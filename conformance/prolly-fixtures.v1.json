@@ -1,0 +1,599 @@
+{
+  "schema": "prolly-conformance-v1",
+  "generated_by": "cargo run -p prolly-map --bin prolly-conformance",
+  "rust_package": "prolly-map",
+  "defaults": {
+    "min_chunk_size": 4,
+    "max_chunk_size": 1048576,
+    "chunking_factor": 128,
+    "hash_seed": 0,
+    "encoding": {
+      "kind": "raw",
+      "custom_name": null
+    },
+    "node_cache_max_nodes": null,
+    "node_cache_max_bytes": null
+  },
+  "node_fixtures": [
+    {
+      "name": "compact_leaf",
+      "node": {
+        "leaf": true,
+        "level": 0,
+        "min_chunk_size": 16,
+        "max_chunk_size": 512,
+        "chunking_factor": 256,
+        "hash_seed": 42,
+        "encoding": {
+          "kind": "raw",
+          "custom_name": null
+        },
+        "keys": [
+          "6372617465732f70726f6c6c792f7372632f612e7273",
+          "6372617465732f70726f6c6c792f7372632f622e7273",
+          "6372617465732f70726f6c6c792f7372632f632e7273"
+        ],
+        "vals": [
+          "76616c75652d61",
+          "76616c75652d62",
+          "76616c75652d63"
+        ]
+      },
+      "bytes": "4352414201010010800480022a000300166372617465732f70726f6c6c792f7372632f612e72730776616c75652d611204622e72730776616c75652d621204632e72730776616c75652d63",
+      "cid": "8c8be530228e193ceac3ae97fb0fe049df90cb080f8d20187f31eaf0610e404d",
+      "legacy_cbor_bytes": "a9008396186318721861187418651873182f18701872186f186c186c1879182f187318721863182f1861182e1872187396186318721861187418651873182f18701872186f186c186c1879182f187318721863182f1862182e1872187396186318721861187418651873182f18701872186f186c186c1879182f187318721863182f1863182e1872187301838718761861186c18751865182d18618718761861186c18751865182d18628718761861186c18751865182d186302f503000410051902000619010007182a0800"
+    },
+    {
+      "name": "compact_internal",
+      "node": {
+        "leaf": false,
+        "level": 2,
+        "min_chunk_size": 16,
+        "max_chunk_size": 512,
+        "chunking_factor": 256,
+        "hash_seed": 42,
+        "encoding": {
+          "kind": "raw",
+          "custom_name": null
+        },
+        "keys": [
+          "6372617465732f70726f6c6c792f7372632f612e7273",
+          "6372617465732f70726f6c6c792f7372632f622e7273",
+          "6372617465732f70726f6c6c792f7372632f632e7273"
+        ],
+        "vals": [
+          "0100000000000000000000000000000000000000000000000000000000000000",
+          "0200000000000000000000000000000000000000000000000000000000000000",
+          "6c65676163792d6368696c64"
+        ]
+      },
+      "bytes": "4352414201000210800480022a000300166372617465732f70726f6c6c792f7372632f612e72730001000000000000000000000000000000000000000000000000000000000000001204622e72730002000000000000000000000000000000000000000000000000000000000000001204632e7273010c6c65676163792d6368696c64",
+      "cid": "3e5ccbf207b7c8776cfdf8f5ce7f493d87ebe983d813e41240e604d935b82c81",
+      "legacy_cbor_bytes": null
+    },
+    {
+      "name": "compact_custom_encoding",
+      "node": {
+        "leaf": true,
+        "level": 0,
+        "min_chunk_size": 2,
+        "max_chunk_size": 128,
+        "chunking_factor": 64,
+        "hash_seed": 42,
+        "encoding": {
+          "kind": "custom",
+          "custom_name": "application/x-crabdb-node-test"
+        },
+        "keys": [
+          "61",
+          "62"
+        ],
+        "vals": [
+          "31",
+          "32"
+        ]
+      },
+      "bytes": "43524142010100028001402a031e6170706c69636174696f6e2f782d6372616264622d6e6f64652d746573740200016101310001620132",
+      "cid": "9fcaa8dbf12dcc98ad3ee58398503b9719293cbebfd4268b9eec32681282e04a",
+      "legacy_cbor_bytes": null
+    }
+  ],
+  "boundary_fixtures": [
+    {
+      "name": "below_min",
+      "config": {
+        "min_chunk_size": 4,
+        "max_chunk_size": 10,
+        "chunking_factor": 128,
+        "hash_seed": 0,
+        "encoding": {
+          "kind": "raw",
+          "custom_name": null
+        },
+        "node_cache_max_nodes": null,
+        "node_cache_max_bytes": null
+      },
+      "count": 2,
+      "key": "6b6579",
+      "value": "76616c7565",
+      "is_boundary": false
+    },
+    {
+      "name": "at_max",
+      "config": {
+        "min_chunk_size": 2,
+        "max_chunk_size": 4,
+        "chunking_factor": 128,
+        "hash_seed": 0,
+        "encoding": {
+          "kind": "raw",
+          "custom_name": null
+        },
+        "node_cache_max_nodes": null,
+        "node_cache_max_bytes": null
+      },
+      "count": 4,
+      "key": "6b6579",
+      "value": "76616c7565",
+      "is_boundary": true
+    },
+    {
+      "name": "hash_boundary",
+      "config": {
+        "min_chunk_size": 1,
+        "max_chunk_size": 1000,
+        "chunking_factor": 8,
+        "hash_seed": 42,
+        "encoding": {
+          "kind": "raw",
+          "custom_name": null
+        },
+        "node_cache_max_nodes": null,
+        "node_cache_max_bytes": null
+      },
+      "count": 1,
+      "key": "6b3030303036",
+      "value": "763030303036",
+      "is_boundary": true
+    },
+    {
+      "name": "hash_non_boundary",
+      "config": {
+        "min_chunk_size": 1,
+        "max_chunk_size": 1000,
+        "chunking_factor": 8,
+        "hash_seed": 42,
+        "encoding": {
+          "kind": "raw",
+          "custom_name": null
+        },
+        "node_cache_max_nodes": null,
+        "node_cache_max_bytes": null
+      },
+      "count": 1,
+      "key": "6b3030303030",
+      "value": "763030303030",
+      "is_boundary": false
+    }
+  ],
+  "key_fixtures": {
+    "prefix_end": [
+      {
+        "prefix": "",
+        "end": null
+      },
+      {
+        "prefix": "616263",
+        "end": "616264"
+      },
+      {
+        "prefix": "12ff",
+        "end": "13"
+      },
+      {
+        "prefix": "ffff",
+        "end": null
+      }
+    ],
+    "numeric": [
+      {
+        "kind": "u64",
+        "value": "0",
+        "encoded": "0000000000000000"
+      },
+      {
+        "kind": "u64",
+        "value": "9",
+        "encoded": "0000000000000009"
+      },
+      {
+        "kind": "u64",
+        "value": "18446744073709551615",
+        "encoded": "ffffffffffffffff"
+      },
+      {
+        "kind": "i64",
+        "value": "-9223372036854775808",
+        "encoded": "0000000000000000"
+      },
+      {
+        "kind": "i64",
+        "value": "-42",
+        "encoded": "7fffffffffffffd6"
+      },
+      {
+        "kind": "i64",
+        "value": "-1",
+        "encoded": "7fffffffffffffff"
+      },
+      {
+        "kind": "i64",
+        "value": "0",
+        "encoded": "8000000000000000"
+      },
+      {
+        "kind": "i64",
+        "value": "42",
+        "encoded": "800000000000002a"
+      },
+      {
+        "kind": "i64",
+        "value": "9223372036854775807",
+        "encoded": "ffffffffffffffff"
+      },
+      {
+        "kind": "u128",
+        "value": "340282366920938463463374607431768211455",
+        "encoded": "ffffffffffffffffffffffffffffffff"
+      },
+      {
+        "kind": "i128",
+        "value": "-1",
+        "encoded": "7fffffffffffffffffffffffffffffff"
+      },
+      {
+        "kind": "timestamp_millis",
+        "value": "123456789",
+        "encoded": "00000000075bcd15"
+      }
+    ],
+    "segments": [
+      {
+        "segments": [
+          "74656e616e74",
+          "0001ff",
+          ""
+        ],
+        "encoded": "74656e616e74000000ff01ff00000000",
+        "decoded": [
+          "74656e616e74",
+          "0001ff",
+          ""
+        ]
+      },
+      {
+        "segments": [
+          "636f6e766572736174696f6e",
+          "633432",
+          "0000000000000007"
+        ],
+        "encoded": "636f6e766572736174696f6e0000633432000000ff00ff00ff00ff00ff00ff00ff070000",
+        "decoded": [
+          "636f6e766572736174696f6e",
+          "633432",
+          "0000000000000007"
+        ]
+      }
+    ],
+    "debug": [
+      {
+        "key": "610a005c22",
+        "debug": "\"a\\n\\x00\\\\\\\"\""
+      },
+      {
+        "key": "00017f80ff",
+        "debug": "\"\\x00\\x01\\x7f\\x80\\xff\""
+      }
+    ]
+  },
+  "tree_fixtures": [
+    {
+      "name": "six_entries_multi_leaf",
+      "config": {
+        "min_chunk_size": 2,
+        "max_chunk_size": 4,
+        "chunking_factor": 2,
+        "hash_seed": 0,
+        "encoding": {
+          "kind": "raw",
+          "custom_name": null
+        },
+        "node_cache_max_nodes": null,
+        "node_cache_max_bytes": null
+      },
+      "root": "0002fa4d601bbed3b4275937290bf7656af127c14823157f212200b45ab4a653",
+      "store": [
+        {
+          "cid": "0002fa4d601bbed3b4275937290bf7656af127c14823157f212200b45ab4a653",
+          "bytes": "4352414201000102040200000200016100d12dc0b8fc479200c59df9b2efa28ed6ffb0c14473a1a42141c7901398981a79000165001f60ac7238ba0de4846afd07c1575c6268e59ae495323df322815550cfae7494"
+        },
+        {
+          "cid": "1f60ac7238ba0de4846afd07c1575c6268e59ae495323df322815550cfae7494",
+          "bytes": "4352414201010002040200000200016501350001660136"
+        },
+        {
+          "cid": "3bb35e6c7111d220fe57ee72e007a5a902bbd95681ea29b9bdc4692928724c32",
+          "bytes": "4352414201010002040200000200016101310001620132"
+        },
+        {
+          "cid": "5f35a511280104ee13f78d5010e85a3e131a1877aebfb25c46b1ca2daf8e236e",
+          "bytes": "43524142010100020402000003000161013100016201320001630133"
+        },
+        {
+          "cid": "97a123aaa03453f241997017bfd27c822e2459fec412dcb9194f011fae26bea3",
+          "bytes": "435241420101000204020000010001650135"
+        },
+        {
+          "cid": "cd82a7d55dc84b16827c032bddc84cd5846c6945aaee3487f72f2180f0283bd8",
+          "bytes": "4352414201000102040200000200016100d12dc0b8fc479200c59df9b2efa28ed6ffb0c14473a1a42141c7901398981a790001650097a123aaa03453f241997017bfd27c822e2459fec412dcb9194f011fae26bea3"
+        },
+        {
+          "cid": "d12dc0b8fc479200c59df9b2efa28ed6ffb0c14473a1a42141c7901398981a79",
+          "bytes": "435241420101000204020000040001610131000162013200016301330001640134"
+        },
+        {
+          "cid": "dc49c2279b15133d844a92e6cf74e5f0fbe1aa1ce78bc7bbc948bbfd123211fe",
+          "bytes": "435241420101000204020000010001620132"
+        }
+      ],
+      "entries": [
+        {
+          "key": "61",
+          "value": "31"
+        },
+        {
+          "key": "62",
+          "value": "32"
+        },
+        {
+          "key": "63",
+          "value": "33"
+        },
+        {
+          "key": "64",
+          "value": "34"
+        },
+        {
+          "key": "65",
+          "value": "35"
+        },
+        {
+          "key": "66",
+          "value": "36"
+        }
+      ],
+      "lookups": [
+        {
+          "key": "61",
+          "value": "31"
+        },
+        {
+          "key": "64",
+          "value": "34"
+        },
+        {
+          "key": "6d697373696e67",
+          "value": null
+        }
+      ],
+      "ranges": [
+        {
+          "start": "",
+          "end": null,
+          "entries": [
+            {
+              "key": "61",
+              "value": "31"
+            },
+            {
+              "key": "62",
+              "value": "32"
+            },
+            {
+              "key": "63",
+              "value": "33"
+            },
+            {
+              "key": "64",
+              "value": "34"
+            },
+            {
+              "key": "65",
+              "value": "35"
+            },
+            {
+              "key": "66",
+              "value": "36"
+            }
+          ]
+        },
+        {
+          "start": "62",
+          "end": "65",
+          "entries": [
+            {
+              "key": "62",
+              "value": "32"
+            },
+            {
+              "key": "63",
+              "value": "33"
+            },
+            {
+              "key": "64",
+              "value": "34"
+            }
+          ]
+        },
+        {
+          "start": "65",
+          "end": null,
+          "entries": [
+            {
+              "key": "65",
+              "value": "35"
+            },
+            {
+              "key": "66",
+              "value": "36"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "diff_fixtures": [
+    {
+      "name": "added_removed_changed",
+      "config": {
+        "min_chunk_size": 2,
+        "max_chunk_size": 4,
+        "chunking_factor": 2,
+        "hash_seed": 0,
+        "encoding": {
+          "kind": "raw",
+          "custom_name": null
+        },
+        "node_cache_max_nodes": null,
+        "node_cache_max_bytes": null
+      },
+      "base_root": "5f35a511280104ee13f78d5010e85a3e131a1877aebfb25c46b1ca2daf8e236e",
+      "other_root": "92ddc414f48170a0455d21bc227c26110f2c476ca41dbd858339dd933eb6d733",
+      "store": [
+        {
+          "cid": "3bb35e6c7111d220fe57ee72e007a5a902bbd95681ea29b9bdc4692928724c32",
+          "bytes": "4352414201010002040200000200016101310001620132"
+        },
+        {
+          "cid": "515f8a3d048079ffec88d379aca8e3f673fa7c6f91bcc1727102faa94815e45b",
+          "bytes": "4352414201010002040200000300016101310001620232320001630133"
+        },
+        {
+          "cid": "5f35a511280104ee13f78d5010e85a3e131a1877aebfb25c46b1ca2daf8e236e",
+          "bytes": "43524142010100020402000003000161013100016201320001630133"
+        },
+        {
+          "cid": "92ddc414f48170a0455d21bc227c26110f2c476ca41dbd858339dd933eb6d733",
+          "bytes": "4352414201010002040200000300016101310001620232320001640134"
+        },
+        {
+          "cid": "97d7b7de5ca98fd071fbcf691a3994aa3453740fb9d1f9a14ce2da814b539eae",
+          "bytes": "435241420101000204020000010001610131"
+        },
+        {
+          "cid": "ab8562f8593a881805a710a92f956d9055042ab3dde1f6b0d332d837bbc24e26",
+          "bytes": "435241420101000204020000020001610131000162023232"
+        }
+      ],
+      "diffs": [
+        {
+          "kind": "changed",
+          "key": "62",
+          "value": null,
+          "old": "32",
+          "new": "3232"
+        },
+        {
+          "kind": "removed",
+          "key": "63",
+          "value": "33",
+          "old": null,
+          "new": null
+        },
+        {
+          "kind": "added",
+          "key": "64",
+          "value": "34",
+          "old": null,
+          "new": null
+        }
+      ]
+    }
+  ],
+  "value_fixtures": [
+    {
+      "name": "versioned_raw",
+      "schema_name": "memory.chunk",
+      "version": 2,
+      "encoding": {
+        "kind": "raw",
+        "custom_name": null
+      },
+      "payload": "7061796c6f6164",
+      "bytes": "504c5656010000000000000000020000000c0000000000000000000000076d656d6f72792e6368756e6b7061796c6f6164"
+    },
+    {
+      "name": "versioned_json",
+      "schema_name": "memory.score",
+      "version": 7,
+      "encoding": {
+        "kind": "json",
+        "custom_name": null
+      },
+      "payload": "7b226e616d65223a226368756e6b222c2273636f7265223a397d",
+      "bytes": "504c5656010200000000000000070000000c00000000000000000000001a6d656d6f72792e73636f72657b226e616d65223a226368756e6b222c2273636f7265223a397d"
+    },
+    {
+      "name": "versioned_custom",
+      "schema_name": "memory.custom",
+      "version": 1,
+      "encoding": {
+        "kind": "custom",
+        "custom_name": "application/x-crabdb-test"
+      },
+      "payload": "637573746f6d2d7061796c6f6164",
+      "bytes": "504c5656010300000000000000010000000d00000019000000000000000e6d656d6f72792e637573746f6d6170706c69636174696f6e2f782d6372616264622d74657374637573746f6d2d7061796c6f6164"
+    }
+  ],
+  "blob_fixtures": [
+    {
+      "name": "inline",
+      "kind": "inline",
+      "value": "736d616c6c2d76616c7565",
+      "blob": null,
+      "cid": null,
+      "len": null,
+      "bytes": "504c56420100000000000000000b736d616c6c2d76616c7565"
+    },
+    {
+      "name": "blob",
+      "kind": "blob",
+      "value": null,
+      "blob": "6c617267652d7061796c6f61642d666f722d636f6e74656e742d6164647265737365642d626c6f62",
+      "cid": "925561c1dec53c6b9ebe54a9daf2d91c13ece59cf673bde75e1b7af807c10415",
+      "len": 40,
+      "bytes": "504c56420101925561c1dec53c6b9ebe54a9daf2d91c13ece59cf673bde75e1b7af807c104150000000000000028"
+    }
+  ],
+  "manifest_fixtures": [
+    {
+      "name": "root_manifest",
+      "root": "7b2f2eb4ed85a7f1c0d7658f57ee016050ae99326a82f73f3501be277e71ff32",
+      "config": {
+        "min_chunk_size": 2,
+        "max_chunk_size": 4,
+        "chunking_factor": 2,
+        "hash_seed": 0,
+        "encoding": {
+          "kind": "raw",
+          "custom_name": null
+        },
+        "node_cache_max_nodes": null,
+        "node_cache_max_bytes": null
+      },
+      "created_at_millis": 1700000000000,
+      "updated_at_millis": 1700000000123,
+      "bytes": "a50001019820187b182f182e18b418ed188518a718f118c018d71865188f185718ee011860185018ae18991832186a188218f7183f18350118be1827187e187118ff183202a70002010402020300040005f606f6031b0000018bcfe56800041b0000018bcfe5687b"
+    }
+  ]
+}

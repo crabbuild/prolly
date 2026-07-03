@@ -1,0 +1,83 @@
+[package]
+name = "prolly-map"
+description = "Content-addressed versioned map storage primitives."
+readme = "README.md"
+edition.workspace = true
+rust-version.workspace = true
+version.workspace = true
+license.workspace = true
+repository = "https://github.com/crabbuild/crabdb"
+homepage = "https://github.com/crabbuild/crabdb"
+documentation = "https://docs.rs/prolly-map"
+keywords = ["prolly-tree", "versioned-map", "content-addressed", "local-first", "merge"]
+categories = ["data-structures", "database-implementations"]
+
+[lib]
+name = "prolly"
+path = "src/lib.rs"
+
+[features]
+default = []
+async-store = ["dep:futures-util"]
+pglite = ["dep:hex"]
+rocksdb = ["dep:rocksdb"]
+slatedb = ["dep:futures-util", "dep:slatedb", "dep:tokio"]
+sqlite = ["dep:rusqlite"]
+tokio = ["async-store", "dep:tokio"]
+
+[dependencies]
+hex = { workspace = true, optional = true }
+rayon.workspace = true
+serde.workspace = true
+serde_cbor.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+xxhash-rust.workspace = true
+rocksdb = { workspace = true, optional = true }
+rusqlite = { workspace = true, optional = true }
+futures-util = { workspace = true, optional = true }
+slatedb = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }
+
+[dev-dependencies]
+futures-util.workspace = true
+
+[lints]
+workspace = true
+
+[[bench]]
+name = "prolly_bench"
+harness = false
+
+[[bench]]
+name = "ai_workloads_bench"
+harness = false
+
+[[bench]]
+name = "sqlite_scale_bench"
+harness = false
+required-features = ["sqlite"]
+
+[[bench]]
+name = "pglite_scale_bench"
+harness = false
+required-features = ["pglite"]
+
+[[bench]]
+name = "store_diff_merge_bench"
+harness = false
+
+[[bench]]
+name = "slatedb_scale_bench"
+harness = false
+required-features = ["slatedb"]
+
+[[bench]]
+name = "slatedb_ops_bench"
+harness = false
+required-features = ["slatedb"]
+
+[[bench]]
+name = "slatedb_workload_bench"
+harness = false
+required-features = ["slatedb"]

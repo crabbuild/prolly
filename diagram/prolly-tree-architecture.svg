@@ -1,0 +1,377 @@
+<svg viewBox="0 0 1600 1220" xmlns="http://www.w3.org/2000/svg" fill="#e2e8f0">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap');
+    text { font-family: 'JetBrains Mono', 'SF Mono', 'Cascadia Code', monospace; fill: #e2e8f0; }
+    .title { fill: #f8fafc; font-size: 24px; font-weight: 700; }
+    .subtitle { fill: #94a3b8; font-size: 11px; }
+    .region-label { font-size: 11px; font-weight: 700; }
+    .box-title { fill: #f8fafc; font-size: 12px; font-weight: 700; text-anchor: middle; }
+    .box-subtitle { fill: #cbd5e1; font-size: 9px; text-anchor: middle; }
+    .box-line { fill: #94a3b8; font-size: 8px; }
+    .tiny { fill: #94a3b8; font-size: 8px; }
+    .label { fill: #cbd5e1; font-size: 8px; font-weight: 500; }
+    .mask { fill: #0f172a; }
+    .primary { fill: rgba(8, 51, 68, 0.42); stroke: #22d3ee; }
+    .secondary { fill: rgba(6, 78, 59, 0.42); stroke: #34d399; }
+    .tertiary { fill: rgba(76, 29, 149, 0.42); stroke: #a78bfa; }
+    .accent { fill: rgba(120, 53, 15, 0.34); stroke: #fbbf24; }
+    .alert { fill: rgba(136, 19, 55, 0.38); stroke: #fb7185; }
+    .connector { fill: rgba(251, 146, 60, 0.3); stroke: #fb923c; }
+    .neutral { fill: rgba(30, 41, 59, 0.58); stroke: #94a3b8; }
+    .highlight { fill: rgba(59, 130, 246, 0.32); stroke: #60a5fa; }
+    .box { stroke-width: 1.5; rx: 6; }
+    .thin { stroke-width: 1; }
+    .edge { fill: none; stroke: #64748b; stroke-width: 1.4; marker-end: url(#arrow); }
+    .edge-cyan { fill: none; stroke: #22d3ee; stroke-width: 1.5; marker-end: url(#arrow-cyan); }
+    .edge-green { fill: none; stroke: #34d399; stroke-width: 1.5; marker-end: url(#arrow-green); }
+    .edge-amber { fill: none; stroke: #fbbf24; stroke-width: 1.5; marker-end: url(#arrow-amber); }
+    .edge-blue { fill: none; stroke: #60a5fa; stroke-width: 1.5; marker-end: url(#arrow-blue); }
+    .edge-rose { fill: none; stroke: #fb7185; stroke-width: 1.4; marker-end: url(#arrow-rose); }
+    .edge-dashed { fill: none; stroke: #94a3b8; stroke-width: 1.2; stroke-dasharray: 5,4; marker-end: url(#arrow-open); }
+    .region { fill: none; stroke-width: 1; stroke-dasharray: 9,5; rx: 12; }
+  </style>
+  <defs>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+    </pattern>
+    <marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#64748b"/>
+    </marker>
+    <marker id="arrow-cyan" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#22d3ee"/>
+    </marker>
+    <marker id="arrow-green" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#34d399"/>
+    </marker>
+    <marker id="arrow-amber" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#fbbf24"/>
+    </marker>
+    <marker id="arrow-blue" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#60a5fa"/>
+    </marker>
+    <marker id="arrow-rose" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#fb7185"/>
+    </marker>
+    <marker id="arrow-open" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polyline points="0 0, 10 3.5, 0 7" fill="none" stroke="#94a3b8" stroke-width="1.4"/>
+    </marker>
+  </defs>
+
+  <rect width="100%" height="100%" fill="#0f172a"/>
+  <rect width="100%" height="100%" fill="url(#grid)"/>
+
+  <text x="40" y="42" class="title">Prolly Tree Architecture</text>
+  <text x="40" y="64" class="subtitle">Content-addressed immutable ordered index: API facade, mutation pipelines, deterministic chunking, Merkle node graph, storage backends</text>
+
+  <rect x="30" y="88" width="360" height="520" class="region" stroke="#22d3ee"/>
+  <text x="45" y="108" class="region-label" fill="#22d3ee">Public API and Handles</text>
+
+  <rect x="420" y="88" width="650" height="520" class="region" stroke="#34d399"/>
+  <text x="435" y="108" class="region-label" fill="#34d399">Operation Paths</text>
+
+  <rect x="1100" y="88" width="470" height="520" class="region" stroke="#a78bfa"/>
+  <text x="1115" y="108" class="region-label" fill="#a78bfa">Persistent Prolly Tree Shape</text>
+
+  <rect x="30" y="650" width="735" height="430" class="region" stroke="#fbbf24"/>
+  <text x="45" y="670" class="region-label" fill="#fbbf24">Persistence, Encoding, Caches</text>
+
+  <rect x="800" y="650" width="770" height="430" class="region" stroke="#60a5fa"/>
+  <text x="815" y="670" class="region-label" fill="#60a5fa">Versioning, Sync, and Analysis</text>
+
+  <!-- API layer -->
+  <rect x="60" y="130" width="280" height="86" rx="6" class="mask"/>
+  <rect x="60" y="130" width="280" height="86" rx="6" class="box primary"/>
+  <text x="200" y="154" class="box-title">Prolly&lt;S: Store&gt;</text>
+  <text x="76" y="176" class="box-line">store: S, config: Config</text>
+  <text x="76" y="190" class="box-line">node_cache: RwLock&lt;Cid, Node&gt;</text>
+  <text x="76" y="204" class="box-line">rightmost_path_cache: append anchor</text>
+
+  <rect x="60" y="245" width="280" height="74" rx="6" class="mask"/>
+  <rect x="60" y="245" width="280" height="74" rx="6" class="box highlight"/>
+  <text x="200" y="269" class="box-title">Tree</text>
+  <text x="76" y="291" class="box-line">root: Option&lt;Cid&gt;</text>
+  <text x="76" y="305" class="box-line">config: Config</text>
+
+  <rect x="60" y="348" width="280" height="112" rx="6" class="mask"/>
+  <rect x="60" y="348" width="280" height="112" rx="6" class="box accent"/>
+  <text x="200" y="372" class="box-title">Config</text>
+  <text x="76" y="394" class="box-line">min_chunk_size</text>
+  <text x="76" y="408" class="box-line">max_chunk_size</text>
+  <text x="76" y="422" class="box-line">chunking_factor</text>
+  <text x="76" y="436" class="box-line">hash_seed, encoding</text>
+
+  <rect x="60" y="490" width="280" height="72" rx="6" class="mask"/>
+  <rect x="60" y="490" width="280" height="72" rx="6" class="box neutral"/>
+  <text x="200" y="514" class="box-title">Public Calls</text>
+  <text x="76" y="536" class="box-line">create, get, put, delete, batch</text>
+  <text x="76" y="550" class="box-line">range, cursor, diff, merge, stats</text>
+
+  <!-- Operation boxes -->
+  <rect x="455" y="130" width="260" height="82" rx="6" class="mask"/>
+  <rect x="455" y="130" width="260" height="82" rx="6" class="box secondary"/>
+  <text x="585" y="154" class="box-title">Read Path</text>
+  <text x="471" y="176" class="box-line">load root CID -&gt; binary search keys</text>
+  <text x="471" y="190" class="box-line">internal vals are child CIDs</text>
+  <text x="471" y="204" class="box-line">leaf vals are user bytes</text>
+
+  <rect x="770" y="130" width="260" height="82" rx="6" class="mask"/>
+  <rect x="770" y="130" width="260" height="82" rx="6" class="box secondary"/>
+  <text x="900" y="154" class="box-title">Range and Cursor</text>
+  <text x="786" y="176" class="box-line">seek to first key &gt;= start</text>
+  <text x="786" y="190" class="box-line">advance leaf-to-leaf lazily</text>
+  <text x="786" y="204" class="box-line">stop before exclusive end</text>
+
+  <rect x="455" y="250" width="260" height="96" rx="6" class="mask"/>
+  <rect x="455" y="250" width="260" height="96" rx="6" class="box connector"/>
+  <text x="585" y="274" class="box-title">Single-Key Write</text>
+  <text x="471" y="296" class="box-line">find_path(root, key)</text>
+  <text x="471" y="310" class="box-line">clone and edit target leaf</text>
+  <text x="471" y="324" class="box-line">rebalance changed ancestor path</text>
+  <text x="471" y="338" class="box-line">return new Tree root</text>
+
+  <rect x="770" y="250" width="260" height="96" rx="6" class="mask"/>
+  <rect x="770" y="250" width="260" height="96" rx="6" class="box connector"/>
+  <text x="900" y="274" class="box-title">BatchWriter</text>
+  <text x="786" y="296" class="box-line">sort and dedupe mutations</text>
+  <text x="786" y="310" class="box-line">group by affected leaf</text>
+  <text x="786" y="324" class="box-line">append fast path, prefetch</text>
+  <text x="786" y="338" class="box-line">coalesced atomic flush</text>
+
+  <rect x="455" y="384" width="260" height="96" rx="6" class="mask"/>
+  <rect x="455" y="384" width="260" height="96" rx="6" class="box accent"/>
+  <text x="585" y="408" class="box-title">Boundary Detection</text>
+  <text x="471" y="430" class="box-line">below min: never split</text>
+  <text x="471" y="444" class="box-line">above max: force split</text>
+  <text x="471" y="458" class="box-line">xxHash64(key || val)</text>
+  <text x="471" y="472" class="box-line">lower32 &lt;= u32::MAX / factor</text>
+
+  <rect x="770" y="384" width="260" height="96" rx="6" class="mask"/>
+  <rect x="770" y="384" width="260" height="96" rx="6" class="box accent"/>
+  <text x="900" y="408" class="box-title">Bulk Builders</text>
+  <text x="786" y="430" class="box-line">BatchBuilder sorts entries</text>
+  <text x="786" y="444" class="box-line">parallel boundary precompute</text>
+  <text x="786" y="458" class="box-line">write leaves in batches</text>
+  <text x="786" y="472" class="box-line">build internal levels bottom-up</text>
+
+  <rect x="610" y="515" width="260" height="62" rx="6" class="mask"/>
+  <rect x="610" y="515" width="260" height="62" rx="6" class="box highlight"/>
+  <text x="740" y="539" class="box-title">New Snapshot</text>
+  <text x="626" y="561" class="box-line">new root CID + shared old subtrees</text>
+
+  <!-- Tree shape -->
+  <rect x="1140" y="130" width="180" height="62" rx="6" class="mask"/>
+  <rect x="1140" y="130" width="180" height="62" rx="6" class="box highlight"/>
+  <text x="1230" y="154" class="box-title">Tree Handle</text>
+  <text x="1154" y="176" class="box-line">root = CID(R)</text>
+
+  <rect x="1380" y="130" width="150" height="62" rx="6" class="mask"/>
+  <rect x="1380" y="130" width="150" height="62" rx="6" class="box tertiary"/>
+  <text x="1455" y="154" class="box-title">CID</text>
+  <text x="1394" y="176" class="box-line">SHA-256(node bytes)</text>
+
+  <rect x="1230" y="230" width="230" height="82" rx="6" class="mask"/>
+  <rect x="1230" y="230" width="230" height="82" rx="6" class="box tertiary"/>
+  <text x="1345" y="254" class="box-title">Root Internal Node L2</text>
+  <text x="1246" y="276" class="box-line">keys: first keys of child spans</text>
+  <text x="1246" y="290" class="box-line">vals: child CID bytes</text>
+  <text x="1246" y="304" class="box-line">not user data</text>
+
+  <rect x="1135" y="360" width="170" height="70" rx="6" class="mask"/>
+  <rect x="1135" y="360" width="170" height="70" rx="6" class="box tertiary"/>
+  <text x="1220" y="384" class="box-title">Internal L1</text>
+  <text x="1149" y="406" class="box-line">span: [a, m)</text>
+  <text x="1149" y="420" class="box-line">children by CID</text>
+
+  <rect x="1355" y="360" width="170" height="70" rx="6" class="mask"/>
+  <rect x="1355" y="360" width="170" height="70" rx="6" class="box tertiary"/>
+  <text x="1440" y="384" class="box-title">Internal L1</text>
+  <text x="1369" y="406" class="box-line">span: [m, end)</text>
+  <text x="1369" y="420" class="box-line">children by CID</text>
+
+  <rect x="1115" y="480" width="125" height="82" rx="6" class="mask"/>
+  <rect x="1115" y="480" width="125" height="82" rx="6" class="box primary"/>
+  <text x="1177" y="504" class="box-title">Leaf L0</text>
+  <text x="1127" y="526" class="box-line">a,b,c</text>
+  <text x="1127" y="540" class="box-line">raw values</text>
+
+  <rect x="1275" y="480" width="125" height="82" rx="6" class="mask"/>
+  <rect x="1275" y="480" width="125" height="82" rx="6" class="box primary"/>
+  <text x="1337" y="504" class="box-title">Leaf L0</text>
+  <text x="1287" y="526" class="box-line">m,n,p</text>
+  <text x="1287" y="540" class="box-line">raw values</text>
+
+  <rect x="1435" y="480" width="125" height="82" rx="6" class="mask"/>
+  <rect x="1435" y="480" width="125" height="82" rx="6" class="box primary"/>
+  <text x="1497" y="504" class="box-title">Leaf L0</text>
+  <text x="1447" y="526" class="box-line">x,y,z</text>
+  <text x="1447" y="540" class="box-line">raw values</text>
+
+  <text x="1120" y="590" class="tiny">Invariant: keys are sorted byte strings; child key is the first key in that child span.</text>
+
+  <!-- Persistence layer -->
+  <rect x="60" y="700" width="230" height="112" rx="6" class="mask"/>
+  <rect x="60" y="700" width="230" height="112" rx="6" class="box tertiary"/>
+  <text x="175" y="724" class="box-title">Node Encoding</text>
+  <text x="76" y="746" class="box-line">compact bytes with CRAB magic</text>
+  <text x="76" y="760" class="box-line">varints and prefix-compressed keys</text>
+  <text x="76" y="774" class="box-line">internal vals tag CID bytes</text>
+  <text x="76" y="788" class="box-line">legacy CBOR fallback read</text>
+
+  <rect x="330" y="700" width="205" height="112" rx="6" class="mask"/>
+  <rect x="330" y="700" width="205" height="112" rx="6" class="box tertiary"/>
+  <text x="432" y="724" class="box-title">Content Addressing</text>
+  <text x="346" y="746" class="box-line">bytes -&gt; SHA-256 -&gt; Cid</text>
+  <text x="346" y="760" class="box-line">same content, same id</text>
+  <text x="346" y="774" class="box-line">dedupe and structural share</text>
+  <text x="346" y="788" class="box-line">root CID identifies snapshot</text>
+
+  <rect x="575" y="700" width="150" height="112" rx="6" class="mask"/>
+  <rect x="575" y="700" width="150" height="112" rx="6" class="box highlight"/>
+  <text x="650" y="724" class="box-title">Caches</text>
+  <text x="590" y="746" class="box-line">node_cache</text>
+  <text x="590" y="760" class="box-line">load_many_ordered</text>
+  <text x="590" y="774" class="box-line">rightmost path</text>
+  <text x="590" y="788" class="box-line">append hints</text>
+
+  <rect x="95" y="860" width="205" height="96" rx="6" class="mask"/>
+  <rect x="95" y="860" width="205" height="96" rx="6" class="box accent"/>
+  <text x="197" y="884" class="box-title">Store Trait</text>
+  <text x="111" y="906" class="box-line">get, put, delete, batch</text>
+  <text x="111" y="920" class="box-line">batch_get_ordered</text>
+  <text x="111" y="934" class="box-line">batch_put_with_hint</text>
+  <text x="111" y="948" class="box-line">hints are performance only</text>
+
+  <rect x="345" y="865" width="120" height="74" rx="6" class="mask"/>
+  <rect x="345" y="865" width="120" height="74" rx="6" class="box neutral"/>
+  <text x="405" y="889" class="box-title">MemStore</text>
+  <text x="357" y="911" class="box-line">BTreeMap</text>
+  <text x="357" y="925" class="box-line">test/local</text>
+
+  <rect x="505" y="865" width="120" height="74" rx="6" class="mask"/>
+  <rect x="505" y="865" width="120" height="74" rx="6" class="box neutral"/>
+  <text x="565" y="889" class="box-title">SQLite</text>
+  <text x="517" y="911" class="box-line">WITHOUT ROWID</text>
+  <text x="517" y="925" class="box-line">WAL + hints</text>
+
+  <rect x="345" y="975" width="120" height="74" rx="6" class="mask"/>
+  <rect x="345" y="975" width="120" height="74" rx="6" class="box neutral"/>
+  <text x="405" y="999" class="box-title">RocksDB</text>
+  <text x="357" y="1021" class="box-line">feature gated</text>
+  <text x="357" y="1035" class="box-line">persistent KV</text>
+
+  <rect x="505" y="975" width="120" height="74" rx="6" class="mask"/>
+  <rect x="505" y="975" width="120" height="74" rx="6" class="box neutral"/>
+  <text x="565" y="999" class="box-title">Custom</text>
+  <text x="517" y="1021" class="box-line">implement Store</text>
+  <text x="517" y="1035" class="box-line">remote/local</text>
+
+  <!-- Versioning layer -->
+  <rect x="830" y="700" width="225" height="96" rx="6" class="mask"/>
+  <rect x="830" y="700" width="225" height="96" rx="6" class="box highlight"/>
+  <text x="942" y="724" class="box-title">Structural Diff</text>
+  <text x="846" y="746" class="box-line">same root: O(1)</text>
+  <text x="846" y="760" class="box-line">same child CID: skip subtree</text>
+  <text x="846" y="774" class="box-line">span-aligned recurse</text>
+  <text x="846" y="788" class="box-line">fallback ordered leaf compare</text>
+
+  <rect x="1095" y="700" width="205" height="96" rx="6" class="mask"/>
+  <rect x="1095" y="700" width="205" height="96" rx="6" class="box highlight"/>
+  <text x="1197" y="724" class="box-title">Range Diff</text>
+  <text x="1111" y="746" class="box-line">half-open [start, end)</text>
+  <text x="1111" y="760" class="box-line">prune disjoint spans</text>
+  <text x="1111" y="774" class="box-line">stream or collect changes</text>
+  <text x="1111" y="788" class="box-line">Added, Removed, Changed</text>
+
+  <rect x="1340" y="700" width="190" height="96" rx="6" class="mask"/>
+  <rect x="1340" y="700" width="190" height="96" rx="6" class="box alert"/>
+  <text x="1435" y="724" class="box-title">Merge</text>
+  <text x="1356" y="746" class="box-line">base -&gt; left/right diffs</text>
+  <text x="1356" y="760" class="box-line">three-way conflict check</text>
+  <text x="1356" y="774" class="box-line">resolver or Error::Conflict</text>
+  <text x="1356" y="788" class="box-line">CRDT strategies available</text>
+
+  <rect x="830" y="850" width="225" height="96" rx="6" class="mask"/>
+  <rect x="830" y="850" width="225" height="96" rx="6" class="box secondary"/>
+  <text x="942" y="874" class="box-title">Streaming Diff</text>
+  <text x="846" y="896" class="box-line">DiffCursor dual traversal</text>
+  <text x="846" y="910" class="box-line">yields without Vec allocation</text>
+  <text x="846" y="924" class="box-line">append-only shortcut</text>
+
+  <rect x="1095" y="850" width="205" height="96" rx="6" class="mask"/>
+  <rect x="1095" y="850" width="205" height="96" rx="6" class="box secondary"/>
+  <text x="1197" y="874" class="box-title">TreeStats</text>
+  <text x="1111" y="896" class="box-line">height, node counts</text>
+  <text x="1111" y="910" class="box-line">fanout and fill factor</text>
+  <text x="1111" y="924" class="box-line">serialized byte sizes</text>
+
+  <rect x="1340" y="850" width="190" height="96" rx="6" class="mask"/>
+  <rect x="1340" y="850" width="190" height="96" rx="6" class="box secondary"/>
+  <text x="1435" y="874" class="box-title">Parallel APIs</text>
+  <text x="1356" y="896" class="box-line">Rayon builders</text>
+  <text x="1356" y="910" class="box-line">parallel_batch threshold</text>
+  <text x="1356" y="924" class="box-line">independent leaf groups</text>
+
+  <rect x="1010" y="990" width="345" height="58" rx="6" class="mask"/>
+  <rect x="1010" y="990" width="345" height="58" rx="6" class="box neutral"/>
+  <text x="1182" y="1014" class="box-title">Local-First Snapshot Semantics</text>
+  <text x="1026" y="1036" class="box-line">multiple roots can share storage and reconcile by CID-aware diff/merge</text>
+
+  <!-- Connections -->
+  <path d="M 340 173 L 455 173" class="edge-cyan"/>
+  <path d="M 340 282 L 455 282" class="edge-blue"/>
+  <path d="M 340 526 L 455 526 L 455 298" class="edge"/>
+  <path d="M 715 171 L 770 171" class="edge-green"/>
+  <path d="M 715 298 L 770 298" class="edge-amber"/>
+  <path d="M 585 346 L 585 384" class="edge-amber"/>
+  <path d="M 900 346 L 900 384" class="edge-amber"/>
+  <path d="M 715 432 L 770 432" class="edge-amber"/>
+  <path d="M 585 480 L 660 515" class="edge-blue"/>
+  <path d="M 900 480 L 820 515" class="edge-blue"/>
+  <path d="M 870 546 L 1135 546" class="edge-blue"/>
+  <path d="M 1030 171 L 1140 161" class="edge-green"/>
+  <path d="M 1030 298 L 1230 271" class="edge-amber"/>
+
+  <path d="M 1320 161 L 1380 161" class="edge-dashed"/>
+  <path d="M 1230 192 L 1325 230" class="edge-blue"/>
+  <path d="M 1345 312 L 1220 360" class="edge"/>
+  <path d="M 1345 312 L 1440 360" class="edge"/>
+  <path d="M 1220 430 L 1177 480" class="edge"/>
+  <path d="M 1220 430 L 1337 480" class="edge"/>
+  <path d="M 1440 430 L 1337 480" class="edge"/>
+  <path d="M 1440 430 L 1497 480" class="edge"/>
+
+  <path d="M 1177 562 L 432 700" class="edge-dashed"/>
+  <path d="M 432 812 L 300 887" class="edge-amber"/>
+  <path d="M 535 756 L 575 756" class="edge-blue"/>
+  <path d="M 300 908 L 345 902" class="edge"/>
+  <path d="M 300 908 L 505 902" class="edge"/>
+  <path d="M 300 908 L 345 1012" class="edge"/>
+  <path d="M 300 908 L 505 1012" class="edge"/>
+
+  <path d="M 740 577 L 740 625 L 942 625 L 942 700" class="edge-blue"/>
+  <path d="M 740 577 L 740 625 L 1197 625 L 1197 700" class="edge-blue"/>
+  <path d="M 740 577 L 740 625 L 1435 625 L 1435 700" class="edge-rose"/>
+  <path d="M 942 796 L 942 850" class="edge-green"/>
+  <path d="M 1197 796 L 1197 850" class="edge-green"/>
+  <path d="M 1435 796 L 1435 850" class="edge-green"/>
+  <path d="M 942 946 L 1100 990" class="edge-dashed"/>
+  <path d="M 1197 946 L 1197 990" class="edge-dashed"/>
+  <path d="M 1435 946 L 1355 990" class="edge-dashed"/>
+
+  <!-- Legend -->
+  <rect x="40" y="1120" width="1520" height="64" rx="8" fill="#0f172a" stroke="#334155" stroke-width="1"/>
+  <text x="60" y="1143" class="box-line" fill="#cbd5e1">Legend</text>
+  <rect x="125" y="1130" width="18" height="12" rx="2" class="primary"/>
+  <text x="150" y="1140" class="tiny">API / leaf data</text>
+  <rect x="270" y="1130" width="18" height="12" rx="2" class="secondary"/>
+  <text x="295" y="1140" class="tiny">read / analysis process</text>
+  <rect x="480" y="1130" width="18" height="12" rx="2" class="tertiary"/>
+  <text x="505" y="1140" class="tiny">content-addressed nodes</text>
+  <rect x="710" y="1130" width="18" height="12" rx="2" class="accent"/>
+  <text x="735" y="1140" class="tiny">chunking / storage contract</text>
+  <rect x="970" y="1130" width="18" height="12" rx="2" class="connector"/>
+  <text x="995" y="1140" class="tiny">mutation path</text>
+  <rect x="1125" y="1130" width="18" height="12" rx="2" class="alert"/>
+  <text x="1150" y="1140" class="tiny">conflict handling</text>
+  <text x="60" y="1168" class="tiny">Primary flow: public API chooses a read/write/diff path, loads nodes by CID, rewrites changed content, stores deterministic bytes, and returns a new root.</text>
+</svg>
