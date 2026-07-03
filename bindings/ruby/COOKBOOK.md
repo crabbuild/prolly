@@ -80,6 +80,15 @@ loop do
   cursor = page.next_cursor
 end
 
+reverse_cursor = nil
+loop do
+  page = engine.reverse_page(tree, reverse_cursor, ''.b, 100)
+  page.entries.each { |entry| handle_newest_first(entry.key, entry.value) }
+  break unless page.next_cursor
+
+  reverse_cursor = page.next_cursor
+end
+
 diffs = engine.diff_from_cursor(
   old_tree,
   new_tree,

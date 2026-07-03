@@ -105,13 +105,42 @@ function makeHostStore(nativeModule: any): any {
 
 test("native batch, getMany, pages, and diff pages use Rust engine", { skip: native === null }, () => {
   assert.ok(native);
+  const defaultConfig = native.defaultConfig();
+  assert.equal(defaultConfig.encoding.kind, "raw");
+  assert.equal(native.encodingRaw().kind, "raw");
+  assert.equal(native.encodingCbor().kind, "cbor");
+  assert.equal(native.encodingJson().kind, "json");
+  const customEncoding = native.encodingCustom("postcard");
+  assert.deepEqual(customEncoding, { kind: "custom", customName: "postcard" });
+  assert.deepEqual(native.treeConfig("2", "64", 32, "7", customEncoding, "16", "4096"), {
+    minChunkSize: "2",
+    maxChunkSize: "64",
+    chunkingFactor: 32,
+    hashSeed: "7",
+    encoding: customEncoding,
+    nodeCacheMaxNodes: "16",
+    nodeCacheMaxBytes: "4096",
+  });
+  assert.throws(() =>
+    native.treeConfig("2", "64", 32, "7", { kind: "custom" } as any, null, null),
+  );
+
   const engine = native.NativeProllyEngine.memory();
   const empty = engine.create();
+  assert.deepEqual(native.upsertMutation(bytes("probe"), bytes("value")), {
+    kind: "upsert",
+    key: bytes("probe"),
+    value: bytes("value"),
+  });
+  assert.deepEqual(native.deleteMutation(bytes("probe")), {
+    kind: "delete",
+    key: bytes("probe"),
+  });
   const tree = engine.batch(empty, [
-    { kind: "upsert", key: bytes("a"), value: bytes("1") },
-    { kind: "upsert", key: bytes("b"), value: bytes("2") },
-    { kind: "upsert", key: bytes("a"), value: bytes("11") },
-    { kind: "delete", key: bytes("missing") },
+    native.upsertMutation(bytes("a"), bytes("1")),
+    native.upsertMutation(bytes("b"), bytes("2")),
+    native.upsertMutation(bytes("a"), bytes("11")),
+    native.deleteMutation(bytes("missing")),
   ]);
 
   assert.deepEqual(engine.getMany(tree, [bytes("a"), bytes("missing"), bytes("b")]).map(text), [
@@ -320,15 +349,34 @@ test("native batch, getMany, pages, and diff pages use Rust engine", { skip: nat
 
   const parallelConfig = native.defaultParallelConfig();
   assert.equal(parallelConfig.parallelismThreshold, "100");
+  assert.deepEqual(native.parallelConfig("1", "1"), {
+    maxThreads: "1",
+    parallelismThreshold: "1",
+  });
+  const sequentialParallelConfig = native.parallelConfigSequential();
+  assert.equal(sequentialParallelConfig.maxThreads, "1");
+  assert.equal(BigInt(sequentialParallelConfig.parallelismThreshold), (1n << 64n) - 1n);
   const parallelTree = engine.parallelBatch(
     empty,
     [
       { kind: "upsert", key: bytes("p"), value: bytes("parallel") },
       { kind: "upsert", key: bytes("q"), value: bytes("batch") },
     ],
-    { ...parallelConfig, maxThreads: "1", parallelismThreshold: "1" },
+    native.parallelConfig("1", "1"),
   );
   assert.equal(text(engine.get(parallelTree, bytes("q"))), "batch");
+  const parallelStats = engine.parallelBatchWithStats(
+    empty,
+    [
+      { kind: "upsert", key: bytes("r"), value: bytes("route") },
+      { kind: "upsert", key: bytes("s"), value: bytes("stats") },
+    ],
+    native.parallelConfig("1", "1"),
+  );
+  assert.equal(text(engine.get(parallelStats.tree, bytes("s"))), "stats");
+  assert.equal(parallelStats.stats.inputMutations, "2");
+  assert.equal(parallelStats.stats.effectiveMutations, "2");
+  assert.notEqual(parallelStats.stats.writtenNodes, "0");
 
   const appended = engine.appendBatch(built, [
     { kind: "upsert", key: bytes("d"), value: bytes("4") },
@@ -360,6 +408,28 @@ test("native batch, getMany, pages, and diff pages use Rust engine", { skip: nat
   assert.equal(text(afterACursor.afterKey), "a");
   const fromCursor = engine.rangeFromCursor(tree, afterACursor, null);
   assert.deepEqual(fromCursor.map((entry) => text(entry.key)), afterA.map((entry) => text(entry.key)));
+  assert.deepEqual(engine.prefix(tree, bytes("a")).map((entry) => text(entry.value)), ["11"]);
+  const prefixPage = engine.prefixPage(tree, bytes("a"), null, "1");
+  assert.deepEqual(prefixPage.entries.map((entry) => text(entry.value)), ["11"]);
+  assert.ok(prefixPage.nextCursor);
+  assert.equal(text(engine.firstEntry(tree)?.key), "a");
+  assert.equal(text(engine.firstEntry(tree)?.value), "11");
+  assert.equal(text(engine.lastEntry(tree)?.key), "b");
+  assert.equal(text(engine.lowerBound(tree, bytes("aa"))?.key), "b");
+  assert.equal(engine.upperBound(tree, bytes("b")) ?? null, null);
+
+  const window = engine.cursorWindow(tree, bytes("aa"), null, "1");
+  assert.equal(text(window.positionKey), "a");
+  assert.equal(text(window.positionValue), "11");
+  assert.equal(window.found, false);
+  assert.deepEqual(window.entries.map((entry) => text(entry.key)), ["b"]);
+  assert.equal(text(window.nextCursor?.afterKey), "b");
+
+  const exactProbe = engine.cursorWindow(tree, bytes("a"), null, "0");
+  assert.equal(exactProbe.found, true);
+  assert.equal(text(exactProbe.positionKey), "a");
+  assert.equal(exactProbe.entries.length, 0);
+  assert.equal(exactProbe.nextCursor == null, true);
 
   const secondPage = engine.rangePage(tree, firstPage.nextCursor, null, "1");
   assert.equal(secondPage.entries.length, 1);
@@ -369,6 +439,21 @@ test("native batch, getMany, pages, and diff pages use Rust engine", { skip: nat
     assert.equal(thirdPage.entries.length, 0);
     assert.equal(thirdPage.nextCursor == null, true);
   }
+
+  assert.equal(native.reverseCursorEnd().beforeKey ?? null, null);
+  const beforeCCursor = native.reverseCursorBeforeKey(bytes("c"));
+  assert.equal(text(beforeCCursor.beforeKey), "c");
+  const reverseFirst = engine.reversePage(built, null, Buffer.alloc(0), "2");
+  assert.deepEqual(reverseFirst.entries.map((entry) => text(entry.key)), ["c", "b"]);
+  assert.equal(text(reverseFirst.nextCursor?.beforeKey), "b");
+  const reverseSecond = engine.reversePage(built, reverseFirst.nextCursor, Buffer.alloc(0), "2");
+  assert.deepEqual(reverseSecond.entries.map((entry) => text(entry.key)), ["a"]);
+  assert.equal(reverseSecond.nextCursor == null, true);
+  const reverseBounded = engine.reversePage(built, null, bytes("b"), "8");
+  assert.deepEqual(reverseBounded.entries.map((entry) => text(entry.key)), ["c", "b"]);
+  const prefixReverse = engine.prefixReversePage(built, bytes("b"), null, "8");
+  assert.deepEqual(prefixReverse.entries.map((entry) => text(entry.key)), ["b"]);
+  assert.equal(prefixReverse.nextCursor == null, true);
 
   const changed = engine.put(tree, bytes("b"), bytes("22"));
   const diffPage = engine.diffPage(tree, changed, null, null, "1");
@@ -432,14 +517,45 @@ test("native merge and named-root CAS use Rust engine", { skip: native === null 
   assert.ok(explanation.result);
   assert.equal(explanation.error == null, true);
   assert.match(explanation.traceJson, /events/);
+  assert.ok(explanation.trace.events.length > 0);
+  assert.ok(
+    explanation.trace.events.some(
+      (event) => event.kind === "resolver_called" && event.resolution === "value",
+    ),
+  );
 
   const merged = engine.merge(base, left, right, "prefer_right");
   assert.equal(text(engine.get(merged, bytes("k"))), "right");
 
-  const resolver = (conflict: { left?: Uint8Array | null; right?: Uint8Array | null }) => ({
-    kind: "value" as const,
-    value: Buffer.concat([Buffer.from(conflict.left ?? []), bytes("|"), Buffer.from(conflict.right ?? [])]),
+  assert.equal(native.resolutionDelete().kind, "delete");
+  assert.equal(native.resolutionUnresolved().kind, "unresolved");
+  let updateConflict: Parameters<typeof native.resolvePreferLeft>[0] | null = null;
+  const preferRightCallbackMerged = engine.mergeWithResolver(base, left, right, (conflict) => {
+    updateConflict = conflict;
+    return native.resolvePreferRight(conflict);
   });
+  assert.equal(text(engine.get(preferRightCallbackMerged, bytes("k"))), "right");
+  assert.ok(updateConflict);
+  assert.equal(text(native.resolvePreferLeft(updateConflict).value), "left");
+  assert.equal(native.resolveDeleteWins(updateConflict).kind, "unresolved");
+
+  let deleteConflict: Parameters<typeof native.resolveDeleteWins>[0] | null = null;
+  const updateWinsCallbackMerged = engine.mergeWithResolver(
+    base,
+    engine.delete(base, bytes("k")),
+    right,
+    (conflict) => {
+      deleteConflict = conflict;
+      return native.resolveUpdateWins(conflict);
+    },
+  );
+  assert.equal(text(engine.get(updateWinsCallbackMerged, bytes("k"))), "right");
+  assert.ok(deleteConflict);
+  assert.equal(native.resolveDeleteWins(deleteConflict).kind, "delete");
+  const resolver = (conflict: { left?: Uint8Array | null; right?: Uint8Array | null }) =>
+    native.resolutionValue(
+      Buffer.concat([Buffer.from(conflict.left ?? []), bytes("|"), Buffer.from(conflict.right ?? [])]),
+    );
   const callbackMerged = engine.mergeWithResolver(base, left, right, resolver);
   assert.equal(text(engine.get(callbackMerged, bytes("k"))), "left|right");
 
@@ -624,10 +740,24 @@ test("native operational APIs expose stats, debug, metrics, cache, and hints", {
   const tree = engine.put(empty, bytes("k"), bytes("v"));
 
   assert.match(engine.collectStatsJson(tree), /"num_nodes"/);
+  const typedStats = engine.collectStats(tree);
+  assert.equal(typedStats.total_key_value_pairs, 1);
+  assert.ok(typedStats.nodes_per_level["0"] > 0);
   assert.match(engine.statsDiffJson(empty, tree), /"absolute"/);
+  const typedDiffStats = engine.statsDiff(empty, tree);
+  assert.equal(typedDiffStats.before.total_key_value_pairs, 0);
+  assert.equal(typedDiffStats.after.total_key_value_pairs, 1);
+  assert.equal(typedDiffStats.absolute.total_key_value_pairs_diff, 1);
   assert.match(engine.debugTreeJson(tree), /"levels"/);
+  const debugTree = engine.debugTree(tree);
+  assert.ok(debugTree.levels.length > 0);
+  assert.ok(debugTree.levels[0].nodes.length > 0);
   assert.match(engine.debugTreeText(tree), /level/);
   assert.match(engine.debugCompareTreesJson(empty, tree), /"right_only_nodes"/);
+  const debugComparison = engine.debugCompareTrees(empty, tree);
+  assert.ok(debugComparison.right_only_nodes > 0);
+  assert.equal(debugComparison.left_only_nodes, 0);
+  assert.ok(debugComparison.levels.some((level) => level.nodes.some((node) => node.status === "RightOnly")));
   assert.match(engine.debugCompareTreesText(empty, tree), /right/);
 
   const pinnedPathCount = Number(engine.pinTreePath(tree, bytes("k")));
@@ -656,6 +786,11 @@ test("native operational APIs expose stats, debug, metrics, cache, and hints", {
   const structuralPage = engine.structuralDiffPage(empty, tree, null, "1");
   assert.ok(structuralPage.diffs.length > 0);
   assert.ok(Number(structuralPage.stats.emittedDiffs) > 0);
+  const cursorPage = engine.structuralDiffPage(empty, tree, null, "0");
+  assert.ok(cursorPage.nextCursor);
+  assert.ok(cursorPage.nextCursorJson);
+  const resumedStructuralPage = engine.structuralDiffPageWithCursor(empty, tree, cursorPage.nextCursor, "1");
+  assert.ok(resumedStructuralPage.diffs.length > 0);
 
   const reachability = engine.markReachable([tree]);
   assert.ok(Number(reachability.liveNodes) > 0);
@@ -682,6 +817,44 @@ test("native operational APIs expose stats, debug, metrics, cache, and hints", {
   assert.equal(copied.copiedNodes, missing.missingNodes);
   assert.equal(engine.planMissingNodes(tree, destination).missingNodes, "0");
   assert.equal(text(destination.get(tree, bytes("k"))), "v");
+
+  const bundle = engine.exportSnapshot(tree);
+  assert.equal(bundle.formatVersion, 1);
+  assert.ok(bundle.tree.config);
+  assert.ok(bundle.nodes.length > 0);
+  const bundleBytes = native.snapshotBundleToBytes(bundle);
+  assert.deepEqual(
+    Buffer.from(native.snapshotBundleDigest(bundle)),
+    Buffer.from(native.cidFromBytes(bundleBytes)),
+  );
+  assert.deepEqual(
+    Buffer.from(native.snapshotBundleDigestBytes(bundleBytes)),
+    Buffer.from(native.snapshotBundleDigest(bundle)),
+  );
+  const summary = native.snapshotBundleSummary(bundle);
+  assert.equal(summary.formatVersion, 1);
+  assert.equal(summary.nodeCount, String(bundle.nodes.length));
+  assert.ok(Number(summary.byteCount) > 0);
+  assert.ok(summary.root);
+  assert.deepEqual(native.snapshotBundleSummaryFromBytes(bundleBytes), summary);
+  const verification = native.verifySnapshotBundle(bundle);
+  assert.equal(verification.valid, true);
+  assert.equal(verification.summary.nodeCount, summary.nodeCount);
+  assert.equal(verification.missingCids.length, 0);
+  assert.equal(verification.extraCids.length, 0);
+  const byteVerification = native.verifySnapshotBundleBytes(bundleBytes);
+  assert.equal(byteVerification.valid, true);
+  assert.deepEqual(byteVerification.summary, summary);
+  const incompleteBundle = { ...bundle, nodes: bundle.nodes.slice(0, -1) };
+  const incompleteVerification = native.verifySnapshotBundle(incompleteBundle);
+  assert.equal(incompleteVerification.valid, false);
+  assert.ok(incompleteVerification.missingCids.length > 0);
+  const decodedBundle = native.snapshotBundleFromBytes(bundleBytes);
+  assert.equal(decodedBundle.formatVersion, 1);
+  assert.equal(decodedBundle.nodes.length, bundle.nodes.length);
+  const snapshotDestination = native.NativeProllyEngine.memory();
+  const importedTree = snapshotDestination.importSnapshot(decodedBundle);
+  assert.equal(text(snapshotDestination.get(importedTree, bytes("k"))), "v");
 });
 
 test("native CRDT, multi-value, and tombstone helpers use Rust engine", { skip: native === null }, () => {
@@ -703,6 +876,24 @@ test("native CRDT, multi-value, and tombstone helpers use Rust engine", { skip: 
   const mergedValue = native.timestampedValueFromBytes(engine.get(merged, bytes("k"))!);
   assert.equal(text(mergedValue.value), "right");
   assert.equal(mergedValue.timestamp, "3");
+
+  const callbackMerged = engine.crdtMergeWithResolver(base, left, right, "update_wins", (conflict) =>
+    native.crdtResolutionValue(
+      Buffer.concat([Buffer.from(conflict.left ?? []), bytes("|"), Buffer.from(conflict.right ?? [])]),
+    ),
+  );
+  assert.deepEqual(
+    Buffer.from(engine.get(callbackMerged, bytes("k"))!),
+    Buffer.concat([Buffer.from(leftValue), bytes("|"), Buffer.from(rightValue)]),
+  );
+  const deleted = engine.crdtMergeWithResolver(
+    base,
+    engine.delete(base, bytes("k")),
+    engine.put(base, bytes("k"), rightValue),
+    "update_wins",
+    () => native.crdtResolutionDelete(),
+  );
+  assert.equal(engine.get(deleted, bytes("k")), null);
 
   const now = native.timestampedValueNow(bytes("now"));
   assert.equal(text(now.value), "now");
@@ -755,9 +946,7 @@ test("native blob stores, large values, and blob GC use Rust engine", { skip: na
 
   const empty = engine.create();
   const largeValue = Buffer.alloc(64, 42);
-  const tree = engine.putLargeValue(blobStore, empty, bytes("big"), largeValue, {
-    inlineThreshold: "8",
-  });
+  const tree = engine.putLargeValue(blobStore, empty, bytes("big"), largeValue, native.largeValueConfig("8"));
   const valueRef = engine.getValueRef(tree, bytes("big"));
   assert.equal(valueRef?.kind, "blob");
   assert.ok(valueRef?.blob);

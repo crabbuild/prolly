@@ -5,6 +5,7 @@
 
 export interface NodeTreeRecord {
   root?: Buffer
+  config?: NodeConfigRecord
 }
 export interface NodeEntryRecord {
   key: Buffer
@@ -22,9 +23,47 @@ export interface NodeMutationRecord {
   key: Buffer
   value?: Buffer
 }
+export interface NodeEncodingRecord {
+  kind: string
+  customName?: string
+}
+export interface NodeConfigRecord {
+  minChunkSize: string
+  maxChunkSize: string
+  chunkingFactor: number
+  hashSeed: string
+  encoding: NodeEncodingRecord
+  nodeCacheMaxNodes?: string
+  nodeCacheMaxBytes?: string
+}
 export interface NodeParallelConfigRecord {
   maxThreads: string
   parallelismThreshold: string
+}
+export interface NodeSnapshotBundleNodeRecord {
+  cid: Buffer
+  bytes: Buffer
+}
+export interface NodeSnapshotBundleRecord {
+  formatVersion: number
+  tree: NodeTreeRecord
+  nodes: Array<NodeSnapshotBundleNodeRecord>
+}
+export interface NodeSnapshotBundleSummaryRecord {
+  formatVersion: number
+  root?: Buffer
+  nodeCount: string
+  byteCount: string
+  minNodeBytes: string
+  maxNodeBytes: string
+}
+export interface NodeSnapshotBundleVerificationRecord {
+  valid: boolean
+  summary: NodeSnapshotBundleSummaryRecord
+  reachableNodes: string
+  reachableBytes: string
+  missingCids: Array<Buffer>
+  extraCids: Array<Buffer>
 }
 export interface NodeBatchApplyStatsRecord {
   inputMutations: string
@@ -123,11 +162,25 @@ export interface NodeHostStoreCasResult {
 export interface NodeRangeCursorRecord {
   afterKey?: Buffer
 }
+export interface NodeReverseCursorRecord {
+  beforeKey?: Buffer
+}
 export interface NodeRangeBoundsRecord {
   start: Buffer
   end?: Buffer
 }
 export interface NodeRangePageRecord {
+  entries: Array<NodeEntryRecord>
+  nextCursor?: NodeRangeCursorRecord
+}
+export interface NodeReversePageRecord {
+  entries: Array<NodeEntryRecord>
+  nextCursor?: NodeReverseCursorRecord
+}
+export interface NodeCursorWindowRecord {
+  positionKey?: Buffer
+  positionValue?: Buffer
+  found: boolean
   entries: Array<NodeEntryRecord>
   nextCursor?: NodeRangeCursorRecord
 }
@@ -165,11 +218,47 @@ export interface NodeStructuralDiffPageRecord {
   diffs: Array<NodeDiffRecord>
   nextCursorJson?: string
   stats: NodeDiffTraversalStatsRecord
+  nextCursor?: NodeStructuralDiffCursorRecord
+}
+export interface NodeStructuralDiffCursorRecord {
+  baseRoot?: Buffer
+  otherRoot?: Buffer
+  markers: Array<NodeStructuralDiffMarkerRecord>
+  pending: Array<NodeDiffRecord>
+}
+export interface NodeStructuralDiffMarkerRecord {
+  kind: string
+  baseCid?: Buffer
+  otherCid?: Buffer
+  spanEnd?: Buffer
+  cid?: Buffer
+}
+export interface NodeMergeTraceRecord {
+  events: Array<NodeMergeTraceEventRecord>
+}
+export interface NodeMergeTraceEventRecord {
+  kind: string
+  fastPath?: string
+  cid?: Buffer
+  reuseReason?: string
+  level?: string
+  entries?: string
+  firstKey?: Buffer
+  lastKey?: Buffer
+  stage?: string
+  key?: Buffer
+  resolution?: string
+  fallbackReason?: string
+  diffStats?: NodeDiffTraversalStatsRecord
+  rightChanges?: string
+  mutations?: string
+  appendOnly?: boolean
 }
 export interface NodeMergeExplanationRecord {
   result?: NodeTreeRecord
   error?: string
   traceJson: string
+  trace: NodeMergeTraceRecord
 }
 export interface NodeNamedRootRecord {
   name: Buffer
@@ -493,6 +582,19 @@ export declare function prefixEnd(prefix: Buffer): Buffer | null
 export declare function prefixRange(prefix: Buffer): NodeRangeBoundsRecord
 export declare function rangeCursorStart(): NodeRangeCursorRecord
 export declare function rangeCursorAfterKey(key: Buffer): NodeRangeCursorRecord
+export declare function reverseCursorEnd(): NodeReverseCursorRecord
+export declare function reverseCursorBeforeKey(key: Buffer): NodeReverseCursorRecord
+export declare function upsertMutation(key: Buffer, value: Buffer): NodeMutationRecord
+export declare function deleteMutation(key: Buffer): NodeMutationRecord
+export declare function resolutionValue(value: Buffer): NodeResolutionRecord
+export declare function resolutionDelete(): NodeResolutionRecord
+export declare function resolutionUnresolved(): NodeResolutionRecord
+export declare function resolvePreferLeft(conflict: NodeConflictRecord): NodeResolutionRecord
+export declare function resolvePreferRight(conflict: NodeConflictRecord): NodeResolutionRecord
+export declare function resolveDeleteWins(conflict: NodeConflictRecord): NodeResolutionRecord
+export declare function resolveUpdateWins(conflict: NodeConflictRecord): NodeResolutionRecord
+export declare function crdtResolutionValue(value: Buffer): NodeCrdtResolutionRecord
+export declare function crdtResolutionDelete(): NodeCrdtResolutionRecord
 export declare function u64Key(value: string): Buffer
 export declare function u128Key(value: string): Buffer
 export declare function i64Key(value: string): Buffer
@@ -525,8 +627,25 @@ export declare function valueRefFromStoredBytes(bytes: Buffer): NodeValueRefReco
 export declare function valueRefInlineRequiresEscape(value: Buffer): boolean
 export declare function blobRefValidateBytes(reference: NodeBlobRefRecord, bytes: Buffer): void
 export declare function rootManifestBytesRoundTrip(bytes: Buffer): Buffer
+export declare function snapshotBundleToBytes(bundle: NodeSnapshotBundleRecord): Buffer
+export declare function snapshotBundleFromBytes(bytes: Buffer): NodeSnapshotBundleRecord
+export declare function snapshotBundleDigest(bundle: NodeSnapshotBundleRecord): Buffer
+export declare function snapshotBundleDigestBytes(bytes: Buffer): Buffer
+export declare function snapshotBundleSummary(bundle: NodeSnapshotBundleRecord): NodeSnapshotBundleSummaryRecord
+export declare function snapshotBundleSummaryFromBytes(bytes: Buffer): NodeSnapshotBundleSummaryRecord
+export declare function verifySnapshotBundle(bundle: NodeSnapshotBundleRecord): NodeSnapshotBundleVerificationRecord
+export declare function verifySnapshotBundleBytes(bytes: Buffer): NodeSnapshotBundleVerificationRecord
+export declare function defaultConfig(): NodeConfigRecord
+export declare function encodingRaw(): NodeEncodingRecord
+export declare function encodingCbor(): NodeEncodingRecord
+export declare function encodingJson(): NodeEncodingRecord
+export declare function encodingCustom(name: string): NodeEncodingRecord
+export declare function treeConfig(minChunkSize: string, maxChunkSize: string, chunkingFactor: number, hashSeed: string, encoding: NodeEncodingRecord, nodeCacheMaxNodes?: string | undefined | null, nodeCacheMaxBytes?: string | undefined | null): NodeConfigRecord
 export declare function defaultLargeValueConfig(): NodeLargeValueConfigRecord
+export declare function largeValueConfig(inlineThreshold: string): NodeLargeValueConfigRecord
 export declare function defaultParallelConfig(): NodeParallelConfigRecord
+export declare function parallelConfig(maxThreads: string, parallelismThreshold: string): NodeParallelConfigRecord
+export declare function parallelConfigSequential(): NodeParallelConfigRecord
 export declare function crdtConfigLww(deletePolicy: string): NodeCrdtConfigRecord
 export declare function crdtConfigMultiValue(deletePolicy: string): NodeCrdtConfigRecord
 export declare function timestampedValueToBytes(record: NodeTimestampedValueRecord): Buffer
@@ -593,14 +712,24 @@ export declare class NativeProllyEngine {
   batch(tree: NodeTreeRecord, mutations: Array<NodeMutationRecord>): NodeTreeRecord
   batchWithStats(tree: NodeTreeRecord, mutations: Array<NodeMutationRecord>): NodeBatchApplyResultRecord
   parallelBatch(tree: NodeTreeRecord, mutations: Array<NodeMutationRecord>, config: NodeParallelConfigRecord): NodeTreeRecord
+  parallelBatchWithStats(tree: NodeTreeRecord, mutations: Array<NodeMutationRecord>, config: NodeParallelConfigRecord): NodeBatchApplyResultRecord
   buildFromEntries(entries: Array<NodeEntryRecord>): NodeTreeRecord
   buildFromSortedEntries(entries: Array<NodeEntryRecord>): NodeTreeRecord
   appendBatch(tree: NodeTreeRecord, mutations: Array<NodeMutationRecord>): NodeTreeRecord
   appendBatchWithStats(tree: NodeTreeRecord, mutations: Array<NodeMutationRecord>): NodeBatchApplyResultRecord
+  firstEntry(tree: NodeTreeRecord): NodeEntryRecord | null
+  lastEntry(tree: NodeTreeRecord): NodeEntryRecord | null
+  lowerBound(tree: NodeTreeRecord, key: Buffer): NodeEntryRecord | null
+  upperBound(tree: NodeTreeRecord, key: Buffer): NodeEntryRecord | null
   range(tree: NodeTreeRecord, start: Buffer, end?: Buffer | undefined | null): Array<NodeEntryRecord>
+  prefix(tree: NodeTreeRecord, prefix: Buffer): Array<NodeEntryRecord>
+  prefixPage(tree: NodeTreeRecord, prefix: Buffer, cursor: NodeRangeCursorRecord | undefined | null, limit: string): NodeRangePageRecord
+  prefixReversePage(tree: NodeTreeRecord, prefix: Buffer, cursor: NodeReverseCursorRecord | undefined | null, limit: string): NodeReversePageRecord
   rangeAfter(tree: NodeTreeRecord, afterKey: Buffer, end?: Buffer | undefined | null): Array<NodeEntryRecord>
   rangeFromCursor(tree: NodeTreeRecord, cursor?: NodeRangeCursorRecord | undefined | null, end?: Buffer | undefined | null): Array<NodeEntryRecord>
   rangePage(tree: NodeTreeRecord, cursor: NodeRangeCursorRecord | undefined | null, end: Buffer | undefined | null, limit: string): NodeRangePageRecord
+  reversePage(tree: NodeTreeRecord, cursor: NodeReverseCursorRecord | undefined | null, start: Buffer, limit: string): NodeReversePageRecord
+  cursorWindow(tree: NodeTreeRecord, key: Buffer, end: Buffer | undefined | null, limit: string): NodeCursorWindowRecord
   diff(base: NodeTreeRecord, other: NodeTreeRecord): Array<NodeDiffRecord>
   rangeDiff(base: NodeTreeRecord, other: NodeTreeRecord, start: Buffer, end?: Buffer | undefined | null): Array<NodeDiffRecord>
   diffFromCursor(base: NodeTreeRecord, other: NodeTreeRecord, cursor?: NodeRangeCursorRecord | undefined | null, end?: Buffer | undefined | null): Array<NodeDiffRecord>
@@ -638,10 +767,14 @@ export declare class NativeProllyEngine {
   compareAndSwapSnapshot(namespace: NodeSnapshotNamespaceRecord, id: Buffer, expected?: NodeTreeRecord | undefined | null, replacement?: NodeTreeRecord | undefined | null): NodeNamedRootUpdateRecord
   compareAndSwapSnapshotAtMillis(namespace: NodeSnapshotNamespaceRecord, id: Buffer, expected: NodeTreeRecord | undefined | null, replacement: NodeTreeRecord | undefined | null, timestampMillis: string): NodeNamedRootUpdateRecord
   collectStatsJson(tree: NodeTreeRecord): string
+  collectStats(tree: NodeTreeRecord): unknown
   statsDiffJson(before: NodeTreeRecord, after: NodeTreeRecord): string
+  statsDiff(before: NodeTreeRecord, after: NodeTreeRecord): unknown
   debugTreeJson(tree: NodeTreeRecord): string
+  debugTree(tree: NodeTreeRecord): unknown
   debugTreeText(tree: NodeTreeRecord): string
   debugCompareTreesJson(left: NodeTreeRecord, right: NodeTreeRecord): string
+  debugCompareTrees(left: NodeTreeRecord, right: NodeTreeRecord): unknown
   debugCompareTreesText(left: NodeTreeRecord, right: NodeTreeRecord): string
   cacheStats(): NodeCacheStatsRecord
   clearCache(): void
@@ -655,6 +788,7 @@ export declare class NativeProllyEngine {
   publishChangedSpansHint(base: NodeTreeRecord, changed: NodeTreeRecord, spans: Array<NodeChangedSpanRecord>): boolean
   loadChangedSpansHint(base: NodeTreeRecord, changed: NodeTreeRecord): NodeChangedSpanHintRecord | null
   structuralDiffPage(base: NodeTreeRecord, other: NodeTreeRecord, cursorJson: string | undefined | null, limit: string): NodeStructuralDiffPageRecord
+  structuralDiffPageWithCursor(base: NodeTreeRecord, other: NodeTreeRecord, cursor: NodeStructuralDiffCursorRecord | undefined | null, limit: string): NodeStructuralDiffPageRecord
   markReachable(roots: Array<NodeTreeRecord>): NodeGcReachabilityRecord
   markReachableBlobs(roots: Array<NodeTreeRecord>): NodeBlobGcReachabilityRecord
   listNodeCids(): Array<Buffer>
@@ -670,4 +804,6 @@ export declare class NativeProllyEngine {
   sweepBlobStoreGc(blobStore: NativeProllyBlobStore, roots: Array<NodeTreeRecord>): NodeBlobGcSweepRecord
   planMissingNodes(tree: NodeTreeRecord, destination: NativeProllyEngine): NodeMissingNodePlanRecord
   copyMissingNodes(tree: NodeTreeRecord, destination: NativeProllyEngine): NodeMissingNodeCopyRecord
+  exportSnapshot(tree: NodeTreeRecord): NodeSnapshotBundleRecord
+  importSnapshot(bundle: NodeSnapshotBundleRecord): NodeTreeRecord
 }

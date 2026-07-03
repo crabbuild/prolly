@@ -804,6 +804,10 @@ external fun uniffi_prolly_bindings_checksum_func_crdt_config_lww(
 ): Short
 external fun uniffi_prolly_bindings_checksum_func_crdt_config_multi_value(
 ): Short
+external fun uniffi_prolly_bindings_checksum_func_crdt_resolution_delete(
+): Short
+external fun uniffi_prolly_bindings_checksum_func_crdt_resolution_value(
+): Short
 external fun uniffi_prolly_bindings_checksum_func_debug_key(
 ): Short
 external fun uniffi_prolly_bindings_checksum_func_decode_segments(
@@ -814,11 +818,21 @@ external fun uniffi_prolly_bindings_checksum_func_default_large_value_config(
 ): Short
 external fun uniffi_prolly_bindings_checksum_func_default_parallel_config(
 ): Short
+external fun uniffi_prolly_bindings_checksum_func_delete_mutation(
+): Short
 external fun uniffi_prolly_bindings_checksum_func_diff_page_proof_from_bytes(
 ): Short
 external fun uniffi_prolly_bindings_checksum_func_diff_page_proof_to_bytes(
 ): Short
 external fun uniffi_prolly_bindings_checksum_func_encode_segment(
+): Short
+external fun uniffi_prolly_bindings_checksum_func_encoding_cbor(
+): Short
+external fun uniffi_prolly_bindings_checksum_func_encoding_custom(
+): Short
+external fun uniffi_prolly_bindings_checksum_func_encoding_json(
+): Short
+external fun uniffi_prolly_bindings_checksum_func_encoding_raw(
 ): Short
 external fun uniffi_prolly_bindings_checksum_func_i128_key(
 ): Short
@@ -842,6 +856,8 @@ external fun uniffi_prolly_bindings_checksum_func_key_proof_path_node_bytes(
 ): Short
 external fun uniffi_prolly_bindings_checksum_func_key_proof_to_bytes(
 ): Short
+external fun uniffi_prolly_bindings_checksum_func_large_value_config(
+): Short
 external fun uniffi_prolly_bindings_checksum_func_multi_key_proof_from_bytes(
 ): Short
 external fun uniffi_prolly_bindings_checksum_func_multi_key_proof_from_node_bytes(
@@ -861,6 +877,10 @@ external fun uniffi_prolly_bindings_checksum_func_node_cid(
 external fun uniffi_prolly_bindings_checksum_func_node_from_bytes(
 ): Short
 external fun uniffi_prolly_bindings_checksum_func_node_to_bytes(
+): Short
+external fun uniffi_prolly_bindings_checksum_func_parallel_config(
+): Short
+external fun uniffi_prolly_bindings_checksum_func_parallel_config_sequential(
 ): Short
 external fun uniffi_prolly_bindings_checksum_func_prefix_end(
 ): Short
@@ -886,6 +906,20 @@ external fun uniffi_prolly_bindings_checksum_func_range_proof_path_node_bytes(
 ): Short
 external fun uniffi_prolly_bindings_checksum_func_range_proof_to_bytes(
 ): Short
+external fun uniffi_prolly_bindings_checksum_func_resolution_delete(
+): Short
+external fun uniffi_prolly_bindings_checksum_func_resolution_unresolved(
+): Short
+external fun uniffi_prolly_bindings_checksum_func_resolution_value(
+): Short
+external fun uniffi_prolly_bindings_checksum_func_resolve_delete_wins(
+): Short
+external fun uniffi_prolly_bindings_checksum_func_resolve_prefer_left(
+): Short
+external fun uniffi_prolly_bindings_checksum_func_resolve_prefer_right(
+): Short
+external fun uniffi_prolly_bindings_checksum_func_resolve_update_wins(
+): Short
 external fun uniffi_prolly_bindings_checksum_func_retain_all_named_roots(
 ): Short
 external fun uniffi_prolly_bindings_checksum_func_retain_exact_named_roots(
@@ -896,11 +930,27 @@ external fun uniffi_prolly_bindings_checksum_func_retain_named_roots_updated_sin
 ): Short
 external fun uniffi_prolly_bindings_checksum_func_retain_newest_named_roots(
 ): Short
+external fun uniffi_prolly_bindings_checksum_func_reverse_cursor_before_key(
+): Short
+external fun uniffi_prolly_bindings_checksum_func_reverse_cursor_end(
+): Short
 external fun uniffi_prolly_bindings_checksum_func_root_manifest_from_bytes(
 ): Short
 external fun uniffi_prolly_bindings_checksum_func_root_manifest_to_bytes(
 ): Short
 external fun uniffi_prolly_bindings_checksum_func_sign_proof_bundle_hmac_sha256(
+): Short
+external fun uniffi_prolly_bindings_checksum_func_snapshot_bundle_digest(
+): Short
+external fun uniffi_prolly_bindings_checksum_func_snapshot_bundle_digest_bytes(
+): Short
+external fun uniffi_prolly_bindings_checksum_func_snapshot_bundle_from_bytes(
+): Short
+external fun uniffi_prolly_bindings_checksum_func_snapshot_bundle_summary(
+): Short
+external fun uniffi_prolly_bindings_checksum_func_snapshot_bundle_summary_from_bytes(
+): Short
+external fun uniffi_prolly_bindings_checksum_func_snapshot_bundle_to_bytes(
 ): Short
 external fun uniffi_prolly_bindings_checksum_func_snapshot_id_from_name(
 ): Short
@@ -932,9 +982,13 @@ external fun uniffi_prolly_bindings_checksum_func_tombstone_to_bytes(
 ): Short
 external fun uniffi_prolly_bindings_checksum_func_tombstone_upsert_mutation(
 ): Short
+external fun uniffi_prolly_bindings_checksum_func_tree_config(
+): Short
 external fun uniffi_prolly_bindings_checksum_func_u128_key(
 ): Short
 external fun uniffi_prolly_bindings_checksum_func_u64_key(
+): Short
+external fun uniffi_prolly_bindings_checksum_func_upsert_mutation(
 ): Short
 external fun uniffi_prolly_bindings_checksum_func_value_ref_from_bytes(
 ): Short
@@ -959,6 +1013,10 @@ external fun uniffi_prolly_bindings_checksum_func_verify_proof_bundle(
 external fun uniffi_prolly_bindings_checksum_func_verify_range_page_proof(
 ): Short
 external fun uniffi_prolly_bindings_checksum_func_verify_range_proof(
+): Short
+external fun uniffi_prolly_bindings_checksum_func_verify_snapshot_bundle(
+): Short
+external fun uniffi_prolly_bindings_checksum_func_verify_snapshot_bundle_bytes(
 ): Short
 external fun uniffi_prolly_bindings_checksum_func_versioned_value_bytes_matches_schema(
 ): Short
@@ -1050,6 +1108,8 @@ external fun uniffi_prolly_bindings_checksum_method_prollyengine_cache_stats(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_prollyengine_clear_cache(
 ): Short
+external fun uniffi_prolly_bindings_checksum_method_prollyengine_collect_stats(
+): Short
 external fun uniffi_prolly_bindings_checksum_method_prollyengine_collect_stats_json(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_prollyengine_compare_and_swap_named_root(
@@ -1070,9 +1130,15 @@ external fun uniffi_prolly_bindings_checksum_method_prollyengine_crdt_merge_with
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_prollyengine_create(
 ): Short
+external fun uniffi_prolly_bindings_checksum_method_prollyengine_cursor_window(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_prollyengine_debug_compare_trees(
+): Short
 external fun uniffi_prolly_bindings_checksum_method_prollyengine_debug_compare_trees_json(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_prollyengine_debug_compare_trees_text(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_prollyengine_debug_tree(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_prollyengine_debug_tree_json(
 ): Short
@@ -1090,6 +1156,10 @@ external fun uniffi_prolly_bindings_checksum_method_prollyengine_diff_from_curso
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_prollyengine_diff_page(
 ): Short
+external fun uniffi_prolly_bindings_checksum_method_prollyengine_export_snapshot(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_prollyengine_first_entry(
+): Short
 external fun uniffi_prolly_bindings_checksum_method_prollyengine_get(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_prollyengine_get_large_value(
@@ -1099,6 +1169,10 @@ external fun uniffi_prolly_bindings_checksum_method_prollyengine_get_many(
 external fun uniffi_prolly_bindings_checksum_method_prollyengine_get_value_ref(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_prollyengine_hydrate_prefix_path_hint(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_prollyengine_import_snapshot(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_prollyengine_last_entry(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_prollyengine_list_named_root_manifests(
 ): Short
@@ -1119,6 +1193,8 @@ external fun uniffi_prolly_bindings_checksum_method_prollyengine_load_retained_n
 external fun uniffi_prolly_bindings_checksum_method_prollyengine_load_snapshot(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_prollyengine_load_snapshots(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_prollyengine_lower_bound(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_prollyengine_mark_reachable(
 ): Short
@@ -1152,6 +1228,8 @@ external fun uniffi_prolly_bindings_checksum_method_prollyengine_metrics(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_prollyengine_parallel_batch(
 ): Short
+external fun uniffi_prolly_bindings_checksum_method_prollyengine_parallel_batch_with_stats(
+): Short
 external fun uniffi_prolly_bindings_checksum_method_prollyengine_pin_tree_path(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_prollyengine_pin_tree_root(
@@ -1167,6 +1245,12 @@ external fun uniffi_prolly_bindings_checksum_method_prollyengine_plan_missing_no
 external fun uniffi_prolly_bindings_checksum_method_prollyengine_plan_store_gc(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_prollyengine_plan_store_gc_for_retention(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_prollyengine_prefix(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_prollyengine_prefix_page(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_prollyengine_prefix_reverse_page(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_prollyengine_prove_diff_page(
 ): Short
@@ -1208,9 +1292,15 @@ external fun uniffi_prolly_bindings_checksum_method_prollyengine_range_page(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_prollyengine_reset_metrics(
 ): Short
+external fun uniffi_prolly_bindings_checksum_method_prollyengine_reverse_page(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_prollyengine_stats_diff(
+): Short
 external fun uniffi_prolly_bindings_checksum_method_prollyengine_stats_diff_json(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_prollyengine_structural_diff_page(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_prollyengine_structural_diff_page_with_cursor(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_prollyengine_sweep_blob_gc(
 ): Short
@@ -1223,6 +1313,8 @@ external fun uniffi_prolly_bindings_checksum_method_prollyengine_sweep_store_gc(
 external fun uniffi_prolly_bindings_checksum_method_prollyengine_sweep_store_gc_for_retention(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_prollyengine_unpin_all_cache_nodes(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_prollyengine_upper_bound(
 ): Short
 external fun uniffi_prolly_bindings_checksum_constructor_mergepolicyregistry_new(
 ): Short
@@ -1385,6 +1477,8 @@ external fun uniffi_prolly_bindings_fn_method_prollyengine_cache_stats(`ptr`: Lo
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_prollyengine_clear_cache(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): Unit
+external fun uniffi_prolly_bindings_fn_method_prollyengine_collect_stats(`ptr`: Long,`tree`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_prollyengine_collect_stats_json(`ptr`: Long,`tree`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_prollyengine_compare_and_swap_named_root(`ptr`: Long,`name`: RustBuffer.ByValue,`expected`: RustBuffer.ByValue,`replacement`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -1405,9 +1499,15 @@ external fun uniffi_prolly_bindings_fn_method_prollyengine_crdt_merge_with_resol
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_prollyengine_create(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_prollyengine_cursor_window(`ptr`: Long,`tree`: RustBuffer.ByValue,`key`: RustBuffer.ByValue,`end`: RustBuffer.ByValue,`limit`: Long,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_prollyengine_debug_compare_trees(`ptr`: Long,`left`: RustBuffer.ByValue,`right`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_prollyengine_debug_compare_trees_json(`ptr`: Long,`left`: RustBuffer.ByValue,`right`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_prollyengine_debug_compare_trees_text(`ptr`: Long,`left`: RustBuffer.ByValue,`right`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_prollyengine_debug_tree(`ptr`: Long,`tree`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_prollyengine_debug_tree_json(`ptr`: Long,`tree`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
@@ -1425,6 +1525,10 @@ external fun uniffi_prolly_bindings_fn_method_prollyengine_diff_from_cursor(`ptr
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_prollyengine_diff_page(`ptr`: Long,`base`: RustBuffer.ByValue,`other`: RustBuffer.ByValue,`cursor`: RustBuffer.ByValue,`end`: RustBuffer.ByValue,`limit`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_prollyengine_export_snapshot(`ptr`: Long,`tree`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_prollyengine_first_entry(`ptr`: Long,`tree`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_prollyengine_get(`ptr`: Long,`tree`: RustBuffer.ByValue,`key`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_prollyengine_get_large_value(`ptr`: Long,`blobStore`: Long,`tree`: RustBuffer.ByValue,`key`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -1435,6 +1539,10 @@ external fun uniffi_prolly_bindings_fn_method_prollyengine_get_value_ref(`ptr`: 
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_prollyengine_hydrate_prefix_path_hint(`ptr`: Long,`tree`: RustBuffer.ByValue,`prefix`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): Byte
+external fun uniffi_prolly_bindings_fn_method_prollyengine_import_snapshot(`ptr`: Long,`bundle`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_prollyengine_last_entry(`ptr`: Long,`tree`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_prollyengine_list_named_root_manifests(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_prollyengine_list_named_roots(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -1454,6 +1562,8 @@ external fun uniffi_prolly_bindings_fn_method_prollyengine_load_retained_named_r
 external fun uniffi_prolly_bindings_fn_method_prollyengine_load_snapshot(`ptr`: Long,`namespace`: RustBuffer.ByValue,`id`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_prollyengine_load_snapshots(`ptr`: Long,`namespace`: RustBuffer.ByValue,`ids`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_prollyengine_lower_bound(`ptr`: Long,`tree`: RustBuffer.ByValue,`key`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_prollyengine_mark_reachable(`ptr`: Long,`roots`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
@@ -1487,6 +1597,8 @@ external fun uniffi_prolly_bindings_fn_method_prollyengine_metrics(`ptr`: Long,u
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_prollyengine_parallel_batch(`ptr`: Long,`tree`: RustBuffer.ByValue,`mutations`: RustBuffer.ByValue,`config`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_prollyengine_parallel_batch_with_stats(`ptr`: Long,`tree`: RustBuffer.ByValue,`mutations`: RustBuffer.ByValue,`config`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_prollyengine_pin_tree_path(`ptr`: Long,`tree`: RustBuffer.ByValue,`key`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): Long
 external fun uniffi_prolly_bindings_fn_method_prollyengine_pin_tree_root(`ptr`: Long,`tree`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -1502,6 +1614,12 @@ external fun uniffi_prolly_bindings_fn_method_prollyengine_plan_missing_nodes(`p
 external fun uniffi_prolly_bindings_fn_method_prollyengine_plan_store_gc(`ptr`: Long,`roots`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_prollyengine_plan_store_gc_for_retention(`ptr`: Long,`retention`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_prollyengine_prefix(`ptr`: Long,`tree`: RustBuffer.ByValue,`prefix`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_prollyengine_prefix_page(`ptr`: Long,`tree`: RustBuffer.ByValue,`prefix`: RustBuffer.ByValue,`cursor`: RustBuffer.ByValue,`limit`: Long,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_prollyengine_prefix_reverse_page(`ptr`: Long,`tree`: RustBuffer.ByValue,`prefix`: RustBuffer.ByValue,`cursor`: RustBuffer.ByValue,`limit`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_prollyengine_prove_diff_page(`ptr`: Long,`base`: RustBuffer.ByValue,`other`: RustBuffer.ByValue,`cursor`: RustBuffer.ByValue,`end`: RustBuffer.ByValue,`limit`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
@@ -1543,9 +1661,15 @@ external fun uniffi_prolly_bindings_fn_method_prollyengine_range_page(`ptr`: Lon
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_prollyengine_reset_metrics(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): Unit
+external fun uniffi_prolly_bindings_fn_method_prollyengine_reverse_page(`ptr`: Long,`tree`: RustBuffer.ByValue,`cursor`: RustBuffer.ByValue,`start`: RustBuffer.ByValue,`limit`: Long,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_prollyengine_stats_diff(`ptr`: Long,`before`: RustBuffer.ByValue,`after`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_prollyengine_stats_diff_json(`ptr`: Long,`before`: RustBuffer.ByValue,`after`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_prollyengine_structural_diff_page(`ptr`: Long,`base`: RustBuffer.ByValue,`other`: RustBuffer.ByValue,`cursorJson`: RustBuffer.ByValue,`limit`: Long,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_prollyengine_structural_diff_page_with_cursor(`ptr`: Long,`base`: RustBuffer.ByValue,`other`: RustBuffer.ByValue,`cursor`: RustBuffer.ByValue,`limit`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_prollyengine_sweep_blob_gc(`ptr`: Long,`blobStore`: Long,`roots`: RustBuffer.ByValue,`candidateBlobs`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
@@ -1559,6 +1683,8 @@ external fun uniffi_prolly_bindings_fn_method_prollyengine_sweep_store_gc_for_re
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_prollyengine_unpin_all_cache_nodes(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): Long
+external fun uniffi_prolly_bindings_fn_method_prollyengine_upper_bound(`ptr`: Long,`tree`: RustBuffer.ByValue,`key`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_authenticated_proof_envelope_from_bytes(`bytes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_authenticated_proof_envelope_to_bytes(`envelope`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -1577,6 +1703,10 @@ external fun uniffi_prolly_bindings_fn_func_crdt_config_lww(`deletePolicy`: Rust
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_crdt_config_multi_value(`deletePolicy`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_func_crdt_resolution_delete(uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_func_crdt_resolution_value(`value`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_debug_key(`key`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_decode_segments(`key`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -1587,11 +1717,21 @@ external fun uniffi_prolly_bindings_fn_func_default_large_value_config(uniffi_ou
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_default_parallel_config(uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_func_delete_mutation(`key`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_diff_page_proof_from_bytes(`bytes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_diff_page_proof_to_bytes(`proof`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_encode_segment(`segment`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_func_encoding_cbor(uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_func_encoding_custom(`name`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_func_encoding_json(uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_func_encoding_raw(uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_i128_key(`value`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
@@ -1615,6 +1755,8 @@ external fun uniffi_prolly_bindings_fn_func_key_proof_path_node_bytes(`proof`: R
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_key_proof_to_bytes(`proof`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_func_large_value_config(`inlineThreshold`: Long,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_multi_key_proof_from_bytes(`bytes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_multi_key_proof_from_node_bytes(`root`: RustBuffer.ByValue,`keys`: RustBuffer.ByValue,`pathNodeBytes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -1634,6 +1776,10 @@ external fun uniffi_prolly_bindings_fn_func_node_cid(`node`: RustBuffer.ByValue,
 external fun uniffi_prolly_bindings_fn_func_node_from_bytes(`bytes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_node_to_bytes(`node`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_func_parallel_config(`maxThreads`: Long,`parallelismThreshold`: Long,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_func_parallel_config_sequential(uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_prefix_end(`prefix`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
@@ -1659,6 +1805,20 @@ external fun uniffi_prolly_bindings_fn_func_range_proof_path_node_bytes(`proof`:
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_range_proof_to_bytes(`proof`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_func_resolution_delete(uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_func_resolution_unresolved(uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_func_resolution_value(`value`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_func_resolve_delete_wins(`conflict`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_func_resolve_prefer_left(`conflict`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_func_resolve_prefer_right(`conflict`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_func_resolve_update_wins(`conflict`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_retain_all_named_roots(uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_retain_exact_named_roots(`names`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -1669,11 +1829,27 @@ external fun uniffi_prolly_bindings_fn_func_retain_named_roots_updated_since(`pr
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_retain_newest_named_roots(`prefix`: RustBuffer.ByValue,`count`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_func_reverse_cursor_before_key(`key`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_func_reverse_cursor_end(uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_root_manifest_from_bytes(`bytes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_root_manifest_to_bytes(`record`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_sign_proof_bundle_hmac_sha256(`proofBundle`: RustBuffer.ByValue,`keyId`: RustBuffer.ByValue,`secret`: RustBuffer.ByValue,`context`: RustBuffer.ByValue,`issuedAtMillis`: RustBuffer.ByValue,`expiresAtMillis`: RustBuffer.ByValue,`nonce`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_func_snapshot_bundle_digest(`record`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_func_snapshot_bundle_digest_bytes(`bytes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_func_snapshot_bundle_from_bytes(`bytes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_func_snapshot_bundle_summary(`record`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_func_snapshot_bundle_summary_from_bytes(`bytes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_func_snapshot_bundle_to_bytes(`record`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_snapshot_id_from_name(`namespace`: RustBuffer.ByValue,`name`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
@@ -1705,9 +1881,13 @@ external fun uniffi_prolly_bindings_fn_func_tombstone_to_bytes(`record`: RustBuf
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_tombstone_upsert_mutation(`key`: RustBuffer.ByValue,`tombstone`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_func_tree_config(`minChunkSize`: Long,`maxChunkSize`: Long,`chunkingFactor`: Int,`hashSeed`: Long,`encoding`: RustBuffer.ByValue,`nodeCacheMaxNodes`: RustBuffer.ByValue,`nodeCacheMaxBytes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_u128_key(`value`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_u64_key(`value`: Long,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_func_upsert_mutation(`key`: RustBuffer.ByValue,`value`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_value_ref_from_bytes(`bytes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
@@ -1732,6 +1912,10 @@ external fun uniffi_prolly_bindings_fn_func_verify_proof_bundle(`bytes`: RustBuf
 external fun uniffi_prolly_bindings_fn_func_verify_range_page_proof(`proof`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_verify_range_proof(`proof`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_func_verify_snapshot_bundle(`record`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_func_verify_snapshot_bundle_bytes(`bytes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_versioned_value_bytes_matches_schema(`bytes`: RustBuffer.ByValue,`schema`: RustBuffer.ByValue,`version`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): Byte
@@ -1891,6 +2075,12 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_prolly_bindings_checksum_func_crdt_config_multi_value() != 53968.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_prolly_bindings_checksum_func_crdt_resolution_delete() != 41725.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_func_crdt_resolution_value() != 63818.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_prolly_bindings_checksum_func_debug_key() != 56659.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1906,6 +2096,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_prolly_bindings_checksum_func_default_parallel_config() != 39626.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_prolly_bindings_checksum_func_delete_mutation() != 23016.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_prolly_bindings_checksum_func_diff_page_proof_from_bytes() != 24710.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1913,6 +2106,18 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_func_encode_segment() != 11634.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_func_encoding_cbor() != 62179.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_func_encoding_custom() != 31444.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_func_encoding_json() != 52476.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_func_encoding_raw() != 57596.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_func_i128_key() != 29684.toShort()) {
@@ -1948,6 +2153,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_prolly_bindings_checksum_func_key_proof_to_bytes() != 57240.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_prolly_bindings_checksum_func_large_value_config() != 23240.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_prolly_bindings_checksum_func_multi_key_proof_from_bytes() != 33082.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1976,6 +2184,12 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_func_node_to_bytes() != 56453.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_func_parallel_config() != 49373.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_func_parallel_config_sequential() != 26170.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_func_prefix_end() != 19464.toShort()) {
@@ -2014,6 +2228,27 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_prolly_bindings_checksum_func_range_proof_to_bytes() != 3393.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_prolly_bindings_checksum_func_resolution_delete() != 6396.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_func_resolution_unresolved() != 8947.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_func_resolution_value() != 33181.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_func_resolve_delete_wins() != 26919.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_func_resolve_prefer_left() != 7433.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_func_resolve_prefer_right() != 10928.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_func_resolve_update_wins() != 62395.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_prolly_bindings_checksum_func_retain_all_named_roots() != 23556.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -2029,6 +2264,12 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_prolly_bindings_checksum_func_retain_newest_named_roots() != 19688.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_prolly_bindings_checksum_func_reverse_cursor_before_key() != 30758.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_func_reverse_cursor_end() != 24189.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_prolly_bindings_checksum_func_root_manifest_from_bytes() != 59047.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -2036,6 +2277,24 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_func_sign_proof_bundle_hmac_sha256() != 46166.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_func_snapshot_bundle_digest() != 49430.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_func_snapshot_bundle_digest_bytes() != 38367.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_func_snapshot_bundle_from_bytes() != 49121.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_func_snapshot_bundle_summary() != 22997.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_func_snapshot_bundle_summary_from_bytes() != 35406.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_func_snapshot_bundle_to_bytes() != 49097.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_func_snapshot_id_from_name() != 57327.toShort()) {
@@ -2083,10 +2342,16 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_prolly_bindings_checksum_func_tombstone_upsert_mutation() != 25846.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_prolly_bindings_checksum_func_tree_config() != 13018.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_prolly_bindings_checksum_func_u128_key() != 12112.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_func_u64_key() != 43436.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_func_upsert_mutation() != 55414.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_func_value_ref_from_bytes() != 265.toShort()) {
@@ -2123,6 +2388,12 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_func_verify_range_proof() != 32709.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_func_verify_snapshot_bundle() != 37604.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_func_verify_snapshot_bundle_bytes() != 55548.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_func_versioned_value_bytes_matches_schema() != 9192.toShort()) {
@@ -2260,6 +2531,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_clear_cache() != 38107.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_collect_stats() != 8801.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_collect_stats_json() != 21299.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -2290,10 +2564,19 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_create() != 15621.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_cursor_window() != 31202.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_debug_compare_trees() != 16233.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_debug_compare_trees_json() != 10941.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_debug_compare_trees_text() != 55170.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_debug_tree() != 56376.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_debug_tree_json() != 24340.toShort()) {
@@ -2320,6 +2603,12 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_diff_page() != 49332.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_export_snapshot() != 39238.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_first_entry() != 29853.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_get() != 37112.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -2333,6 +2622,12 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_hydrate_prefix_path_hint() != 30547.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_import_snapshot() != 14533.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_last_entry() != 35726.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_list_named_root_manifests() != 58385.toShort()) {
@@ -2363,6 +2658,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_load_snapshots() != 34944.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_lower_bound() != 56345.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_mark_reachable() != 32421.toShort()) {
@@ -2413,6 +2711,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_parallel_batch() != 61898.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_parallel_batch_with_stats() != 14930.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_pin_tree_path() != 42121.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -2435,6 +2736,15 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_plan_store_gc_for_retention() != 19773.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_prefix() != 11714.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_prefix_page() != 29919.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_prefix_reverse_page() != 20711.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_prove_diff_page() != 18402.toShort()) {
@@ -2497,10 +2807,19 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_reset_metrics() != 10217.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_reverse_page() != 38329.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_stats_diff() != 34349.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_stats_diff_json() != 1768.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_structural_diff_page() != 61826.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_structural_diff_page_with_cursor() != 28097.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_sweep_blob_gc() != 64727.toShort()) {
@@ -2519,6 +2838,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_unpin_all_cache_nodes() != 58636.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_upper_bound() != 36418.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_constructor_mergepolicyregistry_new() != 19304.toShort()) {
@@ -2759,6 +3081,29 @@ public object FfiConverterUByte: FfiConverter<UByte, Byte> {
 /**
  * @suppress
  */
+public object FfiConverterByte: FfiConverter<Byte, Byte> {
+    override fun lift(value: Byte): Byte {
+        return value
+    }
+
+    override fun read(buf: ByteBuffer): Byte {
+        return buf.get()
+    }
+
+    override fun lower(value: Byte): Byte {
+        return value
+    }
+
+    override fun allocationSize(value: Byte) = 1UL
+
+    override fun write(value: Byte, buf: ByteBuffer) {
+        buf.put(value)
+    }
+}
+
+/**
+ * @suppress
+ */
 public object FfiConverterUInt: FfiConverter<UInt, Int> {
     override fun lift(value: Int): UInt {
         return value.toUInt()
@@ -2822,6 +3167,29 @@ public object FfiConverterLong: FfiConverter<Long, Long> {
 
     override fun write(value: Long, buf: ByteBuffer) {
         buf.putLong(value)
+    }
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterDouble: FfiConverter<Double, Double> {
+    override fun lift(value: Double): Double {
+        return value
+    }
+
+    override fun read(buf: ByteBuffer): Double {
+        return buf.getDouble()
+    }
+
+    override fun lower(value: Double): Double {
+        return value
+    }
+
+    override fun allocationSize(value: Double) = 8UL
+
+    override fun write(value: Double, buf: ByteBuffer) {
+        buf.putDouble(value)
     }
 }
 
@@ -5067,6 +5435,8 @@ public interface ProllyEngineInterface {
 
     fun `clearCache`()
 
+    fun `collectStats`(`tree`: TreeRecord): TreeStatsRecord
+
     fun `collectStatsJson`(`tree`: TreeRecord): JsonDocumentRecord
 
     fun `compareAndSwapNamedRoot`(`name`: kotlin.ByteArray, `expected`: TreeRecord?, `replacement`: TreeRecord?): NamedRootUpdateRecord
@@ -5087,9 +5457,15 @@ public interface ProllyEngineInterface {
 
     fun `create`(): TreeRecord
 
+    fun `cursorWindow`(`tree`: TreeRecord, `key`: kotlin.ByteArray, `end`: kotlin.ByteArray?, `limit`: kotlin.ULong): CursorWindowRecord
+
+    fun `debugCompareTrees`(`left`: TreeRecord, `right`: TreeRecord): TreeDebugComparisonRecord
+
     fun `debugCompareTreesJson`(`left`: TreeRecord, `right`: TreeRecord): JsonDocumentRecord
 
     fun `debugCompareTreesText`(`left`: TreeRecord, `right`: TreeRecord): kotlin.String
+
+    fun `debugTree`(`tree`: TreeRecord): TreeDebugViewRecord
 
     fun `debugTreeJson`(`tree`: TreeRecord): JsonDocumentRecord
 
@@ -5107,6 +5483,10 @@ public interface ProllyEngineInterface {
 
     fun `diffPage`(`base`: TreeRecord, `other`: TreeRecord, `cursor`: RangeCursorRecord?, `end`: kotlin.ByteArray?, `limit`: kotlin.ULong): DiffPageRecord
 
+    fun `exportSnapshot`(`tree`: TreeRecord): SnapshotBundleRecord
+
+    fun `firstEntry`(`tree`: TreeRecord): EntryRecord?
+
     fun `get`(`tree`: TreeRecord, `key`: kotlin.ByteArray): kotlin.ByteArray?
 
     fun `getLargeValue`(`blobStore`: ProllyBlobStore, `tree`: TreeRecord, `key`: kotlin.ByteArray): kotlin.ByteArray?
@@ -5116,6 +5496,10 @@ public interface ProllyEngineInterface {
     fun `getValueRef`(`tree`: TreeRecord, `key`: kotlin.ByteArray): ValueRefRecord?
 
     fun `hydratePrefixPathHint`(`tree`: TreeRecord, `prefix`: kotlin.ByteArray): kotlin.Boolean
+
+    fun `importSnapshot`(`bundle`: SnapshotBundleRecord): TreeRecord
+
+    fun `lastEntry`(`tree`: TreeRecord): EntryRecord?
 
     fun `listNamedRootManifests`(): List<NamedRootManifestRecord>
 
@@ -5136,6 +5520,8 @@ public interface ProllyEngineInterface {
     fun `loadSnapshot`(`namespace`: SnapshotNamespaceRecord, `id`: kotlin.ByteArray): TreeRecord?
 
     fun `loadSnapshots`(`namespace`: SnapshotNamespaceRecord, `ids`: List<kotlin.ByteArray>): SnapshotSelectionRecord
+
+    fun `lowerBound`(`tree`: TreeRecord, `key`: kotlin.ByteArray): EntryRecord?
 
     fun `markReachable`(`roots`: List<TreeRecord>): GcReachabilityRecord
 
@@ -5169,6 +5555,8 @@ public interface ProllyEngineInterface {
 
     fun `parallelBatch`(`tree`: TreeRecord, `mutations`: List<MutationRecord>, `config`: ParallelConfigRecord): TreeRecord
 
+    fun `parallelBatchWithStats`(`tree`: TreeRecord, `mutations`: List<MutationRecord>, `config`: ParallelConfigRecord): BatchApplyResultRecord
+
     fun `pinTreePath`(`tree`: TreeRecord, `key`: kotlin.ByteArray): kotlin.ULong
 
     fun `pinTreeRoot`(`tree`: TreeRecord): kotlin.ULong
@@ -5184,6 +5572,12 @@ public interface ProllyEngineInterface {
     fun `planStoreGc`(`roots`: List<TreeRecord>): GcPlanRecord
 
     fun `planStoreGcForRetention`(`retention`: NamedRootRetentionRecord): GcPlanRecord
+
+    fun `prefix`(`tree`: TreeRecord, `prefix`: kotlin.ByteArray): List<EntryRecord>
+
+    fun `prefixPage`(`tree`: TreeRecord, `prefix`: kotlin.ByteArray, `cursor`: RangeCursorRecord?, `limit`: kotlin.ULong): RangePageRecord
+
+    fun `prefixReversePage`(`tree`: TreeRecord, `prefix`: kotlin.ByteArray, `cursor`: ReverseCursorRecord?, `limit`: kotlin.ULong): ReversePageRecord
 
     fun `proveDiffPage`(`base`: TreeRecord, `other`: TreeRecord, `cursor`: RangeCursorRecord?, `end`: kotlin.ByteArray?, `limit`: kotlin.ULong): ProvedDiffPageRecord
 
@@ -5225,9 +5619,15 @@ public interface ProllyEngineInterface {
 
     fun `resetMetrics`()
 
+    fun `reversePage`(`tree`: TreeRecord, `cursor`: ReverseCursorRecord?, `start`: kotlin.ByteArray, `limit`: kotlin.ULong): ReversePageRecord
+
+    fun `statsDiff`(`before`: TreeRecord, `after`: TreeRecord): StatsComparisonRecord
+
     fun `statsDiffJson`(`before`: TreeRecord, `after`: TreeRecord): JsonDocumentRecord
 
     fun `structuralDiffPage`(`base`: TreeRecord, `other`: TreeRecord, `cursorJson`: kotlin.String?, `limit`: kotlin.ULong): StructuralDiffPageRecord
+
+    fun `structuralDiffPageWithCursor`(`base`: TreeRecord, `other`: TreeRecord, `cursor`: StructuralDiffCursorRecord?, `limit`: kotlin.ULong): StructuralDiffPageRecord
 
     fun `sweepBlobGc`(`blobStore`: ProllyBlobStore, `roots`: List<TreeRecord>, `candidateBlobs`: List<BlobRefRecord>): BlobGcSweepRecord
 
@@ -5240,6 +5640,8 @@ public interface ProllyEngineInterface {
     fun `sweepStoreGcForRetention`(`retention`: NamedRootRetentionRecord): GcSweepRecord
 
     fun `unpinAllCacheNodes`(): kotlin.ULong
+
+    fun `upperBound`(`tree`: TreeRecord, `key`: kotlin.ByteArray): EntryRecord?
 
     companion object
 }
@@ -5451,6 +5853,20 @@ open class ProllyEngine: Disposable, AutoCloseable, ProllyEngineInterface
 
 
 
+    @Throws(ProllyBindingException::class)override fun `collectStats`(`tree`: TreeRecord): TreeStatsRecord {
+            return FfiConverterTypeTreeStatsRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_collect_stats(
+        it,
+        FfiConverterTypeTreeRecord.lower(`tree`),_status)
+}
+    }
+    )
+    }
+
+
+
     @Throws(ProllyBindingException::class)override fun `collectStatsJson`(`tree`: TreeRecord): JsonDocumentRecord {
             return FfiConverterTypeJsonDocumentRecord.lift(
     callWithHandle {
@@ -5590,6 +6006,34 @@ open class ProllyEngine: Disposable, AutoCloseable, ProllyEngineInterface
 
 
 
+    @Throws(ProllyBindingException::class)override fun `cursorWindow`(`tree`: TreeRecord, `key`: kotlin.ByteArray, `end`: kotlin.ByteArray?, `limit`: kotlin.ULong): CursorWindowRecord {
+            return FfiConverterTypeCursorWindowRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_cursor_window(
+        it,
+        FfiConverterTypeTreeRecord.lower(`tree`),FfiConverterByteArray.lower(`key`),FfiConverterOptionalByteArray.lower(`end`),FfiConverterULong.lower(`limit`),_status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `debugCompareTrees`(`left`: TreeRecord, `right`: TreeRecord): TreeDebugComparisonRecord {
+            return FfiConverterTypeTreeDebugComparisonRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_debug_compare_trees(
+        it,
+        FfiConverterTypeTreeRecord.lower(`left`),FfiConverterTypeTreeRecord.lower(`right`),_status)
+}
+    }
+    )
+    }
+
+
+
     @Throws(ProllyBindingException::class)override fun `debugCompareTreesJson`(`left`: TreeRecord, `right`: TreeRecord): JsonDocumentRecord {
             return FfiConverterTypeJsonDocumentRecord.lift(
     callWithHandle {
@@ -5611,6 +6055,20 @@ open class ProllyEngine: Disposable, AutoCloseable, ProllyEngineInterface
     UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_debug_compare_trees_text(
         it,
         FfiConverterTypeTreeRecord.lower(`left`),FfiConverterTypeTreeRecord.lower(`right`),_status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `debugTree`(`tree`: TreeRecord): TreeDebugViewRecord {
+            return FfiConverterTypeTreeDebugViewRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_debug_tree(
+        it,
+        FfiConverterTypeTreeRecord.lower(`tree`),_status)
 }
     }
     )
@@ -5728,6 +6186,34 @@ open class ProllyEngine: Disposable, AutoCloseable, ProllyEngineInterface
 
 
 
+    @Throws(ProllyBindingException::class)override fun `exportSnapshot`(`tree`: TreeRecord): SnapshotBundleRecord {
+            return FfiConverterTypeSnapshotBundleRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_export_snapshot(
+        it,
+        FfiConverterTypeTreeRecord.lower(`tree`),_status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `firstEntry`(`tree`: TreeRecord): EntryRecord? {
+            return FfiConverterOptionalTypeEntryRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_first_entry(
+        it,
+        FfiConverterTypeTreeRecord.lower(`tree`),_status)
+}
+    }
+    )
+    }
+
+
+
     @Throws(ProllyBindingException::class)override fun `get`(`tree`: TreeRecord, `key`: kotlin.ByteArray): kotlin.ByteArray? {
             return FfiConverterOptionalByteArray.lift(
     callWithHandle {
@@ -5791,6 +6277,34 @@ open class ProllyEngine: Disposable, AutoCloseable, ProllyEngineInterface
     UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_hydrate_prefix_path_hint(
         it,
         FfiConverterTypeTreeRecord.lower(`tree`),FfiConverterByteArray.lower(`prefix`),_status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `importSnapshot`(`bundle`: SnapshotBundleRecord): TreeRecord {
+            return FfiConverterTypeTreeRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_import_snapshot(
+        it,
+        FfiConverterTypeSnapshotBundleRecord.lower(`bundle`),_status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `lastEntry`(`tree`: TreeRecord): EntryRecord? {
+            return FfiConverterOptionalTypeEntryRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_last_entry(
+        it,
+        FfiConverterTypeTreeRecord.lower(`tree`),_status)
 }
     }
     )
@@ -5931,6 +6445,20 @@ open class ProllyEngine: Disposable, AutoCloseable, ProllyEngineInterface
     UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_load_snapshots(
         it,
         FfiConverterTypeSnapshotNamespaceRecord.lower(`namespace`),FfiConverterSequenceByteArray.lower(`ids`),_status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `lowerBound`(`tree`: TreeRecord, `key`: kotlin.ByteArray): EntryRecord? {
+            return FfiConverterOptionalTypeEntryRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_lower_bound(
+        it,
+        FfiConverterTypeTreeRecord.lower(`tree`),FfiConverterByteArray.lower(`key`),_status)
 }
     }
     )
@@ -6161,6 +6689,20 @@ open class ProllyEngine: Disposable, AutoCloseable, ProllyEngineInterface
 
 
 
+    @Throws(ProllyBindingException::class)override fun `parallelBatchWithStats`(`tree`: TreeRecord, `mutations`: List<MutationRecord>, `config`: ParallelConfigRecord): BatchApplyResultRecord {
+            return FfiConverterTypeBatchApplyResultRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_parallel_batch_with_stats(
+        it,
+        FfiConverterTypeTreeRecord.lower(`tree`),FfiConverterSequenceTypeMutationRecord.lower(`mutations`),FfiConverterTypeParallelConfigRecord.lower(`config`),_status)
+}
+    }
+    )
+    }
+
+
+
     @Throws(ProllyBindingException::class)override fun `pinTreePath`(`tree`: TreeRecord, `key`: kotlin.ByteArray): kotlin.ULong {
             return FfiConverterULong.lift(
     callWithHandle {
@@ -6266,6 +6808,48 @@ open class ProllyEngine: Disposable, AutoCloseable, ProllyEngineInterface
     UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_plan_store_gc_for_retention(
         it,
         FfiConverterTypeNamedRootRetentionRecord.lower(`retention`),_status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `prefix`(`tree`: TreeRecord, `prefix`: kotlin.ByteArray): List<EntryRecord> {
+            return FfiConverterSequenceTypeEntryRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_prefix(
+        it,
+        FfiConverterTypeTreeRecord.lower(`tree`),FfiConverterByteArray.lower(`prefix`),_status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `prefixPage`(`tree`: TreeRecord, `prefix`: kotlin.ByteArray, `cursor`: RangeCursorRecord?, `limit`: kotlin.ULong): RangePageRecord {
+            return FfiConverterTypeRangePageRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_prefix_page(
+        it,
+        FfiConverterTypeTreeRecord.lower(`tree`),FfiConverterByteArray.lower(`prefix`),FfiConverterOptionalTypeRangeCursorRecord.lower(`cursor`),FfiConverterULong.lower(`limit`),_status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `prefixReversePage`(`tree`: TreeRecord, `prefix`: kotlin.ByteArray, `cursor`: ReverseCursorRecord?, `limit`: kotlin.ULong): ReversePageRecord {
+            return FfiConverterTypeReversePageRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_prefix_reverse_page(
+        it,
+        FfiConverterTypeTreeRecord.lower(`tree`),FfiConverterByteArray.lower(`prefix`),FfiConverterOptionalTypeReverseCursorRecord.lower(`cursor`),FfiConverterULong.lower(`limit`),_status)
 }
     }
     )
@@ -6547,6 +7131,34 @@ open class ProllyEngine: Disposable, AutoCloseable, ProllyEngineInterface
 
 
 
+    @Throws(ProllyBindingException::class)override fun `reversePage`(`tree`: TreeRecord, `cursor`: ReverseCursorRecord?, `start`: kotlin.ByteArray, `limit`: kotlin.ULong): ReversePageRecord {
+            return FfiConverterTypeReversePageRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_reverse_page(
+        it,
+        FfiConverterTypeTreeRecord.lower(`tree`),FfiConverterOptionalTypeReverseCursorRecord.lower(`cursor`),FfiConverterByteArray.lower(`start`),FfiConverterULong.lower(`limit`),_status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `statsDiff`(`before`: TreeRecord, `after`: TreeRecord): StatsComparisonRecord {
+            return FfiConverterTypeStatsComparisonRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_stats_diff(
+        it,
+        FfiConverterTypeTreeRecord.lower(`before`),FfiConverterTypeTreeRecord.lower(`after`),_status)
+}
+    }
+    )
+    }
+
+
+
     @Throws(ProllyBindingException::class)override fun `statsDiffJson`(`before`: TreeRecord, `after`: TreeRecord): JsonDocumentRecord {
             return FfiConverterTypeJsonDocumentRecord.lift(
     callWithHandle {
@@ -6568,6 +7180,20 @@ open class ProllyEngine: Disposable, AutoCloseable, ProllyEngineInterface
     UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_structural_diff_page(
         it,
         FfiConverterTypeTreeRecord.lower(`base`),FfiConverterTypeTreeRecord.lower(`other`),FfiConverterOptionalString.lower(`cursorJson`),FfiConverterULong.lower(`limit`),_status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `structuralDiffPageWithCursor`(`base`: TreeRecord, `other`: TreeRecord, `cursor`: StructuralDiffCursorRecord?, `limit`: kotlin.ULong): StructuralDiffPageRecord {
+            return FfiConverterTypeStructuralDiffPageRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_structural_diff_page_with_cursor(
+        it,
+        FfiConverterTypeTreeRecord.lower(`base`),FfiConverterTypeTreeRecord.lower(`other`),FfiConverterOptionalTypeStructuralDiffCursorRecord.lower(`cursor`),FfiConverterULong.lower(`limit`),_status)
 }
     }
     )
@@ -6652,6 +7278,20 @@ open class ProllyEngine: Disposable, AutoCloseable, ProllyEngineInterface
     UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_unpin_all_cache_nodes(
         it,
         _status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `upperBound`(`tree`: TreeRecord, `key`: kotlin.ByteArray): EntryRecord? {
+            return FfiConverterOptionalTypeEntryRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_upper_bound(
+        it,
+        FfiConverterTypeTreeRecord.lower(`tree`),FfiConverterByteArray.lower(`key`),_status)
 }
     }
     )
@@ -7637,6 +8277,59 @@ public object FfiConverterTypeCrdtResolutionRecord: FfiConverterRustBuffer<CrdtR
     override fun write(value: CrdtResolutionRecord, buf: ByteBuffer) {
             FfiConverterTypeCrdtResolutionKind.write(value.`kind`, buf)
             FfiConverterOptionalByteArray.write(value.`value`, buf)
+    }
+}
+
+
+
+data class CursorWindowRecord (
+    var `positionKey`: kotlin.ByteArray?
+    ,
+    var `positionValue`: kotlin.ByteArray?
+    ,
+    var `found`: kotlin.Boolean
+    ,
+    var `entries`: List<EntryRecord>
+    ,
+    var `nextCursor`: RangeCursorRecord?
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCursorWindowRecord: FfiConverterRustBuffer<CursorWindowRecord> {
+    override fun read(buf: ByteBuffer): CursorWindowRecord {
+        return CursorWindowRecord(
+            FfiConverterOptionalByteArray.read(buf),
+            FfiConverterOptionalByteArray.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterSequenceTypeEntryRecord.read(buf),
+            FfiConverterOptionalTypeRangeCursorRecord.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: CursorWindowRecord) = (
+            FfiConverterOptionalByteArray.allocationSize(value.`positionKey`) +
+            FfiConverterOptionalByteArray.allocationSize(value.`positionValue`) +
+            FfiConverterBoolean.allocationSize(value.`found`) +
+            FfiConverterSequenceTypeEntryRecord.allocationSize(value.`entries`) +
+            FfiConverterOptionalTypeRangeCursorRecord.allocationSize(value.`nextCursor`)
+    )
+
+    override fun write(value: CursorWindowRecord, buf: ByteBuffer) {
+            FfiConverterOptionalByteArray.write(value.`positionKey`, buf)
+            FfiConverterOptionalByteArray.write(value.`positionValue`, buf)
+            FfiConverterBoolean.write(value.`found`, buf)
+            FfiConverterSequenceTypeEntryRecord.write(value.`entries`, buf)
+            FfiConverterOptionalTypeRangeCursorRecord.write(value.`nextCursor`, buf)
     }
 }
 
@@ -8682,6 +9375,8 @@ data class MergeExplanationRecord (
     var `error`: kotlin.String?
     ,
     var `traceJson`: kotlin.String
+    ,
+    var `trace`: MergeTraceRecord
 
 ){
 
@@ -8701,19 +9396,163 @@ public object FfiConverterTypeMergeExplanationRecord: FfiConverterRustBuffer<Mer
             FfiConverterOptionalTypeTreeRecord.read(buf),
             FfiConverterOptionalString.read(buf),
             FfiConverterString.read(buf),
+            FfiConverterTypeMergeTraceRecord.read(buf),
         )
     }
 
     override fun allocationSize(value: MergeExplanationRecord) = (
             FfiConverterOptionalTypeTreeRecord.allocationSize(value.`result`) +
             FfiConverterOptionalString.allocationSize(value.`error`) +
-            FfiConverterString.allocationSize(value.`traceJson`)
+            FfiConverterString.allocationSize(value.`traceJson`) +
+            FfiConverterTypeMergeTraceRecord.allocationSize(value.`trace`)
     )
 
     override fun write(value: MergeExplanationRecord, buf: ByteBuffer) {
             FfiConverterOptionalTypeTreeRecord.write(value.`result`, buf)
             FfiConverterOptionalString.write(value.`error`, buf)
             FfiConverterString.write(value.`traceJson`, buf)
+            FfiConverterTypeMergeTraceRecord.write(value.`trace`, buf)
+    }
+}
+
+
+
+data class MergeTraceEventRecord (
+    var `kind`: MergeTraceEventKind
+    ,
+    var `fastPath`: MergeFastPathKind?
+    ,
+    var `cid`: kotlin.ByteArray?
+    ,
+    var `reuseReason`: MergeReuseReasonKind?
+    ,
+    var `level`: kotlin.ULong?
+    ,
+    var `entries`: kotlin.ULong?
+    ,
+    var `firstKey`: kotlin.ByteArray?
+    ,
+    var `lastKey`: kotlin.ByteArray?
+    ,
+    var `stage`: MergeTraceStageKind?
+    ,
+    var `key`: kotlin.ByteArray?
+    ,
+    var `resolution`: MergeTraceResolutionKind?
+    ,
+    var `fallbackReason`: MergeFallbackReasonKind?
+    ,
+    var `diffStats`: DiffTraversalStatsRecord?
+    ,
+    var `rightChanges`: kotlin.ULong?
+    ,
+    var `mutations`: kotlin.ULong?
+    ,
+    var `appendOnly`: kotlin.Boolean?
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeMergeTraceEventRecord: FfiConverterRustBuffer<MergeTraceEventRecord> {
+    override fun read(buf: ByteBuffer): MergeTraceEventRecord {
+        return MergeTraceEventRecord(
+            FfiConverterTypeMergeTraceEventKind.read(buf),
+            FfiConverterOptionalTypeMergeFastPathKind.read(buf),
+            FfiConverterOptionalByteArray.read(buf),
+            FfiConverterOptionalTypeMergeReuseReasonKind.read(buf),
+            FfiConverterOptionalULong.read(buf),
+            FfiConverterOptionalULong.read(buf),
+            FfiConverterOptionalByteArray.read(buf),
+            FfiConverterOptionalByteArray.read(buf),
+            FfiConverterOptionalTypeMergeTraceStageKind.read(buf),
+            FfiConverterOptionalByteArray.read(buf),
+            FfiConverterOptionalTypeMergeTraceResolutionKind.read(buf),
+            FfiConverterOptionalTypeMergeFallbackReasonKind.read(buf),
+            FfiConverterOptionalTypeDiffTraversalStatsRecord.read(buf),
+            FfiConverterOptionalULong.read(buf),
+            FfiConverterOptionalULong.read(buf),
+            FfiConverterOptionalBoolean.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: MergeTraceEventRecord) = (
+            FfiConverterTypeMergeTraceEventKind.allocationSize(value.`kind`) +
+            FfiConverterOptionalTypeMergeFastPathKind.allocationSize(value.`fastPath`) +
+            FfiConverterOptionalByteArray.allocationSize(value.`cid`) +
+            FfiConverterOptionalTypeMergeReuseReasonKind.allocationSize(value.`reuseReason`) +
+            FfiConverterOptionalULong.allocationSize(value.`level`) +
+            FfiConverterOptionalULong.allocationSize(value.`entries`) +
+            FfiConverterOptionalByteArray.allocationSize(value.`firstKey`) +
+            FfiConverterOptionalByteArray.allocationSize(value.`lastKey`) +
+            FfiConverterOptionalTypeMergeTraceStageKind.allocationSize(value.`stage`) +
+            FfiConverterOptionalByteArray.allocationSize(value.`key`) +
+            FfiConverterOptionalTypeMergeTraceResolutionKind.allocationSize(value.`resolution`) +
+            FfiConverterOptionalTypeMergeFallbackReasonKind.allocationSize(value.`fallbackReason`) +
+            FfiConverterOptionalTypeDiffTraversalStatsRecord.allocationSize(value.`diffStats`) +
+            FfiConverterOptionalULong.allocationSize(value.`rightChanges`) +
+            FfiConverterOptionalULong.allocationSize(value.`mutations`) +
+            FfiConverterOptionalBoolean.allocationSize(value.`appendOnly`)
+    )
+
+    override fun write(value: MergeTraceEventRecord, buf: ByteBuffer) {
+            FfiConverterTypeMergeTraceEventKind.write(value.`kind`, buf)
+            FfiConverterOptionalTypeMergeFastPathKind.write(value.`fastPath`, buf)
+            FfiConverterOptionalByteArray.write(value.`cid`, buf)
+            FfiConverterOptionalTypeMergeReuseReasonKind.write(value.`reuseReason`, buf)
+            FfiConverterOptionalULong.write(value.`level`, buf)
+            FfiConverterOptionalULong.write(value.`entries`, buf)
+            FfiConverterOptionalByteArray.write(value.`firstKey`, buf)
+            FfiConverterOptionalByteArray.write(value.`lastKey`, buf)
+            FfiConverterOptionalTypeMergeTraceStageKind.write(value.`stage`, buf)
+            FfiConverterOptionalByteArray.write(value.`key`, buf)
+            FfiConverterOptionalTypeMergeTraceResolutionKind.write(value.`resolution`, buf)
+            FfiConverterOptionalTypeMergeFallbackReasonKind.write(value.`fallbackReason`, buf)
+            FfiConverterOptionalTypeDiffTraversalStatsRecord.write(value.`diffStats`, buf)
+            FfiConverterOptionalULong.write(value.`rightChanges`, buf)
+            FfiConverterOptionalULong.write(value.`mutations`, buf)
+            FfiConverterOptionalBoolean.write(value.`appendOnly`, buf)
+    }
+}
+
+
+
+data class MergeTraceRecord (
+    var `events`: List<MergeTraceEventRecord>
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeMergeTraceRecord: FfiConverterRustBuffer<MergeTraceRecord> {
+    override fun read(buf: ByteBuffer): MergeTraceRecord {
+        return MergeTraceRecord(
+            FfiConverterSequenceTypeMergeTraceEventRecord.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: MergeTraceRecord) = (
+            FfiConverterSequenceTypeMergeTraceEventRecord.allocationSize(value.`events`)
+    )
+
+    override fun write(value: MergeTraceRecord, buf: ByteBuffer) {
+            FfiConverterSequenceTypeMergeTraceEventRecord.write(value.`events`, buf)
     }
 }
 
@@ -9939,6 +10778,77 @@ public object FfiConverterTypeResolutionRecord: FfiConverterRustBuffer<Resolutio
 
 
 
+data class ReverseCursorRecord (
+    var `beforeKey`: kotlin.ByteArray?
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeReverseCursorRecord: FfiConverterRustBuffer<ReverseCursorRecord> {
+    override fun read(buf: ByteBuffer): ReverseCursorRecord {
+        return ReverseCursorRecord(
+            FfiConverterOptionalByteArray.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: ReverseCursorRecord) = (
+            FfiConverterOptionalByteArray.allocationSize(value.`beforeKey`)
+    )
+
+    override fun write(value: ReverseCursorRecord, buf: ByteBuffer) {
+            FfiConverterOptionalByteArray.write(value.`beforeKey`, buf)
+    }
+}
+
+
+
+data class ReversePageRecord (
+    var `entries`: List<EntryRecord>
+    ,
+    var `nextCursor`: ReverseCursorRecord?
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeReversePageRecord: FfiConverterRustBuffer<ReversePageRecord> {
+    override fun read(buf: ByteBuffer): ReversePageRecord {
+        return ReversePageRecord(
+            FfiConverterSequenceTypeEntryRecord.read(buf),
+            FfiConverterOptionalTypeReverseCursorRecord.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: ReversePageRecord) = (
+            FfiConverterSequenceTypeEntryRecord.allocationSize(value.`entries`) +
+            FfiConverterOptionalTypeReverseCursorRecord.allocationSize(value.`nextCursor`)
+    )
+
+    override fun write(value: ReversePageRecord, buf: ByteBuffer) {
+            FfiConverterSequenceTypeEntryRecord.write(value.`entries`, buf)
+            FfiConverterOptionalTypeReverseCursorRecord.write(value.`nextCursor`, buf)
+    }
+}
+
+
+
 data class RootManifestRecord (
     var `tree`: TreeRecord
     ,
@@ -9977,6 +10887,203 @@ public object FfiConverterTypeRootManifestRecord: FfiConverterRustBuffer<RootMan
             FfiConverterTypeTreeRecord.write(value.`tree`, buf)
             FfiConverterOptionalULong.write(value.`createdAtMillis`, buf)
             FfiConverterOptionalULong.write(value.`updatedAtMillis`, buf)
+    }
+}
+
+
+
+data class SnapshotBundleNodeRecord (
+    var `cid`: kotlin.ByteArray
+    ,
+    var `bytes`: kotlin.ByteArray
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeSnapshotBundleNodeRecord: FfiConverterRustBuffer<SnapshotBundleNodeRecord> {
+    override fun read(buf: ByteBuffer): SnapshotBundleNodeRecord {
+        return SnapshotBundleNodeRecord(
+            FfiConverterByteArray.read(buf),
+            FfiConverterByteArray.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: SnapshotBundleNodeRecord) = (
+            FfiConverterByteArray.allocationSize(value.`cid`) +
+            FfiConverterByteArray.allocationSize(value.`bytes`)
+    )
+
+    override fun write(value: SnapshotBundleNodeRecord, buf: ByteBuffer) {
+            FfiConverterByteArray.write(value.`cid`, buf)
+            FfiConverterByteArray.write(value.`bytes`, buf)
+    }
+}
+
+
+
+data class SnapshotBundleRecord (
+    var `formatVersion`: kotlin.UInt
+    ,
+    var `tree`: TreeRecord
+    ,
+    var `nodes`: List<SnapshotBundleNodeRecord>
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeSnapshotBundleRecord: FfiConverterRustBuffer<SnapshotBundleRecord> {
+    override fun read(buf: ByteBuffer): SnapshotBundleRecord {
+        return SnapshotBundleRecord(
+            FfiConverterUInt.read(buf),
+            FfiConverterTypeTreeRecord.read(buf),
+            FfiConverterSequenceTypeSnapshotBundleNodeRecord.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: SnapshotBundleRecord) = (
+            FfiConverterUInt.allocationSize(value.`formatVersion`) +
+            FfiConverterTypeTreeRecord.allocationSize(value.`tree`) +
+            FfiConverterSequenceTypeSnapshotBundleNodeRecord.allocationSize(value.`nodes`)
+    )
+
+    override fun write(value: SnapshotBundleRecord, buf: ByteBuffer) {
+            FfiConverterUInt.write(value.`formatVersion`, buf)
+            FfiConverterTypeTreeRecord.write(value.`tree`, buf)
+            FfiConverterSequenceTypeSnapshotBundleNodeRecord.write(value.`nodes`, buf)
+    }
+}
+
+
+
+data class SnapshotBundleSummaryRecord (
+    var `formatVersion`: kotlin.UInt
+    ,
+    var `root`: kotlin.ByteArray?
+    ,
+    var `nodeCount`: kotlin.ULong
+    ,
+    var `byteCount`: kotlin.ULong
+    ,
+    var `minNodeBytes`: kotlin.ULong
+    ,
+    var `maxNodeBytes`: kotlin.ULong
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeSnapshotBundleSummaryRecord: FfiConverterRustBuffer<SnapshotBundleSummaryRecord> {
+    override fun read(buf: ByteBuffer): SnapshotBundleSummaryRecord {
+        return SnapshotBundleSummaryRecord(
+            FfiConverterUInt.read(buf),
+            FfiConverterOptionalByteArray.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: SnapshotBundleSummaryRecord) = (
+            FfiConverterUInt.allocationSize(value.`formatVersion`) +
+            FfiConverterOptionalByteArray.allocationSize(value.`root`) +
+            FfiConverterULong.allocationSize(value.`nodeCount`) +
+            FfiConverterULong.allocationSize(value.`byteCount`) +
+            FfiConverterULong.allocationSize(value.`minNodeBytes`) +
+            FfiConverterULong.allocationSize(value.`maxNodeBytes`)
+    )
+
+    override fun write(value: SnapshotBundleSummaryRecord, buf: ByteBuffer) {
+            FfiConverterUInt.write(value.`formatVersion`, buf)
+            FfiConverterOptionalByteArray.write(value.`root`, buf)
+            FfiConverterULong.write(value.`nodeCount`, buf)
+            FfiConverterULong.write(value.`byteCount`, buf)
+            FfiConverterULong.write(value.`minNodeBytes`, buf)
+            FfiConverterULong.write(value.`maxNodeBytes`, buf)
+    }
+}
+
+
+
+data class SnapshotBundleVerificationRecord (
+    var `valid`: kotlin.Boolean
+    ,
+    var `summary`: SnapshotBundleSummaryRecord
+    ,
+    var `reachableNodes`: kotlin.ULong
+    ,
+    var `reachableBytes`: kotlin.ULong
+    ,
+    var `missingCids`: List<kotlin.ByteArray>
+    ,
+    var `extraCids`: List<kotlin.ByteArray>
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeSnapshotBundleVerificationRecord: FfiConverterRustBuffer<SnapshotBundleVerificationRecord> {
+    override fun read(buf: ByteBuffer): SnapshotBundleVerificationRecord {
+        return SnapshotBundleVerificationRecord(
+            FfiConverterBoolean.read(buf),
+            FfiConverterTypeSnapshotBundleSummaryRecord.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterSequenceByteArray.read(buf),
+            FfiConverterSequenceByteArray.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: SnapshotBundleVerificationRecord) = (
+            FfiConverterBoolean.allocationSize(value.`valid`) +
+            FfiConverterTypeSnapshotBundleSummaryRecord.allocationSize(value.`summary`) +
+            FfiConverterULong.allocationSize(value.`reachableNodes`) +
+            FfiConverterULong.allocationSize(value.`reachableBytes`) +
+            FfiConverterSequenceByteArray.allocationSize(value.`missingCids`) +
+            FfiConverterSequenceByteArray.allocationSize(value.`extraCids`)
+    )
+
+    override fun write(value: SnapshotBundleVerificationRecord, buf: ByteBuffer) {
+            FfiConverterBoolean.write(value.`valid`, buf)
+            FfiConverterTypeSnapshotBundleSummaryRecord.write(value.`summary`, buf)
+            FfiConverterULong.write(value.`reachableNodes`, buf)
+            FfiConverterULong.write(value.`reachableBytes`, buf)
+            FfiConverterSequenceByteArray.write(value.`missingCids`, buf)
+            FfiConverterSequenceByteArray.write(value.`extraCids`, buf)
     }
 }
 
@@ -10111,12 +11218,459 @@ public object FfiConverterTypeSnapshotSelectionRecord: FfiConverterRustBuffer<Sn
 
 
 
+data class StatsComparisonRecord (
+    var `before`: TreeStatsRecord
+    ,
+    var `after`: TreeStatsRecord
+    ,
+    var `absolute`: StatsDiffRecord
+    ,
+    var `percentage`: StatsPercentageChangeRecord
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeStatsComparisonRecord: FfiConverterRustBuffer<StatsComparisonRecord> {
+    override fun read(buf: ByteBuffer): StatsComparisonRecord {
+        return StatsComparisonRecord(
+            FfiConverterTypeTreeStatsRecord.read(buf),
+            FfiConverterTypeTreeStatsRecord.read(buf),
+            FfiConverterTypeStatsDiffRecord.read(buf),
+            FfiConverterTypeStatsPercentageChangeRecord.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: StatsComparisonRecord) = (
+            FfiConverterTypeTreeStatsRecord.allocationSize(value.`before`) +
+            FfiConverterTypeTreeStatsRecord.allocationSize(value.`after`) +
+            FfiConverterTypeStatsDiffRecord.allocationSize(value.`absolute`) +
+            FfiConverterTypeStatsPercentageChangeRecord.allocationSize(value.`percentage`)
+    )
+
+    override fun write(value: StatsComparisonRecord, buf: ByteBuffer) {
+            FfiConverterTypeTreeStatsRecord.write(value.`before`, buf)
+            FfiConverterTypeTreeStatsRecord.write(value.`after`, buf)
+            FfiConverterTypeStatsDiffRecord.write(value.`absolute`, buf)
+            FfiConverterTypeStatsPercentageChangeRecord.write(value.`percentage`, buf)
+    }
+}
+
+
+
+data class StatsDiffRecord (
+    var `numNodesDiff`: kotlin.Long
+    ,
+    var `numLeavesDiff`: kotlin.Long
+    ,
+    var `numInternalNodesDiff`: kotlin.Long
+    ,
+    var `treeHeightDiff`: kotlin.Byte
+    ,
+    var `totalKeyValuePairsDiff`: kotlin.Long
+    ,
+    var `totalTreeSizeBytesDiff`: kotlin.Long
+    ,
+    var `avgNodeSizeBytesDiff`: kotlin.Double
+    ,
+    var `minNodeSizeBytesDiff`: kotlin.Long
+    ,
+    var `maxNodeSizeBytesDiff`: kotlin.Long
+    ,
+    var `avgEntriesPerNodeDiff`: kotlin.Double
+    ,
+    var `avgFanoutDiff`: kotlin.Double
+    ,
+    var `minFanoutDiff`: kotlin.Long
+    ,
+    var `maxFanoutDiff`: kotlin.Long
+    ,
+    var `avgFillFactorDiff`: kotlin.Double
+    ,
+    var `avgLeafFillFactorDiff`: kotlin.Double
+    ,
+    var `avgInternalFillFactorDiff`: kotlin.Double
+    ,
+    var `avgKeySizeBytesDiff`: kotlin.Double
+    ,
+    var `avgValueSizeBytesDiff`: kotlin.Double
+    ,
+    var `minKeySizeBytesDiff`: kotlin.Long
+    ,
+    var `maxKeySizeBytesDiff`: kotlin.Long
+    ,
+    var `minValueSizeBytesDiff`: kotlin.Long
+    ,
+    var `maxValueSizeBytesDiff`: kotlin.Long
+    ,
+    var `totalKeysSizeBytesDiff`: kotlin.Long
+    ,
+    var `totalValuesSizeBytesDiff`: kotlin.Long
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeStatsDiffRecord: FfiConverterRustBuffer<StatsDiffRecord> {
+    override fun read(buf: ByteBuffer): StatsDiffRecord {
+        return StatsDiffRecord(
+            FfiConverterLong.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterByte.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterLong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: StatsDiffRecord) = (
+            FfiConverterLong.allocationSize(value.`numNodesDiff`) +
+            FfiConverterLong.allocationSize(value.`numLeavesDiff`) +
+            FfiConverterLong.allocationSize(value.`numInternalNodesDiff`) +
+            FfiConverterByte.allocationSize(value.`treeHeightDiff`) +
+            FfiConverterLong.allocationSize(value.`totalKeyValuePairsDiff`) +
+            FfiConverterLong.allocationSize(value.`totalTreeSizeBytesDiff`) +
+            FfiConverterDouble.allocationSize(value.`avgNodeSizeBytesDiff`) +
+            FfiConverterLong.allocationSize(value.`minNodeSizeBytesDiff`) +
+            FfiConverterLong.allocationSize(value.`maxNodeSizeBytesDiff`) +
+            FfiConverterDouble.allocationSize(value.`avgEntriesPerNodeDiff`) +
+            FfiConverterDouble.allocationSize(value.`avgFanoutDiff`) +
+            FfiConverterLong.allocationSize(value.`minFanoutDiff`) +
+            FfiConverterLong.allocationSize(value.`maxFanoutDiff`) +
+            FfiConverterDouble.allocationSize(value.`avgFillFactorDiff`) +
+            FfiConverterDouble.allocationSize(value.`avgLeafFillFactorDiff`) +
+            FfiConverterDouble.allocationSize(value.`avgInternalFillFactorDiff`) +
+            FfiConverterDouble.allocationSize(value.`avgKeySizeBytesDiff`) +
+            FfiConverterDouble.allocationSize(value.`avgValueSizeBytesDiff`) +
+            FfiConverterLong.allocationSize(value.`minKeySizeBytesDiff`) +
+            FfiConverterLong.allocationSize(value.`maxKeySizeBytesDiff`) +
+            FfiConverterLong.allocationSize(value.`minValueSizeBytesDiff`) +
+            FfiConverterLong.allocationSize(value.`maxValueSizeBytesDiff`) +
+            FfiConverterLong.allocationSize(value.`totalKeysSizeBytesDiff`) +
+            FfiConverterLong.allocationSize(value.`totalValuesSizeBytesDiff`)
+    )
+
+    override fun write(value: StatsDiffRecord, buf: ByteBuffer) {
+            FfiConverterLong.write(value.`numNodesDiff`, buf)
+            FfiConverterLong.write(value.`numLeavesDiff`, buf)
+            FfiConverterLong.write(value.`numInternalNodesDiff`, buf)
+            FfiConverterByte.write(value.`treeHeightDiff`, buf)
+            FfiConverterLong.write(value.`totalKeyValuePairsDiff`, buf)
+            FfiConverterLong.write(value.`totalTreeSizeBytesDiff`, buf)
+            FfiConverterDouble.write(value.`avgNodeSizeBytesDiff`, buf)
+            FfiConverterLong.write(value.`minNodeSizeBytesDiff`, buf)
+            FfiConverterLong.write(value.`maxNodeSizeBytesDiff`, buf)
+            FfiConverterDouble.write(value.`avgEntriesPerNodeDiff`, buf)
+            FfiConverterDouble.write(value.`avgFanoutDiff`, buf)
+            FfiConverterLong.write(value.`minFanoutDiff`, buf)
+            FfiConverterLong.write(value.`maxFanoutDiff`, buf)
+            FfiConverterDouble.write(value.`avgFillFactorDiff`, buf)
+            FfiConverterDouble.write(value.`avgLeafFillFactorDiff`, buf)
+            FfiConverterDouble.write(value.`avgInternalFillFactorDiff`, buf)
+            FfiConverterDouble.write(value.`avgKeySizeBytesDiff`, buf)
+            FfiConverterDouble.write(value.`avgValueSizeBytesDiff`, buf)
+            FfiConverterLong.write(value.`minKeySizeBytesDiff`, buf)
+            FfiConverterLong.write(value.`maxKeySizeBytesDiff`, buf)
+            FfiConverterLong.write(value.`minValueSizeBytesDiff`, buf)
+            FfiConverterLong.write(value.`maxValueSizeBytesDiff`, buf)
+            FfiConverterLong.write(value.`totalKeysSizeBytesDiff`, buf)
+            FfiConverterLong.write(value.`totalValuesSizeBytesDiff`, buf)
+    }
+}
+
+
+
+data class StatsPercentageChangeRecord (
+    var `numNodesPct`: kotlin.Double
+    ,
+    var `numLeavesPct`: kotlin.Double
+    ,
+    var `numInternalNodesPct`: kotlin.Double
+    ,
+    var `treeHeightPct`: kotlin.Double
+    ,
+    var `totalKeyValuePairsPct`: kotlin.Double
+    ,
+    var `totalTreeSizeBytesPct`: kotlin.Double
+    ,
+    var `avgNodeSizeBytesPct`: kotlin.Double
+    ,
+    var `minNodeSizeBytesPct`: kotlin.Double
+    ,
+    var `maxNodeSizeBytesPct`: kotlin.Double
+    ,
+    var `avgEntriesPerNodePct`: kotlin.Double
+    ,
+    var `avgFanoutPct`: kotlin.Double
+    ,
+    var `minFanoutPct`: kotlin.Double
+    ,
+    var `maxFanoutPct`: kotlin.Double
+    ,
+    var `avgFillFactorPct`: kotlin.Double
+    ,
+    var `avgLeafFillFactorPct`: kotlin.Double
+    ,
+    var `avgInternalFillFactorPct`: kotlin.Double
+    ,
+    var `avgKeySizeBytesPct`: kotlin.Double
+    ,
+    var `avgValueSizeBytesPct`: kotlin.Double
+    ,
+    var `minKeySizeBytesPct`: kotlin.Double
+    ,
+    var `maxKeySizeBytesPct`: kotlin.Double
+    ,
+    var `minValueSizeBytesPct`: kotlin.Double
+    ,
+    var `maxValueSizeBytesPct`: kotlin.Double
+    ,
+    var `totalKeysSizeBytesPct`: kotlin.Double
+    ,
+    var `totalValuesSizeBytesPct`: kotlin.Double
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeStatsPercentageChangeRecord: FfiConverterRustBuffer<StatsPercentageChangeRecord> {
+    override fun read(buf: ByteBuffer): StatsPercentageChangeRecord {
+        return StatsPercentageChangeRecord(
+            FfiConverterDouble.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterDouble.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: StatsPercentageChangeRecord) = (
+            FfiConverterDouble.allocationSize(value.`numNodesPct`) +
+            FfiConverterDouble.allocationSize(value.`numLeavesPct`) +
+            FfiConverterDouble.allocationSize(value.`numInternalNodesPct`) +
+            FfiConverterDouble.allocationSize(value.`treeHeightPct`) +
+            FfiConverterDouble.allocationSize(value.`totalKeyValuePairsPct`) +
+            FfiConverterDouble.allocationSize(value.`totalTreeSizeBytesPct`) +
+            FfiConverterDouble.allocationSize(value.`avgNodeSizeBytesPct`) +
+            FfiConverterDouble.allocationSize(value.`minNodeSizeBytesPct`) +
+            FfiConverterDouble.allocationSize(value.`maxNodeSizeBytesPct`) +
+            FfiConverterDouble.allocationSize(value.`avgEntriesPerNodePct`) +
+            FfiConverterDouble.allocationSize(value.`avgFanoutPct`) +
+            FfiConverterDouble.allocationSize(value.`minFanoutPct`) +
+            FfiConverterDouble.allocationSize(value.`maxFanoutPct`) +
+            FfiConverterDouble.allocationSize(value.`avgFillFactorPct`) +
+            FfiConverterDouble.allocationSize(value.`avgLeafFillFactorPct`) +
+            FfiConverterDouble.allocationSize(value.`avgInternalFillFactorPct`) +
+            FfiConverterDouble.allocationSize(value.`avgKeySizeBytesPct`) +
+            FfiConverterDouble.allocationSize(value.`avgValueSizeBytesPct`) +
+            FfiConverterDouble.allocationSize(value.`minKeySizeBytesPct`) +
+            FfiConverterDouble.allocationSize(value.`maxKeySizeBytesPct`) +
+            FfiConverterDouble.allocationSize(value.`minValueSizeBytesPct`) +
+            FfiConverterDouble.allocationSize(value.`maxValueSizeBytesPct`) +
+            FfiConverterDouble.allocationSize(value.`totalKeysSizeBytesPct`) +
+            FfiConverterDouble.allocationSize(value.`totalValuesSizeBytesPct`)
+    )
+
+    override fun write(value: StatsPercentageChangeRecord, buf: ByteBuffer) {
+            FfiConverterDouble.write(value.`numNodesPct`, buf)
+            FfiConverterDouble.write(value.`numLeavesPct`, buf)
+            FfiConverterDouble.write(value.`numInternalNodesPct`, buf)
+            FfiConverterDouble.write(value.`treeHeightPct`, buf)
+            FfiConverterDouble.write(value.`totalKeyValuePairsPct`, buf)
+            FfiConverterDouble.write(value.`totalTreeSizeBytesPct`, buf)
+            FfiConverterDouble.write(value.`avgNodeSizeBytesPct`, buf)
+            FfiConverterDouble.write(value.`minNodeSizeBytesPct`, buf)
+            FfiConverterDouble.write(value.`maxNodeSizeBytesPct`, buf)
+            FfiConverterDouble.write(value.`avgEntriesPerNodePct`, buf)
+            FfiConverterDouble.write(value.`avgFanoutPct`, buf)
+            FfiConverterDouble.write(value.`minFanoutPct`, buf)
+            FfiConverterDouble.write(value.`maxFanoutPct`, buf)
+            FfiConverterDouble.write(value.`avgFillFactorPct`, buf)
+            FfiConverterDouble.write(value.`avgLeafFillFactorPct`, buf)
+            FfiConverterDouble.write(value.`avgInternalFillFactorPct`, buf)
+            FfiConverterDouble.write(value.`avgKeySizeBytesPct`, buf)
+            FfiConverterDouble.write(value.`avgValueSizeBytesPct`, buf)
+            FfiConverterDouble.write(value.`minKeySizeBytesPct`, buf)
+            FfiConverterDouble.write(value.`maxKeySizeBytesPct`, buf)
+            FfiConverterDouble.write(value.`minValueSizeBytesPct`, buf)
+            FfiConverterDouble.write(value.`maxValueSizeBytesPct`, buf)
+            FfiConverterDouble.write(value.`totalKeysSizeBytesPct`, buf)
+            FfiConverterDouble.write(value.`totalValuesSizeBytesPct`, buf)
+    }
+}
+
+
+
+data class StructuralDiffCursorRecord (
+    var `baseRoot`: kotlin.ByteArray?
+    ,
+    var `otherRoot`: kotlin.ByteArray?
+    ,
+    var `markers`: List<StructuralDiffMarkerRecord>
+    ,
+    var `pending`: List<DiffRecord>
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeStructuralDiffCursorRecord: FfiConverterRustBuffer<StructuralDiffCursorRecord> {
+    override fun read(buf: ByteBuffer): StructuralDiffCursorRecord {
+        return StructuralDiffCursorRecord(
+            FfiConverterOptionalByteArray.read(buf),
+            FfiConverterOptionalByteArray.read(buf),
+            FfiConverterSequenceTypeStructuralDiffMarkerRecord.read(buf),
+            FfiConverterSequenceTypeDiffRecord.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: StructuralDiffCursorRecord) = (
+            FfiConverterOptionalByteArray.allocationSize(value.`baseRoot`) +
+            FfiConverterOptionalByteArray.allocationSize(value.`otherRoot`) +
+            FfiConverterSequenceTypeStructuralDiffMarkerRecord.allocationSize(value.`markers`) +
+            FfiConverterSequenceTypeDiffRecord.allocationSize(value.`pending`)
+    )
+
+    override fun write(value: StructuralDiffCursorRecord, buf: ByteBuffer) {
+            FfiConverterOptionalByteArray.write(value.`baseRoot`, buf)
+            FfiConverterOptionalByteArray.write(value.`otherRoot`, buf)
+            FfiConverterSequenceTypeStructuralDiffMarkerRecord.write(value.`markers`, buf)
+            FfiConverterSequenceTypeDiffRecord.write(value.`pending`, buf)
+    }
+}
+
+
+
+data class StructuralDiffMarkerRecord (
+    var `kind`: StructuralDiffMarkerKind
+    ,
+    var `baseCid`: kotlin.ByteArray?
+    ,
+    var `otherCid`: kotlin.ByteArray?
+    ,
+    var `spanEnd`: kotlin.ByteArray?
+    ,
+    var `cid`: kotlin.ByteArray?
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeStructuralDiffMarkerRecord: FfiConverterRustBuffer<StructuralDiffMarkerRecord> {
+    override fun read(buf: ByteBuffer): StructuralDiffMarkerRecord {
+        return StructuralDiffMarkerRecord(
+            FfiConverterTypeStructuralDiffMarkerKind.read(buf),
+            FfiConverterOptionalByteArray.read(buf),
+            FfiConverterOptionalByteArray.read(buf),
+            FfiConverterOptionalByteArray.read(buf),
+            FfiConverterOptionalByteArray.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: StructuralDiffMarkerRecord) = (
+            FfiConverterTypeStructuralDiffMarkerKind.allocationSize(value.`kind`) +
+            FfiConverterOptionalByteArray.allocationSize(value.`baseCid`) +
+            FfiConverterOptionalByteArray.allocationSize(value.`otherCid`) +
+            FfiConverterOptionalByteArray.allocationSize(value.`spanEnd`) +
+            FfiConverterOptionalByteArray.allocationSize(value.`cid`)
+    )
+
+    override fun write(value: StructuralDiffMarkerRecord, buf: ByteBuffer) {
+            FfiConverterTypeStructuralDiffMarkerKind.write(value.`kind`, buf)
+            FfiConverterOptionalByteArray.write(value.`baseCid`, buf)
+            FfiConverterOptionalByteArray.write(value.`otherCid`, buf)
+            FfiConverterOptionalByteArray.write(value.`spanEnd`, buf)
+            FfiConverterOptionalByteArray.write(value.`cid`, buf)
+    }
+}
+
+
+
 data class StructuralDiffPageRecord (
     var `diffs`: List<DiffRecord>
     ,
     var `nextCursorJson`: kotlin.String?
     ,
     var `stats`: DiffTraversalStatsRecord
+    ,
+    var `nextCursor`: StructuralDiffCursorRecord?
 
 ){
 
@@ -10136,19 +11690,22 @@ public object FfiConverterTypeStructuralDiffPageRecord: FfiConverterRustBuffer<S
             FfiConverterSequenceTypeDiffRecord.read(buf),
             FfiConverterOptionalString.read(buf),
             FfiConverterTypeDiffTraversalStatsRecord.read(buf),
+            FfiConverterOptionalTypeStructuralDiffCursorRecord.read(buf),
         )
     }
 
     override fun allocationSize(value: StructuralDiffPageRecord) = (
             FfiConverterSequenceTypeDiffRecord.allocationSize(value.`diffs`) +
             FfiConverterOptionalString.allocationSize(value.`nextCursorJson`) +
-            FfiConverterTypeDiffTraversalStatsRecord.allocationSize(value.`stats`)
+            FfiConverterTypeDiffTraversalStatsRecord.allocationSize(value.`stats`) +
+            FfiConverterOptionalTypeStructuralDiffCursorRecord.allocationSize(value.`nextCursor`)
     )
 
     override fun write(value: StructuralDiffPageRecord, buf: ByteBuffer) {
             FfiConverterSequenceTypeDiffRecord.write(value.`diffs`, buf)
             FfiConverterOptionalString.write(value.`nextCursorJson`, buf)
             FfiConverterTypeDiffTraversalStatsRecord.write(value.`stats`, buf)
+            FfiConverterOptionalTypeStructuralDiffCursorRecord.write(value.`nextCursor`, buf)
     }
 }
 
@@ -10273,6 +11830,319 @@ public object FfiConverterTypeTombstoneRecord: FfiConverterRustBuffer<TombstoneR
 
 
 
+data class TreeDebugComparedNodeRecord (
+    var `status`: TreeDebugNodeStatusKind
+    ,
+    var `node`: TreeDebugNodeRecord
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeTreeDebugComparedNodeRecord: FfiConverterRustBuffer<TreeDebugComparedNodeRecord> {
+    override fun read(buf: ByteBuffer): TreeDebugComparedNodeRecord {
+        return TreeDebugComparedNodeRecord(
+            FfiConverterTypeTreeDebugNodeStatusKind.read(buf),
+            FfiConverterTypeTreeDebugNodeRecord.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: TreeDebugComparedNodeRecord) = (
+            FfiConverterTypeTreeDebugNodeStatusKind.allocationSize(value.`status`) +
+            FfiConverterTypeTreeDebugNodeRecord.allocationSize(value.`node`)
+    )
+
+    override fun write(value: TreeDebugComparedNodeRecord, buf: ByteBuffer) {
+            FfiConverterTypeTreeDebugNodeStatusKind.write(value.`status`, buf)
+            FfiConverterTypeTreeDebugNodeRecord.write(value.`node`, buf)
+    }
+}
+
+
+
+data class TreeDebugComparisonLevelRecord (
+    var `level`: kotlin.UByte
+    ,
+    var `sharedNodes`: kotlin.ULong
+    ,
+    var `leftOnlyNodes`: kotlin.ULong
+    ,
+    var `rightOnlyNodes`: kotlin.ULong
+    ,
+    var `sharedBytes`: kotlin.ULong
+    ,
+    var `leftOnlyBytes`: kotlin.ULong
+    ,
+    var `rightOnlyBytes`: kotlin.ULong
+    ,
+    var `nodes`: List<TreeDebugComparedNodeRecord>
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeTreeDebugComparisonLevelRecord: FfiConverterRustBuffer<TreeDebugComparisonLevelRecord> {
+    override fun read(buf: ByteBuffer): TreeDebugComparisonLevelRecord {
+        return TreeDebugComparisonLevelRecord(
+            FfiConverterUByte.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterSequenceTypeTreeDebugComparedNodeRecord.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: TreeDebugComparisonLevelRecord) = (
+            FfiConverterUByte.allocationSize(value.`level`) +
+            FfiConverterULong.allocationSize(value.`sharedNodes`) +
+            FfiConverterULong.allocationSize(value.`leftOnlyNodes`) +
+            FfiConverterULong.allocationSize(value.`rightOnlyNodes`) +
+            FfiConverterULong.allocationSize(value.`sharedBytes`) +
+            FfiConverterULong.allocationSize(value.`leftOnlyBytes`) +
+            FfiConverterULong.allocationSize(value.`rightOnlyBytes`) +
+            FfiConverterSequenceTypeTreeDebugComparedNodeRecord.allocationSize(value.`nodes`)
+    )
+
+    override fun write(value: TreeDebugComparisonLevelRecord, buf: ByteBuffer) {
+            FfiConverterUByte.write(value.`level`, buf)
+            FfiConverterULong.write(value.`sharedNodes`, buf)
+            FfiConverterULong.write(value.`leftOnlyNodes`, buf)
+            FfiConverterULong.write(value.`rightOnlyNodes`, buf)
+            FfiConverterULong.write(value.`sharedBytes`, buf)
+            FfiConverterULong.write(value.`leftOnlyBytes`, buf)
+            FfiConverterULong.write(value.`rightOnlyBytes`, buf)
+            FfiConverterSequenceTypeTreeDebugComparedNodeRecord.write(value.`nodes`, buf)
+    }
+}
+
+
+
+data class TreeDebugComparisonRecord (
+    var `sharedNodes`: kotlin.ULong
+    ,
+    var `leftOnlyNodes`: kotlin.ULong
+    ,
+    var `rightOnlyNodes`: kotlin.ULong
+    ,
+    var `sharedBytes`: kotlin.ULong
+    ,
+    var `leftOnlyBytes`: kotlin.ULong
+    ,
+    var `rightOnlyBytes`: kotlin.ULong
+    ,
+    var `levels`: List<TreeDebugComparisonLevelRecord>
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeTreeDebugComparisonRecord: FfiConverterRustBuffer<TreeDebugComparisonRecord> {
+    override fun read(buf: ByteBuffer): TreeDebugComparisonRecord {
+        return TreeDebugComparisonRecord(
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterSequenceTypeTreeDebugComparisonLevelRecord.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: TreeDebugComparisonRecord) = (
+            FfiConverterULong.allocationSize(value.`sharedNodes`) +
+            FfiConverterULong.allocationSize(value.`leftOnlyNodes`) +
+            FfiConverterULong.allocationSize(value.`rightOnlyNodes`) +
+            FfiConverterULong.allocationSize(value.`sharedBytes`) +
+            FfiConverterULong.allocationSize(value.`leftOnlyBytes`) +
+            FfiConverterULong.allocationSize(value.`rightOnlyBytes`) +
+            FfiConverterSequenceTypeTreeDebugComparisonLevelRecord.allocationSize(value.`levels`)
+    )
+
+    override fun write(value: TreeDebugComparisonRecord, buf: ByteBuffer) {
+            FfiConverterULong.write(value.`sharedNodes`, buf)
+            FfiConverterULong.write(value.`leftOnlyNodes`, buf)
+            FfiConverterULong.write(value.`rightOnlyNodes`, buf)
+            FfiConverterULong.write(value.`sharedBytes`, buf)
+            FfiConverterULong.write(value.`leftOnlyBytes`, buf)
+            FfiConverterULong.write(value.`rightOnlyBytes`, buf)
+            FfiConverterSequenceTypeTreeDebugComparisonLevelRecord.write(value.`levels`, buf)
+    }
+}
+
+
+
+data class TreeDebugLevelRecord (
+    var `level`: kotlin.UByte
+    ,
+    var `nodes`: List<TreeDebugNodeRecord>
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeTreeDebugLevelRecord: FfiConverterRustBuffer<TreeDebugLevelRecord> {
+    override fun read(buf: ByteBuffer): TreeDebugLevelRecord {
+        return TreeDebugLevelRecord(
+            FfiConverterUByte.read(buf),
+            FfiConverterSequenceTypeTreeDebugNodeRecord.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: TreeDebugLevelRecord) = (
+            FfiConverterUByte.allocationSize(value.`level`) +
+            FfiConverterSequenceTypeTreeDebugNodeRecord.allocationSize(value.`nodes`)
+    )
+
+    override fun write(value: TreeDebugLevelRecord, buf: ByteBuffer) {
+            FfiConverterUByte.write(value.`level`, buf)
+            FfiConverterSequenceTypeTreeDebugNodeRecord.write(value.`nodes`, buf)
+    }
+}
+
+
+
+data class TreeDebugNodeRecord (
+    var `cid`: kotlin.ByteArray
+    ,
+    var `leaf`: kotlin.Boolean
+    ,
+    var `level`: kotlin.UByte
+    ,
+    var `entryCount`: kotlin.ULong
+    ,
+    var `maxEntries`: kotlin.ULong
+    ,
+    var `fillFactor`: kotlin.Double
+    ,
+    var `encodedBytes`: kotlin.ULong
+    ,
+    var `firstKey`: kotlin.ByteArray?
+    ,
+    var `lastKey`: kotlin.ByteArray?
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeTreeDebugNodeRecord: FfiConverterRustBuffer<TreeDebugNodeRecord> {
+    override fun read(buf: ByteBuffer): TreeDebugNodeRecord {
+        return TreeDebugNodeRecord(
+            FfiConverterByteArray.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterUByte.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterOptionalByteArray.read(buf),
+            FfiConverterOptionalByteArray.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: TreeDebugNodeRecord) = (
+            FfiConverterByteArray.allocationSize(value.`cid`) +
+            FfiConverterBoolean.allocationSize(value.`leaf`) +
+            FfiConverterUByte.allocationSize(value.`level`) +
+            FfiConverterULong.allocationSize(value.`entryCount`) +
+            FfiConverterULong.allocationSize(value.`maxEntries`) +
+            FfiConverterDouble.allocationSize(value.`fillFactor`) +
+            FfiConverterULong.allocationSize(value.`encodedBytes`) +
+            FfiConverterOptionalByteArray.allocationSize(value.`firstKey`) +
+            FfiConverterOptionalByteArray.allocationSize(value.`lastKey`)
+    )
+
+    override fun write(value: TreeDebugNodeRecord, buf: ByteBuffer) {
+            FfiConverterByteArray.write(value.`cid`, buf)
+            FfiConverterBoolean.write(value.`leaf`, buf)
+            FfiConverterUByte.write(value.`level`, buf)
+            FfiConverterULong.write(value.`entryCount`, buf)
+            FfiConverterULong.write(value.`maxEntries`, buf)
+            FfiConverterDouble.write(value.`fillFactor`, buf)
+            FfiConverterULong.write(value.`encodedBytes`, buf)
+            FfiConverterOptionalByteArray.write(value.`firstKey`, buf)
+            FfiConverterOptionalByteArray.write(value.`lastKey`, buf)
+    }
+}
+
+
+
+data class TreeDebugViewRecord (
+    var `levels`: List<TreeDebugLevelRecord>
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeTreeDebugViewRecord: FfiConverterRustBuffer<TreeDebugViewRecord> {
+    override fun read(buf: ByteBuffer): TreeDebugViewRecord {
+        return TreeDebugViewRecord(
+            FfiConverterSequenceTypeTreeDebugLevelRecord.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: TreeDebugViewRecord) = (
+            FfiConverterSequenceTypeTreeDebugLevelRecord.allocationSize(value.`levels`)
+    )
+
+    override fun write(value: TreeDebugViewRecord, buf: ByteBuffer) {
+            FfiConverterSequenceTypeTreeDebugLevelRecord.write(value.`levels`, buf)
+    }
+}
+
+
+
 data class TreeRecord (
     var `root`: kotlin.ByteArray?
     ,
@@ -10306,6 +12176,255 @@ public object FfiConverterTypeTreeRecord: FfiConverterRustBuffer<TreeRecord> {
     override fun write(value: TreeRecord, buf: ByteBuffer) {
             FfiConverterOptionalByteArray.write(value.`root`, buf)
             FfiConverterTypeConfigRecord.write(value.`config`, buf)
+    }
+}
+
+
+
+data class TreeStatsLevelF64Record (
+    var `level`: kotlin.UByte
+    ,
+    var `value`: kotlin.Double
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeTreeStatsLevelF64Record: FfiConverterRustBuffer<TreeStatsLevelF64Record> {
+    override fun read(buf: ByteBuffer): TreeStatsLevelF64Record {
+        return TreeStatsLevelF64Record(
+            FfiConverterUByte.read(buf),
+            FfiConverterDouble.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: TreeStatsLevelF64Record) = (
+            FfiConverterUByte.allocationSize(value.`level`) +
+            FfiConverterDouble.allocationSize(value.`value`)
+    )
+
+    override fun write(value: TreeStatsLevelF64Record, buf: ByteBuffer) {
+            FfiConverterUByte.write(value.`level`, buf)
+            FfiConverterDouble.write(value.`value`, buf)
+    }
+}
+
+
+
+data class TreeStatsLevelU64Record (
+    var `level`: kotlin.UByte
+    ,
+    var `value`: kotlin.ULong
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeTreeStatsLevelU64Record: FfiConverterRustBuffer<TreeStatsLevelU64Record> {
+    override fun read(buf: ByteBuffer): TreeStatsLevelU64Record {
+        return TreeStatsLevelU64Record(
+            FfiConverterUByte.read(buf),
+            FfiConverterULong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: TreeStatsLevelU64Record) = (
+            FfiConverterUByte.allocationSize(value.`level`) +
+            FfiConverterULong.allocationSize(value.`value`)
+    )
+
+    override fun write(value: TreeStatsLevelU64Record, buf: ByteBuffer) {
+            FfiConverterUByte.write(value.`level`, buf)
+            FfiConverterULong.write(value.`value`, buf)
+    }
+}
+
+
+
+data class TreeStatsRecord (
+    var `numNodes`: kotlin.ULong
+    ,
+    var `numLeaves`: kotlin.ULong
+    ,
+    var `numInternalNodes`: kotlin.ULong
+    ,
+    var `treeHeight`: kotlin.UByte
+    ,
+    var `totalKeyValuePairs`: kotlin.ULong
+    ,
+    var `totalTreeSizeBytes`: kotlin.ULong
+    ,
+    var `avgNodeSizeBytes`: kotlin.Double
+    ,
+    var `minNodeSizeBytes`: kotlin.ULong
+    ,
+    var `maxNodeSizeBytes`: kotlin.ULong
+    ,
+    var `avgEntriesPerNode`: kotlin.Double
+    ,
+    var `nodesPerLevel`: List<TreeStatsLevelU64Record>
+    ,
+    var `avgNodeSizePerLevel`: List<TreeStatsLevelF64Record>
+    ,
+    var `avgEntriesPerLevel`: List<TreeStatsLevelF64Record>
+    ,
+    var `minEntriesPerLevel`: List<TreeStatsLevelU64Record>
+    ,
+    var `maxEntriesPerLevel`: List<TreeStatsLevelU64Record>
+    ,
+    var `avgFanout`: kotlin.Double
+    ,
+    var `minFanout`: kotlin.ULong
+    ,
+    var `maxFanout`: kotlin.ULong
+    ,
+    var `avgFillFactor`: kotlin.Double
+    ,
+    var `avgLeafFillFactor`: kotlin.Double
+    ,
+    var `avgInternalFillFactor`: kotlin.Double
+    ,
+    var `avgKeySizeBytes`: kotlin.Double
+    ,
+    var `avgValueSizeBytes`: kotlin.Double
+    ,
+    var `minKeySizeBytes`: kotlin.ULong
+    ,
+    var `maxKeySizeBytes`: kotlin.ULong
+    ,
+    var `minValueSizeBytes`: kotlin.ULong
+    ,
+    var `maxValueSizeBytes`: kotlin.ULong
+    ,
+    var `totalKeysSizeBytes`: kotlin.ULong
+    ,
+    var `totalValuesSizeBytes`: kotlin.ULong
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeTreeStatsRecord: FfiConverterRustBuffer<TreeStatsRecord> {
+    override fun read(buf: ByteBuffer): TreeStatsRecord {
+        return TreeStatsRecord(
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterUByte.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterSequenceTypeTreeStatsLevelU64Record.read(buf),
+            FfiConverterSequenceTypeTreeStatsLevelF64Record.read(buf),
+            FfiConverterSequenceTypeTreeStatsLevelF64Record.read(buf),
+            FfiConverterSequenceTypeTreeStatsLevelU64Record.read(buf),
+            FfiConverterSequenceTypeTreeStatsLevelU64Record.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: TreeStatsRecord) = (
+            FfiConverterULong.allocationSize(value.`numNodes`) +
+            FfiConverterULong.allocationSize(value.`numLeaves`) +
+            FfiConverterULong.allocationSize(value.`numInternalNodes`) +
+            FfiConverterUByte.allocationSize(value.`treeHeight`) +
+            FfiConverterULong.allocationSize(value.`totalKeyValuePairs`) +
+            FfiConverterULong.allocationSize(value.`totalTreeSizeBytes`) +
+            FfiConverterDouble.allocationSize(value.`avgNodeSizeBytes`) +
+            FfiConverterULong.allocationSize(value.`minNodeSizeBytes`) +
+            FfiConverterULong.allocationSize(value.`maxNodeSizeBytes`) +
+            FfiConverterDouble.allocationSize(value.`avgEntriesPerNode`) +
+            FfiConverterSequenceTypeTreeStatsLevelU64Record.allocationSize(value.`nodesPerLevel`) +
+            FfiConverterSequenceTypeTreeStatsLevelF64Record.allocationSize(value.`avgNodeSizePerLevel`) +
+            FfiConverterSequenceTypeTreeStatsLevelF64Record.allocationSize(value.`avgEntriesPerLevel`) +
+            FfiConverterSequenceTypeTreeStatsLevelU64Record.allocationSize(value.`minEntriesPerLevel`) +
+            FfiConverterSequenceTypeTreeStatsLevelU64Record.allocationSize(value.`maxEntriesPerLevel`) +
+            FfiConverterDouble.allocationSize(value.`avgFanout`) +
+            FfiConverterULong.allocationSize(value.`minFanout`) +
+            FfiConverterULong.allocationSize(value.`maxFanout`) +
+            FfiConverterDouble.allocationSize(value.`avgFillFactor`) +
+            FfiConverterDouble.allocationSize(value.`avgLeafFillFactor`) +
+            FfiConverterDouble.allocationSize(value.`avgInternalFillFactor`) +
+            FfiConverterDouble.allocationSize(value.`avgKeySizeBytes`) +
+            FfiConverterDouble.allocationSize(value.`avgValueSizeBytes`) +
+            FfiConverterULong.allocationSize(value.`minKeySizeBytes`) +
+            FfiConverterULong.allocationSize(value.`maxKeySizeBytes`) +
+            FfiConverterULong.allocationSize(value.`minValueSizeBytes`) +
+            FfiConverterULong.allocationSize(value.`maxValueSizeBytes`) +
+            FfiConverterULong.allocationSize(value.`totalKeysSizeBytes`) +
+            FfiConverterULong.allocationSize(value.`totalValuesSizeBytes`)
+    )
+
+    override fun write(value: TreeStatsRecord, buf: ByteBuffer) {
+            FfiConverterULong.write(value.`numNodes`, buf)
+            FfiConverterULong.write(value.`numLeaves`, buf)
+            FfiConverterULong.write(value.`numInternalNodes`, buf)
+            FfiConverterUByte.write(value.`treeHeight`, buf)
+            FfiConverterULong.write(value.`totalKeyValuePairs`, buf)
+            FfiConverterULong.write(value.`totalTreeSizeBytes`, buf)
+            FfiConverterDouble.write(value.`avgNodeSizeBytes`, buf)
+            FfiConverterULong.write(value.`minNodeSizeBytes`, buf)
+            FfiConverterULong.write(value.`maxNodeSizeBytes`, buf)
+            FfiConverterDouble.write(value.`avgEntriesPerNode`, buf)
+            FfiConverterSequenceTypeTreeStatsLevelU64Record.write(value.`nodesPerLevel`, buf)
+            FfiConverterSequenceTypeTreeStatsLevelF64Record.write(value.`avgNodeSizePerLevel`, buf)
+            FfiConverterSequenceTypeTreeStatsLevelF64Record.write(value.`avgEntriesPerLevel`, buf)
+            FfiConverterSequenceTypeTreeStatsLevelU64Record.write(value.`minEntriesPerLevel`, buf)
+            FfiConverterSequenceTypeTreeStatsLevelU64Record.write(value.`maxEntriesPerLevel`, buf)
+            FfiConverterDouble.write(value.`avgFanout`, buf)
+            FfiConverterULong.write(value.`minFanout`, buf)
+            FfiConverterULong.write(value.`maxFanout`, buf)
+            FfiConverterDouble.write(value.`avgFillFactor`, buf)
+            FfiConverterDouble.write(value.`avgLeafFillFactor`, buf)
+            FfiConverterDouble.write(value.`avgInternalFillFactor`, buf)
+            FfiConverterDouble.write(value.`avgKeySizeBytes`, buf)
+            FfiConverterDouble.write(value.`avgValueSizeBytes`, buf)
+            FfiConverterULong.write(value.`minKeySizeBytes`, buf)
+            FfiConverterULong.write(value.`maxKeySizeBytes`, buf)
+            FfiConverterULong.write(value.`minValueSizeBytes`, buf)
+            FfiConverterULong.write(value.`maxValueSizeBytes`, buf)
+            FfiConverterULong.write(value.`totalKeysSizeBytes`, buf)
+            FfiConverterULong.write(value.`totalValuesSizeBytes`, buf)
     }
 }
 
@@ -10576,6 +12695,226 @@ public object FfiConverterTypeEncodingKind: FfiConverterRustBuffer<EncodingKind>
 
 
 
+enum class MergeFallbackReasonKind {
+
+    MISSING_ROOT,
+    SHAPE_MISMATCH,
+    NODE_LENGTH_MISMATCH,
+    CHILD_FALLBACK,
+    DELETE_RESOLUTION,
+    DIFF_BATCH;
+
+
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeMergeFallbackReasonKind: FfiConverterRustBuffer<MergeFallbackReasonKind> {
+    override fun read(buf: ByteBuffer) = try {
+        MergeFallbackReasonKind.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: MergeFallbackReasonKind) = 4UL
+
+    override fun write(value: MergeFallbackReasonKind, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
+enum class MergeFastPathKind {
+
+    BRANCHES_EQUAL,
+    LEFT_UNCHANGED,
+    RIGHT_UNCHANGED;
+
+
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeMergeFastPathKind: FfiConverterRustBuffer<MergeFastPathKind> {
+    override fun read(buf: ByteBuffer) = try {
+        MergeFastPathKind.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: MergeFastPathKind) = 4UL
+
+    override fun write(value: MergeFastPathKind, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
+enum class MergeReuseReasonKind {
+
+    BRANCHES_EQUAL,
+    LEFT_UNCHANGED,
+    RIGHT_UNCHANGED,
+    UNCHANGED_AFTER_MERGE,
+    MATCHES_LEFT,
+    MATCHES_RIGHT;
+
+
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeMergeReuseReasonKind: FfiConverterRustBuffer<MergeReuseReasonKind> {
+    override fun read(buf: ByteBuffer) = try {
+        MergeReuseReasonKind.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: MergeReuseReasonKind) = 4UL
+
+    override fun write(value: MergeReuseReasonKind, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
+enum class MergeTraceEventKind {
+
+    FAST_PATH,
+    STRUCTURAL_MERGE_STARTED,
+    REUSED_SUBTREE,
+    REWRITTEN_NODE,
+    RESOLVER_CALLED,
+    FALLBACK,
+    DIFF_TRAVERSAL,
+    BATCH_MERGE;
+
+
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeMergeTraceEventKind: FfiConverterRustBuffer<MergeTraceEventKind> {
+    override fun read(buf: ByteBuffer) = try {
+        MergeTraceEventKind.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: MergeTraceEventKind) = 4UL
+
+    override fun write(value: MergeTraceEventKind, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
+enum class MergeTraceResolutionKind {
+
+    VALUE,
+    DELETE,
+    UNRESOLVED;
+
+
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeMergeTraceResolutionKind: FfiConverterRustBuffer<MergeTraceResolutionKind> {
+    override fun read(buf: ByteBuffer) = try {
+        MergeTraceResolutionKind.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: MergeTraceResolutionKind) = 4UL
+
+    override fun write(value: MergeTraceResolutionKind, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
+enum class MergeTraceStageKind {
+
+    STRUCTURAL,
+    BATCH;
+
+
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeMergeTraceStageKind: FfiConverterRustBuffer<MergeTraceStageKind> {
+    override fun read(buf: ByteBuffer) = try {
+        MergeTraceStageKind.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: MergeTraceStageKind) = 4UL
+
+    override fun write(value: MergeTraceStageKind, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
 enum class MutationKind {
 
     UPSERT,
@@ -10651,52 +12990,36 @@ public object FfiConverterTypeNamedRootRetentionKind: FfiConverterRustBuffer<Nam
 sealed class ProllyBindingException: kotlin.Exception() {
 
     class InvalidArgument(
-
         override val `message`: kotlin.String
-        ) : ProllyBindingException() {
-    }
+        ) : ProllyBindingException()
 
     class InvalidCid(
-
         override val `message`: kotlin.String
-        ) : ProllyBindingException() {
-    }
+        ) : ProllyBindingException()
 
     class InvalidNode(
-
         override val `message`: kotlin.String
-        ) : ProllyBindingException() {
-    }
+        ) : ProllyBindingException()
 
     class NotFound(
-
         override val `message`: kotlin.String
-        ) : ProllyBindingException() {
-    }
+        ) : ProllyBindingException()
 
     class Conflict(
-
         override val `message`: kotlin.String
-        ) : ProllyBindingException() {
-    }
+        ) : ProllyBindingException()
 
     class Store(
-
         override val `message`: kotlin.String
-        ) : ProllyBindingException() {
-    }
+        ) : ProllyBindingException()
 
     class Serialization(
-
         override val `message`: kotlin.String
-        ) : ProllyBindingException() {
-    }
+        ) : ProllyBindingException()
 
     class Internal(
-
         override val `message`: kotlin.String
-        ) : ProllyBindingException() {
-    }
+        ) : ProllyBindingException()
 
 
 
@@ -10911,6 +13234,76 @@ public object FfiConverterTypeSnapshotNamespaceKind: FfiConverterRustBuffer<Snap
 
 
 
+enum class StructuralDiffMarkerKind {
+
+    COMPARE,
+    ADDED,
+    REMOVED;
+
+
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeStructuralDiffMarkerKind: FfiConverterRustBuffer<StructuralDiffMarkerKind> {
+    override fun read(buf: ByteBuffer) = try {
+        StructuralDiffMarkerKind.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: StructuralDiffMarkerKind) = 4UL
+
+    override fun write(value: StructuralDiffMarkerKind, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
+enum class TreeDebugNodeStatusKind {
+
+    SHARED,
+    LEFT_ONLY,
+    RIGHT_ONLY;
+
+
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeTreeDebugNodeStatusKind: FfiConverterRustBuffer<TreeDebugNodeStatusKind> {
+    override fun read(buf: ByteBuffer) = try {
+        TreeDebugNodeStatusKind.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: TreeDebugNodeStatusKind) = 4UL
+
+    override fun write(value: TreeDebugNodeStatusKind, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
 enum class ValueRefKind {
 
     INLINE,
@@ -10970,6 +13363,38 @@ public object FfiConverterOptionalULong: FfiConverterRustBuffer<kotlin.ULong?> {
         } else {
             buf.put(1)
             FfiConverterULong.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalBoolean: FfiConverterRustBuffer<kotlin.Boolean?> {
+    override fun read(buf: ByteBuffer): kotlin.Boolean? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterBoolean.read(buf)
+    }
+
+    override fun allocationSize(value: kotlin.Boolean?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterBoolean.allocationSize(value)
+        }
+    }
+
+    override fun write(value: kotlin.Boolean?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterBoolean.write(value, buf)
         }
     }
 }
@@ -11108,6 +13533,70 @@ public object FfiConverterOptionalTypeChangedSpanHintRecord: FfiConverterRustBuf
 /**
  * @suppress
  */
+public object FfiConverterOptionalTypeDiffTraversalStatsRecord: FfiConverterRustBuffer<DiffTraversalStatsRecord?> {
+    override fun read(buf: ByteBuffer): DiffTraversalStatsRecord? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeDiffTraversalStatsRecord.read(buf)
+    }
+
+    override fun allocationSize(value: DiffTraversalStatsRecord?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeDiffTraversalStatsRecord.allocationSize(value)
+        }
+    }
+
+    override fun write(value: DiffTraversalStatsRecord?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeDiffTraversalStatsRecord.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypeEntryRecord: FfiConverterRustBuffer<EntryRecord?> {
+    override fun read(buf: ByteBuffer): EntryRecord? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeEntryRecord.read(buf)
+    }
+
+    override fun allocationSize(value: EntryRecord?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeEntryRecord.allocationSize(value)
+        }
+    }
+
+    override fun write(value: EntryRecord?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeEntryRecord.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterOptionalTypeKeyProofRecord: FfiConverterRustBuffer<KeyProofRecord?> {
     override fun read(buf: ByteBuffer): KeyProofRecord? {
         if (buf.get().toInt() == 0) {
@@ -11236,6 +13725,38 @@ public object FfiConverterOptionalTypeRangeCursorRecord: FfiConverterRustBuffer<
 /**
  * @suppress
  */
+public object FfiConverterOptionalTypeReverseCursorRecord: FfiConverterRustBuffer<ReverseCursorRecord?> {
+    override fun read(buf: ByteBuffer): ReverseCursorRecord? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeReverseCursorRecord.read(buf)
+    }
+
+    override fun allocationSize(value: ReverseCursorRecord?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeReverseCursorRecord.allocationSize(value)
+        }
+    }
+
+    override fun write(value: ReverseCursorRecord?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeReverseCursorRecord.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterOptionalTypeRootManifestRecord: FfiConverterRustBuffer<RootManifestRecord?> {
     override fun read(buf: ByteBuffer): RootManifestRecord? {
         if (buf.get().toInt() == 0) {
@@ -11258,6 +13779,38 @@ public object FfiConverterOptionalTypeRootManifestRecord: FfiConverterRustBuffer
         } else {
             buf.put(1)
             FfiConverterTypeRootManifestRecord.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypeStructuralDiffCursorRecord: FfiConverterRustBuffer<StructuralDiffCursorRecord?> {
+    override fun read(buf: ByteBuffer): StructuralDiffCursorRecord? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeStructuralDiffCursorRecord.read(buf)
+    }
+
+    override fun allocationSize(value: StructuralDiffCursorRecord?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeStructuralDiffCursorRecord.allocationSize(value)
+        }
+    }
+
+    override fun write(value: StructuralDiffCursorRecord?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeStructuralDiffCursorRecord.write(value, buf)
         }
     }
 }
@@ -11354,6 +13907,166 @@ public object FfiConverterOptionalTypeValueRefRecord: FfiConverterRustBuffer<Val
         } else {
             buf.put(1)
             FfiConverterTypeValueRefRecord.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypeMergeFallbackReasonKind: FfiConverterRustBuffer<MergeFallbackReasonKind?> {
+    override fun read(buf: ByteBuffer): MergeFallbackReasonKind? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeMergeFallbackReasonKind.read(buf)
+    }
+
+    override fun allocationSize(value: MergeFallbackReasonKind?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeMergeFallbackReasonKind.allocationSize(value)
+        }
+    }
+
+    override fun write(value: MergeFallbackReasonKind?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeMergeFallbackReasonKind.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypeMergeFastPathKind: FfiConverterRustBuffer<MergeFastPathKind?> {
+    override fun read(buf: ByteBuffer): MergeFastPathKind? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeMergeFastPathKind.read(buf)
+    }
+
+    override fun allocationSize(value: MergeFastPathKind?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeMergeFastPathKind.allocationSize(value)
+        }
+    }
+
+    override fun write(value: MergeFastPathKind?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeMergeFastPathKind.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypeMergeReuseReasonKind: FfiConverterRustBuffer<MergeReuseReasonKind?> {
+    override fun read(buf: ByteBuffer): MergeReuseReasonKind? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeMergeReuseReasonKind.read(buf)
+    }
+
+    override fun allocationSize(value: MergeReuseReasonKind?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeMergeReuseReasonKind.allocationSize(value)
+        }
+    }
+
+    override fun write(value: MergeReuseReasonKind?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeMergeReuseReasonKind.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypeMergeTraceResolutionKind: FfiConverterRustBuffer<MergeTraceResolutionKind?> {
+    override fun read(buf: ByteBuffer): MergeTraceResolutionKind? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeMergeTraceResolutionKind.read(buf)
+    }
+
+    override fun allocationSize(value: MergeTraceResolutionKind?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeMergeTraceResolutionKind.allocationSize(value)
+        }
+    }
+
+    override fun write(value: MergeTraceResolutionKind?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeMergeTraceResolutionKind.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypeMergeTraceStageKind: FfiConverterRustBuffer<MergeTraceStageKind?> {
+    override fun read(buf: ByteBuffer): MergeTraceStageKind? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeMergeTraceStageKind.read(buf)
+    }
+
+    override fun allocationSize(value: MergeTraceStageKind?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeMergeTraceStageKind.allocationSize(value)
+        }
+    }
+
+    override fun write(value: MergeTraceStageKind?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeMergeTraceStageKind.write(value, buf)
         }
     }
 }
@@ -11588,6 +14301,34 @@ public object FfiConverterSequenceTypeKeyProofVerificationRecord: FfiConverterRu
 /**
  * @suppress
  */
+public object FfiConverterSequenceTypeMergeTraceEventRecord: FfiConverterRustBuffer<List<MergeTraceEventRecord>> {
+    override fun read(buf: ByteBuffer): List<MergeTraceEventRecord> {
+        val len = buf.getInt()
+        return List<MergeTraceEventRecord>(len) {
+            FfiConverterTypeMergeTraceEventRecord.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<MergeTraceEventRecord>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeMergeTraceEventRecord.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<MergeTraceEventRecord>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeMergeTraceEventRecord.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterSequenceTypeMutationRecord: FfiConverterRustBuffer<List<MutationRecord>> {
     override fun read(buf: ByteBuffer): List<MutationRecord> {
         val len = buf.getInt()
@@ -11700,6 +14441,34 @@ public object FfiConverterSequenceTypeNodeRecord: FfiConverterRustBuffer<List<No
 /**
  * @suppress
  */
+public object FfiConverterSequenceTypeSnapshotBundleNodeRecord: FfiConverterRustBuffer<List<SnapshotBundleNodeRecord>> {
+    override fun read(buf: ByteBuffer): List<SnapshotBundleNodeRecord> {
+        val len = buf.getInt()
+        return List<SnapshotBundleNodeRecord>(len) {
+            FfiConverterTypeSnapshotBundleNodeRecord.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<SnapshotBundleNodeRecord>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeSnapshotBundleNodeRecord.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<SnapshotBundleNodeRecord>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeSnapshotBundleNodeRecord.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterSequenceTypeSnapshotRecord: FfiConverterRustBuffer<List<SnapshotRecord>> {
     override fun read(buf: ByteBuffer): List<SnapshotRecord> {
         val len = buf.getInt()
@@ -11718,6 +14487,34 @@ public object FfiConverterSequenceTypeSnapshotRecord: FfiConverterRustBuffer<Lis
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterTypeSnapshotRecord.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeStructuralDiffMarkerRecord: FfiConverterRustBuffer<List<StructuralDiffMarkerRecord>> {
+    override fun read(buf: ByteBuffer): List<StructuralDiffMarkerRecord> {
+        val len = buf.getInt()
+        return List<StructuralDiffMarkerRecord>(len) {
+            FfiConverterTypeStructuralDiffMarkerRecord.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<StructuralDiffMarkerRecord>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeStructuralDiffMarkerRecord.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<StructuralDiffMarkerRecord>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeStructuralDiffMarkerRecord.write(it, buf)
         }
     }
 }
@@ -11756,6 +14553,118 @@ public object FfiConverterSequenceTypeTombstoneMetadataRecord: FfiConverterRustB
 /**
  * @suppress
  */
+public object FfiConverterSequenceTypeTreeDebugComparedNodeRecord: FfiConverterRustBuffer<List<TreeDebugComparedNodeRecord>> {
+    override fun read(buf: ByteBuffer): List<TreeDebugComparedNodeRecord> {
+        val len = buf.getInt()
+        return List<TreeDebugComparedNodeRecord>(len) {
+            FfiConverterTypeTreeDebugComparedNodeRecord.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<TreeDebugComparedNodeRecord>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeTreeDebugComparedNodeRecord.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<TreeDebugComparedNodeRecord>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeTreeDebugComparedNodeRecord.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeTreeDebugComparisonLevelRecord: FfiConverterRustBuffer<List<TreeDebugComparisonLevelRecord>> {
+    override fun read(buf: ByteBuffer): List<TreeDebugComparisonLevelRecord> {
+        val len = buf.getInt()
+        return List<TreeDebugComparisonLevelRecord>(len) {
+            FfiConverterTypeTreeDebugComparisonLevelRecord.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<TreeDebugComparisonLevelRecord>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeTreeDebugComparisonLevelRecord.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<TreeDebugComparisonLevelRecord>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeTreeDebugComparisonLevelRecord.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeTreeDebugLevelRecord: FfiConverterRustBuffer<List<TreeDebugLevelRecord>> {
+    override fun read(buf: ByteBuffer): List<TreeDebugLevelRecord> {
+        val len = buf.getInt()
+        return List<TreeDebugLevelRecord>(len) {
+            FfiConverterTypeTreeDebugLevelRecord.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<TreeDebugLevelRecord>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeTreeDebugLevelRecord.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<TreeDebugLevelRecord>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeTreeDebugLevelRecord.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeTreeDebugNodeRecord: FfiConverterRustBuffer<List<TreeDebugNodeRecord>> {
+    override fun read(buf: ByteBuffer): List<TreeDebugNodeRecord> {
+        val len = buf.getInt()
+        return List<TreeDebugNodeRecord>(len) {
+            FfiConverterTypeTreeDebugNodeRecord.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<TreeDebugNodeRecord>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeTreeDebugNodeRecord.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<TreeDebugNodeRecord>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeTreeDebugNodeRecord.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterSequenceTypeTreeRecord: FfiConverterRustBuffer<List<TreeRecord>> {
     override fun read(buf: ByteBuffer): List<TreeRecord> {
         val len = buf.getInt()
@@ -11774,6 +14683,62 @@ public object FfiConverterSequenceTypeTreeRecord: FfiConverterRustBuffer<List<Tr
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterTypeTreeRecord.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeTreeStatsLevelF64Record: FfiConverterRustBuffer<List<TreeStatsLevelF64Record>> {
+    override fun read(buf: ByteBuffer): List<TreeStatsLevelF64Record> {
+        val len = buf.getInt()
+        return List<TreeStatsLevelF64Record>(len) {
+            FfiConverterTypeTreeStatsLevelF64Record.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<TreeStatsLevelF64Record>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeTreeStatsLevelF64Record.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<TreeStatsLevelF64Record>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeTreeStatsLevelF64Record.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeTreeStatsLevelU64Record: FfiConverterRustBuffer<List<TreeStatsLevelU64Record>> {
+    override fun read(buf: ByteBuffer): List<TreeStatsLevelU64Record> {
+        val len = buf.getInt()
+        return List<TreeStatsLevelU64Record>(len) {
+            FfiConverterTypeTreeStatsLevelU64Record.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<TreeStatsLevelU64Record>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeTreeStatsLevelU64Record.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<TreeStatsLevelU64Record>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeTreeStatsLevelU64Record.write(it, buf)
         }
     }
 }
@@ -11896,6 +14861,26 @@ public object FfiConverterSequenceOptionalByteArray: FfiConverterRustBuffer<List
     )
     }
 
+ fun `crdtResolutionDelete`(): CrdtResolutionRecord {
+            return FfiConverterTypeCrdtResolutionRecord.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_func_crdt_resolution_delete(
+
+        _status)
+}
+    )
+    }
+
+ fun `crdtResolutionValue`(`value`: kotlin.ByteArray): CrdtResolutionRecord {
+            return FfiConverterTypeCrdtResolutionRecord.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_func_crdt_resolution_value(
+
+        FfiConverterByteArray.lower(`value`),_status)
+}
+    )
+    }
+
  fun `debugKey`(`key`: kotlin.ByteArray): kotlin.String {
             return FfiConverterString.lift(
     uniffiRustCall() { _status ->
@@ -11947,6 +14932,16 @@ public object FfiConverterSequenceOptionalByteArray: FfiConverterRustBuffer<List
     )
     }
 
+ fun `deleteMutation`(`key`: kotlin.ByteArray): MutationRecord {
+            return FfiConverterTypeMutationRecord.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_func_delete_mutation(
+
+        FfiConverterByteArray.lower(`key`),_status)
+}
+    )
+    }
+
 
     @Throws(ProllyBindingException::class) fun `diffPageProofFromBytes`(`bytes`: kotlin.ByteArray): DiffPageProofRecord {
             return FfiConverterTypeDiffPageProofRecord.lift(
@@ -11975,6 +14970,46 @@ public object FfiConverterSequenceOptionalByteArray: FfiConverterRustBuffer<List
     UniffiLib.uniffi_prolly_bindings_fn_func_encode_segment(
 
         FfiConverterByteArray.lower(`segment`),_status)
+}
+    )
+    }
+
+ fun `encodingCbor`(): EncodingRecord {
+            return FfiConverterTypeEncodingRecord.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_func_encoding_cbor(
+
+        _status)
+}
+    )
+    }
+
+ fun `encodingCustom`(`name`: kotlin.String): EncodingRecord {
+            return FfiConverterTypeEncodingRecord.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_func_encoding_custom(
+
+        FfiConverterString.lower(`name`),_status)
+}
+    )
+    }
+
+ fun `encodingJson`(): EncodingRecord {
+            return FfiConverterTypeEncodingRecord.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_func_encoding_json(
+
+        _status)
+}
+    )
+    }
+
+ fun `encodingRaw`(): EncodingRecord {
+            return FfiConverterTypeEncodingRecord.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_func_encoding_raw(
+
+        _status)
 }
     )
     }
@@ -12097,6 +15132,17 @@ public object FfiConverterSequenceOptionalByteArray: FfiConverterRustBuffer<List
     }
 
 
+    @Throws(ProllyBindingException::class) fun `largeValueConfig`(`inlineThreshold`: kotlin.ULong): LargeValueConfigRecord {
+            return FfiConverterTypeLargeValueConfigRecord.lift(
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_func_large_value_config(
+
+        FfiConverterULong.lower(`inlineThreshold`),_status)
+}
+    )
+    }
+
+
     @Throws(ProllyBindingException::class) fun `multiKeyProofFromBytes`(`bytes`: kotlin.ByteArray): MultiKeyProofRecord {
             return FfiConverterTypeMultiKeyProofRecord.lift(
     uniffiRustCallWithError(ProllyBindingException) { _status ->
@@ -12200,6 +15246,27 @@ public object FfiConverterSequenceOptionalByteArray: FfiConverterRustBuffer<List
     UniffiLib.uniffi_prolly_bindings_fn_func_node_to_bytes(
 
         FfiConverterTypeNodeRecord.lower(`node`),_status)
+}
+    )
+    }
+
+
+    @Throws(ProllyBindingException::class) fun `parallelConfig`(`maxThreads`: kotlin.ULong, `parallelismThreshold`: kotlin.ULong): ParallelConfigRecord {
+            return FfiConverterTypeParallelConfigRecord.lift(
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_func_parallel_config(
+
+        FfiConverterULong.lower(`maxThreads`),FfiConverterULong.lower(`parallelismThreshold`),_status)
+}
+    )
+    }
+
+ fun `parallelConfigSequential`(): ParallelConfigRecord {
+            return FfiConverterTypeParallelConfigRecord.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_func_parallel_config_sequential(
+
+        _status)
 }
     )
     }
@@ -12332,6 +15399,76 @@ public object FfiConverterSequenceOptionalByteArray: FfiConverterRustBuffer<List
     )
     }
 
+ fun `resolutionDelete`(): ResolutionRecord {
+            return FfiConverterTypeResolutionRecord.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_func_resolution_delete(
+
+        _status)
+}
+    )
+    }
+
+ fun `resolutionUnresolved`(): ResolutionRecord {
+            return FfiConverterTypeResolutionRecord.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_func_resolution_unresolved(
+
+        _status)
+}
+    )
+    }
+
+ fun `resolutionValue`(`value`: kotlin.ByteArray): ResolutionRecord {
+            return FfiConverterTypeResolutionRecord.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_func_resolution_value(
+
+        FfiConverterByteArray.lower(`value`),_status)
+}
+    )
+    }
+
+ fun `resolveDeleteWins`(`conflict`: ConflictRecord): ResolutionRecord {
+            return FfiConverterTypeResolutionRecord.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_func_resolve_delete_wins(
+
+        FfiConverterTypeConflictRecord.lower(`conflict`),_status)
+}
+    )
+    }
+
+ fun `resolvePreferLeft`(`conflict`: ConflictRecord): ResolutionRecord {
+            return FfiConverterTypeResolutionRecord.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_func_resolve_prefer_left(
+
+        FfiConverterTypeConflictRecord.lower(`conflict`),_status)
+}
+    )
+    }
+
+ fun `resolvePreferRight`(`conflict`: ConflictRecord): ResolutionRecord {
+            return FfiConverterTypeResolutionRecord.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_func_resolve_prefer_right(
+
+        FfiConverterTypeConflictRecord.lower(`conflict`),_status)
+}
+    )
+    }
+
+ fun `resolveUpdateWins`(`conflict`: ConflictRecord): ResolutionRecord {
+            return FfiConverterTypeResolutionRecord.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_func_resolve_update_wins(
+
+        FfiConverterTypeConflictRecord.lower(`conflict`),_status)
+}
+    )
+    }
+
  fun `retainAllNamedRoots`(): NamedRootRetentionRecord {
             return FfiConverterTypeNamedRootRetentionRecord.lift(
     uniffiRustCall() { _status ->
@@ -12382,6 +15519,26 @@ public object FfiConverterSequenceOptionalByteArray: FfiConverterRustBuffer<List
     )
     }
 
+ fun `reverseCursorBeforeKey`(`key`: kotlin.ByteArray): ReverseCursorRecord {
+            return FfiConverterTypeReverseCursorRecord.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_func_reverse_cursor_before_key(
+
+        FfiConverterByteArray.lower(`key`),_status)
+}
+    )
+    }
+
+ fun `reverseCursorEnd`(): ReverseCursorRecord {
+            return FfiConverterTypeReverseCursorRecord.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_func_reverse_cursor_end(
+
+        _status)
+}
+    )
+    }
+
 
     @Throws(ProllyBindingException::class) fun `rootManifestFromBytes`(`bytes`: kotlin.ByteArray): RootManifestRecord {
             return FfiConverterTypeRootManifestRecord.lift(
@@ -12411,6 +15568,72 @@ public object FfiConverterSequenceOptionalByteArray: FfiConverterRustBuffer<List
     UniffiLib.uniffi_prolly_bindings_fn_func_sign_proof_bundle_hmac_sha256(
 
         FfiConverterByteArray.lower(`proofBundle`),FfiConverterByteArray.lower(`keyId`),FfiConverterByteArray.lower(`secret`),FfiConverterByteArray.lower(`context`),FfiConverterOptionalULong.lower(`issuedAtMillis`),FfiConverterOptionalULong.lower(`expiresAtMillis`),FfiConverterByteArray.lower(`nonce`),_status)
+}
+    )
+    }
+
+
+    @Throws(ProllyBindingException::class) fun `snapshotBundleDigest`(`record`: SnapshotBundleRecord): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_func_snapshot_bundle_digest(
+
+        FfiConverterTypeSnapshotBundleRecord.lower(`record`),_status)
+}
+    )
+    }
+
+
+    @Throws(ProllyBindingException::class) fun `snapshotBundleDigestBytes`(`bytes`: kotlin.ByteArray): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_func_snapshot_bundle_digest_bytes(
+
+        FfiConverterByteArray.lower(`bytes`),_status)
+}
+    )
+    }
+
+
+    @Throws(ProllyBindingException::class) fun `snapshotBundleFromBytes`(`bytes`: kotlin.ByteArray): SnapshotBundleRecord {
+            return FfiConverterTypeSnapshotBundleRecord.lift(
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_func_snapshot_bundle_from_bytes(
+
+        FfiConverterByteArray.lower(`bytes`),_status)
+}
+    )
+    }
+
+
+    @Throws(ProllyBindingException::class) fun `snapshotBundleSummary`(`record`: SnapshotBundleRecord): SnapshotBundleSummaryRecord {
+            return FfiConverterTypeSnapshotBundleSummaryRecord.lift(
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_func_snapshot_bundle_summary(
+
+        FfiConverterTypeSnapshotBundleRecord.lower(`record`),_status)
+}
+    )
+    }
+
+
+    @Throws(ProllyBindingException::class) fun `snapshotBundleSummaryFromBytes`(`bytes`: kotlin.ByteArray): SnapshotBundleSummaryRecord {
+            return FfiConverterTypeSnapshotBundleSummaryRecord.lift(
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_func_snapshot_bundle_summary_from_bytes(
+
+        FfiConverterByteArray.lower(`bytes`),_status)
+}
+    )
+    }
+
+
+    @Throws(ProllyBindingException::class) fun `snapshotBundleToBytes`(`record`: SnapshotBundleRecord): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_func_snapshot_bundle_to_bytes(
+
+        FfiConverterTypeSnapshotBundleRecord.lower(`record`),_status)
 }
     )
     }
@@ -12574,6 +15797,17 @@ public object FfiConverterSequenceOptionalByteArray: FfiConverterRustBuffer<List
     }
 
 
+    @Throws(ProllyBindingException::class) fun `treeConfig`(`minChunkSize`: kotlin.ULong, `maxChunkSize`: kotlin.ULong, `chunkingFactor`: kotlin.UInt, `hashSeed`: kotlin.ULong, `encoding`: EncodingRecord, `nodeCacheMaxNodes`: kotlin.ULong?, `nodeCacheMaxBytes`: kotlin.ULong?): ConfigRecord {
+            return FfiConverterTypeConfigRecord.lift(
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_func_tree_config(
+
+        FfiConverterULong.lower(`minChunkSize`),FfiConverterULong.lower(`maxChunkSize`),FfiConverterUInt.lower(`chunkingFactor`),FfiConverterULong.lower(`hashSeed`),FfiConverterTypeEncodingRecord.lower(`encoding`),FfiConverterOptionalULong.lower(`nodeCacheMaxNodes`),FfiConverterOptionalULong.lower(`nodeCacheMaxBytes`),_status)
+}
+    )
+    }
+
+
     @Throws(ProllyBindingException::class) fun `u128Key`(`value`: kotlin.String): kotlin.ByteArray {
             return FfiConverterByteArray.lift(
     uniffiRustCallWithError(ProllyBindingException) { _status ->
@@ -12590,6 +15824,16 @@ public object FfiConverterSequenceOptionalByteArray: FfiConverterRustBuffer<List
     UniffiLib.uniffi_prolly_bindings_fn_func_u64_key(
 
         FfiConverterULong.lower(`value`),_status)
+}
+    )
+    }
+
+ fun `upsertMutation`(`key`: kotlin.ByteArray, `value`: kotlin.ByteArray): MutationRecord {
+            return FfiConverterTypeMutationRecord.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_func_upsert_mutation(
+
+        FfiConverterByteArray.lower(`key`),FfiConverterByteArray.lower(`value`),_status)
 }
     )
     }
@@ -12720,6 +15964,28 @@ public object FfiConverterSequenceOptionalByteArray: FfiConverterRustBuffer<List
     UniffiLib.uniffi_prolly_bindings_fn_func_verify_range_proof(
 
         FfiConverterTypeRangeProofRecord.lower(`proof`),_status)
+}
+    )
+    }
+
+
+    @Throws(ProllyBindingException::class) fun `verifySnapshotBundle`(`record`: SnapshotBundleRecord): SnapshotBundleVerificationRecord {
+            return FfiConverterTypeSnapshotBundleVerificationRecord.lift(
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_func_verify_snapshot_bundle(
+
+        FfiConverterTypeSnapshotBundleRecord.lower(`record`),_status)
+}
+    )
+    }
+
+
+    @Throws(ProllyBindingException::class) fun `verifySnapshotBundleBytes`(`bytes`: kotlin.ByteArray): SnapshotBundleVerificationRecord {
+            return FfiConverterTypeSnapshotBundleVerificationRecord.lift(
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_func_verify_snapshot_bundle_bytes(
+
+        FfiConverterByteArray.lower(`bytes`),_status)
 }
     )
     }

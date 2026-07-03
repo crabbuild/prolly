@@ -8,23 +8,27 @@ See `COOKBOOK.md` for Ruby application patterns covering SQLite-backed indexes,
 prefix queries, futures, merge callbacks, large values, and custom stores.
 
 The smoke test covers memory, file, SQLite, SQLite-in-memory, generated wire
-helpers, paged range/diff/conflict inspection, merge/named-root flows, Rust
-bulk-build, sorted bulk-build, append-batch, parallel batch, batch execution statistics, range-after/cursor resumption with cursor helpers, cursor-resumed diffs,
+helpers, paged range/diff/conflict inspection, typed structural diff cursor
+resume, merge/named-root flows, Rust bulk-build, sorted bulk-build,
+append-batch, parallel batch, batch/append/parallel batch execution statistics, ordered boundary helpers, range-after/cursor resumption with cursor helpers, reverse and prefix-reverse pages, cursor-resumed diffs,
+cursor windows,
 host `Prolly::MergeResolverCallback` custom resolvers for full-tree,
 range-limited, and prefix-limited merges, merge policy registries with named
-and Ruby callback rules, `Prolly::HostStoreCallback` custom stores,
-operational APIs, sync/GC, retained named-root GC with retention policy helpers, blob
+and Ruby callback rules, typed merge explanation traces with JSON trace
+compatibility, `Prolly::HostStoreCallback` custom stores,
+operational APIs, sync/GC, portable snapshot bundle export/import with
+canonical bytes, digests, summaries, and self-contained verification, retained named-root GC with retention policy helpers, blob
 stores, large-value helpers, key helpers for prefix bounds and segment
 encoding/decoding plus composite key construction, value-ref stored-byte helpers, blob-ref byte validation, blob GC, CRDT
 merge presets, single-key, multi-key, range, cursor-page, diff-page, and prefix proofs with compact path-node export/import, canonical bundle bytes, proof-bundle introspection/routing summaries, one-shot proof-bundle verification, HMAC-authenticated proof envelopes, and one-shot authenticated proof-bundle verification,
 `Prolly::CrdtResolverCallback` custom resolvers, timestamped
 value envelopes, multi-value set helpers, tombstone
-envelopes, tombstone upsert, tombstone compaction, changed-span constructors, and versioned-value schema
-guards through the generated
-Ruby API. `Prolly::AsyncEngine` provides dependency-free `Future` wrappers for
+envelopes, tombstone upsert, tombstone compaction, mutation constructors, changed-span constructors, merge/CRDT resolution helpers, built-in resolver helper functions, versioned-value schema
+guards, encoding helpers, and tree/large-value/parallel config constructors
+through the generated Ruby API. `Prolly::AsyncEngine` provides dependency-free `Future` wrappers for
 the generated engine surface, and `Prolly::AsyncBlobStore` wraps blob-store
 methods. Named-root flows include manifest metadata listing. The async wrappers cover create/read/write, range/diff, merge,
-named-root, stats/cache, hint, GC/sync, large-value, and blob-store flows.
+named-root, typed stats/debug/cache, hint, GC/sync, large-value, and blob-store flows.
 
 Local smoke test:
 

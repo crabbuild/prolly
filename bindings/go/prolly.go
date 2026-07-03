@@ -234,8 +234,16 @@ extern RustBuffer uniffi_prolly_bindings_fn_func_prefix_end(RustBuffer prefix, R
 extern RustBuffer uniffi_prolly_bindings_fn_func_prefix_range(RustBuffer prefix, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_func_range_cursor_after_key(RustBuffer key, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_func_range_cursor_start(RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_func_reverse_cursor_before_key(RustBuffer key, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_func_reverse_cursor_end(RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_func_root_manifest_from_bytes(RustBuffer bytes, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_func_root_manifest_to_bytes(RustBuffer record, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_func_snapshot_bundle_digest(RustBuffer record, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_func_snapshot_bundle_digest_bytes(RustBuffer bytes, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_func_snapshot_bundle_from_bytes(RustBuffer bytes, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_func_snapshot_bundle_summary(RustBuffer record, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_func_snapshot_bundle_summary_from_bytes(RustBuffer bytes, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_func_snapshot_bundle_to_bytes(RustBuffer record, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_func_snapshot_id_from_name(RustBuffer namespace, RustBuffer name, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_func_snapshot_namespace_branch(RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_func_snapshot_namespace_checkpoint(RustCallStatus *out_err);
@@ -246,6 +254,8 @@ extern RustBuffer uniffi_prolly_bindings_fn_func_timestamp_millis_key(uint64_t v
 extern RustBuffer uniffi_prolly_bindings_fn_func_timestamped_value_from_bytes(RustBuffer bytes, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_func_timestamped_value_now(RustBuffer value, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_func_timestamped_value_to_bytes(RustBuffer record, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_func_verify_snapshot_bundle(RustBuffer record, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_func_verify_snapshot_bundle_bytes(RustBuffer bytes, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_func_tombstone_compaction_mutation(RustBuffer key, RustBuffer stored_value, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_func_tombstone_from_bytes(RustBuffer bytes, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_func_tombstone_from_stored_bytes(RustBuffer bytes, RustCallStatus *out_err);
@@ -279,10 +289,11 @@ extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_build_from_sorte
 	extern void uniffi_prolly_bindings_fn_method_prollyengine_clear_cache(uint64_t ptr, RustCallStatus *out_err);
 	extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_collect_stats_json(uint64_t ptr, RustBuffer tree, RustCallStatus *out_err);
 	extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_compare_and_swap_named_root(uint64_t ptr, RustBuffer name, RustBuffer expected, RustBuffer replacement, RustCallStatus *out_err);
-	extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_compare_and_swap_snapshot(uint64_t ptr, RustBuffer namespace, RustBuffer id, RustBuffer expected, RustBuffer replacement, RustCallStatus *out_err);
-	extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_compare_and_swap_snapshot_at_millis(uint64_t ptr, RustBuffer namespace, RustBuffer id, RustBuffer expected, RustBuffer replacement, uint64_t timestamp_millis, RustCallStatus *out_err);
-	extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_copy_missing_nodes(uint64_t ptr, RustBuffer tree, uint64_t destination, RustCallStatus *out_err);
-	extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_crdt_merge(uint64_t ptr, RustBuffer base, RustBuffer left, RustBuffer right, RustBuffer config, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_compare_and_swap_snapshot(uint64_t ptr, RustBuffer namespace, RustBuffer id, RustBuffer expected, RustBuffer replacement, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_compare_and_swap_snapshot_at_millis(uint64_t ptr, RustBuffer namespace, RustBuffer id, RustBuffer expected, RustBuffer replacement, uint64_t timestamp_millis, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_copy_missing_nodes(uint64_t ptr, RustBuffer tree, uint64_t destination, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_cursor_window(uint64_t ptr, RustBuffer tree, RustBuffer key, RustBuffer end, uint64_t limit, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_crdt_merge(uint64_t ptr, RustBuffer base, RustBuffer left, RustBuffer right, RustBuffer config, RustCallStatus *out_err);
 	extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_crdt_merge_with_resolver(uint64_t ptr, RustBuffer base, RustBuffer left, RustBuffer right, RustBuffer delete_policy, uint64_t resolver, RustCallStatus *out_err);
 	extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_debug_compare_trees_json(uint64_t ptr, RustBuffer left, RustBuffer right, RustCallStatus *out_err);
 	extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_debug_compare_trees_text(uint64_t ptr, RustBuffer left, RustBuffer right, RustCallStatus *out_err);
@@ -293,14 +304,18 @@ extern void uniffi_prolly_bindings_fn_method_prollyengine_delete_named_root(uint
 extern void uniffi_prolly_bindings_fn_method_prollyengine_delete_snapshot(uint64_t ptr, RustBuffer namespace, RustBuffer id, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_diff(uint64_t ptr, RustBuffer base, RustBuffer other, RustCallStatus *out_err);
 	extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_range_diff(uint64_t ptr, RustBuffer base, RustBuffer other, RustBuffer start, RustBuffer end, RustCallStatus *out_err);
-	extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_diff_from_cursor(uint64_t ptr, RustBuffer base, RustBuffer other, RustBuffer cursor, RustBuffer end, RustCallStatus *out_err);
-	extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_diff_page(uint64_t ptr, RustBuffer base, RustBuffer other, RustBuffer cursor, RustBuffer end, uint64_t limit, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_diff_from_cursor(uint64_t ptr, RustBuffer base, RustBuffer other, RustBuffer cursor, RustBuffer end, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_diff_page(uint64_t ptr, RustBuffer base, RustBuffer other, RustBuffer cursor, RustBuffer end, uint64_t limit, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_conflict_page(uint64_t ptr, RustBuffer base, RustBuffer left, RustBuffer right, RustBuffer cursor, uint64_t limit, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_export_snapshot(uint64_t ptr, RustBuffer tree, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_first_entry(uint64_t ptr, RustBuffer tree, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_get(uint64_t ptr, RustBuffer tree, RustBuffer key, RustCallStatus *out_err);
 	extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_get_large_value(uint64_t ptr, uint64_t blob_store, RustBuffer tree, RustBuffer key, RustCallStatus *out_err);
 	extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_get_many(uint64_t ptr, RustBuffer tree, RustBuffer keys, RustCallStatus *out_err);
 	extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_get_value_ref(uint64_t ptr, RustBuffer tree, RustBuffer key, RustCallStatus *out_err);
 	extern uint8_t uniffi_prolly_bindings_fn_method_prollyengine_hydrate_prefix_path_hint(uint64_t ptr, RustBuffer tree, RustBuffer prefix, RustCallStatus *out_err);
+	extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_import_snapshot(uint64_t ptr, RustBuffer bundle, RustCallStatus *out_err);
+	extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_last_entry(uint64_t ptr, RustBuffer tree, RustCallStatus *out_err);
 	extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_list_named_root_manifests(uint64_t ptr, RustCallStatus *out_err);
 	extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_list_named_roots(uint64_t ptr, RustCallStatus *out_err);
 	extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_list_node_cids(uint64_t ptr, RustCallStatus *out_err);
@@ -311,6 +326,7 @@ extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_get(uint64_t ptr
 	extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_load_retained_named_roots(uint64_t ptr, RustBuffer retention, RustCallStatus *out_err);
 	extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_load_snapshot(uint64_t ptr, RustBuffer namespace, RustBuffer id, RustCallStatus *out_err);
 	extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_load_snapshots(uint64_t ptr, RustBuffer namespace, RustBuffer ids, RustCallStatus *out_err);
+	extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_lower_bound(uint64_t ptr, RustBuffer tree, RustBuffer key, RustCallStatus *out_err);
 	extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_mark_reachable(uint64_t ptr, RustBuffer roots, RustCallStatus *out_err);
 	extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_mark_reachable_blobs(uint64_t ptr, RustBuffer roots, RustCallStatus *out_err);
 	extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_merge(uint64_t ptr, RustBuffer base, RustBuffer left, RustBuffer right, RustBuffer resolver, RustCallStatus *out_err);
@@ -327,6 +343,7 @@ extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_get(uint64_t ptr
 	extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_merge_with_resolver(uint64_t ptr, RustBuffer base, RustBuffer left, RustBuffer right, uint64_t resolver, RustCallStatus *out_err);
 	extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_metrics(uint64_t ptr, RustCallStatus *out_err);
 	extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_parallel_batch(uint64_t ptr, RustBuffer tree, RustBuffer mutations, RustBuffer config, RustCallStatus *out_err);
+	extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_parallel_batch_with_stats(uint64_t ptr, RustBuffer tree, RustBuffer mutations, RustBuffer config, RustCallStatus *out_err);
 	extern uint64_t uniffi_prolly_bindings_fn_method_prollyengine_pin_tree_path(uint64_t ptr, RustBuffer tree, RustBuffer key, RustCallStatus *out_err);
 	extern uint64_t uniffi_prolly_bindings_fn_method_prollyengine_pin_tree_root(uint64_t ptr, RustBuffer tree, RustCallStatus *out_err);
 	extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_plan_blob_gc(uint64_t ptr, uint64_t blob_store, RustBuffer roots, RustBuffer candidate_blobs, RustCallStatus *out_err);
@@ -350,25 +367,32 @@ extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_prove_range_page
 extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_prove_diff_page(uint64_t ptr, RustBuffer base, RustBuffer other, RustBuffer cursor, RustBuffer end, uint64_t limit, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_put(uint64_t ptr, RustBuffer tree, RustBuffer key, RustBuffer value, RustCallStatus *out_err);
 	extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_put_large_value(uint64_t ptr, uint64_t blob_store, RustBuffer tree, RustBuffer key, RustBuffer value, RustBuffer config, RustCallStatus *out_err);
+	extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_prefix(uint64_t ptr, RustBuffer tree, RustBuffer prefix, RustCallStatus *out_err);
+	extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_prefix_page(uint64_t ptr, RustBuffer tree, RustBuffer prefix, RustBuffer cursor, uint64_t limit, RustCallStatus *out_err);
+	extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_prefix_reverse_page(uint64_t ptr, RustBuffer tree, RustBuffer prefix, RustBuffer cursor, uint64_t limit, RustCallStatus *out_err);
 	extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_range(uint64_t ptr, RustBuffer tree, RustBuffer start, RustBuffer end, RustCallStatus *out_err);
 	extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_range_after(uint64_t ptr, RustBuffer tree, RustBuffer after_key, RustBuffer end, RustCallStatus *out_err);
 	extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_range_from_cursor(uint64_t ptr, RustBuffer tree, RustBuffer cursor, RustBuffer end, RustCallStatus *out_err);
 	extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_range_page(uint64_t ptr, RustBuffer tree, RustBuffer cursor, RustBuffer end, uint64_t limit, RustCallStatus *out_err);
+	extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_reverse_page(uint64_t ptr, RustBuffer tree, RustBuffer cursor, RustBuffer start, uint64_t limit, RustCallStatus *out_err);
 	extern void uniffi_prolly_bindings_fn_method_prollyengine_reset_metrics(uint64_t ptr, RustCallStatus *out_err);
 	extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_stats_diff_json(uint64_t ptr, RustBuffer before, RustBuffer after, RustCallStatus *out_err);
 	extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_structural_diff_page(uint64_t ptr, RustBuffer base, RustBuffer other, RustBuffer cursor_json, uint64_t limit, RustCallStatus *out_err);
+	extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_structural_diff_page_with_cursor(uint64_t ptr, RustBuffer base, RustBuffer other, RustBuffer cursor, uint64_t limit, RustCallStatus *out_err);
 	extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_sweep_blob_gc(uint64_t ptr, uint64_t blob_store, RustBuffer roots, RustBuffer candidate_blobs, RustCallStatus *out_err);
 	extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_sweep_blob_store_gc(uint64_t ptr, uint64_t blob_store, RustBuffer roots, RustCallStatus *out_err);
 	extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_sweep_gc(uint64_t ptr, RustBuffer roots, RustBuffer candidate_cids, RustCallStatus *out_err);
 	extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_sweep_store_gc(uint64_t ptr, RustBuffer roots, RustCallStatus *out_err);
 	extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_sweep_store_gc_for_retention(uint64_t ptr, RustBuffer retention, RustCallStatus *out_err);
 	extern uint64_t uniffi_prolly_bindings_fn_method_prollyengine_unpin_all_cache_nodes(uint64_t ptr, RustCallStatus *out_err);
+	extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_upper_bound(uint64_t ptr, RustBuffer tree, RustBuffer key, RustCallStatus *out_err);
 */
 import "C"
 
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"runtime"
@@ -392,8 +416,43 @@ type ConfigOptions struct {
 	NodeCacheMaxBytes *uint64
 }
 
+type Encoding struct {
+	Kind       string
+	CustomName *string
+}
+
 type Tree struct {
 	raw []byte
+}
+
+type SnapshotBundleNode struct {
+	CID   []byte
+	Bytes []byte
+}
+
+type SnapshotBundle struct {
+	FormatVersion uint32
+	Tree          Tree
+	Nodes         []SnapshotBundleNode
+}
+
+type SnapshotBundleSummary struct {
+	FormatVersion uint32
+	Root          []byte
+	HasRoot       bool
+	NodeCount     uint64
+	ByteCount     uint64
+	MinNodeBytes  uint64
+	MaxNodeBytes  uint64
+}
+
+type SnapshotBundleVerification struct {
+	Valid          bool
+	Summary        SnapshotBundleSummary
+	ReachableNodes uint64
+	ReachableBytes uint64
+	MissingCids    [][]byte
+	ExtraCids      [][]byte
 }
 
 type Entry struct {
@@ -413,6 +472,14 @@ type Mutation struct {
 	Kind  string
 	Key   []byte
 	Value []byte
+}
+
+func UpsertMutation(key []byte, value []byte) Mutation {
+	return Mutation{Kind: "upsert", Key: key, Value: value}
+}
+
+func DeleteMutation(key []byte) Mutation {
+	return Mutation{Kind: "delete", Key: key}
 }
 
 type BatchApplyStats struct {
@@ -441,6 +508,10 @@ type RangeCursor struct {
 	AfterKey []byte
 }
 
+type ReverseCursor struct {
+	BeforeKey []byte
+}
+
 func RangeCursorStart() (RangeCursor, error) {
 	var status C.RustCallStatus
 	out := C.uniffi_prolly_bindings_fn_func_range_cursor_start(&status)
@@ -465,6 +536,30 @@ func RangeCursorAfterKey(key []byte) (RangeCursor, error) {
 	return decodeRangeCursor(copyRustBuffer(out))
 }
 
+func ReverseCursorEnd() (ReverseCursor, error) {
+	var status C.RustCallStatus
+	out := C.uniffi_prolly_bindings_fn_func_reverse_cursor_end(&status)
+	if err := statusError(&status); err != nil {
+		return ReverseCursor{}, err
+	}
+	defer freeRustBuffer(out)
+	return decodeReverseCursor(copyRustBuffer(out))
+}
+
+func ReverseCursorBeforeKey(key []byte) (ReverseCursor, error) {
+	in, err := rustBufferFromBytes(encodeByteArray(key))
+	if err != nil {
+		return ReverseCursor{}, err
+	}
+	var status C.RustCallStatus
+	out := C.uniffi_prolly_bindings_fn_func_reverse_cursor_before_key(in, &status)
+	if err := statusError(&status); err != nil {
+		return ReverseCursor{}, err
+	}
+	defer freeRustBuffer(out)
+	return decodeReverseCursor(copyRustBuffer(out))
+}
+
 type RangeBounds struct {
 	Start []byte
 	End   []byte
@@ -473,6 +568,21 @@ type RangeBounds struct {
 type RangePage struct {
 	Entries    []Entry
 	NextCursor *RangeCursor
+}
+
+type ReversePage struct {
+	Entries    []Entry
+	NextCursor *ReverseCursor
+}
+
+type CursorWindow struct {
+	PositionKey      []byte
+	HasPositionKey   bool
+	PositionValue    []byte
+	HasPositionValue bool
+	Found            bool
+	Entries          []Entry
+	NextCursor       *RangeCursor
 }
 
 type DiffPage struct {
@@ -501,12 +611,55 @@ func ResolveValue(value []byte) Resolution {
 	return Resolution{Kind: "value", Value: value}
 }
 
+func ResolutionValue(value []byte) Resolution {
+	return ResolveValue(value)
+}
+
 func ResolveDelete() Resolution {
 	return Resolution{Kind: "delete"}
 }
 
+func ResolutionDelete() Resolution {
+	return ResolveDelete()
+}
+
 func ResolveUnresolved() Resolution {
 	return Resolution{Kind: "unresolved"}
+}
+
+func ResolutionUnresolved() Resolution {
+	return ResolveUnresolved()
+}
+
+func ResolvePreferLeft(conflict Conflict) Resolution {
+	if conflict.LeftPresent {
+		return ResolutionValue(conflict.Left)
+	}
+	return ResolutionDelete()
+}
+
+func ResolvePreferRight(conflict Conflict) Resolution {
+	if conflict.RightPresent {
+		return ResolutionValue(conflict.Right)
+	}
+	return ResolutionDelete()
+}
+
+func ResolveDeleteWins(conflict Conflict) Resolution {
+	if !conflict.LeftPresent || !conflict.RightPresent {
+		return ResolutionDelete()
+	}
+	return ResolutionUnresolved()
+}
+
+func ResolveUpdateWins(conflict Conflict) Resolution {
+	if conflict.LeftPresent && !conflict.RightPresent {
+		return ResolutionValue(conflict.Left)
+	}
+	if !conflict.LeftPresent && conflict.RightPresent {
+		return ResolutionValue(conflict.Right)
+	}
+	return ResolutionUnresolved()
 }
 
 type CrdtResolution struct {
@@ -520,8 +673,16 @@ func CrdtResolveValue(value []byte) CrdtResolution {
 	return CrdtResolution{Kind: "value", Value: value}
 }
 
+func CrdtResolutionValue(value []byte) CrdtResolution {
+	return CrdtResolveValue(value)
+}
+
 func CrdtResolveDelete() CrdtResolution {
 	return CrdtResolution{Kind: "delete"}
+}
+
+func CrdtResolutionDelete() CrdtResolution {
+	return CrdtResolveDelete()
 }
 
 type ConflictPage struct {
@@ -543,6 +704,190 @@ type StructuralDiffPage struct {
 	NextCursorJSON string
 	HasNextCursor  bool
 	Stats          DiffTraversalStats
+	NextCursor     *StructuralDiffCursor
+}
+
+type StructuralDiffCursor struct {
+	BaseRoot  []byte
+	OtherRoot []byte
+	Markers   []StructuralDiffMarker
+	Pending   []Diff
+}
+
+type StructuralDiffMarker struct {
+	Kind       string
+	BaseCID    []byte
+	OtherCID   []byte
+	SpanEnd    []byte
+	HasSpanEnd bool
+	CID        []byte
+}
+
+type MergeTrace struct {
+	Events []MergeTraceEvent
+}
+
+type MergeTraceEvent struct {
+	Kind           string
+	FastPath       string
+	CID            []byte
+	HasCID         bool
+	ReuseReason    string
+	Level          *uint64
+	Entries        *uint64
+	FirstKey       []byte
+	HasFirstKey    bool
+	LastKey        []byte
+	HasLastKey     bool
+	Stage          string
+	Key            []byte
+	HasKey         bool
+	Resolution     string
+	FallbackReason string
+	DiffStats      *DiffTraversalStats
+	RightChanges   *uint64
+	Mutations      *uint64
+	AppendOnly     *bool
+}
+
+type TreeStats struct {
+	NumNodes              uint64             `json:"num_nodes"`
+	NumLeaves             uint64             `json:"num_leaves"`
+	NumInternalNodes      uint64             `json:"num_internal_nodes"`
+	TreeHeight            uint8              `json:"tree_height"`
+	TotalKeyValuePairs    uint64             `json:"total_key_value_pairs"`
+	TotalTreeSizeBytes    uint64             `json:"total_tree_size_bytes"`
+	AvgNodeSizeBytes      float64            `json:"avg_node_size_bytes"`
+	MinNodeSizeBytes      uint64             `json:"min_node_size_bytes"`
+	MaxNodeSizeBytes      uint64             `json:"max_node_size_bytes"`
+	AvgEntriesPerNode     float64            `json:"avg_entries_per_node"`
+	NodesPerLevel         map[string]uint64  `json:"nodes_per_level"`
+	AvgNodeSizePerLevel   map[string]float64 `json:"avg_node_size_per_level"`
+	AvgEntriesPerLevel    map[string]float64 `json:"avg_entries_per_level"`
+	MinEntriesPerLevel    map[string]uint64  `json:"min_entries_per_level"`
+	MaxEntriesPerLevel    map[string]uint64  `json:"max_entries_per_level"`
+	AvgFanout             float64            `json:"avg_fanout"`
+	MinFanout             uint64             `json:"min_fanout"`
+	MaxFanout             uint64             `json:"max_fanout"`
+	AvgFillFactor         float64            `json:"avg_fill_factor"`
+	AvgLeafFillFactor     float64            `json:"avg_leaf_fill_factor"`
+	AvgInternalFillFactor float64            `json:"avg_internal_fill_factor"`
+	AvgKeySizeBytes       float64            `json:"avg_key_size_bytes"`
+	AvgValueSizeBytes     float64            `json:"avg_value_size_bytes"`
+	MinKeySizeBytes       uint64             `json:"min_key_size_bytes"`
+	MaxKeySizeBytes       uint64             `json:"max_key_size_bytes"`
+	MinValueSizeBytes     uint64             `json:"min_value_size_bytes"`
+	MaxValueSizeBytes     uint64             `json:"max_value_size_bytes"`
+	TotalKeysSizeBytes    uint64             `json:"total_keys_size_bytes"`
+	TotalValuesSizeBytes  uint64             `json:"total_values_size_bytes"`
+}
+
+type StatsDiff struct {
+	NumNodesDiff              int64   `json:"num_nodes_diff"`
+	NumLeavesDiff             int64   `json:"num_leaves_diff"`
+	NumInternalNodesDiff      int64   `json:"num_internal_nodes_diff"`
+	TreeHeightDiff            int8    `json:"tree_height_diff"`
+	TotalKeyValuePairsDiff    int64   `json:"total_key_value_pairs_diff"`
+	TotalTreeSizeBytesDiff    int64   `json:"total_tree_size_bytes_diff"`
+	AvgNodeSizeBytesDiff      float64 `json:"avg_node_size_bytes_diff"`
+	MinNodeSizeBytesDiff      int64   `json:"min_node_size_bytes_diff"`
+	MaxNodeSizeBytesDiff      int64   `json:"max_node_size_bytes_diff"`
+	AvgEntriesPerNodeDiff     float64 `json:"avg_entries_per_node_diff"`
+	AvgFanoutDiff             float64 `json:"avg_fanout_diff"`
+	MinFanoutDiff             int64   `json:"min_fanout_diff"`
+	MaxFanoutDiff             int64   `json:"max_fanout_diff"`
+	AvgFillFactorDiff         float64 `json:"avg_fill_factor_diff"`
+	AvgLeafFillFactorDiff     float64 `json:"avg_leaf_fill_factor_diff"`
+	AvgInternalFillFactorDiff float64 `json:"avg_internal_fill_factor_diff"`
+	AvgKeySizeBytesDiff       float64 `json:"avg_key_size_bytes_diff"`
+	AvgValueSizeBytesDiff     float64 `json:"avg_value_size_bytes_diff"`
+	MinKeySizeBytesDiff       int64   `json:"min_key_size_bytes_diff"`
+	MaxKeySizeBytesDiff       int64   `json:"max_key_size_bytes_diff"`
+	MinValueSizeBytesDiff     int64   `json:"min_value_size_bytes_diff"`
+	MaxValueSizeBytesDiff     int64   `json:"max_value_size_bytes_diff"`
+	TotalKeysSizeBytesDiff    int64   `json:"total_keys_size_bytes_diff"`
+	TotalValuesSizeBytesDiff  int64   `json:"total_values_size_bytes_diff"`
+}
+
+type StatsPercentageChange struct {
+	NumNodesPct              float64 `json:"num_nodes_pct"`
+	NumLeavesPct             float64 `json:"num_leaves_pct"`
+	NumInternalNodesPct      float64 `json:"num_internal_nodes_pct"`
+	TreeHeightPct            float64 `json:"tree_height_pct"`
+	TotalKeyValuePairsPct    float64 `json:"total_key_value_pairs_pct"`
+	TotalTreeSizeBytesPct    float64 `json:"total_tree_size_bytes_pct"`
+	AvgNodeSizeBytesPct      float64 `json:"avg_node_size_bytes_pct"`
+	MinNodeSizeBytesPct      float64 `json:"min_node_size_bytes_pct"`
+	MaxNodeSizeBytesPct      float64 `json:"max_node_size_bytes_pct"`
+	AvgEntriesPerNodePct     float64 `json:"avg_entries_per_node_pct"`
+	AvgFanoutPct             float64 `json:"avg_fanout_pct"`
+	MinFanoutPct             float64 `json:"min_fanout_pct"`
+	MaxFanoutPct             float64 `json:"max_fanout_pct"`
+	AvgFillFactorPct         float64 `json:"avg_fill_factor_pct"`
+	AvgLeafFillFactorPct     float64 `json:"avg_leaf_fill_factor_pct"`
+	AvgInternalFillFactorPct float64 `json:"avg_internal_fill_factor_pct"`
+	AvgKeySizeBytesPct       float64 `json:"avg_key_size_bytes_pct"`
+	AvgValueSizeBytesPct     float64 `json:"avg_value_size_bytes_pct"`
+	MinKeySizeBytesPct       float64 `json:"min_key_size_bytes_pct"`
+	MaxKeySizeBytesPct       float64 `json:"max_key_size_bytes_pct"`
+	MinValueSizeBytesPct     float64 `json:"min_value_size_bytes_pct"`
+	MaxValueSizeBytesPct     float64 `json:"max_value_size_bytes_pct"`
+	TotalKeysSizeBytesPct    float64 `json:"total_keys_size_bytes_pct"`
+	TotalValuesSizeBytesPct  float64 `json:"total_values_size_bytes_pct"`
+}
+
+type StatsComparison struct {
+	Before     TreeStats             `json:"before"`
+	After      TreeStats             `json:"after"`
+	Absolute   StatsDiff             `json:"absolute"`
+	Percentage StatsPercentageChange `json:"percentage"`
+}
+
+type TreeDebugNode struct {
+	Cid          []byte  `json:"cid"`
+	Leaf         bool    `json:"leaf"`
+	Level        uint8   `json:"level"`
+	EntryCount   uint64  `json:"entry_count"`
+	MaxEntries   uint64  `json:"max_entries"`
+	FillFactor   float64 `json:"fill_factor"`
+	EncodedBytes uint64  `json:"encoded_bytes"`
+	FirstKey     []byte  `json:"first_key"`
+	LastKey      []byte  `json:"last_key"`
+}
+
+type TreeDebugLevel struct {
+	Level uint8           `json:"level"`
+	Nodes []TreeDebugNode `json:"nodes"`
+}
+
+type TreeDebugView struct {
+	Levels []TreeDebugLevel `json:"levels"`
+}
+
+type TreeDebugComparedNode struct {
+	Status string        `json:"status"`
+	Node   TreeDebugNode `json:"node"`
+}
+
+type TreeDebugComparisonLevel struct {
+	Level          uint8                   `json:"level"`
+	SharedNodes    uint64                  `json:"shared_nodes"`
+	LeftOnlyNodes  uint64                  `json:"left_only_nodes"`
+	RightOnlyNodes uint64                  `json:"right_only_nodes"`
+	SharedBytes    uint64                  `json:"shared_bytes"`
+	LeftOnlyBytes  uint64                  `json:"left_only_bytes"`
+	RightOnlyBytes uint64                  `json:"right_only_bytes"`
+	Nodes          []TreeDebugComparedNode `json:"nodes"`
+}
+
+type TreeDebugComparison struct {
+	SharedNodes    uint64                     `json:"shared_nodes"`
+	LeftOnlyNodes  uint64                     `json:"left_only_nodes"`
+	RightOnlyNodes uint64                     `json:"right_only_nodes"`
+	SharedBytes    uint64                     `json:"shared_bytes"`
+	LeftOnlyBytes  uint64                     `json:"left_only_bytes"`
+	RightOnlyBytes uint64                     `json:"right_only_bytes"`
+	Levels         []TreeDebugComparisonLevel `json:"levels"`
 }
 
 type MergeExplanation struct {
@@ -550,6 +895,7 @@ type MergeExplanation struct {
 	Error     string
 	HasError  bool
 	TraceJSON string
+	Trace     MergeTrace
 }
 
 type NamedRoot struct {
@@ -1106,23 +1452,97 @@ type MergePolicyRegistry struct {
 }
 
 func NewConfig(options ConfigOptions) (Config, error) {
-	if options.EncodingKind == "" {
-		options.EncodingKind = "raw"
+	return encodeConfigRecord(
+		options.MinChunkSize,
+		options.MaxChunkSize,
+		options.ChunkingFactor,
+		options.HashSeed,
+		options.EncodingKind,
+		optionalString(options.CustomEncoding),
+		options.NodeCacheMaxNodes,
+		options.NodeCacheMaxBytes,
+	)
+}
+
+func EncodingRaw() Encoding {
+	return Encoding{Kind: "raw"}
+}
+
+func EncodingCBOR() Encoding {
+	return Encoding{Kind: "cbor"}
+}
+
+func EncodingJSON() Encoding {
+	return Encoding{Kind: "json"}
+}
+
+func EncodingCustom(name string) Encoding {
+	return Encoding{Kind: "custom", CustomName: &name}
+}
+
+func TreeConfig(
+	minChunkSize uint64,
+	maxChunkSize uint64,
+	chunkingFactor uint32,
+	hashSeed uint64,
+	encoding Encoding,
+	nodeCacheMaxNodes *uint64,
+	nodeCacheMaxBytes *uint64,
+) (Config, error) {
+	if encoding.Kind == "custom" && encoding.CustomName == nil {
+		return Config{}, errors.New("custom encoding requires custom name")
 	}
-	encodingKind, err := encodeEncodingKind(options.EncodingKind)
+	return encodeConfigRecord(
+		minChunkSize,
+		maxChunkSize,
+		chunkingFactor,
+		hashSeed,
+		encoding.Kind,
+		encoding.CustomName,
+		nodeCacheMaxNodes,
+		nodeCacheMaxBytes,
+	)
+}
+
+func NewLargeValueConfig(inlineThreshold uint64) LargeValueConfig {
+	return LargeValueConfig{InlineThreshold: inlineThreshold}
+}
+
+func NewParallelConfig(maxThreads uint64, parallelismThreshold uint64) ParallelConfig {
+	return ParallelConfig{MaxThreads: maxThreads, ParallelismThreshold: parallelismThreshold}
+}
+
+func SequentialParallelConfig() ParallelConfig {
+	return ParallelConfig{MaxThreads: 1, ParallelismThreshold: ^uint64(0)}
+}
+
+func encodeConfigRecord(
+	minChunkSize uint64,
+	maxChunkSize uint64,
+	chunkingFactor uint32,
+	hashSeed uint64,
+	encodingKindName string,
+	customEncodingName *string,
+	nodeCacheMaxNodes *uint64,
+	nodeCacheMaxBytes *uint64,
+) (Config, error) {
+	if encodingKindName == "" {
+		encodingKindName = "raw"
+	}
+	encodingKind, err := encodeEncodingKind(encodingKindName)
 	if err != nil {
 		return Config{}, err
 	}
 
 	var out bytes.Buffer
-	writeU64(&out, options.MinChunkSize)
-	writeU64(&out, options.MaxChunkSize)
-	writeU32(&out, options.ChunkingFactor)
-	writeU64(&out, options.HashSeed)
+	writeU64(&out, minChunkSize)
+	writeU64(&out, maxChunkSize)
+	writeU32(&out, chunkingFactor)
+	writeU64(&out, hashSeed)
 	writeI32(&out, encodingKind)
-	encodeOptionalString(&out, optionalString(options.CustomEncoding))
-	encodeOptionalU64(&out, options.NodeCacheMaxNodes)
-	encodeOptionalU64(&out, options.NodeCacheMaxBytes)
+	encodeOptionalString(&out, customEncodingName)
+	encodeOptionalU64(&out, nodeCacheMaxNodes)
+	encodeOptionalU64(&out, nodeCacheMaxBytes)
 	return Config{raw: out.Bytes()}, nil
 }
 
@@ -1686,6 +2106,90 @@ func (e *Engine) Get(tree Tree, key []byte) ([]byte, bool, error) {
 	return decodeOptionalByteArray(copyRustBuffer(buf))
 }
 
+func (e *Engine) FirstEntry(tree Tree) (*Entry, error) {
+	handle, err := e.cloneHandle()
+	if err != nil {
+		return nil, err
+	}
+	treeBuf, err := rustBufferFromBytes(tree.raw)
+	if err != nil {
+		return nil, err
+	}
+
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_prollyengine_first_entry(handle, treeBuf, &status)
+	if err := statusError(&status); err != nil {
+		return nil, err
+	}
+	defer freeRustBuffer(buf)
+	return decodeOptionalEntry(copyRustBuffer(buf))
+}
+
+func (e *Engine) LastEntry(tree Tree) (*Entry, error) {
+	handle, err := e.cloneHandle()
+	if err != nil {
+		return nil, err
+	}
+	treeBuf, err := rustBufferFromBytes(tree.raw)
+	if err != nil {
+		return nil, err
+	}
+
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_prollyengine_last_entry(handle, treeBuf, &status)
+	if err := statusError(&status); err != nil {
+		return nil, err
+	}
+	defer freeRustBuffer(buf)
+	return decodeOptionalEntry(copyRustBuffer(buf))
+}
+
+func (e *Engine) LowerBound(tree Tree, key []byte) (*Entry, error) {
+	handle, err := e.cloneHandle()
+	if err != nil {
+		return nil, err
+	}
+	treeBuf, err := rustBufferFromBytes(tree.raw)
+	if err != nil {
+		return nil, err
+	}
+	keyBuf, err := rustBufferFromBytes(encodeByteArray(key))
+	if err != nil {
+		return nil, err
+	}
+
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_prollyengine_lower_bound(handle, treeBuf, keyBuf, &status)
+	if err := statusError(&status); err != nil {
+		return nil, err
+	}
+	defer freeRustBuffer(buf)
+	return decodeOptionalEntry(copyRustBuffer(buf))
+}
+
+func (e *Engine) UpperBound(tree Tree, key []byte) (*Entry, error) {
+	handle, err := e.cloneHandle()
+	if err != nil {
+		return nil, err
+	}
+	treeBuf, err := rustBufferFromBytes(tree.raw)
+	if err != nil {
+		return nil, err
+	}
+	keyBuf, err := rustBufferFromBytes(encodeByteArray(key))
+	if err != nil {
+		return nil, err
+	}
+
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_prollyengine_upper_bound(handle, treeBuf, keyBuf, &status)
+	if err := statusError(&status); err != nil {
+		return nil, err
+	}
+	defer freeRustBuffer(buf)
+	return decodeOptionalEntry(copyRustBuffer(buf))
+}
+
 func (e *Engine) GetValueRef(tree Tree, key []byte) (*ValueRef, error) {
 	handle, err := e.cloneHandle()
 	if err != nil {
@@ -2101,6 +2605,37 @@ func (e *Engine) ParallelBatch(tree Tree, mutations []Mutation, config ParallelC
 	return Tree{raw: copyRustBuffer(buf)}, nil
 }
 
+func (e *Engine) ParallelBatchWithStats(tree Tree, mutations []Mutation, config ParallelConfig) (BatchApplyResult, error) {
+	handle, err := e.cloneHandle()
+	if err != nil {
+		return BatchApplyResult{}, err
+	}
+	treeBuf, err := rustBufferFromBytes(tree.raw)
+	if err != nil {
+		return BatchApplyResult{}, err
+	}
+	mutationBytes, err := encodeMutations(mutations)
+	if err != nil {
+		return BatchApplyResult{}, err
+	}
+	mutationsBuf, err := rustBufferFromBytes(mutationBytes)
+	if err != nil {
+		return BatchApplyResult{}, err
+	}
+	configBuf, err := rustBufferFromBytes(encodeParallelConfig(config))
+	if err != nil {
+		return BatchApplyResult{}, err
+	}
+
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_prollyengine_parallel_batch_with_stats(handle, treeBuf, mutationsBuf, configBuf, &status)
+	if err := statusError(&status); err != nil {
+		return BatchApplyResult{}, err
+	}
+	defer freeRustBuffer(buf)
+	return decodeBatchApplyResult(copyRustBuffer(buf))
+}
+
 func (e *Engine) Range(tree Tree, start []byte, end []byte) ([]Entry, error) {
 	handle, err := e.cloneHandle()
 	if err != nil {
@@ -2126,6 +2661,83 @@ func (e *Engine) Range(tree Tree, start []byte, end []byte) ([]Entry, error) {
 	}
 	defer freeRustBuffer(buf)
 	return decodeEntries(copyRustBuffer(buf))
+}
+
+func (e *Engine) Prefix(tree Tree, prefix []byte) ([]Entry, error) {
+	handle, err := e.cloneHandle()
+	if err != nil {
+		return nil, err
+	}
+	treeBuf, err := rustBufferFromBytes(tree.raw)
+	if err != nil {
+		return nil, err
+	}
+	prefixBuf, err := rustBufferFromBytes(encodeByteArray(prefix))
+	if err != nil {
+		return nil, err
+	}
+
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_prollyengine_prefix(handle, treeBuf, prefixBuf, &status)
+	if err := statusError(&status); err != nil {
+		return nil, err
+	}
+	defer freeRustBuffer(buf)
+	return decodeEntries(copyRustBuffer(buf))
+}
+
+func (e *Engine) PrefixPage(tree Tree, prefix []byte, cursor *RangeCursor, limit uint64) (RangePage, error) {
+	handle, err := e.cloneHandle()
+	if err != nil {
+		return RangePage{}, err
+	}
+	treeBuf, err := rustBufferFromBytes(tree.raw)
+	if err != nil {
+		return RangePage{}, err
+	}
+	prefixBuf, err := rustBufferFromBytes(encodeByteArray(prefix))
+	if err != nil {
+		return RangePage{}, err
+	}
+	cursorBuf, err := rustBufferFromBytes(encodeOptionalRangeCursor(cursor))
+	if err != nil {
+		return RangePage{}, err
+	}
+
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_prollyengine_prefix_page(handle, treeBuf, prefixBuf, cursorBuf, C.uint64_t(limit), &status)
+	if err := statusError(&status); err != nil {
+		return RangePage{}, err
+	}
+	defer freeRustBuffer(buf)
+	return decodeRangePage(copyRustBuffer(buf))
+}
+
+func (e *Engine) PrefixReversePage(tree Tree, prefix []byte, cursor *ReverseCursor, limit uint64) (ReversePage, error) {
+	handle, err := e.cloneHandle()
+	if err != nil {
+		return ReversePage{}, err
+	}
+	treeBuf, err := rustBufferFromBytes(tree.raw)
+	if err != nil {
+		return ReversePage{}, err
+	}
+	prefixBuf, err := rustBufferFromBytes(encodeByteArray(prefix))
+	if err != nil {
+		return ReversePage{}, err
+	}
+	cursorBuf, err := rustBufferFromBytes(encodeOptionalReverseCursor(cursor))
+	if err != nil {
+		return ReversePage{}, err
+	}
+
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_prollyengine_prefix_reverse_page(handle, treeBuf, prefixBuf, cursorBuf, C.uint64_t(limit), &status)
+	if err := statusError(&status); err != nil {
+		return ReversePage{}, err
+	}
+	defer freeRustBuffer(buf)
+	return decodeReversePage(copyRustBuffer(buf))
 }
 
 func (e *Engine) RangeAfter(tree Tree, afterKey []byte, end []byte) ([]Entry, error) {
@@ -2207,6 +2819,60 @@ func (e *Engine) RangePage(tree Tree, cursor *RangeCursor, end []byte, limit uin
 	}
 	defer freeRustBuffer(buf)
 	return decodeRangePage(copyRustBuffer(buf))
+}
+
+func (e *Engine) ReversePage(tree Tree, cursor *ReverseCursor, start []byte, limit uint64) (ReversePage, error) {
+	handle, err := e.cloneHandle()
+	if err != nil {
+		return ReversePage{}, err
+	}
+	treeBuf, err := rustBufferFromBytes(tree.raw)
+	if err != nil {
+		return ReversePage{}, err
+	}
+	cursorBuf, err := rustBufferFromBytes(encodeOptionalReverseCursor(cursor))
+	if err != nil {
+		return ReversePage{}, err
+	}
+	startBuf, err := rustBufferFromBytes(encodeByteArray(start))
+	if err != nil {
+		return ReversePage{}, err
+	}
+
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_prollyengine_reverse_page(handle, treeBuf, cursorBuf, startBuf, C.uint64_t(limit), &status)
+	if err := statusError(&status); err != nil {
+		return ReversePage{}, err
+	}
+	defer freeRustBuffer(buf)
+	return decodeReversePage(copyRustBuffer(buf))
+}
+
+func (e *Engine) CursorWindow(tree Tree, key []byte, end []byte, limit uint64) (CursorWindow, error) {
+	handle, err := e.cloneHandle()
+	if err != nil {
+		return CursorWindow{}, err
+	}
+	treeBuf, err := rustBufferFromBytes(tree.raw)
+	if err != nil {
+		return CursorWindow{}, err
+	}
+	keyBuf, err := rustBufferFromBytes(encodeByteArray(key))
+	if err != nil {
+		return CursorWindow{}, err
+	}
+	endBuf, err := rustBufferFromBytes(encodeOptionalByteArray(end))
+	if err != nil {
+		return CursorWindow{}, err
+	}
+
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_prollyengine_cursor_window(handle, treeBuf, keyBuf, endBuf, C.uint64_t(limit), &status)
+	if err := statusError(&status); err != nil {
+		return CursorWindow{}, err
+	}
+	defer freeRustBuffer(buf)
+	return decodeCursorWindow(copyRustBuffer(buf))
 }
 
 func (e *Engine) Diff(base Tree, other Tree) ([]Diff, error) {
@@ -3128,12 +3794,48 @@ func (e *Engine) CollectStatsJSON(tree Tree) (string, error) {
 	return e.callTreeJSON(tree, "collect_stats_json")
 }
 
+func (e *Engine) CollectStats(tree Tree) (TreeStats, error) {
+	raw, err := e.CollectStatsJSON(tree)
+	if err != nil {
+		return TreeStats{}, err
+	}
+	var stats TreeStats
+	if err := json.Unmarshal([]byte(raw), &stats); err != nil {
+		return TreeStats{}, err
+	}
+	return stats, nil
+}
+
 func (e *Engine) StatsDiffJSON(before Tree, after Tree) (string, error) {
 	return e.callTreePairJSON(before, after, "stats_diff_json")
 }
 
+func (e *Engine) StatsDiff(before Tree, after Tree) (StatsComparison, error) {
+	raw, err := e.StatsDiffJSON(before, after)
+	if err != nil {
+		return StatsComparison{}, err
+	}
+	var stats StatsComparison
+	if err := json.Unmarshal([]byte(raw), &stats); err != nil {
+		return StatsComparison{}, err
+	}
+	return stats, nil
+}
+
 func (e *Engine) DebugTreeJSON(tree Tree) (string, error) {
 	return e.callTreeJSON(tree, "debug_tree_json")
+}
+
+func (e *Engine) DebugTree(tree Tree) (TreeDebugView, error) {
+	raw, err := e.DebugTreeJSON(tree)
+	if err != nil {
+		return TreeDebugView{}, err
+	}
+	var view TreeDebugView
+	if err := json.Unmarshal([]byte(raw), &view); err != nil {
+		return TreeDebugView{}, err
+	}
+	return view, nil
 }
 
 func (e *Engine) DebugTreeText(tree Tree) (string, error) {
@@ -3142,6 +3844,18 @@ func (e *Engine) DebugTreeText(tree Tree) (string, error) {
 
 func (e *Engine) DebugCompareTreesJSON(left Tree, right Tree) (string, error) {
 	return e.callTreePairJSON(left, right, "debug_compare_trees_json")
+}
+
+func (e *Engine) DebugCompareTrees(left Tree, right Tree) (TreeDebugComparison, error) {
+	raw, err := e.DebugCompareTreesJSON(left, right)
+	if err != nil {
+		return TreeDebugComparison{}, err
+	}
+	var comparison TreeDebugComparison
+	if err := json.Unmarshal([]byte(raw), &comparison); err != nil {
+		return TreeDebugComparison{}, err
+	}
+	return comparison, nil
 }
 
 func (e *Engine) DebugCompareTreesText(left Tree, right Tree) (string, error) {
@@ -3321,6 +4035,32 @@ func (e *Engine) StructuralDiffPage(base Tree, other Tree, cursorJSON *string, l
 	return decodeStructuralDiffPage(copyRustBuffer(buf))
 }
 
+func (e *Engine) StructuralDiffPageWithCursor(base Tree, other Tree, cursor *StructuralDiffCursor, limit uint64) (StructuralDiffPage, error) {
+	handle, err := e.cloneHandle()
+	if err != nil {
+		return StructuralDiffPage{}, err
+	}
+	baseBuf, err := rustBufferFromBytes(base.raw)
+	if err != nil {
+		return StructuralDiffPage{}, err
+	}
+	otherBuf, err := rustBufferFromBytes(other.raw)
+	if err != nil {
+		return StructuralDiffPage{}, err
+	}
+	cursorBuf, err := rustBufferFromBytes(encodeOptionalStructuralDiffCursor(cursor))
+	if err != nil {
+		return StructuralDiffPage{}, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_prollyengine_structural_diff_page_with_cursor(handle, baseBuf, otherBuf, cursorBuf, C.uint64_t(limit), &status)
+	if err := statusError(&status); err != nil {
+		return StructuralDiffPage{}, err
+	}
+	defer freeRustBuffer(buf)
+	return decodeStructuralDiffPage(copyRustBuffer(buf))
+}
+
 func (e *Engine) MarkReachable(roots []Tree) (GcReachability, error) {
 	payload, err := e.callRootsBuffer(roots, nil, "mark_reachable")
 	if err != nil {
@@ -3445,6 +4185,42 @@ func (e *Engine) CopyMissingNodes(tree Tree, destination *Engine) (MissingNodeCo
 		return MissingNodeCopy{}, err
 	}
 	return decodeMissingNodeCopy(payload)
+}
+
+func (e *Engine) ExportSnapshot(tree Tree) (SnapshotBundle, error) {
+	handle, err := e.cloneHandle()
+	if err != nil {
+		return SnapshotBundle{}, err
+	}
+	treeBuf, err := rustBufferFromBytes(tree.raw)
+	if err != nil {
+		return SnapshotBundle{}, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_prollyengine_export_snapshot(handle, treeBuf, &status)
+	if err := statusError(&status); err != nil {
+		return SnapshotBundle{}, err
+	}
+	defer freeRustBuffer(buf)
+	return decodeSnapshotBundle(copyRustBuffer(buf))
+}
+
+func (e *Engine) ImportSnapshot(bundle SnapshotBundle) (Tree, error) {
+	handle, err := e.cloneHandle()
+	if err != nil {
+		return Tree{}, err
+	}
+	bundleBuf, err := rustBufferFromBytes(encodeSnapshotBundle(bundle))
+	if err != nil {
+		return Tree{}, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_prollyengine_import_snapshot(handle, bundleBuf, &status)
+	if err := statusError(&status); err != nil {
+		return Tree{}, err
+	}
+	defer freeRustBuffer(buf)
+	return decodeTree(copyRustBuffer(buf))
 }
 
 func (e *Engine) callRootsBuffer(roots []Tree, candidateCids [][]byte, op string) ([]byte, error) {
@@ -4923,6 +5699,118 @@ func RootManifestBytesRoundTrip(data []byte) ([]byte, error) {
 	return rootManifestToBytes(record)
 }
 
+func SnapshotBundleToBytes(bundle SnapshotBundle) ([]byte, error) {
+	recordBuf, err := rustBufferFromBytes(encodeSnapshotBundle(bundle))
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	out := C.uniffi_prolly_bindings_fn_func_snapshot_bundle_to_bytes(recordBuf, &status)
+	if err := statusError(&status); err != nil {
+		return nil, err
+	}
+	defer freeRustBuffer(out)
+	return decodeRequiredByteArray(copyRustBuffer(out))
+}
+
+func SnapshotBundleFromBytes(data []byte) (SnapshotBundle, error) {
+	in, err := rustBufferFromBytes(encodeByteArray(data))
+	if err != nil {
+		return SnapshotBundle{}, err
+	}
+	var status C.RustCallStatus
+	record := C.uniffi_prolly_bindings_fn_func_snapshot_bundle_from_bytes(in, &status)
+	if err := statusError(&status); err != nil {
+		return SnapshotBundle{}, err
+	}
+	defer freeRustBuffer(record)
+	return decodeSnapshotBundle(copyRustBuffer(record))
+}
+
+func SnapshotBundleDigest(bundle SnapshotBundle) ([]byte, error) {
+	recordBuf, err := rustBufferFromBytes(encodeSnapshotBundle(bundle))
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	out := C.uniffi_prolly_bindings_fn_func_snapshot_bundle_digest(recordBuf, &status)
+	if err := statusError(&status); err != nil {
+		return nil, err
+	}
+	defer freeRustBuffer(out)
+	return decodeRequiredByteArray(copyRustBuffer(out))
+}
+
+func SnapshotBundleDigestBytes(data []byte) ([]byte, error) {
+	in, err := rustBufferFromBytes(encodeByteArray(data))
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	out := C.uniffi_prolly_bindings_fn_func_snapshot_bundle_digest_bytes(in, &status)
+	if err := statusError(&status); err != nil {
+		return nil, err
+	}
+	defer freeRustBuffer(out)
+	return decodeRequiredByteArray(copyRustBuffer(out))
+}
+
+func SummarizeSnapshotBundle(bundle SnapshotBundle) (SnapshotBundleSummary, error) {
+	recordBuf, err := rustBufferFromBytes(encodeSnapshotBundle(bundle))
+	if err != nil {
+		return SnapshotBundleSummary{}, err
+	}
+	var status C.RustCallStatus
+	out := C.uniffi_prolly_bindings_fn_func_snapshot_bundle_summary(recordBuf, &status)
+	if err := statusError(&status); err != nil {
+		return SnapshotBundleSummary{}, err
+	}
+	defer freeRustBuffer(out)
+	return decodeSnapshotBundleSummary(copyRustBuffer(out))
+}
+
+func SummarizeSnapshotBundleBytes(data []byte) (SnapshotBundleSummary, error) {
+	in, err := rustBufferFromBytes(encodeByteArray(data))
+	if err != nil {
+		return SnapshotBundleSummary{}, err
+	}
+	var status C.RustCallStatus
+	out := C.uniffi_prolly_bindings_fn_func_snapshot_bundle_summary_from_bytes(in, &status)
+	if err := statusError(&status); err != nil {
+		return SnapshotBundleSummary{}, err
+	}
+	defer freeRustBuffer(out)
+	return decodeSnapshotBundleSummary(copyRustBuffer(out))
+}
+
+func VerifySnapshotBundle(bundle SnapshotBundle) (SnapshotBundleVerification, error) {
+	recordBuf, err := rustBufferFromBytes(encodeSnapshotBundle(bundle))
+	if err != nil {
+		return SnapshotBundleVerification{}, err
+	}
+	var status C.RustCallStatus
+	out := C.uniffi_prolly_bindings_fn_func_verify_snapshot_bundle(recordBuf, &status)
+	if err := statusError(&status); err != nil {
+		return SnapshotBundleVerification{}, err
+	}
+	defer freeRustBuffer(out)
+	return decodeSnapshotBundleVerification(copyRustBuffer(out))
+}
+
+func VerifySnapshotBundleBytes(data []byte) (SnapshotBundleVerification, error) {
+	in, err := rustBufferFromBytes(encodeByteArray(data))
+	if err != nil {
+		return SnapshotBundleVerification{}, err
+	}
+	var status C.RustCallStatus
+	out := C.uniffi_prolly_bindings_fn_func_verify_snapshot_bundle_bytes(in, &status)
+	if err := statusError(&status); err != nil {
+		return SnapshotBundleVerification{}, err
+	}
+	defer freeRustBuffer(out)
+	return decodeSnapshotBundleVerification(copyRustBuffer(out))
+}
+
 func versionedValueFromBytes(data []byte) ([]byte, error) {
 	in, err := rustBufferFromBytes(encodeByteArray(data))
 	if err != nil {
@@ -5306,6 +6194,57 @@ func encodeOptionalRangeCursor(cursor *RangeCursor) []byte {
 	return out.Bytes()
 }
 
+func encodeOptionalReverseCursor(cursor *ReverseCursor) []byte {
+	var out bytes.Buffer
+	if cursor == nil {
+		out.WriteByte(0)
+		return out.Bytes()
+	}
+	out.WriteByte(1)
+	encodeOptionalByteArrayInto(&out, cursor.BeforeKey)
+	return out.Bytes()
+}
+
+func encodeOptionalStructuralDiffCursor(cursor *StructuralDiffCursor) []byte {
+	var out bytes.Buffer
+	if cursor == nil {
+		out.WriteByte(0)
+		return out.Bytes()
+	}
+	out.WriteByte(1)
+	encodeOptionalByteArrayInto(&out, cursor.BaseRoot)
+	encodeOptionalByteArrayInto(&out, cursor.OtherRoot)
+	encodeStructuralDiffMarkersInto(&out, cursor.Markers)
+	encodeDiffsInto(&out, cursor.Pending)
+	return out.Bytes()
+}
+
+func encodeStructuralDiffMarkersInto(out *bytes.Buffer, markers []StructuralDiffMarker) {
+	writeI32(out, int32(len(markers)))
+	for _, marker := range markers {
+		writeI32(out, encodeStructuralDiffMarkerKind(marker.Kind))
+		encodeOptionalByteArrayInto(out, marker.BaseCID)
+		encodeOptionalByteArrayInto(out, marker.OtherCID)
+		if marker.HasSpanEnd {
+			encodeOptionalByteArrayInto(out, marker.SpanEnd)
+		} else {
+			encodeOptionalByteArrayInto(out, nil)
+		}
+		encodeOptionalByteArrayInto(out, marker.CID)
+	}
+}
+
+func encodeDiffsInto(out *bytes.Buffer, diffs []Diff) {
+	writeI32(out, int32(len(diffs)))
+	for _, diff := range diffs {
+		writeI32(out, encodeDiffKind(diff.Kind))
+		encodeByteArrayInto(out, diff.Key)
+		encodeOptionalByteArrayInto(out, diff.Value)
+		encodeOptionalByteArrayInto(out, diff.OldValue)
+		encodeOptionalByteArrayInto(out, diff.NewValue)
+	}
+}
+
 func encodeOptionalTree(tree *Tree) []byte {
 	if tree == nil {
 		return []byte{0}
@@ -5321,6 +6260,18 @@ func encodeTrees(trees []Tree) []byte {
 	writeI32(&out, int32(len(trees)))
 	for _, tree := range trees {
 		out.Write(tree.raw)
+	}
+	return out.Bytes()
+}
+
+func encodeSnapshotBundle(bundle SnapshotBundle) []byte {
+	var out bytes.Buffer
+	writeU32(&out, bundle.FormatVersion)
+	out.Write(bundle.Tree.raw)
+	writeI32(&out, int32(len(bundle.Nodes)))
+	for _, node := range bundle.Nodes {
+		encodeByteArrayInto(&out, node.CID)
+		encodeByteArrayInto(&out, node.Bytes)
 	}
 	return out.Bytes()
 }
@@ -5792,6 +6743,15 @@ func decodeEntries(data []byte) ([]Entry, error) {
 	return entries, decoder.done()
 }
 
+func decodeOptionalEntry(data []byte) (*Entry, error) {
+	decoder := byteDecoder{data: data}
+	entry, err := decoder.readOptionalEntry()
+	if err != nil {
+		return nil, err
+	}
+	return entry, decoder.done()
+}
+
 func decodeBatchApplyResult(data []byte) (BatchApplyResult, error) {
 	decoder := byteDecoder{data: data}
 	tree, err := decoder.readTree()
@@ -5812,6 +6772,24 @@ func decodeRangePage(data []byte) (RangePage, error) {
 		return RangePage{}, err
 	}
 	return page, decoder.done()
+}
+
+func decodeReversePage(data []byte) (ReversePage, error) {
+	decoder := byteDecoder{data: data}
+	page, err := decoder.readReversePage()
+	if err != nil {
+		return ReversePage{}, err
+	}
+	return page, decoder.done()
+}
+
+func decodeCursorWindow(data []byte) (CursorWindow, error) {
+	decoder := byteDecoder{data: data}
+	window, err := decoder.readCursorWindow()
+	if err != nil {
+		return CursorWindow{}, err
+	}
+	return window, decoder.done()
 }
 
 func decodeProvedRangePage(data []byte) (ProvedRangePage, error) {
@@ -5885,11 +6863,16 @@ func decodeStructuralDiffPage(data []byte) (StructuralDiffPage, error) {
 	if err != nil {
 		return StructuralDiffPage{}, err
 	}
+	nextCursor, err := decoder.readOptionalStructuralDiffCursor()
+	if err != nil {
+		return StructuralDiffPage{}, err
+	}
 	return StructuralDiffPage{
 		Diffs:          diffs,
 		NextCursorJSON: nextCursorJSON,
 		HasNextCursor:  hasNextCursor,
 		Stats:          stats,
+		NextCursor:     nextCursor,
 	}, decoder.done()
 }
 
@@ -5907,10 +6890,15 @@ func decodeMergeExplanation(data []byte) (MergeExplanation, error) {
 	if err != nil {
 		return MergeExplanation{}, err
 	}
+	typedTrace, err := decoder.readMergeTrace()
+	if err != nil {
+		return MergeExplanation{}, err
+	}
 	explanation := MergeExplanation{
 		Error:     errorValue,
 		HasError:  hasError,
 		TraceJSON: trace,
+		Trace:     typedTrace,
 	}
 	if ok {
 		explanation.Result = &result
@@ -6774,6 +7762,15 @@ func decodeRangeCursor(data []byte) (RangeCursor, error) {
 	return RangeCursor{AfterKey: afterKey}, decoder.done()
 }
 
+func decodeReverseCursor(data []byte) (ReverseCursor, error) {
+	decoder := byteDecoder{data: data}
+	beforeKey, _, err := decoder.readOptionalByteArray()
+	if err != nil {
+		return ReverseCursor{}, err
+	}
+	return ReverseCursor{BeforeKey: beforeKey}, decoder.done()
+}
+
 func decodeNamedRootRetention(data []byte) (NamedRootRetention, error) {
 	decoder := byteDecoder{data: data}
 	rawKind, err := decoder.readInt32()
@@ -6876,6 +7873,33 @@ func decodeMissingNodeCopy(data []byte) (MissingNodeCopy, error) {
 		CopiedNodes: copiedNodes,
 		CopiedBytes: copiedBytes,
 	}, decoder.done()
+}
+
+func decodeSnapshotBundle(data []byte) (SnapshotBundle, error) {
+	decoder := byteDecoder{data: data}
+	bundle, err := decoder.readSnapshotBundle()
+	if err != nil {
+		return SnapshotBundle{}, err
+	}
+	return bundle, decoder.done()
+}
+
+func decodeSnapshotBundleSummary(data []byte) (SnapshotBundleSummary, error) {
+	decoder := byteDecoder{data: data}
+	summary, err := decoder.readSnapshotBundleSummary()
+	if err != nil {
+		return SnapshotBundleSummary{}, err
+	}
+	return summary, decoder.done()
+}
+
+func decodeSnapshotBundleVerification(data []byte) (SnapshotBundleVerification, error) {
+	decoder := byteDecoder{data: data}
+	verification, err := decoder.readSnapshotBundleVerification()
+	if err != nil {
+		return SnapshotBundleVerification{}, err
+	}
+	return verification, decoder.done()
 }
 
 func decodeBlobRef(data []byte) (BlobRef, error) {
@@ -7141,6 +8165,15 @@ func decodeOptionalTree(data []byte) (Tree, bool, error) {
 	return tree, ok, decoder.done()
 }
 
+func decodeTree(data []byte) (Tree, error) {
+	decoder := byteDecoder{data: data}
+	tree, err := decoder.readTree()
+	if err != nil {
+		return Tree{}, err
+	}
+	return tree, decoder.done()
+}
+
 func (d *byteDecoder) readEntries() ([]Entry, error) {
 	count, err := d.readInt32()
 	if err != nil {
@@ -7162,6 +8195,25 @@ func (d *byteDecoder) readEntries() ([]Entry, error) {
 		entries = append(entries, Entry{Key: key, Value: value})
 	}
 	return entries, nil
+}
+
+func (d *byteDecoder) readOptionalEntry() (*Entry, error) {
+	present, err := d.readByte()
+	if err != nil {
+		return nil, err
+	}
+	if present == 0 {
+		return nil, nil
+	}
+	key, err := d.readByteArray()
+	if err != nil {
+		return nil, err
+	}
+	value, err := d.readByteArray()
+	if err != nil {
+		return nil, err
+	}
+	return &Entry{Key: key, Value: value}, nil
 }
 
 func (d *byteDecoder) readDiffs() ([]Diff, error) {
@@ -7296,6 +8348,220 @@ func (d *byteDecoder) readDiffTraversalStats() (DiffTraversalStats, error) {
 		RemovedSubtrees:    values[3],
 		CollectedFallbacks: values[4],
 		EmittedDiffs:       values[5],
+	}, nil
+}
+
+func (d *byteDecoder) readOptionalStructuralDiffCursor() (*StructuralDiffCursor, error) {
+	present, err := d.readByte()
+	if err != nil {
+		return nil, err
+	}
+	if present == 0 {
+		return nil, nil
+	}
+	cursor, err := d.readStructuralDiffCursor()
+	if err != nil {
+		return nil, err
+	}
+	return &cursor, nil
+}
+
+func (d *byteDecoder) readStructuralDiffCursor() (StructuralDiffCursor, error) {
+	baseRoot, _, err := d.readOptionalByteArray()
+	if err != nil {
+		return StructuralDiffCursor{}, err
+	}
+	otherRoot, _, err := d.readOptionalByteArray()
+	if err != nil {
+		return StructuralDiffCursor{}, err
+	}
+	markers, err := d.readStructuralDiffMarkers()
+	if err != nil {
+		return StructuralDiffCursor{}, err
+	}
+	pending, err := d.readDiffs()
+	if err != nil {
+		return StructuralDiffCursor{}, err
+	}
+	return StructuralDiffCursor{
+		BaseRoot:  baseRoot,
+		OtherRoot: otherRoot,
+		Markers:   markers,
+		Pending:   pending,
+	}, nil
+}
+
+func (d *byteDecoder) readStructuralDiffMarkers() ([]StructuralDiffMarker, error) {
+	count, err := d.readInt32()
+	if err != nil {
+		return nil, err
+	}
+	if count < 0 {
+		return nil, fmt.Errorf("negative structural diff marker count %d", count)
+	}
+	markers := make([]StructuralDiffMarker, 0, count)
+	for i := int32(0); i < count; i++ {
+		kindValue, err := d.readInt32()
+		if err != nil {
+			return nil, err
+		}
+		kind, err := decodeStructuralDiffMarkerKind(kindValue)
+		if err != nil {
+			return nil, err
+		}
+		baseCID, _, err := d.readOptionalByteArray()
+		if err != nil {
+			return nil, err
+		}
+		otherCID, _, err := d.readOptionalByteArray()
+		if err != nil {
+			return nil, err
+		}
+		spanEnd, hasSpanEnd, err := d.readOptionalByteArray()
+		if err != nil {
+			return nil, err
+		}
+		cid, _, err := d.readOptionalByteArray()
+		if err != nil {
+			return nil, err
+		}
+		markers = append(markers, StructuralDiffMarker{
+			Kind:       kind,
+			BaseCID:    baseCID,
+			OtherCID:   otherCID,
+			SpanEnd:    spanEnd,
+			HasSpanEnd: hasSpanEnd,
+			CID:        cid,
+		})
+	}
+	return markers, nil
+}
+
+func (d *byteDecoder) readOptionalDiffTraversalStats() (*DiffTraversalStats, error) {
+	present, err := d.readByte()
+	if err != nil {
+		return nil, err
+	}
+	if present == 0 {
+		return nil, nil
+	}
+	stats, err := d.readDiffTraversalStats()
+	if err != nil {
+		return nil, err
+	}
+	return &stats, nil
+}
+
+func (d *byteDecoder) readMergeTrace() (MergeTrace, error) {
+	count, err := d.readInt32()
+	if err != nil {
+		return MergeTrace{}, err
+	}
+	if count < 0 {
+		return MergeTrace{}, fmt.Errorf("negative merge trace event count %d", count)
+	}
+	events := make([]MergeTraceEvent, 0, count)
+	for i := int32(0); i < count; i++ {
+		event, err := d.readMergeTraceEvent()
+		if err != nil {
+			return MergeTrace{}, err
+		}
+		events = append(events, event)
+	}
+	return MergeTrace{Events: events}, nil
+}
+
+func (d *byteDecoder) readMergeTraceEvent() (MergeTraceEvent, error) {
+	kindValue, err := d.readInt32()
+	if err != nil {
+		return MergeTraceEvent{}, err
+	}
+	kind, err := decodeMergeTraceEventKind(kindValue)
+	if err != nil {
+		return MergeTraceEvent{}, err
+	}
+	fastPath, err := d.readOptionalMergeFastPathKind()
+	if err != nil {
+		return MergeTraceEvent{}, err
+	}
+	cid, hasCID, err := d.readOptionalByteArray()
+	if err != nil {
+		return MergeTraceEvent{}, err
+	}
+	reuseReason, err := d.readOptionalMergeReuseReasonKind()
+	if err != nil {
+		return MergeTraceEvent{}, err
+	}
+	level, err := d.readOptionalUint64()
+	if err != nil {
+		return MergeTraceEvent{}, err
+	}
+	entries, err := d.readOptionalUint64()
+	if err != nil {
+		return MergeTraceEvent{}, err
+	}
+	firstKey, hasFirstKey, err := d.readOptionalByteArray()
+	if err != nil {
+		return MergeTraceEvent{}, err
+	}
+	lastKey, hasLastKey, err := d.readOptionalByteArray()
+	if err != nil {
+		return MergeTraceEvent{}, err
+	}
+	stage, err := d.readOptionalMergeTraceStageKind()
+	if err != nil {
+		return MergeTraceEvent{}, err
+	}
+	key, hasKey, err := d.readOptionalByteArray()
+	if err != nil {
+		return MergeTraceEvent{}, err
+	}
+	resolution, err := d.readOptionalMergeTraceResolutionKind()
+	if err != nil {
+		return MergeTraceEvent{}, err
+	}
+	fallbackReason, err := d.readOptionalMergeFallbackReasonKind()
+	if err != nil {
+		return MergeTraceEvent{}, err
+	}
+	diffStats, err := d.readOptionalDiffTraversalStats()
+	if err != nil {
+		return MergeTraceEvent{}, err
+	}
+	rightChanges, err := d.readOptionalUint64()
+	if err != nil {
+		return MergeTraceEvent{}, err
+	}
+	mutations, err := d.readOptionalUint64()
+	if err != nil {
+		return MergeTraceEvent{}, err
+	}
+	appendOnly, err := d.readOptionalBool()
+	if err != nil {
+		return MergeTraceEvent{}, err
+	}
+
+	return MergeTraceEvent{
+		Kind:           kind,
+		FastPath:       fastPath,
+		CID:            cid,
+		HasCID:         hasCID,
+		ReuseReason:    reuseReason,
+		Level:          level,
+		Entries:        entries,
+		FirstKey:       firstKey,
+		HasFirstKey:    hasFirstKey,
+		LastKey:        lastKey,
+		HasLastKey:     hasLastKey,
+		Stage:          stage,
+		Key:            key,
+		HasKey:         hasKey,
+		Resolution:     resolution,
+		FallbackReason: fallbackReason,
+		DiffStats:      diffStats,
+		RightChanges:   rightChanges,
+		Mutations:      mutations,
+		AppendOnly:     appendOnly,
 	}, nil
 }
 
@@ -7707,6 +8973,178 @@ func decodeDiffKind(kind int32) (string, error) {
 	}
 }
 
+func encodeDiffKind(kind string) int32 {
+	switch kind {
+	case "added":
+		return 1
+	case "removed":
+		return 2
+	case "changed":
+		return 3
+	default:
+		return 3
+	}
+}
+
+func encodeStructuralDiffMarkerKind(kind string) int32 {
+	switch kind {
+	case "compare":
+		return 1
+	case "added":
+		return 2
+	case "removed":
+		return 3
+	default:
+		return 1
+	}
+}
+
+func decodeStructuralDiffMarkerKind(kind int32) (string, error) {
+	switch kind {
+	case 1:
+		return "compare", nil
+	case 2:
+		return "added", nil
+	case 3:
+		return "removed", nil
+	default:
+		return "", fmt.Errorf("unknown structural diff marker kind %d", kind)
+	}
+}
+
+func (d *byteDecoder) readOptionalEnumString(decode func(int32) (string, error)) (string, error) {
+	present, err := d.readByte()
+	if err != nil {
+		return "", err
+	}
+	if present == 0 {
+		return "", nil
+	}
+	kind, err := d.readInt32()
+	if err != nil {
+		return "", err
+	}
+	return decode(kind)
+}
+
+func (d *byteDecoder) readOptionalMergeFastPathKind() (string, error) {
+	return d.readOptionalEnumString(decodeMergeFastPathKind)
+}
+
+func (d *byteDecoder) readOptionalMergeReuseReasonKind() (string, error) {
+	return d.readOptionalEnumString(decodeMergeReuseReasonKind)
+}
+
+func (d *byteDecoder) readOptionalMergeTraceStageKind() (string, error) {
+	return d.readOptionalEnumString(decodeMergeTraceStageKind)
+}
+
+func (d *byteDecoder) readOptionalMergeTraceResolutionKind() (string, error) {
+	return d.readOptionalEnumString(decodeMergeTraceResolutionKind)
+}
+
+func (d *byteDecoder) readOptionalMergeFallbackReasonKind() (string, error) {
+	return d.readOptionalEnumString(decodeMergeFallbackReasonKind)
+}
+
+func decodeMergeTraceEventKind(kind int32) (string, error) {
+	switch kind {
+	case 1:
+		return "fast_path", nil
+	case 2:
+		return "structural_merge_started", nil
+	case 3:
+		return "reused_subtree", nil
+	case 4:
+		return "rewritten_node", nil
+	case 5:
+		return "resolver_called", nil
+	case 6:
+		return "fallback", nil
+	case 7:
+		return "diff_traversal", nil
+	case 8:
+		return "batch_merge", nil
+	default:
+		return "", fmt.Errorf("unknown merge trace event kind %d", kind)
+	}
+}
+
+func decodeMergeFastPathKind(kind int32) (string, error) {
+	switch kind {
+	case 1:
+		return "branches_equal", nil
+	case 2:
+		return "left_unchanged", nil
+	case 3:
+		return "right_unchanged", nil
+	default:
+		return "", fmt.Errorf("unknown merge fast path kind %d", kind)
+	}
+}
+
+func decodeMergeReuseReasonKind(kind int32) (string, error) {
+	switch kind {
+	case 1:
+		return "branches_equal", nil
+	case 2:
+		return "left_unchanged", nil
+	case 3:
+		return "right_unchanged", nil
+	case 4:
+		return "unchanged_after_merge", nil
+	case 5:
+		return "matches_left", nil
+	case 6:
+		return "matches_right", nil
+	default:
+		return "", fmt.Errorf("unknown merge reuse reason kind %d", kind)
+	}
+}
+
+func decodeMergeTraceStageKind(kind int32) (string, error) {
+	switch kind {
+	case 1:
+		return "structural", nil
+	case 2:
+		return "batch", nil
+	default:
+		return "", fmt.Errorf("unknown merge trace stage kind %d", kind)
+	}
+}
+
+func decodeMergeTraceResolutionKind(kind int32) (string, error) {
+	switch kind {
+	case 1:
+		return "value", nil
+	case 2:
+		return "delete", nil
+	case 3:
+		return "unresolved", nil
+	default:
+		return "", fmt.Errorf("unknown merge trace resolution kind %d", kind)
+	}
+}
+
+func decodeMergeFallbackReasonKind(kind int32) (string, error) {
+	switch kind {
+	case 1:
+		return "missing_root", nil
+	case 2:
+		return "shape_mismatch", nil
+	case 3:
+		return "node_length_mismatch", nil
+	case 4:
+		return "child_fallback", nil
+	case 5:
+		return "delete_resolution", nil
+	case 6:
+		return "diff_batch", nil
+	default:
+		return "", fmt.Errorf("unknown merge fallback reason kind %d", kind)
+	}
+}
+
 func decodeMutationKind(kind int32) (string, error) {
 	switch kind {
 	case 1:
@@ -7842,6 +9280,21 @@ func (d *byteDecoder) readBool() (bool, error) {
 	return value != 0, nil
 }
 
+func (d *byteDecoder) readOptionalBool() (*bool, error) {
+	present, err := d.readByte()
+	if err != nil {
+		return nil, err
+	}
+	if present == 0 {
+		return nil, nil
+	}
+	value, err := d.readBool()
+	if err != nil {
+		return nil, err
+	}
+	return &value, nil
+}
+
 func (d *byteDecoder) readString() (string, error) {
 	bytes, err := d.readByteArray()
 	if err != nil {
@@ -7922,6 +9375,21 @@ func (d *byteDecoder) readOptionalRangeCursor() (*RangeCursor, error) {
 	return &RangeCursor{AfterKey: afterKey}, nil
 }
 
+func (d *byteDecoder) readOptionalReverseCursor() (*ReverseCursor, error) {
+	present, err := d.readByte()
+	if err != nil {
+		return nil, err
+	}
+	if present == 0 {
+		return nil, nil
+	}
+	beforeKey, _, err := d.readOptionalByteArray()
+	if err != nil {
+		return nil, err
+	}
+	return &ReverseCursor{BeforeKey: beforeKey}, nil
+}
+
 func (d *byteDecoder) readOptionalTree() (Tree, bool, error) {
 	present, err := d.readByte()
 	if err != nil {
@@ -7946,6 +9414,115 @@ func (d *byteDecoder) readTree() (Tree, error) {
 		return Tree{}, err
 	}
 	return Tree{raw: append([]byte(nil), d.data[start:d.pos]...)}, nil
+}
+
+func (d *byteDecoder) readSnapshotBundle() (SnapshotBundle, error) {
+	formatVersion, err := d.readUint32()
+	if err != nil {
+		return SnapshotBundle{}, err
+	}
+	tree, err := d.readTree()
+	if err != nil {
+		return SnapshotBundle{}, err
+	}
+	count, err := d.readInt32()
+	if err != nil {
+		return SnapshotBundle{}, err
+	}
+	if count < 0 {
+		return SnapshotBundle{}, fmt.Errorf("negative snapshot bundle node count %d", count)
+	}
+	nodes := make([]SnapshotBundleNode, 0, count)
+	for i := int32(0); i < count; i++ {
+		cid, err := d.readByteArray()
+		if err != nil {
+			return SnapshotBundle{}, err
+		}
+		bytes, err := d.readByteArray()
+		if err != nil {
+			return SnapshotBundle{}, err
+		}
+		nodes = append(nodes, SnapshotBundleNode{
+			CID:   cid,
+			Bytes: bytes,
+		})
+	}
+	return SnapshotBundle{
+		FormatVersion: formatVersion,
+		Tree:          tree,
+		Nodes:         nodes,
+	}, nil
+}
+
+func (d *byteDecoder) readSnapshotBundleSummary() (SnapshotBundleSummary, error) {
+	formatVersion, err := d.readUint32()
+	if err != nil {
+		return SnapshotBundleSummary{}, err
+	}
+	root, hasRoot, err := d.readOptionalByteArray()
+	if err != nil {
+		return SnapshotBundleSummary{}, err
+	}
+	nodeCount, err := d.readUint64()
+	if err != nil {
+		return SnapshotBundleSummary{}, err
+	}
+	byteCount, err := d.readUint64()
+	if err != nil {
+		return SnapshotBundleSummary{}, err
+	}
+	minNodeBytes, err := d.readUint64()
+	if err != nil {
+		return SnapshotBundleSummary{}, err
+	}
+	maxNodeBytes, err := d.readUint64()
+	if err != nil {
+		return SnapshotBundleSummary{}, err
+	}
+	return SnapshotBundleSummary{
+		FormatVersion: formatVersion,
+		Root:          root,
+		HasRoot:       hasRoot,
+		NodeCount:     nodeCount,
+		ByteCount:     byteCount,
+		MinNodeBytes:  minNodeBytes,
+		MaxNodeBytes:  maxNodeBytes,
+	}, nil
+}
+
+func (d *byteDecoder) readSnapshotBundleVerification() (SnapshotBundleVerification, error) {
+	valid, err := d.readBool()
+	if err != nil {
+		return SnapshotBundleVerification{}, err
+	}
+	summary, err := d.readSnapshotBundleSummary()
+	if err != nil {
+		return SnapshotBundleVerification{}, err
+	}
+	reachableNodes, err := d.readUint64()
+	if err != nil {
+		return SnapshotBundleVerification{}, err
+	}
+	reachableBytes, err := d.readUint64()
+	if err != nil {
+		return SnapshotBundleVerification{}, err
+	}
+	missingCids, err := d.readByteArraySequence()
+	if err != nil {
+		return SnapshotBundleVerification{}, err
+	}
+	extraCids, err := d.readByteArraySequence()
+	if err != nil {
+		return SnapshotBundleVerification{}, err
+	}
+	return SnapshotBundleVerification{
+		Valid:          valid,
+		Summary:        summary,
+		ReachableNodes: reachableNodes,
+		ReachableBytes: reachableBytes,
+		MissingCids:    missingCids,
+		ExtraCids:      extraCids,
+	}, nil
 }
 
 func (d *byteDecoder) readKeyProof() (KeyProof, error) {
@@ -8022,6 +9599,50 @@ func (d *byteDecoder) readRangePage() (RangePage, error) {
 		return RangePage{}, err
 	}
 	return RangePage{Entries: entries, NextCursor: cursor}, nil
+}
+
+func (d *byteDecoder) readReversePage() (ReversePage, error) {
+	entries, err := d.readEntries()
+	if err != nil {
+		return ReversePage{}, err
+	}
+	cursor, err := d.readOptionalReverseCursor()
+	if err != nil {
+		return ReversePage{}, err
+	}
+	return ReversePage{Entries: entries, NextCursor: cursor}, nil
+}
+
+func (d *byteDecoder) readCursorWindow() (CursorWindow, error) {
+	positionKey, hasPositionKey, err := d.readOptionalByteArray()
+	if err != nil {
+		return CursorWindow{}, err
+	}
+	positionValue, hasPositionValue, err := d.readOptionalByteArray()
+	if err != nil {
+		return CursorWindow{}, err
+	}
+	found, err := d.readBool()
+	if err != nil {
+		return CursorWindow{}, err
+	}
+	entries, err := d.readEntries()
+	if err != nil {
+		return CursorWindow{}, err
+	}
+	cursor, err := d.readOptionalRangeCursor()
+	if err != nil {
+		return CursorWindow{}, err
+	}
+	return CursorWindow{
+		PositionKey:      positionKey,
+		HasPositionKey:   hasPositionKey,
+		PositionValue:    positionValue,
+		HasPositionValue: hasPositionValue,
+		Found:            found,
+		Entries:          entries,
+		NextCursor:       cursor,
+	}, nil
 }
 
 func (d *byteDecoder) readDiffPage() (DiffPage, error) {

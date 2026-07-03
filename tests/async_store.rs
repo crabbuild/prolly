@@ -15,7 +15,8 @@ use prolly::{
     AsyncBlobStore, AsyncProlly, BatchBuilder, BatchOp, BlobRef, BlobStore, Cid, Config,
     CrdtConfig, CrdtResolution, DeletePolicy, Diff, Error, LargeValueConfig, MemBlobStore,
     MemBlobStoreError, MemStore, MemStoreError, MultiValueSet, Mutation, Prolly, RangeCursor,
-    Resolution, Store, SyncBlobStoreAsAsync, SyncStoreAsAsync, TimestampedValue, ValueRef,
+    Resolution, ReverseCursor, Store, SyncBlobStoreAsAsync, SyncStoreAsAsync, TimestampedValue,
+    ValueRef,
 };
 #[cfg(feature = "tokio")]
 use prolly::{AsyncStore, TokioBlockingBlobStore, TokioBlockingStore};
@@ -1940,6 +1941,126 @@ fn async_range_pages_resume_to_reconstruct_bounded_scan() {
 
     assert_eq!(actual, expected);
     assert!(page_count > 1);
+}
+
+#[test]
+fn async_reverse_pages_resume_to_reconstruct_descending_scan() {
+    let store = Arc::new(MemStore::new());
+    let config = Config::builder()
+        .min_chunk_size(2)
+        .max_chunk_size(4)
+        .chunking_factor(2)
+        .hash_seed(157)
+        .build();
+    let sync_prolly = Prolly::new(store.clone(), config.clone());
+    let async_prolly = AsyncProlly::new(SyncStoreAsAsync::new(store), config);
+    let mut tree = sync_prolly.create();
+
+    for idx in 0..18 {
+        tree = sync_prolly
+            .put(
+                &tree,
+                format!("k{idx:03}").into_bytes(),
+                format!("v{idx:03}").into_bytes(),
+            )
+            .unwrap();
+    }
+
+    let mut expected = sync_prolly
+        .range(&tree, b"k004", None)
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    expected.reverse();
+
+    let mut cursor = ReverseCursor::end();
+    let mut actual = Vec::new();
+    let mut page_count = 0usize;
+
+    loop {
+        let page = block_on(async_prolly.reverse_page(&tree, &cursor, b"k004", 4)).unwrap();
+        page_count += 1;
+        actual.extend(page.entries);
+
+        let Some(next) = page.next_cursor else {
+            break;
+        };
+        assert!(!next.is_end());
+        cursor = next;
+    }
+
+    assert_eq!(actual, expected);
+    assert!(page_count > 1);
+
+    let zero_cursor = ReverseCursor::before_key(b"k010".to_vec());
+    let zero = block_on(async_prolly.reverse_page(&tree, &zero_cursor, b"k004", 0)).unwrap();
+    assert!(zero.entries.is_empty());
+    assert_eq!(zero.next_cursor, Some(zero_cursor));
+}
+
+#[test]
+fn async_prefix_reverse_pages_resume_inside_prefix() {
+    let store = Arc::new(MemStore::new());
+    let config = Config::builder()
+        .min_chunk_size(2)
+        .max_chunk_size(4)
+        .chunking_factor(2)
+        .hash_seed(158)
+        .build();
+    let sync_prolly = Prolly::new(store.clone(), config.clone());
+    let async_prolly = AsyncProlly::new(SyncStoreAsAsync::new(store), config);
+    let mut tree = sync_prolly.create();
+
+    for idx in 0..12 {
+        tree = sync_prolly
+            .put(
+                &tree,
+                format!("doc/{idx:03}").into_bytes(),
+                format!("v{idx:03}").into_bytes(),
+            )
+            .unwrap();
+    }
+    tree = sync_prolly
+        .put(&tree, b"doc0/000".to_vec(), b"outside".to_vec())
+        .unwrap();
+    tree = sync_prolly
+        .put(&tree, b"other/999".to_vec(), b"outside".to_vec())
+        .unwrap();
+
+    let mut expected = sync_prolly
+        .prefix(&tree, b"doc/")
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    expected.reverse();
+
+    let mut cursor = ReverseCursor::end();
+    let mut actual = Vec::new();
+    let mut page_count = 0usize;
+
+    loop {
+        let page = block_on(async_prolly.prefix_reverse_page(&tree, b"doc/", &cursor, 3)).unwrap();
+        page_count += 1;
+        actual.extend(page.entries);
+
+        let Some(next) = page.next_cursor else {
+            break;
+        };
+        assert!(!next.is_end());
+        cursor = next;
+    }
+
+    assert_eq!(actual, expected);
+    assert!(page_count > 1);
+
+    let clamped = block_on(async_prolly.prefix_reverse_page(
+        &tree,
+        b"doc/",
+        &ReverseCursor::before_key(b"other/999".to_vec()),
+        1,
+    ))
+    .unwrap();
+    assert_eq!(clamped.entries[0].0, b"doc/011".to_vec());
 }
 
 #[test]

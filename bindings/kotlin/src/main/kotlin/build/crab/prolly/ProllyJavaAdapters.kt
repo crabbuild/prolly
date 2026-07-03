@@ -23,6 +23,30 @@ object ProllyJavaAdapters {
         )
 
     @JvmStatic
+    fun treeConfig(
+        minChunkSize: Long,
+        maxChunkSize: Long,
+        chunkingFactor: Int,
+        hashSeed: Long,
+        encoding: EncodingRecord,
+        nodeCacheMaxNodes: Long?,
+        nodeCacheMaxBytes: Long?,
+    ): ConfigRecord =
+        build.crab.prolly.treeConfig(
+            minChunkSize.toULong(),
+            maxChunkSize.toULong(),
+            chunkingFactor.toUInt(),
+            hashSeed.toULong(),
+            encoding,
+            nodeCacheMaxNodes?.toULong(),
+            nodeCacheMaxBytes?.toULong(),
+        )
+
+    @JvmStatic
+    fun configNodeCacheMaxNodes(record: ConfigRecord): Long? =
+        record.nodeCacheMaxNodes?.toLong()
+
+    @JvmStatic
     fun isBoundaryConfig(config: ConfigRecord, count: Long, key: ByteArray, value: ByteArray): Boolean =
         build.crab.prolly.isBoundaryConfig(config, count.toULong(), key, value)
 
@@ -55,6 +79,54 @@ object ProllyJavaAdapters {
         ParallelConfigRecord(maxThreads.toULong(), parallelismThreshold.toULong())
 
     @JvmStatic
+    fun parallelConfigSequential(): ParallelConfigRecord =
+        build.crab.prolly.parallelConfigSequential()
+
+    @JvmStatic
+    fun parallelConfigMaxThreads(record: ParallelConfigRecord): Long =
+        record.maxThreads.toLong()
+
+    @JvmStatic
+    fun firstEntry(engine: ProllyEngine, tree: TreeRecord): EntryRecord? =
+        engine.firstEntry(tree)
+
+    @JvmStatic
+    fun lastEntry(engine: ProllyEngine, tree: TreeRecord): EntryRecord? =
+        engine.lastEntry(tree)
+
+    @JvmStatic
+    fun lowerBound(engine: ProllyEngine, tree: TreeRecord, key: ByteArray): EntryRecord? =
+        engine.lowerBound(tree, key)
+
+    @JvmStatic
+    fun upperBound(engine: ProllyEngine, tree: TreeRecord, key: ByteArray): EntryRecord? =
+        engine.upperBound(tree, key)
+
+    @JvmStatic
+    fun prefix(engine: ProllyEngine, tree: TreeRecord, prefix: ByteArray): List<EntryRecord> =
+        engine.prefix(tree, prefix)
+
+    @JvmStatic
+    fun prefixPage(
+        engine: ProllyEngine,
+        tree: TreeRecord,
+        prefix: ByteArray,
+        cursor: RangeCursorRecord?,
+        limit: Long,
+    ): RangePageRecord =
+        engine.prefixPage(tree, prefix, cursor, limit.toULong())
+
+    @JvmStatic
+    fun prefixReversePage(
+        engine: ProllyEngine,
+        tree: TreeRecord,
+        prefix: ByteArray,
+        cursor: ReverseCursorRecord?,
+        limit: Long,
+    ): ReversePageRecord =
+        engine.prefixReversePage(tree, prefix, cursor, limit.toULong())
+
+    @JvmStatic
     fun rangePage(
         engine: ProllyEngine,
         tree: TreeRecord,
@@ -63,6 +135,26 @@ object ProllyJavaAdapters {
         limit: Long,
     ): RangePageRecord =
         engine.rangePage(tree, cursor, end, limit.toULong())
+
+    @JvmStatic
+    fun reversePage(
+        engine: ProllyEngine,
+        tree: TreeRecord,
+        cursor: ReverseCursorRecord?,
+        start: ByteArray,
+        limit: Long,
+    ): ReversePageRecord =
+        engine.reversePage(tree, cursor, start, limit.toULong())
+
+    @JvmStatic
+    fun cursorWindow(
+        engine: ProllyEngine,
+        tree: TreeRecord,
+        key: ByteArray,
+        end: ByteArray?,
+        limit: Long,
+    ): CursorWindowRecord =
+        engine.cursorWindow(tree, key, end, limit.toULong())
 
     @JvmStatic
     fun proveRangePage(
@@ -116,6 +208,16 @@ object ProllyJavaAdapters {
         limit: Long,
     ): StructuralDiffPageRecord =
         engine.structuralDiffPage(base, other, cursorJson, limit.toULong())
+
+    @JvmStatic
+    fun structuralDiffPageWithCursor(
+        engine: ProllyEngine,
+        base: TreeRecord,
+        other: TreeRecord,
+        cursor: StructuralDiffCursorRecord?,
+        limit: Long,
+    ): StructuralDiffPageRecord =
+        engine.structuralDiffPageWithCursor(base, other, cursor, limit.toULong())
 
     @JvmStatic
     fun publishNamedRootAtMillis(
@@ -190,6 +292,52 @@ object ProllyJavaAdapters {
     @JvmStatic
     fun snapshotUpdatedAtMillis(record: SnapshotRecord): Long? =
         record.updatedAtMillis?.toLong()
+
+    @JvmStatic
+    fun treeStatsNumNodes(record: TreeStatsRecord): Long =
+        record.numNodes.toLong()
+
+    @JvmStatic
+    fun treeStatsTotalKeyValuePairs(record: TreeStatsRecord): Long =
+        record.totalKeyValuePairs.toLong()
+
+    @JvmStatic
+    fun treeStatsLevelCount(record: TreeStatsRecord, level: Int): Long =
+        record.nodesPerLevel.firstOrNull { it.level.toInt() == level }?.value?.toLong() ?: 0L
+
+    @JvmStatic
+    fun statsComparisonBeforeTotalKeyValuePairs(record: StatsComparisonRecord): Long =
+        record.before.totalKeyValuePairs.toLong()
+
+    @JvmStatic
+    fun statsComparisonAfterTotalKeyValuePairs(record: StatsComparisonRecord): Long =
+        record.after.totalKeyValuePairs.toLong()
+
+    @JvmStatic
+    fun statsDiffTotalKeyValuePairs(record: StatsComparisonRecord): Long =
+        record.absolute.totalKeyValuePairsDiff
+
+    @JvmStatic
+    fun treeDebugViewLevelCount(record: TreeDebugViewRecord): Long =
+        record.levels.size.toLong()
+
+    @JvmStatic
+    fun treeDebugViewFirstLevelNodeCount(record: TreeDebugViewRecord): Long =
+        record.levels.firstOrNull()?.nodes?.size?.toLong() ?: 0L
+
+    @JvmStatic
+    fun treeDebugComparisonLeftOnlyNodes(record: TreeDebugComparisonRecord): Long =
+        record.leftOnlyNodes.toLong()
+
+    @JvmStatic
+    fun treeDebugComparisonRightOnlyNodes(record: TreeDebugComparisonRecord): Long =
+        record.rightOnlyNodes.toLong()
+
+    @JvmStatic
+    fun treeDebugComparisonHasRightOnlyNode(record: TreeDebugComparisonRecord): Boolean =
+        record.levels.any { level ->
+            level.nodes.any { node -> node.status == TreeDebugNodeStatusKind.RIGHT_ONLY }
+        }
 
     @JvmStatic
     fun rootManifestCreatedAtMillis(record: RootManifestRecord): Long? =
@@ -786,6 +934,38 @@ object ProllyJavaAdapters {
     @JvmStatic
     fun retentionUpdatedSince(prefix: ByteArray, minUpdatedAtMillis: Long): NamedRootRetentionRecord =
         build.crab.prolly.retainNamedRootsUpdatedSince(prefix, minUpdatedAtMillis.toULong())
+
+    @JvmStatic
+    fun snapshotBundleFormatVersion(record: SnapshotBundleRecord): Long =
+        record.formatVersion.toLong()
+
+    @JvmStatic
+    fun snapshotBundleNodeCount(record: SnapshotBundleRecord): Long =
+        record.nodes.size.toLong()
+
+    @JvmStatic
+    fun snapshotBundleSummaryFormatVersion(record: SnapshotBundleSummaryRecord): Long =
+        record.formatVersion.toLong()
+
+    @JvmStatic
+    fun snapshotBundleSummaryNodeCount(record: SnapshotBundleSummaryRecord): Long =
+        record.nodeCount.toLong()
+
+    @JvmStatic
+    fun snapshotBundleSummaryByteCount(record: SnapshotBundleSummaryRecord): Long =
+        record.byteCount.toLong()
+
+    @JvmStatic
+    fun snapshotBundleVerificationValid(record: SnapshotBundleVerificationRecord): Boolean =
+        record.valid
+
+    @JvmStatic
+    fun snapshotBundleVerificationMissingCidCount(record: SnapshotBundleVerificationRecord): Long =
+        record.missingCids.size.toLong()
+
+    @JvmStatic
+    fun snapshotBundleVerificationExtraCidCount(record: SnapshotBundleVerificationRecord): Long =
+        record.extraCids.size.toLong()
 
     private fun encodingKind(kind: String): EncodingKind =
         when (kind) {

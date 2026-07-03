@@ -40,10 +40,17 @@ test("wasm package declares browser memory-scope API", () => {
   const source = readFileSync(resolve(import.meta.dirname, "../src/index.ts"), "utf8");
   assert.match(source, /loadProllyWasm/);
   assert.match(source, /WasmEntryRecord/);
+  assert.match(source, /WasmOptionalEntryRecord/);
+  assert.match(source, /WasmProllyEngineInstance/);
   assert.match(source, /WasmParallelConfigRecord/);
   assert.match(source, /WasmBatchApplyStatsRecord/);
   assert.match(source, /WasmBatchApplyResultRecord/);
+  assert.match(source, /WasmSnapshotBundleRecord/);
   assert.match(source, /WasmRangePageRecord/);
+  assert.match(source, /WasmReversePageRecord/);
+  assert.match(source, /WasmReverseCursor/);
+  assert.match(source, /prefixReversePage/);
+  assert.match(source, /WasmCursorWindowRecord/);
   assert.match(source, /WasmRangeBoundsRecord/);
   assert.match(source, /WasmDiffPageRecord/);
   assert.match(source, /WasmStructuralDiffPageRecord/);
@@ -126,6 +133,41 @@ test("wasm fixtures decode, build, and query through Rust memory engine", { skip
   for (const lookup of treeFixture.lookups) {
     assert.equal(toHex(engine.get(tree, fromHex(lookup.key))), lookup.value);
   }
+
+  const bundle = engine.exportSnapshot(tree);
+  assert.equal(bundle.formatVersion, 1);
+  assert.equal(bundle.nodeCount > 0, true);
+  assert.equal(bundle.nodes.length > 0, true);
+  const snapshotEngine = wasm.WasmProllyEngine.memoryWithConfigJson(JSON.stringify(treeFixture.config));
+  const importedTree = snapshotEngine.importSnapshot(bundle);
+  assert.equal(toHex(importedTree.root), treeFixture.root);
+  const reconstructedBundle = new wasm.WasmSnapshotBundle(bundle.formatVersion, bundle.tree, bundle.nodes);
+  const bundleBytes = reconstructedBundle.toBytes();
+  assert.equal(toHex(reconstructedBundle.digest()), toHex(wasm.cidFromBytes(bundleBytes)));
+  assert.equal(toHex(wasm.WasmSnapshotBundle.digestBytes(bundleBytes)), toHex(reconstructedBundle.digest()));
+  const summary = reconstructedBundle.summary();
+  assert.equal(summary.formatVersion, 1);
+  assert.equal(summary.nodeCount, String(bundle.nodes.length));
+  assert.equal(Number(summary.byteCount) > 0, true);
+  assert.equal(toHex(summary.root), treeFixture.root);
+  assert.deepEqual(wasm.WasmSnapshotBundle.summaryFromBytes(bundleBytes), summary);
+  const verification = reconstructedBundle.verify();
+  assert.equal(verification.valid, true);
+  assert.equal(verification.missingCids.length, 0);
+  assert.equal(verification.extraCids.length, 0);
+  assert.equal(verification.summary.nodeCount, summary.nodeCount);
+  assert.deepEqual(wasm.WasmSnapshotBundle.verifyBytes(bundleBytes).summary, summary);
+  const incompleteBundle = new wasm.WasmSnapshotBundle(
+    bundle.formatVersion,
+    bundle.tree,
+    bundle.nodes.slice(0, -1),
+  );
+  const incompleteVerification = incompleteBundle.verify();
+  assert.equal(incompleteVerification.valid, false);
+  assert.equal(incompleteVerification.missingCids.length > 0, true);
+  const rebuiltBundle = wasm.WasmSnapshotBundle.fromBytes(bundleBytes);
+  const rebuiltTree = wasm.WasmProllyEngine.memoryWithConfigJson(JSON.stringify(treeFixture.config)).importSnapshot(rebuiltBundle);
+  assert.equal(toHex(rebuiltTree.root), treeFixture.root);
 
   const presentLookup = treeFixture.lookups.find((lookup: any) => lookup.value !== null);
   const proof = engine.proveKey(tree, fromHex(presentLookup.key));
@@ -264,6 +306,27 @@ test("wasm fixtures decode, build, and query through Rust memory engine", { skip
   );
   assert.equal(prefixVerified.valid, true);
   assert.ok(prefixVerified.entries.some((entry: any) => toHex(entry.key) === presentLookup.key));
+  const reverseEnd = wasm.WasmReverseCursor.end();
+  assert.equal(reverseEnd.beforeKey, null);
+  const allForwardKeys = engine.range(tree, new Uint8Array(), null).map((entry: any) => toHex(entry.key));
+  const reverseFirst = engine.reversePage(tree, null, new Uint8Array(), 2);
+  assert.deepEqual(
+    reverseFirst.entries.map((entry: any) => toHex(entry.key)),
+    allForwardKeys.slice(-2).reverse(),
+  );
+  assert.equal(toHex(reverseFirst.nextCursor.beforeKey), allForwardKeys.at(-2));
+  const reverseSecond = engine.reversePage(tree, reverseFirst.nextCursor, new Uint8Array(), 2);
+  assert.deepEqual(
+    reverseSecond.entries.map((entry: any) => toHex(entry.key)),
+    allForwardKeys.slice(0, -2).slice(-2).reverse(),
+  );
+  const prefixBytes = fromHex(presentLookup.key).slice(0, 1);
+  const prefixForwardKeys = engine.prefix(tree, prefixBytes).map((entry: any) => toHex(entry.key));
+  const prefixReverse = engine.prefixReversePage(tree, prefixBytes, null, 2);
+  assert.deepEqual(
+    prefixReverse.entries.map((entry: any) => toHex(entry.key)),
+    prefixForwardKeys.slice(-2).reverse(),
+  );
   const provedPage = engine.proveRangePage(tree, null, null, 1);
   const pageVerified = wasm.verifyRangePageProof(
     provedPage.proof.root,
@@ -446,6 +509,28 @@ test("wasm fixtures decode, build, and query through Rust memory engine", { skip
   assert.equal(batchStats.stats.inputMutations, 3);
   assert.equal(batchStats.stats.effectiveMutations, 2);
   assert.equal(batchStats.stats.preprocessInputSorted, false);
+  assert.equal(Buffer.from(engine.firstEntry(batchStats.tree).key).toString(), "a");
+  assert.equal(Buffer.from(engine.firstEntry(batchStats.tree).value).toString(), "11");
+  assert.equal(Buffer.from(engine.lastEntry(batchStats.tree).key).toString(), "b");
+  assert.deepEqual(engine.prefix(batchStats.tree, utf8("a")).map((entry) => Buffer.from(entry.value).toString()), ["11"]);
+  const prefixPage = engine.prefixPage(batchStats.tree, utf8("a"), null, 1);
+  assert.deepEqual(prefixPage.entries.map((entry) => Buffer.from(entry.value).toString()), ["11"]);
+  assert.ok(prefixPage.nextCursor);
+  assert.equal(Buffer.from(engine.lowerBound(batchStats.tree, utf8("aa")).key).toString(), "b");
+  assert.equal(engine.upperBound(batchStats.tree, utf8("b")), null);
+
+  const cursorWindow = engine.cursorWindow(batchStats.tree, utf8("aa"), null, 1);
+  assert.equal(Buffer.from(cursorWindow.positionKey).toString(), "a");
+  assert.equal(Buffer.from(cursorWindow.positionValue).toString(), "11");
+  assert.equal(cursorWindow.found, false);
+  assert.deepEqual(cursorWindow.entries.map((entry) => Buffer.from(entry.key).toString()), ["b"]);
+  assert.equal(Buffer.from(cursorWindow.nextCursor.afterKey).toString(), "b");
+
+  const exactProbe = engine.cursorWindow(batchStats.tree, utf8("a"), null, 0);
+  assert.equal(exactProbe.found, true);
+  assert.equal(Buffer.from(exactProbe.positionKey).toString(), "a");
+  assert.equal(exactProbe.entries.length, 0);
+  assert.equal(exactProbe.nextCursor, null);
 
   const parallelConfig = wasm.defaultParallelConfig();
   assert.equal(parallelConfig.parallelismThreshold, "100");
@@ -454,6 +539,14 @@ test("wasm fixtures decode, build, and query through Rust memory engine", { skip
     { kind: "upsert", key: utf8("q"), value: utf8("wasm") },
   ], { ...parallelConfig, maxThreads: 1, parallelismThreshold: 1 });
   assert.equal(Buffer.from(engine.get(parallelTree, utf8("q"))).toString(), "wasm");
+  const parallelStats = engine.parallelBatchWithStats(engine.create(), [
+    { kind: "upsert", key: utf8("r"), value: utf8("route") },
+    { kind: "upsert", key: utf8("s"), value: utf8("stats") },
+  ], { ...parallelConfig, maxThreads: 1, parallelismThreshold: 1 });
+  assert.equal(Buffer.from(engine.get(parallelStats.tree, utf8("s"))).toString(), "stats");
+  assert.equal(parallelStats.stats.inputMutations, 2);
+  assert.equal(parallelStats.stats.effectiveMutations, 2);
+  assert.notEqual(parallelStats.stats.writtenNodes, 0);
 
   const appendedStats = engine.appendBatchWithStats(statsBase, [
     { kind: "upsert", key: utf8("d"), value: utf8("4") },
@@ -492,6 +585,16 @@ test("wasm fixtures decode, build, and query through Rust memory engine", { skip
   const structuralDiffPage = engine.structuralDiffPage(base, right, null, 1);
   assert.equal(structuralDiffPage.diffs.length, 1);
   assert.equal(structuralDiffPage.stats.emittedDiffs, 1);
+  const structuralCursorPage = engine.structuralDiffPage(base, right, null, 0);
+  assert.ok(structuralCursorPage.nextCursor);
+  assert.ok(structuralCursorPage.nextCursorJson);
+  const resumedStructuralPage = engine.structuralDiffPageWithCursor(
+    base,
+    right,
+    structuralCursorPage.nextCursor,
+    1,
+  );
+  assert.equal(resumedStructuralPage.diffs.length, 1);
 
   const conflictPage = engine.conflictPage(base, left, right, null, 1);
   assert.equal(conflictPage.conflicts.length, 1);
@@ -508,11 +611,30 @@ test("wasm fixtures decode, build, and query through Rust memory engine", { skip
   assert.ok(explanation.result);
   assert.equal(explanation.error, null);
   assert.ok(JSON.parse(explanation.traceJson).events.length >= 1);
+  assert.ok(explanation.trace.events.length >= 1);
+  assert.ok(
+    explanation.trace.events.some(
+      (event) => event.kind === "resolver_called" && event.resolution === "value",
+    ),
+  );
 
   assert.ok(JSON.parse(engine.collectStatsJson(merged)).num_nodes >= 1);
+  const typedStats = engine.collectStats(merged) as any;
+  assert.equal(typedStats.total_key_value_pairs, 1);
+  assert.ok(typedStats.nodes_per_level["0"] > 0);
   assert.ok(JSON.parse(engine.statsDiffJson(base, merged)));
+  const typedDiffStats = engine.statsDiff(base, merged) as any;
+  assert.equal(typedDiffStats.before.total_key_value_pairs, 1);
+  assert.equal(typedDiffStats.after.total_key_value_pairs, 1);
+  assert.equal(typedDiffStats.absolute.total_key_value_pairs_diff, 0);
   assert.ok(JSON.parse(engine.debugTreeJson(merged)).levels.length >= 1);
+  const debugTree = engine.debugTree(merged) as any;
+  assert.ok(debugTree.levels.length >= 1);
+  assert.ok(debugTree.levels.some((level: any) => level.nodes.length > 0));
   assert.match(engine.debugTreeText(merged), /level/i);
   assert.ok(JSON.parse(engine.debugCompareTreesJson(base, merged)));
+  const debugComparison = engine.debugCompareTrees(base, merged) as any;
+  assert.ok(debugComparison.right_only_nodes > 0);
+  assert.ok(debugComparison.levels.some((level: any) => level.nodes.some((node: any) => node.status === "RightOnly")));
   assert.match(engine.debugCompareTreesText(base, merged), /left_only/i);
 });

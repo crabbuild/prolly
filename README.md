@@ -495,6 +495,8 @@ Range APIs use similar positioning:
 - `range_after(&tree, after_key, end)` resumes strictly after a processed key.
 - `range_from_cursor(&tree, cursor, end)` resumes from a stable `RangeCursor`.
 - `range_page(&tree, cursor, end, limit)` reads bounded pages for checkpoints.
+- `reverse_page(&tree, cursor, start, limit)` and `prefix_reverse_page(&tree, prefix, cursor, limit)` read descending pages with a
+  stable `ReverseCursor`.
 - `prove_range_page(&tree, cursor, end, limit)` returns the same page plus a
   store-independent proof for the exclusive cursor window.
 - `cursor(&tree, key)` positions a cursor near a key.
@@ -1406,7 +1408,8 @@ typed trace across successful merges and `Error::Conflict`; async CRDT merge
 uses the same conflict-free resolution strategies as sync CRDT merge. The range
 iterator supports `next().await`, resumable
 `RangeCursor` tokens, `range_after`, `range_from_cursor`, bounded `range_page`,
-and an `into_stream()` adapter for `futures_util::Stream`. Append-heavy async
+bounded `reverse_page`, and an `into_stream()` adapter for
+`futures_util::Stream`. Append-heavy async
 batches use the same rightmost-path hint namespace as sync append batches so
 fresh async managers can hydrate the append anchor through ordered reads.
 

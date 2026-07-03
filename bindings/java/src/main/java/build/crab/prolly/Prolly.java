@@ -61,6 +61,26 @@ public final class Prolly implements AutoCloseable {
         return new Prolly(ProllyEngine.Companion.customStore(new HostStoreAdapter(Objects.requireNonNull(store)), config));
     }
 
+    public static ConfigRecord defaultConfig() {
+        return ProllyKt.defaultConfig();
+    }
+
+    public static EncodingRecord encodingRaw() {
+        return ProllyKt.encodingRaw();
+    }
+
+    public static EncodingRecord encodingCbor() {
+        return ProllyKt.encodingCbor();
+    }
+
+    public static EncodingRecord encodingJson() {
+        return ProllyKt.encodingJson();
+    }
+
+    public static EncodingRecord encodingCustom(String name) {
+        return ProllyKt.encodingCustom(Objects.requireNonNull(name));
+    }
+
     public static ConfigRecord config(
             long minChunkSize,
             long maxChunkSize,
@@ -79,6 +99,28 @@ public final class Prolly implements AutoCloseable {
                 customEncodingName,
                 nodeCacheMaxNodes,
                 nodeCacheMaxBytes);
+    }
+
+    public static ConfigRecord treeConfig(
+            long minChunkSize,
+            long maxChunkSize,
+            int chunkingFactor,
+            long hashSeed,
+            EncodingRecord encoding,
+            Long nodeCacheMaxNodes,
+            Long nodeCacheMaxBytes) throws ProllyBindingException {
+        return ProllyJavaAdapters.treeConfig(
+                minChunkSize,
+                maxChunkSize,
+                chunkingFactor,
+                hashSeed,
+                Objects.requireNonNull(encoding),
+                nodeCacheMaxNodes,
+                nodeCacheMaxBytes);
+    }
+
+    public static Long configNodeCacheMaxNodes(ConfigRecord record) {
+        return ProllyJavaAdapters.configNodeCacheMaxNodes(Objects.requireNonNull(record));
     }
 
     public static byte[] cidFromBytes(byte[] bytes) {
@@ -289,6 +331,14 @@ public final class Prolly implements AutoCloseable {
         return ProllyKt.rangeCursorAfterKey(key.clone());
     }
 
+    public static ReverseCursorRecord reverseCursorEnd() {
+        return ProllyKt.reverseCursorEnd();
+    }
+
+    public static ReverseCursorRecord reverseCursorBeforeKey(byte[] key) {
+        return ProllyKt.reverseCursorBeforeKey(key.clone());
+    }
+
     public static byte[] u64Key(String value) {
         return ProllyJavaAdapters.u64Key(value);
     }
@@ -376,15 +426,63 @@ public final class Prolly implements AutoCloseable {
     }
 
     public static MutationRecord upsert(byte[] key, byte[] value) {
-        return ProllyJavaAdapters.upsertMutation(key.clone(), value.clone());
+        return upsertMutation(key, value);
+    }
+
+    public static MutationRecord upsertMutation(byte[] key, byte[] value) {
+        return ProllyKt.upsertMutation(key.clone(), value.clone());
     }
 
     public static MutationRecord deleteMutation(byte[] key) {
-        return ProllyJavaAdapters.deleteMutation(key.clone());
+        return ProllyKt.deleteMutation(key.clone());
+    }
+
+    public static ResolutionRecord resolutionValue(byte[] value) {
+        return ProllyKt.resolutionValue(value.clone());
+    }
+
+    public static ResolutionRecord resolutionDelete() {
+        return ProllyKt.resolutionDelete();
+    }
+
+    public static ResolutionRecord resolutionUnresolved() {
+        return ProllyKt.resolutionUnresolved();
+    }
+
+    public static ResolutionRecord resolvePreferLeft(ConflictRecord conflict) {
+        return ProllyKt.resolvePreferLeft(conflict);
+    }
+
+    public static ResolutionRecord resolvePreferRight(ConflictRecord conflict) {
+        return ProllyKt.resolvePreferRight(conflict);
+    }
+
+    public static ResolutionRecord resolveDeleteWins(ConflictRecord conflict) {
+        return ProllyKt.resolveDeleteWins(conflict);
+    }
+
+    public static ResolutionRecord resolveUpdateWins(ConflictRecord conflict) {
+        return ProllyKt.resolveUpdateWins(conflict);
+    }
+
+    public static CrdtResolutionRecord crdtResolutionValue(byte[] value) {
+        return ProllyKt.crdtResolutionValue(value.clone());
+    }
+
+    public static CrdtResolutionRecord crdtResolutionDelete() {
+        return ProllyKt.crdtResolutionDelete();
     }
 
     public static ParallelConfigRecord parallelConfig(long maxThreads, long parallelismThreshold) {
         return ProllyJavaAdapters.parallelConfig(maxThreads, parallelismThreshold);
+    }
+
+    public static ParallelConfigRecord parallelConfigSequential() {
+        return ProllyJavaAdapters.parallelConfigSequential();
+    }
+
+    public static long parallelConfigMaxThreads(ParallelConfigRecord record) {
+        return ProllyJavaAdapters.parallelConfigMaxThreads(Objects.requireNonNull(record));
     }
 
     public static LargeValueConfig largeValueConfig(long inlineThreshold) {
@@ -531,6 +629,118 @@ public final class Prolly implements AutoCloseable {
         return Optional.ofNullable(id == null ? null : id.clone());
     }
 
+    public static long snapshotBundleFormatVersion(SnapshotBundleRecord record) {
+        return ProllyJavaAdapters.snapshotBundleFormatVersion(Objects.requireNonNull(record));
+    }
+
+    public static long snapshotBundleNodeCount(SnapshotBundleRecord record) {
+        return ProllyJavaAdapters.snapshotBundleNodeCount(Objects.requireNonNull(record));
+    }
+
+    public static byte[] snapshotBundleToBytes(SnapshotBundleRecord record) throws ProllyBindingException {
+        return ProllyKt.snapshotBundleToBytes(Objects.requireNonNull(record)).clone();
+    }
+
+    public static SnapshotBundleRecord snapshotBundleFromBytes(byte[] bytes) throws ProllyBindingException {
+        return ProllyKt.snapshotBundleFromBytes(bytes.clone());
+    }
+
+    public static byte[] snapshotBundleDigest(SnapshotBundleRecord record) throws ProllyBindingException {
+        return ProllyKt.snapshotBundleDigest(Objects.requireNonNull(record)).clone();
+    }
+
+    public static byte[] snapshotBundleDigestBytes(byte[] bytes) throws ProllyBindingException {
+        return ProllyKt.snapshotBundleDigestBytes(bytes.clone()).clone();
+    }
+
+    public static SnapshotBundleSummaryRecord snapshotBundleSummary(SnapshotBundleRecord record)
+            throws ProllyBindingException {
+        return ProllyKt.snapshotBundleSummary(Objects.requireNonNull(record));
+    }
+
+    public static SnapshotBundleSummaryRecord snapshotBundleSummaryFromBytes(byte[] bytes)
+            throws ProllyBindingException {
+        return ProllyKt.snapshotBundleSummaryFromBytes(bytes.clone());
+    }
+
+    public static SnapshotBundleVerificationRecord verifySnapshotBundle(SnapshotBundleRecord record)
+            throws ProllyBindingException {
+        return ProllyKt.verifySnapshotBundle(Objects.requireNonNull(record));
+    }
+
+    public static SnapshotBundleVerificationRecord verifySnapshotBundleBytes(byte[] bytes)
+            throws ProllyBindingException {
+        return ProllyKt.verifySnapshotBundleBytes(bytes.clone());
+    }
+
+    public static long snapshotBundleSummaryFormatVersion(SnapshotBundleSummaryRecord record) {
+        return ProllyJavaAdapters.snapshotBundleSummaryFormatVersion(Objects.requireNonNull(record));
+    }
+
+    public static long snapshotBundleSummaryNodeCount(SnapshotBundleSummaryRecord record) {
+        return ProllyJavaAdapters.snapshotBundleSummaryNodeCount(Objects.requireNonNull(record));
+    }
+
+    public static long snapshotBundleSummaryByteCount(SnapshotBundleSummaryRecord record) {
+        return ProllyJavaAdapters.snapshotBundleSummaryByteCount(Objects.requireNonNull(record));
+    }
+
+    public static boolean snapshotBundleVerificationValid(SnapshotBundleVerificationRecord record) {
+        return ProllyJavaAdapters.snapshotBundleVerificationValid(Objects.requireNonNull(record));
+    }
+
+    public static long snapshotBundleVerificationMissingCidCount(SnapshotBundleVerificationRecord record) {
+        return ProllyJavaAdapters.snapshotBundleVerificationMissingCidCount(Objects.requireNonNull(record));
+    }
+
+    public static long snapshotBundleVerificationExtraCidCount(SnapshotBundleVerificationRecord record) {
+        return ProllyJavaAdapters.snapshotBundleVerificationExtraCidCount(Objects.requireNonNull(record));
+    }
+
+    public static long treeStatsNumNodes(TreeStatsRecord record) {
+        return ProllyJavaAdapters.treeStatsNumNodes(Objects.requireNonNull(record));
+    }
+
+    public static long treeStatsTotalKeyValuePairs(TreeStatsRecord record) {
+        return ProllyJavaAdapters.treeStatsTotalKeyValuePairs(Objects.requireNonNull(record));
+    }
+
+    public static long treeStatsLevelCount(TreeStatsRecord record, int level) {
+        return ProllyJavaAdapters.treeStatsLevelCount(Objects.requireNonNull(record), level);
+    }
+
+    public static long statsComparisonBeforeTotalKeyValuePairs(StatsComparisonRecord record) {
+        return ProllyJavaAdapters.statsComparisonBeforeTotalKeyValuePairs(Objects.requireNonNull(record));
+    }
+
+    public static long statsComparisonAfterTotalKeyValuePairs(StatsComparisonRecord record) {
+        return ProllyJavaAdapters.statsComparisonAfterTotalKeyValuePairs(Objects.requireNonNull(record));
+    }
+
+    public static long statsDiffTotalKeyValuePairs(StatsComparisonRecord record) {
+        return ProllyJavaAdapters.statsDiffTotalKeyValuePairs(Objects.requireNonNull(record));
+    }
+
+    public static long treeDebugViewLevelCount(TreeDebugViewRecord record) {
+        return ProllyJavaAdapters.treeDebugViewLevelCount(Objects.requireNonNull(record));
+    }
+
+    public static long treeDebugViewFirstLevelNodeCount(TreeDebugViewRecord record) {
+        return ProllyJavaAdapters.treeDebugViewFirstLevelNodeCount(Objects.requireNonNull(record));
+    }
+
+    public static long treeDebugComparisonLeftOnlyNodes(TreeDebugComparisonRecord record) {
+        return ProllyJavaAdapters.treeDebugComparisonLeftOnlyNodes(Objects.requireNonNull(record));
+    }
+
+    public static long treeDebugComparisonRightOnlyNodes(TreeDebugComparisonRecord record) {
+        return ProllyJavaAdapters.treeDebugComparisonRightOnlyNodes(Objects.requireNonNull(record));
+    }
+
+    public static boolean treeDebugComparisonHasRightOnlyNode(TreeDebugComparisonRecord record) {
+        return ProllyJavaAdapters.treeDebugComparisonHasRightOnlyNode(Objects.requireNonNull(record));
+    }
+
     public static MergePolicyRegistry mergePolicyRegistry() {
         return new MergePolicyRegistry();
     }
@@ -637,11 +847,55 @@ public final class Prolly implements AutoCloseable {
         return engine.parallelBatch(tree, cloneMutations(mutations), config);
     }
 
+    public BatchApplyResult parallelBatchWithStats(
+            TreeRecord tree,
+            List<MutationRecord> mutations,
+            ParallelConfigRecord config) throws ProllyBindingException {
+        return new BatchApplyResult(engine.parallelBatchWithStats(tree, cloneMutations(mutations), config));
+    }
+
+    public Optional<Entry> firstEntry(TreeRecord tree) throws ProllyBindingException {
+        return Optional.ofNullable(ProllyJavaAdapters.firstEntry(engine, tree))
+                .map(Prolly::entry);
+    }
+
+    public Optional<Entry> lastEntry(TreeRecord tree) throws ProllyBindingException {
+        return Optional.ofNullable(ProllyJavaAdapters.lastEntry(engine, tree))
+                .map(Prolly::entry);
+    }
+
+    public Optional<Entry> lowerBound(TreeRecord tree, byte[] key) throws ProllyBindingException {
+        return Optional.ofNullable(ProllyJavaAdapters.lowerBound(engine, tree, key.clone()))
+                .map(Prolly::entry);
+    }
+
+    public Optional<Entry> upperBound(TreeRecord tree, byte[] key) throws ProllyBindingException {
+        return Optional.ofNullable(ProllyJavaAdapters.upperBound(engine, tree, key.clone()))
+                .map(Prolly::entry);
+    }
+
+    public List<Entry> prefix(TreeRecord tree, byte[] prefix) throws ProllyBindingException {
+        return ProllyJavaAdapters.prefix(engine, tree, prefix.clone())
+                .stream()
+                .map(Prolly::entry)
+                .toList();
+    }
+
+    public RangePageRecord prefixPage(TreeRecord tree, byte[] prefix, RangeCursorRecord cursor, long limit)
+            throws ProllyBindingException {
+        return ProllyJavaAdapters.prefixPage(engine, tree, prefix.clone(), cursor, limit);
+    }
+
+    public ReversePageRecord prefixReversePage(TreeRecord tree, byte[] prefix, ReverseCursorRecord cursor, long limit)
+            throws ProllyBindingException {
+        return ProllyJavaAdapters.prefixReversePage(engine, tree, prefix.clone(), cursor, limit);
+    }
+
     public List<Entry> range(TreeRecord tree, byte[] start, Optional<byte[]> end)
             throws ProllyBindingException {
         return engine.range(tree, start.clone(), end.map(byte[]::clone).orElse(null))
                 .stream()
-                .map(entry -> new Entry(entry.getKey(), entry.getValue()))
+                .map(Prolly::entry)
                 .toList();
     }
 
@@ -649,7 +903,7 @@ public final class Prolly implements AutoCloseable {
             throws ProllyBindingException {
         return engine.rangeAfter(tree, afterKey.clone(), end.map(byte[]::clone).orElse(null))
                 .stream()
-                .map(entry -> new Entry(entry.getKey(), entry.getValue()))
+                .map(Prolly::entry)
                 .toList();
     }
 
@@ -657,7 +911,7 @@ public final class Prolly implements AutoCloseable {
             throws ProllyBindingException {
         return engine.rangeFromCursor(tree, cursor, end.map(byte[]::clone).orElse(null))
                 .stream()
-                .map(entry -> new Entry(entry.getKey(), entry.getValue()))
+                .map(Prolly::entry)
                 .toList();
     }
 
@@ -667,6 +921,22 @@ public final class Prolly implements AutoCloseable {
             Optional<byte[]> end,
             long limit) throws ProllyBindingException {
         return ProllyJavaAdapters.rangePage(engine, tree, cursor, end.map(byte[]::clone).orElse(null), limit);
+    }
+
+    public ReversePageRecord reversePage(
+            TreeRecord tree,
+            ReverseCursorRecord cursor,
+            byte[] start,
+            long limit) throws ProllyBindingException {
+        return ProllyJavaAdapters.reversePage(engine, tree, cursor, start.clone(), limit);
+    }
+
+    public CursorWindowRecord cursorWindow(
+            TreeRecord tree,
+            byte[] key,
+            Optional<byte[]> end,
+            long limit) throws ProllyBindingException {
+        return ProllyJavaAdapters.cursorWindow(engine, tree, key.clone(), end.map(byte[]::clone).orElse(null), limit);
     }
 
     public List<DiffRecord> diff(TreeRecord base, TreeRecord other) throws ProllyBindingException {
@@ -950,12 +1220,24 @@ public final class Prolly implements AutoCloseable {
         return engine.collectStatsJson(tree).getJson();
     }
 
+    public TreeStatsRecord collectStats(TreeRecord tree) throws ProllyBindingException {
+        return engine.collectStats(tree);
+    }
+
     public String statsDiffJson(TreeRecord before, TreeRecord after) throws ProllyBindingException {
         return engine.statsDiffJson(before, after).getJson();
     }
 
+    public StatsComparisonRecord statsDiff(TreeRecord before, TreeRecord after) throws ProllyBindingException {
+        return engine.statsDiff(before, after);
+    }
+
     public String debugTreeJson(TreeRecord tree) throws ProllyBindingException {
         return engine.debugTreeJson(tree).getJson();
+    }
+
+    public TreeDebugViewRecord debugTree(TreeRecord tree) throws ProllyBindingException {
+        return engine.debugTree(tree);
     }
 
     public String debugTreeText(TreeRecord tree) throws ProllyBindingException {
@@ -964,6 +1246,10 @@ public final class Prolly implements AutoCloseable {
 
     public String debugCompareTreesJson(TreeRecord left, TreeRecord right) throws ProllyBindingException {
         return engine.debugCompareTreesJson(left, right).getJson();
+    }
+
+    public TreeDebugComparisonRecord debugCompareTrees(TreeRecord left, TreeRecord right) throws ProllyBindingException {
+        return engine.debugCompareTrees(left, right);
     }
 
     public String debugCompareTreesText(TreeRecord left, TreeRecord right) throws ProllyBindingException {
@@ -1020,6 +1306,16 @@ public final class Prolly implements AutoCloseable {
             throws ProllyBindingException {
         return new StructuralDiffPage(
                 ProllyJavaAdapters.structuralDiffPage(engine, base, other, cursorJson, limit));
+    }
+
+    public StructuralDiffPage structuralDiffPageWithCursor(
+            TreeRecord base,
+            TreeRecord other,
+            StructuralDiffCursorRecord cursor,
+            long limit)
+            throws ProllyBindingException {
+        return new StructuralDiffPage(
+                ProllyJavaAdapters.structuralDiffPageWithCursor(engine, base, other, cursor, limit));
     }
 
     public GcReachability markReachable(List<TreeRecord> roots) throws ProllyBindingException {
@@ -1084,6 +1380,14 @@ public final class Prolly implements AutoCloseable {
         return new MissingNodeCopy(engine.copyMissingNodes(tree, destination.engine));
     }
 
+    public SnapshotBundleRecord exportSnapshot(TreeRecord tree) throws ProllyBindingException {
+        return engine.exportSnapshot(Objects.requireNonNull(tree));
+    }
+
+    public TreeRecord importSnapshot(SnapshotBundleRecord bundle) throws ProllyBindingException {
+        return engine.importSnapshot(Objects.requireNonNull(bundle));
+    }
+
     @Override
     public void close() {
         engine.close();
@@ -1115,6 +1419,10 @@ public final class Prolly implements AutoCloseable {
             records.add(new EntryRecord(entry.key(), entry.value()));
         }
         return records;
+    }
+
+    private static Entry entry(EntryRecord record) {
+        return new Entry(record.getKey(), record.getValue());
     }
 
     private static SnapshotNamespaceRecord cloneSnapshotNamespace(SnapshotNamespaceRecord namespace) {

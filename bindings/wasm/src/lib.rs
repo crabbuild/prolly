@@ -5,7 +5,8 @@ use prolly::{
     is_boundary_config as core_is_boundary_config, AuthenticatedProofEnvelope, BatchApplyResult,
     BatchApplyStats, Cid, Config, Conflict, Diff, DiffPageProof, Encoding, Error, KeyProof,
     MemStore, MultiKeyProof, Mutation, Node, ParallelConfig, Prolly, RangeCursor, RangePageProof,
-    RangeProof, Resolver, SnapshotNamespace, StructuralDiffCursor, Tree,
+    RangeProof, Resolver, ReverseCursor, SnapshotBundle, SnapshotBundleNode, SnapshotNamespace,
+    StructuralDiffCursor, StructuralDiffMarker, Tree,
 };
 use serde_json::Value;
 use wasm_bindgen::prelude::*;
@@ -98,6 +99,125 @@ impl WasmTree {
     }
 }
 
+#[wasm_bindgen(js_name = WasmSnapshotBundle)]
+#[derive(Clone)]
+pub struct WasmSnapshotBundle {
+    inner: SnapshotBundle,
+}
+
+#[wasm_bindgen(js_class = WasmSnapshotBundle)]
+impl WasmSnapshotBundle {
+    #[wasm_bindgen(constructor)]
+    pub fn new(
+        format_version: u32,
+        tree: &WasmTree,
+        nodes: Array,
+    ) -> Result<WasmSnapshotBundle, JsValue> {
+        let nodes = snapshot_bundle_nodes_from_array(nodes)?;
+        let bundle = SnapshotBundle {
+            format_version,
+            tree: tree.inner.clone(),
+            nodes,
+        };
+        bundle.validate_format_version().map_err(js_error)?;
+        Ok(Self { inner: bundle })
+    }
+
+    #[wasm_bindgen(getter, js_name = formatVersion)]
+    pub fn format_version(&self) -> u32 {
+        self.inner.format_version
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn tree(&self) -> WasmTree {
+        WasmTree {
+            inner: self.inner.tree.clone(),
+        }
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn nodes(&self) -> Result<Array, JsValue> {
+        snapshot_bundle_nodes_to_array(&self.inner.nodes)
+    }
+
+    #[wasm_bindgen(getter, js_name = nodeCount)]
+    pub fn node_count(&self) -> u32 {
+        self.inner.node_count() as u32
+    }
+
+    #[wasm_bindgen(getter, js_name = byteCount)]
+    pub fn byte_count(&self) -> f64 {
+        self.inner.byte_count() as f64
+    }
+
+    #[wasm_bindgen(js_name = toBytes)]
+    pub fn to_bytes(&self) -> Result<Vec<u8>, JsValue> {
+        self.inner.to_bytes().map_err(js_error)
+    }
+
+    #[wasm_bindgen(js_name = digest)]
+    pub fn digest(&self) -> Result<Vec<u8>, JsValue> {
+        self.inner
+            .digest()
+            .map(|cid| cid.as_bytes().to_vec())
+            .map_err(js_error)
+    }
+
+    #[wasm_bindgen(js_name = summary)]
+    pub fn summary(&self) -> Result<JsValue, JsValue> {
+        self.inner
+            .summary()
+            .map_err(js_error)
+            .and_then(snapshot_bundle_summary_to_object)
+            .map(Into::into)
+    }
+
+    #[wasm_bindgen(js_name = verify)]
+    pub fn verify(&self) -> Result<JsValue, JsValue> {
+        self.inner
+            .verify()
+            .map_err(js_error)
+            .and_then(snapshot_bundle_verification_to_object)
+            .map(Into::into)
+    }
+
+    #[wasm_bindgen(js_name = fromBytes)]
+    pub fn from_bytes(bytes: Uint8Array) -> Result<WasmSnapshotBundle, JsValue> {
+        SnapshotBundle::from_bytes(&bytes.to_vec())
+            .map(|inner| WasmSnapshotBundle { inner })
+            .map_err(js_error)
+    }
+
+    #[wasm_bindgen(js_name = digestBytes)]
+    pub fn digest_bytes(bytes: Uint8Array) -> Result<Vec<u8>, JsValue> {
+        SnapshotBundle::from_bytes(&bytes.to_vec())
+            .map_err(js_error)?
+            .digest()
+            .map(|cid| cid.as_bytes().to_vec())
+            .map_err(js_error)
+    }
+
+    #[wasm_bindgen(js_name = summaryFromBytes)]
+    pub fn summary_from_bytes(bytes: Uint8Array) -> Result<JsValue, JsValue> {
+        SnapshotBundle::from_bytes(&bytes.to_vec())
+            .map_err(js_error)?
+            .summary()
+            .map_err(js_error)
+            .and_then(snapshot_bundle_summary_to_object)
+            .map(Into::into)
+    }
+
+    #[wasm_bindgen(js_name = verifyBytes)]
+    pub fn verify_bytes(bytes: Uint8Array) -> Result<JsValue, JsValue> {
+        SnapshotBundle::from_bytes(&bytes.to_vec())
+            .map_err(js_error)?
+            .verify()
+            .map_err(js_error)
+            .and_then(snapshot_bundle_verification_to_object)
+            .map(Into::into)
+    }
+}
+
 #[wasm_bindgen(js_name = WasmRangeCursor)]
 #[derive(Clone)]
 pub struct WasmRangeCursor {
@@ -125,6 +245,38 @@ impl WasmRangeCursor {
     pub fn after_key(&self) -> JsValue {
         self.inner
             .after()
+            .map(|key| Uint8Array::from(key).into())
+            .unwrap_or(JsValue::NULL)
+    }
+}
+
+#[wasm_bindgen(js_name = WasmReverseCursor)]
+#[derive(Clone)]
+pub struct WasmReverseCursor {
+    inner: ReverseCursor,
+}
+
+#[wasm_bindgen(js_class = WasmReverseCursor)]
+impl WasmReverseCursor {
+    #[wasm_bindgen(constructor)]
+    pub fn new(before_key: Option<Uint8Array>) -> WasmReverseCursor {
+        let inner = before_key
+            .map(|key| ReverseCursor::before_key(key.to_vec()))
+            .unwrap_or_else(ReverseCursor::end);
+        Self { inner }
+    }
+
+    #[wasm_bindgen(js_name = end)]
+    pub fn end() -> WasmReverseCursor {
+        Self {
+            inner: ReverseCursor::end(),
+        }
+    }
+
+    #[wasm_bindgen(getter, js_name = beforeKey)]
+    pub fn before_key(&self) -> JsValue {
+        self.inner
+            .before()
             .map(|key| Uint8Array::from(key).into())
             .unwrap_or(JsValue::NULL)
     }
@@ -288,6 +440,21 @@ impl WasmProllyEngine {
             .map_err(js_error)
     }
 
+    #[wasm_bindgen(js_name = parallelBatchWithStats)]
+    pub fn parallel_batch_with_stats(
+        &self,
+        tree: &WasmTree,
+        mutations: Array,
+        config: JsValue,
+    ) -> Result<Object, JsValue> {
+        let mutations = mutations_array(mutations)?;
+        let config = parallel_config_from_js(&config)?;
+        self.inner
+            .parallel_batch_with_stats(&tree.inner, mutations, &config)
+            .map_err(js_error)
+            .and_then(batch_apply_result_to_object)
+    }
+
     #[wasm_bindgen(js_name = buildFromEntries)]
     pub fn build_from_entries(&self, entries: Array) -> Result<WasmTree, JsValue> {
         let entries = entries_array(entries)?;
@@ -328,6 +495,40 @@ impl WasmProllyEngine {
             .and_then(batch_apply_result_to_object)
     }
 
+    #[wasm_bindgen(js_name = firstEntry)]
+    pub fn first_entry(&self, tree: &WasmTree) -> Result<JsValue, JsValue> {
+        self.inner
+            .first_entry(&tree.inner)
+            .map_err(js_error)
+            .and_then(optional_entry_value)
+    }
+
+    #[wasm_bindgen(js_name = lastEntry)]
+    pub fn last_entry(&self, tree: &WasmTree) -> Result<JsValue, JsValue> {
+        self.inner
+            .last_entry(&tree.inner)
+            .map_err(js_error)
+            .and_then(optional_entry_value)
+    }
+
+    #[wasm_bindgen(js_name = lowerBound)]
+    pub fn lower_bound(&self, tree: &WasmTree, key: Uint8Array) -> Result<JsValue, JsValue> {
+        let key = key.to_vec();
+        self.inner
+            .lower_bound(&tree.inner, &key)
+            .map_err(js_error)
+            .and_then(optional_entry_value)
+    }
+
+    #[wasm_bindgen(js_name = upperBound)]
+    pub fn upper_bound(&self, tree: &WasmTree, key: Uint8Array) -> Result<JsValue, JsValue> {
+        let key = key.to_vec();
+        self.inner
+            .upper_bound(&tree.inner, &key)
+            .map_err(js_error)
+            .and_then(optional_entry_value)
+    }
+
     pub fn range(
         &self,
         tree: &WasmTree,
@@ -341,6 +542,48 @@ impl WasmProllyEngine {
             .range(&tree.inner, &start, end.as_deref())
             .map_err(js_error)?;
         collect_entries(entries)
+    }
+
+    pub fn prefix(&self, tree: &WasmTree, prefix: Uint8Array) -> Result<Array, JsValue> {
+        let prefix = prefix.to_vec();
+        let entries = self.inner.prefix(&tree.inner, &prefix).map_err(js_error)?;
+        collect_entries(entries)
+    }
+
+    #[wasm_bindgen(js_name = prefixPage)]
+    pub fn prefix_page(
+        &self,
+        tree: &WasmTree,
+        prefix: Uint8Array,
+        cursor: Option<WasmRangeCursor>,
+        limit: u32,
+    ) -> Result<Object, JsValue> {
+        let prefix = prefix.to_vec();
+        let cursor = cursor
+            .map(|cursor| cursor.inner)
+            .unwrap_or_else(RangeCursor::start);
+        self.inner
+            .prefix_page(&tree.inner, &prefix, &cursor, limit as usize)
+            .map_err(js_error)
+            .and_then(range_page_to_object)
+    }
+
+    #[wasm_bindgen(js_name = prefixReversePage)]
+    pub fn prefix_reverse_page(
+        &self,
+        tree: &WasmTree,
+        prefix: Uint8Array,
+        cursor: Option<WasmReverseCursor>,
+        limit: u32,
+    ) -> Result<Object, JsValue> {
+        let prefix = prefix.to_vec();
+        let cursor = cursor
+            .map(|cursor| cursor.inner)
+            .unwrap_or_else(ReverseCursor::end);
+        self.inner
+            .prefix_reverse_page(&tree.inner, &prefix, &cursor, limit as usize)
+            .map_err(js_error)
+            .and_then(reverse_page_to_object)
     }
 
     #[wasm_bindgen(js_name = rangeAfter)]
@@ -388,23 +631,68 @@ impl WasmProllyEngine {
         let cursor = cursor
             .map(|cursor| cursor.inner)
             .unwrap_or_else(RangeCursor::start);
-        let page = self
-            .inner
+        self.inner
             .range_page(
                 &tree.inner,
                 &cursor,
                 end.as_ref().map(Uint8Array::to_vec).as_deref(),
                 limit as usize,
             )
+            .map_err(js_error)
+            .and_then(range_page_to_object)
+    }
+
+    #[wasm_bindgen(js_name = reversePage)]
+    pub fn reverse_page(
+        &self,
+        tree: &WasmTree,
+        cursor: Option<WasmReverseCursor>,
+        start: Uint8Array,
+        limit: u32,
+    ) -> Result<Object, JsValue> {
+        let cursor = cursor
+            .map(|cursor| cursor.inner)
+            .unwrap_or_else(ReverseCursor::end);
+        let start = start.to_vec();
+        self.inner
+            .reverse_page(&tree.inner, &cursor, &start, limit as usize)
+            .map_err(js_error)
+            .and_then(reverse_page_to_object)
+    }
+
+    #[wasm_bindgen(js_name = cursorWindow)]
+    pub fn cursor_window(
+        &self,
+        tree: &WasmTree,
+        key: Uint8Array,
+        end: Option<Uint8Array>,
+        limit: u32,
+    ) -> Result<Object, JsValue> {
+        let key = key.to_vec();
+        let end = end.map(|value| value.to_vec());
+        let window = self
+            .inner
+            .cursor_window(&tree.inner, &key, end.as_deref(), limit as usize)
             .map_err(js_error)?;
         let object = Object::new();
-        let entries: JsValue = entries_to_array(page.entries)?.into();
+        Reflect::set(
+            &object,
+            &"positionKey".into(),
+            &optional_bytes(window.position_key),
+        )?;
+        Reflect::set(
+            &object,
+            &"positionValue".into(),
+            &optional_bytes(window.position_value),
+        )?;
+        Reflect::set(&object, &"found".into(), &JsValue::from_bool(window.found))?;
+        let entries: JsValue = entries_to_array(window.entries)?.into();
         Reflect::set(&object, &"entries".into(), &entries)?;
-        let cursor_value = page
-            .next_cursor
-            .map(|inner| WasmRangeCursor { inner }.into())
-            .unwrap_or(JsValue::NULL);
-        Reflect::set(&object, &"nextCursor".into(), &cursor_value)?;
+        Reflect::set(
+            &object,
+            &"nextCursor".into(),
+            &range_cursor_value(window.next_cursor),
+        )?;
         Ok(object)
     }
 
@@ -526,18 +814,23 @@ impl WasmProllyEngine {
             .inner
             .structural_diff_page(&base.inner, &other.inner, cursor.as_ref(), limit as usize)
             .map_err(js_error)?;
-        let object = Object::new();
-        let diffs: JsValue = diffs_to_array(page.diffs)?.into();
-        Reflect::set(&object, &"diffs".into(), &diffs)?;
-        let next_cursor_json = page
-            .next_cursor
-            .map(|cursor| serde_json::to_string(&cursor).map_err(js_error))
-            .transpose()?
-            .map(JsValue::from)
-            .unwrap_or(JsValue::NULL);
-        Reflect::set(&object, &"nextCursorJson".into(), &next_cursor_json)?;
-        Reflect::set(&object, &"stats".into(), &diff_stats_to_object(page.stats)?)?;
-        Ok(object)
+        structural_diff_page_to_object(page)
+    }
+
+    #[wasm_bindgen(js_name = structuralDiffPageWithCursor)]
+    pub fn structural_diff_page_with_cursor(
+        &self,
+        base: &WasmTree,
+        other: &WasmTree,
+        cursor: JsValue,
+        limit: u32,
+    ) -> Result<Object, JsValue> {
+        let cursor = structural_diff_cursor_from_js(&cursor)?;
+        let page = self
+            .inner
+            .structural_diff_page(&base.inner, &other.inner, cursor.as_ref(), limit as usize)
+            .map_err(js_error)?;
+        structural_diff_page_to_object(page)
     }
 
     pub fn merge(
@@ -566,6 +859,8 @@ impl WasmProllyEngine {
         let explanation =
             self.inner
                 .merge_explain(&base.inner, &left.inner, &right.inner, resolver);
+        let trace_json = serde_json::to_string(&explanation.trace).map_err(js_error)?;
+        let trace = merge_trace_to_object(explanation.trace)?;
         let object = Object::new();
         match explanation.result {
             Ok(inner) => {
@@ -578,13 +873,8 @@ impl WasmProllyEngine {
                 Reflect::set(&object, &"error".into(), &error.to_string().into())?;
             }
         }
-        Reflect::set(
-            &object,
-            &"traceJson".into(),
-            &serde_json::to_string(&explanation.trace)
-                .map_err(js_error)?
-                .into(),
-        )?;
+        Reflect::set(&object, &"traceJson".into(), &trace_json.into())?;
+        Reflect::set(&object, &"trace".into(), &trace)?;
         Ok(object)
     }
 
@@ -698,6 +988,15 @@ impl WasmProllyEngine {
             .and_then(|stats| serde_json::to_string(&stats).map_err(js_error))
     }
 
+    #[wasm_bindgen(js_name = collectStats)]
+    pub fn collect_stats(&self, tree: &WasmTree) -> Result<JsValue, JsValue> {
+        self.inner
+            .collect_stats(&tree.inner)
+            .map_err(js_error)
+            .and_then(|stats| serde_json::to_value(stats).map_err(js_error))
+            .and_then(json_value_to_js)
+    }
+
     #[wasm_bindgen(js_name = statsDiffJson)]
     pub fn stats_diff_json(&self, before: &WasmTree, after: &WasmTree) -> Result<String, JsValue> {
         self.inner
@@ -706,12 +1005,30 @@ impl WasmProllyEngine {
             .and_then(|stats| serde_json::to_string(&stats).map_err(js_error))
     }
 
+    #[wasm_bindgen(js_name = statsDiff)]
+    pub fn stats_diff(&self, before: &WasmTree, after: &WasmTree) -> Result<JsValue, JsValue> {
+        self.inner
+            .stats_diff(&before.inner, &after.inner)
+            .map_err(js_error)
+            .and_then(|stats| serde_json::to_value(stats).map_err(js_error))
+            .and_then(json_value_to_js)
+    }
+
     #[wasm_bindgen(js_name = debugTreeJson)]
     pub fn debug_tree_json(&self, tree: &WasmTree) -> Result<String, JsValue> {
         self.inner
             .debug_tree(&tree.inner)
             .map_err(js_error)
             .and_then(|view| serde_json::to_string(&view).map_err(js_error))
+    }
+
+    #[wasm_bindgen(js_name = debugTree)]
+    pub fn debug_tree(&self, tree: &WasmTree) -> Result<JsValue, JsValue> {
+        self.inner
+            .debug_tree(&tree.inner)
+            .map_err(js_error)
+            .and_then(|view| serde_json::to_value(view).map_err(js_error))
+            .and_then(json_value_to_js)
     }
 
     #[wasm_bindgen(js_name = debugTreeText)]
@@ -734,6 +1051,19 @@ impl WasmProllyEngine {
             .and_then(|comparison| serde_json::to_string(&comparison).map_err(js_error))
     }
 
+    #[wasm_bindgen(js_name = debugCompareTrees)]
+    pub fn debug_compare_trees(
+        &self,
+        left: &WasmTree,
+        right: &WasmTree,
+    ) -> Result<JsValue, JsValue> {
+        self.inner
+            .debug_compare_trees(&left.inner, &right.inner)
+            .map_err(js_error)
+            .and_then(|comparison| serde_json::to_value(comparison).map_err(js_error))
+            .and_then(json_value_to_js)
+    }
+
     #[wasm_bindgen(js_name = debugCompareTreesText)]
     pub fn debug_compare_trees_text(
         &self,
@@ -743,6 +1073,22 @@ impl WasmProllyEngine {
         self.inner
             .debug_compare_trees(&left.inner, &right.inner)
             .map(|comparison| comparison.to_text())
+            .map_err(js_error)
+    }
+
+    #[wasm_bindgen(js_name = exportSnapshot)]
+    pub fn export_snapshot(&self, tree: &WasmTree) -> Result<WasmSnapshotBundle, JsValue> {
+        self.inner
+            .export_snapshot(&tree.inner)
+            .map(|inner| WasmSnapshotBundle { inner })
+            .map_err(js_error)
+    }
+
+    #[wasm_bindgen(js_name = importSnapshot)]
+    pub fn import_snapshot(&self, bundle: &WasmSnapshotBundle) -> Result<WasmTree, JsValue> {
+        self.inner
+            .import_snapshot(&bundle.inner)
+            .map(|inner| WasmTree { inner })
             .map_err(js_error)
     }
 }
@@ -1244,6 +1590,84 @@ fn optional_bytes(value: Option<Vec<u8>>) -> JsValue {
         .unwrap_or(JsValue::NULL)
 }
 
+fn cids_to_array(cids: Vec<Cid>) -> Array {
+    let array = Array::new();
+    for cid in cids {
+        array.push(&Uint8Array::from(cid.as_bytes()).into());
+    }
+    array
+}
+
+fn snapshot_bundle_summary_to_object(
+    summary: prolly::SnapshotBundleSummary,
+) -> Result<Object, JsValue> {
+    let object = Object::new();
+    Reflect::set(
+        &object,
+        &"formatVersion".into(),
+        &summary.format_version.into(),
+    )?;
+    Reflect::set(
+        &object,
+        &"root".into(),
+        &optional_bytes(summary.root.map(|cid| cid.as_bytes().to_vec())),
+    )?;
+    Reflect::set(
+        &object,
+        &"nodeCount".into(),
+        &summary.node_count.to_string().into(),
+    )?;
+    Reflect::set(
+        &object,
+        &"byteCount".into(),
+        &summary.byte_count.to_string().into(),
+    )?;
+    Reflect::set(
+        &object,
+        &"minNodeBytes".into(),
+        &summary.min_node_bytes.to_string().into(),
+    )?;
+    Reflect::set(
+        &object,
+        &"maxNodeBytes".into(),
+        &summary.max_node_bytes.to_string().into(),
+    )?;
+    Ok(object)
+}
+
+fn snapshot_bundle_verification_to_object(
+    verification: prolly::SnapshotBundleVerification,
+) -> Result<Object, JsValue> {
+    let object = Object::new();
+    Reflect::set(&object, &"valid".into(), &verification.valid.into())?;
+    Reflect::set(
+        &object,
+        &"summary".into(),
+        &snapshot_bundle_summary_to_object(verification.summary)?.into(),
+    )?;
+    Reflect::set(
+        &object,
+        &"reachableNodes".into(),
+        &verification.reachable_nodes.to_string().into(),
+    )?;
+    Reflect::set(
+        &object,
+        &"reachableBytes".into(),
+        &verification.reachable_bytes.to_string().into(),
+    )?;
+    Reflect::set(
+        &object,
+        &"missingCids".into(),
+        &cids_to_array(verification.missing_cids).into(),
+    )?;
+    Reflect::set(
+        &object,
+        &"extraCids".into(),
+        &cids_to_array(verification.extra_cids).into(),
+    )?;
+    Ok(object)
+}
+
 fn optional_u64_from_string(value: Option<String>) -> Result<Option<u64>, JsValue> {
     value
         .map(|value| value.parse::<u64>().map_err(js_error))
@@ -1503,6 +1927,36 @@ fn diff_page_proof_to_object(proof: DiffPageProof) -> Result<Object, JsValue> {
         &object,
         &"limit".into(),
         &JsValue::from_str(&proof.limit.to_string()),
+    )?;
+    Ok(object)
+}
+
+fn range_page_to_object(page: prolly::RangePage) -> Result<Object, JsValue> {
+    let object = Object::new();
+    Reflect::set(
+        &object,
+        &"entries".into(),
+        &entries_to_array(page.entries)?.into(),
+    )?;
+    Reflect::set(
+        &object,
+        &"nextCursor".into(),
+        &range_cursor_value(page.next_cursor),
+    )?;
+    Ok(object)
+}
+
+fn reverse_page_to_object(page: prolly::ReversePage) -> Result<Object, JsValue> {
+    let object = Object::new();
+    Reflect::set(
+        &object,
+        &"entries".into(),
+        &entries_to_array(page.entries)?.into(),
+    )?;
+    Reflect::set(
+        &object,
+        &"nextCursor".into(),
+        &reverse_cursor_value(page.next_cursor),
     )?;
     Ok(object)
 }
@@ -2049,9 +2503,143 @@ fn diffs_to_array(diffs: Vec<Diff>) -> Result<Array, JsValue> {
     Ok(out)
 }
 
+fn structural_diff_page_to_object(page: prolly::StructuralDiffPage) -> Result<Object, JsValue> {
+    let object = Object::new();
+    let diffs: JsValue = diffs_to_array(page.diffs)?.into();
+    Reflect::set(&object, &"diffs".into(), &diffs)?;
+    let next_cursor_json = page
+        .next_cursor
+        .as_ref()
+        .map(serde_json::to_string)
+        .transpose()
+        .map_err(js_error)?
+        .map(JsValue::from)
+        .unwrap_or(JsValue::NULL);
+    Reflect::set(&object, &"nextCursorJson".into(), &next_cursor_json)?;
+    let next_cursor = page
+        .next_cursor
+        .map(structural_diff_cursor_to_value)
+        .transpose()?
+        .unwrap_or(JsValue::NULL);
+    Reflect::set(&object, &"nextCursor".into(), &next_cursor)?;
+    Reflect::set(&object, &"stats".into(), &diff_stats_to_object(page.stats)?)?;
+    Ok(object)
+}
+
+fn structural_diff_cursor_to_value(cursor: StructuralDiffCursor) -> Result<JsValue, JsValue> {
+    let object = Object::new();
+    Reflect::set(&object, &"baseRoot".into(), &optional_cid(cursor.base_root))?;
+    Reflect::set(
+        &object,
+        &"otherRoot".into(),
+        &optional_cid(cursor.other_root),
+    )?;
+
+    let markers = Array::new();
+    for marker in cursor.markers {
+        markers.push(&structural_diff_marker_to_value(marker)?);
+    }
+    Reflect::set(&object, &"markers".into(), &markers.into())?;
+    Reflect::set(
+        &object,
+        &"pending".into(),
+        &diffs_to_array(cursor.pending)?.into(),
+    )?;
+    Ok(object.into())
+}
+
+fn structural_diff_marker_to_value(marker: StructuralDiffMarker) -> Result<JsValue, JsValue> {
+    let object = Object::new();
+    match marker {
+        StructuralDiffMarker::Compare {
+            base_cid,
+            other_cid,
+            span_end,
+        } => {
+            Reflect::set(&object, &"kind".into(), &"compare".into())?;
+            Reflect::set(
+                &object,
+                &"baseCid".into(),
+                &Uint8Array::from(base_cid.as_bytes()).into(),
+            )?;
+            Reflect::set(
+                &object,
+                &"otherCid".into(),
+                &Uint8Array::from(other_cid.as_bytes()).into(),
+            )?;
+            Reflect::set(&object, &"spanEnd".into(), &optional_bytes(span_end))?;
+        }
+        StructuralDiffMarker::Added { cid } => {
+            Reflect::set(&object, &"kind".into(), &"added".into())?;
+            Reflect::set(
+                &object,
+                &"cid".into(),
+                &Uint8Array::from(cid.as_bytes()).into(),
+            )?;
+        }
+        StructuralDiffMarker::Removed { cid } => {
+            Reflect::set(&object, &"kind".into(), &"removed".into())?;
+            Reflect::set(
+                &object,
+                &"cid".into(),
+                &Uint8Array::from(cid.as_bytes()).into(),
+            )?;
+        }
+    }
+    Ok(object.into())
+}
+
+fn structural_diff_cursor_from_js(
+    value: &JsValue,
+) -> Result<Option<StructuralDiffCursor>, JsValue> {
+    if value.is_null() || value.is_undefined() {
+        return Ok(None);
+    }
+    let markers = object_array(value, "markers")?
+        .iter()
+        .map(structural_diff_marker_from_js)
+        .collect::<Result<Vec<_>, _>>()?;
+    let pending = object_array(value, "pending")?
+        .iter()
+        .map(diff_from_js)
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(Some(StructuralDiffCursor {
+        base_root: object_optional_cid(value, "baseRoot")?,
+        other_root: object_optional_cid(value, "otherRoot")?,
+        markers,
+        pending,
+    }))
+}
+
+fn structural_diff_marker_from_js(value: JsValue) -> Result<StructuralDiffMarker, JsValue> {
+    let kind = object_string(&value, "kind")?;
+    match kind.as_str() {
+        "compare" => Ok(StructuralDiffMarker::Compare {
+            base_cid: object_cid(&value, "baseCid")?,
+            other_cid: object_cid(&value, "otherCid")?,
+            span_end: object_optional_uint8_array(&value, "spanEnd")?.map(|bytes| bytes.to_vec()),
+        }),
+        "added" => Ok(StructuralDiffMarker::Added {
+            cid: object_cid(&value, "cid")?,
+        }),
+        "removed" => Ok(StructuralDiffMarker::Removed {
+            cid: object_cid(&value, "cid")?,
+        }),
+        other => Err(JsValue::from_str(&format!(
+            "unknown structural diff marker kind: {other}"
+        ))),
+    }
+}
+
 fn range_cursor_value(cursor: Option<RangeCursor>) -> JsValue {
     cursor
         .map(|inner| WasmRangeCursor { inner }.into())
+        .unwrap_or(JsValue::NULL)
+}
+
+fn reverse_cursor_value(cursor: Option<ReverseCursor>) -> JsValue {
+    cursor
+        .map(|inner| WasmReverseCursor { inner }.into())
         .unwrap_or(JsValue::NULL)
 }
 
@@ -2079,6 +2667,12 @@ fn entry_object(key: Vec<u8>, value: Vec<u8>) -> Result<Object, JsValue> {
         &Uint8Array::from(value.as_slice()).into(),
     )?;
     Ok(object)
+}
+
+fn optional_entry_value(entry: Option<(Vec<u8>, Vec<u8>)>) -> Result<JsValue, JsValue> {
+    entry
+        .map(|(key, value)| entry_object(key, value).map(JsValue::from))
+        .unwrap_or(Ok(JsValue::NULL))
 }
 
 fn conflict_to_object(conflict: Conflict) -> Result<Object, JsValue> {
@@ -2143,6 +2737,203 @@ fn diff_to_object(diff: Diff) -> Result<Object, JsValue> {
         }
     }
     Ok(object)
+}
+
+fn diff_from_js(value: JsValue) -> Result<Diff, JsValue> {
+    let kind = object_string(&value, "kind")?;
+    let key = object_bytes(&value, "key")?;
+    match kind.as_str() {
+        "added" => Ok(Diff::Added {
+            key,
+            val: object_bytes(&value, "value")?,
+        }),
+        "removed" => Ok(Diff::Removed {
+            key,
+            val: object_bytes(&value, "value")?,
+        }),
+        "changed" => Ok(Diff::Changed {
+            key,
+            old: object_bytes(&value, "old")?,
+            new: object_bytes(&value, "newValue")?,
+        }),
+        other => Err(JsValue::from_str(&format!("unknown diff kind: {other}"))),
+    }
+}
+
+fn merge_trace_to_object(trace: prolly::MergeTrace) -> Result<JsValue, JsValue> {
+    let object = Object::new();
+    let events = Array::new();
+    for event in trace.events {
+        events.push(&merge_trace_event_to_object(event)?);
+    }
+    Reflect::set(&object, &"events".into(), &events.into())?;
+    Ok(object.into())
+}
+
+fn merge_trace_event_to_object(event: prolly::MergeTraceEvent) -> Result<JsValue, JsValue> {
+    let object = Object::new();
+    match event {
+        prolly::MergeTraceEvent::FastPath { reason } => {
+            Reflect::set(&object, &"kind".into(), &"fast_path".into())?;
+            Reflect::set(
+                &object,
+                &"fastPath".into(),
+                &merge_fast_path_kind(reason).into(),
+            )?;
+        }
+        prolly::MergeTraceEvent::StructuralMergeStarted => {
+            Reflect::set(&object, &"kind".into(), &"structural_merge_started".into())?;
+        }
+        prolly::MergeTraceEvent::ReusedSubtree { cid, reason } => {
+            Reflect::set(&object, &"kind".into(), &"reused_subtree".into())?;
+            Reflect::set(
+                &object,
+                &"cid".into(),
+                &Uint8Array::from(cid.as_bytes()).into(),
+            )?;
+            Reflect::set(
+                &object,
+                &"reuseReason".into(),
+                &merge_reuse_reason_kind(reason).into(),
+            )?;
+        }
+        prolly::MergeTraceEvent::RewrittenNode {
+            cid,
+            level,
+            entries,
+            first_key,
+            last_key,
+        } => {
+            Reflect::set(&object, &"kind".into(), &"rewritten_node".into())?;
+            Reflect::set(
+                &object,
+                &"cid".into(),
+                &Uint8Array::from(cid.as_bytes()).into(),
+            )?;
+            Reflect::set(&object, &"level".into(), &JsValue::from_f64(level as f64))?;
+            Reflect::set(
+                &object,
+                &"entries".into(),
+                &JsValue::from_f64(entries as f64),
+            )?;
+            if let Some(key) = first_key {
+                Reflect::set(
+                    &object,
+                    &"firstKey".into(),
+                    &Uint8Array::from(key.as_slice()).into(),
+                )?;
+            }
+            if let Some(key) = last_key {
+                Reflect::set(
+                    &object,
+                    &"lastKey".into(),
+                    &Uint8Array::from(key.as_slice()).into(),
+                )?;
+            }
+        }
+        prolly::MergeTraceEvent::ResolverCalled {
+            stage,
+            key,
+            resolution,
+        } => {
+            Reflect::set(&object, &"kind".into(), &"resolver_called".into())?;
+            Reflect::set(
+                &object,
+                &"stage".into(),
+                &merge_trace_stage_kind(stage).into(),
+            )?;
+            Reflect::set(
+                &object,
+                &"key".into(),
+                &Uint8Array::from(key.as_slice()).into(),
+            )?;
+            Reflect::set(
+                &object,
+                &"resolution".into(),
+                &merge_trace_resolution_kind(resolution).into(),
+            )?;
+        }
+        prolly::MergeTraceEvent::Fallback { reason } => {
+            Reflect::set(&object, &"kind".into(), &"fallback".into())?;
+            Reflect::set(
+                &object,
+                &"fallbackReason".into(),
+                &merge_fallback_reason_kind(reason).into(),
+            )?;
+        }
+        prolly::MergeTraceEvent::DiffTraversal { stats } => {
+            Reflect::set(&object, &"kind".into(), &"diff_traversal".into())?;
+            Reflect::set(&object, &"diffStats".into(), &diff_stats_to_object(stats)?)?;
+        }
+        prolly::MergeTraceEvent::BatchMerge {
+            right_changes,
+            mutations,
+            append_only,
+        } => {
+            Reflect::set(&object, &"kind".into(), &"batch_merge".into())?;
+            Reflect::set(
+                &object,
+                &"rightChanges".into(),
+                &JsValue::from_f64(right_changes as f64),
+            )?;
+            Reflect::set(
+                &object,
+                &"mutations".into(),
+                &JsValue::from_f64(mutations as f64),
+            )?;
+            Reflect::set(
+                &object,
+                &"appendOnly".into(),
+                &JsValue::from_bool(append_only),
+            )?;
+        }
+    }
+    Ok(object.into())
+}
+
+fn merge_fast_path_kind(kind: prolly::MergeFastPath) -> &'static str {
+    match kind {
+        prolly::MergeFastPath::BranchesEqual => "branches_equal",
+        prolly::MergeFastPath::LeftUnchanged => "left_unchanged",
+        prolly::MergeFastPath::RightUnchanged => "right_unchanged",
+    }
+}
+
+fn merge_reuse_reason_kind(kind: prolly::MergeReuseReason) -> &'static str {
+    match kind {
+        prolly::MergeReuseReason::BranchesEqual => "branches_equal",
+        prolly::MergeReuseReason::LeftUnchanged => "left_unchanged",
+        prolly::MergeReuseReason::RightUnchanged => "right_unchanged",
+        prolly::MergeReuseReason::UnchangedAfterMerge => "unchanged_after_merge",
+        prolly::MergeReuseReason::MatchesLeft => "matches_left",
+        prolly::MergeReuseReason::MatchesRight => "matches_right",
+    }
+}
+
+fn merge_trace_stage_kind(kind: prolly::MergeTraceStage) -> &'static str {
+    match kind {
+        prolly::MergeTraceStage::Structural => "structural",
+        prolly::MergeTraceStage::Batch => "batch",
+    }
+}
+
+fn merge_trace_resolution_kind(kind: prolly::MergeResolutionKind) -> &'static str {
+    match kind {
+        prolly::MergeResolutionKind::Value => "value",
+        prolly::MergeResolutionKind::Delete => "delete",
+        prolly::MergeResolutionKind::Unresolved => "unresolved",
+    }
+}
+
+fn merge_fallback_reason_kind(kind: prolly::MergeFallbackReason) -> &'static str {
+    match kind {
+        prolly::MergeFallbackReason::MissingRoot => "missing_root",
+        prolly::MergeFallbackReason::ShapeMismatch => "shape_mismatch",
+        prolly::MergeFallbackReason::NodeLengthMismatch => "node_length_mismatch",
+        prolly::MergeFallbackReason::ChildFallback => "child_fallback",
+        prolly::MergeFallbackReason::DeleteResolution => "delete_resolution",
+        prolly::MergeFallbackReason::DiffBatch => "diff_batch",
+    }
 }
 
 fn batch_apply_result_to_object(result: BatchApplyResult) -> Result<Object, JsValue> {
@@ -2267,6 +3058,32 @@ fn diff_stats_to_object(stats: prolly::DiffTraversalStats) -> Result<JsValue, Js
     Ok(object.into())
 }
 
+fn json_value_to_js(value: Value) -> Result<JsValue, JsValue> {
+    match value {
+        Value::Null => Ok(JsValue::NULL),
+        Value::Bool(value) => Ok(JsValue::from_bool(value)),
+        Value::Number(value) => value
+            .as_f64()
+            .map(JsValue::from_f64)
+            .ok_or_else(|| JsValue::from_str("JSON number is not representable as f64")),
+        Value::String(value) => Ok(JsValue::from_str(&value)),
+        Value::Array(values) => {
+            let array = Array::new();
+            for value in values {
+                array.push(&json_value_to_js(value)?);
+            }
+            Ok(array.into())
+        }
+        Value::Object(values) => {
+            let object = Object::new();
+            for (key, value) in values {
+                Reflect::set(&object, &JsValue::from_str(&key), &json_value_to_js(value)?)?;
+            }
+            Ok(object.into())
+        }
+    }
+}
+
 fn resolver_from_name(name: Option<String>) -> Result<Option<Resolver>, JsValue> {
     let Some(name) = name else {
         return Ok(None);
@@ -2303,6 +3120,57 @@ fn object_optional_uint8_array(
     object_optional_value(value, field)?
         .map(|field_value| uint8_array(field_value, &format!("{field} must be a Uint8Array")))
         .transpose()
+}
+
+fn object_cid(value: &JsValue, field: &str) -> Result<Cid, JsValue> {
+    raw_cid_from_bytes(object_uint8_array(value, field)?.to_vec(), field)
+}
+
+fn object_optional_cid(value: &JsValue, field: &str) -> Result<Option<Cid>, JsValue> {
+    object_optional_uint8_array(value, field)?
+        .map(|bytes| raw_cid_from_bytes(bytes.to_vec(), field))
+        .transpose()
+}
+
+fn optional_cid(cid: Option<Cid>) -> JsValue {
+    cid.map(|value| Uint8Array::from(value.as_bytes()).into())
+        .unwrap_or(JsValue::NULL)
+}
+
+fn raw_cid_from_bytes(bytes: Vec<u8>, field: &str) -> Result<Cid, JsValue> {
+    let bytes: [u8; 32] = bytes
+        .try_into()
+        .map_err(|_| JsValue::from_str(&format!("{field} must be a 32-byte CID")))?;
+    Ok(Cid(bytes))
+}
+
+fn snapshot_bundle_nodes_from_array(values: Array) -> Result<Vec<SnapshotBundleNode>, JsValue> {
+    values.iter().map(snapshot_bundle_node_from_js).collect()
+}
+
+fn snapshot_bundle_node_from_js(value: JsValue) -> Result<SnapshotBundleNode, JsValue> {
+    let cid = raw_cid_from_bytes(object_uint8_array(&value, "cid")?.to_vec(), "cid")?;
+    let bytes = object_uint8_array(&value, "bytes")?.to_vec();
+    Ok(SnapshotBundleNode { cid, bytes })
+}
+
+fn snapshot_bundle_nodes_to_array(nodes: &[SnapshotBundleNode]) -> Result<Array, JsValue> {
+    let out = Array::new();
+    for node in nodes {
+        let object = Object::new();
+        Reflect::set(
+            &object,
+            &"cid".into(),
+            &Uint8Array::from(node.cid.as_bytes()).into(),
+        )?;
+        Reflect::set(
+            &object,
+            &"bytes".into(),
+            &Uint8Array::from(node.bytes.as_slice()).into(),
+        )?;
+        out.push(&object.into());
+    }
+    Ok(out)
 }
 
 fn object_array(value: &JsValue, field: &str) -> Result<Array, JsValue> {

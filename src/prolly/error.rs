@@ -210,6 +210,8 @@ pub enum Error {
     UnsortedInput { previous: Vec<u8>, next: Vec<u8> },
     /// A GC retention policy referenced named roots that were not present.
     MissingNamedRoots { names: Vec<Vec<u8>> },
+    /// A portable snapshot bundle is malformed or not self-contained.
+    InvalidSnapshotBundle(String),
 }
 
 impl std::fmt::Display for Error {
@@ -236,6 +238,9 @@ impl std::fmt::Display for Error {
             ),
             Error::MissingNamedRoots { names } => {
                 write!(f, "missing named roots for retention policy: {:?}", names)
+            }
+            Error::InvalidSnapshotBundle(message) => {
+                write!(f, "invalid snapshot bundle: {message}")
             }
         }
     }

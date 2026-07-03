@@ -784,6 +784,14 @@ module Prolly
       future { @engine.range_page(tree, cursor, finish, limit) }
     end
 
+    def reverse_page(tree, cursor, start, limit)
+      future { @engine.reverse_page(tree, cursor, start, limit) }
+    end
+
+    def prefix_reverse_page(tree, prefix, cursor, limit)
+      future { @engine.prefix_reverse_page(tree, prefix, cursor, limit) }
+    end
+
     def diff(base, other)
       future { @engine.diff(base, other) }
     end

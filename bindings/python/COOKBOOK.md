@@ -84,6 +84,15 @@ while True:
         break
     cursor = page.next_cursor
 
+reverse_cursor = None
+while True:
+    page = engine.reverse_page(tree, reverse_cursor, b"", 100)
+    for entry in page.entries:
+        handle_newest_first(entry.key, entry.value)
+    if page.next_cursor is None:
+        break
+    reverse_cursor = page.next_cursor
+
 diffs = engine.diff_from_cursor(
     old_tree,
     new_tree,

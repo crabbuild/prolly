@@ -9,6 +9,20 @@ const PRIME64_5 = 2870177450012600261n;
 
 export type EncodingKind = "raw" | "cbor" | "json" | "custom";
 
+export interface EncodingRecord {
+  kind: EncodingKind;
+  customName?: string;
+}
+
+export interface LargeValueConfig {
+  inlineThreshold: number;
+}
+
+export interface ParallelConfig {
+  maxThreads: number;
+  parallelismThreshold: number;
+}
+
 export interface RangeBounds {
   start: Uint8Array;
   end?: Uint8Array;
@@ -94,6 +108,58 @@ export class Config {
       nodeCacheMaxBytes: fixture.node_cache_max_bytes ?? undefined,
     });
   }
+}
+
+export function encodingRaw(): EncodingRecord {
+  return { kind: "raw" };
+}
+
+export function encodingCbor(): EncodingRecord {
+  return { kind: "cbor" };
+}
+
+export function encodingJson(): EncodingRecord {
+  return { kind: "json" };
+}
+
+export function encodingCustom(name: string): EncodingRecord {
+  return { kind: "custom", customName: name };
+}
+
+export function treeConfig(options: {
+  minChunkSize: number;
+  maxChunkSize: number;
+  chunkingFactor: number;
+  hashSeed: bigint;
+  encoding: EncodingRecord;
+  nodeCacheMaxNodes?: number;
+  nodeCacheMaxBytes?: number;
+}): Config {
+  if (options.encoding.kind === "custom" && options.encoding.customName == null) {
+    throw new Error("custom encoding requires customName");
+  }
+  return new Config({
+    minChunkSize: options.minChunkSize,
+    maxChunkSize: options.maxChunkSize,
+    chunkingFactor: options.chunkingFactor,
+    hashSeed: options.hashSeed,
+    encoding: options.encoding.kind,
+    customEncodingName: options.encoding.customName,
+    nodeCacheMaxNodes: options.nodeCacheMaxNodes,
+    nodeCacheMaxBytes: options.nodeCacheMaxBytes,
+  });
+}
+
+export function largeValueConfig(inlineThreshold: number): LargeValueConfig {
+  return { inlineThreshold };
+}
+
+export function parallelConfig(maxThreads: number, parallelismThreshold: number): ParallelConfig {
+  return { maxThreads, parallelismThreshold };
+}
+
+export function parallelConfigSequential(): ParallelConfig {
+  return { maxThreads: 1, parallelismThreshold: Number.MAX_SAFE_INTEGER };
 }
 
 export class ProllyNode {

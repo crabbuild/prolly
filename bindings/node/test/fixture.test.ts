@@ -15,6 +15,10 @@ import {
   changedSpanForPrefix,
   changedSpanFromKey,
   decodeSegments,
+  encodingCbor,
+  encodingCustom,
+  encodingJson,
+  encodingRaw,
   encodeSegment,
   fromHex,
   i128Key,
@@ -22,9 +26,13 @@ import {
   isBoundaryConfig,
   keyFromPrefixedSegments,
   keyFromSegments,
+  largeValueConfig,
+  parallelConfig,
+  parallelConfigSequential,
   prefixEnd,
   prefixRange,
   toHex,
+  treeConfig,
   u128Key,
   u64Key,
 } from "../src/index.ts";
@@ -45,6 +53,35 @@ test("node fixtures decode, encode, and hash", () => {
 
 test("boundary and key fixtures match Rust", () => {
   const loaded = fixtures();
+  assert.equal(encodingRaw().kind, "raw");
+  assert.equal(encodingCbor().kind, "cbor");
+  assert.equal(encodingJson().kind, "json");
+  const customEncoding = encodingCustom("postcard");
+  assert.deepEqual(customEncoding, { kind: "custom", customName: "postcard" });
+  const constructedConfig = treeConfig({
+    minChunkSize: 2,
+    maxChunkSize: 64,
+    chunkingFactor: 32,
+    hashSeed: 7n,
+    encoding: customEncoding,
+    nodeCacheMaxNodes: 16,
+    nodeCacheMaxBytes: 4096,
+  });
+  assert.equal(constructedConfig.encoding, "custom");
+  assert.equal(constructedConfig.customEncodingName, "postcard");
+  assert.throws(() =>
+    treeConfig({
+      minChunkSize: 2,
+      maxChunkSize: 64,
+      chunkingFactor: 32,
+      hashSeed: 7n,
+      encoding: { kind: "custom" },
+    }),
+  );
+  assert.deepEqual(largeValueConfig(8), { inlineThreshold: 8 });
+  assert.deepEqual(parallelConfig(2, 24), { maxThreads: 2, parallelismThreshold: 24 });
+  assert.equal(parallelConfigSequential().maxThreads, 1);
+
   for (const fixture of loaded.boundary_fixtures) {
     assert.equal(
       isBoundaryConfig(

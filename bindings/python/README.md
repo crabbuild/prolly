@@ -32,20 +32,24 @@ PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" \
 
 The current Rust-backed surface includes memory, file, and SQLite engines;
 CRUD, batch, batch-with-stats, Rust bulk-build, sorted bulk-build,
-append-batch, append-batch-with-stats, and parallel batch operations; eager
-range, range-after/cursor resumption with cursor constructors, cursor-resumed diffs, and paged
+append-batch, append-batch-with-stats, parallel batch, and parallel-batch-with-stats operations; eager
+range, prefix scans/pages, ordered boundary helpers, reverse and prefix-reverse pages, range-after/cursor resumption with cursor constructors, cursor windows, cursor-resumed diffs, and paged
 range/diff; paged
 three-way conflict inspection; merge with built-in resolver names and merge
-explanations; Python `MergeResolverCallback` custom resolvers for full-tree,
+explanations with typed trace events plus JSON trace compatibility; Python
+`MergeResolverCallback` custom resolvers for full-tree,
 range-limited, and prefix-limited merges; merge policy registries with named
-and Python callback resolvers; Python `HostStoreCallback` custom stores;
+and Python callback resolvers; mutation constructors; merge/CRDT resolution constructors and built-in resolver helper functions; Python `HostStoreCallback` custom stores;
 named root
 publish/load/list/manifest-list/delete/CAS; root manifest bytes; node/CID helpers; key
 helpers, including prefix bounds, segment encoding/decoding, and composite key
-construction; boundary
-checks; range-limited diffs; structural diff cursor pages;
-stats/debug JSON; GC planning and sweeping, including named-root retention
-policy constructors; store-to-store missing-node sync; cache and metrics inspection;
+construction; encoding helpers and tree/large-value/parallel config
+constructors; boundary
+checks; range-limited diffs; structural diff cursor pages with typed resume;
+typed stats/debug records plus stats/debug JSON; GC planning and sweeping, including named-root retention
+policy constructors; store-to-store missing-node sync; portable snapshot bundle
+export/import plus canonical bundle bytes, digests, summaries, and self-contained
+verification; cache and metrics inspection;
 changed-span constructors for performance hints; optional performance hints; CRDT merge presets and `CrdtResolverCallback`
 custom resolvers; tombstone envelopes; versioned values with schema
 match/require guards; memory/file blob

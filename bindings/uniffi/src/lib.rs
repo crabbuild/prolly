@@ -7,18 +7,24 @@ use prolly::{
     self, is_boundary_config as core_is_boundary_config, AuthenticatedProofBundleVerification,
     AuthenticatedProofEnvelope, AuthenticatedProofEnvelopeVerification, BatchApplyResult,
     BatchApplyStats, BatchOp, BlobGcPlan, BlobGcReachability, BlobGcSweep, BlobRef, BlobStore,
-    BlobStoreScan, ChangedSpan, ChangedSpanHint, Cid, Config, Conflict, CrdtConfig, DeletePolicy,
-    Diff, DiffPageProof, DiffPageProofVerification, DiffTraversalStats, Encoding, FileBlobStore,
-    FileNodeStore, GcPlan, GcReachability, GcSweep, KeyBuilder, KeyProof, KeyProofVerification,
-    LargeValueConfig, ManifestStore, ManifestStoreScan, ManifestUpdate, MemBlobStore, MemStore,
-    MergePolicyFn, MergePolicyRegistry as CoreMergePolicyRegistry, MissingNodeCopy,
+    BlobStoreScan, ChangedSpan, ChangedSpanHint, Cid, Config, Conflict, CrdtConfig, CursorWindow,
+    DeletePolicy, Diff, DiffPageProof, DiffPageProofVerification, DiffTraversalStats, Encoding,
+    FileBlobStore, FileNodeStore, GcPlan, GcReachability, GcSweep, KeyBuilder, KeyProof,
+    KeyProofVerification, LargeValueConfig, ManifestStore, ManifestStoreScan, ManifestUpdate,
+    MemBlobStore, MemStore, MergeFallbackReason, MergeFastPath, MergePolicyFn,
+    MergePolicyRegistry as CoreMergePolicyRegistry, MergeResolutionKind as CoreMergeResolutionKind,
+    MergeReuseReason, MergeTrace, MergeTraceEvent, MergeTraceStage, MissingNodeCopy,
     MissingNodePlan, MultiKeyProof, MultiKeyProofVerification, MultiValueSet, Mutation,
     NamedRootManifest, NamedRootRetention, NamedRootUpdate, Node, NodeStoreScan, ParallelConfig,
     Prolly, ProllyMetricsSnapshot, ProofBundleSummary, ProofBundleVerification, ProvedDiffPage,
     ProvedRangePage, RangeCursor, RangePageProof, RangePageProofVerification, RangeProof,
-    RangeProofVerification, Resolver, RootManifest, SnapshotNamespace, SnapshotRoot,
-    SnapshotSelection, Store, StructuralDiffCursor, StructuralDiffPage, TimestampedValue,
-    Tombstone, Tree, ValueRef, VersionedValue,
+    RangeProofVerification, Resolver, ReverseCursor, RootManifest,
+    SnapshotBundle as CoreSnapshotBundle, SnapshotBundleNode as CoreSnapshotBundleNode,
+    SnapshotBundleSummary, SnapshotBundleVerification, SnapshotNamespace, SnapshotRoot,
+    SnapshotSelection, StatsComparison, StatsDiff, StatsPercentageChange, Store,
+    StructuralDiffCursor, StructuralDiffMarker, StructuralDiffPage, TimestampedValue, Tombstone,
+    Tree, TreeDebugComparedNode, TreeDebugComparison, TreeDebugComparisonLevel, TreeDebugLevel,
+    TreeDebugNode, TreeDebugNodeStatus, TreeDebugView, TreeStats, ValueRef, VersionedValue,
 };
 use serde::Serialize;
 use thiserror::Error;
@@ -151,6 +157,39 @@ pub struct TreeRecord {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct SnapshotBundleNodeRecord {
+    pub cid: Vec<u8>,
+    pub bytes: Vec<u8>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct SnapshotBundleRecord {
+    pub format_version: u32,
+    pub tree: TreeRecord,
+    pub nodes: Vec<SnapshotBundleNodeRecord>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct SnapshotBundleSummaryRecord {
+    pub format_version: u32,
+    pub root: Option<Vec<u8>>,
+    pub node_count: u64,
+    pub byte_count: u64,
+    pub min_node_bytes: u64,
+    pub max_node_bytes: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct SnapshotBundleVerificationRecord {
+    pub valid: bool,
+    pub summary: SnapshotBundleSummaryRecord,
+    pub reachable_nodes: u64,
+    pub reachable_bytes: u64,
+    pub missing_cids: Vec<Vec<u8>>,
+    pub extra_cids: Vec<Vec<u8>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
 pub struct EntryRecord {
     pub key: Vec<u8>,
     pub value: Vec<u8>,
@@ -193,6 +232,252 @@ pub struct BatchApplyResultRecord {
     pub stats: BatchApplyStatsRecord,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct TreeStatsLevelU64Record {
+    pub level: u8,
+    pub value: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, uniffi::Record)]
+pub struct TreeStatsLevelF64Record {
+    pub level: u8,
+    pub value: f64,
+}
+
+#[derive(Clone, Debug, PartialEq, uniffi::Record)]
+pub struct TreeStatsRecord {
+    pub num_nodes: u64,
+    pub num_leaves: u64,
+    pub num_internal_nodes: u64,
+    pub tree_height: u8,
+    pub total_key_value_pairs: u64,
+    pub total_tree_size_bytes: u64,
+    pub avg_node_size_bytes: f64,
+    pub min_node_size_bytes: u64,
+    pub max_node_size_bytes: u64,
+    pub avg_entries_per_node: f64,
+    pub nodes_per_level: Vec<TreeStatsLevelU64Record>,
+    pub avg_node_size_per_level: Vec<TreeStatsLevelF64Record>,
+    pub avg_entries_per_level: Vec<TreeStatsLevelF64Record>,
+    pub min_entries_per_level: Vec<TreeStatsLevelU64Record>,
+    pub max_entries_per_level: Vec<TreeStatsLevelU64Record>,
+    pub avg_fanout: f64,
+    pub min_fanout: u64,
+    pub max_fanout: u64,
+    pub avg_fill_factor: f64,
+    pub avg_leaf_fill_factor: f64,
+    pub avg_internal_fill_factor: f64,
+    pub avg_key_size_bytes: f64,
+    pub avg_value_size_bytes: f64,
+    pub min_key_size_bytes: u64,
+    pub max_key_size_bytes: u64,
+    pub min_value_size_bytes: u64,
+    pub max_value_size_bytes: u64,
+    pub total_keys_size_bytes: u64,
+    pub total_values_size_bytes: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, uniffi::Record)]
+pub struct StatsDiffRecord {
+    pub num_nodes_diff: i64,
+    pub num_leaves_diff: i64,
+    pub num_internal_nodes_diff: i64,
+    pub tree_height_diff: i8,
+    pub total_key_value_pairs_diff: i64,
+    pub total_tree_size_bytes_diff: i64,
+    pub avg_node_size_bytes_diff: f64,
+    pub min_node_size_bytes_diff: i64,
+    pub max_node_size_bytes_diff: i64,
+    pub avg_entries_per_node_diff: f64,
+    pub avg_fanout_diff: f64,
+    pub min_fanout_diff: i64,
+    pub max_fanout_diff: i64,
+    pub avg_fill_factor_diff: f64,
+    pub avg_leaf_fill_factor_diff: f64,
+    pub avg_internal_fill_factor_diff: f64,
+    pub avg_key_size_bytes_diff: f64,
+    pub avg_value_size_bytes_diff: f64,
+    pub min_key_size_bytes_diff: i64,
+    pub max_key_size_bytes_diff: i64,
+    pub min_value_size_bytes_diff: i64,
+    pub max_value_size_bytes_diff: i64,
+    pub total_keys_size_bytes_diff: i64,
+    pub total_values_size_bytes_diff: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, uniffi::Record)]
+pub struct StatsPercentageChangeRecord {
+    pub num_nodes_pct: f64,
+    pub num_leaves_pct: f64,
+    pub num_internal_nodes_pct: f64,
+    pub tree_height_pct: f64,
+    pub total_key_value_pairs_pct: f64,
+    pub total_tree_size_bytes_pct: f64,
+    pub avg_node_size_bytes_pct: f64,
+    pub min_node_size_bytes_pct: f64,
+    pub max_node_size_bytes_pct: f64,
+    pub avg_entries_per_node_pct: f64,
+    pub avg_fanout_pct: f64,
+    pub min_fanout_pct: f64,
+    pub max_fanout_pct: f64,
+    pub avg_fill_factor_pct: f64,
+    pub avg_leaf_fill_factor_pct: f64,
+    pub avg_internal_fill_factor_pct: f64,
+    pub avg_key_size_bytes_pct: f64,
+    pub avg_value_size_bytes_pct: f64,
+    pub min_key_size_bytes_pct: f64,
+    pub max_key_size_bytes_pct: f64,
+    pub min_value_size_bytes_pct: f64,
+    pub max_value_size_bytes_pct: f64,
+    pub total_keys_size_bytes_pct: f64,
+    pub total_values_size_bytes_pct: f64,
+}
+
+#[derive(Clone, Debug, PartialEq, uniffi::Record)]
+pub struct StatsComparisonRecord {
+    pub before: TreeStatsRecord,
+    pub after: TreeStatsRecord,
+    pub absolute: StatsDiffRecord,
+    pub percentage: StatsPercentageChangeRecord,
+}
+
+#[derive(Clone, Debug, PartialEq, uniffi::Record)]
+pub struct TreeDebugNodeRecord {
+    pub cid: Vec<u8>,
+    pub leaf: bool,
+    pub level: u8,
+    pub entry_count: u64,
+    pub max_entries: u64,
+    pub fill_factor: f64,
+    pub encoded_bytes: u64,
+    pub first_key: Option<Vec<u8>>,
+    pub last_key: Option<Vec<u8>>,
+}
+
+#[derive(Clone, Debug, PartialEq, uniffi::Record)]
+pub struct TreeDebugLevelRecord {
+    pub level: u8,
+    pub nodes: Vec<TreeDebugNodeRecord>,
+}
+
+#[derive(Clone, Debug, PartialEq, uniffi::Record)]
+pub struct TreeDebugViewRecord {
+    pub levels: Vec<TreeDebugLevelRecord>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, uniffi::Enum)]
+pub enum TreeDebugNodeStatusKind {
+    Shared,
+    LeftOnly,
+    RightOnly,
+}
+
+#[derive(Clone, Debug, PartialEq, uniffi::Record)]
+pub struct TreeDebugComparedNodeRecord {
+    pub status: TreeDebugNodeStatusKind,
+    pub node: TreeDebugNodeRecord,
+}
+
+#[derive(Clone, Debug, PartialEq, uniffi::Record)]
+pub struct TreeDebugComparisonLevelRecord {
+    pub level: u8,
+    pub shared_nodes: u64,
+    pub left_only_nodes: u64,
+    pub right_only_nodes: u64,
+    pub shared_bytes: u64,
+    pub left_only_bytes: u64,
+    pub right_only_bytes: u64,
+    pub nodes: Vec<TreeDebugComparedNodeRecord>,
+}
+
+#[derive(Clone, Debug, PartialEq, uniffi::Record)]
+pub struct TreeDebugComparisonRecord {
+    pub shared_nodes: u64,
+    pub left_only_nodes: u64,
+    pub right_only_nodes: u64,
+    pub shared_bytes: u64,
+    pub left_only_bytes: u64,
+    pub right_only_bytes: u64,
+    pub levels: Vec<TreeDebugComparisonLevelRecord>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, uniffi::Enum)]
+pub enum MergeTraceEventKind {
+    FastPath,
+    StructuralMergeStarted,
+    ReusedSubtree,
+    RewrittenNode,
+    ResolverCalled,
+    Fallback,
+    DiffTraversal,
+    BatchMerge,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, uniffi::Enum)]
+pub enum MergeFastPathKind {
+    BranchesEqual,
+    LeftUnchanged,
+    RightUnchanged,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, uniffi::Enum)]
+pub enum MergeReuseReasonKind {
+    BranchesEqual,
+    LeftUnchanged,
+    RightUnchanged,
+    UnchangedAfterMerge,
+    MatchesLeft,
+    MatchesRight,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, uniffi::Enum)]
+pub enum MergeTraceStageKind {
+    Structural,
+    Batch,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, uniffi::Enum)]
+pub enum MergeTraceResolutionKind {
+    Value,
+    Delete,
+    Unresolved,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, uniffi::Enum)]
+pub enum MergeFallbackReasonKind {
+    MissingRoot,
+    ShapeMismatch,
+    NodeLengthMismatch,
+    ChildFallback,
+    DeleteResolution,
+    DiffBatch,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct MergeTraceEventRecord {
+    pub kind: MergeTraceEventKind,
+    pub fast_path: Option<MergeFastPathKind>,
+    pub cid: Option<Vec<u8>>,
+    pub reuse_reason: Option<MergeReuseReasonKind>,
+    pub level: Option<u64>,
+    pub entries: Option<u64>,
+    pub first_key: Option<Vec<u8>>,
+    pub last_key: Option<Vec<u8>>,
+    pub stage: Option<MergeTraceStageKind>,
+    pub key: Option<Vec<u8>>,
+    pub resolution: Option<MergeTraceResolutionKind>,
+    pub fallback_reason: Option<MergeFallbackReasonKind>,
+    pub diff_stats: Option<DiffTraversalStatsRecord>,
+    pub right_changes: Option<u64>,
+    pub mutations: Option<u64>,
+    pub append_only: Option<bool>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct MergeTraceRecord {
+    pub events: Vec<MergeTraceEventRecord>,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, uniffi::Enum)]
 pub enum DiffKind {
     Added,
@@ -216,6 +501,26 @@ pub struct RangeCursorRecord {
 
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
 pub struct RangePageRecord {
+    pub entries: Vec<EntryRecord>,
+    pub next_cursor: Option<RangeCursorRecord>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct ReverseCursorRecord {
+    pub before_key: Option<Vec<u8>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct ReversePageRecord {
+    pub entries: Vec<EntryRecord>,
+    pub next_cursor: Option<ReverseCursorRecord>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct CursorWindowRecord {
+    pub position_key: Option<Vec<u8>>,
+    pub position_value: Option<Vec<u8>>,
+    pub found: bool,
     pub entries: Vec<EntryRecord>,
     pub next_cursor: Option<RangeCursorRecord>,
 }
@@ -363,6 +668,7 @@ pub struct MergeExplanationRecord {
     pub result: Option<TreeRecord>,
     pub error: Option<String>,
     pub trace_json: String,
+    pub trace: MergeTraceRecord,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
@@ -715,11 +1021,36 @@ pub struct DiffTraversalStatsRecord {
     pub emitted_diffs: u64,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, uniffi::Enum)]
+pub enum StructuralDiffMarkerKind {
+    Compare,
+    Added,
+    Removed,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct StructuralDiffMarkerRecord {
+    pub kind: StructuralDiffMarkerKind,
+    pub base_cid: Option<Vec<u8>>,
+    pub other_cid: Option<Vec<u8>>,
+    pub span_end: Option<Vec<u8>>,
+    pub cid: Option<Vec<u8>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct StructuralDiffCursorRecord {
+    pub base_root: Option<Vec<u8>>,
+    pub other_root: Option<Vec<u8>>,
+    pub markers: Vec<StructuralDiffMarkerRecord>,
+    pub pending: Vec<DiffRecord>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
 pub struct StructuralDiffPageRecord {
     pub diffs: Vec<DiffRecord>,
     pub next_cursor_json: Option<String>,
     pub stats: DiffTraversalStatsRecord,
+    pub next_cursor: Option<StructuralDiffCursorRecord>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
@@ -885,6 +1216,7 @@ impl From<prolly::Error> for ProllyBindingError {
             prolly::Error::MissingNamedRoots { names } => Self::InvalidArgument {
                 message: format!("missing named roots for retention policy: {names:?}"),
             },
+            prolly::Error::InvalidSnapshotBundle(message) => Self::InvalidArgument { message },
         }
     }
 }
@@ -1380,6 +1712,54 @@ impl ProllyEngine {
         })
     }
 
+    pub fn first_entry(&self, tree: TreeRecord) -> Result<Option<EntryRecord>, ProllyBindingError> {
+        let tree = tree.try_into()?;
+        with_engine!(self, engine, {
+            engine
+                .first_entry(&tree)
+                .map(|entry| entry.map(entry_record))
+                .map_err(Into::into)
+        })
+    }
+
+    pub fn last_entry(&self, tree: TreeRecord) -> Result<Option<EntryRecord>, ProllyBindingError> {
+        let tree = tree.try_into()?;
+        with_engine!(self, engine, {
+            engine
+                .last_entry(&tree)
+                .map(|entry| entry.map(entry_record))
+                .map_err(Into::into)
+        })
+    }
+
+    pub fn lower_bound(
+        &self,
+        tree: TreeRecord,
+        key: Vec<u8>,
+    ) -> Result<Option<EntryRecord>, ProllyBindingError> {
+        let tree = tree.try_into()?;
+        with_engine!(self, engine, {
+            engine
+                .lower_bound(&tree, &key)
+                .map(|entry| entry.map(entry_record))
+                .map_err(Into::into)
+        })
+    }
+
+    pub fn upper_bound(
+        &self,
+        tree: TreeRecord,
+        key: Vec<u8>,
+    ) -> Result<Option<EntryRecord>, ProllyBindingError> {
+        let tree = tree.try_into()?;
+        with_engine!(self, engine, {
+            engine
+                .upper_bound(&tree, &key)
+                .map(|entry| entry.map(entry_record))
+                .map_err(Into::into)
+        })
+    }
+
     pub fn get_many(
         &self,
         tree: TreeRecord,
@@ -1683,6 +2063,26 @@ impl ProllyEngine {
         })
     }
 
+    pub fn parallel_batch_with_stats(
+        &self,
+        tree: TreeRecord,
+        mutations: Vec<MutationRecord>,
+        config: ParallelConfigRecord,
+    ) -> Result<BatchApplyResultRecord, ProllyBindingError> {
+        let tree = tree.try_into()?;
+        let mutations = mutations
+            .into_iter()
+            .map(Mutation::try_from)
+            .collect::<Result<Vec<_>, _>>()?;
+        let config = ParallelConfig::try_from(config)?;
+        with_engine!(self, engine, {
+            engine
+                .parallel_batch_with_stats(&tree, mutations, &config)
+                .map(BatchApplyResultRecord::from)
+                .map_err(Into::into)
+        })
+    }
+
     pub fn range(
         &self,
         tree: TreeRecord,
@@ -1698,6 +2098,38 @@ impl ProllyEngine {
                     .map_err(Into::into)
             })
             .collect()
+        })
+    }
+
+    pub fn prefix(
+        &self,
+        tree: TreeRecord,
+        prefix: Vec<u8>,
+    ) -> Result<Vec<EntryRecord>, ProllyBindingError> {
+        let tree = tree.try_into()?;
+        with_engine!(self, engine, {
+            let iter = engine.prefix(&tree, &prefix)?;
+            iter.map(|entry| entry.map(entry_record).map_err(Into::into))
+                .collect()
+        })
+    }
+
+    pub fn prefix_page(
+        &self,
+        tree: TreeRecord,
+        prefix: Vec<u8>,
+        cursor: Option<RangeCursorRecord>,
+        limit: u64,
+    ) -> Result<RangePageRecord, ProllyBindingError> {
+        let tree = tree.try_into()?;
+        let cursor = cursor
+            .map(RangeCursor::from)
+            .unwrap_or_else(RangeCursor::start);
+        let limit = to_usize(limit, "limit")?;
+        with_engine!(self, engine, {
+            engine
+                .prefix_page(&tree, &prefix, &cursor, limit)
+                .map(RangePageRecord::try_from)?
         })
     }
 
@@ -1795,6 +2227,61 @@ impl ProllyEngine {
             engine
                 .range_page(&tree, &cursor, end.as_deref(), limit)
                 .map(RangePageRecord::try_from)?
+        })
+    }
+
+    pub fn reverse_page(
+        &self,
+        tree: TreeRecord,
+        cursor: Option<ReverseCursorRecord>,
+        start: Vec<u8>,
+        limit: u64,
+    ) -> Result<ReversePageRecord, ProllyBindingError> {
+        let tree = tree.try_into()?;
+        let cursor = cursor
+            .map(ReverseCursor::from)
+            .unwrap_or_else(ReverseCursor::end);
+        let limit = to_usize(limit, "limit")?;
+        with_engine!(self, engine, {
+            engine
+                .reverse_page(&tree, &cursor, &start, limit)
+                .map(ReversePageRecord::try_from)?
+        })
+    }
+
+    pub fn prefix_reverse_page(
+        &self,
+        tree: TreeRecord,
+        prefix: Vec<u8>,
+        cursor: Option<ReverseCursorRecord>,
+        limit: u64,
+    ) -> Result<ReversePageRecord, ProllyBindingError> {
+        let tree = tree.try_into()?;
+        let cursor = cursor
+            .map(ReverseCursor::from)
+            .unwrap_or_else(ReverseCursor::end);
+        let limit = to_usize(limit, "limit")?;
+        with_engine!(self, engine, {
+            engine
+                .prefix_reverse_page(&tree, &prefix, &cursor, limit)
+                .map(ReversePageRecord::try_from)?
+        })
+    }
+
+    pub fn cursor_window(
+        &self,
+        tree: TreeRecord,
+        key: Vec<u8>,
+        end: Option<Vec<u8>>,
+        limit: u64,
+    ) -> Result<CursorWindowRecord, ProllyBindingError> {
+        let tree = tree.try_into()?;
+        let limit = to_usize(limit, "limit")?;
+        with_engine!(self, engine, {
+            engine
+                .cursor_window(&tree, &key, end.as_deref(), limit)
+                .map(CursorWindowRecord::from)
+                .map_err(Into::into)
         })
     }
 
@@ -2177,6 +2664,23 @@ impl ProllyEngine {
         })
     }
 
+    pub fn structural_diff_page_with_cursor(
+        &self,
+        base: TreeRecord,
+        other: TreeRecord,
+        cursor: Option<StructuralDiffCursorRecord>,
+        limit: u64,
+    ) -> Result<StructuralDiffPageRecord, ProllyBindingError> {
+        let base = base.try_into()?;
+        let other = other.try_into()?;
+        let cursor = cursor.map(StructuralDiffCursor::try_from).transpose()?;
+        let limit = to_usize(limit, "limit")?;
+        with_engine!(self, engine, {
+            let page = engine.structural_diff_page(&base, &other, cursor.as_ref(), limit)?;
+            StructuralDiffPageRecord::try_from(page)
+        })
+    }
+
     pub fn collect_stats_json(
         &self,
         tree: TreeRecord,
@@ -2185,6 +2689,16 @@ impl ProllyEngine {
         with_engine!(self, engine, {
             let stats = engine.collect_stats(&tree)?;
             json_document(&stats)
+        })
+    }
+
+    pub fn collect_stats(&self, tree: TreeRecord) -> Result<TreeStatsRecord, ProllyBindingError> {
+        let tree = tree.try_into()?;
+        with_engine!(self, engine, {
+            engine
+                .collect_stats(&tree)
+                .map(TreeStatsRecord::from)
+                .map_err(Into::into)
         })
     }
 
@@ -2201,6 +2715,21 @@ impl ProllyEngine {
         })
     }
 
+    pub fn stats_diff(
+        &self,
+        before: TreeRecord,
+        after: TreeRecord,
+    ) -> Result<StatsComparisonRecord, ProllyBindingError> {
+        let before = before.try_into()?;
+        let after = after.try_into()?;
+        with_engine!(self, engine, {
+            engine
+                .stats_diff(&before, &after)
+                .map(StatsComparisonRecord::from)
+                .map_err(Into::into)
+        })
+    }
+
     pub fn debug_tree_json(
         &self,
         tree: TreeRecord,
@@ -2209,6 +2738,16 @@ impl ProllyEngine {
         with_engine!(self, engine, {
             let view = engine.debug_tree(&tree)?;
             json_document(&view)
+        })
+    }
+
+    pub fn debug_tree(&self, tree: TreeRecord) -> Result<TreeDebugViewRecord, ProllyBindingError> {
+        let tree = tree.try_into()?;
+        with_engine!(self, engine, {
+            engine
+                .debug_tree(&tree)
+                .map(TreeDebugViewRecord::from)
+                .map_err(Into::into)
         })
     }
 
@@ -2232,6 +2771,21 @@ impl ProllyEngine {
         with_engine!(self, engine, {
             let comparison = engine.debug_compare_trees(&left, &right)?;
             json_document(&comparison)
+        })
+    }
+
+    pub fn debug_compare_trees(
+        &self,
+        left: TreeRecord,
+        right: TreeRecord,
+    ) -> Result<TreeDebugComparisonRecord, ProllyBindingError> {
+        let left = left.try_into()?;
+        let right = right.try_into()?;
+        with_engine!(self, engine, {
+            engine
+                .debug_compare_trees(&left, &right)
+                .map(TreeDebugComparisonRecord::from)
+                .map_err(Into::into)
         })
     }
 
@@ -2403,6 +2957,30 @@ impl ProllyEngine {
         with_engine_pair!(self, destination, source, destination_engine, {
             let copy = source.copy_missing_nodes(&tree, destination_engine.store())?;
             MissingNodeCopyRecord::try_from(copy)
+        })
+    }
+
+    pub fn export_snapshot(
+        &self,
+        tree: TreeRecord,
+    ) -> Result<SnapshotBundleRecord, ProllyBindingError> {
+        let tree = tree.try_into()?;
+        with_engine!(self, engine, {
+            let bundle = engine.export_snapshot(&tree)?;
+            SnapshotBundleRecord::try_from(bundle)
+        })
+    }
+
+    pub fn import_snapshot(
+        &self,
+        bundle: SnapshotBundleRecord,
+    ) -> Result<TreeRecord, ProllyBindingError> {
+        let bundle = CoreSnapshotBundle::try_from(bundle)?;
+        with_engine!(self, engine, {
+            engine
+                .import_snapshot(&bundle)
+                .map(Into::into)
+                .map_err(Into::into)
         })
     }
 
@@ -2929,13 +3507,83 @@ pub fn default_config() -> ConfigRecord {
 }
 
 #[uniffi::export]
+pub fn encoding_raw() -> EncodingRecord {
+    Encoding::Raw.into()
+}
+
+#[uniffi::export]
+pub fn encoding_cbor() -> EncodingRecord {
+    Encoding::Cbor.into()
+}
+
+#[uniffi::export]
+pub fn encoding_json() -> EncodingRecord {
+    Encoding::Json.into()
+}
+
+#[uniffi::export]
+pub fn encoding_custom(name: String) -> EncodingRecord {
+    Encoding::Custom(name).into()
+}
+
+#[uniffi::export]
+pub fn tree_config(
+    min_chunk_size: u64,
+    max_chunk_size: u64,
+    chunking_factor: u32,
+    hash_seed: u64,
+    encoding: EncodingRecord,
+    node_cache_max_nodes: Option<u64>,
+    node_cache_max_bytes: Option<u64>,
+) -> Result<ConfigRecord, ProllyBindingError> {
+    let record = ConfigRecord {
+        min_chunk_size,
+        max_chunk_size,
+        chunking_factor,
+        hash_seed,
+        encoding,
+        node_cache_max_nodes,
+        node_cache_max_bytes,
+    };
+    Config::try_from(record.clone())?;
+    Ok(record)
+}
+
+#[uniffi::export]
 pub fn default_large_value_config() -> LargeValueConfigRecord {
     LargeValueConfig::default().into()
 }
 
 #[uniffi::export]
+pub fn large_value_config(
+    inline_threshold: u64,
+) -> Result<LargeValueConfigRecord, ProllyBindingError> {
+    let record = LargeValueConfigRecord { inline_threshold };
+    LargeValueConfig::try_from(record.clone())?;
+    Ok(record)
+}
+
+#[uniffi::export]
 pub fn default_parallel_config() -> ParallelConfigRecord {
     ParallelConfig::default().into()
+}
+
+#[uniffi::export]
+pub fn parallel_config(
+    max_threads: u64,
+    parallelism_threshold: u64,
+) -> Result<ParallelConfigRecord, ProllyBindingError> {
+    let record = ParallelConfigRecord {
+        max_threads,
+        parallelism_threshold,
+    };
+    ParallelConfig::try_from(record.clone())?;
+    Ok(record)
+}
+
+#[uniffi::export]
+pub fn parallel_config_sequential() -> ParallelConfigRecord {
+    ParallelConfig::sequential().into()
 }
 
 #[uniffi::export]
@@ -3263,6 +3911,71 @@ pub fn range_cursor_after_key(key: Vec<u8>) -> RangeCursorRecord {
 }
 
 #[uniffi::export]
+pub fn reverse_cursor_end() -> ReverseCursorRecord {
+    ReverseCursor::end().into()
+}
+
+#[uniffi::export]
+pub fn reverse_cursor_before_key(key: Vec<u8>) -> ReverseCursorRecord {
+    ReverseCursor::before_key(key).into()
+}
+
+#[uniffi::export]
+pub fn upsert_mutation(key: Vec<u8>, value: Vec<u8>) -> MutationRecord {
+    Mutation::Upsert { key, val: value }.into()
+}
+
+#[uniffi::export]
+pub fn delete_mutation(key: Vec<u8>) -> MutationRecord {
+    Mutation::Delete { key }.into()
+}
+
+#[uniffi::export]
+pub fn resolution_value(value: Vec<u8>) -> ResolutionRecord {
+    prolly::Resolution::value(value).into()
+}
+
+#[uniffi::export]
+pub fn resolution_delete() -> ResolutionRecord {
+    prolly::Resolution::delete().into()
+}
+
+#[uniffi::export]
+pub fn resolution_unresolved() -> ResolutionRecord {
+    prolly::Resolution::unresolved().into()
+}
+
+#[uniffi::export]
+pub fn resolve_prefer_left(conflict: ConflictRecord) -> ResolutionRecord {
+    prolly::resolver::prefer_left(&conflict.into()).into()
+}
+
+#[uniffi::export]
+pub fn resolve_prefer_right(conflict: ConflictRecord) -> ResolutionRecord {
+    prolly::resolver::prefer_right(&conflict.into()).into()
+}
+
+#[uniffi::export]
+pub fn resolve_delete_wins(conflict: ConflictRecord) -> ResolutionRecord {
+    prolly::resolver::delete_wins(&conflict.into()).into()
+}
+
+#[uniffi::export]
+pub fn resolve_update_wins(conflict: ConflictRecord) -> ResolutionRecord {
+    prolly::resolver::update_wins(&conflict.into()).into()
+}
+
+#[uniffi::export]
+pub fn crdt_resolution_value(value: Vec<u8>) -> CrdtResolutionRecord {
+    prolly::CrdtResolution::value(value).into()
+}
+
+#[uniffi::export]
+pub fn crdt_resolution_delete() -> CrdtResolutionRecord {
+    prolly::CrdtResolution::delete().into()
+}
+
+#[uniffi::export]
 pub fn snapshot_namespace_branch() -> SnapshotNamespaceRecord {
     SnapshotNamespace::Branch.into()
 }
@@ -3522,6 +4235,72 @@ pub fn root_manifest_from_bytes(bytes: Vec<u8>) -> Result<RootManifestRecord, Pr
 }
 
 #[uniffi::export]
+pub fn snapshot_bundle_to_bytes(
+    record: SnapshotBundleRecord,
+) -> Result<Vec<u8>, ProllyBindingError> {
+    let bundle = CoreSnapshotBundle::try_from(record)?;
+    bundle.to_bytes().map_err(Into::into)
+}
+
+#[uniffi::export]
+pub fn snapshot_bundle_from_bytes(
+    bytes: Vec<u8>,
+) -> Result<SnapshotBundleRecord, ProllyBindingError> {
+    let bundle = CoreSnapshotBundle::from_bytes(&bytes)?;
+    SnapshotBundleRecord::try_from(bundle)
+}
+
+#[uniffi::export]
+pub fn snapshot_bundle_digest(record: SnapshotBundleRecord) -> Result<Vec<u8>, ProllyBindingError> {
+    let bundle = CoreSnapshotBundle::try_from(record)?;
+    bundle
+        .digest()
+        .map(|cid| cid.as_bytes().to_vec())
+        .map_err(Into::into)
+}
+
+#[uniffi::export]
+pub fn snapshot_bundle_digest_bytes(bytes: Vec<u8>) -> Result<Vec<u8>, ProllyBindingError> {
+    let bundle = CoreSnapshotBundle::from_bytes(&bytes)?;
+    bundle
+        .digest()
+        .map(|cid| cid.as_bytes().to_vec())
+        .map_err(Into::into)
+}
+
+#[uniffi::export]
+pub fn snapshot_bundle_summary(
+    record: SnapshotBundleRecord,
+) -> Result<SnapshotBundleSummaryRecord, ProllyBindingError> {
+    let bundle = CoreSnapshotBundle::try_from(record)?;
+    bundle.summary().map(TryInto::try_into)?
+}
+
+#[uniffi::export]
+pub fn snapshot_bundle_summary_from_bytes(
+    bytes: Vec<u8>,
+) -> Result<SnapshotBundleSummaryRecord, ProllyBindingError> {
+    let bundle = CoreSnapshotBundle::from_bytes(&bytes)?;
+    bundle.summary().map(TryInto::try_into)?
+}
+
+#[uniffi::export]
+pub fn verify_snapshot_bundle(
+    record: SnapshotBundleRecord,
+) -> Result<SnapshotBundleVerificationRecord, ProllyBindingError> {
+    let bundle = CoreSnapshotBundle::try_from(record)?;
+    bundle.verify().map(TryInto::try_into)?
+}
+
+#[uniffi::export]
+pub fn verify_snapshot_bundle_bytes(
+    bytes: Vec<u8>,
+) -> Result<SnapshotBundleVerificationRecord, ProllyBindingError> {
+    let bundle = CoreSnapshotBundle::from_bytes(&bytes)?;
+    bundle.verify().map(TryInto::try_into)?
+}
+
+#[uniffi::export]
 pub fn crdt_config_lww(delete_policy: CrdtDeletePolicyKind) -> CrdtConfigRecord {
     CrdtConfigRecord {
         strategy: CrdtMergeStrategyKind::LastWriterWins,
@@ -3733,6 +4512,86 @@ impl TryFrom<TreeRecord> for Tree {
         Ok(Self {
             root: value.root.map(cid_from_vec).transpose()?,
             config: value.config.try_into()?,
+        })
+    }
+}
+
+impl TryFrom<CoreSnapshotBundle> for SnapshotBundleRecord {
+    type Error = ProllyBindingError;
+
+    fn try_from(value: CoreSnapshotBundle) -> Result<Self, Self::Error> {
+        Ok(Self {
+            format_version: value.format_version,
+            tree: value.tree.into(),
+            nodes: value.nodes.into_iter().map(Into::into).collect(),
+        })
+    }
+}
+
+impl TryFrom<SnapshotBundleRecord> for CoreSnapshotBundle {
+    type Error = ProllyBindingError;
+
+    fn try_from(value: SnapshotBundleRecord) -> Result<Self, Self::Error> {
+        let bundle = CoreSnapshotBundle {
+            format_version: value.format_version,
+            tree: value.tree.try_into()?,
+            nodes: value
+                .nodes
+                .into_iter()
+                .map(CoreSnapshotBundleNode::try_from)
+                .collect::<Result<Vec<_>, _>>()?,
+        };
+        bundle.validate_format_version()?;
+        Ok(bundle)
+    }
+}
+
+impl TryFrom<SnapshotBundleSummary> for SnapshotBundleSummaryRecord {
+    type Error = ProllyBindingError;
+
+    fn try_from(value: SnapshotBundleSummary) -> Result<Self, Self::Error> {
+        Ok(Self {
+            format_version: value.format_version,
+            root: value.root.map(|cid| cid.as_bytes().to_vec()),
+            node_count: to_u64(value.node_count, "node_count")?,
+            byte_count: to_u64(value.byte_count, "byte_count")?,
+            min_node_bytes: to_u64(value.min_node_bytes, "min_node_bytes")?,
+            max_node_bytes: to_u64(value.max_node_bytes, "max_node_bytes")?,
+        })
+    }
+}
+
+impl TryFrom<SnapshotBundleVerification> for SnapshotBundleVerificationRecord {
+    type Error = ProllyBindingError;
+
+    fn try_from(value: SnapshotBundleVerification) -> Result<Self, Self::Error> {
+        Ok(Self {
+            valid: value.valid,
+            summary: value.summary.try_into()?,
+            reachable_nodes: to_u64(value.reachable_nodes, "reachable_nodes")?,
+            reachable_bytes: to_u64(value.reachable_bytes, "reachable_bytes")?,
+            missing_cids: cid_records(value.missing_cids),
+            extra_cids: cid_records(value.extra_cids),
+        })
+    }
+}
+
+impl From<CoreSnapshotBundleNode> for SnapshotBundleNodeRecord {
+    fn from(value: CoreSnapshotBundleNode) -> Self {
+        Self {
+            cid: value.cid.as_bytes().to_vec(),
+            bytes: value.bytes,
+        }
+    }
+}
+
+impl TryFrom<SnapshotBundleNodeRecord> for CoreSnapshotBundleNode {
+    type Error = ProllyBindingError;
+
+    fn try_from(value: SnapshotBundleNodeRecord) -> Result<Self, Self::Error> {
+        Ok(Self {
+            cid: cid_from_vec(value.cid)?,
+            bytes: value.bytes,
         })
     }
 }
@@ -4175,6 +5034,384 @@ impl From<BatchApplyResult> for BatchApplyResultRecord {
     }
 }
 
+fn level_u64_records(
+    values: std::collections::BTreeMap<u8, usize>,
+) -> Vec<TreeStatsLevelU64Record> {
+    values
+        .into_iter()
+        .map(|(level, value)| TreeStatsLevelU64Record {
+            level,
+            value: value as u64,
+        })
+        .collect()
+}
+
+fn level_f64_records(values: std::collections::BTreeMap<u8, f64>) -> Vec<TreeStatsLevelF64Record> {
+    values
+        .into_iter()
+        .map(|(level, value)| TreeStatsLevelF64Record { level, value })
+        .collect()
+}
+
+impl From<TreeStats> for TreeStatsRecord {
+    fn from(value: TreeStats) -> Self {
+        Self {
+            num_nodes: value.num_nodes as u64,
+            num_leaves: value.num_leaves as u64,
+            num_internal_nodes: value.num_internal_nodes as u64,
+            tree_height: value.tree_height,
+            total_key_value_pairs: value.total_key_value_pairs as u64,
+            total_tree_size_bytes: value.total_tree_size_bytes as u64,
+            avg_node_size_bytes: value.avg_node_size_bytes,
+            min_node_size_bytes: value.min_node_size_bytes as u64,
+            max_node_size_bytes: value.max_node_size_bytes as u64,
+            avg_entries_per_node: value.avg_entries_per_node,
+            nodes_per_level: level_u64_records(value.nodes_per_level),
+            avg_node_size_per_level: level_f64_records(value.avg_node_size_per_level),
+            avg_entries_per_level: level_f64_records(value.avg_entries_per_level),
+            min_entries_per_level: level_u64_records(value.min_entries_per_level),
+            max_entries_per_level: level_u64_records(value.max_entries_per_level),
+            avg_fanout: value.avg_fanout,
+            min_fanout: value.min_fanout as u64,
+            max_fanout: value.max_fanout as u64,
+            avg_fill_factor: value.avg_fill_factor,
+            avg_leaf_fill_factor: value.avg_leaf_fill_factor,
+            avg_internal_fill_factor: value.avg_internal_fill_factor,
+            avg_key_size_bytes: value.avg_key_size_bytes,
+            avg_value_size_bytes: value.avg_value_size_bytes,
+            min_key_size_bytes: value.min_key_size_bytes as u64,
+            max_key_size_bytes: value.max_key_size_bytes as u64,
+            min_value_size_bytes: value.min_value_size_bytes as u64,
+            max_value_size_bytes: value.max_value_size_bytes as u64,
+            total_keys_size_bytes: value.total_keys_size_bytes as u64,
+            total_values_size_bytes: value.total_values_size_bytes as u64,
+        }
+    }
+}
+
+impl From<StatsDiff> for StatsDiffRecord {
+    fn from(value: StatsDiff) -> Self {
+        Self {
+            num_nodes_diff: value.num_nodes_diff,
+            num_leaves_diff: value.num_leaves_diff,
+            num_internal_nodes_diff: value.num_internal_nodes_diff,
+            tree_height_diff: value.tree_height_diff,
+            total_key_value_pairs_diff: value.total_key_value_pairs_diff,
+            total_tree_size_bytes_diff: value.total_tree_size_bytes_diff,
+            avg_node_size_bytes_diff: value.avg_node_size_bytes_diff,
+            min_node_size_bytes_diff: value.min_node_size_bytes_diff,
+            max_node_size_bytes_diff: value.max_node_size_bytes_diff,
+            avg_entries_per_node_diff: value.avg_entries_per_node_diff,
+            avg_fanout_diff: value.avg_fanout_diff,
+            min_fanout_diff: value.min_fanout_diff,
+            max_fanout_diff: value.max_fanout_diff,
+            avg_fill_factor_diff: value.avg_fill_factor_diff,
+            avg_leaf_fill_factor_diff: value.avg_leaf_fill_factor_diff,
+            avg_internal_fill_factor_diff: value.avg_internal_fill_factor_diff,
+            avg_key_size_bytes_diff: value.avg_key_size_bytes_diff,
+            avg_value_size_bytes_diff: value.avg_value_size_bytes_diff,
+            min_key_size_bytes_diff: value.min_key_size_bytes_diff,
+            max_key_size_bytes_diff: value.max_key_size_bytes_diff,
+            min_value_size_bytes_diff: value.min_value_size_bytes_diff,
+            max_value_size_bytes_diff: value.max_value_size_bytes_diff,
+            total_keys_size_bytes_diff: value.total_keys_size_bytes_diff,
+            total_values_size_bytes_diff: value.total_values_size_bytes_diff,
+        }
+    }
+}
+
+impl From<StatsPercentageChange> for StatsPercentageChangeRecord {
+    fn from(value: StatsPercentageChange) -> Self {
+        Self {
+            num_nodes_pct: value.num_nodes_pct,
+            num_leaves_pct: value.num_leaves_pct,
+            num_internal_nodes_pct: value.num_internal_nodes_pct,
+            tree_height_pct: value.tree_height_pct,
+            total_key_value_pairs_pct: value.total_key_value_pairs_pct,
+            total_tree_size_bytes_pct: value.total_tree_size_bytes_pct,
+            avg_node_size_bytes_pct: value.avg_node_size_bytes_pct,
+            min_node_size_bytes_pct: value.min_node_size_bytes_pct,
+            max_node_size_bytes_pct: value.max_node_size_bytes_pct,
+            avg_entries_per_node_pct: value.avg_entries_per_node_pct,
+            avg_fanout_pct: value.avg_fanout_pct,
+            min_fanout_pct: value.min_fanout_pct,
+            max_fanout_pct: value.max_fanout_pct,
+            avg_fill_factor_pct: value.avg_fill_factor_pct,
+            avg_leaf_fill_factor_pct: value.avg_leaf_fill_factor_pct,
+            avg_internal_fill_factor_pct: value.avg_internal_fill_factor_pct,
+            avg_key_size_bytes_pct: value.avg_key_size_bytes_pct,
+            avg_value_size_bytes_pct: value.avg_value_size_bytes_pct,
+            min_key_size_bytes_pct: value.min_key_size_bytes_pct,
+            max_key_size_bytes_pct: value.max_key_size_bytes_pct,
+            min_value_size_bytes_pct: value.min_value_size_bytes_pct,
+            max_value_size_bytes_pct: value.max_value_size_bytes_pct,
+            total_keys_size_bytes_pct: value.total_keys_size_bytes_pct,
+            total_values_size_bytes_pct: value.total_values_size_bytes_pct,
+        }
+    }
+}
+
+impl From<StatsComparison> for StatsComparisonRecord {
+    fn from(value: StatsComparison) -> Self {
+        Self {
+            before: value.before.into(),
+            after: value.after.into(),
+            absolute: value.absolute.into(),
+            percentage: value.percentage.into(),
+        }
+    }
+}
+
+impl From<TreeDebugNode> for TreeDebugNodeRecord {
+    fn from(value: TreeDebugNode) -> Self {
+        Self {
+            cid: value.cid.as_bytes().to_vec(),
+            leaf: value.leaf,
+            level: value.level,
+            entry_count: value.entry_count as u64,
+            max_entries: value.max_entries as u64,
+            fill_factor: value.fill_factor,
+            encoded_bytes: value.encoded_bytes as u64,
+            first_key: value.first_key,
+            last_key: value.last_key,
+        }
+    }
+}
+
+impl From<TreeDebugLevel> for TreeDebugLevelRecord {
+    fn from(value: TreeDebugLevel) -> Self {
+        Self {
+            level: value.level,
+            nodes: value
+                .nodes
+                .into_iter()
+                .map(TreeDebugNodeRecord::from)
+                .collect(),
+        }
+    }
+}
+
+impl From<TreeDebugView> for TreeDebugViewRecord {
+    fn from(value: TreeDebugView) -> Self {
+        Self {
+            levels: value
+                .levels
+                .into_iter()
+                .map(TreeDebugLevelRecord::from)
+                .collect(),
+        }
+    }
+}
+
+impl From<TreeDebugNodeStatus> for TreeDebugNodeStatusKind {
+    fn from(value: TreeDebugNodeStatus) -> Self {
+        match value {
+            TreeDebugNodeStatus::Shared => Self::Shared,
+            TreeDebugNodeStatus::LeftOnly => Self::LeftOnly,
+            TreeDebugNodeStatus::RightOnly => Self::RightOnly,
+        }
+    }
+}
+
+impl From<TreeDebugComparedNode> for TreeDebugComparedNodeRecord {
+    fn from(value: TreeDebugComparedNode) -> Self {
+        Self {
+            status: value.status.into(),
+            node: value.node.into(),
+        }
+    }
+}
+
+impl From<TreeDebugComparisonLevel> for TreeDebugComparisonLevelRecord {
+    fn from(value: TreeDebugComparisonLevel) -> Self {
+        Self {
+            level: value.level,
+            shared_nodes: value.shared_nodes as u64,
+            left_only_nodes: value.left_only_nodes as u64,
+            right_only_nodes: value.right_only_nodes as u64,
+            shared_bytes: value.shared_bytes as u64,
+            left_only_bytes: value.left_only_bytes as u64,
+            right_only_bytes: value.right_only_bytes as u64,
+            nodes: value
+                .nodes
+                .into_iter()
+                .map(TreeDebugComparedNodeRecord::from)
+                .collect(),
+        }
+    }
+}
+
+impl From<TreeDebugComparison> for TreeDebugComparisonRecord {
+    fn from(value: TreeDebugComparison) -> Self {
+        Self {
+            shared_nodes: value.shared_nodes as u64,
+            left_only_nodes: value.left_only_nodes as u64,
+            right_only_nodes: value.right_only_nodes as u64,
+            shared_bytes: value.shared_bytes as u64,
+            left_only_bytes: value.left_only_bytes as u64,
+            right_only_bytes: value.right_only_bytes as u64,
+            levels: value
+                .levels
+                .into_iter()
+                .map(TreeDebugComparisonLevelRecord::from)
+                .collect(),
+        }
+    }
+}
+
+impl TryFrom<MergeTrace> for MergeTraceRecord {
+    type Error = ProllyBindingError;
+
+    fn try_from(value: MergeTrace) -> Result<Self, Self::Error> {
+        Ok(Self {
+            events: value
+                .events
+                .into_iter()
+                .map(MergeTraceEventRecord::try_from)
+                .collect::<Result<Vec<_>, _>>()?,
+        })
+    }
+}
+
+impl TryFrom<MergeTraceEvent> for MergeTraceEventRecord {
+    type Error = ProllyBindingError;
+
+    fn try_from(value: MergeTraceEvent) -> Result<Self, Self::Error> {
+        let mut record = Self {
+            kind: MergeTraceEventKind::StructuralMergeStarted,
+            fast_path: None,
+            cid: None,
+            reuse_reason: None,
+            level: None,
+            entries: None,
+            first_key: None,
+            last_key: None,
+            stage: None,
+            key: None,
+            resolution: None,
+            fallback_reason: None,
+            diff_stats: None,
+            right_changes: None,
+            mutations: None,
+            append_only: None,
+        };
+
+        match value {
+            MergeTraceEvent::FastPath { reason } => {
+                record.kind = MergeTraceEventKind::FastPath;
+                record.fast_path = Some(MergeFastPathKind::from(reason));
+            }
+            MergeTraceEvent::StructuralMergeStarted => {
+                record.kind = MergeTraceEventKind::StructuralMergeStarted;
+            }
+            MergeTraceEvent::ReusedSubtree { cid, reason } => {
+                record.kind = MergeTraceEventKind::ReusedSubtree;
+                record.cid = Some(cid.as_bytes().to_vec());
+                record.reuse_reason = Some(MergeReuseReasonKind::from(reason));
+            }
+            MergeTraceEvent::RewrittenNode {
+                cid,
+                level,
+                entries,
+                first_key,
+                last_key,
+            } => {
+                record.kind = MergeTraceEventKind::RewrittenNode;
+                record.cid = Some(cid.as_bytes().to_vec());
+                record.level = Some(level.into());
+                record.entries = Some(to_u64(entries, "entries")?);
+                record.first_key = first_key;
+                record.last_key = last_key;
+            }
+            MergeTraceEvent::ResolverCalled {
+                stage,
+                key,
+                resolution,
+            } => {
+                record.kind = MergeTraceEventKind::ResolverCalled;
+                record.stage = Some(MergeTraceStageKind::from(stage));
+                record.key = Some(key);
+                record.resolution = Some(MergeTraceResolutionKind::from(resolution));
+            }
+            MergeTraceEvent::Fallback { reason } => {
+                record.kind = MergeTraceEventKind::Fallback;
+                record.fallback_reason = Some(MergeFallbackReasonKind::from(reason));
+            }
+            MergeTraceEvent::DiffTraversal { stats } => {
+                record.kind = MergeTraceEventKind::DiffTraversal;
+                record.diff_stats = Some(DiffTraversalStatsRecord::try_from(stats)?);
+            }
+            MergeTraceEvent::BatchMerge {
+                right_changes,
+                mutations,
+                append_only,
+            } => {
+                record.kind = MergeTraceEventKind::BatchMerge;
+                record.right_changes = Some(to_u64(right_changes, "right_changes")?);
+                record.mutations = Some(to_u64(mutations, "mutations")?);
+                record.append_only = Some(append_only);
+            }
+        }
+
+        Ok(record)
+    }
+}
+
+impl From<MergeFastPath> for MergeFastPathKind {
+    fn from(value: MergeFastPath) -> Self {
+        match value {
+            MergeFastPath::BranchesEqual => Self::BranchesEqual,
+            MergeFastPath::LeftUnchanged => Self::LeftUnchanged,
+            MergeFastPath::RightUnchanged => Self::RightUnchanged,
+        }
+    }
+}
+
+impl From<MergeReuseReason> for MergeReuseReasonKind {
+    fn from(value: MergeReuseReason) -> Self {
+        match value {
+            MergeReuseReason::BranchesEqual => Self::BranchesEqual,
+            MergeReuseReason::LeftUnchanged => Self::LeftUnchanged,
+            MergeReuseReason::RightUnchanged => Self::RightUnchanged,
+            MergeReuseReason::UnchangedAfterMerge => Self::UnchangedAfterMerge,
+            MergeReuseReason::MatchesLeft => Self::MatchesLeft,
+            MergeReuseReason::MatchesRight => Self::MatchesRight,
+        }
+    }
+}
+
+impl From<MergeTraceStage> for MergeTraceStageKind {
+    fn from(value: MergeTraceStage) -> Self {
+        match value {
+            MergeTraceStage::Structural => Self::Structural,
+            MergeTraceStage::Batch => Self::Batch,
+        }
+    }
+}
+
+impl From<CoreMergeResolutionKind> for MergeTraceResolutionKind {
+    fn from(value: CoreMergeResolutionKind) -> Self {
+        match value {
+            CoreMergeResolutionKind::Value => Self::Value,
+            CoreMergeResolutionKind::Delete => Self::Delete,
+            CoreMergeResolutionKind::Unresolved => Self::Unresolved,
+        }
+    }
+}
+
+impl From<MergeFallbackReason> for MergeFallbackReasonKind {
+    fn from(value: MergeFallbackReason) -> Self {
+        match value {
+            MergeFallbackReason::MissingRoot => Self::MissingRoot,
+            MergeFallbackReason::ShapeMismatch => Self::ShapeMismatch,
+            MergeFallbackReason::NodeLengthMismatch => Self::NodeLengthMismatch,
+            MergeFallbackReason::ChildFallback => Self::ChildFallback,
+            MergeFallbackReason::DeleteResolution => Self::DeleteResolution,
+            MergeFallbackReason::DiffBatch => Self::DiffBatch,
+        }
+    }
+}
+
 impl TryFrom<Diff> for DiffRecord {
     type Error = ProllyBindingError;
 
@@ -4205,6 +5442,40 @@ impl TryFrom<Diff> for DiffRecord {
     }
 }
 
+impl TryFrom<DiffRecord> for Diff {
+    type Error = ProllyBindingError;
+
+    fn try_from(value: DiffRecord) -> Result<Self, Self::Error> {
+        match value.kind {
+            DiffKind::Added => Ok(Self::Added {
+                key: value.key,
+                val: value
+                    .value
+                    .ok_or_else(|| invalid_argument("added diff requires value"))?,
+            }),
+            DiffKind::Removed => Ok(Self::Removed {
+                key: value.key,
+                val: value
+                    .value
+                    .ok_or_else(|| invalid_argument("removed diff requires value"))?,
+            }),
+            DiffKind::Changed => Ok(Self::Changed {
+                key: value.key,
+                old: value
+                    .old_value
+                    .ok_or_else(|| invalid_argument("changed diff requires old_value"))?,
+                new: value
+                    .new_value
+                    .ok_or_else(|| invalid_argument("changed diff requires new_value"))?,
+            }),
+        }
+    }
+}
+
+fn entry_record((key, value): (Vec<u8>, Vec<u8>)) -> EntryRecord {
+    EntryRecord { key, value }
+}
+
 impl From<Conflict> for ConflictRecord {
     fn from(value: Conflict) -> Self {
         Self::from(&value)
@@ -4222,6 +5493,17 @@ impl From<&Conflict> for ConflictRecord {
     }
 }
 
+impl From<ConflictRecord> for Conflict {
+    fn from(value: ConflictRecord) -> Self {
+        Self {
+            key: value.key,
+            base: value.base,
+            left: value.left,
+            right: value.right,
+        }
+    }
+}
+
 impl From<ResolutionRecord> for prolly::Resolution {
     fn from(value: ResolutionRecord) -> Self {
         match value.kind {
@@ -4235,6 +5517,25 @@ impl From<ResolutionRecord> for prolly::Resolution {
     }
 }
 
+impl From<prolly::Resolution> for ResolutionRecord {
+    fn from(value: prolly::Resolution) -> Self {
+        match value {
+            prolly::Resolution::Value(value) => Self {
+                kind: ResolutionKind::Value,
+                value: Some(value),
+            },
+            prolly::Resolution::Delete => Self {
+                kind: ResolutionKind::Delete,
+                value: None,
+            },
+            prolly::Resolution::Unresolved => Self {
+                kind: ResolutionKind::Unresolved,
+                value: None,
+            },
+        }
+    }
+}
+
 impl From<CrdtResolutionRecord> for prolly::CrdtResolution {
     fn from(value: CrdtResolutionRecord) -> Self {
         match value.kind {
@@ -4242,6 +5543,21 @@ impl From<CrdtResolutionRecord> for prolly::CrdtResolution {
                 prolly::CrdtResolution::value(value.value.unwrap_or_default())
             }
             CrdtResolutionKind::Delete => prolly::CrdtResolution::delete(),
+        }
+    }
+}
+
+impl From<prolly::CrdtResolution> for CrdtResolutionRecord {
+    fn from(value: prolly::CrdtResolution) -> Self {
+        match value {
+            prolly::CrdtResolution::Value(value) => Self {
+                kind: CrdtResolutionKind::Value,
+                value: Some(value),
+            },
+            prolly::CrdtResolution::Delete => Self {
+                kind: CrdtResolutionKind::Delete,
+                value: None,
+            },
         }
     }
 }
@@ -4278,6 +5594,54 @@ impl TryFrom<prolly::RangePage> for RangePageRecord {
     }
 }
 
+impl From<ReverseCursor> for ReverseCursorRecord {
+    fn from(value: ReverseCursor) -> Self {
+        Self {
+            before_key: value.before().map(<[u8]>::to_vec),
+        }
+    }
+}
+
+impl From<ReverseCursorRecord> for ReverseCursor {
+    fn from(value: ReverseCursorRecord) -> Self {
+        value
+            .before_key
+            .map(ReverseCursor::before_key)
+            .unwrap_or_else(ReverseCursor::end)
+    }
+}
+
+impl TryFrom<prolly::ReversePage> for ReversePageRecord {
+    type Error = ProllyBindingError;
+
+    fn try_from(value: prolly::ReversePage) -> Result<Self, Self::Error> {
+        Ok(Self {
+            entries: value
+                .entries
+                .into_iter()
+                .map(|(key, value)| EntryRecord { key, value })
+                .collect(),
+            next_cursor: value.next_cursor.map(ReverseCursorRecord::from),
+        })
+    }
+}
+
+impl From<CursorWindow> for CursorWindowRecord {
+    fn from(value: CursorWindow) -> Self {
+        Self {
+            position_key: value.position_key,
+            position_value: value.position_value,
+            found: value.found,
+            entries: value
+                .entries
+                .into_iter()
+                .map(|(key, value)| EntryRecord { key, value })
+                .collect(),
+            next_cursor: value.next_cursor.map(RangeCursorRecord::from),
+        }
+    }
+}
+
 impl TryFrom<prolly::DiffPage> for DiffPageRecord {
     type Error = ProllyBindingError;
 
@@ -4298,6 +5662,7 @@ impl TryFrom<prolly::MergeExplanation> for MergeExplanationRecord {
 
     fn try_from(value: prolly::MergeExplanation) -> Result<Self, Self::Error> {
         let trace_json = serde_json::to_string(&value.trace).map_err(json_error)?;
+        let trace = MergeTraceRecord::try_from(value.trace)?;
         let (result, error) = match value.result {
             Ok(tree) => (Some(TreeRecord::from(tree)), None),
             Err(error) => (None, Some(error.to_string())),
@@ -4307,6 +5672,7 @@ impl TryFrom<prolly::MergeExplanation> for MergeExplanationRecord {
             result,
             error,
             trace_json,
+            trace,
         })
     }
 }
@@ -4671,18 +6037,127 @@ impl TryFrom<StructuralDiffPage> for StructuralDiffPageRecord {
     type Error = ProllyBindingError;
 
     fn try_from(value: StructuralDiffPage) -> Result<Self, Self::Error> {
+        let next_cursor_json = value
+            .next_cursor
+            .as_ref()
+            .map(serde_json::to_string)
+            .transpose()
+            .map_err(json_error)?;
         Ok(Self {
             diffs: value
                 .diffs
                 .into_iter()
                 .map(DiffRecord::try_from)
                 .collect::<Result<Vec<_>, _>>()?,
-            next_cursor_json: value
-                .next_cursor
-                .map(|cursor| serde_json::to_string(&cursor).map_err(json_error))
-                .transpose()?,
+            next_cursor_json,
             stats: DiffTraversalStatsRecord::try_from(value.stats)?,
+            next_cursor: value
+                .next_cursor
+                .map(StructuralDiffCursorRecord::try_from)
+                .transpose()?,
         })
+    }
+}
+
+impl TryFrom<StructuralDiffCursor> for StructuralDiffCursorRecord {
+    type Error = ProllyBindingError;
+
+    fn try_from(value: StructuralDiffCursor) -> Result<Self, Self::Error> {
+        Ok(Self {
+            base_root: value.base_root.map(|cid| cid.as_bytes().to_vec()),
+            other_root: value.other_root.map(|cid| cid.as_bytes().to_vec()),
+            markers: value
+                .markers
+                .into_iter()
+                .map(StructuralDiffMarkerRecord::from)
+                .collect(),
+            pending: value
+                .pending
+                .into_iter()
+                .map(DiffRecord::try_from)
+                .collect::<Result<Vec<_>, _>>()?,
+        })
+    }
+}
+
+impl TryFrom<StructuralDiffCursorRecord> for StructuralDiffCursor {
+    type Error = ProllyBindingError;
+
+    fn try_from(value: StructuralDiffCursorRecord) -> Result<Self, Self::Error> {
+        Ok(Self {
+            base_root: value.base_root.map(cid_from_vec).transpose()?,
+            other_root: value.other_root.map(cid_from_vec).transpose()?,
+            markers: value
+                .markers
+                .into_iter()
+                .map(StructuralDiffMarker::try_from)
+                .collect::<Result<Vec<_>, _>>()?,
+            pending: value
+                .pending
+                .into_iter()
+                .map(Diff::try_from)
+                .collect::<Result<Vec<_>, _>>()?,
+        })
+    }
+}
+
+impl From<StructuralDiffMarker> for StructuralDiffMarkerRecord {
+    fn from(value: StructuralDiffMarker) -> Self {
+        match value {
+            StructuralDiffMarker::Compare {
+                base_cid,
+                other_cid,
+                span_end,
+            } => Self {
+                kind: StructuralDiffMarkerKind::Compare,
+                base_cid: Some(base_cid.as_bytes().to_vec()),
+                other_cid: Some(other_cid.as_bytes().to_vec()),
+                span_end,
+                cid: None,
+            },
+            StructuralDiffMarker::Added { cid } => Self {
+                kind: StructuralDiffMarkerKind::Added,
+                base_cid: None,
+                other_cid: None,
+                span_end: None,
+                cid: Some(cid.as_bytes().to_vec()),
+            },
+            StructuralDiffMarker::Removed { cid } => Self {
+                kind: StructuralDiffMarkerKind::Removed,
+                base_cid: None,
+                other_cid: None,
+                span_end: None,
+                cid: Some(cid.as_bytes().to_vec()),
+            },
+        }
+    }
+}
+
+impl TryFrom<StructuralDiffMarkerRecord> for StructuralDiffMarker {
+    type Error = ProllyBindingError;
+
+    fn try_from(value: StructuralDiffMarkerRecord) -> Result<Self, Self::Error> {
+        match value.kind {
+            StructuralDiffMarkerKind::Compare => Ok(Self::Compare {
+                base_cid: cid_from_vec(value.base_cid.ok_or_else(|| {
+                    invalid_argument("compare structural diff marker requires base_cid")
+                })?)?,
+                other_cid: cid_from_vec(value.other_cid.ok_or_else(|| {
+                    invalid_argument("compare structural diff marker requires other_cid")
+                })?)?,
+                span_end: value.span_end,
+            }),
+            StructuralDiffMarkerKind::Added => Ok(Self::Added {
+                cid: cid_from_vec(value.cid.ok_or_else(|| {
+                    invalid_argument("added structural diff marker requires cid")
+                })?)?,
+            }),
+            StructuralDiffMarkerKind::Removed => Ok(Self::Removed {
+                cid: cid_from_vec(value.cid.ok_or_else(|| {
+                    invalid_argument("removed structural diff marker requires cid")
+                })?)?,
+            }),
+        }
     }
 }
 
@@ -5379,6 +6854,55 @@ mod tests {
     }
 
     #[test]
+    fn config_helpers_match_rust_constructors() {
+        assert_eq!(encoding_raw(), Encoding::Raw.into());
+        assert_eq!(encoding_cbor(), Encoding::Cbor.into());
+        assert_eq!(encoding_json(), Encoding::Json.into());
+        assert_eq!(
+            encoding_custom("postcard".to_string()),
+            Encoding::Custom("postcard".to_string()).into()
+        );
+
+        let config = tree_config(
+            2,
+            64,
+            32,
+            7,
+            encoding_custom("postcard".to_string()),
+            Some(16),
+            Some(4096),
+        )
+        .unwrap();
+        assert_eq!(
+            Config::try_from(config.clone()).unwrap(),
+            Config::builder()
+                .min_chunk_size(2)
+                .max_chunk_size(64)
+                .chunking_factor(32)
+                .hash_seed(7)
+                .encoding(Encoding::Custom("postcard".to_string()))
+                .node_cache_max_nodes(16)
+                .node_cache_max_bytes(4096)
+                .build()
+        );
+        assert_eq!(config.node_cache_max_nodes, Some(16));
+        assert_eq!(config.node_cache_max_bytes, Some(4096));
+
+        assert_eq!(
+            large_value_config(8).unwrap(),
+            LargeValueConfig::new(8).into()
+        );
+        assert_eq!(
+            parallel_config(2, 24).unwrap(),
+            ParallelConfig::new(2, 24).into()
+        );
+        assert_eq!(
+            parallel_config_sequential(),
+            ParallelConfig::sequential().into()
+        );
+    }
+
+    #[test]
     fn node_bytes_and_cid_round_trip() {
         let node = NodeRecord {
             keys: vec![b"a".to_vec()],
@@ -5490,6 +7014,96 @@ mod tests {
         assert_eq!(
             range_cursor_after_key(b"k".to_vec()),
             RangeCursorRecord::from(RangeCursor::after_key(b"k".to_vec()))
+        );
+        assert_eq!(
+            reverse_cursor_end(),
+            ReverseCursorRecord { before_key: None }
+        );
+        assert_eq!(
+            reverse_cursor_before_key(b"k".to_vec()),
+            ReverseCursorRecord::from(ReverseCursor::before_key(b"k".to_vec()))
+        );
+    }
+
+    #[test]
+    fn mutation_helpers_match_rust_constructors() {
+        assert_eq!(
+            upsert_mutation(b"k".to_vec(), b"value".to_vec()),
+            MutationRecord::from(Mutation::Upsert {
+                key: b"k".to_vec(),
+                val: b"value".to_vec(),
+            })
+        );
+        assert_eq!(
+            delete_mutation(b"k".to_vec()),
+            MutationRecord::from(Mutation::Delete { key: b"k".to_vec() })
+        );
+    }
+
+    #[test]
+    fn resolution_helpers_match_rust_constructors() {
+        assert_eq!(
+            resolution_value(b"value".to_vec()),
+            ResolutionRecord::from(prolly::Resolution::value(b"value".to_vec()))
+        );
+        assert_eq!(
+            resolution_delete(),
+            ResolutionRecord::from(prolly::Resolution::delete())
+        );
+        assert_eq!(
+            resolution_unresolved(),
+            ResolutionRecord::from(prolly::Resolution::unresolved())
+        );
+        assert_eq!(
+            crdt_resolution_value(b"value".to_vec()),
+            CrdtResolutionRecord::from(prolly::CrdtResolution::value(b"value".to_vec()))
+        );
+        assert_eq!(
+            crdt_resolution_delete(),
+            CrdtResolutionRecord::from(prolly::CrdtResolution::delete())
+        );
+    }
+
+    #[test]
+    fn built_in_resolver_helpers_match_rust_resolvers() {
+        let update_conflict = ConflictRecord {
+            key: b"k".to_vec(),
+            base: Some(b"base".to_vec()),
+            left: Some(b"left".to_vec()),
+            right: Some(b"right".to_vec()),
+        };
+        assert_eq!(
+            resolve_prefer_left(update_conflict.clone()),
+            ResolutionRecord::from(prolly::resolver::prefer_left(
+                &update_conflict.clone().into()
+            ))
+        );
+        assert_eq!(
+            resolve_prefer_right(update_conflict.clone()),
+            ResolutionRecord::from(prolly::resolver::prefer_right(
+                &update_conflict.clone().into()
+            ))
+        );
+        assert_eq!(
+            resolve_delete_wins(update_conflict.clone()).kind,
+            ResolutionKind::Unresolved
+        );
+
+        let delete_conflict = ConflictRecord {
+            key: b"k".to_vec(),
+            base: Some(b"base".to_vec()),
+            left: None,
+            right: Some(b"right".to_vec()),
+        };
+        assert_eq!(
+            resolve_delete_wins(delete_conflict.clone()),
+            ResolutionRecord::from(prolly::resolver::delete_wins(
+                &delete_conflict.clone().into()
+            ))
+        );
+        assert_eq!(
+            resolve_update_wins(delete_conflict.clone()),
+            ResolutionRecord::from(prolly::resolver::update_wins(&delete_conflict.into()))
         );
     }
 
@@ -5933,6 +7547,49 @@ mod tests {
                 .unwrap(),
             vec![Some(b"1".to_vec()), None]
         );
+        assert_eq!(
+            engine.first_entry(tree.clone()).unwrap(),
+            Some(EntryRecord {
+                key: b"a".to_vec(),
+                value: b"1".to_vec(),
+            })
+        );
+        assert_eq!(
+            engine.last_entry(tree.clone()).unwrap(),
+            Some(EntryRecord {
+                key: b"b".to_vec(),
+                value: b"2".to_vec(),
+            })
+        );
+        assert_eq!(
+            engine.lower_bound(tree.clone(), b"aa".to_vec()).unwrap(),
+            Some(EntryRecord {
+                key: b"b".to_vec(),
+                value: b"2".to_vec(),
+            })
+        );
+        assert_eq!(
+            engine.upper_bound(tree.clone(), b"b".to_vec()).unwrap(),
+            None
+        );
+        assert_eq!(
+            engine.prefix(tree.clone(), b"a".to_vec()).unwrap(),
+            vec![EntryRecord {
+                key: b"a".to_vec(),
+                value: b"1".to_vec(),
+            }]
+        );
+        let prefix_page = engine
+            .prefix_page(tree.clone(), b"a".to_vec(), None, 1)
+            .unwrap();
+        assert_eq!(
+            prefix_page.entries,
+            vec![EntryRecord {
+                key: b"a".to_vec(),
+                value: b"1".to_vec(),
+            }]
+        );
+        assert!(prefix_page.next_cursor.is_some());
         assert!(engine
             .publish_prefix_path_hint(tree.clone(), b"a".to_vec())
             .unwrap());
@@ -6044,6 +7701,30 @@ mod tests {
             .expect("range from cursor");
         assert_eq!(from_cursor, after_a);
 
+        let window = engine
+            .cursor_window(tree.clone(), b"bb".to_vec(), None, 1)
+            .expect("cursor window");
+        assert_eq!(window.position_key, Some(b"b".to_vec()));
+        assert_eq!(window.position_value, Some(b"2".to_vec()));
+        assert!(!window.found);
+        assert_eq!(window.entries.len(), 1);
+        assert_eq!(window.entries[0].key, b"c".to_vec());
+        assert_eq!(window.entries[0].value, b"3".to_vec());
+        assert_eq!(
+            window.next_cursor,
+            Some(RangeCursorRecord {
+                after_key: Some(b"c".to_vec())
+            })
+        );
+
+        let exact_probe = engine
+            .cursor_window(tree.clone(), b"b".to_vec(), None, 0)
+            .expect("exact cursor probe");
+        assert!(exact_probe.found);
+        assert_eq!(exact_probe.position_key, Some(b"b".to_vec()));
+        assert!(exact_probe.entries.is_empty());
+        assert!(exact_probe.next_cursor.is_none());
+
         let second_page = engine
             .range_page(tree.clone(), first_page.next_cursor, None, 2)
             .expect("second range page");
@@ -6056,6 +7737,52 @@ mod tests {
             vec![(b"c".to_vec(), b"3".to_vec())]
         );
         assert!(second_page.next_cursor.is_none());
+
+        let reverse_first = engine
+            .reverse_page(tree.clone(), None, Vec::new(), 2)
+            .expect("reverse page");
+        assert_eq!(
+            reverse_first
+                .entries
+                .iter()
+                .map(|entry| (entry.key.clone(), entry.value.clone()))
+                .collect::<Vec<_>>(),
+            vec![
+                (b"c".to_vec(), b"3".to_vec()),
+                (b"b".to_vec(), b"2".to_vec())
+            ]
+        );
+        assert_eq!(
+            reverse_first.next_cursor,
+            Some(ReverseCursorRecord {
+                before_key: Some(b"b".to_vec())
+            })
+        );
+        let reverse_second = engine
+            .reverse_page(tree.clone(), reverse_first.next_cursor, Vec::new(), 2)
+            .expect("second reverse page");
+        assert_eq!(
+            reverse_second
+                .entries
+                .into_iter()
+                .map(|entry| (entry.key, entry.value))
+                .collect::<Vec<_>>(),
+            vec![(b"a".to_vec(), b"1".to_vec())]
+        );
+        assert!(reverse_second.next_cursor.is_none());
+
+        let prefix_reverse = engine
+            .prefix_reverse_page(tree.clone(), b"b".to_vec(), None, 4)
+            .expect("prefix reverse page");
+        assert_eq!(
+            prefix_reverse
+                .entries
+                .into_iter()
+                .map(|entry| (entry.key, entry.value))
+                .collect::<Vec<_>>(),
+            vec![(b"b".to_vec(), b"2".to_vec())]
+        );
+        assert!(prefix_reverse.next_cursor.is_none());
 
         let diff_page = engine
             .diff_page(empty.clone(), tree.clone(), None, None, 1)
@@ -6094,6 +7821,23 @@ mod tests {
             engine.get(parallel, b"e".to_vec()).unwrap(),
             Some(b"5".to_vec())
         );
+        let parallel_stats = engine
+            .parallel_batch_with_stats(
+                tree.clone(),
+                vec![upsert(b"f", b"6"), upsert(b"g", b"7")],
+                ParallelConfigRecord {
+                    max_threads: 1,
+                    parallelism_threshold: 1,
+                },
+            )
+            .unwrap();
+        assert_eq!(parallel_stats.stats.input_mutations, 2);
+        assert_eq!(parallel_stats.stats.effective_mutations, 2);
+        assert!(parallel_stats.stats.written_nodes > 0);
+        assert_eq!(
+            engine.get(parallel_stats.tree, b"g".to_vec()).unwrap(),
+            Some(b"7".to_vec())
+        );
 
         let base = engine.put(empty, b"k".to_vec(), b"base".to_vec()).unwrap();
         let left = engine
@@ -6113,6 +7857,13 @@ mod tests {
         assert!(explanation.result.is_some());
         assert!(explanation.error.is_none());
         assert!(explanation.trace_json.contains("events"));
+        assert!(!explanation.trace.events.is_empty());
+        assert!(explanation
+            .trace
+            .events
+            .iter()
+            .any(|event| event.kind == MergeTraceEventKind::ResolverCalled
+                && event.resolution == Some(MergeTraceResolutionKind::Value)));
         let merged = engine
             .merge(base, left, right, Some("prefer_right".to_string()))
             .unwrap();
@@ -6290,6 +8041,12 @@ mod tests {
         assert!(explanation.result.is_some());
         assert!(explanation.error.is_none());
         assert!(explanation.trace_json.contains("ResolverCalled"));
+        assert!(explanation
+            .trace
+            .events
+            .iter()
+            .any(|event| event.kind == MergeTraceEventKind::ResolverCalled
+                && event.resolution == Some(MergeTraceResolutionKind::Value)));
 
         let ranged = engine
             .merge_range_with_resolver(
@@ -6782,6 +8539,21 @@ mod tests {
             .unwrap();
         assert_eq!(structural_page.diffs.len(), 1);
         assert_eq!(structural_page.stats.emitted_diffs, 1);
+        let cursor_page = engine
+            .structural_diff_page(empty.clone(), merged.clone(), None, 0)
+            .unwrap();
+        assert!(cursor_page.next_cursor.is_some());
+        assert!(cursor_page.next_cursor_json.is_some());
+        let resumed_page = engine
+            .structural_diff_page_with_cursor(
+                empty.clone(),
+                merged.clone(),
+                cursor_page.next_cursor.clone(),
+                1,
+            )
+            .unwrap();
+        assert_eq!(resumed_page.diffs.len(), 1);
+        assert!(resumed_page.next_cursor.is_none());
         assert_eq!(
             engine
                 .range_diff(
@@ -6805,19 +8577,49 @@ mod tests {
 
         let stats = engine.collect_stats_json(merged.clone()).unwrap();
         assert!(stats.json.contains("\"num_nodes\""));
+        let typed_stats = engine.collect_stats(merged.clone()).unwrap();
+        assert!(typed_stats.num_nodes > 0);
+        assert_eq!(typed_stats.total_key_value_pairs, 1);
+        assert!(typed_stats
+            .nodes_per_level
+            .iter()
+            .any(|entry| entry.level == 0));
+
         let diff_stats = engine
             .stats_diff_json(empty.clone(), merged.clone())
             .unwrap();
         assert!(diff_stats.json.contains("\"absolute\""));
+        let typed_diff_stats = engine.stats_diff(empty.clone(), merged.clone()).unwrap();
+        assert_eq!(typed_diff_stats.before.total_key_value_pairs, 0);
+        assert_eq!(typed_diff_stats.after.total_key_value_pairs, 1);
+        assert_eq!(typed_diff_stats.absolute.total_key_value_pairs_diff, 1);
+        assert!(typed_diff_stats.percentage.total_key_value_pairs_pct >= 0.0);
         assert!(engine
             .debug_tree_text(merged.clone())
             .unwrap()
             .contains("level"));
+        let debug_tree = engine.debug_tree(merged.clone()).unwrap();
+        assert!(!debug_tree.levels.is_empty());
+        assert!(debug_tree
+            .levels
+            .iter()
+            .flat_map(|level| level.nodes.iter())
+            .any(|node| node.leaf && node.entry_count > 0));
         assert!(engine
             .debug_compare_trees_json(empty.clone(), merged.clone())
             .unwrap()
             .json
             .contains("\"right_only_nodes\""));
+        let debug_comparison = engine
+            .debug_compare_trees(empty.clone(), merged.clone())
+            .unwrap();
+        assert_eq!(debug_comparison.left_only_nodes, 0);
+        assert!(debug_comparison.right_only_nodes > 0);
+        assert!(debug_comparison
+            .levels
+            .iter()
+            .flat_map(|level| level.nodes.iter())
+            .any(|node| node.status == TreeDebugNodeStatusKind::RightOnly));
 
         let reachability = engine.mark_reachable(vec![merged.clone()]).unwrap();
         assert!(reachability.live_nodes > 0);
@@ -6856,6 +8658,58 @@ mod tests {
         assert_eq!(copied.copied_nodes, missing.missing_nodes);
         assert_eq!(
             destination.get(merged.clone(), b"k".to_vec()).unwrap(),
+            engine.get(merged.clone(), b"k".to_vec()).unwrap()
+        );
+        let snapshot_bundle = engine.export_snapshot(merged.clone()).unwrap();
+        assert_eq!(snapshot_bundle.format_version, 1);
+        assert_eq!(snapshot_bundle.tree, merged);
+        assert_eq!(snapshot_bundle.nodes.len() as u64, reachability.live_nodes);
+        let snapshot_bundle_bytes = snapshot_bundle_to_bytes(snapshot_bundle.clone()).unwrap();
+        let snapshot_digest = snapshot_bundle_digest(snapshot_bundle.clone()).unwrap();
+        assert_eq!(
+            snapshot_digest,
+            cid_from_bytes(snapshot_bundle_bytes.clone())
+        );
+        assert_eq!(
+            snapshot_bundle_digest_bytes(snapshot_bundle_bytes.clone()).unwrap(),
+            snapshot_digest
+        );
+        let snapshot_summary = snapshot_bundle_summary(snapshot_bundle.clone()).unwrap();
+        assert_eq!(snapshot_summary.format_version, 1);
+        assert_eq!(snapshot_summary.root, snapshot_bundle.tree.root);
+        assert_eq!(snapshot_summary.node_count, reachability.live_nodes);
+        assert_eq!(snapshot_summary.byte_count, reachability.live_bytes);
+        assert_eq!(
+            snapshot_bundle_summary_from_bytes(snapshot_bundle_bytes.clone()).unwrap(),
+            snapshot_summary
+        );
+        let snapshot_verification = verify_snapshot_bundle(snapshot_bundle.clone()).unwrap();
+        assert!(snapshot_verification.valid);
+        assert_eq!(snapshot_verification.summary, snapshot_summary);
+        assert!(snapshot_verification.missing_cids.is_empty());
+        assert!(snapshot_verification.extra_cids.is_empty());
+        assert_eq!(
+            verify_snapshot_bundle_bytes(snapshot_bundle_bytes.clone()).unwrap(),
+            snapshot_verification
+        );
+        assert_eq!(
+            snapshot_bundle_from_bytes(snapshot_bundle_bytes.clone()).unwrap(),
+            snapshot_bundle
+        );
+        let mut incomplete_snapshot_bundle = snapshot_bundle.clone();
+        incomplete_snapshot_bundle.nodes.pop();
+        let incomplete_snapshot_verification =
+            verify_snapshot_bundle(incomplete_snapshot_bundle).unwrap();
+        assert!(!incomplete_snapshot_verification.valid);
+        assert!(!incomplete_snapshot_verification.missing_cids.is_empty());
+        let imported_destination = Arc::new(ProllyEngine::memory(small_config()).unwrap());
+        let imported_tree = imported_destination
+            .import_snapshot(snapshot_bundle_from_bytes(snapshot_bundle_bytes).unwrap())
+            .unwrap();
+        assert_eq!(
+            imported_destination
+                .get(imported_tree, b"k".to_vec())
+                .unwrap(),
             engine.get(merged.clone(), b"k".to_vec()).unwrap()
         );
 

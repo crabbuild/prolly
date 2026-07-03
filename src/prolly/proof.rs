@@ -1237,7 +1237,11 @@ impl<S: Store> Prolly<S> {
 }
 
 #[cfg(feature = "async-store")]
-impl<S: AsyncStore> AsyncProlly<S> {
+impl<S> AsyncProlly<S>
+where
+    S: AsyncStore,
+    S::Error: Send + Sync,
+{
     /// Build a root-to-leaf proof for `key`.
     ///
     /// The returned proof is self-contained and can be verified without access

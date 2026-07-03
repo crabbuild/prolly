@@ -9,6 +9,7 @@ import {
   type NativeChangedSpanHintRecord,
   type NativeChangedSpanRecord,
   type NativeConflictPageRecord,
+  type NativeCursorWindowRecord,
   type NativeCrdtConfigRecord,
   type NativeCrdtResolver,
   type NativeDiffPageRecord,
@@ -40,10 +41,18 @@ import {
   type NativeRangeCursorRecord,
   type NativeRangePageRecord,
   type NativeRangeProofRecord,
+  type NativeReverseCursorRecord,
+  type NativeReversePageRecord,
   type NativeSnapshotNamespaceRecord,
+  type NativeSnapshotBundleRecord,
   type NativeSnapshotRecord,
   type NativeSnapshotSelectionRecord,
+  type NativeStatsComparisonRecord,
+  type NativeStructuralDiffCursorRecord,
   type NativeStructuralDiffPageRecord,
+  type NativeTreeDebugComparisonRecord,
+  type NativeTreeDebugViewRecord,
+  type NativeTreeStatsRecord,
   type NativeTreeRecord,
   type NativeValueRefRecord,
 } from "./native.ts";
@@ -277,6 +286,14 @@ export class AsyncProllyEngine {
     return defer(() => this.inner.parallelBatch(tree, mutations, config));
   }
 
+  parallelBatchWithStats(
+    tree: NativeTreeRecord,
+    mutations: NativeMutationRecord[],
+    config: NativeParallelConfigRecord,
+  ): Promise<NativeBatchApplyResultRecord> {
+    return defer(() => this.inner.parallelBatchWithStats(tree, mutations, config));
+  }
+
   buildFromEntries(entries: NativeEntryRecord[]): Promise<NativeTreeRecord> {
     return defer(() => this.inner.buildFromEntries(entries));
   }
@@ -297,6 +314,28 @@ export class AsyncProllyEngine {
     return defer(() => this.inner.range(tree, start, end));
   }
 
+  prefix(tree: NativeTreeRecord, prefix: Uint8Array): Promise<NativeEntryRecord[]> {
+    return defer(() => this.inner.prefix(tree, prefix));
+  }
+
+  prefixPage(
+    tree: NativeTreeRecord,
+    prefix: Uint8Array,
+    cursor?: NativeRangeCursorRecord | null,
+    limit = "1024",
+  ): Promise<NativeRangePageRecord> {
+    return defer(() => this.inner.prefixPage(tree, prefix, cursor, limit));
+  }
+
+  prefixReversePage(
+    tree: NativeTreeRecord,
+    prefix: Uint8Array,
+    cursor?: NativeReverseCursorRecord | null,
+    limit = "1024",
+  ): Promise<NativeReversePageRecord> {
+    return defer(() => this.inner.prefixReversePage(tree, prefix, cursor, limit));
+  }
+
   rangeAfter(tree: NativeTreeRecord, afterKey: Uint8Array, end?: Uint8Array | null): Promise<NativeEntryRecord[]> {
     return defer(() => this.inner.rangeAfter(tree, afterKey, end));
   }
@@ -309,6 +348,22 @@ export class AsyncProllyEngine {
     return defer(() => this.inner.rangeFromCursor(tree, cursor, end));
   }
 
+  firstEntry(tree: NativeTreeRecord): Promise<NativeEntryRecord | null> {
+    return defer(() => this.inner.firstEntry(tree));
+  }
+
+  lastEntry(tree: NativeTreeRecord): Promise<NativeEntryRecord | null> {
+    return defer(() => this.inner.lastEntry(tree));
+  }
+
+  lowerBound(tree: NativeTreeRecord, key: Uint8Array): Promise<NativeEntryRecord | null> {
+    return defer(() => this.inner.lowerBound(tree, key));
+  }
+
+  upperBound(tree: NativeTreeRecord, key: Uint8Array): Promise<NativeEntryRecord | null> {
+    return defer(() => this.inner.upperBound(tree, key));
+  }
+
   rangePage(
     tree: NativeTreeRecord,
     cursor?: NativeRangeCursorRecord | null,
@@ -316,6 +371,24 @@ export class AsyncProllyEngine {
     limit = "1024",
   ): Promise<NativeRangePageRecord> {
     return defer(() => this.inner.rangePage(tree, cursor, end, limit));
+  }
+
+  reversePage(
+    tree: NativeTreeRecord,
+    cursor?: NativeReverseCursorRecord | null,
+    start: Uint8Array = new Uint8Array(),
+    limit = "1024",
+  ): Promise<NativeReversePageRecord> {
+    return defer(() => this.inner.reversePage(tree, cursor, start, limit));
+  }
+
+  cursorWindow(
+    tree: NativeTreeRecord,
+    key: Uint8Array,
+    end?: Uint8Array | null,
+    limit = "1024",
+  ): Promise<NativeCursorWindowRecord> {
+    return defer(() => this.inner.cursorWindow(tree, key, end, limit));
   }
 
   diff(base: NativeTreeRecord, other: NativeTreeRecord): Promise<NativeDiffRecord[]> {
@@ -588,12 +661,24 @@ export class AsyncProllyEngine {
     return defer(() => this.inner.collectStatsJson(tree));
   }
 
+  collectStats(tree: NativeTreeRecord): Promise<NativeTreeStatsRecord> {
+    return defer(() => this.inner.collectStats(tree));
+  }
+
   statsDiffJson(before: NativeTreeRecord, after: NativeTreeRecord): Promise<string> {
     return defer(() => this.inner.statsDiffJson(before, after));
   }
 
+  statsDiff(before: NativeTreeRecord, after: NativeTreeRecord): Promise<NativeStatsComparisonRecord> {
+    return defer(() => this.inner.statsDiff(before, after));
+  }
+
   debugTreeJson(tree: NativeTreeRecord): Promise<string> {
     return defer(() => this.inner.debugTreeJson(tree));
+  }
+
+  debugTree(tree: NativeTreeRecord): Promise<NativeTreeDebugViewRecord> {
+    return defer(() => this.inner.debugTree(tree));
   }
 
   debugTreeText(tree: NativeTreeRecord): Promise<string> {
@@ -602,6 +687,10 @@ export class AsyncProllyEngine {
 
   debugCompareTreesJson(left: NativeTreeRecord, right: NativeTreeRecord): Promise<string> {
     return defer(() => this.inner.debugCompareTreesJson(left, right));
+  }
+
+  debugCompareTrees(left: NativeTreeRecord, right: NativeTreeRecord): Promise<NativeTreeDebugComparisonRecord> {
+    return defer(() => this.inner.debugCompareTrees(left, right));
   }
 
   debugCompareTreesText(left: NativeTreeRecord, right: NativeTreeRecord): Promise<string> {
@@ -663,6 +752,15 @@ export class AsyncProllyEngine {
     limit = "1024",
   ): Promise<NativeStructuralDiffPageRecord> {
     return defer(() => this.inner.structuralDiffPage(base, other, cursorJson, limit));
+  }
+
+  structuralDiffPageWithCursor(
+    base: NativeTreeRecord,
+    other: NativeTreeRecord,
+    cursor?: NativeStructuralDiffCursorRecord | null,
+    limit = "1024",
+  ): Promise<NativeStructuralDiffPageRecord> {
+    return defer(() => this.inner.structuralDiffPageWithCursor(base, other, cursor, limit));
   }
 
   markReachable(roots: NativeTreeRecord[]): Promise<NativeGcReachabilityRecord> {
@@ -743,6 +841,14 @@ export class AsyncProllyEngine {
     destination: NativeProllyEngine | AsyncProllyEngine,
   ): Promise<NativeMissingNodeCopyRecord> {
     return defer(() => this.inner.copyMissingNodes(tree, unwrapEngine(destination)));
+  }
+
+  exportSnapshot(tree: NativeTreeRecord): Promise<NativeSnapshotBundleRecord> {
+    return defer(() => this.inner.exportSnapshot(tree));
+  }
+
+  importSnapshot(bundle: NativeSnapshotBundleRecord): Promise<NativeTreeRecord> {
+    return defer(() => this.inner.importSnapshot(bundle));
   }
 }
 

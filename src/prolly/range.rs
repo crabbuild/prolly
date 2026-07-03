@@ -142,9 +142,73 @@ pub struct RangePage {
     pub next_cursor: Option<RangeCursor>,
 }
 
+/// Stable cursor token for resumable reverse scans.
+///
+/// The token records the next exclusive upper bound. A start cursor scans from
+/// the end of the requested range; a resumed cursor scans keys strictly before
+/// `before_key`.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReverseCursor {
+    before_key: Option<Vec<u8>>,
+}
+
+impl ReverseCursor {
+    /// Start scanning from the end of the requested range.
+    pub fn end() -> Self {
+        Self { before_key: None }
+    }
+
+    /// Resume scanning strictly before `key`.
+    pub fn before_key(key: impl Into<Vec<u8>>) -> Self {
+        Self {
+            before_key: Some(key.into()),
+        }
+    }
+
+    /// Return the key this cursor resumes before, if any.
+    pub fn before(&self) -> Option<&[u8]> {
+        self.before_key.as_deref()
+    }
+
+    /// Whether this cursor represents the end of a range.
+    pub fn is_end(&self) -> bool {
+        self.before_key.is_none()
+    }
+}
+
+/// A bounded page of reverse-scan results.
+///
+/// Entries are returned in descending key order. `next_cursor` is `Some` when
+/// another call should resume before the last entry in this page.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ReversePage {
+    pub entries: Vec<(Vec<u8>, Vec<u8>)>,
+    pub next_cursor: Option<ReverseCursor>,
+}
+
+/// Bounded result for a stateless cursor seek.
+///
+/// `position_key`/`position_value` report where the internal cursor lands for
+/// the requested seek key. This is the exact key when `found` is true; otherwise
+/// it is the closest leaf entry chosen by cursor navigation. `entries` are the
+/// forward window starting at the first key greater than or equal to the seek
+/// key, and `next_cursor` resumes after the last emitted entry.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CursorWindow {
+    pub position_key: Option<Vec<u8>>,
+    pub position_value: Option<Vec<u8>>,
+    pub found: bool,
+    pub entries: Vec<(Vec<u8>, Vec<u8>)>,
+    pub next_cursor: Option<RangeCursor>,
+}
+
 /// Backward-compatible name for async range pages.
 #[cfg(feature = "async-store")]
 pub type AsyncRangePage = RangePage;
+
+/// Backward-compatible name for async reverse range pages.
+#[cfg(feature = "async-store")]
+pub type AsyncReversePage = ReversePage;
 
 /// Create a range iterator over key-value pairs.
 ///

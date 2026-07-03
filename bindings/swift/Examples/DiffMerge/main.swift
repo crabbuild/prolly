@@ -15,15 +15,15 @@ final class JoinResolver: MergeResolverCallback, @unchecked Sendable {
             var joined = left
             joined.append(bytes("|"))
             joined.append(right)
-            return ResolutionRecord(kind: .value, value: joined)
+            return resolutionValue(value: joined)
         }
         if let left = conflict.left {
-            return ResolutionRecord(kind: .value, value: left)
+            return resolutionValue(value: left)
         }
         if let right = conflict.right {
-            return ResolutionRecord(kind: .value, value: right)
+            return resolutionValue(value: right)
         }
-        return ResolutionRecord(kind: .delete, value: nil)
+        return resolutionDelete()
     }
 }
 
@@ -54,6 +54,52 @@ let right = try engine.batch(
 let diffs = try engine.diff(base: base, other: right)
 precondition(diffs.count == 2)
 
+let snapshotBundle = try engine.exportSnapshot(tree: right)
+precondition(snapshotBundle.formatVersion == 1)
+precondition(!snapshotBundle.nodes.isEmpty)
+let snapshotBundleBytes = try snapshotBundleToBytes(record: snapshotBundle)
+let bundleDigest = try snapshotBundleDigest(record: snapshotBundle)
+precondition(bundleDigest == cidFromBytes(bytes: snapshotBundleBytes))
+let byteSnapshotBundleDigest = try snapshotBundleDigestBytes(bytes: snapshotBundleBytes)
+precondition(byteSnapshotBundleDigest == bundleDigest)
+let snapshotSummary = try snapshotBundleSummary(record: snapshotBundle)
+precondition(snapshotSummary.formatVersion == 1)
+precondition(snapshotSummary.nodeCount == UInt64(snapshotBundle.nodes.count))
+precondition(snapshotSummary.byteCount > 0)
+let byteSnapshotSummary = try snapshotBundleSummaryFromBytes(bytes: snapshotBundleBytes)
+precondition(byteSnapshotSummary == snapshotSummary)
+let snapshotVerification = try verifySnapshotBundle(record: snapshotBundle)
+precondition(snapshotVerification.valid)
+precondition(snapshotVerification.summary == snapshotSummary)
+precondition(snapshotVerification.missingCids.isEmpty)
+precondition(snapshotVerification.extraCids.isEmpty)
+let byteSnapshotVerification = try verifySnapshotBundleBytes(bytes: snapshotBundleBytes)
+precondition(byteSnapshotVerification == snapshotVerification)
+let incompleteSnapshotBundle = SnapshotBundleRecord(
+    formatVersion: snapshotBundle.formatVersion,
+    tree: snapshotBundle.tree,
+    nodes: Array(snapshotBundle.nodes.dropLast())
+)
+let incompleteSnapshotVerification = try verifySnapshotBundle(record: incompleteSnapshotBundle)
+precondition(!incompleteSnapshotVerification.valid)
+precondition(!incompleteSnapshotVerification.missingCids.isEmpty)
+let decodedSnapshotBundle = try snapshotBundleFromBytes(bytes: snapshotBundleBytes)
+let snapshotDestination = try ProllyEngine.memory(config: defaultConfig())
+let importedSnapshotTree = try snapshotDestination.importSnapshot(bundle: decodedSnapshotBundle)
+let importedSnapshotTitle = try snapshotDestination.get(tree: importedSnapshotTree, key: bytes("doc:title"))
+precondition(text(importedSnapshotTitle) == "Right")
+
+let structuralCursorPage = try engine.structuralDiffPage(base: empty, other: right, cursorJson: nil, limit: 0)
+precondition(structuralCursorPage.nextCursor != nil)
+precondition(structuralCursorPage.nextCursorJson != nil)
+let resumedStructuralPage = try engine.structuralDiffPageWithCursor(
+    base: empty,
+    other: right,
+    cursor: structuralCursorPage.nextCursor,
+    limit: 1
+)
+precondition(resumedStructuralPage.diffs.count == 1)
+
 let preferRight = try engine.merge(base: base, left: left, right: right, resolver: "prefer_right")
 let preferRightTitle = try engine.get(tree: preferRight, key: bytes("doc:title"))
 precondition(text(preferRightTitle) == "Right")
@@ -82,5 +128,8 @@ precondition(text(prefixMergedBody) == "Right body")
 let explanation = try engine.mergeExplain(base: base, left: left, right: right, resolver: "prefer_right")
 precondition(explanation.result != nil)
 precondition(explanation.traceJson.contains("events"))
+precondition(explanation.trace.events.contains { event in
+    event.kind == .resolverCalled && event.resolution == .value
+})
 
 print("Swift diff_merge scenario passed")

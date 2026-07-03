@@ -134,6 +134,23 @@ for result in prolly.range(&tree, b"b", Some(b"d")).unwrap() {
 }
 ```
 
+#### `prefix(&tree, prefix) -> Result<RangeIter, Error>`
+Iterate over every key that starts with `prefix`, using the same byte-prefix
+bounds as `prefix_range(prefix)`.
+
+#### `prefix_page(&tree, prefix, cursor, limit) -> Result<RangePage, Error>`
+Read a bounded page over keys that start with `prefix`. A start cursor begins
+at the prefix start; returned cursors resume strictly after the last emitted
+key.
+
+#### `first_entry(&tree)` / `last_entry(&tree)`
+Return the first or last key-value pair in lexicographic order, or `None` for
+an empty tree.
+
+#### `lower_bound(&tree, key)` / `upper_bound(&tree, key)`
+Return the first entry whose key is greater than or equal to `key`, or strictly
+greater than `key`, respectively.
+
 ### Batch Operations
 
 #### `batch(&tree, mutations) -> Result<Tree, Error>`
@@ -282,6 +299,14 @@ if cursor.is_valid() {
 }
 ```
 
+#### `cursor_window(&tree, key, end, limit) -> Result<CursorWindow, Error>`
+Seek with the cursor and read a bounded forward page in one call. The result
+reports the cursor landing entry, whether `key` was an exact match, up to
+`limit` entries starting at the first key greater than or equal to `key`, and a
+range cursor that resumes after the last emitted entry.
+
+Use `limit == 0` for an exact/inexact seek probe without reading page entries.
+
 #### `diff_cursor(&base, &other) -> Result<DiffCursor, Error>`
 Stream differences without collecting all diffs upfront (memory-efficient for large trees).
 
@@ -307,13 +332,16 @@ let merged = prolly.crdt_merge(&base, &left, &right, &config).unwrap();
 - **Custom**: User-provided merge function
 
 #### `parallel_batch(&tree, mutations, config) -> Result<Tree, Error>`
-Apply batch mutations with parallel processing for large trees.
+Apply batch mutations through the tunable high-throughput batch path.
+Use `parallel_batch_with_stats` when you need the same route/write telemetry
+returned by `batch_with_stats`.
 
 ```rust
 use prolly::ParallelConfig;
 
 let config = ParallelConfig::default();
 let new_tree = prolly.parallel_batch(&tree, mutations, &config).unwrap();
+let result = prolly.parallel_batch_with_stats(&tree, mutations, &config).unwrap();
 ```
 
 #### `collect_stats(&tree) -> Result<TreeStats, Error>`

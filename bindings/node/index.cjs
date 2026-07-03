@@ -310,7 +310,7 @@ if (!nativeBinding) {
   throw new Error(`Failed to load native binding`)
 }
 
-const { NativeProllyBlobStore, NativeMergePolicyRegistry, NativeHostStore, NativeProllyEngine, cidFromBytes, nodeBytesRoundTrip, nodeCidFromBytes, verifyKeyProof, verifyMultiKeyProof, verifyRangeProof, verifyRangePageProof, verifyDiffPageProof, keyProofToBytes, keyProofFromBytes, multiKeyProofToBytes, multiKeyProofFromBytes, rangeProofToBytes, rangeProofFromBytes, rangePageProofToBytes, rangePageProofFromBytes, diffPageProofToBytes, diffPageProofFromBytes, inspectProofBundle, verifyProofBundle, signProofBundleHmacSha256, verifyAuthenticatedProofEnvelope, verifyAuthenticatedProofBundle, authenticatedProofEnvelopeToBytes, authenticatedProofEnvelopeFromBytes, keyProofFromNodeBytes, multiKeyProofFromNodeBytes, rangeProofFromNodeBytes, rangePageProofFromNodeBytes, isBoundaryConfigJson, prefixEnd, prefixRange, rangeCursorStart, rangeCursorAfterKey, u64Key, u128Key, i64Key, i128Key, timestampMillisKey, encodeSegment, keyFromSegments, keyFromPrefixedSegments, changedSpan, changedSpanFromKey, changedSpanForPrefix, retainAllNamedRoots, retainExactNamedRoots, retainNamedRootPrefix, retainNewestNamedRoots, retainNamedRootsUpdatedSince, decodeSegments, debugKey, snapshotNamespaceBranch, snapshotNamespaceTag, snapshotNamespaceCheckpoint, snapshotNamespaceCustom, snapshotRootName, snapshotIdFromName, versionedValueBytesRoundTrip, versionedValueBytesMatchesSchema, versionedValueBytesRequireSchema, valueRefBytesRoundTrip, valueRefFromStoredBytes, valueRefInlineRequiresEscape, blobRefValidateBytes, rootManifestBytesRoundTrip, defaultLargeValueConfig, defaultParallelConfig, crdtConfigLww, crdtConfigMultiValue, timestampedValueToBytes, timestampedValueFromBytes, timestampedValueNow, multiValueSetToBytes, multiValueSetFromBytes, multiValueSetMerge, tombstoneToBytes, tombstoneFromBytes, tombstoneFromStoredBytes, isTombstoneValue, tombstoneUpsertMutation, tombstoneCompactionMutation } = nativeBinding
+const { NativeProllyBlobStore, NativeMergePolicyRegistry, NativeHostStore, NativeProllyEngine, cidFromBytes, nodeBytesRoundTrip, nodeCidFromBytes, verifyKeyProof, verifyMultiKeyProof, verifyRangeProof, verifyRangePageProof, verifyDiffPageProof, keyProofToBytes, keyProofFromBytes, multiKeyProofToBytes, multiKeyProofFromBytes, rangeProofToBytes, rangeProofFromBytes, rangePageProofToBytes, rangePageProofFromBytes, diffPageProofToBytes, diffPageProofFromBytes, inspectProofBundle, verifyProofBundle, signProofBundleHmacSha256, verifyAuthenticatedProofEnvelope, verifyAuthenticatedProofBundle, authenticatedProofEnvelopeToBytes, authenticatedProofEnvelopeFromBytes, keyProofFromNodeBytes, multiKeyProofFromNodeBytes, rangeProofFromNodeBytes, rangePageProofFromNodeBytes, isBoundaryConfigJson, prefixEnd, prefixRange, rangeCursorStart, rangeCursorAfterKey, reverseCursorEnd, reverseCursorBeforeKey, upsertMutation, deleteMutation, resolutionValue, resolutionDelete, resolutionUnresolved, resolvePreferLeft, resolvePreferRight, resolveDeleteWins, resolveUpdateWins, crdtResolutionValue, crdtResolutionDelete, u64Key, u128Key, i64Key, i128Key, timestampMillisKey, encodeSegment, keyFromSegments, keyFromPrefixedSegments, changedSpan, changedSpanFromKey, changedSpanForPrefix, retainAllNamedRoots, retainExactNamedRoots, retainNamedRootPrefix, retainNewestNamedRoots, retainNamedRootsUpdatedSince, decodeSegments, debugKey, snapshotNamespaceBranch, snapshotNamespaceTag, snapshotNamespaceCheckpoint, snapshotNamespaceCustom, snapshotRootName, snapshotIdFromName, versionedValueBytesRoundTrip, versionedValueBytesMatchesSchema, versionedValueBytesRequireSchema, valueRefBytesRoundTrip, valueRefFromStoredBytes, valueRefInlineRequiresEscape, blobRefValidateBytes, rootManifestBytesRoundTrip, snapshotBundleToBytes, snapshotBundleFromBytes, snapshotBundleDigest, snapshotBundleDigestBytes, snapshotBundleSummary, snapshotBundleSummaryFromBytes, verifySnapshotBundle, verifySnapshotBundleBytes, defaultConfig, encodingRaw, encodingCbor, encodingJson, encodingCustom, treeConfig, defaultLargeValueConfig, largeValueConfig, defaultParallelConfig, parallelConfig, parallelConfigSequential, crdtConfigLww, crdtConfigMultiValue, timestampedValueToBytes, timestampedValueFromBytes, timestampedValueNow, multiValueSetToBytes, multiValueSetFromBytes, multiValueSetMerge, tombstoneToBytes, tombstoneFromBytes, tombstoneFromStoredBytes, isTombstoneValue, tombstoneUpsertMutation, tombstoneCompactionMutation } = nativeBinding
 
 module.exports.NativeProllyBlobStore = NativeProllyBlobStore
 module.exports.NativeMergePolicyRegistry = NativeMergePolicyRegistry
@@ -350,6 +350,19 @@ module.exports.prefixEnd = prefixEnd
 module.exports.prefixRange = prefixRange
 module.exports.rangeCursorStart = rangeCursorStart
 module.exports.rangeCursorAfterKey = rangeCursorAfterKey
+module.exports.reverseCursorEnd = reverseCursorEnd
+module.exports.reverseCursorBeforeKey = reverseCursorBeforeKey
+module.exports.upsertMutation = upsertMutation
+module.exports.deleteMutation = deleteMutation
+module.exports.resolutionValue = resolutionValue
+module.exports.resolutionDelete = resolutionDelete
+module.exports.resolutionUnresolved = resolutionUnresolved
+module.exports.resolvePreferLeft = resolvePreferLeft
+module.exports.resolvePreferRight = resolvePreferRight
+module.exports.resolveDeleteWins = resolveDeleteWins
+module.exports.resolveUpdateWins = resolveUpdateWins
+module.exports.crdtResolutionValue = crdtResolutionValue
+module.exports.crdtResolutionDelete = crdtResolutionDelete
 module.exports.u64Key = u64Key
 module.exports.u128Key = u128Key
 module.exports.i64Key = i64Key
@@ -382,8 +395,25 @@ module.exports.valueRefFromStoredBytes = valueRefFromStoredBytes
 module.exports.valueRefInlineRequiresEscape = valueRefInlineRequiresEscape
 module.exports.blobRefValidateBytes = blobRefValidateBytes
 module.exports.rootManifestBytesRoundTrip = rootManifestBytesRoundTrip
+module.exports.snapshotBundleToBytes = snapshotBundleToBytes
+module.exports.snapshotBundleFromBytes = snapshotBundleFromBytes
+module.exports.snapshotBundleDigest = snapshotBundleDigest
+module.exports.snapshotBundleDigestBytes = snapshotBundleDigestBytes
+module.exports.snapshotBundleSummary = snapshotBundleSummary
+module.exports.snapshotBundleSummaryFromBytes = snapshotBundleSummaryFromBytes
+module.exports.verifySnapshotBundle = verifySnapshotBundle
+module.exports.verifySnapshotBundleBytes = verifySnapshotBundleBytes
+module.exports.defaultConfig = defaultConfig
+module.exports.encodingRaw = encodingRaw
+module.exports.encodingCbor = encodingCbor
+module.exports.encodingJson = encodingJson
+module.exports.encodingCustom = encodingCustom
+module.exports.treeConfig = treeConfig
 module.exports.defaultLargeValueConfig = defaultLargeValueConfig
+module.exports.largeValueConfig = largeValueConfig
 module.exports.defaultParallelConfig = defaultParallelConfig
+module.exports.parallelConfig = parallelConfig
+module.exports.parallelConfigSequential = parallelConfigSequential
 module.exports.crdtConfigLww = crdtConfigLww
 module.exports.crdtConfigMultiValue = crdtConfigMultiValue
 module.exports.timestampedValueToBytes = timestampedValueToBytes

@@ -97,6 +97,21 @@ for {
 	cursor = page.NextCursor
 }
 
+var reverseCursor *prolly.ReverseCursor
+for {
+	page, err := engine.ReversePage(tree, reverseCursor, nil, 100)
+	if err != nil {
+		log.Fatal(err)
+	}
+	for _, entry := range page.Entries {
+		handleNewestFirst(entry.Key, entry.Value)
+	}
+	if page.NextCursor == nil {
+		break
+	}
+	reverseCursor = page.NextCursor
+}
+
 diffs, err := engine.DiffFromCursor(oldTree, newTree, &prolly.RangeCursor{AfterKey: []byte("user/42")}, end)
 if err != nil {
 	log.Fatal(err)

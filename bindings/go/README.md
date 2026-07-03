@@ -11,26 +11,31 @@ Current surface:
 
 - memory engine;
 - file, SQLite, and SQLite-in-memory Rust-backed engines;
-- create, put, get, delete, range, batch, batch-with-stats, parallel batch,
-  Rust bulk-build, sorted bulk-build, append-batch, append-batch-with-stats,
+- create, put, get, delete, range, prefix, batch, batch-with-stats, parallel batch,
+  parallel-batch-with-stats, Rust bulk-build, sorted bulk-build, append-batch, append-batch-with-stats,
   and `get_many`;
-- eager range, range-after/cursor resumption with cursor constructors,
-  cursor-resumed diffs, paged range/diff, and paged three-way conflict
+- eager range, prefix scans/pages, range-after/cursor resumption with cursor constructors, reverse and prefix-reverse pages,
+  ordered boundary helpers, cursor windows, cursor-resumed diffs, paged range/diff, and paged three-way conflict
   inspection;
-- three-way merge, merge explanations, named roots, named-root manifest
+- three-way merge, merge explanations with typed trace events plus JSON trace
+  compatibility, named roots, named-root manifest
   metadata listing, CAS, retention policy constructors, retention selection,
-  and retained named-root store GC;
+  retained named-root store GC, and mutation helper constructors;
 - built-in and Go callback merge resolvers, including full-tree, range-limited,
-  and prefix-limited merge APIs;
+  and prefix-limited merge APIs, plus merge/CRDT resolution constructors and
+  built-in resolver helper functions;
 - merge policy registries with named built-in rules and Go callback rules;
 - Go `HostStore` callbacks for Rust-backed engines over host-owned node bytes,
   hints, node scans, named-root manifests, CAS, GC, and sync;
-- stats/debug JSON and text views, cache stats/pinning, metrics reset, and
+- typed stats/debug records, stats/debug JSON and text views, cache stats/pinning, metrics reset, and
   changed-span constructors plus optional performance hint smoke paths;
 - key helpers for prefix ends/ranges, numeric keys, segment encoding/decoding,
   composite key construction, debug rendering, and boundary checks;
-- structural diff pages, node reachability/GC plan/sweep, store GC, retained
-  named-root GC, and missing-node sync between memory engines;
+- structural diff pages with typed cursor resume plus JSON cursor compatibility,
+  node reachability/GC plan/sweep, store GC, retained named-root GC, and
+  missing-node sync plus portable snapshot bundle export/import between
+  engines with canonical snapshot bundle bytes, digests, summaries, and self-contained
+  verification;
 - memory/file blob stores, large-value helpers, value-ref inspection, blob
   reachability, blob GC, blob-store GC, value-ref stored-byte helpers, and
   blob-ref byte validation;
@@ -43,9 +48,10 @@ Current surface:
   multi-value set helpers, tombstone envelopes, tombstone upsert, and tombstone
   compaction;
 - versioned value byte round trips plus schema match/require guard helpers;
-- `context.Context` wrappers for create/read/write/range/diff, merge,
+- `context.Context` wrappers for create/read/write/range/cursor-window/diff, merge,
   named-root, stats/cache, hint, GC/sync, large-value, and blob-store methods;
-- opaque config and tree handles backed by UniFFI record bytes;
+- opaque config and tree handles backed by UniFFI record bytes, with encoding
+  helpers plus tree, large-value, and parallel config constructors;
 - `[]byte` keys and values.
 
 Local smoke test:

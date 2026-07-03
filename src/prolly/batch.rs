@@ -1495,39 +1495,7 @@ pub(crate) fn rebuild_from_modified_leaves<S: Store>(
     Ok(current_cids.into_iter().next())
 }
 
-/// Preprocess mutations by sorting and deduplicating.
-///
-/// This function prepares mutations for batch application by:
-/// 1. Sorting mutations by key in lexicographic order
-/// 2. Deduplicating mutations, keeping only the last mutation for each key (last-write-wins)
-///
-/// This preprocessing happens before any tree modifications are made.
-///
-/// # Arguments
-/// * `mutations` - Vector of mutations to preprocess
-///
-/// # Returns
-/// A new vector of mutations, sorted by key with duplicates removed.
-///
-/// # Example
-/// ```rust,ignore
-/// use prolly::Mutation;
-/// use prolly::preprocess_mutations;
-///
-/// let mutations = vec![
-///     Mutation::Upsert { key: b"b".to_vec(), val: b"1".to_vec() },
-///     Mutation::Upsert { key: b"a".to_vec(), val: b"2".to_vec() },
-///     Mutation::Upsert { key: b"b".to_vec(), val: b"3".to_vec() }, // duplicate key
-/// ];
-///
-/// let processed = preprocess_mutations(mutations);
-///
-/// // Result is sorted by key, with only the last mutation for "b"
-/// assert_eq!(processed.len(), 2);
-/// assert_eq!(processed[0].key(), b"a");
-/// assert_eq!(processed[1].key(), b"b");
-/// // The value for "b" is "3" (last-write-wins)
-/// ```
+#[cfg(any(test, feature = "async-store"))]
 pub(crate) fn preprocess_mutations(mutations: Vec<Mutation>) -> Vec<Mutation> {
     preprocess_mutations_with_info(mutations).mutations
 }
@@ -1752,27 +1720,8 @@ fn apply_mutations_to_leaf_binary_search_with_change(
 /// In practice, batch operations typically involve enough mutations that
 /// the two-pointer approach provides significant performance benefits.
 ///
-/// # Example
-///
-/// ```rust,ignore
-/// use prolly::{Node, Mutation, apply_mutations_to_leaf};
-///
-/// // Create a leaf with existing entries
-/// let mut leaf = Node::new_leaf();
-/// leaf.keys = vec![b"a".to_vec(), b"c".to_vec(), b"e".to_vec()];
-/// leaf.vals = vec![b"1".to_vec(), b"3".to_vec(), b"5".to_vec()];
-///
-/// // Apply mutations (must be sorted by key)
-/// let mutations = vec![
-///     Mutation::Upsert { key: b"b".to_vec(), val: b"2".to_vec() }, // insert
-///     Mutation::Upsert { key: b"c".to_vec(), val: b"33".to_vec() }, // update
-///     Mutation::Delete { key: b"e".to_vec() }, // delete
-/// ];
-///
-/// let result = apply_mutations_to_leaf(leaf, &mutations);
-/// // Result: [("a", "1"), ("b", "2"), ("c", "33")]
-/// ```
-pub(crate) fn apply_mutations_to_leaf(leaf: Node, mutations: &[Mutation]) -> Node {
+#[cfg(test)]
+fn apply_mutations_to_leaf(leaf: Node, mutations: &[Mutation]) -> Node {
     apply_mutations_to_leaf_with_change(leaf, mutations).0
 }
 
@@ -3307,61 +3256,16 @@ pub(crate) fn filter_mutations_for_range(
         .collect()
 }
 
-/// Group mutations by their target leaf node.
-///
-/// Mutations are grouped so that all mutations targeting the same leaf
-/// can be applied together in a single pass.
-///
-/// # Optimization
-/// Uses cursor-based traversal to achieve O(m + k × h) complexity where:
-/// - m = number of mutations
-/// - k = number of affected leaves  
-/// - h = tree height
-///
-/// This is much faster than the naive O(m × h) approach when mutations
-/// are clustered (which they usually are after sorting).
-///
-/// # Arguments
-/// * `prolly` - Reference to the Prolly tree manager
-/// * `tree` - The tree to find paths in
-/// * `mutations` - Sorted mutations to group
-///
-/// # Returns
-/// Vector of LeafMutationGroup, each containing a leaf and its mutations
-pub(crate) fn group_mutations_by_leaf<S: Store>(
+#[cfg(test)]
+fn group_mutations_by_leaf<S: Store>(
     prolly: &Prolly<S>,
     tree: &Tree,
     mutations: Vec<Mutation>,
 ) -> Result<Vec<LeafMutationGroup>, Error> {
-    // Handle empty mutations
-    if mutations.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    // Handle empty tree - all mutations go to a new leaf
-    if tree.root.is_none() {
-        return Ok(vec![LeafMutationGroup {
-            leaf: prolly.new_leaf_node(),
-            ancestors: vec![],
-            mutations,
-        }]);
-    }
-
-    // Use the optimized cursor-based grouping
     group_mutations_by_leaf_optimized(prolly, tree, mutations)
 }
 
-/// Optimized cursor-based mutation grouping.
-///
-/// This function uses a two-pointer approach:
-/// 1. Cursor traverses leaves in order
-/// 2. Mutation iterator advances through sorted mutations
-/// 3. For each leaf, collect all mutations that belong to it
-///
-/// # Complexity
-/// - O(m) for iterating through mutations
-/// - O(k × h) for finding paths to k affected leaves
-/// - Total: O(m + k × h) which is much better than O(m × h)
+#[cfg(test)]
 fn group_mutations_by_leaf_optimized<S: Store>(
     prolly: &Prolly<S>,
     tree: &Tree,

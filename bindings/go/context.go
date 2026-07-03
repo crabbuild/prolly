@@ -226,9 +226,57 @@ func (e *Engine) ParallelBatchContext(ctx context.Context, tree Tree, mutations 
 	})
 }
 
+func (e *Engine) ParallelBatchWithStatsContext(ctx context.Context, tree Tree, mutations []Mutation, config ParallelConfig) (BatchApplyResult, error) {
+	return contextValue(ctx, func() (BatchApplyResult, error) {
+		return e.ParallelBatchWithStats(tree, mutations, config)
+	})
+}
+
+func (e *Engine) FirstEntryContext(ctx context.Context, tree Tree) (*Entry, error) {
+	return contextValue(ctx, func() (*Entry, error) {
+		return e.FirstEntry(tree)
+	})
+}
+
+func (e *Engine) LastEntryContext(ctx context.Context, tree Tree) (*Entry, error) {
+	return contextValue(ctx, func() (*Entry, error) {
+		return e.LastEntry(tree)
+	})
+}
+
+func (e *Engine) LowerBoundContext(ctx context.Context, tree Tree, key []byte) (*Entry, error) {
+	return contextValue(ctx, func() (*Entry, error) {
+		return e.LowerBound(tree, key)
+	})
+}
+
+func (e *Engine) UpperBoundContext(ctx context.Context, tree Tree, key []byte) (*Entry, error) {
+	return contextValue(ctx, func() (*Entry, error) {
+		return e.UpperBound(tree, key)
+	})
+}
+
 func (e *Engine) RangeContext(ctx context.Context, tree Tree, start []byte, end []byte) ([]Entry, error) {
 	return contextValue(ctx, func() ([]Entry, error) {
 		return e.Range(tree, start, end)
+	})
+}
+
+func (e *Engine) PrefixContext(ctx context.Context, tree Tree, prefix []byte) ([]Entry, error) {
+	return contextValue(ctx, func() ([]Entry, error) {
+		return e.Prefix(tree, prefix)
+	})
+}
+
+func (e *Engine) PrefixPageContext(ctx context.Context, tree Tree, prefix []byte, cursor *RangeCursor, limit uint64) (RangePage, error) {
+	return contextValue(ctx, func() (RangePage, error) {
+		return e.PrefixPage(tree, prefix, cursor, limit)
+	})
+}
+
+func (e *Engine) PrefixReversePageContext(ctx context.Context, tree Tree, prefix []byte, cursor *ReverseCursor, limit uint64) (ReversePage, error) {
+	return contextValue(ctx, func() (ReversePage, error) {
+		return e.PrefixReversePage(tree, prefix, cursor, limit)
 	})
 }
 
@@ -247,6 +295,18 @@ func (e *Engine) RangeFromCursorContext(ctx context.Context, tree Tree, cursor *
 func (e *Engine) RangePageContext(ctx context.Context, tree Tree, cursor *RangeCursor, end []byte, limit uint64) (RangePage, error) {
 	return contextValue(ctx, func() (RangePage, error) {
 		return e.RangePage(tree, cursor, end, limit)
+	})
+}
+
+func (e *Engine) ReversePageContext(ctx context.Context, tree Tree, cursor *ReverseCursor, start []byte, limit uint64) (ReversePage, error) {
+	return contextValue(ctx, func() (ReversePage, error) {
+		return e.ReversePage(tree, cursor, start, limit)
+	})
+}
+
+func (e *Engine) CursorWindowContext(ctx context.Context, tree Tree, key []byte, end []byte, limit uint64) (CursorWindow, error) {
+	return contextValue(ctx, func() (CursorWindow, error) {
+		return e.CursorWindow(tree, key, end, limit)
 	})
 }
 
@@ -474,15 +534,33 @@ func (e *Engine) CollectStatsJSONContext(ctx context.Context, tree Tree) (string
 	})
 }
 
+func (e *Engine) CollectStatsContext(ctx context.Context, tree Tree) (TreeStats, error) {
+	return contextValue(ctx, func() (TreeStats, error) {
+		return e.CollectStats(tree)
+	})
+}
+
 func (e *Engine) StatsDiffJSONContext(ctx context.Context, before Tree, after Tree) (string, error) {
 	return contextValue(ctx, func() (string, error) {
 		return e.StatsDiffJSON(before, after)
 	})
 }
 
+func (e *Engine) StatsDiffContext(ctx context.Context, before Tree, after Tree) (StatsComparison, error) {
+	return contextValue(ctx, func() (StatsComparison, error) {
+		return e.StatsDiff(before, after)
+	})
+}
+
 func (e *Engine) DebugTreeJSONContext(ctx context.Context, tree Tree) (string, error) {
 	return contextValue(ctx, func() (string, error) {
 		return e.DebugTreeJSON(tree)
+	})
+}
+
+func (e *Engine) DebugTreeContext(ctx context.Context, tree Tree) (TreeDebugView, error) {
+	return contextValue(ctx, func() (TreeDebugView, error) {
+		return e.DebugTree(tree)
 	})
 }
 
@@ -495,6 +573,12 @@ func (e *Engine) DebugTreeTextContext(ctx context.Context, tree Tree) (string, e
 func (e *Engine) DebugCompareTreesJSONContext(ctx context.Context, left Tree, right Tree) (string, error) {
 	return contextValue(ctx, func() (string, error) {
 		return e.DebugCompareTreesJSON(left, right)
+	})
+}
+
+func (e *Engine) DebugCompareTreesContext(ctx context.Context, left Tree, right Tree) (TreeDebugComparison, error) {
+	return contextValue(ctx, func() (TreeDebugComparison, error) {
+		return e.DebugCompareTrees(left, right)
 	})
 }
 
@@ -563,6 +647,12 @@ func (e *Engine) LoadChangedSpansHintContext(ctx context.Context, base Tree, cha
 func (e *Engine) StructuralDiffPageContext(ctx context.Context, base Tree, other Tree, cursorJSON *string, limit uint64) (StructuralDiffPage, error) {
 	return contextValue(ctx, func() (StructuralDiffPage, error) {
 		return e.StructuralDiffPage(base, other, cursorJSON, limit)
+	})
+}
+
+func (e *Engine) StructuralDiffPageWithCursorContext(ctx context.Context, base Tree, other Tree, cursor *StructuralDiffCursor, limit uint64) (StructuralDiffPage, error) {
+	return contextValue(ctx, func() (StructuralDiffPage, error) {
+		return e.StructuralDiffPageWithCursor(base, other, cursor, limit)
 	})
 }
 
@@ -651,5 +741,17 @@ func (e *Engine) PlanMissingNodesContext(ctx context.Context, tree Tree, destina
 func (e *Engine) CopyMissingNodesContext(ctx context.Context, tree Tree, destination *Engine) (MissingNodeCopy, error) {
 	return contextValue(ctx, func() (MissingNodeCopy, error) {
 		return e.CopyMissingNodes(tree, destination)
+	})
+}
+
+func (e *Engine) ExportSnapshotContext(ctx context.Context, tree Tree) (SnapshotBundle, error) {
+	return contextValue(ctx, func() (SnapshotBundle, error) {
+		return e.ExportSnapshot(tree)
+	})
+}
+
+func (e *Engine) ImportSnapshotContext(ctx context.Context, bundle SnapshotBundle) (Tree, error) {
+	return contextValue(ctx, func() (Tree, error) {
+		return e.ImportSnapshot(bundle)
 	})
 }

@@ -1,35 +1,42 @@
 use napi::bindgen_prelude::{
     Buffer, Env, Error, FromNapiValue, FunctionRef, JsValuesTupleIntoVec, Result, Status,
 };
+use napi::JsUnknown;
 use napi_derive::napi;
 use prolly_bindings::{
     authenticated_proof_envelope_from_bytes, authenticated_proof_envelope_to_bytes,
     blob_ref_validate_bytes, changed_span, changed_span_for_prefix, changed_span_from_key,
-    cid_from_bytes, crdt_config_lww, crdt_config_multi_value, debug_key, decode_segments,
-    default_config, default_large_value_config, default_parallel_config,
-    diff_page_proof_from_bytes, diff_page_proof_to_bytes, encode_segment, i128_key, i64_key,
+    cid_from_bytes, crdt_config_lww, crdt_config_multi_value, crdt_resolution_delete,
+    crdt_resolution_value, debug_key, decode_segments, default_config, default_large_value_config,
+    default_parallel_config, delete_mutation, diff_page_proof_from_bytes, diff_page_proof_to_bytes,
+    encode_segment, encoding_cbor, encoding_custom, encoding_json, encoding_raw, i128_key, i64_key,
     inspect_proof_bundle, is_boundary_config, is_tombstone_value, key_from_prefixed_segments,
     key_from_segments, key_proof_from_bytes, key_proof_from_node_bytes, key_proof_path_node_bytes,
-    key_proof_to_bytes, multi_key_proof_from_bytes, multi_key_proof_from_node_bytes,
-    multi_key_proof_path_node_bytes, multi_key_proof_to_bytes, multi_value_set_from_bytes,
-    multi_value_set_merge, multi_value_set_to_bytes, node_cid, node_from_bytes, node_to_bytes,
-    prefix_end, prefix_range, range_cursor_after_key, range_cursor_start,
-    range_page_proof_from_bytes, range_page_proof_from_node_bytes,
-    range_page_proof_path_node_bytes, range_page_proof_to_bytes, range_proof_from_bytes,
-    range_proof_from_node_bytes, range_proof_path_node_bytes, range_proof_to_bytes,
+    key_proof_to_bytes, large_value_config, multi_key_proof_from_bytes,
+    multi_key_proof_from_node_bytes, multi_key_proof_path_node_bytes, multi_key_proof_to_bytes,
+    multi_value_set_from_bytes, multi_value_set_merge, multi_value_set_to_bytes, node_cid,
+    node_from_bytes, node_to_bytes, parallel_config, parallel_config_sequential, prefix_end,
+    prefix_range, range_cursor_after_key, range_cursor_start, range_page_proof_from_bytes,
+    range_page_proof_from_node_bytes, range_page_proof_path_node_bytes, range_page_proof_to_bytes,
+    range_proof_from_bytes, range_proof_from_node_bytes, range_proof_path_node_bytes,
+    range_proof_to_bytes, resolution_delete, resolution_unresolved, resolution_value,
+    resolve_delete_wins, resolve_prefer_left, resolve_prefer_right, resolve_update_wins,
     retain_all_named_roots, retain_exact_named_roots, retain_named_root_prefix,
-    retain_named_roots_updated_since, retain_newest_named_roots,
-    root_manifest_from_bytes, root_manifest_to_bytes, sign_proof_bundle_hmac_sha256,
-    snapshot_id_from_name, snapshot_namespace_branch, snapshot_namespace_checkpoint,
-    snapshot_namespace_custom, snapshot_namespace_tag, snapshot_root_name, timestamp_millis_key,
-    timestamped_value_from_bytes, timestamped_value_now, timestamped_value_to_bytes,
-    tombstone_compaction_mutation, tombstone_from_bytes, tombstone_from_stored_bytes,
-    tombstone_to_bytes, tombstone_upsert_mutation, u128_key, u64_key, value_ref_from_bytes,
-    value_ref_from_stored_bytes, value_ref_inline_requires_escape, value_ref_to_bytes,
-    verify_authenticated_proof_bundle, verify_authenticated_proof_envelope, verify_diff_page_proof,
-    verify_key_proof, verify_multi_key_proof, verify_proof_bundle, verify_range_page_proof,
-    verify_range_proof, versioned_value_bytes_matches_schema, versioned_value_bytes_require_schema,
-    versioned_value_from_bytes, versioned_value_to_bytes,
+    retain_named_roots_updated_since, retain_newest_named_roots, reverse_cursor_before_key,
+    reverse_cursor_end, root_manifest_from_bytes, root_manifest_to_bytes,
+    sign_proof_bundle_hmac_sha256, snapshot_bundle_digest, snapshot_bundle_digest_bytes,
+    snapshot_bundle_from_bytes, snapshot_bundle_summary, snapshot_bundle_summary_from_bytes,
+    snapshot_bundle_to_bytes, snapshot_id_from_name, snapshot_namespace_branch,
+    snapshot_namespace_checkpoint, snapshot_namespace_custom, snapshot_namespace_tag,
+    snapshot_root_name, timestamp_millis_key, timestamped_value_from_bytes, timestamped_value_now,
+    timestamped_value_to_bytes, tombstone_compaction_mutation, tombstone_from_bytes,
+    tombstone_from_stored_bytes, tombstone_to_bytes, tombstone_upsert_mutation, tree_config,
+    u128_key, u64_key, upsert_mutation, value_ref_from_bytes, value_ref_from_stored_bytes,
+    value_ref_inline_requires_escape, value_ref_to_bytes, verify_authenticated_proof_bundle,
+    verify_authenticated_proof_envelope, verify_diff_page_proof, verify_key_proof,
+    verify_multi_key_proof, verify_proof_bundle, verify_range_page_proof, verify_range_proof,
+    verify_snapshot_bundle, verify_snapshot_bundle_bytes, versioned_value_bytes_matches_schema,
+    versioned_value_bytes_require_schema, versioned_value_from_bytes, versioned_value_to_bytes,
     AuthenticatedProofBundleVerificationRecord as BindingAuthenticatedProofBundleVerificationRecord,
     AuthenticatedProofEnvelopeRecord as BindingAuthenticatedProofEnvelopeRecord,
     AuthenticatedProofEnvelopeVerificationRecord as BindingAuthenticatedProofEnvelopeVerificationRecord,
@@ -44,7 +51,8 @@ use prolly_bindings::{
     ConflictPageRecord as BindingConflictPageRecord, ConflictRecord as BindingConflictRecord,
     CrdtConfigRecord as BindingCrdtConfigRecord, CrdtDeletePolicyKind, CrdtMergeStrategyKind,
     CrdtResolutionKind as BindingCrdtResolutionKind,
-    CrdtResolutionRecord as BindingCrdtResolutionRecord, DiffKind,
+    CrdtResolutionRecord as BindingCrdtResolutionRecord,
+    CursorWindowRecord as BindingCursorWindowRecord, DiffKind,
     DiffPageProofRecord as BindingDiffPageProofRecord,
     DiffPageProofVerificationRecord as BindingDiffPageProofVerificationRecord,
     DiffPageRecord as BindingDiffPageRecord, DiffRecord as BindingDiffRecord,
@@ -65,7 +73,15 @@ use prolly_bindings::{
     KeyProofVerificationRecord as BindingKeyProofVerificationRecord,
     LargeValueConfigRecord as BindingLargeValueConfigRecord,
     MergeExplanationRecord as BindingMergeExplanationRecord,
-    MergePolicyRegistry as BindingMergePolicyRegistry, MetricsRecord as BindingMetricsRecord,
+    MergeFallbackReasonKind as BindingMergeFallbackReasonKind,
+    MergeFastPathKind as BindingMergeFastPathKind,
+    MergePolicyRegistry as BindingMergePolicyRegistry,
+    MergeReuseReasonKind as BindingMergeReuseReasonKind,
+    MergeTraceEventKind as BindingMergeTraceEventKind,
+    MergeTraceEventRecord as BindingMergeTraceEventRecord,
+    MergeTraceRecord as BindingMergeTraceRecord,
+    MergeTraceResolutionKind as BindingMergeTraceResolutionKind,
+    MergeTraceStageKind as BindingMergeTraceStageKind, MetricsRecord as BindingMetricsRecord,
     MissingNodeCopyRecord as BindingMissingNodeCopyRecord,
     MissingNodePlanRecord as BindingMissingNodePlanRecord,
     MultiKeyProofRecord as BindingMultiKeyProofRecord,
@@ -85,9 +101,17 @@ use prolly_bindings::{
     RangePageRecord as BindingRangePageRecord, RangeProofRecord as BindingRangeProofRecord,
     RangeProofVerificationRecord as BindingRangeProofVerificationRecord,
     ResolutionKind as BindingResolutionKind, ResolutionRecord as BindingResolutionRecord,
-    RootManifestRecord as BindingRootManifestRecord, SnapshotNamespaceKind,
-    SnapshotNamespaceRecord, SnapshotRecord as BindingSnapshotRecord,
+    ReverseCursorRecord, ReversePageRecord as BindingReversePageRecord,
+    RootManifestRecord as BindingRootManifestRecord,
+    SnapshotBundleNodeRecord as BindingSnapshotBundleNodeRecord,
+    SnapshotBundleRecord as BindingSnapshotBundleRecord,
+    SnapshotBundleSummaryRecord as BindingSnapshotBundleSummaryRecord,
+    SnapshotBundleVerificationRecord as BindingSnapshotBundleVerificationRecord,
+    SnapshotNamespaceKind, SnapshotNamespaceRecord, SnapshotRecord as BindingSnapshotRecord,
     SnapshotSelectionRecord as BindingSnapshotSelectionRecord,
+    StructuralDiffCursorRecord as BindingStructuralDiffCursorRecord,
+    StructuralDiffMarkerKind as BindingStructuralDiffMarkerKind,
+    StructuralDiffMarkerRecord as BindingStructuralDiffMarkerRecord,
     StructuralDiffPageRecord as BindingStructuralDiffPageRecord,
     TimestampedValueRecord as BindingTimestampedValueRecord,
     TombstoneMetadataRecord as BindingTombstoneMetadataRecord,
@@ -100,6 +124,7 @@ use std::sync::{Arc, Mutex};
 #[napi(object)]
 pub struct NodeTreeRecord {
     pub root: Option<Buffer>,
+    pub config: Option<NodeConfigRecord>,
 }
 
 #[napi(object)]
@@ -125,9 +150,59 @@ pub struct NodeMutationRecord {
 }
 
 #[napi(object)]
+pub struct NodeEncodingRecord {
+    pub kind: String,
+    pub custom_name: Option<String>,
+}
+
+#[napi(object)]
+pub struct NodeConfigRecord {
+    pub min_chunk_size: String,
+    pub max_chunk_size: String,
+    pub chunking_factor: u32,
+    pub hash_seed: String,
+    pub encoding: NodeEncodingRecord,
+    pub node_cache_max_nodes: Option<String>,
+    pub node_cache_max_bytes: Option<String>,
+}
+
+#[napi(object)]
 pub struct NodeParallelConfigRecord {
     pub max_threads: String,
     pub parallelism_threshold: String,
+}
+
+#[napi(object)]
+pub struct NodeSnapshotBundleNodeRecord {
+    pub cid: Buffer,
+    pub bytes: Buffer,
+}
+
+#[napi(object)]
+pub struct NodeSnapshotBundleRecord {
+    pub format_version: u32,
+    pub tree: NodeTreeRecord,
+    pub nodes: Vec<NodeSnapshotBundleNodeRecord>,
+}
+
+#[napi(object)]
+pub struct NodeSnapshotBundleSummaryRecord {
+    pub format_version: u32,
+    pub root: Option<Buffer>,
+    pub node_count: String,
+    pub byte_count: String,
+    pub min_node_bytes: String,
+    pub max_node_bytes: String,
+}
+
+#[napi(object)]
+pub struct NodeSnapshotBundleVerificationRecord {
+    pub valid: bool,
+    pub summary: NodeSnapshotBundleSummaryRecord,
+    pub reachable_nodes: String,
+    pub reachable_bytes: String,
+    pub missing_cids: Vec<Buffer>,
+    pub extra_cids: Vec<Buffer>,
 }
 
 #[napi(object)]
@@ -288,6 +363,11 @@ pub struct NodeRangeCursorRecord {
 }
 
 #[napi(object)]
+pub struct NodeReverseCursorRecord {
+    pub before_key: Option<Buffer>,
+}
+
+#[napi(object)]
 pub struct NodeRangeBoundsRecord {
     pub start: Buffer,
     pub end: Option<Buffer>,
@@ -295,6 +375,21 @@ pub struct NodeRangeBoundsRecord {
 
 #[napi(object)]
 pub struct NodeRangePageRecord {
+    pub entries: Vec<NodeEntryRecord>,
+    pub next_cursor: Option<NodeRangeCursorRecord>,
+}
+
+#[napi(object)]
+pub struct NodeReversePageRecord {
+    pub entries: Vec<NodeEntryRecord>,
+    pub next_cursor: Option<NodeReverseCursorRecord>,
+}
+
+#[napi(object)]
+pub struct NodeCursorWindowRecord {
+    pub position_key: Option<Buffer>,
+    pub position_value: Option<Buffer>,
+    pub found: bool,
     pub entries: Vec<NodeEntryRecord>,
     pub next_cursor: Option<NodeRangeCursorRecord>,
 }
@@ -346,6 +441,49 @@ pub struct NodeStructuralDiffPageRecord {
     pub diffs: Vec<NodeDiffRecord>,
     pub next_cursor_json: Option<String>,
     pub stats: NodeDiffTraversalStatsRecord,
+    pub next_cursor: Option<NodeStructuralDiffCursorRecord>,
+}
+
+#[napi(object)]
+pub struct NodeStructuralDiffCursorRecord {
+    pub base_root: Option<Buffer>,
+    pub other_root: Option<Buffer>,
+    pub markers: Vec<NodeStructuralDiffMarkerRecord>,
+    pub pending: Vec<NodeDiffRecord>,
+}
+
+#[napi(object)]
+pub struct NodeStructuralDiffMarkerRecord {
+    pub kind: String,
+    pub base_cid: Option<Buffer>,
+    pub other_cid: Option<Buffer>,
+    pub span_end: Option<Buffer>,
+    pub cid: Option<Buffer>,
+}
+
+#[napi(object)]
+pub struct NodeMergeTraceRecord {
+    pub events: Vec<NodeMergeTraceEventRecord>,
+}
+
+#[napi(object)]
+pub struct NodeMergeTraceEventRecord {
+    pub kind: String,
+    pub fast_path: Option<String>,
+    pub cid: Option<Buffer>,
+    pub reuse_reason: Option<String>,
+    pub level: Option<String>,
+    pub entries: Option<String>,
+    pub first_key: Option<Buffer>,
+    pub last_key: Option<Buffer>,
+    pub stage: Option<String>,
+    pub key: Option<Buffer>,
+    pub resolution: Option<String>,
+    pub fallback_reason: Option<String>,
+    pub diff_stats: Option<NodeDiffTraversalStatsRecord>,
+    pub right_changes: Option<String>,
+    pub mutations: Option<String>,
+    pub append_only: Option<bool>,
 }
 
 #[napi(object)]
@@ -353,6 +491,7 @@ pub struct NodeMergeExplanationRecord {
     pub result: Option<NodeTreeRecord>,
     pub error: Option<String>,
     pub trace_json: String,
+    pub trace: NodeMergeTraceRecord,
 }
 
 #[napi(object)]
@@ -1702,6 +1841,24 @@ impl NativeProllyEngine {
             .map_err(to_napi_error)
     }
 
+    #[napi(js_name = "parallelBatchWithStats")]
+    pub fn parallel_batch_with_stats(
+        &self,
+        tree: NodeTreeRecord,
+        mutations: Vec<NodeMutationRecord>,
+        config: NodeParallelConfigRecord,
+    ) -> Result<NodeBatchApplyResultRecord> {
+        let mutations = mutations
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect::<Result<Vec<_>>>()?;
+        let config = config.try_into()?;
+        self.inner
+            .parallel_batch_with_stats(tree.into_tree(self.config.clone()), mutations, config)
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
     #[napi(js_name = "buildFromEntries")]
     pub fn build_from_entries(&self, entries: Vec<NodeEntryRecord>) -> Result<NodeTreeRecord> {
         let entries = entries
@@ -1761,6 +1918,46 @@ impl NativeProllyEngine {
             .map_err(to_napi_error)
     }
 
+    #[napi(js_name = "firstEntry")]
+    pub fn first_entry(&self, tree: NodeTreeRecord) -> Result<Option<NodeEntryRecord>> {
+        self.inner
+            .first_entry(tree.into_tree(self.config.clone()))
+            .map(|entry| entry.map(Into::into))
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "lastEntry")]
+    pub fn last_entry(&self, tree: NodeTreeRecord) -> Result<Option<NodeEntryRecord>> {
+        self.inner
+            .last_entry(tree.into_tree(self.config.clone()))
+            .map(|entry| entry.map(Into::into))
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "lowerBound")]
+    pub fn lower_bound(
+        &self,
+        tree: NodeTreeRecord,
+        key: Buffer,
+    ) -> Result<Option<NodeEntryRecord>> {
+        self.inner
+            .lower_bound(tree.into_tree(self.config.clone()), key.to_vec())
+            .map(|entry| entry.map(Into::into))
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "upperBound")]
+    pub fn upper_bound(
+        &self,
+        tree: NodeTreeRecord,
+        key: Buffer,
+    ) -> Result<Option<NodeEntryRecord>> {
+        self.inner
+            .upper_bound(tree.into_tree(self.config.clone()), key.to_vec())
+            .map(|entry| entry.map(Into::into))
+            .map_err(to_napi_error)
+    }
+
     #[napi]
     pub fn range(
         &self,
@@ -1777,6 +1974,55 @@ impl NativeProllyEngine {
             )
             .map_err(to_napi_error)?;
         Ok(entries.into_iter().map(Into::into).collect())
+    }
+
+    #[napi]
+    pub fn prefix(&self, tree: NodeTreeRecord, prefix: Buffer) -> Result<Vec<NodeEntryRecord>> {
+        let entries = self
+            .inner
+            .prefix(tree.into_tree(self.config.clone()), prefix.to_vec())
+            .map_err(to_napi_error)?;
+        Ok(entries.into_iter().map(Into::into).collect())
+    }
+
+    #[napi(js_name = "prefixPage")]
+    pub fn prefix_page(
+        &self,
+        tree: NodeTreeRecord,
+        prefix: Buffer,
+        cursor: Option<NodeRangeCursorRecord>,
+        limit: String,
+    ) -> Result<NodeRangePageRecord> {
+        let page = self
+            .inner
+            .prefix_page(
+                tree.into_tree(self.config.clone()),
+                prefix.to_vec(),
+                cursor.map(Into::into),
+                parse_u64(&limit)?,
+            )
+            .map_err(to_napi_error)?;
+        Ok(page.into())
+    }
+
+    #[napi(js_name = "prefixReversePage")]
+    pub fn prefix_reverse_page(
+        &self,
+        tree: NodeTreeRecord,
+        prefix: Buffer,
+        cursor: Option<NodeReverseCursorRecord>,
+        limit: String,
+    ) -> Result<NodeReversePageRecord> {
+        let page = self
+            .inner
+            .prefix_reverse_page(
+                tree.into_tree(self.config.clone()),
+                prefix.to_vec(),
+                cursor.map(Into::into),
+                parse_u64(&limit)?,
+            )
+            .map_err(to_napi_error)?;
+        Ok(page.into())
     }
 
     #[napi(js_name = "rangeAfter")]
@@ -1834,6 +2080,48 @@ impl NativeProllyEngine {
             )
             .map_err(to_napi_error)?;
         Ok(page.into())
+    }
+
+    #[napi(js_name = "reversePage")]
+    pub fn reverse_page(
+        &self,
+        tree: NodeTreeRecord,
+        cursor: Option<NodeReverseCursorRecord>,
+        start: Buffer,
+        limit: String,
+    ) -> Result<NodeReversePageRecord> {
+        let limit = parse_u64(&limit)?;
+        let page = self
+            .inner
+            .reverse_page(
+                tree.into_tree(self.config.clone()),
+                cursor.map(Into::into),
+                start.to_vec(),
+                limit,
+            )
+            .map_err(to_napi_error)?;
+        Ok(page.into())
+    }
+
+    #[napi(js_name = "cursorWindow")]
+    pub fn cursor_window(
+        &self,
+        tree: NodeTreeRecord,
+        key: Buffer,
+        end: Option<Buffer>,
+        limit: String,
+    ) -> Result<NodeCursorWindowRecord> {
+        let limit = parse_u64(&limit)?;
+        let window = self
+            .inner
+            .cursor_window(
+                tree.into_tree(self.config.clone()),
+                key.to_vec(),
+                end.map(|value| value.to_vec()),
+                limit,
+            )
+            .map_err(to_napi_error)?;
+        Ok(window.into())
     }
 
     #[napi]
@@ -2496,6 +2784,14 @@ impl NativeProllyEngine {
             .map_err(to_napi_error)
     }
 
+    #[napi(js_name = "collectStats")]
+    pub fn collect_stats(&self, env: Env, tree: NodeTreeRecord) -> Result<JsUnknown> {
+        let json = self.collect_stats_json(tree)?;
+        let value: serde_json::Value = serde_json::from_str(&json)
+            .map_err(|error| Error::new(Status::InvalidArg, error.to_string()))?;
+        env.to_js_value(&value)
+    }
+
     #[napi(js_name = "statsDiffJson")]
     pub fn stats_diff_json(&self, before: NodeTreeRecord, after: NodeTreeRecord) -> Result<String> {
         self.inner
@@ -2507,12 +2803,33 @@ impl NativeProllyEngine {
             .map_err(to_napi_error)
     }
 
+    #[napi(js_name = "statsDiff")]
+    pub fn stats_diff(
+        &self,
+        env: Env,
+        before: NodeTreeRecord,
+        after: NodeTreeRecord,
+    ) -> Result<JsUnknown> {
+        let json = self.stats_diff_json(before, after)?;
+        let value: serde_json::Value = serde_json::from_str(&json)
+            .map_err(|error| Error::new(Status::InvalidArg, error.to_string()))?;
+        env.to_js_value(&value)
+    }
+
     #[napi(js_name = "debugTreeJson")]
     pub fn debug_tree_json(&self, tree: NodeTreeRecord) -> Result<String> {
         self.inner
             .debug_tree_json(tree.into_tree(self.config.clone()))
             .map(|document| document.json)
             .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "debugTree")]
+    pub fn debug_tree(&self, env: Env, tree: NodeTreeRecord) -> Result<JsUnknown> {
+        let json = self.debug_tree_json(tree)?;
+        let value: serde_json::Value = serde_json::from_str(&json)
+            .map_err(|error| Error::new(Status::InvalidArg, error.to_string()))?;
+        env.to_js_value(&value)
     }
 
     #[napi(js_name = "debugTreeText")]
@@ -2535,6 +2852,19 @@ impl NativeProllyEngine {
             )
             .map(|document| document.json)
             .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "debugCompareTrees")]
+    pub fn debug_compare_trees(
+        &self,
+        env: Env,
+        left: NodeTreeRecord,
+        right: NodeTreeRecord,
+    ) -> Result<JsUnknown> {
+        let json = self.debug_compare_trees_json(left, right)?;
+        let value: serde_json::Value = serde_json::from_str(&json)
+            .map_err(|error| Error::new(Status::InvalidArg, error.to_string()))?;
+        env.to_js_value(&value)
     }
 
     #[napi(js_name = "debugCompareTreesText")]
@@ -2657,6 +2987,29 @@ impl NativeProllyEngine {
                 base.into_tree(self.config.clone()),
                 other.into_tree(self.config.clone()),
                 cursor_json,
+                limit,
+            )
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "structuralDiffPageWithCursor")]
+    pub fn structural_diff_page_with_cursor(
+        &self,
+        base: NodeTreeRecord,
+        other: NodeTreeRecord,
+        cursor: Option<NodeStructuralDiffCursorRecord>,
+        limit: String,
+    ) -> Result<NodeStructuralDiffPageRecord> {
+        let limit = parse_u64(&limit)?;
+        let cursor = cursor
+            .map(BindingStructuralDiffCursorRecord::try_from)
+            .transpose()?;
+        self.inner
+            .structural_diff_page_with_cursor(
+                base.into_tree(self.config.clone()),
+                other.into_tree(self.config.clone()),
+                cursor,
                 limit,
             )
             .map(Into::into)
@@ -2846,6 +3199,22 @@ impl NativeProllyEngine {
             .map_err(to_napi_error)
     }
 
+    #[napi(js_name = "exportSnapshot")]
+    pub fn export_snapshot(&self, tree: NodeTreeRecord) -> Result<NodeSnapshotBundleRecord> {
+        self.inner
+            .export_snapshot(tree.into_tree(self.config.clone()))
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "importSnapshot")]
+    pub fn import_snapshot(&self, bundle: NodeSnapshotBundleRecord) -> Result<NodeTreeRecord> {
+        self.inner
+            .import_snapshot(bundle.into_binding(self.config.clone()))
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
     fn trees(&self, trees: Vec<NodeTreeRecord>) -> Vec<TreeRecord> {
         trees
             .into_iter()
@@ -2858,7 +3227,10 @@ impl NodeTreeRecord {
     fn into_tree(self, config: ConfigRecord) -> TreeRecord {
         TreeRecord {
             root: self.root.map(|root| root.to_vec()),
-            config,
+            config: self
+                .config
+                .and_then(|config| config.try_into().ok())
+                .unwrap_or(config),
         }
     }
 }
@@ -2867,6 +3239,7 @@ impl From<TreeRecord> for NodeTreeRecord {
     fn from(tree: TreeRecord) -> Self {
         Self {
             root: tree.root.map(Buffer::from),
+            config: Some(tree.config.into()),
         }
     }
 }
@@ -2907,6 +3280,31 @@ impl From<BindingDiffRecord> for NodeDiffRecord {
     }
 }
 
+impl TryFrom<NodeDiffRecord> for BindingDiffRecord {
+    type Error = Error;
+
+    fn try_from(diff: NodeDiffRecord) -> Result<Self> {
+        let kind = match diff.kind.as_str() {
+            "added" => DiffKind::Added,
+            "removed" => DiffKind::Removed,
+            "changed" => DiffKind::Changed,
+            other => {
+                return Err(Error::new(
+                    Status::InvalidArg,
+                    format!("unknown diff kind {other:?}"),
+                ))
+            }
+        };
+        Ok(Self {
+            kind,
+            key: diff.key.to_vec(),
+            value: diff.value.map(|value| value.to_vec()),
+            old_value: diff.old.map(|value| value.to_vec()),
+            new_value: diff.new_value.map(|value| value.to_vec()),
+        })
+    }
+}
+
 impl TryFrom<NodeMutationRecord> for MutationRecord {
     type Error = Error;
 
@@ -2941,6 +3339,83 @@ impl From<MutationRecord> for NodeMutationRecord {
             key: Buffer::from(value.key),
             value: value.value.map(Buffer::from),
         }
+    }
+}
+
+impl From<EncodingRecord> for NodeEncodingRecord {
+    fn from(value: EncodingRecord) -> Self {
+        let kind = match value.kind {
+            EncodingKind::Raw => "raw",
+            EncodingKind::Cbor => "cbor",
+            EncodingKind::Json => "json",
+            EncodingKind::Custom => "custom",
+        }
+        .to_string();
+        Self {
+            kind,
+            custom_name: value.custom_name,
+        }
+    }
+}
+
+impl TryFrom<NodeEncodingRecord> for EncodingRecord {
+    type Error = Error;
+
+    fn try_from(value: NodeEncodingRecord) -> Result<Self> {
+        let kind = match value.kind.as_str() {
+            "raw" => EncodingKind::Raw,
+            "cbor" => EncodingKind::Cbor,
+            "json" => EncodingKind::Json,
+            "custom" => EncodingKind::Custom,
+            other => {
+                return Err(Error::new(
+                    Status::InvalidArg,
+                    format!("unknown encoding kind {other:?}"),
+                ))
+            }
+        };
+        Ok(Self {
+            kind,
+            custom_name: value.custom_name,
+        })
+    }
+}
+
+impl From<ConfigRecord> for NodeConfigRecord {
+    fn from(config: ConfigRecord) -> Self {
+        Self {
+            min_chunk_size: config.min_chunk_size.to_string(),
+            max_chunk_size: config.max_chunk_size.to_string(),
+            chunking_factor: config.chunking_factor,
+            hash_seed: config.hash_seed.to_string(),
+            encoding: config.encoding.into(),
+            node_cache_max_nodes: config.node_cache_max_nodes.map(|value| value.to_string()),
+            node_cache_max_bytes: config.node_cache_max_bytes.map(|value| value.to_string()),
+        }
+    }
+}
+
+impl TryFrom<NodeConfigRecord> for ConfigRecord {
+    type Error = Error;
+
+    fn try_from(value: NodeConfigRecord) -> Result<Self> {
+        Ok(Self {
+            min_chunk_size: parse_u64(&value.min_chunk_size)?,
+            max_chunk_size: parse_u64(&value.max_chunk_size)?,
+            chunking_factor: value.chunking_factor,
+            hash_seed: parse_u64(&value.hash_seed)?,
+            encoding: value.encoding.try_into()?,
+            node_cache_max_nodes: value
+                .node_cache_max_nodes
+                .as_deref()
+                .map(parse_u64)
+                .transpose()?,
+            node_cache_max_bytes: value
+                .node_cache_max_bytes
+                .as_deref()
+                .map(parse_u64)
+                .transpose()?,
+        })
     }
 }
 
@@ -3100,6 +3575,22 @@ impl From<NodeRangeCursorRecord> for RangeCursorRecord {
     }
 }
 
+impl From<ReverseCursorRecord> for NodeReverseCursorRecord {
+    fn from(cursor: ReverseCursorRecord) -> Self {
+        Self {
+            before_key: cursor.before_key.map(Buffer::from),
+        }
+    }
+}
+
+impl From<NodeReverseCursorRecord> for ReverseCursorRecord {
+    fn from(cursor: NodeReverseCursorRecord) -> Self {
+        Self {
+            before_key: cursor.before_key.map(|value| value.to_vec()),
+        }
+    }
+}
+
 impl From<BindingRangeBoundsRecord> for NodeRangeBoundsRecord {
     fn from(bounds: BindingRangeBoundsRecord) -> Self {
         Self {
@@ -3114,6 +3605,27 @@ impl From<BindingRangePageRecord> for NodeRangePageRecord {
         Self {
             entries: page.entries.into_iter().map(Into::into).collect(),
             next_cursor: page.next_cursor.map(Into::into),
+        }
+    }
+}
+
+impl From<BindingReversePageRecord> for NodeReversePageRecord {
+    fn from(page: BindingReversePageRecord) -> Self {
+        Self {
+            entries: page.entries.into_iter().map(Into::into).collect(),
+            next_cursor: page.next_cursor.map(Into::into),
+        }
+    }
+}
+
+impl From<BindingCursorWindowRecord> for NodeCursorWindowRecord {
+    fn from(window: BindingCursorWindowRecord) -> Self {
+        Self {
+            position_key: window.position_key.map(Buffer::from),
+            position_value: window.position_value.map(Buffer::from),
+            found: window.found,
+            entries: window.entries.into_iter().map(Into::into).collect(),
+            next_cursor: window.next_cursor.map(Into::into),
         }
     }
 }
@@ -3138,6 +3650,17 @@ impl From<BindingConflictRecord> for NodeConflictRecord {
     }
 }
 
+impl From<NodeConflictRecord> for BindingConflictRecord {
+    fn from(conflict: NodeConflictRecord) -> Self {
+        Self {
+            key: conflict.key.to_vec(),
+            base: conflict.base.map(|value| value.to_vec()),
+            left: conflict.left.map(|value| value.to_vec()),
+            right: conflict.right.map(|value| value.to_vec()),
+        }
+    }
+}
+
 impl From<NodeResolutionRecord> for BindingResolutionRecord {
     fn from(resolution: NodeResolutionRecord) -> Self {
         let kind = match resolution.kind.as_str() {
@@ -3153,6 +3676,20 @@ impl From<NodeResolutionRecord> for BindingResolutionRecord {
     }
 }
 
+impl From<BindingResolutionRecord> for NodeResolutionRecord {
+    fn from(resolution: BindingResolutionRecord) -> Self {
+        let kind = match resolution.kind {
+            BindingResolutionKind::Value => "value",
+            BindingResolutionKind::Delete => "delete",
+            BindingResolutionKind::Unresolved => "unresolved",
+        };
+        Self {
+            kind: kind.to_string(),
+            value: resolution.value.map(Buffer::from),
+        }
+    }
+}
+
 impl From<NodeCrdtResolutionRecord> for BindingCrdtResolutionRecord {
     fn from(resolution: NodeCrdtResolutionRecord) -> Self {
         let kind = match resolution.kind.as_str() {
@@ -3163,6 +3700,19 @@ impl From<NodeCrdtResolutionRecord> for BindingCrdtResolutionRecord {
         Self {
             kind,
             value: resolution.value.map(|value| value.to_vec()),
+        }
+    }
+}
+
+impl From<BindingCrdtResolutionRecord> for NodeCrdtResolutionRecord {
+    fn from(resolution: BindingCrdtResolutionRecord) -> Self {
+        let kind = match resolution.kind {
+            BindingCrdtResolutionKind::Value => "value",
+            BindingCrdtResolutionKind::Delete => "delete",
+        };
+        Self {
+            kind: kind.to_string(),
+            value: resolution.value.map(Buffer::from),
         }
     }
 }
@@ -3209,7 +3759,165 @@ impl From<BindingStructuralDiffPageRecord> for NodeStructuralDiffPageRecord {
             diffs: page.diffs.into_iter().map(Into::into).collect(),
             next_cursor_json: page.next_cursor_json,
             stats: page.stats.into(),
+            next_cursor: page.next_cursor.map(Into::into),
         }
+    }
+}
+
+impl From<BindingStructuralDiffCursorRecord> for NodeStructuralDiffCursorRecord {
+    fn from(cursor: BindingStructuralDiffCursorRecord) -> Self {
+        Self {
+            base_root: cursor.base_root.map(Buffer::from),
+            other_root: cursor.other_root.map(Buffer::from),
+            markers: cursor.markers.into_iter().map(Into::into).collect(),
+            pending: cursor.pending.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl TryFrom<NodeStructuralDiffCursorRecord> for BindingStructuralDiffCursorRecord {
+    type Error = Error;
+
+    fn try_from(cursor: NodeStructuralDiffCursorRecord) -> Result<Self> {
+        Ok(Self {
+            base_root: cursor.base_root.map(|value| value.to_vec()),
+            other_root: cursor.other_root.map(|value| value.to_vec()),
+            markers: cursor
+                .markers
+                .into_iter()
+                .map(BindingStructuralDiffMarkerRecord::try_from)
+                .collect::<Result<Vec<_>>>()?,
+            pending: cursor
+                .pending
+                .into_iter()
+                .map(BindingDiffRecord::try_from)
+                .collect::<Result<Vec<_>>>()?,
+        })
+    }
+}
+
+impl From<BindingStructuralDiffMarkerRecord> for NodeStructuralDiffMarkerRecord {
+    fn from(marker: BindingStructuralDiffMarkerRecord) -> Self {
+        Self {
+            kind: structural_diff_marker_kind(marker.kind).to_string(),
+            base_cid: marker.base_cid.map(Buffer::from),
+            other_cid: marker.other_cid.map(Buffer::from),
+            span_end: marker.span_end.map(Buffer::from),
+            cid: marker.cid.map(Buffer::from),
+        }
+    }
+}
+
+impl TryFrom<NodeStructuralDiffMarkerRecord> for BindingStructuralDiffMarkerRecord {
+    type Error = Error;
+
+    fn try_from(marker: NodeStructuralDiffMarkerRecord) -> Result<Self> {
+        Ok(Self {
+            kind: binding_structural_diff_marker_kind(&marker.kind)?,
+            base_cid: marker.base_cid.map(|value| value.to_vec()),
+            other_cid: marker.other_cid.map(|value| value.to_vec()),
+            span_end: marker.span_end.map(|value| value.to_vec()),
+            cid: marker.cid.map(|value| value.to_vec()),
+        })
+    }
+}
+
+impl From<BindingMergeTraceRecord> for NodeMergeTraceRecord {
+    fn from(trace: BindingMergeTraceRecord) -> Self {
+        Self {
+            events: trace.events.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl From<BindingMergeTraceEventRecord> for NodeMergeTraceEventRecord {
+    fn from(event: BindingMergeTraceEventRecord) -> Self {
+        Self {
+            kind: merge_trace_event_kind(event.kind).to_string(),
+            fast_path: event
+                .fast_path
+                .map(|kind| merge_fast_path_kind(kind).to_string()),
+            cid: event.cid.map(Buffer::from),
+            reuse_reason: event
+                .reuse_reason
+                .map(|kind| merge_reuse_reason_kind(kind).to_string()),
+            level: event.level.map(|value| value.to_string()),
+            entries: event.entries.map(|value| value.to_string()),
+            first_key: event.first_key.map(Buffer::from),
+            last_key: event.last_key.map(Buffer::from),
+            stage: event
+                .stage
+                .map(|kind| merge_trace_stage_kind(kind).to_string()),
+            key: event.key.map(Buffer::from),
+            resolution: event
+                .resolution
+                .map(|kind| merge_trace_resolution_kind(kind).to_string()),
+            fallback_reason: event
+                .fallback_reason
+                .map(|kind| merge_fallback_reason_kind(kind).to_string()),
+            diff_stats: event.diff_stats.map(Into::into),
+            right_changes: event.right_changes.map(|value| value.to_string()),
+            mutations: event.mutations.map(|value| value.to_string()),
+            append_only: event.append_only,
+        }
+    }
+}
+
+fn merge_trace_event_kind(kind: BindingMergeTraceEventKind) -> &'static str {
+    match kind {
+        BindingMergeTraceEventKind::FastPath => "fast_path",
+        BindingMergeTraceEventKind::StructuralMergeStarted => "structural_merge_started",
+        BindingMergeTraceEventKind::ReusedSubtree => "reused_subtree",
+        BindingMergeTraceEventKind::RewrittenNode => "rewritten_node",
+        BindingMergeTraceEventKind::ResolverCalled => "resolver_called",
+        BindingMergeTraceEventKind::Fallback => "fallback",
+        BindingMergeTraceEventKind::DiffTraversal => "diff_traversal",
+        BindingMergeTraceEventKind::BatchMerge => "batch_merge",
+    }
+}
+
+fn merge_fast_path_kind(kind: BindingMergeFastPathKind) -> &'static str {
+    match kind {
+        BindingMergeFastPathKind::BranchesEqual => "branches_equal",
+        BindingMergeFastPathKind::LeftUnchanged => "left_unchanged",
+        BindingMergeFastPathKind::RightUnchanged => "right_unchanged",
+    }
+}
+
+fn merge_reuse_reason_kind(kind: BindingMergeReuseReasonKind) -> &'static str {
+    match kind {
+        BindingMergeReuseReasonKind::BranchesEqual => "branches_equal",
+        BindingMergeReuseReasonKind::LeftUnchanged => "left_unchanged",
+        BindingMergeReuseReasonKind::RightUnchanged => "right_unchanged",
+        BindingMergeReuseReasonKind::UnchangedAfterMerge => "unchanged_after_merge",
+        BindingMergeReuseReasonKind::MatchesLeft => "matches_left",
+        BindingMergeReuseReasonKind::MatchesRight => "matches_right",
+    }
+}
+
+fn merge_trace_stage_kind(kind: BindingMergeTraceStageKind) -> &'static str {
+    match kind {
+        BindingMergeTraceStageKind::Structural => "structural",
+        BindingMergeTraceStageKind::Batch => "batch",
+    }
+}
+
+fn merge_trace_resolution_kind(kind: BindingMergeTraceResolutionKind) -> &'static str {
+    match kind {
+        BindingMergeTraceResolutionKind::Value => "value",
+        BindingMergeTraceResolutionKind::Delete => "delete",
+        BindingMergeTraceResolutionKind::Unresolved => "unresolved",
+    }
+}
+
+fn merge_fallback_reason_kind(kind: BindingMergeFallbackReasonKind) -> &'static str {
+    match kind {
+        BindingMergeFallbackReasonKind::MissingRoot => "missing_root",
+        BindingMergeFallbackReasonKind::ShapeMismatch => "shape_mismatch",
+        BindingMergeFallbackReasonKind::NodeLengthMismatch => "node_length_mismatch",
+        BindingMergeFallbackReasonKind::ChildFallback => "child_fallback",
+        BindingMergeFallbackReasonKind::DeleteResolution => "delete_resolution",
+        BindingMergeFallbackReasonKind::DiffBatch => "diff_batch",
     }
 }
 
@@ -3219,6 +3927,7 @@ impl From<BindingMergeExplanationRecord> for NodeMergeExplanationRecord {
             result: explanation.result.map(Into::into),
             error: explanation.error,
             trace_json: explanation.trace_json,
+            trace: explanation.trace.into(),
         }
     }
 }
@@ -3882,6 +4591,78 @@ impl From<BindingMissingNodeCopyRecord> for NodeMissingNodeCopyRecord {
     }
 }
 
+impl From<BindingSnapshotBundleNodeRecord> for NodeSnapshotBundleNodeRecord {
+    fn from(node: BindingSnapshotBundleNodeRecord) -> Self {
+        Self {
+            cid: Buffer::from(node.cid),
+            bytes: Buffer::from(node.bytes),
+        }
+    }
+}
+
+impl From<NodeSnapshotBundleNodeRecord> for BindingSnapshotBundleNodeRecord {
+    fn from(node: NodeSnapshotBundleNodeRecord) -> Self {
+        Self {
+            cid: node.cid.to_vec(),
+            bytes: node.bytes.to_vec(),
+        }
+    }
+}
+
+impl From<BindingSnapshotBundleRecord> for NodeSnapshotBundleRecord {
+    fn from(bundle: BindingSnapshotBundleRecord) -> Self {
+        Self {
+            format_version: bundle.format_version,
+            tree: bundle.tree.into(),
+            nodes: bundle.nodes.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl NodeSnapshotBundleRecord {
+    fn into_binding(self, config: ConfigRecord) -> BindingSnapshotBundleRecord {
+        BindingSnapshotBundleRecord {
+            format_version: self.format_version,
+            tree: self.tree.into_tree(config),
+            nodes: self.nodes.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl From<BindingSnapshotBundleSummaryRecord> for NodeSnapshotBundleSummaryRecord {
+    fn from(summary: BindingSnapshotBundleSummaryRecord) -> Self {
+        Self {
+            format_version: summary.format_version,
+            root: summary.root.map(Buffer::from),
+            node_count: summary.node_count.to_string(),
+            byte_count: summary.byte_count.to_string(),
+            min_node_bytes: summary.min_node_bytes.to_string(),
+            max_node_bytes: summary.max_node_bytes.to_string(),
+        }
+    }
+}
+
+impl From<BindingSnapshotBundleVerificationRecord> for NodeSnapshotBundleVerificationRecord {
+    fn from(verification: BindingSnapshotBundleVerificationRecord) -> Self {
+        Self {
+            valid: verification.valid,
+            summary: verification.summary.into(),
+            reachable_nodes: verification.reachable_nodes.to_string(),
+            reachable_bytes: verification.reachable_bytes.to_string(),
+            missing_cids: verification
+                .missing_cids
+                .into_iter()
+                .map(Buffer::from)
+                .collect(),
+            extra_cids: verification
+                .extra_cids
+                .into_iter()
+                .map(Buffer::from)
+                .collect(),
+        }
+    }
+}
+
 impl From<BindingBlobRefRecord> for NodeBlobRefRecord {
     fn from(reference: BindingBlobRefRecord) -> Self {
         Self {
@@ -4307,6 +5088,71 @@ pub fn range_cursor_after_key_native(key: Buffer) -> NodeRangeCursorRecord {
     range_cursor_after_key(key.to_vec()).into()
 }
 
+#[napi(js_name = "reverseCursorEnd")]
+pub fn reverse_cursor_end_native() -> NodeReverseCursorRecord {
+    reverse_cursor_end().into()
+}
+
+#[napi(js_name = "reverseCursorBeforeKey")]
+pub fn reverse_cursor_before_key_native(key: Buffer) -> NodeReverseCursorRecord {
+    reverse_cursor_before_key(key.to_vec()).into()
+}
+
+#[napi(js_name = "upsertMutation")]
+pub fn upsert_mutation_native(key: Buffer, value: Buffer) -> NodeMutationRecord {
+    upsert_mutation(key.to_vec(), value.to_vec()).into()
+}
+
+#[napi(js_name = "deleteMutation")]
+pub fn delete_mutation_native(key: Buffer) -> NodeMutationRecord {
+    delete_mutation(key.to_vec()).into()
+}
+
+#[napi(js_name = "resolutionValue")]
+pub fn resolution_value_native(value: Buffer) -> NodeResolutionRecord {
+    resolution_value(value.to_vec()).into()
+}
+
+#[napi(js_name = "resolutionDelete")]
+pub fn resolution_delete_native() -> NodeResolutionRecord {
+    resolution_delete().into()
+}
+
+#[napi(js_name = "resolutionUnresolved")]
+pub fn resolution_unresolved_native() -> NodeResolutionRecord {
+    resolution_unresolved().into()
+}
+
+#[napi(js_name = "resolvePreferLeft")]
+pub fn resolve_prefer_left_native(conflict: NodeConflictRecord) -> NodeResolutionRecord {
+    resolve_prefer_left(conflict.into()).into()
+}
+
+#[napi(js_name = "resolvePreferRight")]
+pub fn resolve_prefer_right_native(conflict: NodeConflictRecord) -> NodeResolutionRecord {
+    resolve_prefer_right(conflict.into()).into()
+}
+
+#[napi(js_name = "resolveDeleteWins")]
+pub fn resolve_delete_wins_native(conflict: NodeConflictRecord) -> NodeResolutionRecord {
+    resolve_delete_wins(conflict.into()).into()
+}
+
+#[napi(js_name = "resolveUpdateWins")]
+pub fn resolve_update_wins_native(conflict: NodeConflictRecord) -> NodeResolutionRecord {
+    resolve_update_wins(conflict.into()).into()
+}
+
+#[napi(js_name = "crdtResolutionValue")]
+pub fn crdt_resolution_value_native(value: Buffer) -> NodeCrdtResolutionRecord {
+    crdt_resolution_value(value.to_vec()).into()
+}
+
+#[napi(js_name = "crdtResolutionDelete")]
+pub fn crdt_resolution_delete_native() -> NodeCrdtResolutionRecord {
+    crdt_resolution_delete().into()
+}
+
 #[napi(js_name = "u64Key")]
 pub fn u64_key_native(value: String) -> Result<Buffer> {
     let value = value
@@ -4530,14 +5376,148 @@ pub fn root_manifest_bytes_round_trip(bytes: Buffer) -> Result<Buffer> {
         .map_err(to_napi_error)
 }
 
+#[napi(js_name = "snapshotBundleToBytes")]
+pub fn snapshot_bundle_to_bytes_native(bundle: NodeSnapshotBundleRecord) -> Result<Buffer> {
+    snapshot_bundle_to_bytes(bundle.into_binding(default_config()))
+        .map(Buffer::from)
+        .map_err(to_napi_error)
+}
+
+#[napi(js_name = "snapshotBundleFromBytes")]
+pub fn snapshot_bundle_from_bytes_native(bytes: Buffer) -> Result<NodeSnapshotBundleRecord> {
+    snapshot_bundle_from_bytes(bytes.to_vec())
+        .map(Into::into)
+        .map_err(to_napi_error)
+}
+
+#[napi(js_name = "snapshotBundleDigest")]
+pub fn snapshot_bundle_digest_native(bundle: NodeSnapshotBundleRecord) -> Result<Buffer> {
+    snapshot_bundle_digest(bundle.into_binding(default_config()))
+        .map(Buffer::from)
+        .map_err(to_napi_error)
+}
+
+#[napi(js_name = "snapshotBundleDigestBytes")]
+pub fn snapshot_bundle_digest_bytes_native(bytes: Buffer) -> Result<Buffer> {
+    snapshot_bundle_digest_bytes(bytes.to_vec())
+        .map(Buffer::from)
+        .map_err(to_napi_error)
+}
+
+#[napi(js_name = "snapshotBundleSummary")]
+pub fn snapshot_bundle_summary_native(
+    bundle: NodeSnapshotBundleRecord,
+) -> Result<NodeSnapshotBundleSummaryRecord> {
+    snapshot_bundle_summary(bundle.into_binding(default_config()))
+        .map(Into::into)
+        .map_err(to_napi_error)
+}
+
+#[napi(js_name = "snapshotBundleSummaryFromBytes")]
+pub fn snapshot_bundle_summary_from_bytes_native(
+    bytes: Buffer,
+) -> Result<NodeSnapshotBundleSummaryRecord> {
+    snapshot_bundle_summary_from_bytes(bytes.to_vec())
+        .map(Into::into)
+        .map_err(to_napi_error)
+}
+
+#[napi(js_name = "verifySnapshotBundle")]
+pub fn verify_snapshot_bundle_native(
+    bundle: NodeSnapshotBundleRecord,
+) -> Result<NodeSnapshotBundleVerificationRecord> {
+    verify_snapshot_bundle(bundle.into_binding(default_config()))
+        .map(Into::into)
+        .map_err(to_napi_error)
+}
+
+#[napi(js_name = "verifySnapshotBundleBytes")]
+pub fn verify_snapshot_bundle_bytes_native(
+    bytes: Buffer,
+) -> Result<NodeSnapshotBundleVerificationRecord> {
+    verify_snapshot_bundle_bytes(bytes.to_vec())
+        .map(Into::into)
+        .map_err(to_napi_error)
+}
+
+#[napi(js_name = "defaultConfig")]
+pub fn default_config_native() -> NodeConfigRecord {
+    default_config().into()
+}
+
+#[napi(js_name = "encodingRaw")]
+pub fn encoding_raw_native() -> NodeEncodingRecord {
+    encoding_raw().into()
+}
+
+#[napi(js_name = "encodingCbor")]
+pub fn encoding_cbor_native() -> NodeEncodingRecord {
+    encoding_cbor().into()
+}
+
+#[napi(js_name = "encodingJson")]
+pub fn encoding_json_native() -> NodeEncodingRecord {
+    encoding_json().into()
+}
+
+#[napi(js_name = "encodingCustom")]
+pub fn encoding_custom_native(name: String) -> NodeEncodingRecord {
+    encoding_custom(name).into()
+}
+
+#[napi(js_name = "treeConfig")]
+pub fn tree_config_native(
+    min_chunk_size: String,
+    max_chunk_size: String,
+    chunking_factor: u32,
+    hash_seed: String,
+    encoding: NodeEncodingRecord,
+    node_cache_max_nodes: Option<String>,
+    node_cache_max_bytes: Option<String>,
+) -> Result<NodeConfigRecord> {
+    tree_config(
+        parse_u64(&min_chunk_size)?,
+        parse_u64(&max_chunk_size)?,
+        chunking_factor,
+        parse_u64(&hash_seed)?,
+        encoding.try_into()?,
+        node_cache_max_nodes.as_deref().map(parse_u64).transpose()?,
+        node_cache_max_bytes.as_deref().map(parse_u64).transpose()?,
+    )
+    .map(Into::into)
+    .map_err(to_napi_error)
+}
+
 #[napi(js_name = "defaultLargeValueConfig")]
 pub fn default_large_value_config_native() -> NodeLargeValueConfigRecord {
     default_large_value_config().into()
 }
 
+#[napi(js_name = "largeValueConfig")]
+pub fn large_value_config_native(inline_threshold: String) -> Result<NodeLargeValueConfigRecord> {
+    large_value_config(parse_u64(&inline_threshold)?)
+        .map(Into::into)
+        .map_err(to_napi_error)
+}
+
 #[napi(js_name = "defaultParallelConfig")]
 pub fn default_parallel_config_native() -> NodeParallelConfigRecord {
     default_parallel_config().into()
+}
+
+#[napi(js_name = "parallelConfig")]
+pub fn parallel_config_native(
+    max_threads: String,
+    parallelism_threshold: String,
+) -> Result<NodeParallelConfigRecord> {
+    parallel_config(parse_u64(&max_threads)?, parse_u64(&parallelism_threshold)?)
+        .map(Into::into)
+        .map_err(to_napi_error)
+}
+
+#[napi(js_name = "parallelConfigSequential")]
+pub fn parallel_config_sequential_native() -> NodeParallelConfigRecord {
+    parallel_config_sequential().into()
 }
 
 #[napi(js_name = "crdtConfigLww")]
@@ -4724,6 +5704,26 @@ fn parse_u64(value: &str) -> Result<u64> {
     value
         .parse::<u64>()
         .map_err(|error| Error::new(Status::InvalidArg, error.to_string()))
+}
+
+fn structural_diff_marker_kind(kind: BindingStructuralDiffMarkerKind) -> &'static str {
+    match kind {
+        BindingStructuralDiffMarkerKind::Compare => "compare",
+        BindingStructuralDiffMarkerKind::Added => "added",
+        BindingStructuralDiffMarkerKind::Removed => "removed",
+    }
+}
+
+fn binding_structural_diff_marker_kind(value: &str) -> Result<BindingStructuralDiffMarkerKind> {
+    match value {
+        "compare" => Ok(BindingStructuralDiffMarkerKind::Compare),
+        "added" => Ok(BindingStructuralDiffMarkerKind::Added),
+        "removed" => Ok(BindingStructuralDiffMarkerKind::Removed),
+        other => Err(Error::new(
+            Status::InvalidArg,
+            format!("unknown structural diff marker kind {other:?}"),
+        )),
+    }
 }
 
 fn crdt_delete_policy_from_str(value: &str) -> Result<CrdtDeletePolicyKind> {

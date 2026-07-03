@@ -551,6 +551,63 @@ let builtTree = try parityEngine.buildFromSortedEntries(entries: [
     EntryRecord(key: Data("b".utf8), value: Data("2".utf8)),
     EntryRecord(key: Data("c".utf8), value: Data("3".utf8)),
 ])
+let parityStats = try parityEngine.collectStats(tree: builtTree)
+try expect(parityStats.totalKeyValuePairs == 3, "typed stats total key/value count mismatch")
+try expect(parityStats.nodesPerLevel.contains { $0.level == 0 && $0.value > 0 }, "typed stats level count mismatch")
+let parityStatsDiff = try parityEngine.statsDiff(before: emptyTree, after: builtTree)
+try expect(parityStatsDiff.before.totalKeyValuePairs == 0, "typed stats diff before count mismatch")
+try expect(parityStatsDiff.after.totalKeyValuePairs == 3, "typed stats diff after count mismatch")
+try expect(parityStatsDiff.absolute.totalKeyValuePairsDiff == 3, "typed stats diff absolute count mismatch")
+let parityDebugTree = try parityEngine.debugTree(tree: builtTree)
+try expect(!parityDebugTree.levels.isEmpty, "typed debug tree levels missing")
+try expect(parityDebugTree.levels.contains { !$0.nodes.isEmpty }, "typed debug tree nodes missing")
+let parityDebugComparison = try parityEngine.debugCompareTrees(left: emptyTree, right: builtTree)
+try expect(parityDebugComparison.leftOnlyNodes == 0, "typed debug comparison left-only count mismatch")
+try expect(parityDebugComparison.rightOnlyNodes > 0, "typed debug comparison right-only count mismatch")
+try expect(
+    parityDebugComparison.levels.contains { level in level.nodes.contains { $0.status == .rightOnly } },
+    "typed debug comparison right-only node missing"
+)
+let snapshotBundle = try parityEngine.exportSnapshot(tree: builtTree)
+try expect(snapshotBundle.formatVersion == 1, "snapshot bundle format version mismatch")
+try expect(!snapshotBundle.nodes.isEmpty, "snapshot bundle nodes missing")
+let snapshotBundleBytes = try snapshotBundleToBytes(record: snapshotBundle)
+let bundleDigest = try snapshotBundleDigest(record: snapshotBundle)
+try expect(bundleDigest == cidFromBytes(bytes: snapshotBundleBytes), "snapshot bundle digest mismatch")
+let byteSnapshotBundleDigest = try snapshotBundleDigestBytes(bytes: snapshotBundleBytes)
+try expect(byteSnapshotBundleDigest == bundleDigest, "snapshot bundle byte digest mismatch")
+let snapshotSummary = try snapshotBundleSummary(record: snapshotBundle)
+try expect(snapshotSummary.formatVersion == 1, "snapshot bundle summary format mismatch")
+try expect(snapshotSummary.nodeCount == UInt64(snapshotBundle.nodes.count), "snapshot bundle summary node count mismatch")
+try expect(snapshotSummary.byteCount > 0, "snapshot bundle summary bytes missing")
+let byteSnapshotSummary = try snapshotBundleSummaryFromBytes(bytes: snapshotBundleBytes)
+try expect(byteSnapshotSummary == snapshotSummary, "snapshot bundle byte summary mismatch")
+let snapshotVerification = try verifySnapshotBundle(record: snapshotBundle)
+try expect(snapshotVerification.valid, "snapshot bundle verification failed")
+try expect(snapshotVerification.summary == snapshotSummary, "snapshot bundle verification summary mismatch")
+try expect(snapshotVerification.missingCids.isEmpty, "snapshot bundle verification reported missing CIDs")
+try expect(snapshotVerification.extraCids.isEmpty, "snapshot bundle verification reported extra CIDs")
+let byteSnapshotVerification = try verifySnapshotBundleBytes(bytes: snapshotBundleBytes)
+try expect(byteSnapshotVerification == snapshotVerification, "snapshot bundle byte verification mismatch")
+let incompleteSnapshotBundle = SnapshotBundleRecord(
+    formatVersion: snapshotBundle.formatVersion,
+    tree: snapshotBundle.tree,
+    nodes: Array(snapshotBundle.nodes.dropLast())
+)
+let incompleteSnapshotVerification = try verifySnapshotBundle(record: incompleteSnapshotBundle)
+try expect(!incompleteSnapshotVerification.valid, "incomplete snapshot bundle should be invalid")
+try expect(
+    !incompleteSnapshotVerification.missingCids.isEmpty,
+    "incomplete snapshot bundle should report missing CIDs"
+)
+let decodedSnapshotBundle = try snapshotBundleFromBytes(bytes: snapshotBundleBytes)
+let snapshotDestination = try ProllyEngine.memory(config: defaultConfig())
+let importedSnapshotTree = try snapshotDestination.importSnapshot(bundle: decodedSnapshotBundle)
+let importedSnapshotValue = try snapshotDestination.get(tree: importedSnapshotTree, key: Data("b".utf8))
+try expect(
+    importedSnapshotValue == Data("2".utf8),
+    "snapshot import value mismatch"
+)
 try parityEngine.publishNamedRootAtMillis(name: Data("main".utf8), tree: builtTree, timestampMillis: 42)
 let loadedNamedRoot = try parityEngine.loadNamedRoot(name: Data("main".utf8))
 try expect(loadedNamedRoot != nil, "named root should load")
@@ -585,6 +642,27 @@ let retainedGcPlan = try parityEngine.planStoreGcForRetention(retention: retainA
 try expect(retainedGcPlan.reachability.liveNodes == 1, "retained GC plan live nodes mismatch")
 let retainedGcSweep = try parityEngine.sweepStoreGcForRetention(retention: retainAllRoots)
 try expect(retainedGcSweep.plan.reachability.liveNodes == 1, "retained GC sweep live nodes mismatch")
+try expect(resolutionValue(value: Data("v".utf8)).kind == .value, "resolution value helper mismatch")
+try expect(resolutionDelete().kind == .delete, "resolution delete helper mismatch")
+try expect(resolutionUnresolved().kind == .unresolved, "resolution unresolved helper mismatch")
+let updateConflict = ConflictRecord(
+    key: Data("k".utf8),
+    base: Data("base".utf8),
+    left: Data("left".utf8),
+    right: Data("right".utf8)
+)
+try expect(resolvePreferLeft(conflict: updateConflict).value == Data("left".utf8), "prefer-left helper mismatch")
+try expect(resolveDeleteWins(conflict: updateConflict).kind == .unresolved, "delete-wins update/update helper mismatch")
+let deleteConflict = ConflictRecord(
+    key: Data("k".utf8),
+    base: Data("base".utf8),
+    left: nil,
+    right: Data("right".utf8)
+)
+try expect(resolveDeleteWins(conflict: deleteConflict).kind == .delete, "delete-wins helper mismatch")
+try expect(resolveUpdateWins(conflict: deleteConflict).value == Data("right".utf8), "update-wins helper mismatch")
+try expect(crdtResolutionValue(value: Data("v".utf8)).kind == .value, "CRDT resolution value helper mismatch")
+try expect(crdtResolutionDelete().kind == .delete, "CRDT resolution delete helper mismatch")
 let parityKeyProof = try parityEngine.proveKey(tree: builtTree, key: Data("a".utf8))
 let parityKeyBundle = try keyProofToBytes(proof: parityKeyProof)
 let parityKeySummary = try inspectProofBundle(bytes: parityKeyBundle)
@@ -764,25 +842,111 @@ let parityWrongAuthenticatedBundle = try verifyAuthenticatedProofBundle(
 try expect(!parityWrongAuthenticatedBundle.valid, "authenticated proof bundle should reject wrong secret")
 try expect(!parityWrongAuthenticatedBundle.envelope.valid, "authenticated proof bundle envelope should reject wrong secret")
 try expect(parityWrongAuthenticatedBundle.proof == nil, "wrong-secret authenticated proof bundle should not verify proof")
+try expect(defaultConfig().encoding.kind == .raw, "default config encoding mismatch")
+try expect(encodingRaw().kind == .raw, "raw encoding helper mismatch")
+try expect(encodingCbor().kind == .cbor, "cbor encoding helper mismatch")
+try expect(encodingJson().kind == .json, "json encoding helper mismatch")
+let customEncoding = encodingCustom(name: "postcard")
+try expect(customEncoding.kind == .custom, "custom encoding helper kind mismatch")
+try expect(customEncoding.customName == "postcard", "custom encoding helper name mismatch")
+let constructedConfig = try treeConfig(
+    minChunkSize: 2,
+    maxChunkSize: 64,
+    chunkingFactor: 32,
+    hashSeed: 7,
+    encoding: customEncoding,
+    nodeCacheMaxNodes: 16,
+    nodeCacheMaxBytes: 4096
+)
+try expect(constructedConfig.encoding == customEncoding, "tree config helper encoding mismatch")
+try expect(constructedConfig.nodeCacheMaxNodes == 16, "tree config helper cache node mismatch")
+try expectThrows("custom encoding without a name should fail") {
+    _ = try treeConfig(
+        minChunkSize: 2,
+        maxChunkSize: 64,
+        chunkingFactor: 32,
+        hashSeed: 7,
+        encoding: EncodingRecord(kind: .custom, customName: nil),
+        nodeCacheMaxNodes: nil,
+        nodeCacheMaxBytes: nil
+    )
+}
+let constructedLargeValueConfig = try largeValueConfig(inlineThreshold: 8)
+try expect(constructedLargeValueConfig.inlineThreshold == 8, "large value config helper mismatch")
+let constructedParallelConfig = try parallelConfig(maxThreads: 2, parallelismThreshold: 24)
+try expect(constructedParallelConfig.maxThreads == 2, "parallel config helper mismatch")
+try expect(parallelConfigSequential().maxThreads == 1, "sequential parallel config helper mismatch")
+try expect(upsertMutation(key: Data("probe".utf8), value: Data("value".utf8)).kind == .upsert, "upsert mutation helper mismatch")
+try expect(deleteMutation(key: Data("probe".utf8)).kind == .delete, "delete mutation helper mismatch")
 let batchStats = try parityEngine.batchWithStats(tree: emptyTree, mutations: [
-    MutationRecord(kind: .upsert, key: Data("b".utf8), value: Data("2".utf8)),
-    MutationRecord(kind: .upsert, key: Data("a".utf8), value: Data("1".utf8)),
-    MutationRecord(kind: .upsert, key: Data("a".utf8), value: Data("11".utf8)),
+    upsertMutation(key: Data("b".utf8), value: Data("2".utf8)),
+    upsertMutation(key: Data("a".utf8), value: Data("1".utf8)),
+    upsertMutation(key: Data("a".utf8), value: Data("11".utf8)),
 ])
 let batchStatsValue = try parityEngine.get(tree: batchStats.tree, key: Data("a".utf8))
 try expect(batchStatsValue == Data("11".utf8), "batch_with_stats value mismatch")
 try expect(batchStats.stats.inputMutations == 3, "batch input mutation count mismatch")
 try expect(batchStats.stats.effectiveMutations == 2, "batch effective mutation count mismatch")
 try expect(!batchStats.stats.preprocessInputSorted, "batch sorted flag mismatch")
+let firstBoundaryEntry = try parityEngine.firstEntry(tree: batchStats.tree)
+let lastBoundaryEntry = try parityEngine.lastEntry(tree: batchStats.tree)
+let lowerBoundaryEntry = try parityEngine.lowerBound(tree: batchStats.tree, key: Data("aa".utf8))
+let upperBoundaryEntry = try parityEngine.upperBound(tree: batchStats.tree, key: Data("b".utf8))
+let prefixEntries = try parityEngine.prefix(tree: batchStats.tree, prefix: Data("a".utf8))
+let prefixPage = try parityEngine.prefixPage(tree: batchStats.tree, prefix: Data("a".utf8), cursor: nil, limit: 1)
+let prefixReversePage = try parityEngine.prefixReversePage(tree: batchStats.tree, prefix: Data("a".utf8), cursor: nil, limit: 1)
+try expect(firstBoundaryEntry?.key == Data("a".utf8), "first entry key mismatch")
+try expect(firstBoundaryEntry?.value == Data("11".utf8), "first entry value mismatch")
+try expect(lastBoundaryEntry?.key == Data("b".utf8), "last entry key mismatch")
+try expect(lowerBoundaryEntry?.key == Data("b".utf8), "lower bound key mismatch")
+try expect(upperBoundaryEntry == nil, "upper bound should miss")
+try expect(prefixEntries.map(\.value) == [Data("11".utf8)], "prefix entries mismatch")
+try expect(prefixPage.entries.map(\.value) == [Data("11".utf8)], "prefix page entries mismatch")
+try expect(prefixPage.nextCursor != nil, "prefix page cursor missing")
+try expect(prefixReversePage.entries.map(\.value) == [Data("11".utf8)], "prefix reverse page entries mismatch")
+try expect(prefixReversePage.nextCursor == nil, "prefix reverse page cursor mismatch")
+
+let cursorWindow = try parityEngine.cursorWindow(
+    tree: batchStats.tree,
+    key: Data("aa".utf8),
+    end: nil,
+    limit: 1
+)
+try expect(cursorWindow.positionKey == Data("a".utf8), "cursor window position key mismatch")
+try expect(cursorWindow.positionValue == Data("11".utf8), "cursor window position value mismatch")
+try expect(!cursorWindow.found, "cursor window should report inexact seek")
+try expect(cursorWindow.entries.count == 1, "cursor window entry count mismatch")
+try expect(cursorWindow.entries[0].key == Data("b".utf8), "cursor window entry key mismatch")
+try expect(cursorWindow.nextCursor?.afterKey == Data("b".utf8), "cursor window next cursor mismatch")
+
+let exactCursorProbe = try parityEngine.cursorWindow(
+    tree: batchStats.tree,
+    key: Data("a".utf8),
+    end: nil,
+    limit: 0
+)
+try expect(exactCursorProbe.found, "cursor window exact probe mismatch")
+try expect(exactCursorProbe.positionKey == Data("a".utf8), "cursor window exact position mismatch")
+try expect(exactCursorProbe.entries.isEmpty, "cursor window exact probe should not emit entries")
+try expect(exactCursorProbe.nextCursor == nil, "cursor window exact probe should not emit cursor")
 
 let defaultParallel = defaultParallelConfig()
 try expect(defaultParallel.parallelismThreshold == 100, "default parallel threshold mismatch")
 let parallelTree = try parityEngine.parallelBatch(tree: emptyTree, mutations: [
     MutationRecord(kind: .upsert, key: Data("p".utf8), value: Data("parallel".utf8)),
     MutationRecord(kind: .upsert, key: Data("q".utf8), value: Data("swift".utf8)),
-], config: ParallelConfigRecord(maxThreads: 1, parallelismThreshold: 1))
+], config: try parallelConfig(maxThreads: 1, parallelismThreshold: 1))
 let parallelValue = try parityEngine.get(tree: parallelTree, key: Data("q".utf8))
 try expect(parallelValue == Data("swift".utf8), "parallel_batch value mismatch")
+let parallelStats = try parityEngine.parallelBatchWithStats(tree: emptyTree, mutations: [
+    MutationRecord(kind: .upsert, key: Data("r".utf8), value: Data("route".utf8)),
+    MutationRecord(kind: .upsert, key: Data("s".utf8), value: Data("stats".utf8)),
+], config: try parallelConfig(maxThreads: 1, parallelismThreshold: 1))
+let parallelStatsValue = try parityEngine.get(tree: parallelStats.tree, key: Data("s".utf8))
+try expect(parallelStatsValue == Data("stats".utf8), "parallel_batch_with_stats value mismatch")
+try expect(parallelStats.stats.inputMutations == 2, "parallel batch input mutation count mismatch")
+try expect(parallelStats.stats.effectiveMutations == 2, "parallel batch effective mutation count mismatch")
+try expect(parallelStats.stats.writtenNodes > 0, "parallel batch written node count missing")
 
 let appendedStats = try parityEngine.appendBatchWithStats(tree: builtTree, mutations: [
     MutationRecord(kind: .upsert, key: Data("d".utf8), value: Data("4".utf8)),

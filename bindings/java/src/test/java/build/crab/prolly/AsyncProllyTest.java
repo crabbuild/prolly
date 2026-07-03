@@ -2,6 +2,7 @@ package build.crab.prolly;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -78,10 +79,46 @@ class AsyncProllyTest {
             assertArrayEquals(bytes("async"), prolly.get(parallelTree, bytes("q"))
                     .get(5, TimeUnit.SECONDS)
                     .orElseThrow());
+            BatchApplyResult parallelStats = prolly.parallelBatchWithStats(
+                            empty,
+                            List.of(
+                                    Prolly.upsert(bytes("r"), bytes("route")),
+                                    Prolly.upsert(bytes("s"), bytes("stats"))),
+                            Prolly.parallelConfig(1, 1))
+                    .get(5, TimeUnit.SECONDS);
+            assertArrayEquals(bytes("stats"), prolly.get(parallelStats.tree(), bytes("s"))
+                    .get(5, TimeUnit.SECONDS)
+                    .orElseThrow());
+            assertEquals(2, parallelStats.stats().inputMutations());
+            assertEquals(2, parallelStats.stats().effectiveMutations());
+            assertTrue(parallelStats.stats().writtenNodes() > 0);
 
             TreeRecord changed = prolly.put(tree, bytes("b"), bytes("22")).get(5, TimeUnit.SECONDS);
             assertEquals(1, prolly.diff(tree, changed).get(5, TimeUnit.SECONDS).size());
+            assertArrayEquals(bytes("a"), prolly.firstEntry(tree).get(5, TimeUnit.SECONDS).orElseThrow().key());
+            assertArrayEquals(bytes("b"), prolly.lastEntry(tree).get(5, TimeUnit.SECONDS).orElseThrow().key());
+            assertArrayEquals(bytes("b"), prolly.lowerBound(tree, bytes("aa")).get(5, TimeUnit.SECONDS).orElseThrow().key());
+            assertTrue(prolly.upperBound(tree, bytes("b")).get(5, TimeUnit.SECONDS).isEmpty());
+            List<Entry> prefixEntries = prolly.prefix(tree, bytes("a")).get(5, TimeUnit.SECONDS);
+            assertEquals(1, prefixEntries.size());
+            assertArrayEquals(bytes("1"), prefixEntries.get(0).value());
+            RangePageRecord prefixPage = prolly.prefixPage(tree, bytes("a"), null, 1).get(5, TimeUnit.SECONDS);
+            assertEquals(1, prefixPage.getEntries().size());
+            assertArrayEquals(bytes("1"), prefixPage.getEntries().get(0).getValue());
+            CursorWindowRecord window = prolly.cursorWindow(tree, bytes("aa"), Optional.empty(), 1)
+                    .get(5, TimeUnit.SECONDS);
+            assertArrayEquals(bytes("a"), window.getPositionKey());
+            assertFalse(window.getFound());
+            assertEquals(1, window.getEntries().size());
+            assertArrayEquals(bytes("b"), window.getEntries().get(0).getKey());
             assertNotNull(prolly.rangePage(changed, null, Optional.empty(), 1).get(5, TimeUnit.SECONDS).getNextCursor());
+            ReversePageRecord reversePage = prolly.reversePage(changed, null, new byte[0], 2).get(5, TimeUnit.SECONDS);
+            assertArrayEquals(bytes("b"), reversePage.getEntries().get(0).getKey());
+            assertArrayEquals(bytes("a"), reversePage.getEntries().get(1).getKey());
+            ReversePageRecord prefixReversePage =
+                    prolly.prefixReversePage(changed, bytes("a"), null, 2).get(5, TimeUnit.SECONDS);
+            assertEquals(1, prefixReversePage.getEntries().size());
+            assertArrayEquals(bytes("a"), prefixReversePage.getEntries().get(0).getKey());
         }
     }
 
@@ -115,9 +152,8 @@ class AsyncProllyTest {
             TreeRecord merged = await(prolly.merge(base, left, right, "prefer_right"));
             assertArrayEquals(bytes("right"), await(prolly.get(merged, bytes("k"))).orElseThrow());
             assertNotNull(await(prolly.mergeExplain(base, left, right, "prefer_right")).getResult());
-            MergeResolverCallback resolver = conflict -> new ResolutionRecord(
-                    ResolutionKind.VALUE,
-                    concat(conflict.getLeft(), bytes("|"), conflict.getRight()));
+            MergeResolverCallback resolver =
+                    conflict -> Prolly.resolutionValue(concat(conflict.getLeft(), bytes("|"), conflict.getRight()));
             TreeRecord callbackMerged = await(prolly.mergeWithResolver(base, left, right, resolver));
             assertArrayEquals(bytes("left|right"), await(prolly.get(callbackMerged, bytes("k"))).orElseThrow());
             assertNotNull(await(prolly.mergeExplainWithResolver(base, left, right, resolver)).getResult());
@@ -126,9 +162,8 @@ class AsyncProllyTest {
                 TreeRecord policyMerged = await(prolly.mergeWithPolicy(base, left, right, policy));
                 assertArrayEquals(bytes("left|right"), await(prolly.get(policyMerged, bytes("k"))).orElseThrow());
             }
-            CrdtResolverCallback crdtResolver = conflict -> new CrdtResolutionRecord(
-                    CrdtResolutionKind.VALUE,
-                    concat(conflict.getLeft(), bytes("|"), conflict.getRight()));
+            CrdtResolverCallback crdtResolver =
+                    conflict -> Prolly.crdtResolutionValue(concat(conflict.getLeft(), bytes("|"), conflict.getRight()));
             TreeRecord crdtCallbackMerged =
                     await(prolly.crdtMergeWithResolver(base, left, right, CrdtDeletePolicyKind.UPDATE_WINS, crdtResolver));
             assertArrayEquals(bytes("left|right"), await(prolly.get(crdtCallbackMerged, bytes("k"))).orElseThrow());
@@ -165,6 +200,17 @@ class AsyncProllyTest {
             assertTrue(await(prolly.loadSnapshot(branch, bytes("main"))).isEmpty());
 
             assertTrue(await(prolly.collectStatsJson(largeTree)).contains("\"num_nodes\""));
+            TreeStatsRecord typedStats = await(prolly.collectStats(largeTree));
+            assertTrue(Prolly.treeStatsTotalKeyValuePairs(typedStats) > 0);
+            assertTrue(Prolly.treeStatsLevelCount(typedStats, 0) > 0);
+            StatsComparisonRecord typedDiffStats = await(prolly.statsDiff(empty, largeTree));
+            assertEquals(0L, Prolly.statsComparisonBeforeTotalKeyValuePairs(typedDiffStats));
+            assertTrue(Prolly.statsComparisonAfterTotalKeyValuePairs(typedDiffStats) > 0);
+            assertTrue(Prolly.statsDiffTotalKeyValuePairs(typedDiffStats) > 0);
+            TreeDebugViewRecord debugTree = await(prolly.debugTree(largeTree));
+            assertTrue(Prolly.treeDebugViewLevelCount(debugTree) > 0);
+            TreeDebugComparisonRecord debugComparison = await(prolly.debugCompareTrees(empty, largeTree));
+            assertTrue(Prolly.treeDebugComparisonRightOnlyNodes(debugComparison) > 0);
             assertTrue(await(prolly.pinTreeRoot(largeTree)) > 0);
             assertTrue(await(prolly.cacheStats()).pinnedNodes() > 0);
             assertTrue(await(prolly.unpinAllCacheNodes()) > 0);
@@ -181,6 +227,27 @@ class AsyncProllyTest {
                 assertTrue(missing.missingNodes() > 0);
                 MissingNodeCopy copied = await(prolly.copyMissingNodes(largeTree, destination));
                 assertEquals(missing.missingNodes(), copied.copiedNodes());
+            }
+
+            SnapshotBundleRecord snapshotBundle = await(prolly.exportSnapshot(largeTree));
+            assertEquals(1, Prolly.snapshotBundleFormatVersion(snapshotBundle));
+            assertTrue(Prolly.snapshotBundleNodeCount(snapshotBundle) > 0);
+            byte[] snapshotBundleBytes = Prolly.snapshotBundleToBytes(snapshotBundle);
+            assertArrayEquals(
+                    Prolly.cidFromBytes(snapshotBundleBytes),
+                    Prolly.snapshotBundleDigestBytes(snapshotBundleBytes));
+            SnapshotBundleVerificationRecord snapshotVerification =
+                    Prolly.verifySnapshotBundleBytes(snapshotBundleBytes);
+            assertTrue(Prolly.snapshotBundleVerificationValid(snapshotVerification));
+            assertEquals(
+                    Prolly.snapshotBundleNodeCount(snapshotBundle),
+                    Prolly.snapshotBundleSummaryNodeCount(snapshotVerification.getSummary()));
+            SnapshotBundleRecord decodedSnapshotBundle = Prolly.snapshotBundleFromBytes(snapshotBundleBytes);
+            try (AsyncProlly snapshotDestination = await(AsyncProlly.memory())) {
+                TreeRecord importedTree = await(snapshotDestination.importSnapshot(decodedSnapshotBundle));
+                assertArrayEquals(
+                        largeValue,
+                        await(snapshotDestination.getLargeValue(blobStore, importedTree, bytes("big"))).orElseThrow());
             }
         }
     }

@@ -514,6 +514,29 @@ end
     end
   end
 
+  # The Record type CursorWindowRecord.
+
+  def self.check_lower_TypeCursorWindowRecord(v)
+    RustBuffer.check_lower_Optionalbytes(v.position_key)
+    RustBuffer.check_lower_Optionalbytes(v.position_value)
+
+    RustBuffer.check_lower_SequenceTypeEntryRecord(v.entries)
+    RustBuffer.check_lower_OptionalTypeRangeCursorRecord(v.next_cursor)
+  end
+
+  def self.alloc_from_TypeCursorWindowRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeCursorWindowRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeCursorWindowRecord
+    consumeWithStream do |stream|
+      return stream.readTypeCursorWindowRecord
+    end
+  end
+
   # The Record type DiffPageProofRecord.
 
   def self.check_lower_TypeDiffPageProofRecord(v)
@@ -1012,6 +1035,7 @@ end
     RustBuffer.check_lower_OptionalTypeTreeRecord(v.result)
     RustBuffer.check_lower_Optionalstring(v.error)
 
+    RustBuffer.check_lower_TypeMergeTraceRecord(v.trace)
   end
 
   def self.alloc_from_TypeMergeExplanationRecord(v)
@@ -1024,6 +1048,59 @@ end
   def consumeIntoTypeMergeExplanationRecord
     consumeWithStream do |stream|
       return stream.readTypeMergeExplanationRecord
+    end
+  end
+
+  # The Record type MergeTraceEventRecord.
+
+  def self.check_lower_TypeMergeTraceEventRecord(v)
+    RustBuffer.check_lower_TypeMergeTraceEventKind(v.kind)
+    RustBuffer.check_lower_OptionalTypeMergeFastPathKind(v.fast_path)
+    RustBuffer.check_lower_Optionalbytes(v.cid)
+    RustBuffer.check_lower_OptionalTypeMergeReuseReasonKind(v.reuse_reason)
+    RustBuffer.check_lower_Optionalu64(v.level)
+    RustBuffer.check_lower_Optionalu64(v.entries)
+    RustBuffer.check_lower_Optionalbytes(v.first_key)
+    RustBuffer.check_lower_Optionalbytes(v.last_key)
+    RustBuffer.check_lower_OptionalTypeMergeTraceStageKind(v.stage)
+    RustBuffer.check_lower_Optionalbytes(v.key)
+    RustBuffer.check_lower_OptionalTypeMergeTraceResolutionKind(v.resolution)
+    RustBuffer.check_lower_OptionalTypeMergeFallbackReasonKind(v.fallback_reason)
+    RustBuffer.check_lower_OptionalTypeDiffTraversalStatsRecord(v.diff_stats)
+    RustBuffer.check_lower_Optionalu64(v.right_changes)
+    RustBuffer.check_lower_Optionalu64(v.mutations)
+    RustBuffer.check_lower_Optionalbool(v.append_only)
+  end
+
+  def self.alloc_from_TypeMergeTraceEventRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeMergeTraceEventRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeMergeTraceEventRecord
+    consumeWithStream do |stream|
+      return stream.readTypeMergeTraceEventRecord
+    end
+  end
+
+  # The Record type MergeTraceRecord.
+
+  def self.check_lower_TypeMergeTraceRecord(v)
+    RustBuffer.check_lower_SequenceTypeMergeTraceEventRecord(v.events)
+  end
+
+  def self.alloc_from_TypeMergeTraceRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeMergeTraceRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeMergeTraceRecord
+    consumeWithStream do |stream|
+      return stream.readTypeMergeTraceRecord
     end
   end
 
@@ -1581,6 +1658,45 @@ end
     end
   end
 
+  # The Record type ReverseCursorRecord.
+
+  def self.check_lower_TypeReverseCursorRecord(v)
+    RustBuffer.check_lower_Optionalbytes(v.before_key)
+  end
+
+  def self.alloc_from_TypeReverseCursorRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeReverseCursorRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeReverseCursorRecord
+    consumeWithStream do |stream|
+      return stream.readTypeReverseCursorRecord
+    end
+  end
+
+  # The Record type ReversePageRecord.
+
+  def self.check_lower_TypeReversePageRecord(v)
+    RustBuffer.check_lower_SequenceTypeEntryRecord(v.entries)
+    RustBuffer.check_lower_OptionalTypeReverseCursorRecord(v.next_cursor)
+  end
+
+  def self.alloc_from_TypeReversePageRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeReversePageRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeReversePageRecord
+    consumeWithStream do |stream|
+      return stream.readTypeReversePageRecord
+    end
+  end
+
   # The Record type RootManifestRecord.
 
   def self.check_lower_TypeRootManifestRecord(v)
@@ -1599,6 +1715,95 @@ end
   def consumeIntoTypeRootManifestRecord
     consumeWithStream do |stream|
       return stream.readTypeRootManifestRecord
+    end
+  end
+
+  # The Record type SnapshotBundleNodeRecord.
+
+  def self.check_lower_TypeSnapshotBundleNodeRecord(v)
+
+
+  end
+
+  def self.alloc_from_TypeSnapshotBundleNodeRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeSnapshotBundleNodeRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeSnapshotBundleNodeRecord
+    consumeWithStream do |stream|
+      return stream.readTypeSnapshotBundleNodeRecord
+    end
+  end
+
+  # The Record type SnapshotBundleRecord.
+
+  def self.check_lower_TypeSnapshotBundleRecord(v)
+
+    RustBuffer.check_lower_TypeTreeRecord(v.tree)
+    RustBuffer.check_lower_SequenceTypeSnapshotBundleNodeRecord(v.nodes)
+  end
+
+  def self.alloc_from_TypeSnapshotBundleRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeSnapshotBundleRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeSnapshotBundleRecord
+    consumeWithStream do |stream|
+      return stream.readTypeSnapshotBundleRecord
+    end
+  end
+
+  # The Record type SnapshotBundleSummaryRecord.
+
+  def self.check_lower_TypeSnapshotBundleSummaryRecord(v)
+
+    RustBuffer.check_lower_Optionalbytes(v.root)
+
+
+
+
+  end
+
+  def self.alloc_from_TypeSnapshotBundleSummaryRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeSnapshotBundleSummaryRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeSnapshotBundleSummaryRecord
+    consumeWithStream do |stream|
+      return stream.readTypeSnapshotBundleSummaryRecord
+    end
+  end
+
+  # The Record type SnapshotBundleVerificationRecord.
+
+  def self.check_lower_TypeSnapshotBundleVerificationRecord(v)
+
+    RustBuffer.check_lower_TypeSnapshotBundleSummaryRecord(v.summary)
+
+
+    RustBuffer.check_lower_Sequencebytes(v.missing_cids)
+    RustBuffer.check_lower_Sequencebytes(v.extra_cids)
+  end
+
+  def self.alloc_from_TypeSnapshotBundleVerificationRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeSnapshotBundleVerificationRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeSnapshotBundleVerificationRecord
+    consumeWithStream do |stream|
+      return stream.readTypeSnapshotBundleVerificationRecord
     end
   end
 
@@ -1665,12 +1870,164 @@ end
     end
   end
 
+  # The Record type StatsComparisonRecord.
+
+  def self.check_lower_TypeStatsComparisonRecord(v)
+    RustBuffer.check_lower_TypeTreeStatsRecord(v.before)
+    RustBuffer.check_lower_TypeTreeStatsRecord(v.after)
+    RustBuffer.check_lower_TypeStatsDiffRecord(v.absolute)
+    RustBuffer.check_lower_TypeStatsPercentageChangeRecord(v.percentage)
+  end
+
+  def self.alloc_from_TypeStatsComparisonRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeStatsComparisonRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeStatsComparisonRecord
+    consumeWithStream do |stream|
+      return stream.readTypeStatsComparisonRecord
+    end
+  end
+
+  # The Record type StatsDiffRecord.
+
+  def self.check_lower_TypeStatsDiffRecord(v)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  end
+
+  def self.alloc_from_TypeStatsDiffRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeStatsDiffRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeStatsDiffRecord
+    consumeWithStream do |stream|
+      return stream.readTypeStatsDiffRecord
+    end
+  end
+
+  # The Record type StatsPercentageChangeRecord.
+
+  def self.check_lower_TypeStatsPercentageChangeRecord(v)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  end
+
+  def self.alloc_from_TypeStatsPercentageChangeRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeStatsPercentageChangeRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeStatsPercentageChangeRecord
+    consumeWithStream do |stream|
+      return stream.readTypeStatsPercentageChangeRecord
+    end
+  end
+
+  # The Record type StructuralDiffCursorRecord.
+
+  def self.check_lower_TypeStructuralDiffCursorRecord(v)
+    RustBuffer.check_lower_Optionalbytes(v.base_root)
+    RustBuffer.check_lower_Optionalbytes(v.other_root)
+    RustBuffer.check_lower_SequenceTypeStructuralDiffMarkerRecord(v.markers)
+    RustBuffer.check_lower_SequenceTypeDiffRecord(v.pending)
+  end
+
+  def self.alloc_from_TypeStructuralDiffCursorRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeStructuralDiffCursorRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeStructuralDiffCursorRecord
+    consumeWithStream do |stream|
+      return stream.readTypeStructuralDiffCursorRecord
+    end
+  end
+
+  # The Record type StructuralDiffMarkerRecord.
+
+  def self.check_lower_TypeStructuralDiffMarkerRecord(v)
+    RustBuffer.check_lower_TypeStructuralDiffMarkerKind(v.kind)
+    RustBuffer.check_lower_Optionalbytes(v.base_cid)
+    RustBuffer.check_lower_Optionalbytes(v.other_cid)
+    RustBuffer.check_lower_Optionalbytes(v.span_end)
+    RustBuffer.check_lower_Optionalbytes(v.cid)
+  end
+
+  def self.alloc_from_TypeStructuralDiffMarkerRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeStructuralDiffMarkerRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeStructuralDiffMarkerRecord
+    consumeWithStream do |stream|
+      return stream.readTypeStructuralDiffMarkerRecord
+    end
+  end
+
   # The Record type StructuralDiffPageRecord.
 
   def self.check_lower_TypeStructuralDiffPageRecord(v)
     RustBuffer.check_lower_SequenceTypeDiffRecord(v.diffs)
     RustBuffer.check_lower_Optionalstring(v.next_cursor_json)
     RustBuffer.check_lower_TypeDiffTraversalStatsRecord(v.stats)
+    RustBuffer.check_lower_OptionalTypeStructuralDiffCursorRecord(v.next_cursor)
   end
 
   def self.alloc_from_TypeStructuralDiffPageRecord(v)
@@ -1747,6 +2104,143 @@ end
     end
   end
 
+  # The Record type TreeDebugComparedNodeRecord.
+
+  def self.check_lower_TypeTreeDebugComparedNodeRecord(v)
+    RustBuffer.check_lower_TypeTreeDebugNodeStatusKind(v.status)
+    RustBuffer.check_lower_TypeTreeDebugNodeRecord(v.node)
+  end
+
+  def self.alloc_from_TypeTreeDebugComparedNodeRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeTreeDebugComparedNodeRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeTreeDebugComparedNodeRecord
+    consumeWithStream do |stream|
+      return stream.readTypeTreeDebugComparedNodeRecord
+    end
+  end
+
+  # The Record type TreeDebugComparisonLevelRecord.
+
+  def self.check_lower_TypeTreeDebugComparisonLevelRecord(v)
+
+
+
+
+
+
+
+    RustBuffer.check_lower_SequenceTypeTreeDebugComparedNodeRecord(v.nodes)
+  end
+
+  def self.alloc_from_TypeTreeDebugComparisonLevelRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeTreeDebugComparisonLevelRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeTreeDebugComparisonLevelRecord
+    consumeWithStream do |stream|
+      return stream.readTypeTreeDebugComparisonLevelRecord
+    end
+  end
+
+  # The Record type TreeDebugComparisonRecord.
+
+  def self.check_lower_TypeTreeDebugComparisonRecord(v)
+
+
+
+
+
+
+    RustBuffer.check_lower_SequenceTypeTreeDebugComparisonLevelRecord(v.levels)
+  end
+
+  def self.alloc_from_TypeTreeDebugComparisonRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeTreeDebugComparisonRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeTreeDebugComparisonRecord
+    consumeWithStream do |stream|
+      return stream.readTypeTreeDebugComparisonRecord
+    end
+  end
+
+  # The Record type TreeDebugLevelRecord.
+
+  def self.check_lower_TypeTreeDebugLevelRecord(v)
+
+    RustBuffer.check_lower_SequenceTypeTreeDebugNodeRecord(v.nodes)
+  end
+
+  def self.alloc_from_TypeTreeDebugLevelRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeTreeDebugLevelRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeTreeDebugLevelRecord
+    consumeWithStream do |stream|
+      return stream.readTypeTreeDebugLevelRecord
+    end
+  end
+
+  # The Record type TreeDebugNodeRecord.
+
+  def self.check_lower_TypeTreeDebugNodeRecord(v)
+
+
+
+
+
+
+
+    RustBuffer.check_lower_Optionalbytes(v.first_key)
+    RustBuffer.check_lower_Optionalbytes(v.last_key)
+  end
+
+  def self.alloc_from_TypeTreeDebugNodeRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeTreeDebugNodeRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeTreeDebugNodeRecord
+    consumeWithStream do |stream|
+      return stream.readTypeTreeDebugNodeRecord
+    end
+  end
+
+  # The Record type TreeDebugViewRecord.
+
+  def self.check_lower_TypeTreeDebugViewRecord(v)
+    RustBuffer.check_lower_SequenceTypeTreeDebugLevelRecord(v.levels)
+  end
+
+  def self.alloc_from_TypeTreeDebugViewRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeTreeDebugViewRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeTreeDebugViewRecord
+    consumeWithStream do |stream|
+      return stream.readTypeTreeDebugViewRecord
+    end
+  end
+
   # The Record type TreeRecord.
 
   def self.check_lower_TypeTreeRecord(v)
@@ -1764,6 +2258,93 @@ end
   def consumeIntoTypeTreeRecord
     consumeWithStream do |stream|
       return stream.readTypeTreeRecord
+    end
+  end
+
+  # The Record type TreeStatsLevelF64Record.
+
+  def self.check_lower_TypeTreeStatsLevelF64Record(v)
+
+
+  end
+
+  def self.alloc_from_TypeTreeStatsLevelF64Record(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeTreeStatsLevelF64Record(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeTreeStatsLevelF64Record
+    consumeWithStream do |stream|
+      return stream.readTypeTreeStatsLevelF64Record
+    end
+  end
+
+  # The Record type TreeStatsLevelU64Record.
+
+  def self.check_lower_TypeTreeStatsLevelU64Record(v)
+
+
+  end
+
+  def self.alloc_from_TypeTreeStatsLevelU64Record(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeTreeStatsLevelU64Record(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeTreeStatsLevelU64Record
+    consumeWithStream do |stream|
+      return stream.readTypeTreeStatsLevelU64Record
+    end
+  end
+
+  # The Record type TreeStatsRecord.
+
+  def self.check_lower_TypeTreeStatsRecord(v)
+
+
+
+
+
+
+
+
+
+
+    RustBuffer.check_lower_SequenceTypeTreeStatsLevelU64Record(v.nodes_per_level)
+    RustBuffer.check_lower_SequenceTypeTreeStatsLevelF64Record(v.avg_node_size_per_level)
+    RustBuffer.check_lower_SequenceTypeTreeStatsLevelF64Record(v.avg_entries_per_level)
+    RustBuffer.check_lower_SequenceTypeTreeStatsLevelU64Record(v.min_entries_per_level)
+    RustBuffer.check_lower_SequenceTypeTreeStatsLevelU64Record(v.max_entries_per_level)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  end
+
+  def self.alloc_from_TypeTreeStatsRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeTreeStatsRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeTreeStatsRecord
+    consumeWithStream do |stream|
+      return stream.readTypeTreeStatsRecord
     end
   end
 
@@ -1905,6 +2486,120 @@ end
   end
 
 
+  # The Enum type MergeFallbackReasonKind.
+
+  def self.check_lower_TypeMergeFallbackReasonKind(v)
+  end
+
+  def self.alloc_from_TypeMergeFallbackReasonKind(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeMergeFallbackReasonKind(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeMergeFallbackReasonKind
+    consumeWithStream do |stream|
+      return stream.readTypeMergeFallbackReasonKind
+    end
+  end
+
+
+  # The Enum type MergeFastPathKind.
+
+  def self.check_lower_TypeMergeFastPathKind(v)
+  end
+
+  def self.alloc_from_TypeMergeFastPathKind(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeMergeFastPathKind(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeMergeFastPathKind
+    consumeWithStream do |stream|
+      return stream.readTypeMergeFastPathKind
+    end
+  end
+
+
+  # The Enum type MergeReuseReasonKind.
+
+  def self.check_lower_TypeMergeReuseReasonKind(v)
+  end
+
+  def self.alloc_from_TypeMergeReuseReasonKind(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeMergeReuseReasonKind(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeMergeReuseReasonKind
+    consumeWithStream do |stream|
+      return stream.readTypeMergeReuseReasonKind
+    end
+  end
+
+
+  # The Enum type MergeTraceEventKind.
+
+  def self.check_lower_TypeMergeTraceEventKind(v)
+  end
+
+  def self.alloc_from_TypeMergeTraceEventKind(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeMergeTraceEventKind(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeMergeTraceEventKind
+    consumeWithStream do |stream|
+      return stream.readTypeMergeTraceEventKind
+    end
+  end
+
+
+  # The Enum type MergeTraceResolutionKind.
+
+  def self.check_lower_TypeMergeTraceResolutionKind(v)
+  end
+
+  def self.alloc_from_TypeMergeTraceResolutionKind(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeMergeTraceResolutionKind(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeMergeTraceResolutionKind
+    consumeWithStream do |stream|
+      return stream.readTypeMergeTraceResolutionKind
+    end
+  end
+
+
+  # The Enum type MergeTraceStageKind.
+
+  def self.check_lower_TypeMergeTraceStageKind(v)
+  end
+
+  def self.alloc_from_TypeMergeTraceStageKind(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeMergeTraceStageKind(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeMergeTraceStageKind
+    consumeWithStream do |stream|
+      return stream.readTypeMergeTraceStageKind
+    end
+  end
+
+
   # The Enum type MutationKind.
 
   def self.check_lower_TypeMutationKind(v)
@@ -1983,6 +2678,44 @@ end
   end
 
 
+  # The Enum type StructuralDiffMarkerKind.
+
+  def self.check_lower_TypeStructuralDiffMarkerKind(v)
+  end
+
+  def self.alloc_from_TypeStructuralDiffMarkerKind(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeStructuralDiffMarkerKind(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeStructuralDiffMarkerKind
+    consumeWithStream do |stream|
+      return stream.readTypeStructuralDiffMarkerKind
+    end
+  end
+
+
+  # The Enum type TreeDebugNodeStatusKind.
+
+  def self.check_lower_TypeTreeDebugNodeStatusKind(v)
+  end
+
+  def self.alloc_from_TypeTreeDebugNodeStatusKind(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeTreeDebugNodeStatusKind(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeTreeDebugNodeStatusKind
+    consumeWithStream do |stream|
+      return stream.readTypeTreeDebugNodeStatusKind
+    end
+  end
+
+
   # The Enum type ValueRefKind.
 
   def self.check_lower_TypeValueRefKind(v)
@@ -2020,6 +2753,27 @@ end
   def consumeIntoOptionalu64
     consumeWithStream do |stream|
       return stream.readOptionalu64
+    end
+  end
+
+  # The Optional<T> type for bool.
+
+  def self.check_lower_Optionalbool(v)
+    if not v.nil?
+
+    end
+  end
+
+  def self.alloc_from_Optionalbool(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_Optionalbool(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoOptionalbool
+    consumeWithStream do |stream|
+      return stream.readOptionalbool
     end
   end
 
@@ -2107,6 +2861,48 @@ end
     end
   end
 
+  # The Optional<T> type for TypeDiffTraversalStatsRecord.
+
+  def self.check_lower_OptionalTypeDiffTraversalStatsRecord(v)
+    if not v.nil?
+      RustBuffer.check_lower_TypeDiffTraversalStatsRecord(v)
+    end
+  end
+
+  def self.alloc_from_OptionalTypeDiffTraversalStatsRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_OptionalTypeDiffTraversalStatsRecord(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoOptionalTypeDiffTraversalStatsRecord
+    consumeWithStream do |stream|
+      return stream.readOptionalTypeDiffTraversalStatsRecord
+    end
+  end
+
+  # The Optional<T> type for TypeEntryRecord.
+
+  def self.check_lower_OptionalTypeEntryRecord(v)
+    if not v.nil?
+      RustBuffer.check_lower_TypeEntryRecord(v)
+    end
+  end
+
+  def self.alloc_from_OptionalTypeEntryRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_OptionalTypeEntryRecord(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoOptionalTypeEntryRecord
+    consumeWithStream do |stream|
+      return stream.readOptionalTypeEntryRecord
+    end
+  end
+
   # The Optional<T> type for TypeKeyProofRecord.
 
   def self.check_lower_OptionalTypeKeyProofRecord(v)
@@ -2191,6 +2987,27 @@ end
     end
   end
 
+  # The Optional<T> type for TypeReverseCursorRecord.
+
+  def self.check_lower_OptionalTypeReverseCursorRecord(v)
+    if not v.nil?
+      RustBuffer.check_lower_TypeReverseCursorRecord(v)
+    end
+  end
+
+  def self.alloc_from_OptionalTypeReverseCursorRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_OptionalTypeReverseCursorRecord(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoOptionalTypeReverseCursorRecord
+    consumeWithStream do |stream|
+      return stream.readOptionalTypeReverseCursorRecord
+    end
+  end
+
   # The Optional<T> type for TypeRootManifestRecord.
 
   def self.check_lower_OptionalTypeRootManifestRecord(v)
@@ -2209,6 +3026,27 @@ end
   def consumeIntoOptionalTypeRootManifestRecord
     consumeWithStream do |stream|
       return stream.readOptionalTypeRootManifestRecord
+    end
+  end
+
+  # The Optional<T> type for TypeStructuralDiffCursorRecord.
+
+  def self.check_lower_OptionalTypeStructuralDiffCursorRecord(v)
+    if not v.nil?
+      RustBuffer.check_lower_TypeStructuralDiffCursorRecord(v)
+    end
+  end
+
+  def self.alloc_from_OptionalTypeStructuralDiffCursorRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_OptionalTypeStructuralDiffCursorRecord(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoOptionalTypeStructuralDiffCursorRecord
+    consumeWithStream do |stream|
+      return stream.readOptionalTypeStructuralDiffCursorRecord
     end
   end
 
@@ -2272,6 +3110,111 @@ end
   def consumeIntoOptionalTypeValueRefRecord
     consumeWithStream do |stream|
       return stream.readOptionalTypeValueRefRecord
+    end
+  end
+
+  # The Optional<T> type for TypeMergeFallbackReasonKind.
+
+  def self.check_lower_OptionalTypeMergeFallbackReasonKind(v)
+    if not v.nil?
+      RustBuffer.check_lower_TypeMergeFallbackReasonKind(v)
+    end
+  end
+
+  def self.alloc_from_OptionalTypeMergeFallbackReasonKind(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_OptionalTypeMergeFallbackReasonKind(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoOptionalTypeMergeFallbackReasonKind
+    consumeWithStream do |stream|
+      return stream.readOptionalTypeMergeFallbackReasonKind
+    end
+  end
+
+  # The Optional<T> type for TypeMergeFastPathKind.
+
+  def self.check_lower_OptionalTypeMergeFastPathKind(v)
+    if not v.nil?
+      RustBuffer.check_lower_TypeMergeFastPathKind(v)
+    end
+  end
+
+  def self.alloc_from_OptionalTypeMergeFastPathKind(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_OptionalTypeMergeFastPathKind(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoOptionalTypeMergeFastPathKind
+    consumeWithStream do |stream|
+      return stream.readOptionalTypeMergeFastPathKind
+    end
+  end
+
+  # The Optional<T> type for TypeMergeReuseReasonKind.
+
+  def self.check_lower_OptionalTypeMergeReuseReasonKind(v)
+    if not v.nil?
+      RustBuffer.check_lower_TypeMergeReuseReasonKind(v)
+    end
+  end
+
+  def self.alloc_from_OptionalTypeMergeReuseReasonKind(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_OptionalTypeMergeReuseReasonKind(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoOptionalTypeMergeReuseReasonKind
+    consumeWithStream do |stream|
+      return stream.readOptionalTypeMergeReuseReasonKind
+    end
+  end
+
+  # The Optional<T> type for TypeMergeTraceResolutionKind.
+
+  def self.check_lower_OptionalTypeMergeTraceResolutionKind(v)
+    if not v.nil?
+      RustBuffer.check_lower_TypeMergeTraceResolutionKind(v)
+    end
+  end
+
+  def self.alloc_from_OptionalTypeMergeTraceResolutionKind(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_OptionalTypeMergeTraceResolutionKind(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoOptionalTypeMergeTraceResolutionKind
+    consumeWithStream do |stream|
+      return stream.readOptionalTypeMergeTraceResolutionKind
+    end
+  end
+
+  # The Optional<T> type for TypeMergeTraceStageKind.
+
+  def self.check_lower_OptionalTypeMergeTraceStageKind(v)
+    if not v.nil?
+      RustBuffer.check_lower_TypeMergeTraceStageKind(v)
+    end
+  end
+
+  def self.alloc_from_OptionalTypeMergeTraceStageKind(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_OptionalTypeMergeTraceStageKind(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoOptionalTypeMergeTraceStageKind
+    consumeWithStream do |stream|
+      return stream.readOptionalTypeMergeTraceStageKind
     end
   end
 
@@ -2443,6 +3386,27 @@ end
     end
   end
 
+  # The Sequence<T> type for TypeMergeTraceEventRecord.
+
+  def self.check_lower_SequenceTypeMergeTraceEventRecord(v)
+    v.each do |item|
+      RustBuffer.check_lower_TypeMergeTraceEventRecord(item)
+    end
+  end
+
+  def self.alloc_from_SequenceTypeMergeTraceEventRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_SequenceTypeMergeTraceEventRecord(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoSequenceTypeMergeTraceEventRecord
+    consumeWithStream do |stream|
+      return stream.readSequenceTypeMergeTraceEventRecord
+    end
+  end
+
   # The Sequence<T> type for TypeMutationRecord.
 
   def self.check_lower_SequenceTypeMutationRecord(v)
@@ -2527,6 +3491,27 @@ end
     end
   end
 
+  # The Sequence<T> type for TypeSnapshotBundleNodeRecord.
+
+  def self.check_lower_SequenceTypeSnapshotBundleNodeRecord(v)
+    v.each do |item|
+      RustBuffer.check_lower_TypeSnapshotBundleNodeRecord(item)
+    end
+  end
+
+  def self.alloc_from_SequenceTypeSnapshotBundleNodeRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_SequenceTypeSnapshotBundleNodeRecord(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoSequenceTypeSnapshotBundleNodeRecord
+    consumeWithStream do |stream|
+      return stream.readSequenceTypeSnapshotBundleNodeRecord
+    end
+  end
+
   # The Sequence<T> type for TypeSnapshotRecord.
 
   def self.check_lower_SequenceTypeSnapshotRecord(v)
@@ -2545,6 +3530,27 @@ end
   def consumeIntoSequenceTypeSnapshotRecord
     consumeWithStream do |stream|
       return stream.readSequenceTypeSnapshotRecord
+    end
+  end
+
+  # The Sequence<T> type for TypeStructuralDiffMarkerRecord.
+
+  def self.check_lower_SequenceTypeStructuralDiffMarkerRecord(v)
+    v.each do |item|
+      RustBuffer.check_lower_TypeStructuralDiffMarkerRecord(item)
+    end
+  end
+
+  def self.alloc_from_SequenceTypeStructuralDiffMarkerRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_SequenceTypeStructuralDiffMarkerRecord(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoSequenceTypeStructuralDiffMarkerRecord
+    consumeWithStream do |stream|
+      return stream.readSequenceTypeStructuralDiffMarkerRecord
     end
   end
 
@@ -2569,6 +3575,90 @@ end
     end
   end
 
+  # The Sequence<T> type for TypeTreeDebugComparedNodeRecord.
+
+  def self.check_lower_SequenceTypeTreeDebugComparedNodeRecord(v)
+    v.each do |item|
+      RustBuffer.check_lower_TypeTreeDebugComparedNodeRecord(item)
+    end
+  end
+
+  def self.alloc_from_SequenceTypeTreeDebugComparedNodeRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_SequenceTypeTreeDebugComparedNodeRecord(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoSequenceTypeTreeDebugComparedNodeRecord
+    consumeWithStream do |stream|
+      return stream.readSequenceTypeTreeDebugComparedNodeRecord
+    end
+  end
+
+  # The Sequence<T> type for TypeTreeDebugComparisonLevelRecord.
+
+  def self.check_lower_SequenceTypeTreeDebugComparisonLevelRecord(v)
+    v.each do |item|
+      RustBuffer.check_lower_TypeTreeDebugComparisonLevelRecord(item)
+    end
+  end
+
+  def self.alloc_from_SequenceTypeTreeDebugComparisonLevelRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_SequenceTypeTreeDebugComparisonLevelRecord(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoSequenceTypeTreeDebugComparisonLevelRecord
+    consumeWithStream do |stream|
+      return stream.readSequenceTypeTreeDebugComparisonLevelRecord
+    end
+  end
+
+  # The Sequence<T> type for TypeTreeDebugLevelRecord.
+
+  def self.check_lower_SequenceTypeTreeDebugLevelRecord(v)
+    v.each do |item|
+      RustBuffer.check_lower_TypeTreeDebugLevelRecord(item)
+    end
+  end
+
+  def self.alloc_from_SequenceTypeTreeDebugLevelRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_SequenceTypeTreeDebugLevelRecord(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoSequenceTypeTreeDebugLevelRecord
+    consumeWithStream do |stream|
+      return stream.readSequenceTypeTreeDebugLevelRecord
+    end
+  end
+
+  # The Sequence<T> type for TypeTreeDebugNodeRecord.
+
+  def self.check_lower_SequenceTypeTreeDebugNodeRecord(v)
+    v.each do |item|
+      RustBuffer.check_lower_TypeTreeDebugNodeRecord(item)
+    end
+  end
+
+  def self.alloc_from_SequenceTypeTreeDebugNodeRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_SequenceTypeTreeDebugNodeRecord(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoSequenceTypeTreeDebugNodeRecord
+    consumeWithStream do |stream|
+      return stream.readSequenceTypeTreeDebugNodeRecord
+    end
+  end
+
   # The Sequence<T> type for TypeTreeRecord.
 
   def self.check_lower_SequenceTypeTreeRecord(v)
@@ -2587,6 +3677,48 @@ end
   def consumeIntoSequenceTypeTreeRecord
     consumeWithStream do |stream|
       return stream.readSequenceTypeTreeRecord
+    end
+  end
+
+  # The Sequence<T> type for TypeTreeStatsLevelF64Record.
+
+  def self.check_lower_SequenceTypeTreeStatsLevelF64Record(v)
+    v.each do |item|
+      RustBuffer.check_lower_TypeTreeStatsLevelF64Record(item)
+    end
+  end
+
+  def self.alloc_from_SequenceTypeTreeStatsLevelF64Record(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_SequenceTypeTreeStatsLevelF64Record(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoSequenceTypeTreeStatsLevelF64Record
+    consumeWithStream do |stream|
+      return stream.readSequenceTypeTreeStatsLevelF64Record
+    end
+  end
+
+  # The Sequence<T> type for TypeTreeStatsLevelU64Record.
+
+  def self.check_lower_SequenceTypeTreeStatsLevelU64Record(v)
+    v.each do |item|
+      RustBuffer.check_lower_TypeTreeStatsLevelU64Record(item)
+    end
+  end
+
+  def self.alloc_from_SequenceTypeTreeStatsLevelU64Record(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_SequenceTypeTreeStatsLevelU64Record(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoSequenceTypeTreeStatsLevelU64Record
+    consumeWithStream do |stream|
+      return stream.readSequenceTypeTreeStatsLevelU64Record
     end
   end
 
@@ -2661,6 +3793,10 @@ class RustBufferStream
     unpack_from 1, 'c'
   end
 
+  def readI8
+    unpack_from 1, 'c'
+  end
+
   def readU32
     unpack_from 4, 'L>'
   end
@@ -2671,6 +3807,10 @@ class RustBufferStream
 
   def readI64
     unpack_from 8, 'q>'
+  end
+
+  def readF64
+    unpack_from 8, 'G'
   end
 
   def readBool
@@ -2941,6 +4081,18 @@ class RustBufferStream
     )
   end
 
+  # The Record type CursorWindowRecord.
+
+  def readTypeCursorWindowRecord
+    CursorWindowRecord.new(
+      position_key: readOptionalbytes,
+      position_value: readOptionalbytes,
+      found: readBool,
+      entries: readSequenceTypeEntryRecord,
+      next_cursor: readOptionalTypeRangeCursorRecord
+    )
+  end
+
   # The Record type DiffPageProofRecord.
 
   def readTypeDiffPageProofRecord
@@ -3186,7 +4338,39 @@ class RustBufferStream
     MergeExplanationRecord.new(
       result: readOptionalTypeTreeRecord,
       error: readOptionalstring,
-      trace_json: readString
+      trace_json: readString,
+      trace: readTypeMergeTraceRecord
+    )
+  end
+
+  # The Record type MergeTraceEventRecord.
+
+  def readTypeMergeTraceEventRecord
+    MergeTraceEventRecord.new(
+      kind: readTypeMergeTraceEventKind,
+      fast_path: readOptionalTypeMergeFastPathKind,
+      cid: readOptionalbytes,
+      reuse_reason: readOptionalTypeMergeReuseReasonKind,
+      level: readOptionalu64,
+      entries: readOptionalu64,
+      first_key: readOptionalbytes,
+      last_key: readOptionalbytes,
+      stage: readOptionalTypeMergeTraceStageKind,
+      key: readOptionalbytes,
+      resolution: readOptionalTypeMergeTraceResolutionKind,
+      fallback_reason: readOptionalTypeMergeFallbackReasonKind,
+      diff_stats: readOptionalTypeDiffTraversalStatsRecord,
+      right_changes: readOptionalu64,
+      mutations: readOptionalu64,
+      append_only: readOptionalbool
+    )
+  end
+
+  # The Record type MergeTraceRecord.
+
+  def readTypeMergeTraceRecord
+    MergeTraceRecord.new(
+      events: readSequenceTypeMergeTraceEventRecord
     )
   end
 
@@ -3469,6 +4653,23 @@ class RustBufferStream
     )
   end
 
+  # The Record type ReverseCursorRecord.
+
+  def readTypeReverseCursorRecord
+    ReverseCursorRecord.new(
+      before_key: readOptionalbytes
+    )
+  end
+
+  # The Record type ReversePageRecord.
+
+  def readTypeReversePageRecord
+    ReversePageRecord.new(
+      entries: readSequenceTypeEntryRecord,
+      next_cursor: readOptionalTypeReverseCursorRecord
+    )
+  end
+
   # The Record type RootManifestRecord.
 
   def readTypeRootManifestRecord
@@ -3476,6 +4677,51 @@ class RustBufferStream
       tree: readTypeTreeRecord,
       created_at_millis: readOptionalu64,
       updated_at_millis: readOptionalu64
+    )
+  end
+
+  # The Record type SnapshotBundleNodeRecord.
+
+  def readTypeSnapshotBundleNodeRecord
+    SnapshotBundleNodeRecord.new(
+      cid: readBytes,
+      bytes: readBytes
+    )
+  end
+
+  # The Record type SnapshotBundleRecord.
+
+  def readTypeSnapshotBundleRecord
+    SnapshotBundleRecord.new(
+      format_version: readU32,
+      tree: readTypeTreeRecord,
+      nodes: readSequenceTypeSnapshotBundleNodeRecord
+    )
+  end
+
+  # The Record type SnapshotBundleSummaryRecord.
+
+  def readTypeSnapshotBundleSummaryRecord
+    SnapshotBundleSummaryRecord.new(
+      format_version: readU32,
+      root: readOptionalbytes,
+      node_count: readU64,
+      byte_count: readU64,
+      min_node_bytes: readU64,
+      max_node_bytes: readU64
+    )
+  end
+
+  # The Record type SnapshotBundleVerificationRecord.
+
+  def readTypeSnapshotBundleVerificationRecord
+    SnapshotBundleVerificationRecord.new(
+      valid: readBool,
+      summary: readTypeSnapshotBundleSummaryRecord,
+      reachable_nodes: readU64,
+      reachable_bytes: readU64,
+      missing_cids: readSequencebytes,
+      extra_cids: readSequencebytes
     )
   end
 
@@ -3509,13 +4755,110 @@ class RustBufferStream
     )
   end
 
+  # The Record type StatsComparisonRecord.
+
+  def readTypeStatsComparisonRecord
+    StatsComparisonRecord.new(
+      before: readTypeTreeStatsRecord,
+      after: readTypeTreeStatsRecord,
+      absolute: readTypeStatsDiffRecord,
+      percentage: readTypeStatsPercentageChangeRecord
+    )
+  end
+
+  # The Record type StatsDiffRecord.
+
+  def readTypeStatsDiffRecord
+    StatsDiffRecord.new(
+      num_nodes_diff: readI64,
+      num_leaves_diff: readI64,
+      num_internal_nodes_diff: readI64,
+      tree_height_diff: readI8,
+      total_key_value_pairs_diff: readI64,
+      total_tree_size_bytes_diff: readI64,
+      avg_node_size_bytes_diff: readF64,
+      min_node_size_bytes_diff: readI64,
+      max_node_size_bytes_diff: readI64,
+      avg_entries_per_node_diff: readF64,
+      avg_fanout_diff: readF64,
+      min_fanout_diff: readI64,
+      max_fanout_diff: readI64,
+      avg_fill_factor_diff: readF64,
+      avg_leaf_fill_factor_diff: readF64,
+      avg_internal_fill_factor_diff: readF64,
+      avg_key_size_bytes_diff: readF64,
+      avg_value_size_bytes_diff: readF64,
+      min_key_size_bytes_diff: readI64,
+      max_key_size_bytes_diff: readI64,
+      min_value_size_bytes_diff: readI64,
+      max_value_size_bytes_diff: readI64,
+      total_keys_size_bytes_diff: readI64,
+      total_values_size_bytes_diff: readI64
+    )
+  end
+
+  # The Record type StatsPercentageChangeRecord.
+
+  def readTypeStatsPercentageChangeRecord
+    StatsPercentageChangeRecord.new(
+      num_nodes_pct: readF64,
+      num_leaves_pct: readF64,
+      num_internal_nodes_pct: readF64,
+      tree_height_pct: readF64,
+      total_key_value_pairs_pct: readF64,
+      total_tree_size_bytes_pct: readF64,
+      avg_node_size_bytes_pct: readF64,
+      min_node_size_bytes_pct: readF64,
+      max_node_size_bytes_pct: readF64,
+      avg_entries_per_node_pct: readF64,
+      avg_fanout_pct: readF64,
+      min_fanout_pct: readF64,
+      max_fanout_pct: readF64,
+      avg_fill_factor_pct: readF64,
+      avg_leaf_fill_factor_pct: readF64,
+      avg_internal_fill_factor_pct: readF64,
+      avg_key_size_bytes_pct: readF64,
+      avg_value_size_bytes_pct: readF64,
+      min_key_size_bytes_pct: readF64,
+      max_key_size_bytes_pct: readF64,
+      min_value_size_bytes_pct: readF64,
+      max_value_size_bytes_pct: readF64,
+      total_keys_size_bytes_pct: readF64,
+      total_values_size_bytes_pct: readF64
+    )
+  end
+
+  # The Record type StructuralDiffCursorRecord.
+
+  def readTypeStructuralDiffCursorRecord
+    StructuralDiffCursorRecord.new(
+      base_root: readOptionalbytes,
+      other_root: readOptionalbytes,
+      markers: readSequenceTypeStructuralDiffMarkerRecord,
+      pending: readSequenceTypeDiffRecord
+    )
+  end
+
+  # The Record type StructuralDiffMarkerRecord.
+
+  def readTypeStructuralDiffMarkerRecord
+    StructuralDiffMarkerRecord.new(
+      kind: readTypeStructuralDiffMarkerKind,
+      base_cid: readOptionalbytes,
+      other_cid: readOptionalbytes,
+      span_end: readOptionalbytes,
+      cid: readOptionalbytes
+    )
+  end
+
   # The Record type StructuralDiffPageRecord.
 
   def readTypeStructuralDiffPageRecord
     StructuralDiffPageRecord.new(
       diffs: readSequenceTypeDiffRecord,
       next_cursor_json: readOptionalstring,
-      stats: readTypeDiffTraversalStatsRecord
+      stats: readTypeDiffTraversalStatsRecord,
+      next_cursor: readOptionalTypeStructuralDiffCursorRecord
     )
   end
 
@@ -3547,12 +4890,137 @@ class RustBufferStream
     )
   end
 
+  # The Record type TreeDebugComparedNodeRecord.
+
+  def readTypeTreeDebugComparedNodeRecord
+    TreeDebugComparedNodeRecord.new(
+      status: readTypeTreeDebugNodeStatusKind,
+      node: readTypeTreeDebugNodeRecord
+    )
+  end
+
+  # The Record type TreeDebugComparisonLevelRecord.
+
+  def readTypeTreeDebugComparisonLevelRecord
+    TreeDebugComparisonLevelRecord.new(
+      level: readU8,
+      shared_nodes: readU64,
+      left_only_nodes: readU64,
+      right_only_nodes: readU64,
+      shared_bytes: readU64,
+      left_only_bytes: readU64,
+      right_only_bytes: readU64,
+      nodes: readSequenceTypeTreeDebugComparedNodeRecord
+    )
+  end
+
+  # The Record type TreeDebugComparisonRecord.
+
+  def readTypeTreeDebugComparisonRecord
+    TreeDebugComparisonRecord.new(
+      shared_nodes: readU64,
+      left_only_nodes: readU64,
+      right_only_nodes: readU64,
+      shared_bytes: readU64,
+      left_only_bytes: readU64,
+      right_only_bytes: readU64,
+      levels: readSequenceTypeTreeDebugComparisonLevelRecord
+    )
+  end
+
+  # The Record type TreeDebugLevelRecord.
+
+  def readTypeTreeDebugLevelRecord
+    TreeDebugLevelRecord.new(
+      level: readU8,
+      nodes: readSequenceTypeTreeDebugNodeRecord
+    )
+  end
+
+  # The Record type TreeDebugNodeRecord.
+
+  def readTypeTreeDebugNodeRecord
+    TreeDebugNodeRecord.new(
+      cid: readBytes,
+      leaf: readBool,
+      level: readU8,
+      entry_count: readU64,
+      max_entries: readU64,
+      fill_factor: readF64,
+      encoded_bytes: readU64,
+      first_key: readOptionalbytes,
+      last_key: readOptionalbytes
+    )
+  end
+
+  # The Record type TreeDebugViewRecord.
+
+  def readTypeTreeDebugViewRecord
+    TreeDebugViewRecord.new(
+      levels: readSequenceTypeTreeDebugLevelRecord
+    )
+  end
+
   # The Record type TreeRecord.
 
   def readTypeTreeRecord
     TreeRecord.new(
       root: readOptionalbytes,
       config: readTypeConfigRecord
+    )
+  end
+
+  # The Record type TreeStatsLevelF64Record.
+
+  def readTypeTreeStatsLevelF64Record
+    TreeStatsLevelF64Record.new(
+      level: readU8,
+      value: readF64
+    )
+  end
+
+  # The Record type TreeStatsLevelU64Record.
+
+  def readTypeTreeStatsLevelU64Record
+    TreeStatsLevelU64Record.new(
+      level: readU8,
+      value: readU64
+    )
+  end
+
+  # The Record type TreeStatsRecord.
+
+  def readTypeTreeStatsRecord
+    TreeStatsRecord.new(
+      num_nodes: readU64,
+      num_leaves: readU64,
+      num_internal_nodes: readU64,
+      tree_height: readU8,
+      total_key_value_pairs: readU64,
+      total_tree_size_bytes: readU64,
+      avg_node_size_bytes: readF64,
+      min_node_size_bytes: readU64,
+      max_node_size_bytes: readU64,
+      avg_entries_per_node: readF64,
+      nodes_per_level: readSequenceTypeTreeStatsLevelU64Record,
+      avg_node_size_per_level: readSequenceTypeTreeStatsLevelF64Record,
+      avg_entries_per_level: readSequenceTypeTreeStatsLevelF64Record,
+      min_entries_per_level: readSequenceTypeTreeStatsLevelU64Record,
+      max_entries_per_level: readSequenceTypeTreeStatsLevelU64Record,
+      avg_fanout: readF64,
+      min_fanout: readU64,
+      max_fanout: readU64,
+      avg_fill_factor: readF64,
+      avg_leaf_fill_factor: readF64,
+      avg_internal_fill_factor: readF64,
+      avg_key_size_bytes: readF64,
+      avg_value_size_bytes: readF64,
+      min_key_size_bytes: readU64,
+      max_key_size_bytes: readU64,
+      min_value_size_bytes: readU64,
+      max_value_size_bytes: readU64,
+      total_keys_size_bytes: readU64,
+      total_values_size_bytes: readU64
     )
   end
 
@@ -3677,6 +5145,168 @@ class RustBufferStream
     end
 
     raise InternalError, 'Unexpected variant tag for TypeEncodingKind'
+  end
+
+
+
+
+
+  # The Enum type MergeFallbackReasonKind.
+
+  def readTypeMergeFallbackReasonKind
+    variant = unpack_from 4, 'l>'
+
+    if variant == 1
+      return MergeFallbackReasonKind::MISSING_ROOT
+    end
+    if variant == 2
+      return MergeFallbackReasonKind::SHAPE_MISMATCH
+    end
+    if variant == 3
+      return MergeFallbackReasonKind::NODE_LENGTH_MISMATCH
+    end
+    if variant == 4
+      return MergeFallbackReasonKind::CHILD_FALLBACK
+    end
+    if variant == 5
+      return MergeFallbackReasonKind::DELETE_RESOLUTION
+    end
+    if variant == 6
+      return MergeFallbackReasonKind::DIFF_BATCH
+    end
+
+    raise InternalError, 'Unexpected variant tag for TypeMergeFallbackReasonKind'
+  end
+
+
+
+
+
+  # The Enum type MergeFastPathKind.
+
+  def readTypeMergeFastPathKind
+    variant = unpack_from 4, 'l>'
+
+    if variant == 1
+      return MergeFastPathKind::BRANCHES_EQUAL
+    end
+    if variant == 2
+      return MergeFastPathKind::LEFT_UNCHANGED
+    end
+    if variant == 3
+      return MergeFastPathKind::RIGHT_UNCHANGED
+    end
+
+    raise InternalError, 'Unexpected variant tag for TypeMergeFastPathKind'
+  end
+
+
+
+
+
+  # The Enum type MergeReuseReasonKind.
+
+  def readTypeMergeReuseReasonKind
+    variant = unpack_from 4, 'l>'
+
+    if variant == 1
+      return MergeReuseReasonKind::BRANCHES_EQUAL
+    end
+    if variant == 2
+      return MergeReuseReasonKind::LEFT_UNCHANGED
+    end
+    if variant == 3
+      return MergeReuseReasonKind::RIGHT_UNCHANGED
+    end
+    if variant == 4
+      return MergeReuseReasonKind::UNCHANGED_AFTER_MERGE
+    end
+    if variant == 5
+      return MergeReuseReasonKind::MATCHES_LEFT
+    end
+    if variant == 6
+      return MergeReuseReasonKind::MATCHES_RIGHT
+    end
+
+    raise InternalError, 'Unexpected variant tag for TypeMergeReuseReasonKind'
+  end
+
+
+
+
+
+  # The Enum type MergeTraceEventKind.
+
+  def readTypeMergeTraceEventKind
+    variant = unpack_from 4, 'l>'
+
+    if variant == 1
+      return MergeTraceEventKind::FAST_PATH
+    end
+    if variant == 2
+      return MergeTraceEventKind::STRUCTURAL_MERGE_STARTED
+    end
+    if variant == 3
+      return MergeTraceEventKind::REUSED_SUBTREE
+    end
+    if variant == 4
+      return MergeTraceEventKind::REWRITTEN_NODE
+    end
+    if variant == 5
+      return MergeTraceEventKind::RESOLVER_CALLED
+    end
+    if variant == 6
+      return MergeTraceEventKind::FALLBACK
+    end
+    if variant == 7
+      return MergeTraceEventKind::DIFF_TRAVERSAL
+    end
+    if variant == 8
+      return MergeTraceEventKind::BATCH_MERGE
+    end
+
+    raise InternalError, 'Unexpected variant tag for TypeMergeTraceEventKind'
+  end
+
+
+
+
+
+  # The Enum type MergeTraceResolutionKind.
+
+  def readTypeMergeTraceResolutionKind
+    variant = unpack_from 4, 'l>'
+
+    if variant == 1
+      return MergeTraceResolutionKind::VALUE
+    end
+    if variant == 2
+      return MergeTraceResolutionKind::DELETE
+    end
+    if variant == 3
+      return MergeTraceResolutionKind::UNRESOLVED
+    end
+
+    raise InternalError, 'Unexpected variant tag for TypeMergeTraceResolutionKind'
+  end
+
+
+
+
+
+  # The Enum type MergeTraceStageKind.
+
+  def readTypeMergeTraceStageKind
+    variant = unpack_from 4, 'l>'
+
+    if variant == 1
+      return MergeTraceStageKind::STRUCTURAL
+    end
+    if variant == 2
+      return MergeTraceStageKind::BATCH
+    end
+
+    raise InternalError, 'Unexpected variant tag for TypeMergeTraceStageKind'
   end
 
 
@@ -3831,6 +5461,50 @@ class RustBufferStream
 
 
 
+  # The Enum type StructuralDiffMarkerKind.
+
+  def readTypeStructuralDiffMarkerKind
+    variant = unpack_from 4, 'l>'
+
+    if variant == 1
+      return StructuralDiffMarkerKind::COMPARE
+    end
+    if variant == 2
+      return StructuralDiffMarkerKind::ADDED
+    end
+    if variant == 3
+      return StructuralDiffMarkerKind::REMOVED
+    end
+
+    raise InternalError, 'Unexpected variant tag for TypeStructuralDiffMarkerKind'
+  end
+
+
+
+
+
+  # The Enum type TreeDebugNodeStatusKind.
+
+  def readTypeTreeDebugNodeStatusKind
+    variant = unpack_from 4, 'l>'
+
+    if variant == 1
+      return TreeDebugNodeStatusKind::SHARED
+    end
+    if variant == 2
+      return TreeDebugNodeStatusKind::LEFT_ONLY
+    end
+    if variant == 3
+      return TreeDebugNodeStatusKind::RIGHT_ONLY
+    end
+
+    raise InternalError, 'Unexpected variant tag for TypeTreeDebugNodeStatusKind'
+  end
+
+
+
+
+
   # The Enum type ValueRefKind.
 
   def readTypeValueRefKind
@@ -3859,6 +5533,20 @@ class RustBufferStream
       return readU64
     else
       raise InternalError, 'Unexpected flag byte for Optionalu64'
+    end
+  end
+
+  # The Optional<T> type for bool.
+
+  def readOptionalbool
+    flag = unpack_from 1, 'c'
+
+    if flag == 0
+      return nil
+    elsif flag == 1
+      return readBool
+    else
+      raise InternalError, 'Unexpected flag byte for Optionalbool'
     end
   end
 
@@ -3918,6 +5606,34 @@ class RustBufferStream
     end
   end
 
+  # The Optional<T> type for TypeDiffTraversalStatsRecord.
+
+  def readOptionalTypeDiffTraversalStatsRecord
+    flag = unpack_from 1, 'c'
+
+    if flag == 0
+      return nil
+    elsif flag == 1
+      return readTypeDiffTraversalStatsRecord
+    else
+      raise InternalError, 'Unexpected flag byte for OptionalTypeDiffTraversalStatsRecord'
+    end
+  end
+
+  # The Optional<T> type for TypeEntryRecord.
+
+  def readOptionalTypeEntryRecord
+    flag = unpack_from 1, 'c'
+
+    if flag == 0
+      return nil
+    elsif flag == 1
+      return readTypeEntryRecord
+    else
+      raise InternalError, 'Unexpected flag byte for OptionalTypeEntryRecord'
+    end
+  end
+
   # The Optional<T> type for TypeKeyProofRecord.
 
   def readOptionalTypeKeyProofRecord
@@ -3974,6 +5690,20 @@ class RustBufferStream
     end
   end
 
+  # The Optional<T> type for TypeReverseCursorRecord.
+
+  def readOptionalTypeReverseCursorRecord
+    flag = unpack_from 1, 'c'
+
+    if flag == 0
+      return nil
+    elsif flag == 1
+      return readTypeReverseCursorRecord
+    else
+      raise InternalError, 'Unexpected flag byte for OptionalTypeReverseCursorRecord'
+    end
+  end
+
   # The Optional<T> type for TypeRootManifestRecord.
 
   def readOptionalTypeRootManifestRecord
@@ -3985,6 +5715,20 @@ class RustBufferStream
       return readTypeRootManifestRecord
     else
       raise InternalError, 'Unexpected flag byte for OptionalTypeRootManifestRecord'
+    end
+  end
+
+  # The Optional<T> type for TypeStructuralDiffCursorRecord.
+
+  def readOptionalTypeStructuralDiffCursorRecord
+    flag = unpack_from 1, 'c'
+
+    if flag == 0
+      return nil
+    elsif flag == 1
+      return readTypeStructuralDiffCursorRecord
+    else
+      raise InternalError, 'Unexpected flag byte for OptionalTypeStructuralDiffCursorRecord'
     end
   end
 
@@ -4027,6 +5771,76 @@ class RustBufferStream
       return readTypeValueRefRecord
     else
       raise InternalError, 'Unexpected flag byte for OptionalTypeValueRefRecord'
+    end
+  end
+
+  # The Optional<T> type for TypeMergeFallbackReasonKind.
+
+  def readOptionalTypeMergeFallbackReasonKind
+    flag = unpack_from 1, 'c'
+
+    if flag == 0
+      return nil
+    elsif flag == 1
+      return readTypeMergeFallbackReasonKind
+    else
+      raise InternalError, 'Unexpected flag byte for OptionalTypeMergeFallbackReasonKind'
+    end
+  end
+
+  # The Optional<T> type for TypeMergeFastPathKind.
+
+  def readOptionalTypeMergeFastPathKind
+    flag = unpack_from 1, 'c'
+
+    if flag == 0
+      return nil
+    elsif flag == 1
+      return readTypeMergeFastPathKind
+    else
+      raise InternalError, 'Unexpected flag byte for OptionalTypeMergeFastPathKind'
+    end
+  end
+
+  # The Optional<T> type for TypeMergeReuseReasonKind.
+
+  def readOptionalTypeMergeReuseReasonKind
+    flag = unpack_from 1, 'c'
+
+    if flag == 0
+      return nil
+    elsif flag == 1
+      return readTypeMergeReuseReasonKind
+    else
+      raise InternalError, 'Unexpected flag byte for OptionalTypeMergeReuseReasonKind'
+    end
+  end
+
+  # The Optional<T> type for TypeMergeTraceResolutionKind.
+
+  def readOptionalTypeMergeTraceResolutionKind
+    flag = unpack_from 1, 'c'
+
+    if flag == 0
+      return nil
+    elsif flag == 1
+      return readTypeMergeTraceResolutionKind
+    else
+      raise InternalError, 'Unexpected flag byte for OptionalTypeMergeTraceResolutionKind'
+    end
+  end
+
+  # The Optional<T> type for TypeMergeTraceStageKind.
+
+  def readOptionalTypeMergeTraceStageKind
+    flag = unpack_from 1, 'c'
+
+    if flag == 0
+      return nil
+    elsif flag == 1
+      return readTypeMergeTraceStageKind
+    else
+      raise InternalError, 'Unexpected flag byte for OptionalTypeMergeTraceStageKind'
     end
   end
 
@@ -4158,6 +5972,22 @@ class RustBufferStream
     items
   end
 
+  # The Sequence<T> type for TypeMergeTraceEventRecord.
+
+  def readSequenceTypeMergeTraceEventRecord
+    count = unpack_from 4, 'l>'
+
+    raise InternalError, 'Unexpected negative sequence length' if count.negative?
+
+    items = []
+
+    count.times do
+      items.append readTypeMergeTraceEventRecord
+    end
+
+    items
+  end
+
   # The Sequence<T> type for TypeMutationRecord.
 
   def readSequenceTypeMutationRecord
@@ -4222,6 +6052,22 @@ class RustBufferStream
     items
   end
 
+  # The Sequence<T> type for TypeSnapshotBundleNodeRecord.
+
+  def readSequenceTypeSnapshotBundleNodeRecord
+    count = unpack_from 4, 'l>'
+
+    raise InternalError, 'Unexpected negative sequence length' if count.negative?
+
+    items = []
+
+    count.times do
+      items.append readTypeSnapshotBundleNodeRecord
+    end
+
+    items
+  end
+
   # The Sequence<T> type for TypeSnapshotRecord.
 
   def readSequenceTypeSnapshotRecord
@@ -4233,6 +6079,22 @@ class RustBufferStream
 
     count.times do
       items.append readTypeSnapshotRecord
+    end
+
+    items
+  end
+
+  # The Sequence<T> type for TypeStructuralDiffMarkerRecord.
+
+  def readSequenceTypeStructuralDiffMarkerRecord
+    count = unpack_from 4, 'l>'
+
+    raise InternalError, 'Unexpected negative sequence length' if count.negative?
+
+    items = []
+
+    count.times do
+      items.append readTypeStructuralDiffMarkerRecord
     end
 
     items
@@ -4254,6 +6116,70 @@ class RustBufferStream
     items
   end
 
+  # The Sequence<T> type for TypeTreeDebugComparedNodeRecord.
+
+  def readSequenceTypeTreeDebugComparedNodeRecord
+    count = unpack_from 4, 'l>'
+
+    raise InternalError, 'Unexpected negative sequence length' if count.negative?
+
+    items = []
+
+    count.times do
+      items.append readTypeTreeDebugComparedNodeRecord
+    end
+
+    items
+  end
+
+  # The Sequence<T> type for TypeTreeDebugComparisonLevelRecord.
+
+  def readSequenceTypeTreeDebugComparisonLevelRecord
+    count = unpack_from 4, 'l>'
+
+    raise InternalError, 'Unexpected negative sequence length' if count.negative?
+
+    items = []
+
+    count.times do
+      items.append readTypeTreeDebugComparisonLevelRecord
+    end
+
+    items
+  end
+
+  # The Sequence<T> type for TypeTreeDebugLevelRecord.
+
+  def readSequenceTypeTreeDebugLevelRecord
+    count = unpack_from 4, 'l>'
+
+    raise InternalError, 'Unexpected negative sequence length' if count.negative?
+
+    items = []
+
+    count.times do
+      items.append readTypeTreeDebugLevelRecord
+    end
+
+    items
+  end
+
+  # The Sequence<T> type for TypeTreeDebugNodeRecord.
+
+  def readSequenceTypeTreeDebugNodeRecord
+    count = unpack_from 4, 'l>'
+
+    raise InternalError, 'Unexpected negative sequence length' if count.negative?
+
+    items = []
+
+    count.times do
+      items.append readTypeTreeDebugNodeRecord
+    end
+
+    items
+  end
+
   # The Sequence<T> type for TypeTreeRecord.
 
   def readSequenceTypeTreeRecord
@@ -4265,6 +6191,38 @@ class RustBufferStream
 
     count.times do
       items.append readTypeTreeRecord
+    end
+
+    items
+  end
+
+  # The Sequence<T> type for TypeTreeStatsLevelF64Record.
+
+  def readSequenceTypeTreeStatsLevelF64Record
+    count = unpack_from 4, 'l>'
+
+    raise InternalError, 'Unexpected negative sequence length' if count.negative?
+
+    items = []
+
+    count.times do
+      items.append readTypeTreeStatsLevelF64Record
+    end
+
+    items
+  end
+
+  # The Sequence<T> type for TypeTreeStatsLevelU64Record.
+
+  def readSequenceTypeTreeStatsLevelU64Record
+    count = unpack_from 4, 'l>'
+
+    raise InternalError, 'Unexpected negative sequence length' if count.negative?
+
+    items = []
+
+    count.times do
+      items.append readTypeTreeStatsLevelU64Record
     end
 
     items
@@ -4337,6 +6295,11 @@ class RustBufferBuilder
     pack_into(1, 'c', v)
   end
 
+  def write_I8(v)
+    v = Prolly::uniffi_in_range(v, "i8", -2**7, 2**7)
+    pack_into(1, 'c', v)
+  end
+
   def write_U32(v)
     v = Prolly::uniffi_in_range(v, "u32", 0, 2**32)
     pack_into(4, 'L>', v)
@@ -4350,6 +6313,10 @@ class RustBufferBuilder
   def write_I64(v)
     v = Prolly::uniffi_in_range(v, "i64", -2**63, 2**63)
     pack_into(8, 'q>', v)
+  end
+
+  def write_F64(v)
+    pack_into(8, 'G', v)
   end
 
   def write_Bool(v)
@@ -4577,6 +6544,16 @@ class RustBufferBuilder
     self.write_Optionalbytes(v.value)
   end
 
+  # The Record type CursorWindowRecord.
+
+  def write_TypeCursorWindowRecord(v)
+    self.write_Optionalbytes(v.position_key)
+    self.write_Optionalbytes(v.position_value)
+    self.write_Bool(v.found)
+    self.write_SequenceTypeEntryRecord(v.entries)
+    self.write_OptionalTypeRangeCursorRecord(v.next_cursor)
+  end
+
   # The Record type DiffPageProofRecord.
 
   def write_TypeDiffPageProofRecord(v)
@@ -4776,6 +6753,34 @@ class RustBufferBuilder
     self.write_OptionalTypeTreeRecord(v.result)
     self.write_Optionalstring(v.error)
     self.write_String(v.trace_json)
+    self.write_TypeMergeTraceRecord(v.trace)
+  end
+
+  # The Record type MergeTraceEventRecord.
+
+  def write_TypeMergeTraceEventRecord(v)
+    self.write_TypeMergeTraceEventKind(v.kind)
+    self.write_OptionalTypeMergeFastPathKind(v.fast_path)
+    self.write_Optionalbytes(v.cid)
+    self.write_OptionalTypeMergeReuseReasonKind(v.reuse_reason)
+    self.write_Optionalu64(v.level)
+    self.write_Optionalu64(v.entries)
+    self.write_Optionalbytes(v.first_key)
+    self.write_Optionalbytes(v.last_key)
+    self.write_OptionalTypeMergeTraceStageKind(v.stage)
+    self.write_Optionalbytes(v.key)
+    self.write_OptionalTypeMergeTraceResolutionKind(v.resolution)
+    self.write_OptionalTypeMergeFallbackReasonKind(v.fallback_reason)
+    self.write_OptionalTypeDiffTraversalStatsRecord(v.diff_stats)
+    self.write_Optionalu64(v.right_changes)
+    self.write_Optionalu64(v.mutations)
+    self.write_Optionalbool(v.append_only)
+  end
+
+  # The Record type MergeTraceRecord.
+
+  def write_TypeMergeTraceRecord(v)
+    self.write_SequenceTypeMergeTraceEventRecord(v.events)
   end
 
   # The Record type MetricsRecord.
@@ -5007,12 +7012,62 @@ class RustBufferBuilder
     self.write_Optionalbytes(v.value)
   end
 
+  # The Record type ReverseCursorRecord.
+
+  def write_TypeReverseCursorRecord(v)
+    self.write_Optionalbytes(v.before_key)
+  end
+
+  # The Record type ReversePageRecord.
+
+  def write_TypeReversePageRecord(v)
+    self.write_SequenceTypeEntryRecord(v.entries)
+    self.write_OptionalTypeReverseCursorRecord(v.next_cursor)
+  end
+
   # The Record type RootManifestRecord.
 
   def write_TypeRootManifestRecord(v)
     self.write_TypeTreeRecord(v.tree)
     self.write_Optionalu64(v.created_at_millis)
     self.write_Optionalu64(v.updated_at_millis)
+  end
+
+  # The Record type SnapshotBundleNodeRecord.
+
+  def write_TypeSnapshotBundleNodeRecord(v)
+    self.write_Bytes(v.cid)
+    self.write_Bytes(v.bytes)
+  end
+
+  # The Record type SnapshotBundleRecord.
+
+  def write_TypeSnapshotBundleRecord(v)
+    self.write_U32(v.format_version)
+    self.write_TypeTreeRecord(v.tree)
+    self.write_SequenceTypeSnapshotBundleNodeRecord(v.nodes)
+  end
+
+  # The Record type SnapshotBundleSummaryRecord.
+
+  def write_TypeSnapshotBundleSummaryRecord(v)
+    self.write_U32(v.format_version)
+    self.write_Optionalbytes(v.root)
+    self.write_U64(v.node_count)
+    self.write_U64(v.byte_count)
+    self.write_U64(v.min_node_bytes)
+    self.write_U64(v.max_node_bytes)
+  end
+
+  # The Record type SnapshotBundleVerificationRecord.
+
+  def write_TypeSnapshotBundleVerificationRecord(v)
+    self.write_Bool(v.valid)
+    self.write_TypeSnapshotBundleSummaryRecord(v.summary)
+    self.write_U64(v.reachable_nodes)
+    self.write_U64(v.reachable_bytes)
+    self.write_Sequencebytes(v.missing_cids)
+    self.write_Sequencebytes(v.extra_cids)
   end
 
   # The Record type SnapshotNamespaceRecord.
@@ -5039,12 +7094,99 @@ class RustBufferBuilder
     self.write_Sequencebytes(v.missing_ids)
   end
 
+  # The Record type StatsComparisonRecord.
+
+  def write_TypeStatsComparisonRecord(v)
+    self.write_TypeTreeStatsRecord(v.before)
+    self.write_TypeTreeStatsRecord(v.after)
+    self.write_TypeStatsDiffRecord(v.absolute)
+    self.write_TypeStatsPercentageChangeRecord(v.percentage)
+  end
+
+  # The Record type StatsDiffRecord.
+
+  def write_TypeStatsDiffRecord(v)
+    self.write_I64(v.num_nodes_diff)
+    self.write_I64(v.num_leaves_diff)
+    self.write_I64(v.num_internal_nodes_diff)
+    self.write_I8(v.tree_height_diff)
+    self.write_I64(v.total_key_value_pairs_diff)
+    self.write_I64(v.total_tree_size_bytes_diff)
+    self.write_F64(v.avg_node_size_bytes_diff)
+    self.write_I64(v.min_node_size_bytes_diff)
+    self.write_I64(v.max_node_size_bytes_diff)
+    self.write_F64(v.avg_entries_per_node_diff)
+    self.write_F64(v.avg_fanout_diff)
+    self.write_I64(v.min_fanout_diff)
+    self.write_I64(v.max_fanout_diff)
+    self.write_F64(v.avg_fill_factor_diff)
+    self.write_F64(v.avg_leaf_fill_factor_diff)
+    self.write_F64(v.avg_internal_fill_factor_diff)
+    self.write_F64(v.avg_key_size_bytes_diff)
+    self.write_F64(v.avg_value_size_bytes_diff)
+    self.write_I64(v.min_key_size_bytes_diff)
+    self.write_I64(v.max_key_size_bytes_diff)
+    self.write_I64(v.min_value_size_bytes_diff)
+    self.write_I64(v.max_value_size_bytes_diff)
+    self.write_I64(v.total_keys_size_bytes_diff)
+    self.write_I64(v.total_values_size_bytes_diff)
+  end
+
+  # The Record type StatsPercentageChangeRecord.
+
+  def write_TypeStatsPercentageChangeRecord(v)
+    self.write_F64(v.num_nodes_pct)
+    self.write_F64(v.num_leaves_pct)
+    self.write_F64(v.num_internal_nodes_pct)
+    self.write_F64(v.tree_height_pct)
+    self.write_F64(v.total_key_value_pairs_pct)
+    self.write_F64(v.total_tree_size_bytes_pct)
+    self.write_F64(v.avg_node_size_bytes_pct)
+    self.write_F64(v.min_node_size_bytes_pct)
+    self.write_F64(v.max_node_size_bytes_pct)
+    self.write_F64(v.avg_entries_per_node_pct)
+    self.write_F64(v.avg_fanout_pct)
+    self.write_F64(v.min_fanout_pct)
+    self.write_F64(v.max_fanout_pct)
+    self.write_F64(v.avg_fill_factor_pct)
+    self.write_F64(v.avg_leaf_fill_factor_pct)
+    self.write_F64(v.avg_internal_fill_factor_pct)
+    self.write_F64(v.avg_key_size_bytes_pct)
+    self.write_F64(v.avg_value_size_bytes_pct)
+    self.write_F64(v.min_key_size_bytes_pct)
+    self.write_F64(v.max_key_size_bytes_pct)
+    self.write_F64(v.min_value_size_bytes_pct)
+    self.write_F64(v.max_value_size_bytes_pct)
+    self.write_F64(v.total_keys_size_bytes_pct)
+    self.write_F64(v.total_values_size_bytes_pct)
+  end
+
+  # The Record type StructuralDiffCursorRecord.
+
+  def write_TypeStructuralDiffCursorRecord(v)
+    self.write_Optionalbytes(v.base_root)
+    self.write_Optionalbytes(v.other_root)
+    self.write_SequenceTypeStructuralDiffMarkerRecord(v.markers)
+    self.write_SequenceTypeDiffRecord(v.pending)
+  end
+
+  # The Record type StructuralDiffMarkerRecord.
+
+  def write_TypeStructuralDiffMarkerRecord(v)
+    self.write_TypeStructuralDiffMarkerKind(v.kind)
+    self.write_Optionalbytes(v.base_cid)
+    self.write_Optionalbytes(v.other_cid)
+    self.write_Optionalbytes(v.span_end)
+    self.write_Optionalbytes(v.cid)
+  end
+
   # The Record type StructuralDiffPageRecord.
 
   def write_TypeStructuralDiffPageRecord(v)
     self.write_SequenceTypeDiffRecord(v.diffs)
     self.write_Optionalstring(v.next_cursor_json)
     self.write_TypeDiffTraversalStatsRecord(v.stats)
+    self.write_OptionalTypeStructuralDiffCursorRecord(v.next_cursor)
   end
 
   # The Record type TimestampedValueRecord.
@@ -5069,11 +7211,118 @@ class RustBufferBuilder
     self.write_SequenceTypeTombstoneMetadataRecord(v.causal_metadata)
   end
 
+  # The Record type TreeDebugComparedNodeRecord.
+
+  def write_TypeTreeDebugComparedNodeRecord(v)
+    self.write_TypeTreeDebugNodeStatusKind(v.status)
+    self.write_TypeTreeDebugNodeRecord(v.node)
+  end
+
+  # The Record type TreeDebugComparisonLevelRecord.
+
+  def write_TypeTreeDebugComparisonLevelRecord(v)
+    self.write_U8(v.level)
+    self.write_U64(v.shared_nodes)
+    self.write_U64(v.left_only_nodes)
+    self.write_U64(v.right_only_nodes)
+    self.write_U64(v.shared_bytes)
+    self.write_U64(v.left_only_bytes)
+    self.write_U64(v.right_only_bytes)
+    self.write_SequenceTypeTreeDebugComparedNodeRecord(v.nodes)
+  end
+
+  # The Record type TreeDebugComparisonRecord.
+
+  def write_TypeTreeDebugComparisonRecord(v)
+    self.write_U64(v.shared_nodes)
+    self.write_U64(v.left_only_nodes)
+    self.write_U64(v.right_only_nodes)
+    self.write_U64(v.shared_bytes)
+    self.write_U64(v.left_only_bytes)
+    self.write_U64(v.right_only_bytes)
+    self.write_SequenceTypeTreeDebugComparisonLevelRecord(v.levels)
+  end
+
+  # The Record type TreeDebugLevelRecord.
+
+  def write_TypeTreeDebugLevelRecord(v)
+    self.write_U8(v.level)
+    self.write_SequenceTypeTreeDebugNodeRecord(v.nodes)
+  end
+
+  # The Record type TreeDebugNodeRecord.
+
+  def write_TypeTreeDebugNodeRecord(v)
+    self.write_Bytes(v.cid)
+    self.write_Bool(v.leaf)
+    self.write_U8(v.level)
+    self.write_U64(v.entry_count)
+    self.write_U64(v.max_entries)
+    self.write_F64(v.fill_factor)
+    self.write_U64(v.encoded_bytes)
+    self.write_Optionalbytes(v.first_key)
+    self.write_Optionalbytes(v.last_key)
+  end
+
+  # The Record type TreeDebugViewRecord.
+
+  def write_TypeTreeDebugViewRecord(v)
+    self.write_SequenceTypeTreeDebugLevelRecord(v.levels)
+  end
+
   # The Record type TreeRecord.
 
   def write_TypeTreeRecord(v)
     self.write_Optionalbytes(v.root)
     self.write_TypeConfigRecord(v.config)
+  end
+
+  # The Record type TreeStatsLevelF64Record.
+
+  def write_TypeTreeStatsLevelF64Record(v)
+    self.write_U8(v.level)
+    self.write_F64(v.value)
+  end
+
+  # The Record type TreeStatsLevelU64Record.
+
+  def write_TypeTreeStatsLevelU64Record(v)
+    self.write_U8(v.level)
+    self.write_U64(v.value)
+  end
+
+  # The Record type TreeStatsRecord.
+
+  def write_TypeTreeStatsRecord(v)
+    self.write_U64(v.num_nodes)
+    self.write_U64(v.num_leaves)
+    self.write_U64(v.num_internal_nodes)
+    self.write_U8(v.tree_height)
+    self.write_U64(v.total_key_value_pairs)
+    self.write_U64(v.total_tree_size_bytes)
+    self.write_F64(v.avg_node_size_bytes)
+    self.write_U64(v.min_node_size_bytes)
+    self.write_U64(v.max_node_size_bytes)
+    self.write_F64(v.avg_entries_per_node)
+    self.write_SequenceTypeTreeStatsLevelU64Record(v.nodes_per_level)
+    self.write_SequenceTypeTreeStatsLevelF64Record(v.avg_node_size_per_level)
+    self.write_SequenceTypeTreeStatsLevelF64Record(v.avg_entries_per_level)
+    self.write_SequenceTypeTreeStatsLevelU64Record(v.min_entries_per_level)
+    self.write_SequenceTypeTreeStatsLevelU64Record(v.max_entries_per_level)
+    self.write_F64(v.avg_fanout)
+    self.write_U64(v.min_fanout)
+    self.write_U64(v.max_fanout)
+    self.write_F64(v.avg_fill_factor)
+    self.write_F64(v.avg_leaf_fill_factor)
+    self.write_F64(v.avg_internal_fill_factor)
+    self.write_F64(v.avg_key_size_bytes)
+    self.write_F64(v.avg_value_size_bytes)
+    self.write_U64(v.min_key_size_bytes)
+    self.write_U64(v.max_key_size_bytes)
+    self.write_U64(v.min_value_size_bytes)
+    self.write_U64(v.max_value_size_bytes)
+    self.write_U64(v.total_keys_size_bytes)
+    self.write_U64(v.total_values_size_bytes)
   end
 
   # The Record type ValueRefRecord.
@@ -5128,6 +7377,48 @@ class RustBufferBuilder
  end
 
 
+  # The Enum type MergeFallbackReasonKind.
+
+  def write_TypeMergeFallbackReasonKind(v)
+    pack_into(4, 'l>', v)
+ end
+
+
+  # The Enum type MergeFastPathKind.
+
+  def write_TypeMergeFastPathKind(v)
+    pack_into(4, 'l>', v)
+ end
+
+
+  # The Enum type MergeReuseReasonKind.
+
+  def write_TypeMergeReuseReasonKind(v)
+    pack_into(4, 'l>', v)
+ end
+
+
+  # The Enum type MergeTraceEventKind.
+
+  def write_TypeMergeTraceEventKind(v)
+    pack_into(4, 'l>', v)
+ end
+
+
+  # The Enum type MergeTraceResolutionKind.
+
+  def write_TypeMergeTraceResolutionKind(v)
+    pack_into(4, 'l>', v)
+ end
+
+
+  # The Enum type MergeTraceStageKind.
+
+  def write_TypeMergeTraceStageKind(v)
+    pack_into(4, 'l>', v)
+ end
+
+
   # The Enum type MutationKind.
 
   def write_TypeMutationKind(v)
@@ -5158,6 +7449,20 @@ class RustBufferBuilder
  end
 
 
+  # The Enum type StructuralDiffMarkerKind.
+
+  def write_TypeStructuralDiffMarkerKind(v)
+    pack_into(4, 'l>', v)
+ end
+
+
+  # The Enum type TreeDebugNodeStatusKind.
+
+  def write_TypeTreeDebugNodeStatusKind(v)
+    pack_into(4, 'l>', v)
+ end
+
+
   # The Enum type ValueRefKind.
 
   def write_TypeValueRefKind(v)
@@ -5173,6 +7478,17 @@ class RustBufferBuilder
     else
       pack_into(1, 'c', 1)
       self.write_U64(v)
+    end
+  end
+
+  # The Optional<T> type for bool.
+
+  def write_Optionalbool(v)
+    if v.nil?
+      pack_into(1, 'c', 0)
+    else
+      pack_into(1, 'c', 1)
+      self.write_Bool(v)
     end
   end
 
@@ -5220,6 +7536,28 @@ class RustBufferBuilder
     end
   end
 
+  # The Optional<T> type for TypeDiffTraversalStatsRecord.
+
+  def write_OptionalTypeDiffTraversalStatsRecord(v)
+    if v.nil?
+      pack_into(1, 'c', 0)
+    else
+      pack_into(1, 'c', 1)
+      self.write_TypeDiffTraversalStatsRecord(v)
+    end
+  end
+
+  # The Optional<T> type for TypeEntryRecord.
+
+  def write_OptionalTypeEntryRecord(v)
+    if v.nil?
+      pack_into(1, 'c', 0)
+    else
+      pack_into(1, 'c', 1)
+      self.write_TypeEntryRecord(v)
+    end
+  end
+
   # The Optional<T> type for TypeKeyProofRecord.
 
   def write_OptionalTypeKeyProofRecord(v)
@@ -5264,6 +7602,17 @@ class RustBufferBuilder
     end
   end
 
+  # The Optional<T> type for TypeReverseCursorRecord.
+
+  def write_OptionalTypeReverseCursorRecord(v)
+    if v.nil?
+      pack_into(1, 'c', 0)
+    else
+      pack_into(1, 'c', 1)
+      self.write_TypeReverseCursorRecord(v)
+    end
+  end
+
   # The Optional<T> type for TypeRootManifestRecord.
 
   def write_OptionalTypeRootManifestRecord(v)
@@ -5272,6 +7621,17 @@ class RustBufferBuilder
     else
       pack_into(1, 'c', 1)
       self.write_TypeRootManifestRecord(v)
+    end
+  end
+
+  # The Optional<T> type for TypeStructuralDiffCursorRecord.
+
+  def write_OptionalTypeStructuralDiffCursorRecord(v)
+    if v.nil?
+      pack_into(1, 'c', 0)
+    else
+      pack_into(1, 'c', 1)
+      self.write_TypeStructuralDiffCursorRecord(v)
     end
   end
 
@@ -5305,6 +7665,61 @@ class RustBufferBuilder
     else
       pack_into(1, 'c', 1)
       self.write_TypeValueRefRecord(v)
+    end
+  end
+
+  # The Optional<T> type for TypeMergeFallbackReasonKind.
+
+  def write_OptionalTypeMergeFallbackReasonKind(v)
+    if v.nil?
+      pack_into(1, 'c', 0)
+    else
+      pack_into(1, 'c', 1)
+      self.write_TypeMergeFallbackReasonKind(v)
+    end
+  end
+
+  # The Optional<T> type for TypeMergeFastPathKind.
+
+  def write_OptionalTypeMergeFastPathKind(v)
+    if v.nil?
+      pack_into(1, 'c', 0)
+    else
+      pack_into(1, 'c', 1)
+      self.write_TypeMergeFastPathKind(v)
+    end
+  end
+
+  # The Optional<T> type for TypeMergeReuseReasonKind.
+
+  def write_OptionalTypeMergeReuseReasonKind(v)
+    if v.nil?
+      pack_into(1, 'c', 0)
+    else
+      pack_into(1, 'c', 1)
+      self.write_TypeMergeReuseReasonKind(v)
+    end
+  end
+
+  # The Optional<T> type for TypeMergeTraceResolutionKind.
+
+  def write_OptionalTypeMergeTraceResolutionKind(v)
+    if v.nil?
+      pack_into(1, 'c', 0)
+    else
+      pack_into(1, 'c', 1)
+      self.write_TypeMergeTraceResolutionKind(v)
+    end
+  end
+
+  # The Optional<T> type for TypeMergeTraceStageKind.
+
+  def write_OptionalTypeMergeTraceStageKind(v)
+    if v.nil?
+      pack_into(1, 'c', 0)
+    else
+      pack_into(1, 'c', 1)
+      self.write_TypeMergeTraceStageKind(v)
     end
   end
 
@@ -5388,6 +7803,16 @@ class RustBufferBuilder
     end
   end
 
+  # The Sequence<T> type for TypeMergeTraceEventRecord.
+
+  def write_SequenceTypeMergeTraceEventRecord(items)
+    pack_into(4, 'l>', items.size)
+
+    items.each do |item|
+      self.write_TypeMergeTraceEventRecord(item)
+    end
+  end
+
   # The Sequence<T> type for TypeMutationRecord.
 
   def write_SequenceTypeMutationRecord(items)
@@ -5428,6 +7853,16 @@ class RustBufferBuilder
     end
   end
 
+  # The Sequence<T> type for TypeSnapshotBundleNodeRecord.
+
+  def write_SequenceTypeSnapshotBundleNodeRecord(items)
+    pack_into(4, 'l>', items.size)
+
+    items.each do |item|
+      self.write_TypeSnapshotBundleNodeRecord(item)
+    end
+  end
+
   # The Sequence<T> type for TypeSnapshotRecord.
 
   def write_SequenceTypeSnapshotRecord(items)
@@ -5435,6 +7870,16 @@ class RustBufferBuilder
 
     items.each do |item|
       self.write_TypeSnapshotRecord(item)
+    end
+  end
+
+  # The Sequence<T> type for TypeStructuralDiffMarkerRecord.
+
+  def write_SequenceTypeStructuralDiffMarkerRecord(items)
+    pack_into(4, 'l>', items.size)
+
+    items.each do |item|
+      self.write_TypeStructuralDiffMarkerRecord(item)
     end
   end
 
@@ -5448,6 +7893,46 @@ class RustBufferBuilder
     end
   end
 
+  # The Sequence<T> type for TypeTreeDebugComparedNodeRecord.
+
+  def write_SequenceTypeTreeDebugComparedNodeRecord(items)
+    pack_into(4, 'l>', items.size)
+
+    items.each do |item|
+      self.write_TypeTreeDebugComparedNodeRecord(item)
+    end
+  end
+
+  # The Sequence<T> type for TypeTreeDebugComparisonLevelRecord.
+
+  def write_SequenceTypeTreeDebugComparisonLevelRecord(items)
+    pack_into(4, 'l>', items.size)
+
+    items.each do |item|
+      self.write_TypeTreeDebugComparisonLevelRecord(item)
+    end
+  end
+
+  # The Sequence<T> type for TypeTreeDebugLevelRecord.
+
+  def write_SequenceTypeTreeDebugLevelRecord(items)
+    pack_into(4, 'l>', items.size)
+
+    items.each do |item|
+      self.write_TypeTreeDebugLevelRecord(item)
+    end
+  end
+
+  # The Sequence<T> type for TypeTreeDebugNodeRecord.
+
+  def write_SequenceTypeTreeDebugNodeRecord(items)
+    pack_into(4, 'l>', items.size)
+
+    items.each do |item|
+      self.write_TypeTreeDebugNodeRecord(item)
+    end
+  end
+
   # The Sequence<T> type for TypeTreeRecord.
 
   def write_SequenceTypeTreeRecord(items)
@@ -5455,6 +7940,26 @@ class RustBufferBuilder
 
     items.each do |item|
       self.write_TypeTreeRecord(item)
+    end
+  end
+
+  # The Sequence<T> type for TypeTreeStatsLevelF64Record.
+
+  def write_SequenceTypeTreeStatsLevelF64Record(items)
+    pack_into(4, 'l>', items.size)
+
+    items.each do |item|
+      self.write_TypeTreeStatsLevelF64Record(item)
+    end
+  end
+
+  # The Sequence<T> type for TypeTreeStatsLevelU64Record.
+
+  def write_SequenceTypeTreeStatsLevelU64Record(items)
+    pack_into(4, 'l>', items.size)
+
+    items.each do |item|
+      self.write_TypeTreeStatsLevelU64Record(item)
     end
   end
 
@@ -5513,6 +8018,12 @@ end
 CALL_SUCCESS = 0
 CALL_ERROR = 1
 CALL_PANIC = 2
+
+
+
+
+
+
 
 
 
@@ -5634,6 +8145,8 @@ end
 
 
 
+
+
 # Map error modules to the RustBuffer method name that reads them
 ERROR_MODULE_TO_READER_METHOD = {
 
@@ -5644,7 +8157,15 @@ ERROR_MODULE_TO_READER_METHOD = {
 
 
 
+
+
+
+
+
+
   ProllyBindingError => :readTypeProllyBindingError,
+
+
 
 
 
@@ -5904,6 +8425,9 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_fn_method_prollyengine_clear_cache,
     [:uint64, RustCallStatus.by_ref],
     :void
+  attach_function :uniffi_prolly_bindings_fn_method_prollyengine_collect_stats,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_method_prollyengine_collect_stats_json,
     [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
@@ -5934,11 +8458,20 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_fn_method_prollyengine_create,
     [:uint64, RustCallStatus.by_ref],
     RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_prollyengine_cursor_window,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_prollyengine_debug_compare_trees,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_method_prollyengine_debug_compare_trees_json,
     [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_method_prollyengine_debug_compare_trees_text,
     [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_prollyengine_debug_tree,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_method_prollyengine_debug_tree_json,
     [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
@@ -5964,6 +8497,12 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_fn_method_prollyengine_diff_page,
     [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
     RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_prollyengine_export_snapshot,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_prollyengine_first_entry,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_method_prollyengine_get,
     [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
@@ -5979,6 +8518,12 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_fn_method_prollyengine_hydrate_prefix_path_hint,
     [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
     :int8
+  attach_function :uniffi_prolly_bindings_fn_method_prollyengine_import_snapshot,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_prollyengine_last_entry,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_method_prollyengine_list_named_root_manifests,
     [:uint64, RustCallStatus.by_ref],
     RustBuffer.by_value
@@ -6007,6 +8552,9 @@ module UniFFILib
     [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_method_prollyengine_load_snapshots,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_prollyengine_lower_bound,
     [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_method_prollyengine_mark_reachable,
@@ -6057,6 +8605,9 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_fn_method_prollyengine_parallel_batch,
     [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_prollyengine_parallel_batch_with_stats,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_method_prollyengine_pin_tree_path,
     [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
     :uint64
@@ -6080,6 +8631,15 @@ module UniFFILib
     RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_method_prollyengine_plan_store_gc_for_retention,
     [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_prollyengine_prefix,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_prollyengine_prefix_page,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_prollyengine_prefix_reverse_page,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
     RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_method_prollyengine_prove_diff_page,
     [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
@@ -6141,10 +8701,19 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_fn_method_prollyengine_reset_metrics,
     [:uint64, RustCallStatus.by_ref],
     :void
+  attach_function :uniffi_prolly_bindings_fn_method_prollyengine_reverse_page,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_prollyengine_stats_diff,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_method_prollyengine_stats_diff_json,
     [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_method_prollyengine_structural_diff_page,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_prollyengine_structural_diff_page_with_cursor,
     [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
     RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_method_prollyengine_sweep_blob_gc,
@@ -6165,6 +8734,9 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_fn_method_prollyengine_unpin_all_cache_nodes,
     [:uint64, RustCallStatus.by_ref],
     :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_prollyengine_upper_bound,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_func_authenticated_proof_envelope_from_bytes,
     [RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
@@ -6192,6 +8764,12 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_fn_func_crdt_config_multi_value,
     [RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_func_crdt_resolution_delete,
+    [RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_func_crdt_resolution_value,
+    [RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_func_debug_key,
     [RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
@@ -6207,6 +8785,9 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_fn_func_default_parallel_config,
     [RustCallStatus.by_ref],
     RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_func_delete_mutation,
+    [RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_func_diff_page_proof_from_bytes,
     [RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
@@ -6215,6 +8796,18 @@ module UniFFILib
     RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_func_encode_segment,
     [RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_func_encoding_cbor,
+    [RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_func_encoding_custom,
+    [RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_func_encoding_json,
+    [RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_func_encoding_raw,
+    [RustCallStatus.by_ref],
     RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_func_i128_key,
     [RustBuffer.by_value, RustCallStatus.by_ref],
@@ -6249,6 +8842,9 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_fn_func_key_proof_to_bytes,
     [RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_func_large_value_config,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_func_multi_key_proof_from_bytes,
     [RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
@@ -6278,6 +8874,12 @@ module UniFFILib
     RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_func_node_to_bytes,
     [RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_func_parallel_config,
+    [:uint64, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_func_parallel_config_sequential,
+    [RustCallStatus.by_ref],
     RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_func_prefix_end,
     [RustBuffer.by_value, RustCallStatus.by_ref],
@@ -6315,6 +8917,27 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_fn_func_range_proof_to_bytes,
     [RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_func_resolution_delete,
+    [RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_func_resolution_unresolved,
+    [RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_func_resolution_value,
+    [RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_func_resolve_delete_wins,
+    [RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_func_resolve_prefer_left,
+    [RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_func_resolve_prefer_right,
+    [RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_func_resolve_update_wins,
+    [RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_func_retain_all_named_roots,
     [RustCallStatus.by_ref],
     RustBuffer.by_value
@@ -6330,6 +8953,12 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_fn_func_retain_newest_named_roots,
     [RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
     RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_func_reverse_cursor_before_key,
+    [RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_func_reverse_cursor_end,
+    [RustCallStatus.by_ref],
+    RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_func_root_manifest_from_bytes,
     [RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
@@ -6338,6 +8967,24 @@ module UniFFILib
     RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_func_sign_proof_bundle_hmac_sha256,
     [RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_func_snapshot_bundle_digest,
+    [RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_func_snapshot_bundle_digest_bytes,
+    [RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_func_snapshot_bundle_from_bytes,
+    [RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_func_snapshot_bundle_summary,
+    [RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_func_snapshot_bundle_summary_from_bytes,
+    [RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_func_snapshot_bundle_to_bytes,
+    [RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_func_snapshot_id_from_name,
     [RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
@@ -6384,11 +9031,17 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_fn_func_tombstone_upsert_mutation,
     [RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_func_tree_config,
+    [:uint64, :uint64, :uint32, :uint64, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_func_u128_key,
     [RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_func_u64_key,
     [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_func_upsert_mutation,
+    [RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_func_value_ref_from_bytes,
     [RustBuffer.by_value, RustCallStatus.by_ref],
@@ -6424,6 +9077,12 @@ module UniFFILib
     [RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_func_verify_range_proof,
+    [RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_func_verify_snapshot_bundle,
+    [RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_func_verify_snapshot_bundle_bytes,
     [RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_func_versioned_value_bytes_matches_schema,
@@ -6483,6 +9142,12 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_checksum_func_crdt_config_multi_value,
     [RustCallStatus.by_ref],
     :uint16
+  attach_function :uniffi_prolly_bindings_checksum_func_crdt_resolution_delete,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_func_crdt_resolution_value,
+    [RustCallStatus.by_ref],
+    :uint16
   attach_function :uniffi_prolly_bindings_checksum_func_debug_key,
     [RustCallStatus.by_ref],
     :uint16
@@ -6498,6 +9163,9 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_checksum_func_default_parallel_config,
     [RustCallStatus.by_ref],
     :uint16
+  attach_function :uniffi_prolly_bindings_checksum_func_delete_mutation,
+    [RustCallStatus.by_ref],
+    :uint16
   attach_function :uniffi_prolly_bindings_checksum_func_diff_page_proof_from_bytes,
     [RustCallStatus.by_ref],
     :uint16
@@ -6505,6 +9173,18 @@ module UniFFILib
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_func_encode_segment,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_func_encoding_cbor,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_func_encoding_custom,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_func_encoding_json,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_func_encoding_raw,
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_func_i128_key,
@@ -6540,6 +9220,9 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_checksum_func_key_proof_to_bytes,
     [RustCallStatus.by_ref],
     :uint16
+  attach_function :uniffi_prolly_bindings_checksum_func_large_value_config,
+    [RustCallStatus.by_ref],
+    :uint16
   attach_function :uniffi_prolly_bindings_checksum_func_multi_key_proof_from_bytes,
     [RustCallStatus.by_ref],
     :uint16
@@ -6568,6 +9251,12 @@ module UniFFILib
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_func_node_to_bytes,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_func_parallel_config,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_func_parallel_config_sequential,
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_func_prefix_end,
@@ -6606,6 +9295,27 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_checksum_func_range_proof_to_bytes,
     [RustCallStatus.by_ref],
     :uint16
+  attach_function :uniffi_prolly_bindings_checksum_func_resolution_delete,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_func_resolution_unresolved,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_func_resolution_value,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_func_resolve_delete_wins,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_func_resolve_prefer_left,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_func_resolve_prefer_right,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_func_resolve_update_wins,
+    [RustCallStatus.by_ref],
+    :uint16
   attach_function :uniffi_prolly_bindings_checksum_func_retain_all_named_roots,
     [RustCallStatus.by_ref],
     :uint16
@@ -6621,6 +9331,12 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_checksum_func_retain_newest_named_roots,
     [RustCallStatus.by_ref],
     :uint16
+  attach_function :uniffi_prolly_bindings_checksum_func_reverse_cursor_before_key,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_func_reverse_cursor_end,
+    [RustCallStatus.by_ref],
+    :uint16
   attach_function :uniffi_prolly_bindings_checksum_func_root_manifest_from_bytes,
     [RustCallStatus.by_ref],
     :uint16
@@ -6628,6 +9344,24 @@ module UniFFILib
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_func_sign_proof_bundle_hmac_sha256,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_func_snapshot_bundle_digest,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_func_snapshot_bundle_digest_bytes,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_func_snapshot_bundle_from_bytes,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_func_snapshot_bundle_summary,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_func_snapshot_bundle_summary_from_bytes,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_func_snapshot_bundle_to_bytes,
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_func_snapshot_id_from_name,
@@ -6675,10 +9409,16 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_checksum_func_tombstone_upsert_mutation,
     [RustCallStatus.by_ref],
     :uint16
+  attach_function :uniffi_prolly_bindings_checksum_func_tree_config,
+    [RustCallStatus.by_ref],
+    :uint16
   attach_function :uniffi_prolly_bindings_checksum_func_u128_key,
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_func_u64_key,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_func_upsert_mutation,
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_func_value_ref_from_bytes,
@@ -6715,6 +9455,12 @@ module UniFFILib
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_func_verify_range_proof,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_func_verify_snapshot_bundle,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_func_verify_snapshot_bundle_bytes,
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_func_versioned_value_bytes_matches_schema,
@@ -6852,6 +9598,9 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_clear_cache,
     [RustCallStatus.by_ref],
     :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_collect_stats,
+    [RustCallStatus.by_ref],
+    :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_collect_stats_json,
     [RustCallStatus.by_ref],
     :uint16
@@ -6882,10 +9631,19 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_create,
     [RustCallStatus.by_ref],
     :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_cursor_window,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_debug_compare_trees,
+    [RustCallStatus.by_ref],
+    :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_debug_compare_trees_json,
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_debug_compare_trees_text,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_debug_tree,
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_debug_tree_json,
@@ -6912,6 +9670,12 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_diff_page,
     [RustCallStatus.by_ref],
     :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_export_snapshot,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_first_entry,
+    [RustCallStatus.by_ref],
+    :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_get,
     [RustCallStatus.by_ref],
     :uint16
@@ -6925,6 +9689,12 @@ module UniFFILib
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_hydrate_prefix_path_hint,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_import_snapshot,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_last_entry,
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_list_named_root_manifests,
@@ -6955,6 +9725,9 @@ module UniFFILib
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_load_snapshots,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_lower_bound,
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_mark_reachable,
@@ -7005,6 +9778,9 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_parallel_batch,
     [RustCallStatus.by_ref],
     :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_parallel_batch_with_stats,
+    [RustCallStatus.by_ref],
+    :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_pin_tree_path,
     [RustCallStatus.by_ref],
     :uint16
@@ -7027,6 +9803,15 @@ module UniFFILib
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_plan_store_gc_for_retention,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_prefix,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_prefix_page,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_prefix_reverse_page,
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_prove_diff_page,
@@ -7089,10 +9874,19 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_reset_metrics,
     [RustCallStatus.by_ref],
     :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_reverse_page,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_stats_diff,
+    [RustCallStatus.by_ref],
+    :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_stats_diff_json,
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_structural_diff_page,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_structural_diff_page_with_cursor,
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_sweep_blob_gc,
@@ -7111,6 +9905,9 @@ module UniFFILib
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_unpin_all_cache_nodes,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_upper_bound,
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_constructor_mergepolicyregistry_new,
@@ -7207,6 +10004,88 @@ end
 
 
 
+class MergeFallbackReasonKind
+  MISSING_ROOT = 1
+  SHAPE_MISMATCH = 2
+  NODE_LENGTH_MISMATCH = 3
+  CHILD_FALLBACK = 4
+  DELETE_RESOLUTION = 5
+  DIFF_BATCH = 6
+
+end
+
+
+
+
+
+
+class MergeFastPathKind
+  BRANCHES_EQUAL = 1
+  LEFT_UNCHANGED = 2
+  RIGHT_UNCHANGED = 3
+
+end
+
+
+
+
+
+
+class MergeReuseReasonKind
+  BRANCHES_EQUAL = 1
+  LEFT_UNCHANGED = 2
+  RIGHT_UNCHANGED = 3
+  UNCHANGED_AFTER_MERGE = 4
+  MATCHES_LEFT = 5
+  MATCHES_RIGHT = 6
+
+end
+
+
+
+
+
+
+class MergeTraceEventKind
+  FAST_PATH = 1
+  STRUCTURAL_MERGE_STARTED = 2
+  REUSED_SUBTREE = 3
+  REWRITTEN_NODE = 4
+  RESOLVER_CALLED = 5
+  FALLBACK = 6
+  DIFF_TRAVERSAL = 7
+  BATCH_MERGE = 8
+
+end
+
+
+
+
+
+
+class MergeTraceResolutionKind
+  VALUE = 1
+  DELETE = 2
+  UNRESOLVED = 3
+
+end
+
+
+
+
+
+
+class MergeTraceStageKind
+  STRUCTURAL = 1
+  BATCH = 2
+
+end
+
+
+
+
+
+
 class MutationKind
   UPSERT = 1
   DELETE = 2
@@ -7250,6 +10129,30 @@ class SnapshotNamespaceKind
   TAG = 2
   CHECKPOINT = 3
   CUSTOM = 4
+
+end
+
+
+
+
+
+
+class StructuralDiffMarkerKind
+  COMPARE = 1
+  ADDED = 2
+  REMOVED = 3
+
+end
+
+
+
+
+
+
+class TreeDebugNodeStatusKind
+  SHARED = 1
+  LEFT_ONLY = 2
+  RIGHT_ONLY = 3
 
 end
 
@@ -7808,6 +10711,39 @@ class CrdtResolutionRecord
       return false
     end
     if @value != other.value
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type CursorWindowRecord
+class CursorWindowRecord
+  attr_reader :position_key, :position_value, :found, :entries, :next_cursor
+
+  def initialize(position_key:, position_value:, found:, entries:, next_cursor:)
+    @position_key = position_key
+    @position_value = position_value
+    @found = found
+    @entries = entries
+    @next_cursor = next_cursor
+  end
+
+  def ==(other)
+    if @position_key != other.position_key
+      return false
+    end
+    if @position_value != other.position_value
+      return false
+    end
+    if @found != other.found
+      return false
+    end
+    if @entries != other.entries
+      return false
+    end
+    if @next_cursor != other.next_cursor
       return false
     end
 
@@ -8428,12 +11364,13 @@ end
 
   # Record type MergeExplanationRecord
 class MergeExplanationRecord
-  attr_reader :result, :error, :trace_json
+  attr_reader :result, :error, :trace_json, :trace
 
-  def initialize(result:, error:, trace_json:)
+  def initialize(result:, error:, trace_json:, trace:)
     @result = result
     @error = error
     @trace_json = trace_json
+    @trace = trace
   end
 
   def ==(other)
@@ -8444,6 +11381,103 @@ class MergeExplanationRecord
       return false
     end
     if @trace_json != other.trace_json
+      return false
+    end
+    if @trace != other.trace
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type MergeTraceEventRecord
+class MergeTraceEventRecord
+  attr_reader :kind, :fast_path, :cid, :reuse_reason, :level, :entries, :first_key, :last_key, :stage, :key, :resolution, :fallback_reason, :diff_stats, :right_changes, :mutations, :append_only
+
+  def initialize(kind:, fast_path:, cid:, reuse_reason:, level:, entries:, first_key:, last_key:, stage:, key:, resolution:, fallback_reason:, diff_stats:, right_changes:, mutations:, append_only:)
+    @kind = kind
+    @fast_path = fast_path
+    @cid = cid
+    @reuse_reason = reuse_reason
+    @level = level
+    @entries = entries
+    @first_key = first_key
+    @last_key = last_key
+    @stage = stage
+    @key = key
+    @resolution = resolution
+    @fallback_reason = fallback_reason
+    @diff_stats = diff_stats
+    @right_changes = right_changes
+    @mutations = mutations
+    @append_only = append_only
+  end
+
+  def ==(other)
+    if @kind != other.kind
+      return false
+    end
+    if @fast_path != other.fast_path
+      return false
+    end
+    if @cid != other.cid
+      return false
+    end
+    if @reuse_reason != other.reuse_reason
+      return false
+    end
+    if @level != other.level
+      return false
+    end
+    if @entries != other.entries
+      return false
+    end
+    if @first_key != other.first_key
+      return false
+    end
+    if @last_key != other.last_key
+      return false
+    end
+    if @stage != other.stage
+      return false
+    end
+    if @key != other.key
+      return false
+    end
+    if @resolution != other.resolution
+      return false
+    end
+    if @fallback_reason != other.fallback_reason
+      return false
+    end
+    if @diff_stats != other.diff_stats
+      return false
+    end
+    if @right_changes != other.right_changes
+      return false
+    end
+    if @mutations != other.mutations
+      return false
+    end
+    if @append_only != other.append_only
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type MergeTraceRecord
+class MergeTraceRecord
+  attr_reader :events
+
+  def initialize(events:)
+    @events = events
+  end
+
+  def ==(other)
+    if @events != other.events
       return false
     end
 
@@ -9192,6 +12226,44 @@ class ResolutionRecord
   end
 end
 
+  # Record type ReverseCursorRecord
+class ReverseCursorRecord
+  attr_reader :before_key
+
+  def initialize(before_key:)
+    @before_key = before_key
+  end
+
+  def ==(other)
+    if @before_key != other.before_key
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type ReversePageRecord
+class ReversePageRecord
+  attr_reader :entries, :next_cursor
+
+  def initialize(entries:, next_cursor:)
+    @entries = entries
+    @next_cursor = next_cursor
+  end
+
+  def ==(other)
+    if @entries != other.entries
+      return false
+    end
+    if @next_cursor != other.next_cursor
+      return false
+    end
+
+    true
+  end
+end
+
   # Record type RootManifestRecord
 class RootManifestRecord
   attr_reader :tree, :created_at_millis, :updated_at_millis
@@ -9210,6 +12282,126 @@ class RootManifestRecord
       return false
     end
     if @updated_at_millis != other.updated_at_millis
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type SnapshotBundleNodeRecord
+class SnapshotBundleNodeRecord
+  attr_reader :cid, :bytes
+
+  def initialize(cid:, bytes:)
+    @cid = cid
+    @bytes = bytes
+  end
+
+  def ==(other)
+    if @cid != other.cid
+      return false
+    end
+    if @bytes != other.bytes
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type SnapshotBundleRecord
+class SnapshotBundleRecord
+  attr_reader :format_version, :tree, :nodes
+
+  def initialize(format_version:, tree:, nodes:)
+    @format_version = format_version
+    @tree = tree
+    @nodes = nodes
+  end
+
+  def ==(other)
+    if @format_version != other.format_version
+      return false
+    end
+    if @tree != other.tree
+      return false
+    end
+    if @nodes != other.nodes
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type SnapshotBundleSummaryRecord
+class SnapshotBundleSummaryRecord
+  attr_reader :format_version, :root, :node_count, :byte_count, :min_node_bytes, :max_node_bytes
+
+  def initialize(format_version:, root:, node_count:, byte_count:, min_node_bytes:, max_node_bytes:)
+    @format_version = format_version
+    @root = root
+    @node_count = node_count
+    @byte_count = byte_count
+    @min_node_bytes = min_node_bytes
+    @max_node_bytes = max_node_bytes
+  end
+
+  def ==(other)
+    if @format_version != other.format_version
+      return false
+    end
+    if @root != other.root
+      return false
+    end
+    if @node_count != other.node_count
+      return false
+    end
+    if @byte_count != other.byte_count
+      return false
+    end
+    if @min_node_bytes != other.min_node_bytes
+      return false
+    end
+    if @max_node_bytes != other.max_node_bytes
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type SnapshotBundleVerificationRecord
+class SnapshotBundleVerificationRecord
+  attr_reader :valid, :summary, :reachable_nodes, :reachable_bytes, :missing_cids, :extra_cids
+
+  def initialize(valid:, summary:, reachable_nodes:, reachable_bytes:, missing_cids:, extra_cids:)
+    @valid = valid
+    @summary = summary
+    @reachable_nodes = reachable_nodes
+    @reachable_bytes = reachable_bytes
+    @missing_cids = missing_cids
+    @extra_cids = extra_cids
+  end
+
+  def ==(other)
+    if @valid != other.valid
+      return false
+    end
+    if @summary != other.summary
+      return false
+    end
+    if @reachable_nodes != other.reachable_nodes
+      return false
+    end
+    if @reachable_bytes != other.reachable_bytes
+      return false
+    end
+    if @missing_cids != other.missing_cids
+      return false
+    end
+    if @extra_cids != other.extra_cids
       return false
     end
 
@@ -9292,14 +12484,324 @@ class SnapshotSelectionRecord
   end
 end
 
+  # Record type StatsComparisonRecord
+class StatsComparisonRecord
+  attr_reader :before, :after, :absolute, :percentage
+
+  def initialize(before:, after:, absolute:, percentage:)
+    @before = before
+    @after = after
+    @absolute = absolute
+    @percentage = percentage
+  end
+
+  def ==(other)
+    if @before != other.before
+      return false
+    end
+    if @after != other.after
+      return false
+    end
+    if @absolute != other.absolute
+      return false
+    end
+    if @percentage != other.percentage
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type StatsDiffRecord
+class StatsDiffRecord
+  attr_reader :num_nodes_diff, :num_leaves_diff, :num_internal_nodes_diff, :tree_height_diff, :total_key_value_pairs_diff, :total_tree_size_bytes_diff, :avg_node_size_bytes_diff, :min_node_size_bytes_diff, :max_node_size_bytes_diff, :avg_entries_per_node_diff, :avg_fanout_diff, :min_fanout_diff, :max_fanout_diff, :avg_fill_factor_diff, :avg_leaf_fill_factor_diff, :avg_internal_fill_factor_diff, :avg_key_size_bytes_diff, :avg_value_size_bytes_diff, :min_key_size_bytes_diff, :max_key_size_bytes_diff, :min_value_size_bytes_diff, :max_value_size_bytes_diff, :total_keys_size_bytes_diff, :total_values_size_bytes_diff
+
+  def initialize(num_nodes_diff:, num_leaves_diff:, num_internal_nodes_diff:, tree_height_diff:, total_key_value_pairs_diff:, total_tree_size_bytes_diff:, avg_node_size_bytes_diff:, min_node_size_bytes_diff:, max_node_size_bytes_diff:, avg_entries_per_node_diff:, avg_fanout_diff:, min_fanout_diff:, max_fanout_diff:, avg_fill_factor_diff:, avg_leaf_fill_factor_diff:, avg_internal_fill_factor_diff:, avg_key_size_bytes_diff:, avg_value_size_bytes_diff:, min_key_size_bytes_diff:, max_key_size_bytes_diff:, min_value_size_bytes_diff:, max_value_size_bytes_diff:, total_keys_size_bytes_diff:, total_values_size_bytes_diff:)
+    @num_nodes_diff = num_nodes_diff
+    @num_leaves_diff = num_leaves_diff
+    @num_internal_nodes_diff = num_internal_nodes_diff
+    @tree_height_diff = tree_height_diff
+    @total_key_value_pairs_diff = total_key_value_pairs_diff
+    @total_tree_size_bytes_diff = total_tree_size_bytes_diff
+    @avg_node_size_bytes_diff = avg_node_size_bytes_diff
+    @min_node_size_bytes_diff = min_node_size_bytes_diff
+    @max_node_size_bytes_diff = max_node_size_bytes_diff
+    @avg_entries_per_node_diff = avg_entries_per_node_diff
+    @avg_fanout_diff = avg_fanout_diff
+    @min_fanout_diff = min_fanout_diff
+    @max_fanout_diff = max_fanout_diff
+    @avg_fill_factor_diff = avg_fill_factor_diff
+    @avg_leaf_fill_factor_diff = avg_leaf_fill_factor_diff
+    @avg_internal_fill_factor_diff = avg_internal_fill_factor_diff
+    @avg_key_size_bytes_diff = avg_key_size_bytes_diff
+    @avg_value_size_bytes_diff = avg_value_size_bytes_diff
+    @min_key_size_bytes_diff = min_key_size_bytes_diff
+    @max_key_size_bytes_diff = max_key_size_bytes_diff
+    @min_value_size_bytes_diff = min_value_size_bytes_diff
+    @max_value_size_bytes_diff = max_value_size_bytes_diff
+    @total_keys_size_bytes_diff = total_keys_size_bytes_diff
+    @total_values_size_bytes_diff = total_values_size_bytes_diff
+  end
+
+  def ==(other)
+    if @num_nodes_diff != other.num_nodes_diff
+      return false
+    end
+    if @num_leaves_diff != other.num_leaves_diff
+      return false
+    end
+    if @num_internal_nodes_diff != other.num_internal_nodes_diff
+      return false
+    end
+    if @tree_height_diff != other.tree_height_diff
+      return false
+    end
+    if @total_key_value_pairs_diff != other.total_key_value_pairs_diff
+      return false
+    end
+    if @total_tree_size_bytes_diff != other.total_tree_size_bytes_diff
+      return false
+    end
+    if @avg_node_size_bytes_diff != other.avg_node_size_bytes_diff
+      return false
+    end
+    if @min_node_size_bytes_diff != other.min_node_size_bytes_diff
+      return false
+    end
+    if @max_node_size_bytes_diff != other.max_node_size_bytes_diff
+      return false
+    end
+    if @avg_entries_per_node_diff != other.avg_entries_per_node_diff
+      return false
+    end
+    if @avg_fanout_diff != other.avg_fanout_diff
+      return false
+    end
+    if @min_fanout_diff != other.min_fanout_diff
+      return false
+    end
+    if @max_fanout_diff != other.max_fanout_diff
+      return false
+    end
+    if @avg_fill_factor_diff != other.avg_fill_factor_diff
+      return false
+    end
+    if @avg_leaf_fill_factor_diff != other.avg_leaf_fill_factor_diff
+      return false
+    end
+    if @avg_internal_fill_factor_diff != other.avg_internal_fill_factor_diff
+      return false
+    end
+    if @avg_key_size_bytes_diff != other.avg_key_size_bytes_diff
+      return false
+    end
+    if @avg_value_size_bytes_diff != other.avg_value_size_bytes_diff
+      return false
+    end
+    if @min_key_size_bytes_diff != other.min_key_size_bytes_diff
+      return false
+    end
+    if @max_key_size_bytes_diff != other.max_key_size_bytes_diff
+      return false
+    end
+    if @min_value_size_bytes_diff != other.min_value_size_bytes_diff
+      return false
+    end
+    if @max_value_size_bytes_diff != other.max_value_size_bytes_diff
+      return false
+    end
+    if @total_keys_size_bytes_diff != other.total_keys_size_bytes_diff
+      return false
+    end
+    if @total_values_size_bytes_diff != other.total_values_size_bytes_diff
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type StatsPercentageChangeRecord
+class StatsPercentageChangeRecord
+  attr_reader :num_nodes_pct, :num_leaves_pct, :num_internal_nodes_pct, :tree_height_pct, :total_key_value_pairs_pct, :total_tree_size_bytes_pct, :avg_node_size_bytes_pct, :min_node_size_bytes_pct, :max_node_size_bytes_pct, :avg_entries_per_node_pct, :avg_fanout_pct, :min_fanout_pct, :max_fanout_pct, :avg_fill_factor_pct, :avg_leaf_fill_factor_pct, :avg_internal_fill_factor_pct, :avg_key_size_bytes_pct, :avg_value_size_bytes_pct, :min_key_size_bytes_pct, :max_key_size_bytes_pct, :min_value_size_bytes_pct, :max_value_size_bytes_pct, :total_keys_size_bytes_pct, :total_values_size_bytes_pct
+
+  def initialize(num_nodes_pct:, num_leaves_pct:, num_internal_nodes_pct:, tree_height_pct:, total_key_value_pairs_pct:, total_tree_size_bytes_pct:, avg_node_size_bytes_pct:, min_node_size_bytes_pct:, max_node_size_bytes_pct:, avg_entries_per_node_pct:, avg_fanout_pct:, min_fanout_pct:, max_fanout_pct:, avg_fill_factor_pct:, avg_leaf_fill_factor_pct:, avg_internal_fill_factor_pct:, avg_key_size_bytes_pct:, avg_value_size_bytes_pct:, min_key_size_bytes_pct:, max_key_size_bytes_pct:, min_value_size_bytes_pct:, max_value_size_bytes_pct:, total_keys_size_bytes_pct:, total_values_size_bytes_pct:)
+    @num_nodes_pct = num_nodes_pct
+    @num_leaves_pct = num_leaves_pct
+    @num_internal_nodes_pct = num_internal_nodes_pct
+    @tree_height_pct = tree_height_pct
+    @total_key_value_pairs_pct = total_key_value_pairs_pct
+    @total_tree_size_bytes_pct = total_tree_size_bytes_pct
+    @avg_node_size_bytes_pct = avg_node_size_bytes_pct
+    @min_node_size_bytes_pct = min_node_size_bytes_pct
+    @max_node_size_bytes_pct = max_node_size_bytes_pct
+    @avg_entries_per_node_pct = avg_entries_per_node_pct
+    @avg_fanout_pct = avg_fanout_pct
+    @min_fanout_pct = min_fanout_pct
+    @max_fanout_pct = max_fanout_pct
+    @avg_fill_factor_pct = avg_fill_factor_pct
+    @avg_leaf_fill_factor_pct = avg_leaf_fill_factor_pct
+    @avg_internal_fill_factor_pct = avg_internal_fill_factor_pct
+    @avg_key_size_bytes_pct = avg_key_size_bytes_pct
+    @avg_value_size_bytes_pct = avg_value_size_bytes_pct
+    @min_key_size_bytes_pct = min_key_size_bytes_pct
+    @max_key_size_bytes_pct = max_key_size_bytes_pct
+    @min_value_size_bytes_pct = min_value_size_bytes_pct
+    @max_value_size_bytes_pct = max_value_size_bytes_pct
+    @total_keys_size_bytes_pct = total_keys_size_bytes_pct
+    @total_values_size_bytes_pct = total_values_size_bytes_pct
+  end
+
+  def ==(other)
+    if @num_nodes_pct != other.num_nodes_pct
+      return false
+    end
+    if @num_leaves_pct != other.num_leaves_pct
+      return false
+    end
+    if @num_internal_nodes_pct != other.num_internal_nodes_pct
+      return false
+    end
+    if @tree_height_pct != other.tree_height_pct
+      return false
+    end
+    if @total_key_value_pairs_pct != other.total_key_value_pairs_pct
+      return false
+    end
+    if @total_tree_size_bytes_pct != other.total_tree_size_bytes_pct
+      return false
+    end
+    if @avg_node_size_bytes_pct != other.avg_node_size_bytes_pct
+      return false
+    end
+    if @min_node_size_bytes_pct != other.min_node_size_bytes_pct
+      return false
+    end
+    if @max_node_size_bytes_pct != other.max_node_size_bytes_pct
+      return false
+    end
+    if @avg_entries_per_node_pct != other.avg_entries_per_node_pct
+      return false
+    end
+    if @avg_fanout_pct != other.avg_fanout_pct
+      return false
+    end
+    if @min_fanout_pct != other.min_fanout_pct
+      return false
+    end
+    if @max_fanout_pct != other.max_fanout_pct
+      return false
+    end
+    if @avg_fill_factor_pct != other.avg_fill_factor_pct
+      return false
+    end
+    if @avg_leaf_fill_factor_pct != other.avg_leaf_fill_factor_pct
+      return false
+    end
+    if @avg_internal_fill_factor_pct != other.avg_internal_fill_factor_pct
+      return false
+    end
+    if @avg_key_size_bytes_pct != other.avg_key_size_bytes_pct
+      return false
+    end
+    if @avg_value_size_bytes_pct != other.avg_value_size_bytes_pct
+      return false
+    end
+    if @min_key_size_bytes_pct != other.min_key_size_bytes_pct
+      return false
+    end
+    if @max_key_size_bytes_pct != other.max_key_size_bytes_pct
+      return false
+    end
+    if @min_value_size_bytes_pct != other.min_value_size_bytes_pct
+      return false
+    end
+    if @max_value_size_bytes_pct != other.max_value_size_bytes_pct
+      return false
+    end
+    if @total_keys_size_bytes_pct != other.total_keys_size_bytes_pct
+      return false
+    end
+    if @total_values_size_bytes_pct != other.total_values_size_bytes_pct
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type StructuralDiffCursorRecord
+class StructuralDiffCursorRecord
+  attr_reader :base_root, :other_root, :markers, :pending
+
+  def initialize(base_root:, other_root:, markers:, pending:)
+    @base_root = base_root
+    @other_root = other_root
+    @markers = markers
+    @pending = pending
+  end
+
+  def ==(other)
+    if @base_root != other.base_root
+      return false
+    end
+    if @other_root != other.other_root
+      return false
+    end
+    if @markers != other.markers
+      return false
+    end
+    if @pending != other.pending
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type StructuralDiffMarkerRecord
+class StructuralDiffMarkerRecord
+  attr_reader :kind, :base_cid, :other_cid, :span_end, :cid
+
+  def initialize(kind:, base_cid:, other_cid:, span_end:, cid:)
+    @kind = kind
+    @base_cid = base_cid
+    @other_cid = other_cid
+    @span_end = span_end
+    @cid = cid
+  end
+
+  def ==(other)
+    if @kind != other.kind
+      return false
+    end
+    if @base_cid != other.base_cid
+      return false
+    end
+    if @other_cid != other.other_cid
+      return false
+    end
+    if @span_end != other.span_end
+      return false
+    end
+    if @cid != other.cid
+      return false
+    end
+
+    true
+  end
+end
+
   # Record type StructuralDiffPageRecord
 class StructuralDiffPageRecord
-  attr_reader :diffs, :next_cursor_json, :stats
+  attr_reader :diffs, :next_cursor_json, :stats, :next_cursor
 
-  def initialize(diffs:, next_cursor_json:, stats:)
+  def initialize(diffs:, next_cursor_json:, stats:, next_cursor:)
     @diffs = diffs
     @next_cursor_json = next_cursor_json
     @stats = stats
+    @next_cursor = next_cursor
   end
 
   def ==(other)
@@ -9310,6 +12812,9 @@ class StructuralDiffPageRecord
       return false
     end
     if @stats != other.stats
+      return false
+    end
+    if @next_cursor != other.next_cursor
       return false
     end
 
@@ -9384,6 +12889,200 @@ class TombstoneRecord
   end
 end
 
+  # Record type TreeDebugComparedNodeRecord
+class TreeDebugComparedNodeRecord
+  attr_reader :status, :node
+
+  def initialize(status:, node:)
+    @status = status
+    @node = node
+  end
+
+  def ==(other)
+    if @status != other.status
+      return false
+    end
+    if @node != other.node
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type TreeDebugComparisonLevelRecord
+class TreeDebugComparisonLevelRecord
+  attr_reader :level, :shared_nodes, :left_only_nodes, :right_only_nodes, :shared_bytes, :left_only_bytes, :right_only_bytes, :nodes
+
+  def initialize(level:, shared_nodes:, left_only_nodes:, right_only_nodes:, shared_bytes:, left_only_bytes:, right_only_bytes:, nodes:)
+    @level = level
+    @shared_nodes = shared_nodes
+    @left_only_nodes = left_only_nodes
+    @right_only_nodes = right_only_nodes
+    @shared_bytes = shared_bytes
+    @left_only_bytes = left_only_bytes
+    @right_only_bytes = right_only_bytes
+    @nodes = nodes
+  end
+
+  def ==(other)
+    if @level != other.level
+      return false
+    end
+    if @shared_nodes != other.shared_nodes
+      return false
+    end
+    if @left_only_nodes != other.left_only_nodes
+      return false
+    end
+    if @right_only_nodes != other.right_only_nodes
+      return false
+    end
+    if @shared_bytes != other.shared_bytes
+      return false
+    end
+    if @left_only_bytes != other.left_only_bytes
+      return false
+    end
+    if @right_only_bytes != other.right_only_bytes
+      return false
+    end
+    if @nodes != other.nodes
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type TreeDebugComparisonRecord
+class TreeDebugComparisonRecord
+  attr_reader :shared_nodes, :left_only_nodes, :right_only_nodes, :shared_bytes, :left_only_bytes, :right_only_bytes, :levels
+
+  def initialize(shared_nodes:, left_only_nodes:, right_only_nodes:, shared_bytes:, left_only_bytes:, right_only_bytes:, levels:)
+    @shared_nodes = shared_nodes
+    @left_only_nodes = left_only_nodes
+    @right_only_nodes = right_only_nodes
+    @shared_bytes = shared_bytes
+    @left_only_bytes = left_only_bytes
+    @right_only_bytes = right_only_bytes
+    @levels = levels
+  end
+
+  def ==(other)
+    if @shared_nodes != other.shared_nodes
+      return false
+    end
+    if @left_only_nodes != other.left_only_nodes
+      return false
+    end
+    if @right_only_nodes != other.right_only_nodes
+      return false
+    end
+    if @shared_bytes != other.shared_bytes
+      return false
+    end
+    if @left_only_bytes != other.left_only_bytes
+      return false
+    end
+    if @right_only_bytes != other.right_only_bytes
+      return false
+    end
+    if @levels != other.levels
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type TreeDebugLevelRecord
+class TreeDebugLevelRecord
+  attr_reader :level, :nodes
+
+  def initialize(level:, nodes:)
+    @level = level
+    @nodes = nodes
+  end
+
+  def ==(other)
+    if @level != other.level
+      return false
+    end
+    if @nodes != other.nodes
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type TreeDebugNodeRecord
+class TreeDebugNodeRecord
+  attr_reader :cid, :leaf, :level, :entry_count, :max_entries, :fill_factor, :encoded_bytes, :first_key, :last_key
+
+  def initialize(cid:, leaf:, level:, entry_count:, max_entries:, fill_factor:, encoded_bytes:, first_key:, last_key:)
+    @cid = cid
+    @leaf = leaf
+    @level = level
+    @entry_count = entry_count
+    @max_entries = max_entries
+    @fill_factor = fill_factor
+    @encoded_bytes = encoded_bytes
+    @first_key = first_key
+    @last_key = last_key
+  end
+
+  def ==(other)
+    if @cid != other.cid
+      return false
+    end
+    if @leaf != other.leaf
+      return false
+    end
+    if @level != other.level
+      return false
+    end
+    if @entry_count != other.entry_count
+      return false
+    end
+    if @max_entries != other.max_entries
+      return false
+    end
+    if @fill_factor != other.fill_factor
+      return false
+    end
+    if @encoded_bytes != other.encoded_bytes
+      return false
+    end
+    if @first_key != other.first_key
+      return false
+    end
+    if @last_key != other.last_key
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type TreeDebugViewRecord
+class TreeDebugViewRecord
+  attr_reader :levels
+
+  def initialize(levels:)
+    @levels = levels
+  end
+
+  def ==(other)
+    if @levels != other.levels
+      return false
+    end
+
+    true
+  end
+end
+
   # Record type TreeRecord
 class TreeRecord
   attr_reader :root, :config
@@ -9398,6 +13097,177 @@ class TreeRecord
       return false
     end
     if @config != other.config
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type TreeStatsLevelF64Record
+class TreeStatsLevelF64Record
+  attr_reader :level, :value
+
+  def initialize(level:, value:)
+    @level = level
+    @value = value
+  end
+
+  def ==(other)
+    if @level != other.level
+      return false
+    end
+    if @value != other.value
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type TreeStatsLevelU64Record
+class TreeStatsLevelU64Record
+  attr_reader :level, :value
+
+  def initialize(level:, value:)
+    @level = level
+    @value = value
+  end
+
+  def ==(other)
+    if @level != other.level
+      return false
+    end
+    if @value != other.value
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type TreeStatsRecord
+class TreeStatsRecord
+  attr_reader :num_nodes, :num_leaves, :num_internal_nodes, :tree_height, :total_key_value_pairs, :total_tree_size_bytes, :avg_node_size_bytes, :min_node_size_bytes, :max_node_size_bytes, :avg_entries_per_node, :nodes_per_level, :avg_node_size_per_level, :avg_entries_per_level, :min_entries_per_level, :max_entries_per_level, :avg_fanout, :min_fanout, :max_fanout, :avg_fill_factor, :avg_leaf_fill_factor, :avg_internal_fill_factor, :avg_key_size_bytes, :avg_value_size_bytes, :min_key_size_bytes, :max_key_size_bytes, :min_value_size_bytes, :max_value_size_bytes, :total_keys_size_bytes, :total_values_size_bytes
+
+  def initialize(num_nodes:, num_leaves:, num_internal_nodes:, tree_height:, total_key_value_pairs:, total_tree_size_bytes:, avg_node_size_bytes:, min_node_size_bytes:, max_node_size_bytes:, avg_entries_per_node:, nodes_per_level:, avg_node_size_per_level:, avg_entries_per_level:, min_entries_per_level:, max_entries_per_level:, avg_fanout:, min_fanout:, max_fanout:, avg_fill_factor:, avg_leaf_fill_factor:, avg_internal_fill_factor:, avg_key_size_bytes:, avg_value_size_bytes:, min_key_size_bytes:, max_key_size_bytes:, min_value_size_bytes:, max_value_size_bytes:, total_keys_size_bytes:, total_values_size_bytes:)
+    @num_nodes = num_nodes
+    @num_leaves = num_leaves
+    @num_internal_nodes = num_internal_nodes
+    @tree_height = tree_height
+    @total_key_value_pairs = total_key_value_pairs
+    @total_tree_size_bytes = total_tree_size_bytes
+    @avg_node_size_bytes = avg_node_size_bytes
+    @min_node_size_bytes = min_node_size_bytes
+    @max_node_size_bytes = max_node_size_bytes
+    @avg_entries_per_node = avg_entries_per_node
+    @nodes_per_level = nodes_per_level
+    @avg_node_size_per_level = avg_node_size_per_level
+    @avg_entries_per_level = avg_entries_per_level
+    @min_entries_per_level = min_entries_per_level
+    @max_entries_per_level = max_entries_per_level
+    @avg_fanout = avg_fanout
+    @min_fanout = min_fanout
+    @max_fanout = max_fanout
+    @avg_fill_factor = avg_fill_factor
+    @avg_leaf_fill_factor = avg_leaf_fill_factor
+    @avg_internal_fill_factor = avg_internal_fill_factor
+    @avg_key_size_bytes = avg_key_size_bytes
+    @avg_value_size_bytes = avg_value_size_bytes
+    @min_key_size_bytes = min_key_size_bytes
+    @max_key_size_bytes = max_key_size_bytes
+    @min_value_size_bytes = min_value_size_bytes
+    @max_value_size_bytes = max_value_size_bytes
+    @total_keys_size_bytes = total_keys_size_bytes
+    @total_values_size_bytes = total_values_size_bytes
+  end
+
+  def ==(other)
+    if @num_nodes != other.num_nodes
+      return false
+    end
+    if @num_leaves != other.num_leaves
+      return false
+    end
+    if @num_internal_nodes != other.num_internal_nodes
+      return false
+    end
+    if @tree_height != other.tree_height
+      return false
+    end
+    if @total_key_value_pairs != other.total_key_value_pairs
+      return false
+    end
+    if @total_tree_size_bytes != other.total_tree_size_bytes
+      return false
+    end
+    if @avg_node_size_bytes != other.avg_node_size_bytes
+      return false
+    end
+    if @min_node_size_bytes != other.min_node_size_bytes
+      return false
+    end
+    if @max_node_size_bytes != other.max_node_size_bytes
+      return false
+    end
+    if @avg_entries_per_node != other.avg_entries_per_node
+      return false
+    end
+    if @nodes_per_level != other.nodes_per_level
+      return false
+    end
+    if @avg_node_size_per_level != other.avg_node_size_per_level
+      return false
+    end
+    if @avg_entries_per_level != other.avg_entries_per_level
+      return false
+    end
+    if @min_entries_per_level != other.min_entries_per_level
+      return false
+    end
+    if @max_entries_per_level != other.max_entries_per_level
+      return false
+    end
+    if @avg_fanout != other.avg_fanout
+      return false
+    end
+    if @min_fanout != other.min_fanout
+      return false
+    end
+    if @max_fanout != other.max_fanout
+      return false
+    end
+    if @avg_fill_factor != other.avg_fill_factor
+      return false
+    end
+    if @avg_leaf_fill_factor != other.avg_leaf_fill_factor
+      return false
+    end
+    if @avg_internal_fill_factor != other.avg_internal_fill_factor
+      return false
+    end
+    if @avg_key_size_bytes != other.avg_key_size_bytes
+      return false
+    end
+    if @avg_value_size_bytes != other.avg_value_size_bytes
+      return false
+    end
+    if @min_key_size_bytes != other.min_key_size_bytes
+      return false
+    end
+    if @max_key_size_bytes != other.max_key_size_bytes
+      return false
+    end
+    if @min_value_size_bytes != other.min_value_size_bytes
+      return false
+    end
+    if @max_value_size_bytes != other.max_value_size_bytes
+      return false
+    end
+    if @total_keys_size_bytes != other.total_keys_size_bytes
+      return false
+    end
+    if @total_values_size_bytes != other.total_values_size_bytes
       return false
     end
 
@@ -9575,6 +13445,27 @@ end
 
 
 
+def self.crdt_resolution_delete()
+  result = Prolly.rust_call(:uniffi_prolly_bindings_fn_func_crdt_resolution_delete,)
+  return result.consumeIntoTypeCrdtResolutionRecord
+end
+
+
+
+
+
+def self.crdt_resolution_value(value)
+    value = Prolly::uniffi_bytes(value)
+
+
+  result = Prolly.rust_call(:uniffi_prolly_bindings_fn_func_crdt_resolution_value,RustBuffer.allocFromBytes(value))
+  return result.consumeIntoTypeCrdtResolutionRecord
+end
+
+
+
+
+
 def self.debug_key(key)
     key = Prolly::uniffi_bytes(key)
 
@@ -9626,6 +13517,18 @@ end
 
 
 
+def self.delete_mutation(key)
+    key = Prolly::uniffi_bytes(key)
+
+
+  result = Prolly.rust_call(:uniffi_prolly_bindings_fn_func_delete_mutation,RustBuffer.allocFromBytes(key))
+  return result.consumeIntoTypeMutationRecord
+end
+
+
+
+
+
 def self.diff_page_proof_from_bytes(bytes)
     bytes = Prolly::uniffi_bytes(bytes)
 
@@ -9656,6 +13559,45 @@ def self.encode_segment(segment)
 
   result = Prolly.rust_call(:uniffi_prolly_bindings_fn_func_encode_segment,RustBuffer.allocFromBytes(segment))
   return result.consumeIntoBytes
+end
+
+
+
+
+
+def self.encoding_cbor()
+  result = Prolly.rust_call(:uniffi_prolly_bindings_fn_func_encoding_cbor,)
+  return result.consumeIntoTypeEncodingRecord
+end
+
+
+
+
+
+def self.encoding_custom(name)
+    name = Prolly::uniffi_utf8(name)
+
+
+  result = Prolly.rust_call(:uniffi_prolly_bindings_fn_func_encoding_custom,RustBuffer.allocFromString(name))
+  return result.consumeIntoTypeEncodingRecord
+end
+
+
+
+
+
+def self.encoding_json()
+  result = Prolly.rust_call(:uniffi_prolly_bindings_fn_func_encoding_json,)
+  return result.consumeIntoTypeEncodingRecord
+end
+
+
+
+
+
+def self.encoding_raw()
+  result = Prolly.rust_call(:uniffi_prolly_bindings_fn_func_encoding_raw,)
+  return result.consumeIntoTypeEncodingRecord
 end
 
 
@@ -9812,6 +13754,18 @@ end
 
 
 
+def self.large_value_config(inline_threshold)
+    inline_threshold = Prolly::uniffi_in_range(inline_threshold, "u64", 0, 2**64)
+
+
+  result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_func_large_value_config,inline_threshold)
+  return result.consumeIntoTypeLargeValueConfigRecord
+end
+
+
+
+
+
 def self.multi_key_proof_from_bytes(bytes)
     bytes = Prolly::uniffi_bytes(bytes)
 
@@ -9935,6 +13889,30 @@ def self.node_to_bytes(node)
 
   result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_func_node_to_bytes,RustBuffer.alloc_from_TypeNodeRecord(node))
   return result.consumeIntoBytes
+end
+
+
+
+
+
+def self.parallel_config(max_threads, parallelism_threshold)
+    max_threads = Prolly::uniffi_in_range(max_threads, "u64", 0, 2**64)
+
+
+    parallelism_threshold = Prolly::uniffi_in_range(parallelism_threshold, "u64", 0, 2**64)
+
+
+  result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_func_parallel_config,max_threads,parallelism_threshold)
+  return result.consumeIntoTypeParallelConfigRecord
+end
+
+
+
+
+
+def self.parallel_config_sequential()
+  result = Prolly.rust_call(:uniffi_prolly_bindings_fn_func_parallel_config_sequential,)
+  return result.consumeIntoTypeParallelConfigRecord
 end
 
 
@@ -10100,6 +14078,84 @@ end
 
 
 
+def self.resolution_delete()
+  result = Prolly.rust_call(:uniffi_prolly_bindings_fn_func_resolution_delete,)
+  return result.consumeIntoTypeResolutionRecord
+end
+
+
+
+
+
+def self.resolution_unresolved()
+  result = Prolly.rust_call(:uniffi_prolly_bindings_fn_func_resolution_unresolved,)
+  return result.consumeIntoTypeResolutionRecord
+end
+
+
+
+
+
+def self.resolution_value(value)
+    value = Prolly::uniffi_bytes(value)
+
+
+  result = Prolly.rust_call(:uniffi_prolly_bindings_fn_func_resolution_value,RustBuffer.allocFromBytes(value))
+  return result.consumeIntoTypeResolutionRecord
+end
+
+
+
+
+
+def self.resolve_delete_wins(conflict)
+    conflict = conflict
+    RustBuffer.check_lower_TypeConflictRecord(conflict)
+
+  result = Prolly.rust_call(:uniffi_prolly_bindings_fn_func_resolve_delete_wins,RustBuffer.alloc_from_TypeConflictRecord(conflict))
+  return result.consumeIntoTypeResolutionRecord
+end
+
+
+
+
+
+def self.resolve_prefer_left(conflict)
+    conflict = conflict
+    RustBuffer.check_lower_TypeConflictRecord(conflict)
+
+  result = Prolly.rust_call(:uniffi_prolly_bindings_fn_func_resolve_prefer_left,RustBuffer.alloc_from_TypeConflictRecord(conflict))
+  return result.consumeIntoTypeResolutionRecord
+end
+
+
+
+
+
+def self.resolve_prefer_right(conflict)
+    conflict = conflict
+    RustBuffer.check_lower_TypeConflictRecord(conflict)
+
+  result = Prolly.rust_call(:uniffi_prolly_bindings_fn_func_resolve_prefer_right,RustBuffer.alloc_from_TypeConflictRecord(conflict))
+  return result.consumeIntoTypeResolutionRecord
+end
+
+
+
+
+
+def self.resolve_update_wins(conflict)
+    conflict = conflict
+    RustBuffer.check_lower_TypeConflictRecord(conflict)
+
+  result = Prolly.rust_call(:uniffi_prolly_bindings_fn_func_resolve_update_wins,RustBuffer.alloc_from_TypeConflictRecord(conflict))
+  return result.consumeIntoTypeResolutionRecord
+end
+
+
+
+
+
 def self.retain_all_named_roots()
   result = Prolly.rust_call(:uniffi_prolly_bindings_fn_func_retain_all_named_roots,)
   return result.consumeIntoTypeNamedRootRetentionRecord
@@ -10163,6 +14219,27 @@ end
 
 
 
+def self.reverse_cursor_before_key(key)
+    key = Prolly::uniffi_bytes(key)
+
+
+  result = Prolly.rust_call(:uniffi_prolly_bindings_fn_func_reverse_cursor_before_key,RustBuffer.allocFromBytes(key))
+  return result.consumeIntoTypeReverseCursorRecord
+end
+
+
+
+
+
+def self.reverse_cursor_end()
+  result = Prolly.rust_call(:uniffi_prolly_bindings_fn_func_reverse_cursor_end,)
+  return result.consumeIntoTypeReverseCursorRecord
+end
+
+
+
+
+
 def self.root_manifest_from_bytes(bytes)
     bytes = Prolly::uniffi_bytes(bytes)
 
@@ -10211,6 +14288,78 @@ def self.sign_proof_bundle_hmac_sha256(proof_bundle, key_id, secret, context, is
 
   result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_func_sign_proof_bundle_hmac_sha256,RustBuffer.allocFromBytes(proof_bundle),RustBuffer.allocFromBytes(key_id),RustBuffer.allocFromBytes(secret),RustBuffer.allocFromBytes(context),RustBuffer.alloc_from_Optionalu64(issued_at_millis),RustBuffer.alloc_from_Optionalu64(expires_at_millis),RustBuffer.allocFromBytes(nonce))
   return result.consumeIntoTypeAuthenticatedProofEnvelopeRecord
+end
+
+
+
+
+
+def self.snapshot_bundle_digest(record)
+    record = record
+    RustBuffer.check_lower_TypeSnapshotBundleRecord(record)
+
+  result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_func_snapshot_bundle_digest,RustBuffer.alloc_from_TypeSnapshotBundleRecord(record))
+  return result.consumeIntoBytes
+end
+
+
+
+
+
+def self.snapshot_bundle_digest_bytes(bytes)
+    bytes = Prolly::uniffi_bytes(bytes)
+
+
+  result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_func_snapshot_bundle_digest_bytes,RustBuffer.allocFromBytes(bytes))
+  return result.consumeIntoBytes
+end
+
+
+
+
+
+def self.snapshot_bundle_from_bytes(bytes)
+    bytes = Prolly::uniffi_bytes(bytes)
+
+
+  result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_func_snapshot_bundle_from_bytes,RustBuffer.allocFromBytes(bytes))
+  return result.consumeIntoTypeSnapshotBundleRecord
+end
+
+
+
+
+
+def self.snapshot_bundle_summary(record)
+    record = record
+    RustBuffer.check_lower_TypeSnapshotBundleRecord(record)
+
+  result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_func_snapshot_bundle_summary,RustBuffer.alloc_from_TypeSnapshotBundleRecord(record))
+  return result.consumeIntoTypeSnapshotBundleSummaryRecord
+end
+
+
+
+
+
+def self.snapshot_bundle_summary_from_bytes(bytes)
+    bytes = Prolly::uniffi_bytes(bytes)
+
+
+  result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_func_snapshot_bundle_summary_from_bytes,RustBuffer.allocFromBytes(bytes))
+  return result.consumeIntoTypeSnapshotBundleSummaryRecord
+end
+
+
+
+
+
+def self.snapshot_bundle_to_bytes(record)
+    record = record
+    RustBuffer.check_lower_TypeSnapshotBundleRecord(record)
+
+  result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_func_snapshot_bundle_to_bytes,RustBuffer.alloc_from_TypeSnapshotBundleRecord(record))
+  return result.consumeIntoBytes
 end
 
 
@@ -10400,6 +14549,36 @@ end
 
 
 
+def self.tree_config(min_chunk_size, max_chunk_size, chunking_factor, hash_seed, encoding, node_cache_max_nodes, node_cache_max_bytes)
+    min_chunk_size = Prolly::uniffi_in_range(min_chunk_size, "u64", 0, 2**64)
+
+
+    max_chunk_size = Prolly::uniffi_in_range(max_chunk_size, "u64", 0, 2**64)
+
+
+    chunking_factor = Prolly::uniffi_in_range(chunking_factor, "u32", 0, 2**32)
+
+
+    hash_seed = Prolly::uniffi_in_range(hash_seed, "u64", 0, 2**64)
+
+
+    encoding = encoding
+    RustBuffer.check_lower_TypeEncodingRecord(encoding)
+
+    node_cache_max_nodes = (node_cache_max_nodes ? Prolly::uniffi_in_range(node_cache_max_nodes, "u64", 0, 2**64) : nil)
+    RustBuffer.check_lower_Optionalu64(node_cache_max_nodes)
+
+    node_cache_max_bytes = (node_cache_max_bytes ? Prolly::uniffi_in_range(node_cache_max_bytes, "u64", 0, 2**64) : nil)
+    RustBuffer.check_lower_Optionalu64(node_cache_max_bytes)
+
+  result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_func_tree_config,min_chunk_size,max_chunk_size,chunking_factor,hash_seed,RustBuffer.alloc_from_TypeEncodingRecord(encoding),RustBuffer.alloc_from_Optionalu64(node_cache_max_nodes),RustBuffer.alloc_from_Optionalu64(node_cache_max_bytes))
+  return result.consumeIntoTypeConfigRecord
+end
+
+
+
+
+
 def self.u128_key(value)
     value = Prolly::uniffi_utf8(value)
 
@@ -10418,6 +14597,21 @@ def self.u64_key(value)
 
   result = Prolly.rust_call(:uniffi_prolly_bindings_fn_func_u64_key,value)
   return result.consumeIntoBytes
+end
+
+
+
+
+
+def self.upsert_mutation(key, value)
+    key = Prolly::uniffi_bytes(key)
+
+
+    value = Prolly::uniffi_bytes(value)
+
+
+  result = Prolly.rust_call(:uniffi_prolly_bindings_fn_func_upsert_mutation,RustBuffer.allocFromBytes(key),RustBuffer.allocFromBytes(value))
+  return result.consumeIntoTypeMutationRecord
 end
 
 
@@ -10574,6 +14768,30 @@ def self.verify_range_proof(proof)
 
   result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_func_verify_range_proof,RustBuffer.alloc_from_TypeRangeProofRecord(proof))
   return result.consumeIntoTypeRangeProofVerificationRecord
+end
+
+
+
+
+
+def self.verify_snapshot_bundle(record)
+    record = record
+    RustBuffer.check_lower_TypeSnapshotBundleRecord(record)
+
+  result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_func_verify_snapshot_bundle,RustBuffer.alloc_from_TypeSnapshotBundleRecord(record))
+  return result.consumeIntoTypeSnapshotBundleVerificationRecord
+end
+
+
+
+
+
+def self.verify_snapshot_bundle_bytes(bytes)
+    bytes = Prolly::uniffi_bytes(bytes)
+
+
+  result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_func_verify_snapshot_bundle_bytes,RustBuffer.allocFromBytes(bytes))
+  return result.consumeIntoTypeSnapshotBundleVerificationRecord
 end
 
 
@@ -11264,6 +15482,12 @@ end
       Prolly.rust_call(:uniffi_prolly_bindings_fn_method_prollyengine_clear_cache,uniffi_clone_handle(),)
   end
 
+  def collect_stats(tree)
+        tree = tree
+        RustBuffer.check_lower_TypeTreeRecord(tree)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_collect_stats,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree))
+    return result.consumeIntoTypeTreeStatsRecord
+  end
   def collect_stats_json(tree)
         tree = tree
         RustBuffer.check_lower_TypeTreeRecord(tree)
@@ -11370,6 +15594,26 @@ end
     result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_prollyengine_create,uniffi_clone_handle(),)
     return result.consumeIntoTypeTreeRecord
   end
+  def cursor_window(tree, key, _end, limit)
+        tree = tree
+        RustBuffer.check_lower_TypeTreeRecord(tree)
+        key = Prolly::uniffi_bytes(key)
+
+        _end = (_end ? Prolly::uniffi_bytes(_end) : nil)
+        RustBuffer.check_lower_Optionalbytes(_end)
+        limit = Prolly::uniffi_in_range(limit, "u64", 0, 2**64)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_cursor_window,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.allocFromBytes(key),RustBuffer.alloc_from_Optionalbytes(_end),limit)
+    return result.consumeIntoTypeCursorWindowRecord
+  end
+  def debug_compare_trees(left, right)
+        left = left
+        RustBuffer.check_lower_TypeTreeRecord(left)
+        right = right
+        RustBuffer.check_lower_TypeTreeRecord(right)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_debug_compare_trees,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(left),RustBuffer.alloc_from_TypeTreeRecord(right))
+    return result.consumeIntoTypeTreeDebugComparisonRecord
+  end
   def debug_compare_trees_json(left, right)
         left = left
         RustBuffer.check_lower_TypeTreeRecord(left)
@@ -11385,6 +15629,12 @@ end
         RustBuffer.check_lower_TypeTreeRecord(right)
     result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_debug_compare_trees_text,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(left),RustBuffer.alloc_from_TypeTreeRecord(right))
     return result.consumeIntoString
+  end
+  def debug_tree(tree)
+        tree = tree
+        RustBuffer.check_lower_TypeTreeRecord(tree)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_debug_tree,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree))
+    return result.consumeIntoTypeTreeDebugViewRecord
   end
   def debug_tree_json(tree)
         tree = tree
@@ -11454,6 +15704,18 @@ end
     result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_diff_page,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(base),RustBuffer.alloc_from_TypeTreeRecord(other),RustBuffer.alloc_from_OptionalTypeRangeCursorRecord(cursor),RustBuffer.alloc_from_Optionalbytes(_end),limit)
     return result.consumeIntoTypeDiffPageRecord
   end
+  def export_snapshot(tree)
+        tree = tree
+        RustBuffer.check_lower_TypeTreeRecord(tree)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_export_snapshot,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree))
+    return result.consumeIntoTypeSnapshotBundleRecord
+  end
+  def first_entry(tree)
+        tree = tree
+        RustBuffer.check_lower_TypeTreeRecord(tree)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_first_entry,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree))
+    return result.consumeIntoOptionalTypeEntryRecord
+  end
   def get(tree, key)
         tree = tree
         RustBuffer.check_lower_TypeTreeRecord(tree)
@@ -11495,6 +15757,18 @@ end
 
     result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_hydrate_prefix_path_hint,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.allocFromBytes(prefix))
     return 1 == result
+  end
+  def import_snapshot(bundle)
+        bundle = bundle
+        RustBuffer.check_lower_TypeSnapshotBundleRecord(bundle)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_import_snapshot,uniffi_clone_handle(),RustBuffer.alloc_from_TypeSnapshotBundleRecord(bundle))
+    return result.consumeIntoTypeTreeRecord
+  end
+  def last_entry(tree)
+        tree = tree
+        RustBuffer.check_lower_TypeTreeRecord(tree)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_last_entry,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree))
+    return result.consumeIntoOptionalTypeEntryRecord
   end
   def list_named_root_manifests()
     result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_list_named_root_manifests,uniffi_clone_handle(),)
@@ -11555,6 +15829,14 @@ end
         RustBuffer.check_lower_Sequencebytes(ids)
     result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_load_snapshots,uniffi_clone_handle(),RustBuffer.alloc_from_TypeSnapshotNamespaceRecord(namespace),RustBuffer.alloc_from_Sequencebytes(ids))
     return result.consumeIntoTypeSnapshotSelectionRecord
+  end
+  def lower_bound(tree, key)
+        tree = tree
+        RustBuffer.check_lower_TypeTreeRecord(tree)
+        key = Prolly::uniffi_bytes(key)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_lower_bound,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.allocFromBytes(key))
+    return result.consumeIntoOptionalTypeEntryRecord
   end
   def mark_reachable(roots)
         roots = roots
@@ -11744,6 +16026,16 @@ end
     result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_parallel_batch,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.alloc_from_SequenceTypeMutationRecord(mutations),RustBuffer.alloc_from_TypeParallelConfigRecord(config))
     return result.consumeIntoTypeTreeRecord
   end
+  def parallel_batch_with_stats(tree, mutations, config)
+        tree = tree
+        RustBuffer.check_lower_TypeTreeRecord(tree)
+        mutations = mutations
+        RustBuffer.check_lower_SequenceTypeMutationRecord(mutations)
+        config = config
+        RustBuffer.check_lower_TypeParallelConfigRecord(config)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_parallel_batch_with_stats,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.alloc_from_SequenceTypeMutationRecord(mutations),RustBuffer.alloc_from_TypeParallelConfigRecord(config))
+    return result.consumeIntoTypeBatchApplyResultRecord
+  end
   def pin_tree_path(tree, key)
         tree = tree
         RustBuffer.check_lower_TypeTreeRecord(tree)
@@ -11803,6 +16095,38 @@ end
         RustBuffer.check_lower_TypeNamedRootRetentionRecord(retention)
     result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_plan_store_gc_for_retention,uniffi_clone_handle(),RustBuffer.alloc_from_TypeNamedRootRetentionRecord(retention))
     return result.consumeIntoTypeGcPlanRecord
+  end
+  def prefix(tree, prefix)
+        tree = tree
+        RustBuffer.check_lower_TypeTreeRecord(tree)
+        prefix = Prolly::uniffi_bytes(prefix)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_prefix,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.allocFromBytes(prefix))
+    return result.consumeIntoSequenceTypeEntryRecord
+  end
+  def prefix_page(tree, prefix, cursor, limit)
+        tree = tree
+        RustBuffer.check_lower_TypeTreeRecord(tree)
+        prefix = Prolly::uniffi_bytes(prefix)
+
+        cursor = (cursor ? cursor : nil)
+        RustBuffer.check_lower_OptionalTypeRangeCursorRecord(cursor)
+        limit = Prolly::uniffi_in_range(limit, "u64", 0, 2**64)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_prefix_page,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.allocFromBytes(prefix),RustBuffer.alloc_from_OptionalTypeRangeCursorRecord(cursor),limit)
+    return result.consumeIntoTypeRangePageRecord
+  end
+  def prefix_reverse_page(tree, prefix, cursor, limit)
+        tree = tree
+        RustBuffer.check_lower_TypeTreeRecord(tree)
+        prefix = Prolly::uniffi_bytes(prefix)
+
+        cursor = (cursor ? cursor : nil)
+        RustBuffer.check_lower_OptionalTypeReverseCursorRecord(cursor)
+        limit = Prolly::uniffi_in_range(limit, "u64", 0, 2**64)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_prefix_reverse_page,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.allocFromBytes(prefix),RustBuffer.alloc_from_OptionalTypeReverseCursorRecord(cursor),limit)
+    return result.consumeIntoTypeReversePageRecord
   end
   def prove_diff_page(base, other, cursor, _end, limit)
         base = base
@@ -12004,6 +16328,26 @@ end
       Prolly.rust_call(:uniffi_prolly_bindings_fn_method_prollyengine_reset_metrics,uniffi_clone_handle(),)
   end
 
+  def reverse_page(tree, cursor, start, limit)
+        tree = tree
+        RustBuffer.check_lower_TypeTreeRecord(tree)
+        cursor = (cursor ? cursor : nil)
+        RustBuffer.check_lower_OptionalTypeReverseCursorRecord(cursor)
+        start = Prolly::uniffi_bytes(start)
+
+        limit = Prolly::uniffi_in_range(limit, "u64", 0, 2**64)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_reverse_page,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.alloc_from_OptionalTypeReverseCursorRecord(cursor),RustBuffer.allocFromBytes(start),limit)
+    return result.consumeIntoTypeReversePageRecord
+  end
+  def stats_diff(before, after)
+        before = before
+        RustBuffer.check_lower_TypeTreeRecord(before)
+        after = after
+        RustBuffer.check_lower_TypeTreeRecord(after)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_stats_diff,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(before),RustBuffer.alloc_from_TypeTreeRecord(after))
+    return result.consumeIntoTypeStatsComparisonRecord
+  end
   def stats_diff_json(before, after)
         before = before
         RustBuffer.check_lower_TypeTreeRecord(before)
@@ -12022,6 +16366,18 @@ end
         limit = Prolly::uniffi_in_range(limit, "u64", 0, 2**64)
 
     result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_structural_diff_page,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(base),RustBuffer.alloc_from_TypeTreeRecord(other),RustBuffer.alloc_from_Optionalstring(cursor_json),limit)
+    return result.consumeIntoTypeStructuralDiffPageRecord
+  end
+  def structural_diff_page_with_cursor(base, other, cursor, limit)
+        base = base
+        RustBuffer.check_lower_TypeTreeRecord(base)
+        other = other
+        RustBuffer.check_lower_TypeTreeRecord(other)
+        cursor = (cursor ? cursor : nil)
+        RustBuffer.check_lower_OptionalTypeStructuralDiffCursorRecord(cursor)
+        limit = Prolly::uniffi_in_range(limit, "u64", 0, 2**64)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_structural_diff_page_with_cursor,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(base),RustBuffer.alloc_from_TypeTreeRecord(other),RustBuffer.alloc_from_OptionalTypeStructuralDiffCursorRecord(cursor),limit)
     return result.consumeIntoTypeStructuralDiffPageRecord
   end
   def sweep_blob_gc(blob_store, roots, candidate_blobs)
@@ -12065,6 +16421,14 @@ end
   def unpin_all_cache_nodes()
     result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_unpin_all_cache_nodes,uniffi_clone_handle(),)
     return result.to_i
+  end
+  def upper_bound(tree, key)
+        tree = tree
+        RustBuffer.check_lower_TypeTreeRecord(tree)
+        key = Prolly::uniffi_bytes(key)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_upper_bound,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.allocFromBytes(key))
+    return result.consumeIntoOptionalTypeEntryRecord
   end
 
 end

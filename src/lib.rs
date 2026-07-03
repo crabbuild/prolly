@@ -320,7 +320,9 @@ pub use prolly::proof::{
     ProofBundleSummary, ProofBundleVerification, ProvedDiffPage, ProvedRangePage, RangePageProof,
     RangePageProofVerification, RangeProof, RangeProofVerification,
 };
-pub use prolly::range::{RangeCursor, RangeIter, RangePage};
+pub use prolly::range::{
+    CursorWindow, RangeCursor, RangeIter, RangePage, ReverseCursor, ReversePage,
+};
 pub use prolly::snapshot::{
     snapshot_id_from_name, snapshot_root_name, SnapshotManager, SnapshotNamespace, SnapshotRoot,
     SnapshotSelection, SNAPSHOT_BRANCH_PREFIX, SNAPSHOT_CHECKPOINT_PREFIX, SNAPSHOT_TAG_PREFIX,
@@ -329,7 +331,7 @@ pub use prolly::streaming::{DefaultStreamingDiffer, StreamingDiffer};
 pub use prolly::{ChangedSpan, ChangedSpanHint, Prolly, ProllyMetricsSnapshot};
 
 #[cfg(feature = "async-store")]
-pub use prolly::range::{AsyncRangeIter, AsyncRangePage};
+pub use prolly::range::{AsyncRangeIter, AsyncRangePage, AsyncReversePage};
 pub use prolly::stats::{StatsComparison, StatsDiff, StatsPercentageChange, TreeStats};
 #[cfg(feature = "async-store")]
 pub use prolly::store::{AsyncStore, SyncStoreAsAsync};
@@ -346,7 +348,10 @@ pub use prolly::store::{SlateDbStore, SlateDbStoreConfig, SlateDbStoreError};
 pub use prolly::store::{SqliteStore, SqliteStoreConfig, SqliteStoreError};
 #[cfg(feature = "tokio")]
 pub use prolly::store::{TokioBlockingStore, TokioBlockingStoreError};
-pub use prolly::sync::{MissingNodeCopy, MissingNodePlan};
+pub use prolly::sync::{
+    MissingNodeCopy, MissingNodePlan, SnapshotBundle, SnapshotBundleNode, SnapshotBundleSummary,
+    SnapshotBundleVerification, SNAPSHOT_BUNDLE_FORMAT_VERSION,
+};
 pub use prolly::tombstone::{
     is_tombstone_value, tombstone_compaction, tombstone_upsert, Tombstone,
 };

@@ -144,7 +144,7 @@ pub mod utils;
 // Internal traits for future extensibility (not exposed publicly)
 mod traits;
 
-use self::sync::{MissingNodeCopy, MissingNodePlan};
+use self::sync::{MissingNodeCopy, MissingNodePlan, SnapshotBundle, SnapshotBundleNode};
 use blob::{BlobStore, BlobStoreScan, LargeValueConfig};
 use cid::Cid;
 use config::Config;
@@ -1095,6 +1095,56 @@ impl<S: Store> Prolly<S> {
         }
     }
 
+    /// Return the first key-value entry in key order.
+    pub fn first_entry(&self, tree: &Tree) -> Result<Option<(Vec<u8>, Vec<u8>)>, Error> {
+        self.lower_bound(tree, &[])
+    }
+
+    /// Return the last key-value entry in key order.
+    pub fn last_entry(&self, tree: &Tree) -> Result<Option<(Vec<u8>, Vec<u8>)>, Error> {
+        let Some(root_cid) = &tree.root else {
+            return Ok(None);
+        };
+
+        let mut cid = root_cid.clone();
+        loop {
+            let node = self.load_arc(&cid)?;
+            let idx = node.len().checked_sub(1).ok_or(Error::InvalidNode)?;
+
+            if node.leaf {
+                let key = node.keys.get(idx).cloned().ok_or(Error::InvalidNode)?;
+                let value = leaf_value_at(&node, idx)?;
+                return Ok(Some((key, value)));
+            }
+
+            cid = child_cid_at(&node, idx)?;
+        }
+    }
+
+    /// Return the first entry whose key is greater than or equal to `key`.
+    pub fn lower_bound(
+        &self,
+        tree: &Tree,
+        key: &[u8],
+    ) -> Result<Option<(Vec<u8>, Vec<u8>)>, Error> {
+        match self.range(tree, key, None)?.next() {
+            Some(entry) => entry.map(Some),
+            None => Ok(None),
+        }
+    }
+
+    /// Return the first entry whose key is strictly greater than `key`.
+    pub fn upper_bound(
+        &self,
+        tree: &Tree,
+        key: &[u8],
+    ) -> Result<Option<(Vec<u8>, Vec<u8>)>, Error> {
+        match self.range_after(tree, key, None)?.next() {
+            Some(entry) => entry.map(Some),
+            None => Ok(None),
+        }
+    }
+
     /// Get a stored large-value reference by key.
     ///
     /// Non-envelope values are returned as [`blob::ValueRef::Inline`], so this
@@ -1398,6 +1448,62 @@ impl<S: Store> Prolly<S> {
         range::create_range_iter(self, tree, start, end)
     }
 
+    /// Create a range iterator over all keys that start with `prefix`.
+    pub fn prefix<'a>(
+        &'a self,
+        tree: &Tree,
+        prefix: &[u8],
+    ) -> Result<range::RangeIter<'a, S>, Error> {
+        let (start, end) = key::prefix_range(prefix);
+        self.range(tree, &start, end.as_deref())
+    }
+
+    /// Read a bounded page over all keys that start with `prefix`.
+    ///
+    /// A start cursor begins at the prefix start. A resumed cursor continues
+    /// strictly after its stored key while the prefix end remains exclusive.
+    pub fn prefix_page(
+        &self,
+        tree: &Tree,
+        prefix: &[u8],
+        cursor: &range::RangeCursor,
+        limit: usize,
+    ) -> Result<range::RangePage, Error> {
+        if limit == 0 {
+            return Ok(range::RangePage {
+                entries: Vec::new(),
+                next_cursor: Some(cursor.clone()),
+            });
+        }
+
+        let (start, end) = key::prefix_range(prefix);
+        let mut iter = match cursor.after() {
+            Some(after_key) if after_key >= start.as_slice() => {
+                self.range_after(tree, after_key, end.as_deref())?
+            }
+            _ => self.range(tree, &start, end.as_deref())?,
+        };
+        let mut entries = Vec::with_capacity(limit);
+
+        for _ in 0..limit {
+            let Some(item) = iter.next() else {
+                return Ok(range::RangePage {
+                    entries,
+                    next_cursor: None,
+                });
+            };
+            entries.push(item?);
+        }
+
+        let next_cursor = entries
+            .last()
+            .map(|(key, _)| range::RangeCursor::after_key(key.clone()));
+        Ok(range::RangePage {
+            entries,
+            next_cursor,
+        })
+    }
+
     /// Create a range iterator that resumes strictly after `after_key`.
     ///
     /// Persist the last key successfully processed, then resume with this
@@ -1463,6 +1569,78 @@ impl<S: Store> Prolly<S> {
             .map(|(key, _)| range::RangeCursor::after_key(key.clone()));
         Ok(range::RangePage {
             entries,
+            next_cursor,
+        })
+    }
+
+    /// Read a bounded page in descending key order.
+    ///
+    /// `start` is an inclusive lower bound. A start cursor scans from the end of
+    /// the range; a resumed cursor scans keys strictly before its stored key.
+    pub fn reverse_page(
+        &self,
+        tree: &Tree,
+        cursor: &range::ReverseCursor,
+        start: &[u8],
+        limit: usize,
+    ) -> Result<range::ReversePage, Error> {
+        self.reverse_page_bounded(tree, cursor, start, None, limit)
+    }
+
+    /// Read a bounded page over keys that start with `prefix` in descending key
+    /// order.
+    ///
+    /// A start cursor scans from the end of the prefix range. A resumed cursor
+    /// continues strictly before its stored key while the prefix start and end
+    /// remain enforced.
+    pub fn prefix_reverse_page(
+        &self,
+        tree: &Tree,
+        prefix: &[u8],
+        cursor: &range::ReverseCursor,
+        limit: usize,
+    ) -> Result<range::ReversePage, Error> {
+        let (start, end) = key::prefix_range(prefix);
+        self.reverse_page_bounded(tree, cursor, &start, end.as_deref(), limit)
+    }
+
+    fn reverse_page_bounded(
+        &self,
+        tree: &Tree,
+        cursor: &range::ReverseCursor,
+        start: &[u8],
+        end: Option<&[u8]>,
+        limit: usize,
+    ) -> Result<range::ReversePage, Error> {
+        if limit == 0 {
+            return Ok(range::ReversePage {
+                entries: Vec::new(),
+                next_cursor: Some(cursor.clone()),
+            });
+        }
+
+        let scan_end = reverse_scan_end(cursor.before(), end);
+        if scan_end.is_some_and(|before| before <= start) {
+            return Ok(range::ReversePage::default());
+        }
+
+        let mut entries = self
+            .range(tree, start, scan_end)?
+            .collect::<Result<Vec<_>, _>>()?;
+        let has_more = entries.len() > limit;
+        let split_at = entries.len().saturating_sub(limit);
+        let mut page_entries = entries.split_off(split_at);
+        page_entries.reverse();
+        let next_cursor = if has_more {
+            page_entries
+                .last()
+                .map(|(key, _)| range::ReverseCursor::before_key(key.clone()))
+        } else {
+            None
+        };
+
+        Ok(range::ReversePage {
+            entries: page_entries,
             next_cursor,
         })
     }
@@ -2038,6 +2216,70 @@ impl<S: Store> Prolly<S> {
         })
     }
 
+    /// Export one tree and all reachable serialized node bytes as a portable bundle.
+    ///
+    /// The returned bundle is self-contained: importing it into an empty store
+    /// makes the returned `bundle.tree` readable by a manager using that store.
+    /// Node entries are sorted by raw CID bytes for deterministic transport and
+    /// each node byte payload is verified against its CID before the export
+    /// succeeds.
+    pub fn export_snapshot(&self, tree: &Tree) -> Result<SnapshotBundle, Error> {
+        let reachability = self.mark_reachable(std::slice::from_ref(tree))?;
+        let mut nodes = Vec::with_capacity(reachability.live_cids.len());
+
+        for cid in reachability.live_cids {
+            let bytes = self
+                .store
+                .get(cid.as_bytes())
+                .map_err(|err| Error::Store(Box::new(err)))?
+                .ok_or_else(|| Error::NotFound(cid.clone()))?;
+            self::sync::verify_node_bytes(&cid, &bytes)?;
+            nodes.push(SnapshotBundleNode { cid, bytes });
+        }
+
+        Ok(SnapshotBundle::new(tree.clone(), nodes))
+    }
+
+    /// Import a portable tree snapshot bundle into this manager's store.
+    ///
+    /// Import validates that the bundle is exactly self-contained for its tree
+    /// root before mutating the destination store. It deduplicates identical
+    /// repeated node entries, rejects conflicting duplicates, verifies every
+    /// node byte payload against its CID, then writes the validated node set.
+    pub fn import_snapshot(&self, bundle: &SnapshotBundle) -> Result<Tree, Error> {
+        let verification = bundle.verify()?;
+        if !verification.valid {
+            if let Some(cid) = verification.missing_cids.first() {
+                return Err(Error::InvalidSnapshotBundle(format!(
+                    "bundle missing reachable node CID {:?}",
+                    cid
+                )));
+            }
+            if let Some(cid) = verification.extra_cids.first() {
+                return Err(Error::InvalidSnapshotBundle(format!(
+                    "bundle contains unreachable node CID {:?}",
+                    cid
+                )));
+            }
+            return Err(Error::InvalidSnapshotBundle(
+                "bundle failed self-contained verification".to_string(),
+            ));
+        }
+
+        if !bundle.nodes.is_empty() {
+            let entries = bundle
+                .nodes
+                .iter()
+                .map(|node| (node.cid.as_bytes(), node.bytes.as_slice()))
+                .collect::<Vec<_>>();
+            self.store
+                .batch_put(&entries)
+                .map_err(|err| Error::Store(Box::new(err)))?;
+        }
+
+        Ok(bundle.tree.clone())
+    }
+
     fn prepare_missing_nodes<D>(
         &self,
         tree: &Tree,
@@ -2594,6 +2836,63 @@ impl<S: Store> Prolly<S> {
     /// ```
     pub fn cursor(&self, tree: &Tree, key: &[u8]) -> Result<cursor::Cursor, Error> {
         cursor::Cursor::at_item(&self.store, tree, key)
+    }
+
+    /// Seek with the internal cursor and read a bounded forward window.
+    ///
+    /// This is the stateless, binding-friendly form of cursor navigation. It
+    /// reports the cursor landing position for `key`, whether that position is
+    /// an exact match, and up to `limit` entries starting at the first key
+    /// greater than or equal to `key`. When entries are emitted, `next_cursor`
+    /// resumes strictly after the last emitted key.
+    pub fn cursor_window(
+        &self,
+        tree: &Tree,
+        key: &[u8],
+        end: Option<&[u8]>,
+        limit: usize,
+    ) -> Result<range::CursorWindow, Error> {
+        let cursor = self.cursor(tree, key)?;
+        let position_key = cursor.get_key().map(|key| key.to_vec());
+        let position_value = cursor.get_value().map(|value| value.to_vec());
+        let found = position_key.as_deref() == Some(key);
+
+        if limit == 0 {
+            return Ok(range::CursorWindow {
+                position_key,
+                position_value,
+                found,
+                entries: Vec::new(),
+                next_cursor: None,
+            });
+        }
+
+        let mut iter = self.range_cursor(tree, key, end)?;
+        let mut entries = Vec::with_capacity(limit);
+
+        for _ in 0..limit {
+            let Some(item) = iter.next() else {
+                return Ok(range::CursorWindow {
+                    position_key,
+                    position_value,
+                    found,
+                    entries,
+                    next_cursor: None,
+                });
+            };
+            entries.push(item);
+        }
+
+        let next_cursor = entries
+            .last()
+            .map(|(key, _)| range::RangeCursor::after_key(key.clone()));
+        Ok(range::CursorWindow {
+            position_key,
+            position_value,
+            found,
+            entries,
+            next_cursor,
+        })
     }
 
     /// Create a cursor iterator for range queries.
@@ -3830,11 +4129,13 @@ impl<S: Store> Prolly<S> {
         crdt::ConflictFreeMerger::crdt_merge(&merger, &self.store, base, left, right, config)
     }
 
-    /// Apply batch mutations with parallel processing.
+    /// Apply batch mutations with tunable batched route hydration.
     ///
-    /// This method enables efficient bulk modifications using parallel processing
-    /// for large trees. It groups mutations by target leaf and processes independent
-    /// leaf groups in parallel when beneficial.
+    /// This method uses the production batch writer with a [`ParallelConfig`]
+    /// adapter. Stores that prefer batched reads use `max_threads` as the
+    /// ordered route-hydration width once the mutation count reaches
+    /// `parallelism_threshold`; smaller batches use a narrow route path to avoid
+    /// unnecessary batching overhead.
     ///
     /// # Arguments
     /// * `tree` - The tree to modify
@@ -3846,7 +4147,8 @@ impl<S: Store> Prolly<S> {
     /// * `Err(Error)` - On storage or processing errors
     ///
     /// # Behavior
-    /// - Falls back to sequential processing when below the parallelism threshold
+    /// - Uses append and coalesced-rebuild fast paths from the standard batch writer
+    /// - Bounds batched route hydration with `max_threads` when configured
     /// - Uses batch_put for efficient I/O
     /// - Maintains all tree invariants
     ///
@@ -3873,15 +4175,23 @@ impl<S: Store> Prolly<S> {
         mutations: Vec<Mutation>,
         config: &parallel::ParallelConfig,
     ) -> Result<Tree, Error> {
-        let rebalancer = parallel::DefaultParallelRebalancer::new();
-        parallel::ParallelRebalancer::parallel_batch(
-            &rebalancer,
-            &self.store,
-            self,
-            tree,
-            mutations,
-            config,
-        )
+        Ok(self
+            .parallel_batch_with_stats(tree, mutations, config)?
+            .tree)
+    }
+
+    /// Apply batch mutations with [`ParallelConfig`] and return execution stats.
+    ///
+    /// The returned counters mirror [`Prolly::batch_with_stats`] and make the
+    /// parallel-batch route observable across storage backends and language
+    /// bindings.
+    pub fn parallel_batch_with_stats(
+        &self,
+        tree: &Tree,
+        mutations: Vec<Mutation>,
+        config: &parallel::ParallelConfig,
+    ) -> Result<batch::BatchApplyResult, Error> {
+        parallel::parallel_batch_with_stats(self, tree, mutations, config)
     }
 }
 
@@ -5030,6 +5340,59 @@ where
         range::create_async_range_iter(self, tree, start, end).await
     }
 
+    /// Create an async range iterator over all keys that start with `prefix`.
+    pub async fn prefix<'a>(
+        &'a self,
+        tree: &Tree,
+        prefix: &[u8],
+    ) -> Result<range::AsyncRangeIter<'a, S>, Error> {
+        let (start, end) = key::prefix_range(prefix);
+        self.range(tree, &start, end.as_deref()).await
+    }
+
+    /// Read a bounded page from an async prefix scan.
+    pub async fn prefix_page(
+        &self,
+        tree: &Tree,
+        prefix: &[u8],
+        cursor: &range::RangeCursor,
+        limit: usize,
+    ) -> Result<range::AsyncRangePage, Error> {
+        if limit == 0 {
+            return Ok(range::AsyncRangePage {
+                entries: Vec::new(),
+                next_cursor: Some(cursor.clone()),
+            });
+        }
+
+        let (start, end) = key::prefix_range(prefix);
+        let mut iter = match cursor.after() {
+            Some(after_key) if after_key >= start.as_slice() => {
+                self.range_after(tree, after_key, end.as_deref()).await?
+            }
+            _ => self.range(tree, &start, end.as_deref()).await?,
+        };
+        let mut entries = Vec::with_capacity(limit);
+
+        for _ in 0..limit {
+            let Some(item) = iter.next().await else {
+                return Ok(range::AsyncRangePage {
+                    entries,
+                    next_cursor: None,
+                });
+            };
+            entries.push(item?);
+        }
+
+        let next_cursor = entries
+            .last()
+            .map(|(key, _)| range::RangeCursor::after_key(key.clone()));
+        Ok(range::AsyncRangePage {
+            entries,
+            next_cursor,
+        })
+    }
+
     /// Create an async range iterator that resumes strictly after `after_key`.
     ///
     /// This is useful for checkpointed background jobs: persist the last key
@@ -5095,6 +5458,74 @@ where
             .map(|(key, _)| range::RangeCursor::after_key(key.clone()));
         Ok(range::AsyncRangePage {
             entries,
+            next_cursor,
+        })
+    }
+
+    /// Read a bounded page in descending key order through the async store.
+    ///
+    /// `start` is an inclusive lower bound. A start cursor scans from the end of
+    /// the range; a resumed cursor scans keys strictly before its stored key.
+    pub async fn reverse_page(
+        &self,
+        tree: &Tree,
+        cursor: &range::ReverseCursor,
+        start: &[u8],
+        limit: usize,
+    ) -> Result<range::AsyncReversePage, Error> {
+        self.reverse_page_bounded(tree, cursor, start, None, limit)
+            .await
+    }
+
+    /// Read a bounded async page over keys that start with `prefix` in
+    /// descending key order.
+    pub async fn prefix_reverse_page(
+        &self,
+        tree: &Tree,
+        prefix: &[u8],
+        cursor: &range::ReverseCursor,
+        limit: usize,
+    ) -> Result<range::AsyncReversePage, Error> {
+        let (start, end) = key::prefix_range(prefix);
+        self.reverse_page_bounded(tree, cursor, &start, end.as_deref(), limit)
+            .await
+    }
+
+    async fn reverse_page_bounded(
+        &self,
+        tree: &Tree,
+        cursor: &range::ReverseCursor,
+        start: &[u8],
+        end: Option<&[u8]>,
+        limit: usize,
+    ) -> Result<range::AsyncReversePage, Error> {
+        if limit == 0 {
+            return Ok(range::AsyncReversePage {
+                entries: Vec::new(),
+                next_cursor: Some(cursor.clone()),
+            });
+        }
+
+        let scan_end = reverse_scan_end(cursor.before(), end);
+        if scan_end.is_some_and(|before| before <= start) {
+            return Ok(range::AsyncReversePage::default());
+        }
+
+        let mut entries = self.range(tree, start, scan_end).await?.collect().await?;
+        let has_more = entries.len() > limit;
+        let split_at = entries.len().saturating_sub(limit);
+        let mut page_entries = entries.split_off(split_at);
+        page_entries.reverse();
+        let next_cursor = if has_more {
+            page_entries
+                .last()
+                .map(|(key, _)| range::ReverseCursor::before_key(key.clone()))
+        } else {
+            None
+        };
+
+        Ok(range::AsyncReversePage {
+            entries: page_entries,
             next_cursor,
         })
     }
@@ -7020,6 +7451,18 @@ fn child_index_for_lookup_key(node: &Node, key: &[u8]) -> usize {
         .saturating_sub(1)
 }
 
+fn reverse_scan_end<'a>(
+    cursor_end: Option<&'a [u8]>,
+    range_end: Option<&'a [u8]>,
+) -> Option<&'a [u8]> {
+    match (cursor_end, range_end) {
+        (Some(cursor_end), Some(range_end)) => Some(cursor_end.min(range_end)),
+        (Some(cursor_end), None) => Some(cursor_end),
+        (None, Some(range_end)) => Some(range_end),
+        (None, None) => None,
+    }
+}
+
 fn leaf_value_at(node: &Node, idx: usize) -> Result<Vec<u8>, Error> {
     node.vals.get(idx).cloned().ok_or(Error::InvalidNode)
 }
@@ -7175,6 +7618,101 @@ mod tests {
 
         assert!(tree.is_empty());
         assert!(tree.root.is_none());
+    }
+
+    #[test]
+    fn export_import_snapshot_round_trips_tree_nodes() {
+        let source = Prolly::new(Arc::new(MemStore::new()), Config::default());
+        let destination = Prolly::new(Arc::new(MemStore::new()), Config::default());
+        let empty = source.create();
+        let tree = source
+            .batch(
+                &empty,
+                vec![
+                    Mutation::Upsert {
+                        key: b"a".to_vec(),
+                        val: b"1".to_vec(),
+                    },
+                    Mutation::Upsert {
+                        key: b"b".to_vec(),
+                        val: b"2".to_vec(),
+                    },
+                    Mutation::Upsert {
+                        key: b"c".to_vec(),
+                        val: b"3".to_vec(),
+                    },
+                ],
+            )
+            .unwrap();
+
+        let bundle = source.export_snapshot(&tree).unwrap();
+        assert_eq!(bundle.format_version, sync::SNAPSHOT_BUNDLE_FORMAT_VERSION);
+        assert_eq!(bundle.tree, tree);
+        assert_eq!(bundle.node_count(), bundle.nodes.len());
+        assert!(bundle.byte_count() > 0);
+        let summary = bundle.summary().unwrap();
+        assert_eq!(summary.format_version, sync::SNAPSHOT_BUNDLE_FORMAT_VERSION);
+        assert_eq!(summary.root, tree.root);
+        assert_eq!(summary.node_count, bundle.nodes.len());
+        assert_eq!(summary.byte_count, bundle.byte_count());
+        assert!(summary.min_node_bytes > 0);
+        assert!(summary.max_node_bytes >= summary.min_node_bytes);
+        let verification = bundle.verify().unwrap();
+        assert!(verification.valid);
+        assert_eq!(verification.summary, summary);
+        assert_eq!(verification.reachable_nodes, summary.node_count);
+        assert_eq!(verification.reachable_bytes, summary.byte_count);
+        assert!(verification.missing_cids.is_empty());
+        assert!(verification.extra_cids.is_empty());
+
+        let bundle_bytes = bundle.to_bytes().unwrap();
+        assert_eq!(bundle.digest().unwrap(), Cid::from_bytes(&bundle_bytes));
+        let decoded_bundle = SnapshotBundle::from_bytes(&bundle_bytes).unwrap();
+        assert_eq!(decoded_bundle, bundle);
+        assert_eq!(decoded_bundle.digest().unwrap(), bundle.digest().unwrap());
+
+        let mut reversed_bundle = bundle.clone();
+        reversed_bundle.nodes.reverse();
+        assert_eq!(reversed_bundle.to_bytes().unwrap(), bundle_bytes);
+        assert_eq!(reversed_bundle.digest().unwrap(), bundle.digest().unwrap());
+
+        let imported = destination.import_snapshot(&bundle).unwrap();
+        assert_eq!(imported, tree);
+        assert_eq!(
+            destination.get(&imported, b"b").unwrap(),
+            Some(b"2".to_vec())
+        );
+        assert_eq!(
+            source.mark_reachable(std::slice::from_ref(&tree)).unwrap(),
+            destination
+                .mark_reachable(std::slice::from_ref(&imported))
+                .unwrap()
+        );
+
+        let byte_destination = Prolly::new(Arc::new(MemStore::new()), Config::default());
+        let byte_imported = byte_destination.import_snapshot(&decoded_bundle).unwrap();
+        assert_eq!(
+            byte_destination.get(&byte_imported, b"c").unwrap(),
+            Some(b"3".to_vec())
+        );
+
+        let mut missing_bundle = bundle.clone();
+        missing_bundle.nodes.pop();
+        let missing_verification = missing_bundle.verify().unwrap();
+        assert!(!missing_verification.valid);
+        assert!(!missing_verification.missing_cids.is_empty());
+        assert!(destination.import_snapshot(&missing_bundle).is_err());
+
+        let mut extra_bundle = bundle.clone();
+        extra_bundle.nodes.push(SnapshotBundleNode {
+            cid: Cid::from_bytes(b"not reachable"),
+            bytes: b"not reachable".to_vec(),
+        });
+        let extra_verification = extra_bundle.verify().unwrap();
+        assert!(!extra_verification.valid);
+        assert!(!extra_verification.extra_cids.is_empty());
+        let error = destination.import_snapshot(&extra_bundle).unwrap_err();
+        assert!(matches!(error, Error::InvalidSnapshotBundle(_)));
     }
 
     #[cfg(feature = "async-store")]
@@ -7433,6 +7971,70 @@ mod tests {
             store.max_batch_get_ordered_len.load(Ordering::Relaxed),
             4,
             "wide miss sets should be split into roughly even ordered batches"
+        );
+    }
+
+    #[test]
+    fn parallel_batch_with_stats_uses_bounded_batched_route() {
+        let store = Arc::new(CountingStore {
+            prefer_batch_reads: true,
+            ..CountingStore::default()
+        });
+        let config = Config::builder()
+            .min_chunk_size(2)
+            .max_chunk_size(4)
+            .chunking_factor(u32::MAX)
+            .build();
+        let prolly = Prolly::new(store.clone(), config);
+        let tree = prolly.create();
+        let seed_mutations: Vec<_> = (0..32)
+            .map(|idx| Mutation::Upsert {
+                key: format!("k{idx:03}").into_bytes(),
+                val: format!("v{idx:03}").into_bytes(),
+            })
+            .collect();
+        let tree = prolly.batch(&tree, seed_mutations).unwrap();
+
+        prolly.clear_cache();
+        store.batch_get_ordered_calls.store(0, Ordering::Relaxed);
+        store.max_batch_get_ordered_len.store(0, Ordering::Relaxed);
+
+        let update_mutations: Vec<_> = (0..8)
+            .map(|idx| {
+                let key_idx = idx * 4 + 1;
+                Mutation::Upsert {
+                    key: format!("k{key_idx:03}").into_bytes(),
+                    val: format!("updated-{key_idx:03}").into_bytes(),
+                }
+            })
+            .collect();
+
+        let result = prolly
+            .parallel_batch_with_stats(
+                &tree,
+                update_mutations,
+                &parallel::ParallelConfig::new(3, 1),
+            )
+            .unwrap();
+
+        assert_eq!(result.stats.input_mutations, 8);
+        assert_eq!(result.stats.effective_mutations, 8);
+        assert!(result.stats.used_batched_route);
+        assert!(result.stats.used_coalesced_rebuild);
+        assert!(result.stats.affected_leaves > 1);
+        assert!(result.stats.changed_leaves > 1);
+        assert!(result.stats.written_nodes > 0);
+        assert!(
+            store.batch_get_ordered_calls.load(Ordering::Relaxed) > 0,
+            "batched-read stores should hydrate parallel batch routes through ordered reads"
+        );
+        assert!(
+            store.max_batch_get_ordered_len.load(Ordering::Relaxed) <= 3,
+            "ParallelConfig::max_threads should bound route-hydration batch width"
+        );
+        assert_eq!(
+            prolly.get(&result.tree, b"k005").unwrap(),
+            Some(b"updated-005".to_vec())
         );
     }
 
@@ -8733,6 +9335,387 @@ mod tests {
             get_calls_before,
             "empty cursor ranges should not load the root node"
         );
+    }
+
+    #[test]
+    fn cursor_window_reports_seek_position_and_forward_page() {
+        let prolly = Prolly::new(MemStore::new(), Config::default());
+        let tree = prolly
+            .batch(
+                &prolly.create(),
+                vec![
+                    Mutation::Upsert {
+                        key: b"a".to_vec(),
+                        val: b"1".to_vec(),
+                    },
+                    Mutation::Upsert {
+                        key: b"c".to_vec(),
+                        val: b"3".to_vec(),
+                    },
+                    Mutation::Upsert {
+                        key: b"e".to_vec(),
+                        val: b"5".to_vec(),
+                    },
+                ],
+            )
+            .unwrap();
+
+        let between = prolly.cursor_window(&tree, b"b", None, 1).unwrap();
+        assert_eq!(between.position_key, Some(b"a".to_vec()));
+        assert_eq!(between.position_value, Some(b"1".to_vec()));
+        assert!(!between.found);
+        assert_eq!(between.entries, vec![(b"c".to_vec(), b"3".to_vec())]);
+        assert_eq!(
+            between.next_cursor,
+            Some(range::RangeCursor::after_key(b"c".to_vec()))
+        );
+
+        let exact = prolly.cursor_window(&tree, b"c", Some(b"e"), 4).unwrap();
+        assert_eq!(exact.position_key, Some(b"c".to_vec()));
+        assert_eq!(exact.position_value, Some(b"3".to_vec()));
+        assert!(exact.found);
+        assert_eq!(exact.entries, vec![(b"c".to_vec(), b"3".to_vec())]);
+        assert!(exact.next_cursor.is_none());
+
+        let after_end = prolly.cursor_window(&tree, b"z", None, 4).unwrap();
+        assert_eq!(after_end.position_key, Some(b"e".to_vec()));
+        assert_eq!(after_end.position_value, Some(b"5".to_vec()));
+        assert!(!after_end.found);
+        assert!(after_end.entries.is_empty());
+        assert!(after_end.next_cursor.is_none());
+
+        let probe = prolly.cursor_window(&tree, b"c", None, 0).unwrap();
+        assert!(probe.found);
+        assert_eq!(probe.position_key, Some(b"c".to_vec()));
+        assert!(probe.entries.is_empty());
+        assert!(probe.next_cursor.is_none());
+    }
+
+    #[test]
+    fn boundary_entry_helpers_report_ordered_edges() {
+        let prolly = Prolly::new(MemStore::new(), Config::default());
+        let empty = prolly.create();
+        assert_eq!(prolly.first_entry(&empty).unwrap(), None);
+        assert_eq!(prolly.last_entry(&empty).unwrap(), None);
+        assert_eq!(prolly.lower_bound(&empty, b"a").unwrap(), None);
+        assert_eq!(prolly.upper_bound(&empty, b"a").unwrap(), None);
+
+        let tree = prolly
+            .batch(
+                &empty,
+                vec![
+                    Mutation::Upsert {
+                        key: b"a".to_vec(),
+                        val: b"1".to_vec(),
+                    },
+                    Mutation::Upsert {
+                        key: b"c".to_vec(),
+                        val: b"3".to_vec(),
+                    },
+                    Mutation::Upsert {
+                        key: b"e".to_vec(),
+                        val: b"5".to_vec(),
+                    },
+                ],
+            )
+            .unwrap();
+
+        assert_eq!(
+            prolly.first_entry(&tree).unwrap(),
+            Some((b"a".to_vec(), b"1".to_vec()))
+        );
+        assert_eq!(
+            prolly.last_entry(&tree).unwrap(),
+            Some((b"e".to_vec(), b"5".to_vec()))
+        );
+        assert_eq!(
+            prolly.lower_bound(&tree, b"b").unwrap(),
+            Some((b"c".to_vec(), b"3".to_vec()))
+        );
+        assert_eq!(
+            prolly.lower_bound(&tree, b"c").unwrap(),
+            Some((b"c".to_vec(), b"3".to_vec()))
+        );
+        assert_eq!(
+            prolly.upper_bound(&tree, b"c").unwrap(),
+            Some((b"e".to_vec(), b"5".to_vec()))
+        );
+        assert_eq!(prolly.upper_bound(&tree, b"z").unwrap(), None);
+    }
+
+    #[test]
+    fn prefix_iterator_uses_byte_prefix_bounds() {
+        let prolly = Prolly::new(MemStore::new(), Config::default());
+        let tree = prolly.create();
+        let tree = prolly
+            .batch(
+                &tree,
+                vec![
+                    Mutation::Upsert {
+                        key: b"doc/1".to_vec(),
+                        val: b"a".to_vec(),
+                    },
+                    Mutation::Upsert {
+                        key: b"doc/10".to_vec(),
+                        val: b"b".to_vec(),
+                    },
+                    Mutation::Upsert {
+                        key: b"doc2/1".to_vec(),
+                        val: b"c".to_vec(),
+                    },
+                    Mutation::Upsert {
+                        key: vec![0xff, 0x00],
+                        val: b"tail".to_vec(),
+                    },
+                    Mutation::Upsert {
+                        key: vec![0xff, 0xff],
+                        val: b"max".to_vec(),
+                    },
+                ],
+            )
+            .unwrap();
+
+        let keys = prolly
+            .prefix(&tree, b"doc/")
+            .unwrap()
+            .map(|entry| entry.map(|(key, _)| key))
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(keys, vec![b"doc/1".to_vec(), b"doc/10".to_vec()]);
+
+        let tail_keys = prolly
+            .prefix(&tree, &[0xff])
+            .unwrap()
+            .map(|entry| entry.map(|(key, _)| key))
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(tail_keys, vec![vec![0xff, 0x00], vec![0xff, 0xff]]);
+    }
+
+    #[test]
+    fn prefix_page_starts_at_prefix_and_resumes_with_cursor() {
+        let prolly = Prolly::new(MemStore::new(), Config::default());
+        let tree = prolly.create();
+        let tree = prolly
+            .batch(
+                &tree,
+                vec![
+                    Mutation::Upsert {
+                        key: b"alpha".to_vec(),
+                        val: b"0".to_vec(),
+                    },
+                    Mutation::Upsert {
+                        key: b"doc/1".to_vec(),
+                        val: b"1".to_vec(),
+                    },
+                    Mutation::Upsert {
+                        key: b"doc/2".to_vec(),
+                        val: b"2".to_vec(),
+                    },
+                    Mutation::Upsert {
+                        key: b"doc2/1".to_vec(),
+                        val: b"3".to_vec(),
+                    },
+                ],
+            )
+            .unwrap();
+
+        let first_page = prolly
+            .prefix_page(&tree, b"doc/", &range::RangeCursor::start(), 1)
+            .unwrap();
+        assert_eq!(first_page.entries, vec![(b"doc/1".to_vec(), b"1".to_vec())]);
+        assert_eq!(
+            first_page.next_cursor,
+            Some(range::RangeCursor::after_key(b"doc/1".to_vec()))
+        );
+
+        let second_page = prolly
+            .prefix_page(&tree, b"doc/", first_page.next_cursor.as_ref().unwrap(), 2)
+            .unwrap();
+        assert_eq!(
+            second_page.entries,
+            vec![(b"doc/2".to_vec(), b"2".to_vec())]
+        );
+        assert!(second_page.next_cursor.is_none());
+
+        let clamped_page = prolly
+            .prefix_page(
+                &tree,
+                b"doc/",
+                &range::RangeCursor::after_key(b"alpha".to_vec()),
+                1,
+            )
+            .unwrap();
+        assert_eq!(clamped_page.entries[0].0, b"doc/1".to_vec());
+    }
+
+    #[test]
+    fn reverse_page_reads_descending_and_resumes_before_cursor() {
+        let prolly = Prolly::new(MemStore::new(), Config::default());
+        let tree = prolly.create();
+        let tree = prolly
+            .batch(
+                &tree,
+                vec![
+                    Mutation::Upsert {
+                        key: b"a".to_vec(),
+                        val: b"1".to_vec(),
+                    },
+                    Mutation::Upsert {
+                        key: b"b".to_vec(),
+                        val: b"2".to_vec(),
+                    },
+                    Mutation::Upsert {
+                        key: b"c".to_vec(),
+                        val: b"3".to_vec(),
+                    },
+                    Mutation::Upsert {
+                        key: b"d".to_vec(),
+                        val: b"4".to_vec(),
+                    },
+                ],
+            )
+            .unwrap();
+
+        let first_page = prolly
+            .reverse_page(&tree, &range::ReverseCursor::end(), &[], 2)
+            .unwrap();
+        assert_eq!(
+            first_page.entries,
+            vec![
+                (b"d".to_vec(), b"4".to_vec()),
+                (b"c".to_vec(), b"3".to_vec())
+            ]
+        );
+        assert_eq!(
+            first_page.next_cursor,
+            Some(range::ReverseCursor::before_key(b"c".to_vec()))
+        );
+
+        let second_page = prolly
+            .reverse_page(&tree, first_page.next_cursor.as_ref().unwrap(), &[], 2)
+            .unwrap();
+        assert_eq!(
+            second_page.entries,
+            vec![
+                (b"b".to_vec(), b"2".to_vec()),
+                (b"a".to_vec(), b"1".to_vec())
+            ]
+        );
+        assert!(second_page.next_cursor.is_none());
+
+        let lower_bounded = prolly
+            .reverse_page(&tree, &range::ReverseCursor::end(), b"b", 8)
+            .unwrap();
+        assert_eq!(
+            lower_bounded.entries,
+            vec![
+                (b"d".to_vec(), b"4".to_vec()),
+                (b"c".to_vec(), b"3".to_vec()),
+                (b"b".to_vec(), b"2".to_vec())
+            ]
+        );
+
+        let exhausted = prolly
+            .reverse_page(
+                &tree,
+                &range::ReverseCursor::before_key(b"b".to_vec()),
+                b"b",
+                2,
+            )
+            .unwrap();
+        assert!(exhausted.entries.is_empty());
+        assert!(exhausted.next_cursor.is_none());
+
+        let cursor = range::ReverseCursor::before_key(b"c".to_vec());
+        let zero = prolly.reverse_page(&tree, &cursor, &[], 0).unwrap();
+        assert!(zero.entries.is_empty());
+        assert_eq!(zero.next_cursor, Some(cursor));
+    }
+
+    #[test]
+    fn prefix_reverse_page_reads_descending_inside_prefix() {
+        let prolly = Prolly::new(MemStore::new(), Config::default());
+        let tree = prolly.create();
+        let tree = prolly
+            .batch(
+                &tree,
+                vec![
+                    Mutation::Upsert {
+                        key: b"doc/001".to_vec(),
+                        val: b"1".to_vec(),
+                    },
+                    Mutation::Upsert {
+                        key: b"doc/002".to_vec(),
+                        val: b"2".to_vec(),
+                    },
+                    Mutation::Upsert {
+                        key: b"doc/003".to_vec(),
+                        val: b"3".to_vec(),
+                    },
+                    Mutation::Upsert {
+                        key: b"doc0/001".to_vec(),
+                        val: b"outside".to_vec(),
+                    },
+                    Mutation::Upsert {
+                        key: b"other/999".to_vec(),
+                        val: b"outside".to_vec(),
+                    },
+                ],
+            )
+            .unwrap();
+
+        let first_page = prolly
+            .prefix_reverse_page(&tree, b"doc/", &range::ReverseCursor::end(), 2)
+            .unwrap();
+        assert_eq!(
+            first_page.entries,
+            vec![
+                (b"doc/003".to_vec(), b"3".to_vec()),
+                (b"doc/002".to_vec(), b"2".to_vec())
+            ]
+        );
+        assert_eq!(
+            first_page.next_cursor,
+            Some(range::ReverseCursor::before_key(b"doc/002".to_vec()))
+        );
+
+        let second_page = prolly
+            .prefix_reverse_page(&tree, b"doc/", first_page.next_cursor.as_ref().unwrap(), 2)
+            .unwrap();
+        assert_eq!(
+            second_page.entries,
+            vec![(b"doc/001".to_vec(), b"1".to_vec())]
+        );
+        assert!(second_page.next_cursor.is_none());
+
+        let clamped_page = prolly
+            .prefix_reverse_page(
+                &tree,
+                b"doc/",
+                &range::ReverseCursor::before_key(b"other/999".to_vec()),
+                1,
+            )
+            .unwrap();
+        assert_eq!(clamped_page.entries[0].0, b"doc/003".to_vec());
+
+        let exhausted = prolly
+            .prefix_reverse_page(
+                &tree,
+                b"doc/",
+                &range::ReverseCursor::before_key(b"doc/001".to_vec()),
+                2,
+            )
+            .unwrap();
+        assert!(exhausted.entries.is_empty());
+        assert!(exhausted.next_cursor.is_none());
+
+        let cursor = range::ReverseCursor::before_key(b"doc/002".to_vec());
+        let zero = prolly
+            .prefix_reverse_page(&tree, b"doc/", &cursor, 0)
+            .unwrap();
+        assert!(zero.entries.is_empty());
+        assert_eq!(zero.next_cursor, Some(cursor));
     }
 
     #[test]

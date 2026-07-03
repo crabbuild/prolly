@@ -441,6 +441,22 @@ fileprivate struct FfiConverterUInt8: FfiConverterPrimitive {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterInt8: FfiConverterPrimitive {
+    typealias FfiType = Int8
+    typealias SwiftType = Int8
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Int8 {
+        return try lift(readInt(&buf))
+    }
+
+    public static func write(_ value: Int8, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterUInt32: FfiConverterPrimitive {
     typealias FfiType = UInt32
     typealias SwiftType = UInt32
@@ -483,6 +499,22 @@ fileprivate struct FfiConverterInt64: FfiConverterPrimitive {
 
     public static func write(_ value: Int64, into buf: inout [UInt8]) {
         writeInt(&buf, lower(value))
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterDouble: FfiConverterPrimitive {
+    typealias FfiType = Double
+    typealias SwiftType = Double
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Double {
+        return try lift(readDouble(&buf))
+    }
+
+    public static func write(_ value: Double, into buf: inout [UInt8]) {
+        writeDouble(&buf, lower(value))
     }
 }
 
@@ -2030,6 +2062,8 @@ public protocol ProllyEngineProtocol: AnyObject, Sendable {
 
     func clearCache()
 
+    func collectStats(tree: TreeRecord) throws  -> TreeStatsRecord
+
     func collectStatsJson(tree: TreeRecord) throws  -> JsonDocumentRecord
 
     func compareAndSwapNamedRoot(name: Data, expected: TreeRecord?, replacement: TreeRecord?) throws  -> NamedRootUpdateRecord
@@ -2050,9 +2084,15 @@ public protocol ProllyEngineProtocol: AnyObject, Sendable {
 
     func create()  -> TreeRecord
 
+    func cursorWindow(tree: TreeRecord, key: Data, end: Data?, limit: UInt64) throws  -> CursorWindowRecord
+
+    func debugCompareTrees(left: TreeRecord, right: TreeRecord) throws  -> TreeDebugComparisonRecord
+
     func debugCompareTreesJson(left: TreeRecord, right: TreeRecord) throws  -> JsonDocumentRecord
 
     func debugCompareTreesText(left: TreeRecord, right: TreeRecord) throws  -> String
+
+    func debugTree(tree: TreeRecord) throws  -> TreeDebugViewRecord
 
     func debugTreeJson(tree: TreeRecord) throws  -> JsonDocumentRecord
 
@@ -2070,6 +2110,10 @@ public protocol ProllyEngineProtocol: AnyObject, Sendable {
 
     func diffPage(base: TreeRecord, other: TreeRecord, cursor: RangeCursorRecord?, end: Data?, limit: UInt64) throws  -> DiffPageRecord
 
+    func exportSnapshot(tree: TreeRecord) throws  -> SnapshotBundleRecord
+
+    func firstEntry(tree: TreeRecord) throws  -> EntryRecord?
+
     func get(tree: TreeRecord, key: Data) throws  -> Data?
 
     func getLargeValue(blobStore: ProllyBlobStore, tree: TreeRecord, key: Data) throws  -> Data?
@@ -2079,6 +2123,10 @@ public protocol ProllyEngineProtocol: AnyObject, Sendable {
     func getValueRef(tree: TreeRecord, key: Data) throws  -> ValueRefRecord?
 
     func hydratePrefixPathHint(tree: TreeRecord, prefix: Data) throws  -> Bool
+
+    func importSnapshot(bundle: SnapshotBundleRecord) throws  -> TreeRecord
+
+    func lastEntry(tree: TreeRecord) throws  -> EntryRecord?
 
     func listNamedRootManifests() throws  -> [NamedRootManifestRecord]
 
@@ -2099,6 +2147,8 @@ public protocol ProllyEngineProtocol: AnyObject, Sendable {
     func loadSnapshot(namespace: SnapshotNamespaceRecord, id: Data) throws  -> TreeRecord?
 
     func loadSnapshots(namespace: SnapshotNamespaceRecord, ids: [Data]) throws  -> SnapshotSelectionRecord
+
+    func lowerBound(tree: TreeRecord, key: Data) throws  -> EntryRecord?
 
     func markReachable(roots: [TreeRecord]) throws  -> GcReachabilityRecord
 
@@ -2132,6 +2182,8 @@ public protocol ProllyEngineProtocol: AnyObject, Sendable {
 
     func parallelBatch(tree: TreeRecord, mutations: [MutationRecord], config: ParallelConfigRecord) throws  -> TreeRecord
 
+    func parallelBatchWithStats(tree: TreeRecord, mutations: [MutationRecord], config: ParallelConfigRecord) throws  -> BatchApplyResultRecord
+
     func pinTreePath(tree: TreeRecord, key: Data) throws  -> UInt64
 
     func pinTreeRoot(tree: TreeRecord) throws  -> UInt64
@@ -2147,6 +2199,12 @@ public protocol ProllyEngineProtocol: AnyObject, Sendable {
     func planStoreGc(roots: [TreeRecord]) throws  -> GcPlanRecord
 
     func planStoreGcForRetention(retention: NamedRootRetentionRecord) throws  -> GcPlanRecord
+
+    func prefix(tree: TreeRecord, prefix: Data) throws  -> [EntryRecord]
+
+    func prefixPage(tree: TreeRecord, prefix: Data, cursor: RangeCursorRecord?, limit: UInt64) throws  -> RangePageRecord
+
+    func prefixReversePage(tree: TreeRecord, prefix: Data, cursor: ReverseCursorRecord?, limit: UInt64) throws  -> ReversePageRecord
 
     func proveDiffPage(base: TreeRecord, other: TreeRecord, cursor: RangeCursorRecord?, end: Data?, limit: UInt64) throws  -> ProvedDiffPageRecord
 
@@ -2188,9 +2246,15 @@ public protocol ProllyEngineProtocol: AnyObject, Sendable {
 
     func resetMetrics()
 
+    func reversePage(tree: TreeRecord, cursor: ReverseCursorRecord?, start: Data, limit: UInt64) throws  -> ReversePageRecord
+
+    func statsDiff(before: TreeRecord, after: TreeRecord) throws  -> StatsComparisonRecord
+
     func statsDiffJson(before: TreeRecord, after: TreeRecord) throws  -> JsonDocumentRecord
 
     func structuralDiffPage(base: TreeRecord, other: TreeRecord, cursorJson: String?, limit: UInt64) throws  -> StructuralDiffPageRecord
+
+    func structuralDiffPageWithCursor(base: TreeRecord, other: TreeRecord, cursor: StructuralDiffCursorRecord?, limit: UInt64) throws  -> StructuralDiffPageRecord
 
     func sweepBlobGc(blobStore: ProllyBlobStore, roots: [TreeRecord], candidateBlobs: [BlobRefRecord]) throws  -> BlobGcSweepRecord
 
@@ -2203,6 +2267,8 @@ public protocol ProllyEngineProtocol: AnyObject, Sendable {
     func sweepStoreGcForRetention(retention: NamedRootRetentionRecord) throws  -> GcSweepRecord
 
     func unpinAllCacheNodes() throws  -> UInt64
+
+    func upperBound(tree: TreeRecord, key: Data) throws  -> EntryRecord?
 
 }
 open class ProllyEngine: ProllyEngineProtocol, @unchecked Sendable {
@@ -2374,6 +2440,15 @@ open func clearCache()  {try! rustCall() {
 }
 }
 
+open func collectStats(tree: TreeRecord)throws  -> TreeStatsRecord  {
+    return try  FfiConverterTypeTreeStatsRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_prollyengine_collect_stats(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeTreeRecord_lower(tree),$0
+    )
+})
+}
+
 open func collectStatsJson(tree: TreeRecord)throws  -> JsonDocumentRecord  {
     return try  FfiConverterTypeJsonDocumentRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_collect_stats_json(
@@ -2487,6 +2562,28 @@ open func create() -> TreeRecord  {
 })
 }
 
+open func cursorWindow(tree: TreeRecord, key: Data, end: Data?, limit: UInt64)throws  -> CursorWindowRecord  {
+    return try  FfiConverterTypeCursorWindowRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_prollyengine_cursor_window(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeTreeRecord_lower(tree),
+        FfiConverterData.lower(key),
+        FfiConverterOptionData.lower(end),
+        FfiConverterUInt64.lower(limit),$0
+    )
+})
+}
+
+open func debugCompareTrees(left: TreeRecord, right: TreeRecord)throws  -> TreeDebugComparisonRecord  {
+    return try  FfiConverterTypeTreeDebugComparisonRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_prollyengine_debug_compare_trees(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeTreeRecord_lower(left),
+        FfiConverterTypeTreeRecord_lower(right),$0
+    )
+})
+}
+
 open func debugCompareTreesJson(left: TreeRecord, right: TreeRecord)throws  -> JsonDocumentRecord  {
     return try  FfiConverterTypeJsonDocumentRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_debug_compare_trees_json(
@@ -2503,6 +2600,15 @@ open func debugCompareTreesText(left: TreeRecord, right: TreeRecord)throws  -> S
             self.uniffiCloneHandle(),
         FfiConverterTypeTreeRecord_lower(left),
         FfiConverterTypeTreeRecord_lower(right),$0
+    )
+})
+}
+
+open func debugTree(tree: TreeRecord)throws  -> TreeDebugViewRecord  {
+    return try  FfiConverterTypeTreeDebugViewRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_prollyengine_debug_tree(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeTreeRecord_lower(tree),$0
     )
 })
 }
@@ -2587,6 +2693,24 @@ open func diffPage(base: TreeRecord, other: TreeRecord, cursor: RangeCursorRecor
 })
 }
 
+open func exportSnapshot(tree: TreeRecord)throws  -> SnapshotBundleRecord  {
+    return try  FfiConverterTypeSnapshotBundleRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_prollyengine_export_snapshot(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeTreeRecord_lower(tree),$0
+    )
+})
+}
+
+open func firstEntry(tree: TreeRecord)throws  -> EntryRecord?  {
+    return try  FfiConverterOptionTypeEntryRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_prollyengine_first_entry(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeTreeRecord_lower(tree),$0
+    )
+})
+}
+
 open func get(tree: TreeRecord, key: Data)throws  -> Data?  {
     return try  FfiConverterOptionData.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_get(
@@ -2634,6 +2758,24 @@ open func hydratePrefixPathHint(tree: TreeRecord, prefix: Data)throws  -> Bool  
             self.uniffiCloneHandle(),
         FfiConverterTypeTreeRecord_lower(tree),
         FfiConverterData.lower(prefix),$0
+    )
+})
+}
+
+open func importSnapshot(bundle: SnapshotBundleRecord)throws  -> TreeRecord  {
+    return try  FfiConverterTypeTreeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_prollyengine_import_snapshot(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeSnapshotBundleRecord_lower(bundle),$0
+    )
+})
+}
+
+open func lastEntry(tree: TreeRecord)throws  -> EntryRecord?  {
+    return try  FfiConverterOptionTypeEntryRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_prollyengine_last_entry(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeTreeRecord_lower(tree),$0
     )
 })
 }
@@ -2724,6 +2866,16 @@ open func loadSnapshots(namespace: SnapshotNamespaceRecord, ids: [Data])throws  
             self.uniffiCloneHandle(),
         FfiConverterTypeSnapshotNamespaceRecord_lower(namespace),
         FfiConverterSequenceData.lower(ids),$0
+    )
+})
+}
+
+open func lowerBound(tree: TreeRecord, key: Data)throws  -> EntryRecord?  {
+    return try  FfiConverterOptionTypeEntryRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_prollyengine_lower_bound(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeTreeRecord_lower(tree),
+        FfiConverterData.lower(key),$0
     )
 })
 }
@@ -2918,6 +3070,17 @@ open func parallelBatch(tree: TreeRecord, mutations: [MutationRecord], config: P
 })
 }
 
+open func parallelBatchWithStats(tree: TreeRecord, mutations: [MutationRecord], config: ParallelConfigRecord)throws  -> BatchApplyResultRecord  {
+    return try  FfiConverterTypeBatchApplyResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_prollyengine_parallel_batch_with_stats(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeTreeRecord_lower(tree),
+        FfiConverterSequenceTypeMutationRecord.lower(mutations),
+        FfiConverterTypeParallelConfigRecord_lower(config),$0
+    )
+})
+}
+
 open func pinTreePath(tree: TreeRecord, key: Data)throws  -> UInt64  {
     return try  FfiConverterUInt64.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_pin_tree_path(
@@ -2992,6 +3155,40 @@ open func planStoreGcForRetention(retention: NamedRootRetentionRecord)throws  ->
     uniffi_prolly_bindings_fn_method_prollyengine_plan_store_gc_for_retention(
             self.uniffiCloneHandle(),
         FfiConverterTypeNamedRootRetentionRecord_lower(retention),$0
+    )
+})
+}
+
+open func prefix(tree: TreeRecord, prefix: Data)throws  -> [EntryRecord]  {
+    return try  FfiConverterSequenceTypeEntryRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_prollyengine_prefix(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeTreeRecord_lower(tree),
+        FfiConverterData.lower(prefix),$0
+    )
+})
+}
+
+open func prefixPage(tree: TreeRecord, prefix: Data, cursor: RangeCursorRecord?, limit: UInt64)throws  -> RangePageRecord  {
+    return try  FfiConverterTypeRangePageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_prollyengine_prefix_page(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeTreeRecord_lower(tree),
+        FfiConverterData.lower(prefix),
+        FfiConverterOptionTypeRangeCursorRecord.lower(cursor),
+        FfiConverterUInt64.lower(limit),$0
+    )
+})
+}
+
+open func prefixReversePage(tree: TreeRecord, prefix: Data, cursor: ReverseCursorRecord?, limit: UInt64)throws  -> ReversePageRecord  {
+    return try  FfiConverterTypeReversePageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_prollyengine_prefix_reverse_page(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeTreeRecord_lower(tree),
+        FfiConverterData.lower(prefix),
+        FfiConverterOptionTypeReverseCursorRecord.lower(cursor),
+        FfiConverterUInt64.lower(limit),$0
     )
 })
 }
@@ -3211,6 +3408,28 @@ open func resetMetrics()  {try! rustCall() {
 }
 }
 
+open func reversePage(tree: TreeRecord, cursor: ReverseCursorRecord?, start: Data, limit: UInt64)throws  -> ReversePageRecord  {
+    return try  FfiConverterTypeReversePageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_prollyengine_reverse_page(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeTreeRecord_lower(tree),
+        FfiConverterOptionTypeReverseCursorRecord.lower(cursor),
+        FfiConverterData.lower(start),
+        FfiConverterUInt64.lower(limit),$0
+    )
+})
+}
+
+open func statsDiff(before: TreeRecord, after: TreeRecord)throws  -> StatsComparisonRecord  {
+    return try  FfiConverterTypeStatsComparisonRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_prollyengine_stats_diff(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeTreeRecord_lower(before),
+        FfiConverterTypeTreeRecord_lower(after),$0
+    )
+})
+}
+
 open func statsDiffJson(before: TreeRecord, after: TreeRecord)throws  -> JsonDocumentRecord  {
     return try  FfiConverterTypeJsonDocumentRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_stats_diff_json(
@@ -3228,6 +3447,18 @@ open func structuralDiffPage(base: TreeRecord, other: TreeRecord, cursorJson: St
         FfiConverterTypeTreeRecord_lower(base),
         FfiConverterTypeTreeRecord_lower(other),
         FfiConverterOptionString.lower(cursorJson),
+        FfiConverterUInt64.lower(limit),$0
+    )
+})
+}
+
+open func structuralDiffPageWithCursor(base: TreeRecord, other: TreeRecord, cursor: StructuralDiffCursorRecord?, limit: UInt64)throws  -> StructuralDiffPageRecord  {
+    return try  FfiConverterTypeStructuralDiffPageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_prollyengine_structural_diff_page_with_cursor(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeTreeRecord_lower(base),
+        FfiConverterTypeTreeRecord_lower(other),
+        FfiConverterOptionTypeStructuralDiffCursorRecord.lower(cursor),
         FfiConverterUInt64.lower(limit),$0
     )
 })
@@ -3286,6 +3517,16 @@ open func unpinAllCacheNodes()throws  -> UInt64  {
     return try  FfiConverterUInt64.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_unpin_all_cache_nodes(
             self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func upperBound(tree: TreeRecord, key: Data)throws  -> EntryRecord?  {
+    return try  FfiConverterOptionTypeEntryRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_prollyengine_upper_bound(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeTreeRecord_lower(tree),
+        FfiConverterData.lower(key),$0
     )
 })
 }
@@ -4445,6 +4686,72 @@ public func FfiConverterTypeCrdtResolutionRecord_lift(_ buf: RustBuffer) throws 
 #endif
 public func FfiConverterTypeCrdtResolutionRecord_lower(_ value: CrdtResolutionRecord) -> RustBuffer {
     return FfiConverterTypeCrdtResolutionRecord.lower(value)
+}
+
+
+public struct CursorWindowRecord: Equatable, Hashable {
+    public var positionKey: Data?
+    public var positionValue: Data?
+    public var found: Bool
+    public var entries: [EntryRecord]
+    public var nextCursor: RangeCursorRecord?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(positionKey: Data?, positionValue: Data?, found: Bool, entries: [EntryRecord], nextCursor: RangeCursorRecord?) {
+        self.positionKey = positionKey
+        self.positionValue = positionValue
+        self.found = found
+        self.entries = entries
+        self.nextCursor = nextCursor
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension CursorWindowRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCursorWindowRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CursorWindowRecord {
+        return
+            try CursorWindowRecord(
+                positionKey: FfiConverterOptionData.read(from: &buf),
+                positionValue: FfiConverterOptionData.read(from: &buf),
+                found: FfiConverterBool.read(from: &buf),
+                entries: FfiConverterSequenceTypeEntryRecord.read(from: &buf),
+                nextCursor: FfiConverterOptionTypeRangeCursorRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CursorWindowRecord, into buf: inout [UInt8]) {
+        FfiConverterOptionData.write(value.positionKey, into: &buf)
+        FfiConverterOptionData.write(value.positionValue, into: &buf)
+        FfiConverterBool.write(value.found, into: &buf)
+        FfiConverterSequenceTypeEntryRecord.write(value.entries, into: &buf)
+        FfiConverterOptionTypeRangeCursorRecord.write(value.nextCursor, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCursorWindowRecord_lift(_ buf: RustBuffer) throws -> CursorWindowRecord {
+    return try FfiConverterTypeCursorWindowRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCursorWindowRecord_lower(_ value: CursorWindowRecord) -> RustBuffer {
+    return FfiConverterTypeCursorWindowRecord.lower(value)
 }
 
 
@@ -5822,13 +6129,15 @@ public struct MergeExplanationRecord: Equatable, Hashable {
     public var result: TreeRecord?
     public var error: String?
     public var traceJson: String
+    public var trace: MergeTraceRecord
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(result: TreeRecord?, error: String?, traceJson: String) {
+    public init(result: TreeRecord?, error: String?, traceJson: String, trace: MergeTraceRecord) {
         self.result = result
         self.error = error
         self.traceJson = traceJson
+        self.trace = trace
     }
 
 
@@ -5849,7 +6158,8 @@ public struct FfiConverterTypeMergeExplanationRecord: FfiConverterRustBuffer {
             try MergeExplanationRecord(
                 result: FfiConverterOptionTypeTreeRecord.read(from: &buf),
                 error: FfiConverterOptionString.read(from: &buf),
-                traceJson: FfiConverterString.read(from: &buf)
+                traceJson: FfiConverterString.read(from: &buf),
+                trace: FfiConverterTypeMergeTraceRecord.read(from: &buf)
         )
     }
 
@@ -5857,6 +6167,7 @@ public struct FfiConverterTypeMergeExplanationRecord: FfiConverterRustBuffer {
         FfiConverterOptionTypeTreeRecord.write(value.result, into: &buf)
         FfiConverterOptionString.write(value.error, into: &buf)
         FfiConverterString.write(value.traceJson, into: &buf)
+        FfiConverterTypeMergeTraceRecord.write(value.trace, into: &buf)
     }
 }
 
@@ -5873,6 +6184,166 @@ public func FfiConverterTypeMergeExplanationRecord_lift(_ buf: RustBuffer) throw
 #endif
 public func FfiConverterTypeMergeExplanationRecord_lower(_ value: MergeExplanationRecord) -> RustBuffer {
     return FfiConverterTypeMergeExplanationRecord.lower(value)
+}
+
+
+public struct MergeTraceEventRecord: Equatable, Hashable {
+    public var kind: MergeTraceEventKind
+    public var fastPath: MergeFastPathKind?
+    public var cid: Data?
+    public var reuseReason: MergeReuseReasonKind?
+    public var level: UInt64?
+    public var entries: UInt64?
+    public var firstKey: Data?
+    public var lastKey: Data?
+    public var stage: MergeTraceStageKind?
+    public var key: Data?
+    public var resolution: MergeTraceResolutionKind?
+    public var fallbackReason: MergeFallbackReasonKind?
+    public var diffStats: DiffTraversalStatsRecord?
+    public var rightChanges: UInt64?
+    public var mutations: UInt64?
+    public var appendOnly: Bool?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(kind: MergeTraceEventKind, fastPath: MergeFastPathKind?, cid: Data?, reuseReason: MergeReuseReasonKind?, level: UInt64?, entries: UInt64?, firstKey: Data?, lastKey: Data?, stage: MergeTraceStageKind?, key: Data?, resolution: MergeTraceResolutionKind?, fallbackReason: MergeFallbackReasonKind?, diffStats: DiffTraversalStatsRecord?, rightChanges: UInt64?, mutations: UInt64?, appendOnly: Bool?) {
+        self.kind = kind
+        self.fastPath = fastPath
+        self.cid = cid
+        self.reuseReason = reuseReason
+        self.level = level
+        self.entries = entries
+        self.firstKey = firstKey
+        self.lastKey = lastKey
+        self.stage = stage
+        self.key = key
+        self.resolution = resolution
+        self.fallbackReason = fallbackReason
+        self.diffStats = diffStats
+        self.rightChanges = rightChanges
+        self.mutations = mutations
+        self.appendOnly = appendOnly
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension MergeTraceEventRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMergeTraceEventRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MergeTraceEventRecord {
+        return
+            try MergeTraceEventRecord(
+                kind: FfiConverterTypeMergeTraceEventKind.read(from: &buf),
+                fastPath: FfiConverterOptionTypeMergeFastPathKind.read(from: &buf),
+                cid: FfiConverterOptionData.read(from: &buf),
+                reuseReason: FfiConverterOptionTypeMergeReuseReasonKind.read(from: &buf),
+                level: FfiConverterOptionUInt64.read(from: &buf),
+                entries: FfiConverterOptionUInt64.read(from: &buf),
+                firstKey: FfiConverterOptionData.read(from: &buf),
+                lastKey: FfiConverterOptionData.read(from: &buf),
+                stage: FfiConverterOptionTypeMergeTraceStageKind.read(from: &buf),
+                key: FfiConverterOptionData.read(from: &buf),
+                resolution: FfiConverterOptionTypeMergeTraceResolutionKind.read(from: &buf),
+                fallbackReason: FfiConverterOptionTypeMergeFallbackReasonKind.read(from: &buf),
+                diffStats: FfiConverterOptionTypeDiffTraversalStatsRecord.read(from: &buf),
+                rightChanges: FfiConverterOptionUInt64.read(from: &buf),
+                mutations: FfiConverterOptionUInt64.read(from: &buf),
+                appendOnly: FfiConverterOptionBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: MergeTraceEventRecord, into buf: inout [UInt8]) {
+        FfiConverterTypeMergeTraceEventKind.write(value.kind, into: &buf)
+        FfiConverterOptionTypeMergeFastPathKind.write(value.fastPath, into: &buf)
+        FfiConverterOptionData.write(value.cid, into: &buf)
+        FfiConverterOptionTypeMergeReuseReasonKind.write(value.reuseReason, into: &buf)
+        FfiConverterOptionUInt64.write(value.level, into: &buf)
+        FfiConverterOptionUInt64.write(value.entries, into: &buf)
+        FfiConverterOptionData.write(value.firstKey, into: &buf)
+        FfiConverterOptionData.write(value.lastKey, into: &buf)
+        FfiConverterOptionTypeMergeTraceStageKind.write(value.stage, into: &buf)
+        FfiConverterOptionData.write(value.key, into: &buf)
+        FfiConverterOptionTypeMergeTraceResolutionKind.write(value.resolution, into: &buf)
+        FfiConverterOptionTypeMergeFallbackReasonKind.write(value.fallbackReason, into: &buf)
+        FfiConverterOptionTypeDiffTraversalStatsRecord.write(value.diffStats, into: &buf)
+        FfiConverterOptionUInt64.write(value.rightChanges, into: &buf)
+        FfiConverterOptionUInt64.write(value.mutations, into: &buf)
+        FfiConverterOptionBool.write(value.appendOnly, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMergeTraceEventRecord_lift(_ buf: RustBuffer) throws -> MergeTraceEventRecord {
+    return try FfiConverterTypeMergeTraceEventRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMergeTraceEventRecord_lower(_ value: MergeTraceEventRecord) -> RustBuffer {
+    return FfiConverterTypeMergeTraceEventRecord.lower(value)
+}
+
+
+public struct MergeTraceRecord: Equatable, Hashable {
+    public var events: [MergeTraceEventRecord]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(events: [MergeTraceEventRecord]) {
+        self.events = events
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension MergeTraceRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMergeTraceRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MergeTraceRecord {
+        return
+            try MergeTraceRecord(
+                events: FfiConverterSequenceTypeMergeTraceEventRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: MergeTraceRecord, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeMergeTraceEventRecord.write(value.events, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMergeTraceRecord_lift(_ buf: RustBuffer) throws -> MergeTraceRecord {
+    return try FfiConverterTypeMergeTraceRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMergeTraceRecord_lower(_ value: MergeTraceRecord) -> RustBuffer {
+    return FfiConverterTypeMergeTraceRecord.lower(value)
 }
 
 
@@ -7442,6 +7913,110 @@ public func FfiConverterTypeResolutionRecord_lower(_ value: ResolutionRecord) ->
 }
 
 
+public struct ReverseCursorRecord: Equatable, Hashable {
+    public var beforeKey: Data?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(beforeKey: Data?) {
+        self.beforeKey = beforeKey
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension ReverseCursorRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeReverseCursorRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ReverseCursorRecord {
+        return
+            try ReverseCursorRecord(
+                beforeKey: FfiConverterOptionData.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ReverseCursorRecord, into buf: inout [UInt8]) {
+        FfiConverterOptionData.write(value.beforeKey, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeReverseCursorRecord_lift(_ buf: RustBuffer) throws -> ReverseCursorRecord {
+    return try FfiConverterTypeReverseCursorRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeReverseCursorRecord_lower(_ value: ReverseCursorRecord) -> RustBuffer {
+    return FfiConverterTypeReverseCursorRecord.lower(value)
+}
+
+
+public struct ReversePageRecord: Equatable, Hashable {
+    public var entries: [EntryRecord]
+    public var nextCursor: ReverseCursorRecord?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(entries: [EntryRecord], nextCursor: ReverseCursorRecord?) {
+        self.entries = entries
+        self.nextCursor = nextCursor
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension ReversePageRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeReversePageRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ReversePageRecord {
+        return
+            try ReversePageRecord(
+                entries: FfiConverterSequenceTypeEntryRecord.read(from: &buf),
+                nextCursor: FfiConverterOptionTypeReverseCursorRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ReversePageRecord, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeEntryRecord.write(value.entries, into: &buf)
+        FfiConverterOptionTypeReverseCursorRecord.write(value.nextCursor, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeReversePageRecord_lift(_ buf: RustBuffer) throws -> ReversePageRecord {
+    return try FfiConverterTypeReversePageRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeReversePageRecord_lower(_ value: ReversePageRecord) -> RustBuffer {
+    return FfiConverterTypeReversePageRecord.lower(value)
+}
+
+
 public struct RootManifestRecord: Equatable, Hashable {
     public var tree: TreeRecord
     public var createdAtMillis: UInt64?
@@ -7497,6 +8072,258 @@ public func FfiConverterTypeRootManifestRecord_lift(_ buf: RustBuffer) throws ->
 #endif
 public func FfiConverterTypeRootManifestRecord_lower(_ value: RootManifestRecord) -> RustBuffer {
     return FfiConverterTypeRootManifestRecord.lower(value)
+}
+
+
+public struct SnapshotBundleNodeRecord: Equatable, Hashable {
+    public var cid: Data
+    public var bytes: Data
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(cid: Data, bytes: Data) {
+        self.cid = cid
+        self.bytes = bytes
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension SnapshotBundleNodeRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSnapshotBundleNodeRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SnapshotBundleNodeRecord {
+        return
+            try SnapshotBundleNodeRecord(
+                cid: FfiConverterData.read(from: &buf),
+                bytes: FfiConverterData.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SnapshotBundleNodeRecord, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.cid, into: &buf)
+        FfiConverterData.write(value.bytes, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSnapshotBundleNodeRecord_lift(_ buf: RustBuffer) throws -> SnapshotBundleNodeRecord {
+    return try FfiConverterTypeSnapshotBundleNodeRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSnapshotBundleNodeRecord_lower(_ value: SnapshotBundleNodeRecord) -> RustBuffer {
+    return FfiConverterTypeSnapshotBundleNodeRecord.lower(value)
+}
+
+
+public struct SnapshotBundleRecord: Equatable, Hashable {
+    public var formatVersion: UInt32
+    public var tree: TreeRecord
+    public var nodes: [SnapshotBundleNodeRecord]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(formatVersion: UInt32, tree: TreeRecord, nodes: [SnapshotBundleNodeRecord]) {
+        self.formatVersion = formatVersion
+        self.tree = tree
+        self.nodes = nodes
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension SnapshotBundleRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSnapshotBundleRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SnapshotBundleRecord {
+        return
+            try SnapshotBundleRecord(
+                formatVersion: FfiConverterUInt32.read(from: &buf),
+                tree: FfiConverterTypeTreeRecord.read(from: &buf),
+                nodes: FfiConverterSequenceTypeSnapshotBundleNodeRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SnapshotBundleRecord, into buf: inout [UInt8]) {
+        FfiConverterUInt32.write(value.formatVersion, into: &buf)
+        FfiConverterTypeTreeRecord.write(value.tree, into: &buf)
+        FfiConverterSequenceTypeSnapshotBundleNodeRecord.write(value.nodes, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSnapshotBundleRecord_lift(_ buf: RustBuffer) throws -> SnapshotBundleRecord {
+    return try FfiConverterTypeSnapshotBundleRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSnapshotBundleRecord_lower(_ value: SnapshotBundleRecord) -> RustBuffer {
+    return FfiConverterTypeSnapshotBundleRecord.lower(value)
+}
+
+
+public struct SnapshotBundleSummaryRecord: Equatable, Hashable {
+    public var formatVersion: UInt32
+    public var root: Data?
+    public var nodeCount: UInt64
+    public var byteCount: UInt64
+    public var minNodeBytes: UInt64
+    public var maxNodeBytes: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(formatVersion: UInt32, root: Data?, nodeCount: UInt64, byteCount: UInt64, minNodeBytes: UInt64, maxNodeBytes: UInt64) {
+        self.formatVersion = formatVersion
+        self.root = root
+        self.nodeCount = nodeCount
+        self.byteCount = byteCount
+        self.minNodeBytes = minNodeBytes
+        self.maxNodeBytes = maxNodeBytes
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension SnapshotBundleSummaryRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSnapshotBundleSummaryRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SnapshotBundleSummaryRecord {
+        return
+            try SnapshotBundleSummaryRecord(
+                formatVersion: FfiConverterUInt32.read(from: &buf),
+                root: FfiConverterOptionData.read(from: &buf),
+                nodeCount: FfiConverterUInt64.read(from: &buf),
+                byteCount: FfiConverterUInt64.read(from: &buf),
+                minNodeBytes: FfiConverterUInt64.read(from: &buf),
+                maxNodeBytes: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SnapshotBundleSummaryRecord, into buf: inout [UInt8]) {
+        FfiConverterUInt32.write(value.formatVersion, into: &buf)
+        FfiConverterOptionData.write(value.root, into: &buf)
+        FfiConverterUInt64.write(value.nodeCount, into: &buf)
+        FfiConverterUInt64.write(value.byteCount, into: &buf)
+        FfiConverterUInt64.write(value.minNodeBytes, into: &buf)
+        FfiConverterUInt64.write(value.maxNodeBytes, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSnapshotBundleSummaryRecord_lift(_ buf: RustBuffer) throws -> SnapshotBundleSummaryRecord {
+    return try FfiConverterTypeSnapshotBundleSummaryRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSnapshotBundleSummaryRecord_lower(_ value: SnapshotBundleSummaryRecord) -> RustBuffer {
+    return FfiConverterTypeSnapshotBundleSummaryRecord.lower(value)
+}
+
+
+public struct SnapshotBundleVerificationRecord: Equatable, Hashable {
+    public var valid: Bool
+    public var summary: SnapshotBundleSummaryRecord
+    public var reachableNodes: UInt64
+    public var reachableBytes: UInt64
+    public var missingCids: [Data]
+    public var extraCids: [Data]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(valid: Bool, summary: SnapshotBundleSummaryRecord, reachableNodes: UInt64, reachableBytes: UInt64, missingCids: [Data], extraCids: [Data]) {
+        self.valid = valid
+        self.summary = summary
+        self.reachableNodes = reachableNodes
+        self.reachableBytes = reachableBytes
+        self.missingCids = missingCids
+        self.extraCids = extraCids
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension SnapshotBundleVerificationRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSnapshotBundleVerificationRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SnapshotBundleVerificationRecord {
+        return
+            try SnapshotBundleVerificationRecord(
+                valid: FfiConverterBool.read(from: &buf),
+                summary: FfiConverterTypeSnapshotBundleSummaryRecord.read(from: &buf),
+                reachableNodes: FfiConverterUInt64.read(from: &buf),
+                reachableBytes: FfiConverterUInt64.read(from: &buf),
+                missingCids: FfiConverterSequenceData.read(from: &buf),
+                extraCids: FfiConverterSequenceData.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SnapshotBundleVerificationRecord, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.valid, into: &buf)
+        FfiConverterTypeSnapshotBundleSummaryRecord.write(value.summary, into: &buf)
+        FfiConverterUInt64.write(value.reachableNodes, into: &buf)
+        FfiConverterUInt64.write(value.reachableBytes, into: &buf)
+        FfiConverterSequenceData.write(value.missingCids, into: &buf)
+        FfiConverterSequenceData.write(value.extraCids, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSnapshotBundleVerificationRecord_lift(_ buf: RustBuffer) throws -> SnapshotBundleVerificationRecord {
+    return try FfiConverterTypeSnapshotBundleVerificationRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSnapshotBundleVerificationRecord_lower(_ value: SnapshotBundleVerificationRecord) -> RustBuffer {
+    return FfiConverterTypeSnapshotBundleVerificationRecord.lower(value)
 }
 
 
@@ -7674,17 +8501,493 @@ public func FfiConverterTypeSnapshotSelectionRecord_lower(_ value: SnapshotSelec
 }
 
 
+public struct StatsComparisonRecord: Equatable, Hashable {
+    public var before: TreeStatsRecord
+    public var after: TreeStatsRecord
+    public var absolute: StatsDiffRecord
+    public var percentage: StatsPercentageChangeRecord
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(before: TreeStatsRecord, after: TreeStatsRecord, absolute: StatsDiffRecord, percentage: StatsPercentageChangeRecord) {
+        self.before = before
+        self.after = after
+        self.absolute = absolute
+        self.percentage = percentage
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension StatsComparisonRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeStatsComparisonRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> StatsComparisonRecord {
+        return
+            try StatsComparisonRecord(
+                before: FfiConverterTypeTreeStatsRecord.read(from: &buf),
+                after: FfiConverterTypeTreeStatsRecord.read(from: &buf),
+                absolute: FfiConverterTypeStatsDiffRecord.read(from: &buf),
+                percentage: FfiConverterTypeStatsPercentageChangeRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: StatsComparisonRecord, into buf: inout [UInt8]) {
+        FfiConverterTypeTreeStatsRecord.write(value.before, into: &buf)
+        FfiConverterTypeTreeStatsRecord.write(value.after, into: &buf)
+        FfiConverterTypeStatsDiffRecord.write(value.absolute, into: &buf)
+        FfiConverterTypeStatsPercentageChangeRecord.write(value.percentage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStatsComparisonRecord_lift(_ buf: RustBuffer) throws -> StatsComparisonRecord {
+    return try FfiConverterTypeStatsComparisonRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStatsComparisonRecord_lower(_ value: StatsComparisonRecord) -> RustBuffer {
+    return FfiConverterTypeStatsComparisonRecord.lower(value)
+}
+
+
+public struct StatsDiffRecord: Equatable, Hashable {
+    public var numNodesDiff: Int64
+    public var numLeavesDiff: Int64
+    public var numInternalNodesDiff: Int64
+    public var treeHeightDiff: Int8
+    public var totalKeyValuePairsDiff: Int64
+    public var totalTreeSizeBytesDiff: Int64
+    public var avgNodeSizeBytesDiff: Double
+    public var minNodeSizeBytesDiff: Int64
+    public var maxNodeSizeBytesDiff: Int64
+    public var avgEntriesPerNodeDiff: Double
+    public var avgFanoutDiff: Double
+    public var minFanoutDiff: Int64
+    public var maxFanoutDiff: Int64
+    public var avgFillFactorDiff: Double
+    public var avgLeafFillFactorDiff: Double
+    public var avgInternalFillFactorDiff: Double
+    public var avgKeySizeBytesDiff: Double
+    public var avgValueSizeBytesDiff: Double
+    public var minKeySizeBytesDiff: Int64
+    public var maxKeySizeBytesDiff: Int64
+    public var minValueSizeBytesDiff: Int64
+    public var maxValueSizeBytesDiff: Int64
+    public var totalKeysSizeBytesDiff: Int64
+    public var totalValuesSizeBytesDiff: Int64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(numNodesDiff: Int64, numLeavesDiff: Int64, numInternalNodesDiff: Int64, treeHeightDiff: Int8, totalKeyValuePairsDiff: Int64, totalTreeSizeBytesDiff: Int64, avgNodeSizeBytesDiff: Double, minNodeSizeBytesDiff: Int64, maxNodeSizeBytesDiff: Int64, avgEntriesPerNodeDiff: Double, avgFanoutDiff: Double, minFanoutDiff: Int64, maxFanoutDiff: Int64, avgFillFactorDiff: Double, avgLeafFillFactorDiff: Double, avgInternalFillFactorDiff: Double, avgKeySizeBytesDiff: Double, avgValueSizeBytesDiff: Double, minKeySizeBytesDiff: Int64, maxKeySizeBytesDiff: Int64, minValueSizeBytesDiff: Int64, maxValueSizeBytesDiff: Int64, totalKeysSizeBytesDiff: Int64, totalValuesSizeBytesDiff: Int64) {
+        self.numNodesDiff = numNodesDiff
+        self.numLeavesDiff = numLeavesDiff
+        self.numInternalNodesDiff = numInternalNodesDiff
+        self.treeHeightDiff = treeHeightDiff
+        self.totalKeyValuePairsDiff = totalKeyValuePairsDiff
+        self.totalTreeSizeBytesDiff = totalTreeSizeBytesDiff
+        self.avgNodeSizeBytesDiff = avgNodeSizeBytesDiff
+        self.minNodeSizeBytesDiff = minNodeSizeBytesDiff
+        self.maxNodeSizeBytesDiff = maxNodeSizeBytesDiff
+        self.avgEntriesPerNodeDiff = avgEntriesPerNodeDiff
+        self.avgFanoutDiff = avgFanoutDiff
+        self.minFanoutDiff = minFanoutDiff
+        self.maxFanoutDiff = maxFanoutDiff
+        self.avgFillFactorDiff = avgFillFactorDiff
+        self.avgLeafFillFactorDiff = avgLeafFillFactorDiff
+        self.avgInternalFillFactorDiff = avgInternalFillFactorDiff
+        self.avgKeySizeBytesDiff = avgKeySizeBytesDiff
+        self.avgValueSizeBytesDiff = avgValueSizeBytesDiff
+        self.minKeySizeBytesDiff = minKeySizeBytesDiff
+        self.maxKeySizeBytesDiff = maxKeySizeBytesDiff
+        self.minValueSizeBytesDiff = minValueSizeBytesDiff
+        self.maxValueSizeBytesDiff = maxValueSizeBytesDiff
+        self.totalKeysSizeBytesDiff = totalKeysSizeBytesDiff
+        self.totalValuesSizeBytesDiff = totalValuesSizeBytesDiff
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension StatsDiffRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeStatsDiffRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> StatsDiffRecord {
+        return
+            try StatsDiffRecord(
+                numNodesDiff: FfiConverterInt64.read(from: &buf),
+                numLeavesDiff: FfiConverterInt64.read(from: &buf),
+                numInternalNodesDiff: FfiConverterInt64.read(from: &buf),
+                treeHeightDiff: FfiConverterInt8.read(from: &buf),
+                totalKeyValuePairsDiff: FfiConverterInt64.read(from: &buf),
+                totalTreeSizeBytesDiff: FfiConverterInt64.read(from: &buf),
+                avgNodeSizeBytesDiff: FfiConverterDouble.read(from: &buf),
+                minNodeSizeBytesDiff: FfiConverterInt64.read(from: &buf),
+                maxNodeSizeBytesDiff: FfiConverterInt64.read(from: &buf),
+                avgEntriesPerNodeDiff: FfiConverterDouble.read(from: &buf),
+                avgFanoutDiff: FfiConverterDouble.read(from: &buf),
+                minFanoutDiff: FfiConverterInt64.read(from: &buf),
+                maxFanoutDiff: FfiConverterInt64.read(from: &buf),
+                avgFillFactorDiff: FfiConverterDouble.read(from: &buf),
+                avgLeafFillFactorDiff: FfiConverterDouble.read(from: &buf),
+                avgInternalFillFactorDiff: FfiConverterDouble.read(from: &buf),
+                avgKeySizeBytesDiff: FfiConverterDouble.read(from: &buf),
+                avgValueSizeBytesDiff: FfiConverterDouble.read(from: &buf),
+                minKeySizeBytesDiff: FfiConverterInt64.read(from: &buf),
+                maxKeySizeBytesDiff: FfiConverterInt64.read(from: &buf),
+                minValueSizeBytesDiff: FfiConverterInt64.read(from: &buf),
+                maxValueSizeBytesDiff: FfiConverterInt64.read(from: &buf),
+                totalKeysSizeBytesDiff: FfiConverterInt64.read(from: &buf),
+                totalValuesSizeBytesDiff: FfiConverterInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: StatsDiffRecord, into buf: inout [UInt8]) {
+        FfiConverterInt64.write(value.numNodesDiff, into: &buf)
+        FfiConverterInt64.write(value.numLeavesDiff, into: &buf)
+        FfiConverterInt64.write(value.numInternalNodesDiff, into: &buf)
+        FfiConverterInt8.write(value.treeHeightDiff, into: &buf)
+        FfiConverterInt64.write(value.totalKeyValuePairsDiff, into: &buf)
+        FfiConverterInt64.write(value.totalTreeSizeBytesDiff, into: &buf)
+        FfiConverterDouble.write(value.avgNodeSizeBytesDiff, into: &buf)
+        FfiConverterInt64.write(value.minNodeSizeBytesDiff, into: &buf)
+        FfiConverterInt64.write(value.maxNodeSizeBytesDiff, into: &buf)
+        FfiConverterDouble.write(value.avgEntriesPerNodeDiff, into: &buf)
+        FfiConverterDouble.write(value.avgFanoutDiff, into: &buf)
+        FfiConverterInt64.write(value.minFanoutDiff, into: &buf)
+        FfiConverterInt64.write(value.maxFanoutDiff, into: &buf)
+        FfiConverterDouble.write(value.avgFillFactorDiff, into: &buf)
+        FfiConverterDouble.write(value.avgLeafFillFactorDiff, into: &buf)
+        FfiConverterDouble.write(value.avgInternalFillFactorDiff, into: &buf)
+        FfiConverterDouble.write(value.avgKeySizeBytesDiff, into: &buf)
+        FfiConverterDouble.write(value.avgValueSizeBytesDiff, into: &buf)
+        FfiConverterInt64.write(value.minKeySizeBytesDiff, into: &buf)
+        FfiConverterInt64.write(value.maxKeySizeBytesDiff, into: &buf)
+        FfiConverterInt64.write(value.minValueSizeBytesDiff, into: &buf)
+        FfiConverterInt64.write(value.maxValueSizeBytesDiff, into: &buf)
+        FfiConverterInt64.write(value.totalKeysSizeBytesDiff, into: &buf)
+        FfiConverterInt64.write(value.totalValuesSizeBytesDiff, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStatsDiffRecord_lift(_ buf: RustBuffer) throws -> StatsDiffRecord {
+    return try FfiConverterTypeStatsDiffRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStatsDiffRecord_lower(_ value: StatsDiffRecord) -> RustBuffer {
+    return FfiConverterTypeStatsDiffRecord.lower(value)
+}
+
+
+public struct StatsPercentageChangeRecord: Equatable, Hashable {
+    public var numNodesPct: Double
+    public var numLeavesPct: Double
+    public var numInternalNodesPct: Double
+    public var treeHeightPct: Double
+    public var totalKeyValuePairsPct: Double
+    public var totalTreeSizeBytesPct: Double
+    public var avgNodeSizeBytesPct: Double
+    public var minNodeSizeBytesPct: Double
+    public var maxNodeSizeBytesPct: Double
+    public var avgEntriesPerNodePct: Double
+    public var avgFanoutPct: Double
+    public var minFanoutPct: Double
+    public var maxFanoutPct: Double
+    public var avgFillFactorPct: Double
+    public var avgLeafFillFactorPct: Double
+    public var avgInternalFillFactorPct: Double
+    public var avgKeySizeBytesPct: Double
+    public var avgValueSizeBytesPct: Double
+    public var minKeySizeBytesPct: Double
+    public var maxKeySizeBytesPct: Double
+    public var minValueSizeBytesPct: Double
+    public var maxValueSizeBytesPct: Double
+    public var totalKeysSizeBytesPct: Double
+    public var totalValuesSizeBytesPct: Double
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(numNodesPct: Double, numLeavesPct: Double, numInternalNodesPct: Double, treeHeightPct: Double, totalKeyValuePairsPct: Double, totalTreeSizeBytesPct: Double, avgNodeSizeBytesPct: Double, minNodeSizeBytesPct: Double, maxNodeSizeBytesPct: Double, avgEntriesPerNodePct: Double, avgFanoutPct: Double, minFanoutPct: Double, maxFanoutPct: Double, avgFillFactorPct: Double, avgLeafFillFactorPct: Double, avgInternalFillFactorPct: Double, avgKeySizeBytesPct: Double, avgValueSizeBytesPct: Double, minKeySizeBytesPct: Double, maxKeySizeBytesPct: Double, minValueSizeBytesPct: Double, maxValueSizeBytesPct: Double, totalKeysSizeBytesPct: Double, totalValuesSizeBytesPct: Double) {
+        self.numNodesPct = numNodesPct
+        self.numLeavesPct = numLeavesPct
+        self.numInternalNodesPct = numInternalNodesPct
+        self.treeHeightPct = treeHeightPct
+        self.totalKeyValuePairsPct = totalKeyValuePairsPct
+        self.totalTreeSizeBytesPct = totalTreeSizeBytesPct
+        self.avgNodeSizeBytesPct = avgNodeSizeBytesPct
+        self.minNodeSizeBytesPct = minNodeSizeBytesPct
+        self.maxNodeSizeBytesPct = maxNodeSizeBytesPct
+        self.avgEntriesPerNodePct = avgEntriesPerNodePct
+        self.avgFanoutPct = avgFanoutPct
+        self.minFanoutPct = minFanoutPct
+        self.maxFanoutPct = maxFanoutPct
+        self.avgFillFactorPct = avgFillFactorPct
+        self.avgLeafFillFactorPct = avgLeafFillFactorPct
+        self.avgInternalFillFactorPct = avgInternalFillFactorPct
+        self.avgKeySizeBytesPct = avgKeySizeBytesPct
+        self.avgValueSizeBytesPct = avgValueSizeBytesPct
+        self.minKeySizeBytesPct = minKeySizeBytesPct
+        self.maxKeySizeBytesPct = maxKeySizeBytesPct
+        self.minValueSizeBytesPct = minValueSizeBytesPct
+        self.maxValueSizeBytesPct = maxValueSizeBytesPct
+        self.totalKeysSizeBytesPct = totalKeysSizeBytesPct
+        self.totalValuesSizeBytesPct = totalValuesSizeBytesPct
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension StatsPercentageChangeRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeStatsPercentageChangeRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> StatsPercentageChangeRecord {
+        return
+            try StatsPercentageChangeRecord(
+                numNodesPct: FfiConverterDouble.read(from: &buf),
+                numLeavesPct: FfiConverterDouble.read(from: &buf),
+                numInternalNodesPct: FfiConverterDouble.read(from: &buf),
+                treeHeightPct: FfiConverterDouble.read(from: &buf),
+                totalKeyValuePairsPct: FfiConverterDouble.read(from: &buf),
+                totalTreeSizeBytesPct: FfiConverterDouble.read(from: &buf),
+                avgNodeSizeBytesPct: FfiConverterDouble.read(from: &buf),
+                minNodeSizeBytesPct: FfiConverterDouble.read(from: &buf),
+                maxNodeSizeBytesPct: FfiConverterDouble.read(from: &buf),
+                avgEntriesPerNodePct: FfiConverterDouble.read(from: &buf),
+                avgFanoutPct: FfiConverterDouble.read(from: &buf),
+                minFanoutPct: FfiConverterDouble.read(from: &buf),
+                maxFanoutPct: FfiConverterDouble.read(from: &buf),
+                avgFillFactorPct: FfiConverterDouble.read(from: &buf),
+                avgLeafFillFactorPct: FfiConverterDouble.read(from: &buf),
+                avgInternalFillFactorPct: FfiConverterDouble.read(from: &buf),
+                avgKeySizeBytesPct: FfiConverterDouble.read(from: &buf),
+                avgValueSizeBytesPct: FfiConverterDouble.read(from: &buf),
+                minKeySizeBytesPct: FfiConverterDouble.read(from: &buf),
+                maxKeySizeBytesPct: FfiConverterDouble.read(from: &buf),
+                minValueSizeBytesPct: FfiConverterDouble.read(from: &buf),
+                maxValueSizeBytesPct: FfiConverterDouble.read(from: &buf),
+                totalKeysSizeBytesPct: FfiConverterDouble.read(from: &buf),
+                totalValuesSizeBytesPct: FfiConverterDouble.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: StatsPercentageChangeRecord, into buf: inout [UInt8]) {
+        FfiConverterDouble.write(value.numNodesPct, into: &buf)
+        FfiConverterDouble.write(value.numLeavesPct, into: &buf)
+        FfiConverterDouble.write(value.numInternalNodesPct, into: &buf)
+        FfiConverterDouble.write(value.treeHeightPct, into: &buf)
+        FfiConverterDouble.write(value.totalKeyValuePairsPct, into: &buf)
+        FfiConverterDouble.write(value.totalTreeSizeBytesPct, into: &buf)
+        FfiConverterDouble.write(value.avgNodeSizeBytesPct, into: &buf)
+        FfiConverterDouble.write(value.minNodeSizeBytesPct, into: &buf)
+        FfiConverterDouble.write(value.maxNodeSizeBytesPct, into: &buf)
+        FfiConverterDouble.write(value.avgEntriesPerNodePct, into: &buf)
+        FfiConverterDouble.write(value.avgFanoutPct, into: &buf)
+        FfiConverterDouble.write(value.minFanoutPct, into: &buf)
+        FfiConverterDouble.write(value.maxFanoutPct, into: &buf)
+        FfiConverterDouble.write(value.avgFillFactorPct, into: &buf)
+        FfiConverterDouble.write(value.avgLeafFillFactorPct, into: &buf)
+        FfiConverterDouble.write(value.avgInternalFillFactorPct, into: &buf)
+        FfiConverterDouble.write(value.avgKeySizeBytesPct, into: &buf)
+        FfiConverterDouble.write(value.avgValueSizeBytesPct, into: &buf)
+        FfiConverterDouble.write(value.minKeySizeBytesPct, into: &buf)
+        FfiConverterDouble.write(value.maxKeySizeBytesPct, into: &buf)
+        FfiConverterDouble.write(value.minValueSizeBytesPct, into: &buf)
+        FfiConverterDouble.write(value.maxValueSizeBytesPct, into: &buf)
+        FfiConverterDouble.write(value.totalKeysSizeBytesPct, into: &buf)
+        FfiConverterDouble.write(value.totalValuesSizeBytesPct, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStatsPercentageChangeRecord_lift(_ buf: RustBuffer) throws -> StatsPercentageChangeRecord {
+    return try FfiConverterTypeStatsPercentageChangeRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStatsPercentageChangeRecord_lower(_ value: StatsPercentageChangeRecord) -> RustBuffer {
+    return FfiConverterTypeStatsPercentageChangeRecord.lower(value)
+}
+
+
+public struct StructuralDiffCursorRecord: Equatable, Hashable {
+    public var baseRoot: Data?
+    public var otherRoot: Data?
+    public var markers: [StructuralDiffMarkerRecord]
+    public var pending: [DiffRecord]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(baseRoot: Data?, otherRoot: Data?, markers: [StructuralDiffMarkerRecord], pending: [DiffRecord]) {
+        self.baseRoot = baseRoot
+        self.otherRoot = otherRoot
+        self.markers = markers
+        self.pending = pending
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension StructuralDiffCursorRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeStructuralDiffCursorRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> StructuralDiffCursorRecord {
+        return
+            try StructuralDiffCursorRecord(
+                baseRoot: FfiConverterOptionData.read(from: &buf),
+                otherRoot: FfiConverterOptionData.read(from: &buf),
+                markers: FfiConverterSequenceTypeStructuralDiffMarkerRecord.read(from: &buf),
+                pending: FfiConverterSequenceTypeDiffRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: StructuralDiffCursorRecord, into buf: inout [UInt8]) {
+        FfiConverterOptionData.write(value.baseRoot, into: &buf)
+        FfiConverterOptionData.write(value.otherRoot, into: &buf)
+        FfiConverterSequenceTypeStructuralDiffMarkerRecord.write(value.markers, into: &buf)
+        FfiConverterSequenceTypeDiffRecord.write(value.pending, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStructuralDiffCursorRecord_lift(_ buf: RustBuffer) throws -> StructuralDiffCursorRecord {
+    return try FfiConverterTypeStructuralDiffCursorRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStructuralDiffCursorRecord_lower(_ value: StructuralDiffCursorRecord) -> RustBuffer {
+    return FfiConverterTypeStructuralDiffCursorRecord.lower(value)
+}
+
+
+public struct StructuralDiffMarkerRecord: Equatable, Hashable {
+    public var kind: StructuralDiffMarkerKind
+    public var baseCid: Data?
+    public var otherCid: Data?
+    public var spanEnd: Data?
+    public var cid: Data?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(kind: StructuralDiffMarkerKind, baseCid: Data?, otherCid: Data?, spanEnd: Data?, cid: Data?) {
+        self.kind = kind
+        self.baseCid = baseCid
+        self.otherCid = otherCid
+        self.spanEnd = spanEnd
+        self.cid = cid
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension StructuralDiffMarkerRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeStructuralDiffMarkerRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> StructuralDiffMarkerRecord {
+        return
+            try StructuralDiffMarkerRecord(
+                kind: FfiConverterTypeStructuralDiffMarkerKind.read(from: &buf),
+                baseCid: FfiConverterOptionData.read(from: &buf),
+                otherCid: FfiConverterOptionData.read(from: &buf),
+                spanEnd: FfiConverterOptionData.read(from: &buf),
+                cid: FfiConverterOptionData.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: StructuralDiffMarkerRecord, into buf: inout [UInt8]) {
+        FfiConverterTypeStructuralDiffMarkerKind.write(value.kind, into: &buf)
+        FfiConverterOptionData.write(value.baseCid, into: &buf)
+        FfiConverterOptionData.write(value.otherCid, into: &buf)
+        FfiConverterOptionData.write(value.spanEnd, into: &buf)
+        FfiConverterOptionData.write(value.cid, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStructuralDiffMarkerRecord_lift(_ buf: RustBuffer) throws -> StructuralDiffMarkerRecord {
+    return try FfiConverterTypeStructuralDiffMarkerRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStructuralDiffMarkerRecord_lower(_ value: StructuralDiffMarkerRecord) -> RustBuffer {
+    return FfiConverterTypeStructuralDiffMarkerRecord.lower(value)
+}
+
+
 public struct StructuralDiffPageRecord: Equatable, Hashable {
     public var diffs: [DiffRecord]
     public var nextCursorJson: String?
     public var stats: DiffTraversalStatsRecord
+    public var nextCursor: StructuralDiffCursorRecord?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(diffs: [DiffRecord], nextCursorJson: String?, stats: DiffTraversalStatsRecord) {
+    public init(diffs: [DiffRecord], nextCursorJson: String?, stats: DiffTraversalStatsRecord, nextCursor: StructuralDiffCursorRecord?) {
         self.diffs = diffs
         self.nextCursorJson = nextCursorJson
         self.stats = stats
+        self.nextCursor = nextCursor
     }
 
 
@@ -7705,7 +9008,8 @@ public struct FfiConverterTypeStructuralDiffPageRecord: FfiConverterRustBuffer {
             try StructuralDiffPageRecord(
                 diffs: FfiConverterSequenceTypeDiffRecord.read(from: &buf),
                 nextCursorJson: FfiConverterOptionString.read(from: &buf),
-                stats: FfiConverterTypeDiffTraversalStatsRecord.read(from: &buf)
+                stats: FfiConverterTypeDiffTraversalStatsRecord.read(from: &buf),
+                nextCursor: FfiConverterOptionTypeStructuralDiffCursorRecord.read(from: &buf)
         )
     }
 
@@ -7713,6 +9017,7 @@ public struct FfiConverterTypeStructuralDiffPageRecord: FfiConverterRustBuffer {
         FfiConverterSequenceTypeDiffRecord.write(value.diffs, into: &buf)
         FfiConverterOptionString.write(value.nextCursorJson, into: &buf)
         FfiConverterTypeDiffTraversalStatsRecord.write(value.stats, into: &buf)
+        FfiConverterOptionTypeStructuralDiffCursorRecord.write(value.nextCursor, into: &buf)
     }
 }
 
@@ -7898,6 +9203,398 @@ public func FfiConverterTypeTombstoneRecord_lower(_ value: TombstoneRecord) -> R
 }
 
 
+public struct TreeDebugComparedNodeRecord: Equatable, Hashable {
+    public var status: TreeDebugNodeStatusKind
+    public var node: TreeDebugNodeRecord
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(status: TreeDebugNodeStatusKind, node: TreeDebugNodeRecord) {
+        self.status = status
+        self.node = node
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension TreeDebugComparedNodeRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTreeDebugComparedNodeRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TreeDebugComparedNodeRecord {
+        return
+            try TreeDebugComparedNodeRecord(
+                status: FfiConverterTypeTreeDebugNodeStatusKind.read(from: &buf),
+                node: FfiConverterTypeTreeDebugNodeRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: TreeDebugComparedNodeRecord, into buf: inout [UInt8]) {
+        FfiConverterTypeTreeDebugNodeStatusKind.write(value.status, into: &buf)
+        FfiConverterTypeTreeDebugNodeRecord.write(value.node, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTreeDebugComparedNodeRecord_lift(_ buf: RustBuffer) throws -> TreeDebugComparedNodeRecord {
+    return try FfiConverterTypeTreeDebugComparedNodeRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTreeDebugComparedNodeRecord_lower(_ value: TreeDebugComparedNodeRecord) -> RustBuffer {
+    return FfiConverterTypeTreeDebugComparedNodeRecord.lower(value)
+}
+
+
+public struct TreeDebugComparisonLevelRecord: Equatable, Hashable {
+    public var level: UInt8
+    public var sharedNodes: UInt64
+    public var leftOnlyNodes: UInt64
+    public var rightOnlyNodes: UInt64
+    public var sharedBytes: UInt64
+    public var leftOnlyBytes: UInt64
+    public var rightOnlyBytes: UInt64
+    public var nodes: [TreeDebugComparedNodeRecord]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(level: UInt8, sharedNodes: UInt64, leftOnlyNodes: UInt64, rightOnlyNodes: UInt64, sharedBytes: UInt64, leftOnlyBytes: UInt64, rightOnlyBytes: UInt64, nodes: [TreeDebugComparedNodeRecord]) {
+        self.level = level
+        self.sharedNodes = sharedNodes
+        self.leftOnlyNodes = leftOnlyNodes
+        self.rightOnlyNodes = rightOnlyNodes
+        self.sharedBytes = sharedBytes
+        self.leftOnlyBytes = leftOnlyBytes
+        self.rightOnlyBytes = rightOnlyBytes
+        self.nodes = nodes
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension TreeDebugComparisonLevelRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTreeDebugComparisonLevelRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TreeDebugComparisonLevelRecord {
+        return
+            try TreeDebugComparisonLevelRecord(
+                level: FfiConverterUInt8.read(from: &buf),
+                sharedNodes: FfiConverterUInt64.read(from: &buf),
+                leftOnlyNodes: FfiConverterUInt64.read(from: &buf),
+                rightOnlyNodes: FfiConverterUInt64.read(from: &buf),
+                sharedBytes: FfiConverterUInt64.read(from: &buf),
+                leftOnlyBytes: FfiConverterUInt64.read(from: &buf),
+                rightOnlyBytes: FfiConverterUInt64.read(from: &buf),
+                nodes: FfiConverterSequenceTypeTreeDebugComparedNodeRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: TreeDebugComparisonLevelRecord, into buf: inout [UInt8]) {
+        FfiConverterUInt8.write(value.level, into: &buf)
+        FfiConverterUInt64.write(value.sharedNodes, into: &buf)
+        FfiConverterUInt64.write(value.leftOnlyNodes, into: &buf)
+        FfiConverterUInt64.write(value.rightOnlyNodes, into: &buf)
+        FfiConverterUInt64.write(value.sharedBytes, into: &buf)
+        FfiConverterUInt64.write(value.leftOnlyBytes, into: &buf)
+        FfiConverterUInt64.write(value.rightOnlyBytes, into: &buf)
+        FfiConverterSequenceTypeTreeDebugComparedNodeRecord.write(value.nodes, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTreeDebugComparisonLevelRecord_lift(_ buf: RustBuffer) throws -> TreeDebugComparisonLevelRecord {
+    return try FfiConverterTypeTreeDebugComparisonLevelRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTreeDebugComparisonLevelRecord_lower(_ value: TreeDebugComparisonLevelRecord) -> RustBuffer {
+    return FfiConverterTypeTreeDebugComparisonLevelRecord.lower(value)
+}
+
+
+public struct TreeDebugComparisonRecord: Equatable, Hashable {
+    public var sharedNodes: UInt64
+    public var leftOnlyNodes: UInt64
+    public var rightOnlyNodes: UInt64
+    public var sharedBytes: UInt64
+    public var leftOnlyBytes: UInt64
+    public var rightOnlyBytes: UInt64
+    public var levels: [TreeDebugComparisonLevelRecord]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(sharedNodes: UInt64, leftOnlyNodes: UInt64, rightOnlyNodes: UInt64, sharedBytes: UInt64, leftOnlyBytes: UInt64, rightOnlyBytes: UInt64, levels: [TreeDebugComparisonLevelRecord]) {
+        self.sharedNodes = sharedNodes
+        self.leftOnlyNodes = leftOnlyNodes
+        self.rightOnlyNodes = rightOnlyNodes
+        self.sharedBytes = sharedBytes
+        self.leftOnlyBytes = leftOnlyBytes
+        self.rightOnlyBytes = rightOnlyBytes
+        self.levels = levels
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension TreeDebugComparisonRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTreeDebugComparisonRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TreeDebugComparisonRecord {
+        return
+            try TreeDebugComparisonRecord(
+                sharedNodes: FfiConverterUInt64.read(from: &buf),
+                leftOnlyNodes: FfiConverterUInt64.read(from: &buf),
+                rightOnlyNodes: FfiConverterUInt64.read(from: &buf),
+                sharedBytes: FfiConverterUInt64.read(from: &buf),
+                leftOnlyBytes: FfiConverterUInt64.read(from: &buf),
+                rightOnlyBytes: FfiConverterUInt64.read(from: &buf),
+                levels: FfiConverterSequenceTypeTreeDebugComparisonLevelRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: TreeDebugComparisonRecord, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.sharedNodes, into: &buf)
+        FfiConverterUInt64.write(value.leftOnlyNodes, into: &buf)
+        FfiConverterUInt64.write(value.rightOnlyNodes, into: &buf)
+        FfiConverterUInt64.write(value.sharedBytes, into: &buf)
+        FfiConverterUInt64.write(value.leftOnlyBytes, into: &buf)
+        FfiConverterUInt64.write(value.rightOnlyBytes, into: &buf)
+        FfiConverterSequenceTypeTreeDebugComparisonLevelRecord.write(value.levels, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTreeDebugComparisonRecord_lift(_ buf: RustBuffer) throws -> TreeDebugComparisonRecord {
+    return try FfiConverterTypeTreeDebugComparisonRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTreeDebugComparisonRecord_lower(_ value: TreeDebugComparisonRecord) -> RustBuffer {
+    return FfiConverterTypeTreeDebugComparisonRecord.lower(value)
+}
+
+
+public struct TreeDebugLevelRecord: Equatable, Hashable {
+    public var level: UInt8
+    public var nodes: [TreeDebugNodeRecord]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(level: UInt8, nodes: [TreeDebugNodeRecord]) {
+        self.level = level
+        self.nodes = nodes
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension TreeDebugLevelRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTreeDebugLevelRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TreeDebugLevelRecord {
+        return
+            try TreeDebugLevelRecord(
+                level: FfiConverterUInt8.read(from: &buf),
+                nodes: FfiConverterSequenceTypeTreeDebugNodeRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: TreeDebugLevelRecord, into buf: inout [UInt8]) {
+        FfiConverterUInt8.write(value.level, into: &buf)
+        FfiConverterSequenceTypeTreeDebugNodeRecord.write(value.nodes, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTreeDebugLevelRecord_lift(_ buf: RustBuffer) throws -> TreeDebugLevelRecord {
+    return try FfiConverterTypeTreeDebugLevelRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTreeDebugLevelRecord_lower(_ value: TreeDebugLevelRecord) -> RustBuffer {
+    return FfiConverterTypeTreeDebugLevelRecord.lower(value)
+}
+
+
+public struct TreeDebugNodeRecord: Equatable, Hashable {
+    public var cid: Data
+    public var leaf: Bool
+    public var level: UInt8
+    public var entryCount: UInt64
+    public var maxEntries: UInt64
+    public var fillFactor: Double
+    public var encodedBytes: UInt64
+    public var firstKey: Data?
+    public var lastKey: Data?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(cid: Data, leaf: Bool, level: UInt8, entryCount: UInt64, maxEntries: UInt64, fillFactor: Double, encodedBytes: UInt64, firstKey: Data?, lastKey: Data?) {
+        self.cid = cid
+        self.leaf = leaf
+        self.level = level
+        self.entryCount = entryCount
+        self.maxEntries = maxEntries
+        self.fillFactor = fillFactor
+        self.encodedBytes = encodedBytes
+        self.firstKey = firstKey
+        self.lastKey = lastKey
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension TreeDebugNodeRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTreeDebugNodeRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TreeDebugNodeRecord {
+        return
+            try TreeDebugNodeRecord(
+                cid: FfiConverterData.read(from: &buf),
+                leaf: FfiConverterBool.read(from: &buf),
+                level: FfiConverterUInt8.read(from: &buf),
+                entryCount: FfiConverterUInt64.read(from: &buf),
+                maxEntries: FfiConverterUInt64.read(from: &buf),
+                fillFactor: FfiConverterDouble.read(from: &buf),
+                encodedBytes: FfiConverterUInt64.read(from: &buf),
+                firstKey: FfiConverterOptionData.read(from: &buf),
+                lastKey: FfiConverterOptionData.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: TreeDebugNodeRecord, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.cid, into: &buf)
+        FfiConverterBool.write(value.leaf, into: &buf)
+        FfiConverterUInt8.write(value.level, into: &buf)
+        FfiConverterUInt64.write(value.entryCount, into: &buf)
+        FfiConverterUInt64.write(value.maxEntries, into: &buf)
+        FfiConverterDouble.write(value.fillFactor, into: &buf)
+        FfiConverterUInt64.write(value.encodedBytes, into: &buf)
+        FfiConverterOptionData.write(value.firstKey, into: &buf)
+        FfiConverterOptionData.write(value.lastKey, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTreeDebugNodeRecord_lift(_ buf: RustBuffer) throws -> TreeDebugNodeRecord {
+    return try FfiConverterTypeTreeDebugNodeRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTreeDebugNodeRecord_lower(_ value: TreeDebugNodeRecord) -> RustBuffer {
+    return FfiConverterTypeTreeDebugNodeRecord.lower(value)
+}
+
+
+public struct TreeDebugViewRecord: Equatable, Hashable {
+    public var levels: [TreeDebugLevelRecord]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(levels: [TreeDebugLevelRecord]) {
+        self.levels = levels
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension TreeDebugViewRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTreeDebugViewRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TreeDebugViewRecord {
+        return
+            try TreeDebugViewRecord(
+                levels: FfiConverterSequenceTypeTreeDebugLevelRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: TreeDebugViewRecord, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeTreeDebugLevelRecord.write(value.levels, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTreeDebugViewRecord_lift(_ buf: RustBuffer) throws -> TreeDebugViewRecord {
+    return try FfiConverterTypeTreeDebugViewRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTreeDebugViewRecord_lower(_ value: TreeDebugViewRecord) -> RustBuffer {
+    return FfiConverterTypeTreeDebugViewRecord.lower(value)
+}
+
+
 public struct TreeRecord: Equatable, Hashable {
     public var root: Data?
     public var config: ConfigRecord
@@ -7949,6 +9646,276 @@ public func FfiConverterTypeTreeRecord_lift(_ buf: RustBuffer) throws -> TreeRec
 #endif
 public func FfiConverterTypeTreeRecord_lower(_ value: TreeRecord) -> RustBuffer {
     return FfiConverterTypeTreeRecord.lower(value)
+}
+
+
+public struct TreeStatsLevelF64Record: Equatable, Hashable {
+    public var level: UInt8
+    public var value: Double
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(level: UInt8, value: Double) {
+        self.level = level
+        self.value = value
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension TreeStatsLevelF64Record: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTreeStatsLevelF64Record: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TreeStatsLevelF64Record {
+        return
+            try TreeStatsLevelF64Record(
+                level: FfiConverterUInt8.read(from: &buf),
+                value: FfiConverterDouble.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: TreeStatsLevelF64Record, into buf: inout [UInt8]) {
+        FfiConverterUInt8.write(value.level, into: &buf)
+        FfiConverterDouble.write(value.value, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTreeStatsLevelF64Record_lift(_ buf: RustBuffer) throws -> TreeStatsLevelF64Record {
+    return try FfiConverterTypeTreeStatsLevelF64Record.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTreeStatsLevelF64Record_lower(_ value: TreeStatsLevelF64Record) -> RustBuffer {
+    return FfiConverterTypeTreeStatsLevelF64Record.lower(value)
+}
+
+
+public struct TreeStatsLevelU64Record: Equatable, Hashable {
+    public var level: UInt8
+    public var value: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(level: UInt8, value: UInt64) {
+        self.level = level
+        self.value = value
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension TreeStatsLevelU64Record: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTreeStatsLevelU64Record: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TreeStatsLevelU64Record {
+        return
+            try TreeStatsLevelU64Record(
+                level: FfiConverterUInt8.read(from: &buf),
+                value: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: TreeStatsLevelU64Record, into buf: inout [UInt8]) {
+        FfiConverterUInt8.write(value.level, into: &buf)
+        FfiConverterUInt64.write(value.value, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTreeStatsLevelU64Record_lift(_ buf: RustBuffer) throws -> TreeStatsLevelU64Record {
+    return try FfiConverterTypeTreeStatsLevelU64Record.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTreeStatsLevelU64Record_lower(_ value: TreeStatsLevelU64Record) -> RustBuffer {
+    return FfiConverterTypeTreeStatsLevelU64Record.lower(value)
+}
+
+
+public struct TreeStatsRecord: Equatable, Hashable {
+    public var numNodes: UInt64
+    public var numLeaves: UInt64
+    public var numInternalNodes: UInt64
+    public var treeHeight: UInt8
+    public var totalKeyValuePairs: UInt64
+    public var totalTreeSizeBytes: UInt64
+    public var avgNodeSizeBytes: Double
+    public var minNodeSizeBytes: UInt64
+    public var maxNodeSizeBytes: UInt64
+    public var avgEntriesPerNode: Double
+    public var nodesPerLevel: [TreeStatsLevelU64Record]
+    public var avgNodeSizePerLevel: [TreeStatsLevelF64Record]
+    public var avgEntriesPerLevel: [TreeStatsLevelF64Record]
+    public var minEntriesPerLevel: [TreeStatsLevelU64Record]
+    public var maxEntriesPerLevel: [TreeStatsLevelU64Record]
+    public var avgFanout: Double
+    public var minFanout: UInt64
+    public var maxFanout: UInt64
+    public var avgFillFactor: Double
+    public var avgLeafFillFactor: Double
+    public var avgInternalFillFactor: Double
+    public var avgKeySizeBytes: Double
+    public var avgValueSizeBytes: Double
+    public var minKeySizeBytes: UInt64
+    public var maxKeySizeBytes: UInt64
+    public var minValueSizeBytes: UInt64
+    public var maxValueSizeBytes: UInt64
+    public var totalKeysSizeBytes: UInt64
+    public var totalValuesSizeBytes: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(numNodes: UInt64, numLeaves: UInt64, numInternalNodes: UInt64, treeHeight: UInt8, totalKeyValuePairs: UInt64, totalTreeSizeBytes: UInt64, avgNodeSizeBytes: Double, minNodeSizeBytes: UInt64, maxNodeSizeBytes: UInt64, avgEntriesPerNode: Double, nodesPerLevel: [TreeStatsLevelU64Record], avgNodeSizePerLevel: [TreeStatsLevelF64Record], avgEntriesPerLevel: [TreeStatsLevelF64Record], minEntriesPerLevel: [TreeStatsLevelU64Record], maxEntriesPerLevel: [TreeStatsLevelU64Record], avgFanout: Double, minFanout: UInt64, maxFanout: UInt64, avgFillFactor: Double, avgLeafFillFactor: Double, avgInternalFillFactor: Double, avgKeySizeBytes: Double, avgValueSizeBytes: Double, minKeySizeBytes: UInt64, maxKeySizeBytes: UInt64, minValueSizeBytes: UInt64, maxValueSizeBytes: UInt64, totalKeysSizeBytes: UInt64, totalValuesSizeBytes: UInt64) {
+        self.numNodes = numNodes
+        self.numLeaves = numLeaves
+        self.numInternalNodes = numInternalNodes
+        self.treeHeight = treeHeight
+        self.totalKeyValuePairs = totalKeyValuePairs
+        self.totalTreeSizeBytes = totalTreeSizeBytes
+        self.avgNodeSizeBytes = avgNodeSizeBytes
+        self.minNodeSizeBytes = minNodeSizeBytes
+        self.maxNodeSizeBytes = maxNodeSizeBytes
+        self.avgEntriesPerNode = avgEntriesPerNode
+        self.nodesPerLevel = nodesPerLevel
+        self.avgNodeSizePerLevel = avgNodeSizePerLevel
+        self.avgEntriesPerLevel = avgEntriesPerLevel
+        self.minEntriesPerLevel = minEntriesPerLevel
+        self.maxEntriesPerLevel = maxEntriesPerLevel
+        self.avgFanout = avgFanout
+        self.minFanout = minFanout
+        self.maxFanout = maxFanout
+        self.avgFillFactor = avgFillFactor
+        self.avgLeafFillFactor = avgLeafFillFactor
+        self.avgInternalFillFactor = avgInternalFillFactor
+        self.avgKeySizeBytes = avgKeySizeBytes
+        self.avgValueSizeBytes = avgValueSizeBytes
+        self.minKeySizeBytes = minKeySizeBytes
+        self.maxKeySizeBytes = maxKeySizeBytes
+        self.minValueSizeBytes = minValueSizeBytes
+        self.maxValueSizeBytes = maxValueSizeBytes
+        self.totalKeysSizeBytes = totalKeysSizeBytes
+        self.totalValuesSizeBytes = totalValuesSizeBytes
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension TreeStatsRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTreeStatsRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TreeStatsRecord {
+        return
+            try TreeStatsRecord(
+                numNodes: FfiConverterUInt64.read(from: &buf),
+                numLeaves: FfiConverterUInt64.read(from: &buf),
+                numInternalNodes: FfiConverterUInt64.read(from: &buf),
+                treeHeight: FfiConverterUInt8.read(from: &buf),
+                totalKeyValuePairs: FfiConverterUInt64.read(from: &buf),
+                totalTreeSizeBytes: FfiConverterUInt64.read(from: &buf),
+                avgNodeSizeBytes: FfiConverterDouble.read(from: &buf),
+                minNodeSizeBytes: FfiConverterUInt64.read(from: &buf),
+                maxNodeSizeBytes: FfiConverterUInt64.read(from: &buf),
+                avgEntriesPerNode: FfiConverterDouble.read(from: &buf),
+                nodesPerLevel: FfiConverterSequenceTypeTreeStatsLevelU64Record.read(from: &buf),
+                avgNodeSizePerLevel: FfiConverterSequenceTypeTreeStatsLevelF64Record.read(from: &buf),
+                avgEntriesPerLevel: FfiConverterSequenceTypeTreeStatsLevelF64Record.read(from: &buf),
+                minEntriesPerLevel: FfiConverterSequenceTypeTreeStatsLevelU64Record.read(from: &buf),
+                maxEntriesPerLevel: FfiConverterSequenceTypeTreeStatsLevelU64Record.read(from: &buf),
+                avgFanout: FfiConverterDouble.read(from: &buf),
+                minFanout: FfiConverterUInt64.read(from: &buf),
+                maxFanout: FfiConverterUInt64.read(from: &buf),
+                avgFillFactor: FfiConverterDouble.read(from: &buf),
+                avgLeafFillFactor: FfiConverterDouble.read(from: &buf),
+                avgInternalFillFactor: FfiConverterDouble.read(from: &buf),
+                avgKeySizeBytes: FfiConverterDouble.read(from: &buf),
+                avgValueSizeBytes: FfiConverterDouble.read(from: &buf),
+                minKeySizeBytes: FfiConverterUInt64.read(from: &buf),
+                maxKeySizeBytes: FfiConverterUInt64.read(from: &buf),
+                minValueSizeBytes: FfiConverterUInt64.read(from: &buf),
+                maxValueSizeBytes: FfiConverterUInt64.read(from: &buf),
+                totalKeysSizeBytes: FfiConverterUInt64.read(from: &buf),
+                totalValuesSizeBytes: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: TreeStatsRecord, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.numNodes, into: &buf)
+        FfiConverterUInt64.write(value.numLeaves, into: &buf)
+        FfiConverterUInt64.write(value.numInternalNodes, into: &buf)
+        FfiConverterUInt8.write(value.treeHeight, into: &buf)
+        FfiConverterUInt64.write(value.totalKeyValuePairs, into: &buf)
+        FfiConverterUInt64.write(value.totalTreeSizeBytes, into: &buf)
+        FfiConverterDouble.write(value.avgNodeSizeBytes, into: &buf)
+        FfiConverterUInt64.write(value.minNodeSizeBytes, into: &buf)
+        FfiConverterUInt64.write(value.maxNodeSizeBytes, into: &buf)
+        FfiConverterDouble.write(value.avgEntriesPerNode, into: &buf)
+        FfiConverterSequenceTypeTreeStatsLevelU64Record.write(value.nodesPerLevel, into: &buf)
+        FfiConverterSequenceTypeTreeStatsLevelF64Record.write(value.avgNodeSizePerLevel, into: &buf)
+        FfiConverterSequenceTypeTreeStatsLevelF64Record.write(value.avgEntriesPerLevel, into: &buf)
+        FfiConverterSequenceTypeTreeStatsLevelU64Record.write(value.minEntriesPerLevel, into: &buf)
+        FfiConverterSequenceTypeTreeStatsLevelU64Record.write(value.maxEntriesPerLevel, into: &buf)
+        FfiConverterDouble.write(value.avgFanout, into: &buf)
+        FfiConverterUInt64.write(value.minFanout, into: &buf)
+        FfiConverterUInt64.write(value.maxFanout, into: &buf)
+        FfiConverterDouble.write(value.avgFillFactor, into: &buf)
+        FfiConverterDouble.write(value.avgLeafFillFactor, into: &buf)
+        FfiConverterDouble.write(value.avgInternalFillFactor, into: &buf)
+        FfiConverterDouble.write(value.avgKeySizeBytes, into: &buf)
+        FfiConverterDouble.write(value.avgValueSizeBytes, into: &buf)
+        FfiConverterUInt64.write(value.minKeySizeBytes, into: &buf)
+        FfiConverterUInt64.write(value.maxKeySizeBytes, into: &buf)
+        FfiConverterUInt64.write(value.minValueSizeBytes, into: &buf)
+        FfiConverterUInt64.write(value.maxValueSizeBytes, into: &buf)
+        FfiConverterUInt64.write(value.totalKeysSizeBytes, into: &buf)
+        FfiConverterUInt64.write(value.totalValuesSizeBytes, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTreeStatsRecord_lift(_ buf: RustBuffer) throws -> TreeStatsRecord {
+    return try FfiConverterTypeTreeStatsRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTreeStatsRecord_lower(_ value: TreeStatsRecord) -> RustBuffer {
+    return FfiConverterTypeTreeStatsRecord.lower(value)
 }
 
 
@@ -8430,6 +10397,520 @@ public func FfiConverterTypeEncodingKind_lower(_ value: EncodingKind) -> RustBuf
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
+public enum MergeFallbackReasonKind: Equatable, Hashable {
+
+    case missingRoot
+    case shapeMismatch
+    case nodeLengthMismatch
+    case childFallback
+    case deleteResolution
+    case diffBatch
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension MergeFallbackReasonKind: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMergeFallbackReasonKind: FfiConverterRustBuffer {
+    typealias SwiftType = MergeFallbackReasonKind
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MergeFallbackReasonKind {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .missingRoot
+
+        case 2: return .shapeMismatch
+
+        case 3: return .nodeLengthMismatch
+
+        case 4: return .childFallback
+
+        case 5: return .deleteResolution
+
+        case 6: return .diffBatch
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: MergeFallbackReasonKind, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .missingRoot:
+            writeInt(&buf, Int32(1))
+
+
+        case .shapeMismatch:
+            writeInt(&buf, Int32(2))
+
+
+        case .nodeLengthMismatch:
+            writeInt(&buf, Int32(3))
+
+
+        case .childFallback:
+            writeInt(&buf, Int32(4))
+
+
+        case .deleteResolution:
+            writeInt(&buf, Int32(5))
+
+
+        case .diffBatch:
+            writeInt(&buf, Int32(6))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMergeFallbackReasonKind_lift(_ buf: RustBuffer) throws -> MergeFallbackReasonKind {
+    return try FfiConverterTypeMergeFallbackReasonKind.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMergeFallbackReasonKind_lower(_ value: MergeFallbackReasonKind) -> RustBuffer {
+    return FfiConverterTypeMergeFallbackReasonKind.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum MergeFastPathKind: Equatable, Hashable {
+
+    case branchesEqual
+    case leftUnchanged
+    case rightUnchanged
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension MergeFastPathKind: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMergeFastPathKind: FfiConverterRustBuffer {
+    typealias SwiftType = MergeFastPathKind
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MergeFastPathKind {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .branchesEqual
+
+        case 2: return .leftUnchanged
+
+        case 3: return .rightUnchanged
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: MergeFastPathKind, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .branchesEqual:
+            writeInt(&buf, Int32(1))
+
+
+        case .leftUnchanged:
+            writeInt(&buf, Int32(2))
+
+
+        case .rightUnchanged:
+            writeInt(&buf, Int32(3))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMergeFastPathKind_lift(_ buf: RustBuffer) throws -> MergeFastPathKind {
+    return try FfiConverterTypeMergeFastPathKind.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMergeFastPathKind_lower(_ value: MergeFastPathKind) -> RustBuffer {
+    return FfiConverterTypeMergeFastPathKind.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum MergeReuseReasonKind: Equatable, Hashable {
+
+    case branchesEqual
+    case leftUnchanged
+    case rightUnchanged
+    case unchangedAfterMerge
+    case matchesLeft
+    case matchesRight
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension MergeReuseReasonKind: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMergeReuseReasonKind: FfiConverterRustBuffer {
+    typealias SwiftType = MergeReuseReasonKind
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MergeReuseReasonKind {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .branchesEqual
+
+        case 2: return .leftUnchanged
+
+        case 3: return .rightUnchanged
+
+        case 4: return .unchangedAfterMerge
+
+        case 5: return .matchesLeft
+
+        case 6: return .matchesRight
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: MergeReuseReasonKind, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .branchesEqual:
+            writeInt(&buf, Int32(1))
+
+
+        case .leftUnchanged:
+            writeInt(&buf, Int32(2))
+
+
+        case .rightUnchanged:
+            writeInt(&buf, Int32(3))
+
+
+        case .unchangedAfterMerge:
+            writeInt(&buf, Int32(4))
+
+
+        case .matchesLeft:
+            writeInt(&buf, Int32(5))
+
+
+        case .matchesRight:
+            writeInt(&buf, Int32(6))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMergeReuseReasonKind_lift(_ buf: RustBuffer) throws -> MergeReuseReasonKind {
+    return try FfiConverterTypeMergeReuseReasonKind.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMergeReuseReasonKind_lower(_ value: MergeReuseReasonKind) -> RustBuffer {
+    return FfiConverterTypeMergeReuseReasonKind.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum MergeTraceEventKind: Equatable, Hashable {
+
+    case fastPath
+    case structuralMergeStarted
+    case reusedSubtree
+    case rewrittenNode
+    case resolverCalled
+    case fallback
+    case diffTraversal
+    case batchMerge
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension MergeTraceEventKind: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMergeTraceEventKind: FfiConverterRustBuffer {
+    typealias SwiftType = MergeTraceEventKind
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MergeTraceEventKind {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .fastPath
+
+        case 2: return .structuralMergeStarted
+
+        case 3: return .reusedSubtree
+
+        case 4: return .rewrittenNode
+
+        case 5: return .resolverCalled
+
+        case 6: return .fallback
+
+        case 7: return .diffTraversal
+
+        case 8: return .batchMerge
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: MergeTraceEventKind, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .fastPath:
+            writeInt(&buf, Int32(1))
+
+
+        case .structuralMergeStarted:
+            writeInt(&buf, Int32(2))
+
+
+        case .reusedSubtree:
+            writeInt(&buf, Int32(3))
+
+
+        case .rewrittenNode:
+            writeInt(&buf, Int32(4))
+
+
+        case .resolverCalled:
+            writeInt(&buf, Int32(5))
+
+
+        case .fallback:
+            writeInt(&buf, Int32(6))
+
+
+        case .diffTraversal:
+            writeInt(&buf, Int32(7))
+
+
+        case .batchMerge:
+            writeInt(&buf, Int32(8))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMergeTraceEventKind_lift(_ buf: RustBuffer) throws -> MergeTraceEventKind {
+    return try FfiConverterTypeMergeTraceEventKind.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMergeTraceEventKind_lower(_ value: MergeTraceEventKind) -> RustBuffer {
+    return FfiConverterTypeMergeTraceEventKind.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum MergeTraceResolutionKind: Equatable, Hashable {
+
+    case value
+    case delete
+    case unresolved
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension MergeTraceResolutionKind: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMergeTraceResolutionKind: FfiConverterRustBuffer {
+    typealias SwiftType = MergeTraceResolutionKind
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MergeTraceResolutionKind {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .value
+
+        case 2: return .delete
+
+        case 3: return .unresolved
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: MergeTraceResolutionKind, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .value:
+            writeInt(&buf, Int32(1))
+
+
+        case .delete:
+            writeInt(&buf, Int32(2))
+
+
+        case .unresolved:
+            writeInt(&buf, Int32(3))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMergeTraceResolutionKind_lift(_ buf: RustBuffer) throws -> MergeTraceResolutionKind {
+    return try FfiConverterTypeMergeTraceResolutionKind.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMergeTraceResolutionKind_lower(_ value: MergeTraceResolutionKind) -> RustBuffer {
+    return FfiConverterTypeMergeTraceResolutionKind.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum MergeTraceStageKind: Equatable, Hashable {
+
+    case structural
+    case batch
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension MergeTraceStageKind: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMergeTraceStageKind: FfiConverterRustBuffer {
+    typealias SwiftType = MergeTraceStageKind
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MergeTraceStageKind {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .structural
+
+        case 2: return .batch
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: MergeTraceStageKind, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .structural:
+            writeInt(&buf, Int32(1))
+
+
+        case .batch:
+            writeInt(&buf, Int32(2))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMergeTraceStageKind_lift(_ buf: RustBuffer) throws -> MergeTraceStageKind {
+    return try FfiConverterTypeMergeTraceStageKind.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMergeTraceStageKind_lower(_ value: MergeTraceStageKind) -> RustBuffer {
+    return FfiConverterTypeMergeTraceStageKind.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 public enum MutationKind: Equatable, Hashable {
 
     case upsert
@@ -8884,6 +11365,154 @@ public func FfiConverterTypeSnapshotNamespaceKind_lower(_ value: SnapshotNamespa
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
+public enum StructuralDiffMarkerKind: Equatable, Hashable {
+
+    case compare
+    case added
+    case removed
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension StructuralDiffMarkerKind: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeStructuralDiffMarkerKind: FfiConverterRustBuffer {
+    typealias SwiftType = StructuralDiffMarkerKind
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> StructuralDiffMarkerKind {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .compare
+
+        case 2: return .added
+
+        case 3: return .removed
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: StructuralDiffMarkerKind, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .compare:
+            writeInt(&buf, Int32(1))
+
+
+        case .added:
+            writeInt(&buf, Int32(2))
+
+
+        case .removed:
+            writeInt(&buf, Int32(3))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStructuralDiffMarkerKind_lift(_ buf: RustBuffer) throws -> StructuralDiffMarkerKind {
+    return try FfiConverterTypeStructuralDiffMarkerKind.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStructuralDiffMarkerKind_lower(_ value: StructuralDiffMarkerKind) -> RustBuffer {
+    return FfiConverterTypeStructuralDiffMarkerKind.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum TreeDebugNodeStatusKind: Equatable, Hashable {
+
+    case shared
+    case leftOnly
+    case rightOnly
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension TreeDebugNodeStatusKind: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTreeDebugNodeStatusKind: FfiConverterRustBuffer {
+    typealias SwiftType = TreeDebugNodeStatusKind
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TreeDebugNodeStatusKind {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .shared
+
+        case 2: return .leftOnly
+
+        case 3: return .rightOnly
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: TreeDebugNodeStatusKind, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .shared:
+            writeInt(&buf, Int32(1))
+
+
+        case .leftOnly:
+            writeInt(&buf, Int32(2))
+
+
+        case .rightOnly:
+            writeInt(&buf, Int32(3))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTreeDebugNodeStatusKind_lift(_ buf: RustBuffer) throws -> TreeDebugNodeStatusKind {
+    return try FfiConverterTypeTreeDebugNodeStatusKind.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTreeDebugNodeStatusKind_lower(_ value: TreeDebugNodeStatusKind) -> RustBuffer {
+    return FfiConverterTypeTreeDebugNodeStatusKind.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 public enum ValueRefKind: Equatable, Hashable {
 
     case inline
@@ -8967,6 +11596,30 @@ fileprivate struct FfiConverterOptionUInt64: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterUInt64.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionBool: FfiConverterRustBuffer {
+    typealias SwiftType = Bool?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterBool.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterBool.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -9071,6 +11724,54 @@ fileprivate struct FfiConverterOptionTypeChangedSpanHintRecord: FfiConverterRust
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeDiffTraversalStatsRecord: FfiConverterRustBuffer {
+    typealias SwiftType = DiffTraversalStatsRecord?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeDiffTraversalStatsRecord.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeDiffTraversalStatsRecord.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeEntryRecord: FfiConverterRustBuffer {
+    typealias SwiftType = EntryRecord?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeEntryRecord.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeEntryRecord.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeKeyProofRecord: FfiConverterRustBuffer {
     typealias SwiftType = KeyProofRecord?
 
@@ -9167,6 +11868,30 @@ fileprivate struct FfiConverterOptionTypeRangeCursorRecord: FfiConverterRustBuff
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeReverseCursorRecord: FfiConverterRustBuffer {
+    typealias SwiftType = ReverseCursorRecord?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeReverseCursorRecord.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeReverseCursorRecord.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeRootManifestRecord: FfiConverterRustBuffer {
     typealias SwiftType = RootManifestRecord?
 
@@ -9183,6 +11908,30 @@ fileprivate struct FfiConverterOptionTypeRootManifestRecord: FfiConverterRustBuf
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeRootManifestRecord.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeStructuralDiffCursorRecord: FfiConverterRustBuffer {
+    typealias SwiftType = StructuralDiffCursorRecord?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeStructuralDiffCursorRecord.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeStructuralDiffCursorRecord.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -9255,6 +12004,126 @@ fileprivate struct FfiConverterOptionTypeValueRefRecord: FfiConverterRustBuffer 
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeValueRefRecord.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeMergeFallbackReasonKind: FfiConverterRustBuffer {
+    typealias SwiftType = MergeFallbackReasonKind?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeMergeFallbackReasonKind.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeMergeFallbackReasonKind.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeMergeFastPathKind: FfiConverterRustBuffer {
+    typealias SwiftType = MergeFastPathKind?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeMergeFastPathKind.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeMergeFastPathKind.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeMergeReuseReasonKind: FfiConverterRustBuffer {
+    typealias SwiftType = MergeReuseReasonKind?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeMergeReuseReasonKind.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeMergeReuseReasonKind.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeMergeTraceResolutionKind: FfiConverterRustBuffer {
+    typealias SwiftType = MergeTraceResolutionKind?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeMergeTraceResolutionKind.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeMergeTraceResolutionKind.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeMergeTraceStageKind: FfiConverterRustBuffer {
+    typealias SwiftType = MergeTraceStageKind?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeMergeTraceStageKind.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeMergeTraceStageKind.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -9463,6 +12332,31 @@ fileprivate struct FfiConverterSequenceTypeKeyProofVerificationRecord: FfiConver
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeMergeTraceEventRecord: FfiConverterRustBuffer {
+    typealias SwiftType = [MergeTraceEventRecord]
+
+    public static func write(_ value: [MergeTraceEventRecord], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeMergeTraceEventRecord.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [MergeTraceEventRecord] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [MergeTraceEventRecord]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeMergeTraceEventRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeMutationRecord: FfiConverterRustBuffer {
     typealias SwiftType = [MutationRecord]
 
@@ -9563,6 +12457,31 @@ fileprivate struct FfiConverterSequenceTypeNodeRecord: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeSnapshotBundleNodeRecord: FfiConverterRustBuffer {
+    typealias SwiftType = [SnapshotBundleNodeRecord]
+
+    public static func write(_ value: [SnapshotBundleNodeRecord], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeSnapshotBundleNodeRecord.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [SnapshotBundleNodeRecord] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [SnapshotBundleNodeRecord]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeSnapshotBundleNodeRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeSnapshotRecord: FfiConverterRustBuffer {
     typealias SwiftType = [SnapshotRecord]
 
@@ -9580,6 +12499,31 @@ fileprivate struct FfiConverterSequenceTypeSnapshotRecord: FfiConverterRustBuffe
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeSnapshotRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeStructuralDiffMarkerRecord: FfiConverterRustBuffer {
+    typealias SwiftType = [StructuralDiffMarkerRecord]
+
+    public static func write(_ value: [StructuralDiffMarkerRecord], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeStructuralDiffMarkerRecord.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [StructuralDiffMarkerRecord] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [StructuralDiffMarkerRecord]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeStructuralDiffMarkerRecord.read(from: &buf))
         }
         return seq
     }
@@ -9613,6 +12557,106 @@ fileprivate struct FfiConverterSequenceTypeTombstoneMetadataRecord: FfiConverter
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeTreeDebugComparedNodeRecord: FfiConverterRustBuffer {
+    typealias SwiftType = [TreeDebugComparedNodeRecord]
+
+    public static func write(_ value: [TreeDebugComparedNodeRecord], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeTreeDebugComparedNodeRecord.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [TreeDebugComparedNodeRecord] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [TreeDebugComparedNodeRecord]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeTreeDebugComparedNodeRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeTreeDebugComparisonLevelRecord: FfiConverterRustBuffer {
+    typealias SwiftType = [TreeDebugComparisonLevelRecord]
+
+    public static func write(_ value: [TreeDebugComparisonLevelRecord], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeTreeDebugComparisonLevelRecord.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [TreeDebugComparisonLevelRecord] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [TreeDebugComparisonLevelRecord]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeTreeDebugComparisonLevelRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeTreeDebugLevelRecord: FfiConverterRustBuffer {
+    typealias SwiftType = [TreeDebugLevelRecord]
+
+    public static func write(_ value: [TreeDebugLevelRecord], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeTreeDebugLevelRecord.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [TreeDebugLevelRecord] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [TreeDebugLevelRecord]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeTreeDebugLevelRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeTreeDebugNodeRecord: FfiConverterRustBuffer {
+    typealias SwiftType = [TreeDebugNodeRecord]
+
+    public static func write(_ value: [TreeDebugNodeRecord], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeTreeDebugNodeRecord.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [TreeDebugNodeRecord] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [TreeDebugNodeRecord]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeTreeDebugNodeRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeTreeRecord: FfiConverterRustBuffer {
     typealias SwiftType = [TreeRecord]
 
@@ -9630,6 +12674,56 @@ fileprivate struct FfiConverterSequenceTypeTreeRecord: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeTreeRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeTreeStatsLevelF64Record: FfiConverterRustBuffer {
+    typealias SwiftType = [TreeStatsLevelF64Record]
+
+    public static func write(_ value: [TreeStatsLevelF64Record], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeTreeStatsLevelF64Record.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [TreeStatsLevelF64Record] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [TreeStatsLevelF64Record]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeTreeStatsLevelF64Record.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeTreeStatsLevelU64Record: FfiConverterRustBuffer {
+    typealias SwiftType = [TreeStatsLevelU64Record]
+
+    public static func write(_ value: [TreeStatsLevelU64Record], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeTreeStatsLevelU64Record.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [TreeStatsLevelU64Record] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [TreeStatsLevelU64Record]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeTreeStatsLevelU64Record.read(from: &buf))
         }
         return seq
     }
@@ -9723,6 +12817,19 @@ public func crdtConfigMultiValue(deletePolicy: CrdtDeletePolicyKind) -> CrdtConf
     )
 })
 }
+public func crdtResolutionDelete() -> CrdtResolutionRecord  {
+    return try!  FfiConverterTypeCrdtResolutionRecord_lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_func_crdt_resolution_delete($0
+    )
+})
+}
+public func crdtResolutionValue(value: Data) -> CrdtResolutionRecord  {
+    return try!  FfiConverterTypeCrdtResolutionRecord_lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_func_crdt_resolution_value(
+        FfiConverterData.lower(value),$0
+    )
+})
+}
 public func debugKey(key: Data) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_prolly_bindings_fn_func_debug_key(
@@ -9755,6 +12862,13 @@ public func defaultParallelConfig() -> ParallelConfigRecord  {
     )
 })
 }
+public func deleteMutation(key: Data) -> MutationRecord  {
+    return try!  FfiConverterTypeMutationRecord_lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_func_delete_mutation(
+        FfiConverterData.lower(key),$0
+    )
+})
+}
 public func diffPageProofFromBytes(bytes: Data)throws  -> DiffPageProofRecord  {
     return try  FfiConverterTypeDiffPageProofRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_func_diff_page_proof_from_bytes(
@@ -9773,6 +12887,31 @@ public func encodeSegment(segment: Data) -> Data  {
     return try!  FfiConverterData.lift(try! rustCall() {
     uniffi_prolly_bindings_fn_func_encode_segment(
         FfiConverterData.lower(segment),$0
+    )
+})
+}
+public func encodingCbor() -> EncodingRecord  {
+    return try!  FfiConverterTypeEncodingRecord_lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_func_encoding_cbor($0
+    )
+})
+}
+public func encodingCustom(name: String) -> EncodingRecord  {
+    return try!  FfiConverterTypeEncodingRecord_lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_func_encoding_custom(
+        FfiConverterString.lower(name),$0
+    )
+})
+}
+public func encodingJson() -> EncodingRecord  {
+    return try!  FfiConverterTypeEncodingRecord_lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_func_encoding_json($0
+    )
+})
+}
+public func encodingRaw() -> EncodingRecord  {
+    return try!  FfiConverterTypeEncodingRecord_lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_func_encoding_raw($0
     )
 })
 }
@@ -9859,6 +12998,13 @@ public func keyProofToBytes(proof: KeyProofRecord)throws  -> Data  {
     )
 })
 }
+public func largeValueConfig(inlineThreshold: UInt64)throws  -> LargeValueConfigRecord  {
+    return try  FfiConverterTypeLargeValueConfigRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_func_large_value_config(
+        FfiConverterUInt64.lower(inlineThreshold),$0
+    )
+})
+}
 public func multiKeyProofFromBytes(bytes: Data)throws  -> MultiKeyProofRecord  {
     return try  FfiConverterTypeMultiKeyProofRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_func_multi_key_proof_from_bytes(
@@ -9929,6 +13075,20 @@ public func nodeToBytes(node: NodeRecord)throws  -> Data  {
     return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_func_node_to_bytes(
         FfiConverterTypeNodeRecord_lower(node),$0
+    )
+})
+}
+public func parallelConfig(maxThreads: UInt64, parallelismThreshold: UInt64)throws  -> ParallelConfigRecord  {
+    return try  FfiConverterTypeParallelConfigRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_func_parallel_config(
+        FfiConverterUInt64.lower(maxThreads),
+        FfiConverterUInt64.lower(parallelismThreshold),$0
+    )
+})
+}
+public func parallelConfigSequential() -> ParallelConfigRecord  {
+    return try!  FfiConverterTypeParallelConfigRecord_lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_func_parallel_config_sequential($0
     )
 })
 }
@@ -10021,6 +13181,53 @@ public func rangeProofToBytes(proof: RangeProofRecord)throws  -> Data  {
     )
 })
 }
+public func resolutionDelete() -> ResolutionRecord  {
+    return try!  FfiConverterTypeResolutionRecord_lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_func_resolution_delete($0
+    )
+})
+}
+public func resolutionUnresolved() -> ResolutionRecord  {
+    return try!  FfiConverterTypeResolutionRecord_lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_func_resolution_unresolved($0
+    )
+})
+}
+public func resolutionValue(value: Data) -> ResolutionRecord  {
+    return try!  FfiConverterTypeResolutionRecord_lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_func_resolution_value(
+        FfiConverterData.lower(value),$0
+    )
+})
+}
+public func resolveDeleteWins(conflict: ConflictRecord) -> ResolutionRecord  {
+    return try!  FfiConverterTypeResolutionRecord_lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_func_resolve_delete_wins(
+        FfiConverterTypeConflictRecord_lower(conflict),$0
+    )
+})
+}
+public func resolvePreferLeft(conflict: ConflictRecord) -> ResolutionRecord  {
+    return try!  FfiConverterTypeResolutionRecord_lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_func_resolve_prefer_left(
+        FfiConverterTypeConflictRecord_lower(conflict),$0
+    )
+})
+}
+public func resolvePreferRight(conflict: ConflictRecord) -> ResolutionRecord  {
+    return try!  FfiConverterTypeResolutionRecord_lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_func_resolve_prefer_right(
+        FfiConverterTypeConflictRecord_lower(conflict),$0
+    )
+})
+}
+public func resolveUpdateWins(conflict: ConflictRecord) -> ResolutionRecord  {
+    return try!  FfiConverterTypeResolutionRecord_lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_func_resolve_update_wins(
+        FfiConverterTypeConflictRecord_lower(conflict),$0
+    )
+})
+}
 public func retainAllNamedRoots() -> NamedRootRetentionRecord  {
     return try!  FfiConverterTypeNamedRootRetentionRecord_lift(try! rustCall() {
     uniffi_prolly_bindings_fn_func_retain_all_named_roots($0
@@ -10057,6 +13264,19 @@ public func retainNewestNamedRoots(prefix: Data, count: UInt64) -> NamedRootRete
     )
 })
 }
+public func reverseCursorBeforeKey(key: Data) -> ReverseCursorRecord  {
+    return try!  FfiConverterTypeReverseCursorRecord_lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_func_reverse_cursor_before_key(
+        FfiConverterData.lower(key),$0
+    )
+})
+}
+public func reverseCursorEnd() -> ReverseCursorRecord  {
+    return try!  FfiConverterTypeReverseCursorRecord_lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_func_reverse_cursor_end($0
+    )
+})
+}
 public func rootManifestFromBytes(bytes: Data)throws  -> RootManifestRecord  {
     return try  FfiConverterTypeRootManifestRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_func_root_manifest_from_bytes(
@@ -10081,6 +13301,48 @@ public func signProofBundleHmacSha256(proofBundle: Data, keyId: Data, secret: Da
         FfiConverterOptionUInt64.lower(issuedAtMillis),
         FfiConverterOptionUInt64.lower(expiresAtMillis),
         FfiConverterData.lower(nonce),$0
+    )
+})
+}
+public func snapshotBundleDigest(record: SnapshotBundleRecord)throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_func_snapshot_bundle_digest(
+        FfiConverterTypeSnapshotBundleRecord_lower(record),$0
+    )
+})
+}
+public func snapshotBundleDigestBytes(bytes: Data)throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_func_snapshot_bundle_digest_bytes(
+        FfiConverterData.lower(bytes),$0
+    )
+})
+}
+public func snapshotBundleFromBytes(bytes: Data)throws  -> SnapshotBundleRecord  {
+    return try  FfiConverterTypeSnapshotBundleRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_func_snapshot_bundle_from_bytes(
+        FfiConverterData.lower(bytes),$0
+    )
+})
+}
+public func snapshotBundleSummary(record: SnapshotBundleRecord)throws  -> SnapshotBundleSummaryRecord  {
+    return try  FfiConverterTypeSnapshotBundleSummaryRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_func_snapshot_bundle_summary(
+        FfiConverterTypeSnapshotBundleRecord_lower(record),$0
+    )
+})
+}
+public func snapshotBundleSummaryFromBytes(bytes: Data)throws  -> SnapshotBundleSummaryRecord  {
+    return try  FfiConverterTypeSnapshotBundleSummaryRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_func_snapshot_bundle_summary_from_bytes(
+        FfiConverterData.lower(bytes),$0
+    )
+})
+}
+public func snapshotBundleToBytes(record: SnapshotBundleRecord)throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_func_snapshot_bundle_to_bytes(
+        FfiConverterTypeSnapshotBundleRecord_lower(record),$0
     )
 })
 }
@@ -10190,6 +13452,19 @@ public func tombstoneUpsertMutation(key: Data, tombstone: TombstoneRecord)throws
     )
 })
 }
+public func treeConfig(minChunkSize: UInt64, maxChunkSize: UInt64, chunkingFactor: UInt32, hashSeed: UInt64, encoding: EncodingRecord, nodeCacheMaxNodes: UInt64?, nodeCacheMaxBytes: UInt64?)throws  -> ConfigRecord  {
+    return try  FfiConverterTypeConfigRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_func_tree_config(
+        FfiConverterUInt64.lower(minChunkSize),
+        FfiConverterUInt64.lower(maxChunkSize),
+        FfiConverterUInt32.lower(chunkingFactor),
+        FfiConverterUInt64.lower(hashSeed),
+        FfiConverterTypeEncodingRecord_lower(encoding),
+        FfiConverterOptionUInt64.lower(nodeCacheMaxNodes),
+        FfiConverterOptionUInt64.lower(nodeCacheMaxBytes),$0
+    )
+})
+}
 public func u128Key(value: String)throws  -> Data  {
     return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_func_u128_key(
@@ -10201,6 +13476,14 @@ public func u64Key(value: UInt64) -> Data  {
     return try!  FfiConverterData.lift(try! rustCall() {
     uniffi_prolly_bindings_fn_func_u64_key(
         FfiConverterUInt64.lower(value),$0
+    )
+})
+}
+public func upsertMutation(key: Data, value: Data) -> MutationRecord  {
+    return try!  FfiConverterTypeMutationRecord_lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_func_upsert_mutation(
+        FfiConverterData.lower(key),
+        FfiConverterData.lower(value),$0
     )
 })
 }
@@ -10289,6 +13572,20 @@ public func verifyRangeProof(proof: RangeProofRecord)throws  -> RangeProofVerifi
     return try  FfiConverterTypeRangeProofVerificationRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_func_verify_range_proof(
         FfiConverterTypeRangeProofRecord_lower(proof),$0
+    )
+})
+}
+public func verifySnapshotBundle(record: SnapshotBundleRecord)throws  -> SnapshotBundleVerificationRecord  {
+    return try  FfiConverterTypeSnapshotBundleVerificationRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_func_verify_snapshot_bundle(
+        FfiConverterTypeSnapshotBundleRecord_lower(record),$0
+    )
+})
+}
+public func verifySnapshotBundleBytes(bytes: Data)throws  -> SnapshotBundleVerificationRecord  {
+    return try  FfiConverterTypeSnapshotBundleVerificationRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_func_verify_snapshot_bundle_bytes(
+        FfiConverterData.lower(bytes),$0
     )
 })
 }
@@ -10383,6 +13680,12 @@ private let initializationResult: InitializationResult = {
     if (uniffi_prolly_bindings_checksum_func_crdt_config_multi_value() != 53968) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_prolly_bindings_checksum_func_crdt_resolution_delete() != 41725) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_func_crdt_resolution_value() != 63818) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_prolly_bindings_checksum_func_debug_key() != 56659) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -10398,6 +13701,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_prolly_bindings_checksum_func_default_parallel_config() != 39626) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_prolly_bindings_checksum_func_delete_mutation() != 23016) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_prolly_bindings_checksum_func_diff_page_proof_from_bytes() != 24710) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -10405,6 +13711,18 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_func_encode_segment() != 11634) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_func_encoding_cbor() != 62179) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_func_encoding_custom() != 31444) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_func_encoding_json() != 52476) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_func_encoding_raw() != 57596) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_func_i128_key() != 29684) {
@@ -10440,6 +13758,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_prolly_bindings_checksum_func_key_proof_to_bytes() != 57240) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_prolly_bindings_checksum_func_large_value_config() != 23240) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_prolly_bindings_checksum_func_multi_key_proof_from_bytes() != 33082) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -10468,6 +13789,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_func_node_to_bytes() != 56453) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_func_parallel_config() != 49373) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_func_parallel_config_sequential() != 26170) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_func_prefix_end() != 19464) {
@@ -10506,6 +13833,27 @@ private let initializationResult: InitializationResult = {
     if (uniffi_prolly_bindings_checksum_func_range_proof_to_bytes() != 3393) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_prolly_bindings_checksum_func_resolution_delete() != 6396) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_func_resolution_unresolved() != 8947) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_func_resolution_value() != 33181) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_func_resolve_delete_wins() != 26919) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_func_resolve_prefer_left() != 7433) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_func_resolve_prefer_right() != 10928) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_func_resolve_update_wins() != 62395) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_prolly_bindings_checksum_func_retain_all_named_roots() != 23556) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -10521,6 +13869,12 @@ private let initializationResult: InitializationResult = {
     if (uniffi_prolly_bindings_checksum_func_retain_newest_named_roots() != 19688) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_prolly_bindings_checksum_func_reverse_cursor_before_key() != 30758) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_func_reverse_cursor_end() != 24189) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_prolly_bindings_checksum_func_root_manifest_from_bytes() != 59047) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -10528,6 +13882,24 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_func_sign_proof_bundle_hmac_sha256() != 46166) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_func_snapshot_bundle_digest() != 49430) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_func_snapshot_bundle_digest_bytes() != 38367) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_func_snapshot_bundle_from_bytes() != 49121) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_func_snapshot_bundle_summary() != 22997) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_func_snapshot_bundle_summary_from_bytes() != 35406) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_func_snapshot_bundle_to_bytes() != 49097) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_func_snapshot_id_from_name() != 57327) {
@@ -10575,10 +13947,16 @@ private let initializationResult: InitializationResult = {
     if (uniffi_prolly_bindings_checksum_func_tombstone_upsert_mutation() != 25846) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_prolly_bindings_checksum_func_tree_config() != 13018) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_prolly_bindings_checksum_func_u128_key() != 12112) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_func_u64_key() != 43436) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_func_upsert_mutation() != 55414) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_func_value_ref_from_bytes() != 265) {
@@ -10615,6 +13993,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_func_verify_range_proof() != 32709) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_func_verify_snapshot_bundle() != 37604) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_func_verify_snapshot_bundle_bytes() != 55548) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_func_versioned_value_bytes_matches_schema() != 9192) {
@@ -10752,6 +14136,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_prolly_bindings_checksum_method_prollyengine_clear_cache() != 38107) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_prolly_bindings_checksum_method_prollyengine_collect_stats() != 8801) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_prolly_bindings_checksum_method_prollyengine_collect_stats_json() != 21299) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -10782,10 +14169,19 @@ private let initializationResult: InitializationResult = {
     if (uniffi_prolly_bindings_checksum_method_prollyengine_create() != 15621) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_prolly_bindings_checksum_method_prollyengine_cursor_window() != 31202) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_prollyengine_debug_compare_trees() != 16233) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_prolly_bindings_checksum_method_prollyengine_debug_compare_trees_json() != 10941) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_prollyengine_debug_compare_trees_text() != 55170) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_prollyengine_debug_tree() != 56376) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_prollyengine_debug_tree_json() != 24340) {
@@ -10812,6 +14208,12 @@ private let initializationResult: InitializationResult = {
     if (uniffi_prolly_bindings_checksum_method_prollyengine_diff_page() != 49332) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_prolly_bindings_checksum_method_prollyengine_export_snapshot() != 39238) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_prollyengine_first_entry() != 29853) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_prolly_bindings_checksum_method_prollyengine_get() != 37112) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -10825,6 +14227,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_prollyengine_hydrate_prefix_path_hint() != 30547) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_prollyengine_import_snapshot() != 14533) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_prollyengine_last_entry() != 35726) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_prollyengine_list_named_root_manifests() != 58385) {
@@ -10855,6 +14263,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_prollyengine_load_snapshots() != 34944) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_prollyengine_lower_bound() != 56345) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_prollyengine_mark_reachable() != 32421) {
@@ -10905,6 +14316,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_prolly_bindings_checksum_method_prollyengine_parallel_batch() != 61898) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_prolly_bindings_checksum_method_prollyengine_parallel_batch_with_stats() != 14930) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_prolly_bindings_checksum_method_prollyengine_pin_tree_path() != 42121) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -10927,6 +14341,15 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_prollyengine_plan_store_gc_for_retention() != 19773) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_prollyengine_prefix() != 11714) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_prollyengine_prefix_page() != 29919) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_prollyengine_prefix_reverse_page() != 20711) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_prollyengine_prove_diff_page() != 18402) {
@@ -10989,10 +14412,19 @@ private let initializationResult: InitializationResult = {
     if (uniffi_prolly_bindings_checksum_method_prollyengine_reset_metrics() != 10217) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_prolly_bindings_checksum_method_prollyengine_reverse_page() != 38329) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_prollyengine_stats_diff() != 34349) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_prolly_bindings_checksum_method_prollyengine_stats_diff_json() != 1768) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_prollyengine_structural_diff_page() != 61826) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_prollyengine_structural_diff_page_with_cursor() != 28097) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_prollyengine_sweep_blob_gc() != 64727) {
@@ -11011,6 +14443,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_prollyengine_unpin_all_cache_nodes() != 58636) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_prollyengine_upper_bound() != 36418) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_constructor_mergepolicyregistry_new() != 19304) {

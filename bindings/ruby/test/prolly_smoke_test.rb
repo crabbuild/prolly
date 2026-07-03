@@ -399,6 +399,8 @@ assert_equal '1'.b, async_engine.get(async_tree, 'a'.b).value
 assert_equal ['b'.b], async_engine.range_after(async_tree, 'a'.b, nil).value.map(&:key)
 async_changed = async_engine.put(async_tree, 'b'.b, '22'.b).value
 assert_equal 1, async_engine.diff(async_tree, async_changed).value.length
+assert_equal ['b'.b, 'a'.b], async_engine.reverse_page(async_changed, nil, ''.b, 2).value.entries.map(&:key)
+assert_equal ['a'.b], async_engine.prefix_reverse_page(async_changed, 'a'.b, nil, 2).value.entries.map(&:key)
 async_blob_store = Prolly::AsyncBlobStore.memory
 direct_ref = async_blob_store.put_blob('direct'.b).value
 assert_equal 'direct'.b, async_blob_store.get_blob(direct_ref).value
@@ -585,6 +587,30 @@ diff_fixture.fetch('diffs').each_with_index do |expected, index|
   assert_equal expected['new'], to_hex(actual.new_value)
 end
 
+assert_equal Prolly::EncodingKind::RAW, Prolly.encoding_raw.kind
+assert_equal Prolly::EncodingKind::CBOR, Prolly.encoding_cbor.kind
+assert_equal Prolly::EncodingKind::JSON, Prolly.encoding_json.kind
+custom_encoding = Prolly.encoding_custom('postcard')
+assert_equal Prolly::EncodingKind::CUSTOM, custom_encoding.kind
+assert_equal 'postcard', custom_encoding.custom_name
+constructed_config = Prolly.tree_config(2, 64, 32, 7, custom_encoding, 16, 4096)
+assert_equal custom_encoding, constructed_config.encoding
+assert_equal 16, constructed_config.node_cache_max_nodes
+assert_raises(Prolly::ProllyBindingError::InvalidArgument) do
+  Prolly.tree_config(
+    2,
+    64,
+    32,
+    7,
+    Prolly::EncodingRecord.new(kind: Prolly::EncodingKind::CUSTOM, custom_name: nil),
+    nil,
+    nil
+  )
+end
+assert_equal 8, Prolly.large_value_config(8).inline_threshold
+assert_equal 2, Prolly.parallel_config(2, 24).max_threads
+assert_equal 1, Prolly.parallel_config_sequential.max_threads
+
 fixtures.fetch('value_fixtures').each do |fixture|
   bytes = hex(fixture.fetch('bytes'))
   record = Prolly.versioned_value_from_bytes(bytes)
@@ -634,6 +660,15 @@ batched = parity_engine.batch(
   ]
 )
 assert_equal ['11'.b, nil, '2'.b], parity_engine.get_many(batched, ['a'.b, 'missing'.b, 'b'.b])
+assert_equal 'a'.b, parity_engine.first_entry(batched).key
+assert_equal '11'.b, parity_engine.first_entry(batched).value
+assert_equal 'b'.b, parity_engine.last_entry(batched).key
+assert_equal 'b'.b, parity_engine.lower_bound(batched, 'aa'.b).key
+assert_equal nil, parity_engine.upper_bound(batched, 'b'.b)
+assert_equal ['11'.b], parity_engine.prefix(batched, 'a'.b).map(&:value)
+prefix_page = parity_engine.prefix_page(batched, 'a'.b, nil, 1)
+assert_equal ['11'.b], prefix_page.entries.map(&:value)
+assert prefix_page.next_cursor
 
 built = parity_engine.build_from_entries(
   [
@@ -661,12 +696,14 @@ begin
 rescue Prolly::ProllyBindingError::InvalidArgument
   # expected
 end
+assert_equal Prolly::MutationKind::UPSERT, Prolly.upsert_mutation('probe'.b, 'value'.b).kind
+assert_equal Prolly::MutationKind::DELETE, Prolly.delete_mutation('probe'.b).kind
 batch_stats = parity_engine.batch_with_stats(
   empty,
   [
-    Prolly::MutationRecord.new(kind: Prolly::MutationKind::UPSERT, key: 'b'.b, value: '2'.b),
-    Prolly::MutationRecord.new(kind: Prolly::MutationKind::UPSERT, key: 'a'.b, value: '1'.b),
-    Prolly::MutationRecord.new(kind: Prolly::MutationKind::UPSERT, key: 'a'.b, value: '11'.b)
+    Prolly.upsert_mutation('b'.b, '2'.b),
+    Prolly.upsert_mutation('a'.b, '1'.b),
+    Prolly.upsert_mutation('a'.b, '11'.b)
   ]
 )
 assert_equal '11'.b, parity_engine.get(batch_stats.tree, 'a'.b)
@@ -686,6 +723,18 @@ parallel_tree = parity_engine.parallel_batch(
   parallel_config
 )
 assert_equal 'ruby'.b, parity_engine.get(parallel_tree, 'q'.b)
+parallel_stats = parity_engine.parallel_batch_with_stats(
+  empty,
+  [
+    Prolly::MutationRecord.new(kind: Prolly::MutationKind::UPSERT, key: 'r'.b, value: 'route'.b),
+    Prolly::MutationRecord.new(kind: Prolly::MutationKind::UPSERT, key: 's'.b, value: 'stats'.b)
+  ],
+  parallel_config
+)
+assert_equal 'stats'.b, parity_engine.get(parallel_stats.tree, 's'.b)
+assert_equal 2, parallel_stats.stats.input_mutations
+assert_equal 2, parallel_stats.stats.effective_mutations
+assert parallel_stats.stats.written_nodes.positive?
 
 appended = parity_engine.append_batch(
   built,
@@ -728,6 +777,19 @@ from_cursor = parity_engine.range_from_cursor(
 )
 assert_equal after_a.map(&:key), from_cursor.map(&:key)
 
+window = parity_engine.cursor_window(batched, 'aa'.b, nil, 1)
+assert_equal 'a'.b, window.position_key
+assert_equal '11'.b, window.position_value
+assert_equal false, window.found
+assert_equal ['b'.b], window.entries.map(&:key)
+assert_equal 'b'.b, window.next_cursor.after_key
+
+exact_probe = parity_engine.cursor_window(batched, 'a'.b, nil, 0)
+assert_equal true, exact_probe.found
+assert_equal 'a'.b, exact_probe.position_key
+assert_equal [], exact_probe.entries
+assert_equal nil, exact_probe.next_cursor
+
 second_page = parity_engine.range_page(batched, first_page.next_cursor, nil, 1)
 assert_equal 1, second_page.entries.length
 assert_equal 'b'.b, second_page.entries.first.key
@@ -736,6 +798,19 @@ unless second_page.next_cursor.nil?
   assert_equal 0, third_page.entries.length
   assert_equal nil, third_page.next_cursor
 end
+
+assert_equal nil, Prolly.reverse_cursor_end.before_key
+before_c_cursor = Prolly.reverse_cursor_before_key('c'.b)
+assert_equal 'c'.b, before_c_cursor.before_key
+reverse_first = parity_engine.reverse_page(built, nil, ''.b, 2)
+assert_equal ['c'.b, 'b'.b], reverse_first.entries.map(&:key)
+assert_equal 'b'.b, reverse_first.next_cursor.before_key
+reverse_second = parity_engine.reverse_page(built, reverse_first.next_cursor, ''.b, 2)
+assert_equal ['a'.b], reverse_second.entries.map(&:key)
+assert_equal nil, reverse_second.next_cursor
+prefix_reverse = parity_engine.prefix_reverse_page(built, 'b'.b, nil, 8)
+assert_equal ['b'.b], prefix_reverse.entries.map(&:key)
+assert_equal nil, prefix_reverse.next_cursor
 
 changed = parity_engine.put(batched, 'b'.b, '22'.b)
 diff_page = parity_engine.diff_page(batched, changed, nil, nil, 1)
@@ -809,6 +884,10 @@ explanation = parity_engine.merge_explain(base, left, right, 'prefer_right')
 assert explanation.result, 'expected merge explanation to include a result'
 assert_equal nil, explanation.error
 assert explanation.trace_json.include?('events'), 'expected merge trace JSON to include events'
+assert explanation.trace.events.any? { |event|
+  event.kind == Prolly::MergeTraceEventKind::RESOLVER_CALLED &&
+    event.resolution == Prolly::MergeTraceResolutionKind::VALUE
+}, 'expected typed merge trace to include a resolver-called value event'
 
 merged = parity_engine.merge(base, left, right, 'prefer_right')
 assert_equal 'right'.b, parity_engine.get(merged, 'k'.b)
@@ -820,22 +899,35 @@ assert_equal 'right'.b, parity_engine.get(merged_prefix, 'k'.b)
 class JoinResolver < Prolly::MergeResolverCallback
   def resolve(conflict)
     if conflict.left && conflict.right
-      return Prolly::ResolutionRecord.new(
-        kind: Prolly::ResolutionKind::VALUE,
-        value: conflict.left + '|'.b + conflict.right
-      )
+      return Prolly.resolution_value(conflict.left + '|'.b + conflict.right)
     end
     if conflict.left
-      return Prolly::ResolutionRecord.new(kind: Prolly::ResolutionKind::VALUE, value: conflict.left)
+      return Prolly.resolution_value(conflict.left)
     end
     if conflict.right
-      return Prolly::ResolutionRecord.new(kind: Prolly::ResolutionKind::VALUE, value: conflict.right)
+      return Prolly.resolution_value(conflict.right)
     end
 
-    Prolly::ResolutionRecord.new(kind: Prolly::ResolutionKind::DELETE, value: nil)
+    Prolly.resolution_delete
+  end
+end
+assert_equal Prolly::ResolutionKind::UNRESOLVED, Prolly.resolution_unresolved.kind
+
+update_conflict = Prolly::ConflictRecord.new(key: 'k'.b, base: 'base'.b, left: 'left'.b, right: 'right'.b)
+assert_equal 'left'.b, Prolly.resolve_prefer_left(update_conflict).value
+assert_equal Prolly::ResolutionKind::UNRESOLVED, Prolly.resolve_delete_wins(update_conflict).kind
+delete_conflict = Prolly::ConflictRecord.new(key: 'k'.b, base: 'base'.b, left: nil, right: 'right'.b)
+assert_equal Prolly::ResolutionKind::DELETE, Prolly.resolve_delete_wins(delete_conflict).kind
+assert_equal 'right'.b, Prolly.resolve_update_wins(delete_conflict).value
+
+class PreferRightResolver < Prolly::MergeResolverCallback
+  def resolve(conflict)
+    Prolly.resolve_prefer_right(conflict)
   end
 end
 
+prefer_right_merged = parity_engine.merge_with_resolver(base, left, right, PreferRightResolver.new)
+assert_equal 'right'.b, parity_engine.get(prefer_right_merged, 'k'.b)
 join_resolver = JoinResolver.new
 callback_merged = parity_engine.merge_with_resolver(base, left, right, join_resolver)
 assert_equal 'left|right'.b, parity_engine.get(callback_merged, 'k'.b)
@@ -954,19 +1046,16 @@ assert_equal 3, merged_value.timestamp
 class CrdtJoinResolver < Prolly::CrdtResolverCallback
   def resolve(conflict)
     if conflict.left && conflict.right
-      return Prolly::CrdtResolutionRecord.new(
-        kind: Prolly::CrdtResolutionKind::VALUE,
-        value: conflict.left + '|'.b + conflict.right
-      )
+      return Prolly.crdt_resolution_value(conflict.left + '|'.b + conflict.right)
     end
     if conflict.left
-      return Prolly::CrdtResolutionRecord.new(kind: Prolly::CrdtResolutionKind::VALUE, value: conflict.left)
+      return Prolly.crdt_resolution_value(conflict.left)
     end
     if conflict.right
-      return Prolly::CrdtResolutionRecord.new(kind: Prolly::CrdtResolutionKind::VALUE, value: conflict.right)
+      return Prolly.crdt_resolution_value(conflict.right)
     end
 
-    Prolly::CrdtResolutionRecord.new(kind: Prolly::CrdtResolutionKind::DELETE, value: nil)
+    Prolly.crdt_resolution_delete
   end
 end
 
@@ -1020,10 +1109,23 @@ ops_empty = ops_engine.create
 ops_tree = ops_engine.put(ops_empty, 'k'.b, 'v'.b)
 
 assert ops_engine.collect_stats_json(ops_tree).json.include?('"num_nodes"'), 'expected stats JSON'
+ops_typed_stats = ops_engine.collect_stats(ops_tree)
+assert_equal 1, ops_typed_stats.total_key_value_pairs
+assert ops_typed_stats.nodes_per_level.any? { |level| level.level == 0 && level.value.positive? }, 'expected level stats'
 assert ops_engine.stats_diff_json(ops_empty, ops_tree).json.include?('"absolute"'), 'expected stats diff JSON'
+ops_typed_diff = ops_engine.stats_diff(ops_empty, ops_tree)
+assert_equal 0, ops_typed_diff.before.total_key_value_pairs
+assert_equal 1, ops_typed_diff.after.total_key_value_pairs
+assert_equal 1, ops_typed_diff.absolute.total_key_value_pairs_diff
 assert ops_engine.debug_tree_json(ops_tree).json.include?('"levels"'), 'expected debug tree JSON'
+ops_debug_tree = ops_engine.debug_tree(ops_tree)
+assert ops_debug_tree.levels.any? { |level| !level.nodes.empty? }, 'expected typed debug tree nodes'
 assert ops_engine.debug_tree_text(ops_tree).include?('level'), 'expected debug tree text'
 assert ops_engine.debug_compare_trees_json(ops_empty, ops_tree).json.include?('"right_only_nodes"'), 'expected compare JSON'
+ops_debug_compare = ops_engine.debug_compare_trees(ops_empty, ops_tree)
+assert_equal 0, ops_debug_compare.left_only_nodes
+assert ops_debug_compare.right_only_nodes.positive?, 'expected right-only debug nodes'
+assert ops_debug_compare.levels.any? { |level| level.nodes.any? { |node| node.status == Prolly::TreeDebugNodeStatusKind::RIGHT_ONLY } }, 'expected typed right-only debug node'
 assert ops_engine.debug_compare_trees_text(ops_empty, ops_tree).include?('right'), 'expected compare text'
 
 assert ops_engine.pin_tree_path(ops_tree, 'k'.b).positive?, 'expected pinned path count'
@@ -1051,6 +1153,16 @@ assert_equal nil, ops_engine.load_changed_spans_hint(ops_empty, ops_tree)
 structural_page = ops_engine.structural_diff_page(ops_empty, ops_tree, nil, 1)
 assert structural_page.diffs.any?, 'expected structural diff page diffs'
 assert structural_page.stats.emitted_diffs.positive?, 'expected structural diff stats'
+structural_cursor_page = ops_engine.structural_diff_page(ops_empty, ops_tree, nil, 0)
+assert structural_cursor_page.next_cursor, 'expected typed structural diff cursor'
+assert structural_cursor_page.next_cursor_json, 'expected structural diff cursor JSON'
+resumed_structural_page = ops_engine.structural_diff_page_with_cursor(
+  ops_empty,
+  ops_tree,
+  structural_cursor_page.next_cursor,
+  1
+)
+assert resumed_structural_page.diffs.any?, 'expected resumed structural diff page diffs'
 
 reachability = ops_engine.mark_reachable([ops_tree])
 assert reachability.live_nodes.positive?, 'expected live nodes'
@@ -1071,6 +1183,37 @@ copy_result = ops_engine.copy_missing_nodes(ops_tree, destination_engine)
 assert_equal missing_plan.missing_nodes, copy_result.copied_nodes
 assert_equal 0, ops_engine.plan_missing_nodes(ops_tree, destination_engine).missing_nodes
 assert_equal 'v'.b, destination_engine.get(ops_tree, 'k'.b)
+
+snapshot_bundle = ops_engine.export_snapshot(ops_tree)
+assert_equal 1, snapshot_bundle.format_version
+assert snapshot_bundle.nodes.any?, 'expected snapshot bundle nodes'
+snapshot_bundle_bytes = Prolly.snapshot_bundle_to_bytes(snapshot_bundle)
+snapshot_bundle_digest = Prolly.snapshot_bundle_digest(snapshot_bundle)
+assert_equal Prolly.cid_from_bytes(snapshot_bundle_bytes), snapshot_bundle_digest
+assert_equal snapshot_bundle_digest, Prolly.snapshot_bundle_digest_bytes(snapshot_bundle_bytes)
+snapshot_summary = Prolly.snapshot_bundle_summary(snapshot_bundle)
+assert_equal 1, snapshot_summary.format_version
+assert_equal snapshot_bundle.nodes.length, snapshot_summary.node_count
+assert snapshot_summary.byte_count.positive?, 'expected snapshot bundle byte count'
+assert_equal snapshot_summary, Prolly.snapshot_bundle_summary_from_bytes(snapshot_bundle_bytes)
+snapshot_verification = Prolly.verify_snapshot_bundle(snapshot_bundle)
+assert_equal true, snapshot_verification.valid
+assert_equal snapshot_summary, snapshot_verification.summary
+assert_equal [], snapshot_verification.missing_cids
+assert_equal [], snapshot_verification.extra_cids
+assert_equal snapshot_verification, Prolly.verify_snapshot_bundle_bytes(snapshot_bundle_bytes)
+incomplete_snapshot_bundle = Prolly::SnapshotBundleRecord.new(
+  format_version: snapshot_bundle.format_version,
+  tree: snapshot_bundle.tree,
+  nodes: snapshot_bundle.nodes[0...-1]
+)
+incomplete_snapshot_verification = Prolly.verify_snapshot_bundle(incomplete_snapshot_bundle)
+assert_equal false, incomplete_snapshot_verification.valid
+assert incomplete_snapshot_verification.missing_cids.any?, 'expected incomplete bundle missing CIDs'
+snapshot_bundle = Prolly.snapshot_bundle_from_bytes(snapshot_bundle_bytes)
+snapshot_destination = Prolly::ProllyEngine.memory(Prolly.default_config)
+imported_tree = snapshot_destination.import_snapshot(snapshot_bundle)
+assert_equal 'v'.b, snapshot_destination.get(imported_tree, 'k'.b)
 
 blob_engine = Prolly::ProllyEngine.memory(Prolly.default_config)
 blob_store = Prolly::ProllyBlobStore.memory

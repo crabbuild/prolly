@@ -56,10 +56,7 @@ use super::node::Node;
 use super::store::Store;
 use super::tree::Tree;
 
-use super::batch::{
-    apply_mutations_to_leaf, group_mutations_by_leaf, preprocess_mutations, BatchWriteCollector,
-    LeafMutationGroup,
-};
+use super::batch::{BatchApplyResult, BatchWriter, BatchWriterConfig};
 use super::rebalance;
 use super::Prolly;
 
@@ -119,6 +116,29 @@ impl ParallelConfig {
             parallelism_threshold: usize::MAX,
         }
     }
+}
+
+fn batch_writer_config(config: &ParallelConfig, mutation_count: usize) -> BatchWriterConfig {
+    let default_config = BatchWriterConfig::new();
+    let prefetch_parallelism = if mutation_count < config.parallelism_threshold {
+        1
+    } else if config.max_threads == 0 {
+        default_config.prefetch_parallelism
+    } else {
+        config.max_threads
+    };
+
+    default_config.with_prefetch_parallelism(prefetch_parallelism.max(1))
+}
+
+pub(crate) fn parallel_batch_with_stats<S: Store>(
+    prolly: &Prolly<S>,
+    tree: &Tree,
+    mutations: Vec<Mutation>,
+    config: &ParallelConfig,
+) -> Result<BatchApplyResult, Error> {
+    let writer_config = batch_writer_config(config, mutations.len());
+    BatchWriter::with_config(writer_config).apply_batch_with_stats(prolly, tree, mutations)
 }
 
 /// Trait for parallel rebalancing operations.
@@ -217,72 +237,6 @@ impl DefaultParallelRebalancer {
             .map(|(node, ancestors)| rebalance::rebalance(prolly, node, &ancestors))
             .collect()
     }
-
-    /// Sequential batch processing for small workloads.
-    ///
-    /// For the first group, uses the pre-computed path since the tree structure
-    /// hasn't changed yet. For subsequent groups, applies mutations one at a time
-    /// because the tree structure may have changed after previous rebalancing,
-    /// and mutations that were originally grouped together may now belong to
-    /// different leaves.
-    fn sequential_batch<S: Store>(
-        &self,
-        prolly: &Prolly<S>,
-        tree: &Tree,
-        groups: Vec<LeafMutationGroup>,
-    ) -> Result<Tree, Error> {
-        let mut current_tree = tree.clone();
-
-        for (i, group) in groups.into_iter().enumerate() {
-            if i == 0 {
-                // First group: use pre-computed path since tree structure hasn't changed
-                let mut collector = BatchWriteCollector::new();
-
-                let modified_leaf = apply_mutations_to_leaf(group.leaf, &group.mutations);
-                let new_root = rebalance::rebalance_with_collector(
-                    prolly,
-                    modified_leaf,
-                    &group.ancestors,
-                    &mut collector,
-                )?;
-
-                // Flush writes for this group
-                collector.flush(prolly.store())?;
-                prolly.record_batch_write_metrics(collector.len(), collector.bytes_len());
-
-                // Update the current tree for the next iteration
-                current_tree = Tree {
-                    root: new_root,
-                    config: current_tree.config.clone(),
-                };
-            } else {
-                // Subsequent groups: apply mutations one at a time because tree
-                // structure may have changed. The original grouping was based on
-                // the initial tree structure, but after rebalancing (splits/merges),
-                // mutations in this group may now belong to different leaves.
-                for mutation in group.mutations {
-                    current_tree = Self::apply_single_mutation(prolly, &current_tree, mutation)?;
-                }
-            }
-        }
-
-        Ok(current_tree)
-    }
-
-    /// Apply a single mutation to the tree.
-    ///
-    /// This helper method finds the correct path for the mutation's key in the
-    /// current tree structure and applies the mutation (upsert or delete).
-    fn apply_single_mutation<S: Store>(
-        prolly: &Prolly<S>,
-        tree: &Tree,
-        mutation: Mutation,
-    ) -> Result<Tree, Error> {
-        match mutation {
-            Mutation::Upsert { key, val } => prolly.put(tree, key, val),
-            Mutation::Delete { key } => prolly.delete(tree, &key),
-        }
-    }
 }
 
 impl<S: Store> ParallelRebalancer<S> for DefaultParallelRebalancer {
@@ -333,31 +287,6 @@ impl<S: Store> ParallelRebalancer<S> for DefaultParallelRebalancer {
         mutations: Vec<Mutation>,
         config: &ParallelConfig,
     ) -> Result<Tree, Error> {
-        // Handle empty mutations
-        if mutations.is_empty() {
-            return Ok(tree.clone());
-        }
-
-        // Preprocess mutations (sort and deduplicate)
-        let mutations = preprocess_mutations(mutations);
-        if mutations.is_empty() {
-            return Ok(tree.clone());
-        }
-
-        // Group mutations by affected leaf
-        let groups = group_mutations_by_leaf(prolly, tree, mutations)?;
-        if groups.is_empty() {
-            return Ok(tree.clone());
-        }
-
-        // Fall back to sequential if below threshold
-        if groups.len() < config.parallelism_threshold {
-            return self.sequential_batch(prolly, tree, groups);
-        }
-
-        // For now, parallel processing of mutations is complex because tree structure
-        // changes after each rebalance. Fall back to sequential processing.
-        // TODO: Implement true parallel processing with proper synchronization
-        self.sequential_batch(prolly, tree, groups)
+        Ok(parallel_batch_with_stats(prolly, tree, mutations, config)?.tree)
     }
 }

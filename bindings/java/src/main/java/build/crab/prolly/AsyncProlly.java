@@ -198,6 +198,49 @@ public final class AsyncProlly implements AutoCloseable {
         return supply(() -> inner.parallelBatch(tree, mutations, config));
     }
 
+    public CompletableFuture<BatchApplyResult> parallelBatchWithStats(
+            TreeRecord tree,
+            List<MutationRecord> mutations,
+            ParallelConfigRecord config) {
+        return supply(() -> inner.parallelBatchWithStats(tree, mutations, config));
+    }
+
+    public CompletableFuture<Optional<Entry>> firstEntry(TreeRecord tree) {
+        return supply(() -> inner.firstEntry(tree));
+    }
+
+    public CompletableFuture<Optional<Entry>> lastEntry(TreeRecord tree) {
+        return supply(() -> inner.lastEntry(tree));
+    }
+
+    public CompletableFuture<Optional<Entry>> lowerBound(TreeRecord tree, byte[] key) {
+        return supply(() -> inner.lowerBound(tree, key));
+    }
+
+    public CompletableFuture<Optional<Entry>> upperBound(TreeRecord tree, byte[] key) {
+        return supply(() -> inner.upperBound(tree, key));
+    }
+
+    public CompletableFuture<List<Entry>> prefix(TreeRecord tree, byte[] prefix) {
+        return supply(() -> inner.prefix(tree, prefix));
+    }
+
+    public CompletableFuture<RangePageRecord> prefixPage(
+            TreeRecord tree,
+            byte[] prefix,
+            RangeCursorRecord cursor,
+            long limit) {
+        return supply(() -> inner.prefixPage(tree, prefix, cursor, limit));
+    }
+
+    public CompletableFuture<ReversePageRecord> prefixReversePage(
+            TreeRecord tree,
+            byte[] prefix,
+            ReverseCursorRecord cursor,
+            long limit) {
+        return supply(() -> inner.prefixReversePage(tree, prefix, cursor, limit));
+    }
+
     public CompletableFuture<List<Entry>> range(TreeRecord tree, byte[] start, Optional<byte[]> end) {
         return supply(() -> inner.range(tree, start, end));
     }
@@ -216,6 +259,22 @@ public final class AsyncProlly implements AutoCloseable {
             Optional<byte[]> end,
             long limit) {
         return supply(() -> inner.rangePage(tree, cursor, end, limit));
+    }
+
+    public CompletableFuture<ReversePageRecord> reversePage(
+            TreeRecord tree,
+            ReverseCursorRecord cursor,
+            byte[] start,
+            long limit) {
+        return supply(() -> inner.reversePage(tree, cursor, start, limit));
+    }
+
+    public CompletableFuture<CursorWindowRecord> cursorWindow(
+            TreeRecord tree,
+            byte[] key,
+            Optional<byte[]> end,
+            long limit) {
+        return supply(() -> inner.cursorWindow(tree, key, end, limit));
     }
 
     public CompletableFuture<List<DiffRecord>> diff(TreeRecord base, TreeRecord other) {
@@ -466,12 +525,24 @@ public final class AsyncProlly implements AutoCloseable {
         return supply(() -> inner.collectStatsJson(tree));
     }
 
+    public CompletableFuture<TreeStatsRecord> collectStats(TreeRecord tree) {
+        return supply(() -> inner.collectStats(tree));
+    }
+
     public CompletableFuture<String> statsDiffJson(TreeRecord before, TreeRecord after) {
         return supply(() -> inner.statsDiffJson(before, after));
     }
 
+    public CompletableFuture<StatsComparisonRecord> statsDiff(TreeRecord before, TreeRecord after) {
+        return supply(() -> inner.statsDiff(before, after));
+    }
+
     public CompletableFuture<String> debugTreeJson(TreeRecord tree) {
         return supply(() -> inner.debugTreeJson(tree));
+    }
+
+    public CompletableFuture<TreeDebugViewRecord> debugTree(TreeRecord tree) {
+        return supply(() -> inner.debugTree(tree));
     }
 
     public CompletableFuture<String> debugTreeText(TreeRecord tree) {
@@ -480,6 +551,10 @@ public final class AsyncProlly implements AutoCloseable {
 
     public CompletableFuture<String> debugCompareTreesJson(TreeRecord left, TreeRecord right) {
         return supply(() -> inner.debugCompareTreesJson(left, right));
+    }
+
+    public CompletableFuture<TreeDebugComparisonRecord> debugCompareTrees(TreeRecord left, TreeRecord right) {
+        return supply(() -> inner.debugCompareTrees(left, right));
     }
 
     public CompletableFuture<String> debugCompareTreesText(TreeRecord left, TreeRecord right) {
@@ -539,6 +614,14 @@ public final class AsyncProlly implements AutoCloseable {
             String cursorJson,
             long limit) {
         return supply(() -> inner.structuralDiffPage(base, other, cursorJson, limit));
+    }
+
+    public CompletableFuture<StructuralDiffPage> structuralDiffPageWithCursor(
+            TreeRecord base,
+            TreeRecord other,
+            StructuralDiffCursorRecord cursor,
+            long limit) {
+        return supply(() -> inner.structuralDiffPageWithCursor(base, other, cursor, limit));
     }
 
     public CompletableFuture<GcReachability> markReachable(List<TreeRecord> roots) {
@@ -605,6 +688,14 @@ public final class AsyncProlly implements AutoCloseable {
 
     public CompletableFuture<MissingNodeCopy> copyMissingNodes(TreeRecord tree, AsyncProlly destination) {
         return supply(() -> inner.copyMissingNodes(tree, destination.inner()));
+    }
+
+    public CompletableFuture<SnapshotBundleRecord> exportSnapshot(TreeRecord tree) {
+        return supply(() -> inner.exportSnapshot(tree));
+    }
+
+    public CompletableFuture<TreeRecord> importSnapshot(SnapshotBundleRecord bundle) {
+        return supply(() -> inner.importSnapshot(bundle));
     }
 
     @Override

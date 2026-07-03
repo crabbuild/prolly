@@ -69,6 +69,39 @@ class AsyncProllyEngine private constructor(
         config: ParallelConfigRecord,
     ): TreeRecord = engine.parallelBatch(tree, mutations, config)
 
+    suspend fun parallelBatchWithStats(
+        tree: TreeRecord,
+        mutations: List<MutationRecord>,
+        config: ParallelConfigRecord,
+    ): BatchApplyResultRecord = engine.parallelBatchWithStats(tree, mutations, config)
+
+    suspend fun firstEntry(tree: TreeRecord): EntryRecord? = engine.firstEntry(tree)
+
+    suspend fun lastEntry(tree: TreeRecord): EntryRecord? = engine.lastEntry(tree)
+
+    suspend fun lowerBound(tree: TreeRecord, key: ByteArray): EntryRecord? =
+        engine.lowerBound(tree, key)
+
+    suspend fun upperBound(tree: TreeRecord, key: ByteArray): EntryRecord? =
+        engine.upperBound(tree, key)
+
+    suspend fun prefix(tree: TreeRecord, prefix: ByteArray): List<EntryRecord> =
+        engine.prefix(tree, prefix)
+
+    suspend fun prefixPage(
+        tree: TreeRecord,
+        prefix: ByteArray,
+        cursor: RangeCursorRecord?,
+        limit: ULong,
+    ): RangePageRecord = engine.prefixPage(tree, prefix, cursor, limit)
+
+    suspend fun prefixReversePage(
+        tree: TreeRecord,
+        prefix: ByteArray,
+        cursor: ReverseCursorRecord?,
+        limit: ULong,
+    ): ReversePageRecord = engine.prefixReversePage(tree, prefix, cursor, limit)
+
     suspend fun range(tree: TreeRecord, start: ByteArray, end: ByteArray?): List<EntryRecord> =
         engine.range(tree, start, end)
 
@@ -84,6 +117,20 @@ class AsyncProllyEngine private constructor(
         end: ByteArray?,
         limit: ULong,
     ): RangePageRecord = engine.rangePage(tree, cursor, end, limit)
+
+    suspend fun reversePage(
+        tree: TreeRecord,
+        cursor: ReverseCursorRecord?,
+        start: ByteArray,
+        limit: ULong,
+    ): ReversePageRecord = engine.reversePage(tree, cursor, start, limit)
+
+    suspend fun cursorWindow(
+        tree: TreeRecord,
+        key: ByteArray,
+        end: ByteArray?,
+        limit: ULong,
+    ): CursorWindowRecord = engine.cursorWindow(tree, key, end, limit)
 
     suspend fun diff(base: TreeRecord, other: TreeRecord): List<DiffRecord> = engine.diff(base, other)
 
@@ -255,15 +302,25 @@ class AsyncProllyEngine private constructor(
 
     suspend fun collectStatsJson(tree: TreeRecord): JsonDocumentRecord = engine.collectStatsJson(tree)
 
+    suspend fun collectStats(tree: TreeRecord): TreeStatsRecord = engine.collectStats(tree)
+
     suspend fun statsDiffJson(before: TreeRecord, after: TreeRecord): JsonDocumentRecord =
         engine.statsDiffJson(before, after)
 
+    suspend fun statsDiff(before: TreeRecord, after: TreeRecord): StatsComparisonRecord =
+        engine.statsDiff(before, after)
+
     suspend fun debugTreeJson(tree: TreeRecord): JsonDocumentRecord = engine.debugTreeJson(tree)
+
+    suspend fun debugTree(tree: TreeRecord): TreeDebugViewRecord = engine.debugTree(tree)
 
     suspend fun debugTreeText(tree: TreeRecord): String = engine.debugTreeText(tree)
 
     suspend fun debugCompareTreesJson(left: TreeRecord, right: TreeRecord): JsonDocumentRecord =
         engine.debugCompareTreesJson(left, right)
+
+    suspend fun debugCompareTrees(left: TreeRecord, right: TreeRecord): TreeDebugComparisonRecord =
+        engine.debugCompareTrees(left, right)
 
     suspend fun debugCompareTreesText(left: TreeRecord, right: TreeRecord): String =
         engine.debugCompareTreesText(left, right)
@@ -307,6 +364,13 @@ class AsyncProllyEngine private constructor(
         cursorJson: String?,
         limit: ULong,
     ): StructuralDiffPageRecord = engine.structuralDiffPage(base, other, cursorJson, limit)
+
+    suspend fun structuralDiffPageWithCursor(
+        base: TreeRecord,
+        other: TreeRecord,
+        cursor: StructuralDiffCursorRecord?,
+        limit: ULong,
+    ): StructuralDiffPageRecord = engine.structuralDiffPageWithCursor(base, other, cursor, limit)
 
     suspend fun markReachable(roots: List<TreeRecord>): GcReachabilityRecord = engine.markReachable(roots)
 
@@ -358,6 +422,10 @@ class AsyncProllyEngine private constructor(
 
     suspend fun copyMissingNodes(tree: TreeRecord, destination: AsyncProllyEngine): MissingNodeCopyRecord =
         engine.copyMissingNodes(tree, destination.engine)
+
+    suspend fun exportSnapshot(tree: TreeRecord): SnapshotBundleRecord = engine.exportSnapshot(tree)
+
+    suspend fun importSnapshot(bundle: SnapshotBundleRecord): TreeRecord = engine.importSnapshot(bundle)
 
     override fun close() {
         engine.close()

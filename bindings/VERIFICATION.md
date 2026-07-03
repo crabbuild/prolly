@@ -9,8 +9,8 @@ async wrappers.
 
 | Group | Behavior verified |
 | --- | --- |
-| Core tree | `create`, `get`, `get_many`, `put`, `delete`, `batch`, bulk build, sorted bulk build, append batch |
-| Range/page | `range`, `range_after`, cursor resumption, range pages, diff pages |
+| Core tree | `create`, `get`, `get_many`, `put`, `delete`, `batch`, batch stats, bulk build, sorted bulk build, append batch, parallel batch stats |
+| Range/page | `range`, `prefix`, `prefix_page`, `range_after`, ordered boundary helpers, cursor resumption, cursor windows, range pages, reverse and prefix-reverse pages, diff pages |
 | Wire/helpers | compact `CRAB` nodes, CIDs, config, boundary decisions, key helpers, value/blob envelopes, root manifests |
 | Diff/merge | eager diff, range diff, conflict pages, built-in resolvers, merge explanations, range/prefix merge |
 | Host callbacks | custom merge resolvers, custom CRDT resolvers, custom merge policies, custom stores |
@@ -21,6 +21,14 @@ async wrappers.
 | Cookbook scenarios | Runnable per-scenario examples mirroring the Rust cookbook: map, bulk build, local-first roots, merge policies, CRDT helpers, memory/log workflows, RAG/chunk/vector/provenance patterns, derived views, blob/filesystem storage, and durable SQLite where supported |
 
 ## Binding Coverage
+
+Native Rust feature gates should be checked before regenerating or publishing
+language bindings, because the wrappers assume parity with both sync and async
+tree behavior.
+
+| Native surface | Verification files | Command |
+| --- | --- | --- |
+| Rust async store | `crates/prolly/tests/async_store.rs`, async doctests | `cargo test -p prolly-map --features async-store` |
 
 | Binding | Verification files | Command |
 | --- | --- | --- |
