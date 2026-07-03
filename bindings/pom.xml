@@ -1,0 +1,23 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>build.crab</groupId>
+  <artifactId>prolly-bindings-jvm-parent</artifactId>
+  <version>0.1.0-SNAPSHOT</version>
+  <packaging>pom</packaging>
+
+  <modules>
+    <module>kotlin</module>
+    <module>java</module>
+  </modules>
+
+  <properties>
+    <java.version>17</java.version>
+    <junit.jupiter.version>5.11.4</junit.jupiter.version>
+    <jna.version>5.14.0</jna.version>
+    <kotlin.version>2.2.21</kotlin.version>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+  </properties>
+</project>

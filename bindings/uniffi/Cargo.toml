@@ -1,0 +1,33 @@
+[package]
+name = "prolly-bindings"
+description = "UniFFI bindings for prolly-map"
+readme = "README.md"
+edition.workspace = true
+rust-version.workspace = true
+version.workspace = true
+license.workspace = true
+repository = "https://github.com/crabbuild/crabdb"
+homepage = "https://github.com/crabbuild/crabdb"
+
+[lib]
+name = "prolly_bindings"
+crate-type = ["cdylib", "staticlib", "rlib"]
+doc = false
+bench = false
+
+[features]
+default = ["sqlite"]
+sqlite = ["prolly-map/sqlite"]
+
+[dependencies]
+prolly-map = { path = "../.." }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+uniffi.workspace = true
+
+[dev-dependencies]
+hex.workspace = true
+
+[lints]
+workspace = true

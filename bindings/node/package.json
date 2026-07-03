@@ -1,0 +1,39 @@
+{
+  "name": "@crabdb/prolly-node",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "description": "Node/TypeScript binding compatibility harness for CrabDB prolly-map fixtures",
+  "scripts": {
+    "build:native": "napi build --cargo-cwd native --platform --js index.cjs",
+    "example:agent-event-log": "node examples/agent-event-log.ts",
+    "example:basic-map": "node examples/basic-map.ts",
+    "example:background-compaction": "node examples/background-compaction.ts",
+    "example:batch-build": "node examples/batch-build.ts",
+    "example:cookbook": "node examples/cookbook-scenarios.ts",
+    "example:conversation-memory": "node examples/conversation-memory.ts",
+    "example:crdt-merge": "node examples/crdt-merge.ts",
+    "example:deterministic-rag-snapshot": "node examples/deterministic-rag-snapshot.ts",
+    "example:diff-merge": "node examples/diff-merge.ts",
+    "example:document-chunk-index": "node examples/document-chunk-index.ts",
+    "example:durable-sqlite": "node examples/durable-sqlite.ts",
+    "example:file-blob-store": "node examples/file-blob-store.ts",
+    "example:filesystem-snapshot": "node examples/filesystem-snapshot.ts",
+    "example:local-first-state": "node examples/local-first-state.ts",
+    "example:materialized-view": "node examples/materialized-view.ts",
+    "example:provenance-values": "node examples/provenance-values.ts",
+    "example:resolver": "node examples/resolver.ts",
+    "example:secondary-index": "node examples/secondary-index.ts",
+    "example:vector-sidecar": "node examples/vector-sidecar.ts",
+    "test": "node --test test/*.test.ts"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^2.18.4"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./async": "./src/async.ts",
+    "./native": "./src/native.ts",
+    "./wasm": "../wasm/src/index.ts"
+  }
+}

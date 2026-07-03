@@ -1,0 +1,22 @@
+[bindings.go]
+go_mod = "build.crab/prolly-go"
+package_name = "prolly"
+c_module_filename = "prolly_bindings"
+
+[bindings.java]
+package_name = "build.crab.prolly"
+cdylib_name = "prolly_bindings"
+
+[bindings.kotlin]
+package_name = "build.crab.prolly"
+cdylib_name = "prolly_bindings"
+
+[bindings.node]
+package_name = "@crabdb/prolly-node"
+node_engine = ">=20"
+bundled_prebuilds = true
+manual_load = false
+
+[bindings.python]
+package_name = "prolly"
+cdylib_name = "prolly_bindings"

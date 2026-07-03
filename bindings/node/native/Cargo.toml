@@ -1,0 +1,28 @@
+[package]
+name = "prolly-node-native"
+description = "Node-API bindings for CrabDB prolly-map"
+edition.workspace = true
+rust-version.workspace = true
+version.workspace = true
+license.workspace = true
+repository = "https://github.com/crabbuild/crabdb"
+homepage = "https://github.com/crabbuild/crabdb"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+doc = false
+bench = false
+
+[dependencies]
+napi = { version = "2.16", default-features = false, features = ["napi4"] }
+napi-derive = "2.16"
+prolly-bindings = { path = "../../uniffi" }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+
+[build-dependencies]
+napi-build = "2.2"
+
+[lints]
+workspace = true

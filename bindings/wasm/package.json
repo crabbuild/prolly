@@ -1,0 +1,32 @@
+{
+  "name": "@crabdb/prolly-wasm",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "description": "Browser WASM binding for CrabDB prolly-map",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "example:agent-event-log": "node examples/agent-event-log.ts",
+    "example:background-compaction": "node examples/background-compaction.ts",
+    "example:batch-build": "node examples/batch-build.ts",
+    "check:rust": "cargo check -p prolly-wasm --target wasm32-unknown-unknown",
+    "build:wasm": "cargo build -p prolly-wasm --release --target wasm32-unknown-unknown && wasm-bindgen ../../../../target/wasm32-unknown-unknown/release/prolly_wasm.wasm --target web --typescript --out-dir pkg",
+    "example:basic-map": "node examples/basic-map.ts",
+    "example:browser-storage": "node examples/browser-storage.ts",
+    "example:cookbook": "node examples/browser-scenarios.ts",
+    "example:conversation-memory": "node examples/conversation-memory.ts",
+    "example:deterministic-rag-snapshot": "node examples/deterministic-rag-snapshot.ts",
+    "example:diff-merge": "node examples/diff-merge.ts",
+    "example:document-chunk-index": "node examples/document-chunk-index.ts",
+    "example:file-blob-store": "node examples/file-blob-store.ts",
+    "example:local-first-state": "node examples/local-first-state.ts",
+    "example:materialized-view": "node examples/materialized-view.ts",
+    "example:provenance-values": "node examples/provenance-values.ts",
+    "example:resolver": "node examples/resolver.ts",
+    "example:secondary-index": "node examples/secondary-index.ts",
+    "example:vector-sidecar": "node examples/vector-sidecar.ts",
+    "test": "node --test test/*.test.ts"
+  }
+}
