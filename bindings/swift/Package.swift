@@ -48,19 +48,14 @@ let package = Package(
                 .linkedLibrary("prolly_bindings"),
             ]
         ),
-        .target(
-            name: "CookbookSupport",
-            dependencies: ["Prolly"],
-            path: "Examples/CookbookSupport"
-        ),
         .executableTarget(
             name: "AgentEventLog",
-            dependencies: ["CookbookSupport"],
+            dependencies: ["Prolly"],
             path: "Examples/AgentEventLog"
         ),
         .executableTarget(
             name: "BackgroundCompaction",
-            dependencies: ["CookbookSupport"],
+            dependencies: ["Prolly"],
             path: "Examples/BackgroundCompaction"
         ),
         .executableTarget(
@@ -70,27 +65,27 @@ let package = Package(
         ),
         .executableTarget(
             name: "BatchBuild",
-            dependencies: ["CookbookSupport"],
+            dependencies: ["Prolly"],
             path: "Examples/BatchBuild"
         ),
         .executableTarget(
             name: "ConversationMemory",
-            dependencies: ["CookbookSupport"],
+            dependencies: ["Prolly"],
             path: "Examples/ConversationMemory"
         ),
         .executableTarget(
             name: "CookbookScenarios",
-            dependencies: ["CookbookSupport"],
+            dependencies: ["Prolly"],
             path: "Examples/CookbookScenarios"
         ),
         .executableTarget(
             name: "CrdtMerge",
-            dependencies: ["CookbookSupport"],
+            dependencies: ["Prolly"],
             path: "Examples/CrdtMerge"
         ),
         .executableTarget(
             name: "DeterministicRagSnapshot",
-            dependencies: ["CookbookSupport"],
+            dependencies: ["Prolly"],
             path: "Examples/DeterministicRagSnapshot"
         ),
         .executableTarget(
@@ -100,12 +95,12 @@ let package = Package(
         ),
         .executableTarget(
             name: "DocumentChunkIndex",
-            dependencies: ["CookbookSupport"],
+            dependencies: ["Prolly"],
             path: "Examples/DocumentChunkIndex"
         ),
         .executableTarget(
             name: "DurableSqlite",
-            dependencies: ["CookbookSupport"],
+            dependencies: ["Prolly"],
             path: "Examples/DurableSqlite"
         ),
         .executableTarget(
@@ -115,27 +110,27 @@ let package = Package(
         ),
         .executableTarget(
             name: "FilesystemSnapshot",
-            dependencies: ["CookbookSupport"],
+            dependencies: ["Prolly"],
             path: "Examples/FilesystemSnapshot"
         ),
         .executableTarget(
             name: "LocalFirstState",
-            dependencies: ["CookbookSupport"],
+            dependencies: ["Prolly"],
             path: "Examples/LocalFirstState"
         ),
         .executableTarget(
             name: "MaterializedView",
-            dependencies: ["CookbookSupport"],
+            dependencies: ["Prolly"],
             path: "Examples/MaterializedView"
         ),
         .executableTarget(
             name: "ProvenanceValues",
-            dependencies: ["CookbookSupport"],
+            dependencies: ["Prolly"],
             path: "Examples/ProvenanceValues"
         ),
         .executableTarget(
             name: "Resolver",
-            dependencies: ["CookbookSupport"],
+            dependencies: ["Prolly"],
             path: "Examples/Resolver"
         ),
         .executableTarget(
@@ -145,7 +140,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "VectorSidecar",
-            dependencies: ["CookbookSupport"],
+            dependencies: ["Prolly"],
             path: "Examples/VectorSidecar"
         ),
         .executableTarget(
