@@ -301,6 +301,8 @@ pub use prolly::key::{
     debug_key, decode_segments, encode_segment, i128_key, i64_key, prefix_end, prefix_range,
     timestamp_millis_key, u128_key, u64_key, KeyBuilder, KeyDecodeError,
 };
+#[cfg(feature = "async-store")]
+pub use prolly::manifest::{AsyncManifestStore, AsyncManifestStoreScan};
 pub use prolly::manifest::{
     ManifestStore, ManifestStoreScan, ManifestUpdate, NamedRoot, NamedRootManifest,
     NamedRootRetention, NamedRootSelection, NamedRootUpdate, RootManifest,
@@ -332,6 +334,11 @@ pub use prolly::{ChangedSpan, ChangedSpanHint, Prolly, ProllyMetricsSnapshot};
 
 #[cfg(feature = "async-store")]
 pub use prolly::range::{AsyncRangeIter, AsyncRangePage, AsyncReversePage};
+#[cfg(feature = "async-store")]
+pub use prolly::remote::{
+    conformance as remote_conformance, RemoteAdapterError, RemoteBatchOp, RemoteManifestUpdate,
+    RemoteNamedRoot, RemoteProllyStore, RemoteStoreBackend, RemoteStoreConfig,
+};
 pub use prolly::stats::{StatsComparison, StatsDiff, StatsPercentageChange, TreeStats};
 #[cfg(feature = "async-store")]
 pub use prolly::store::{AsyncStore, SyncStoreAsAsync};

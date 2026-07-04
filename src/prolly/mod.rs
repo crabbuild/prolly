@@ -138,6 +138,8 @@ pub mod diff;
 pub mod parallel;
 pub mod range;
 pub mod rebalance;
+#[cfg(feature = "async-store")]
+pub mod remote;
 pub mod streaming;
 pub mod utils;
 
@@ -155,6 +157,8 @@ use error::Error;
 use error::Mutation;
 use error::Resolver;
 use gc::{BlobGcPlan, BlobGcReachability, BlobGcSweep, GcPlan, GcReachability, GcSweep};
+#[cfg(feature = "async-store")]
+use manifest::{AsyncManifestStore, AsyncManifestStoreScan};
 use manifest::{
     ManifestStore, ManifestStoreScan, NamedRoot, NamedRootRetention, NamedRootSelection,
     NamedRootUpdate, RootManifest,
@@ -6267,6 +6271,290 @@ where
     /// when you want the next operation to run from a cold manager cache.
     pub fn reset_metrics(&self) {
         self.metrics.reset();
+    }
+
+    /// Load a named root as a [`Tree`] through the underlying async manifest
+    /// store.
+    ///
+    /// Missing names return `Ok(None)`.
+    pub async fn load_named_root(&self, name: &[u8]) -> Result<Option<Tree>, Error>
+    where
+        S: AsyncManifestStore,
+        <S as AsyncManifestStore>::Error: Send + Sync,
+    {
+        self.store
+            .get_root(name)
+            .await
+            .map(|manifest| manifest.map(RootManifest::into_tree))
+            .map_err(|err| Error::Store(Box::new(err)))
+    }
+
+    /// Load explicit named roots and report names that were absent.
+    ///
+    /// Duplicate names are ignored after their first occurrence. Missing names
+    /// are reported in [`NamedRootSelection::missing_names`] instead of being
+    /// silently dropped so callers can decide whether to continue.
+    pub async fn load_named_roots<I, N>(&self, names: I) -> Result<NamedRootSelection, Error>
+    where
+        S: AsyncManifestStore,
+        <S as AsyncManifestStore>::Error: Send + Sync,
+        I: IntoIterator<Item = N>,
+        N: AsRef<[u8]>,
+    {
+        let mut seen = HashSet::new();
+        let mut roots = Vec::new();
+        let mut missing_names = Vec::new();
+
+        for name in names {
+            let name = name.as_ref().to_vec();
+            if !seen.insert(name.clone()) {
+                continue;
+            }
+
+            match self.load_named_root(&name).await? {
+                Some(tree) => roots.push(NamedRoot::new(name, tree)),
+                None => missing_names.push(name),
+            }
+        }
+
+        Ok(NamedRootSelection::new(roots, missing_names))
+    }
+
+    /// List every named root manifest in the async manifest store.
+    ///
+    /// Results are sorted by raw name bytes when the backing store implements
+    /// the [`AsyncManifestStoreScan`] contract.
+    pub async fn list_named_root_manifests(&self) -> Result<Vec<manifest::NamedRootManifest>, Error>
+    where
+        S: AsyncManifestStoreScan,
+        <S as AsyncManifestStore>::Error: Send + Sync,
+    {
+        self.store
+            .list_roots()
+            .await
+            .map_err(|err| Error::Store(Box::new(err)))
+    }
+
+    /// List every named root in the async manifest store.
+    ///
+    /// Results are sorted by raw name bytes when the backing store implements
+    /// the [`AsyncManifestStoreScan`] contract.
+    pub async fn list_named_roots(&self) -> Result<Vec<NamedRoot>, Error>
+    where
+        S: AsyncManifestStoreScan,
+        <S as AsyncManifestStore>::Error: Send + Sync,
+    {
+        Ok(self
+            .list_named_root_manifests()
+            .await?
+            .into_iter()
+            .map(|root| root.into_named_root())
+            .collect())
+    }
+
+    /// Select named roots according to a retention policy.
+    ///
+    /// Prefix and newest-by-name policies use manifest scanning. Exact policies
+    /// load the requested names and report absent names explicitly.
+    pub async fn load_retained_named_roots(
+        &self,
+        retention: &NamedRootRetention,
+    ) -> Result<NamedRootSelection, Error>
+    where
+        S: AsyncManifestStoreScan,
+        <S as AsyncManifestStore>::Error: Send + Sync,
+    {
+        match retention {
+            NamedRootRetention::All => Ok(NamedRootSelection::new(
+                self.list_named_roots().await?,
+                Vec::new(),
+            )),
+            NamedRootRetention::Exact { names } => self.load_named_roots(names.iter()).await,
+            NamedRootRetention::Prefix { prefix } => {
+                let roots = self
+                    .list_named_roots()
+                    .await?
+                    .into_iter()
+                    .filter(|root| root.name.starts_with(prefix))
+                    .collect();
+                Ok(NamedRootSelection::new(roots, Vec::new()))
+            }
+            NamedRootRetention::NewestByName { prefix, count } => {
+                if *count == 0 {
+                    return Ok(NamedRootSelection::default());
+                }
+
+                let mut roots = self
+                    .list_named_roots()
+                    .await?
+                    .into_iter()
+                    .filter(|root| root.name.starts_with(prefix))
+                    .collect::<Vec<_>>();
+                if roots.len() > *count {
+                    roots = roots.split_off(roots.len() - *count);
+                }
+                Ok(NamedRootSelection::new(roots, Vec::new()))
+            }
+            NamedRootRetention::UpdatedSince {
+                prefix,
+                min_updated_at_millis,
+            } => {
+                let roots = self
+                    .list_named_root_manifests()
+                    .await?
+                    .into_iter()
+                    .filter(|root| root.name.starts_with(prefix))
+                    .filter(|root| {
+                        root.manifest
+                            .updated_at_millis
+                            .map(|updated_at| updated_at >= *min_updated_at_millis)
+                            .unwrap_or(false)
+                    })
+                    .map(|root| root.into_named_root())
+                    .collect();
+                Ok(NamedRootSelection::new(roots, Vec::new()))
+            }
+        }
+    }
+
+    /// Publish a tree handle under a durable name through the async manifest
+    /// store.
+    ///
+    /// This unconditionally replaces the existing named root. Use
+    /// [`AsyncProlly::compare_and_swap_named_root`] when coordinating
+    /// concurrent writers.
+    pub async fn publish_named_root(&self, name: &[u8], tree: &Tree) -> Result<(), Error>
+    where
+        S: AsyncManifestStore,
+        <S as AsyncManifestStore>::Error: Send + Sync,
+    {
+        self.publish_named_root_at_millis(name, tree, current_unix_time_millis())
+            .await
+    }
+
+    /// Publish a tree handle under a durable name with explicit timestamp
+    /// metadata.
+    ///
+    /// `created_at_millis` is preserved from the existing manifest when
+    /// present; otherwise it is initialized to `timestamp_millis`.
+    /// `updated_at_millis` is always set to `timestamp_millis`.
+    pub async fn publish_named_root_at_millis(
+        &self,
+        name: &[u8],
+        tree: &Tree,
+        timestamp_millis: u64,
+    ) -> Result<(), Error>
+    where
+        S: AsyncManifestStore,
+        <S as AsyncManifestStore>::Error: Send + Sync,
+    {
+        let created_at_millis = self
+            .store
+            .get_root(name)
+            .await
+            .map_err(|err| Error::Store(Box::new(err)))?
+            .and_then(|manifest| manifest.created_at_millis)
+            .unwrap_or(timestamp_millis);
+        let manifest = RootManifest::from_tree_with_timestamps_millis(
+            tree,
+            Some(created_at_millis),
+            Some(timestamp_millis),
+        );
+        self.store
+            .put_root(name, &manifest)
+            .await
+            .map_err(|err| Error::Store(Box::new(err)))
+    }
+
+    /// Delete a durable named root.
+    ///
+    /// Deleting a missing name is not an error. This removes the mutable name
+    /// only; it does not garbage-collect content-addressed nodes.
+    pub async fn delete_named_root(&self, name: &[u8]) -> Result<(), Error>
+    where
+        S: AsyncManifestStore,
+        <S as AsyncManifestStore>::Error: Send + Sync,
+    {
+        self.store
+            .delete_root(name)
+            .await
+            .map_err(|err| Error::Store(Box::new(err)))
+    }
+
+    /// Atomically update a named root when the current tree matches
+    /// `expected`.
+    ///
+    /// `expected == None` means the name must be absent. `new == None` deletes
+    /// the name after a successful compare.
+    pub async fn compare_and_swap_named_root(
+        &self,
+        name: &[u8],
+        expected: Option<&Tree>,
+        new: Option<&Tree>,
+    ) -> Result<NamedRootUpdate, Error>
+    where
+        S: AsyncManifestStore,
+        <S as AsyncManifestStore>::Error: Send + Sync,
+    {
+        self.compare_and_swap_named_root_at_millis(name, expected, new, current_unix_time_millis())
+            .await
+    }
+
+    /// Atomically update a named root with explicit timestamp metadata.
+    ///
+    /// Tree-level compare-and-swap compares `expected` against the current tree
+    /// handle, then performs the backend CAS against the exact current
+    /// manifest. This keeps tree CAS stable even as manifests gain metadata
+    /// fields.
+    pub async fn compare_and_swap_named_root_at_millis(
+        &self,
+        name: &[u8],
+        expected: Option<&Tree>,
+        new: Option<&Tree>,
+        timestamp_millis: u64,
+    ) -> Result<NamedRootUpdate, Error>
+    where
+        S: AsyncManifestStore,
+        <S as AsyncManifestStore>::Error: Send + Sync,
+    {
+        let current = self
+            .store
+            .get_root(name)
+            .await
+            .map_err(|err| Error::Store(Box::new(err)))?;
+        let expected_manifest = match (expected, current) {
+            (None, None) => None,
+            (None, Some(current)) => {
+                return Ok(NamedRootUpdate::Conflict {
+                    current: Some(current.into_tree()),
+                });
+            }
+            (Some(expected_tree), Some(current)) if current.to_tree() == *expected_tree => {
+                Some(current)
+            }
+            (Some(_), current) => {
+                return Ok(NamedRootUpdate::Conflict {
+                    current: current.map(RootManifest::into_tree),
+                });
+            }
+        };
+
+        let new_manifest = new.map(|tree| {
+            let created_at_millis = expected_manifest
+                .as_ref()
+                .and_then(|manifest| manifest.created_at_millis)
+                .unwrap_or(timestamp_millis);
+            RootManifest::from_tree_with_timestamps_millis(
+                tree,
+                Some(created_at_millis),
+                Some(timestamp_millis),
+            )
+        });
+        self.store
+            .compare_and_swap_root(name, expected_manifest.as_ref(), new_manifest.as_ref())
+            .await
+            .map(NamedRootUpdate::from)
+            .map_err(|err| Error::Store(Box::new(err)))
     }
 
     pub(crate) async fn load_arc(&self, cid: &Cid) -> Result<Arc<Node>, Error> {

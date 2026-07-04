@@ -487,6 +487,51 @@ pub trait ManifestStoreScan: ManifestStore {
     fn list_roots(&self) -> Result<Vec<NamedRootManifest>, Self::Error>;
 }
 
+/// Async storage for named root manifests.
+///
+/// This mirrors [`ManifestStore`] for remote, browser, object-store, and
+/// cloud-database backends. The mutable root layer stays separate from
+/// immutable node storage so remote implementations can use their native
+/// compare-and-swap or transaction mechanism for branch/head updates.
+#[cfg(feature = "async-store")]
+#[allow(async_fn_in_trait)]
+pub trait AsyncManifestStore {
+    /// Error type for manifest operations.
+    type Error: std::error::Error + 'static;
+
+    /// Load a named root manifest.
+    async fn get_root(&self, name: &[u8]) -> Result<Option<RootManifest>, Self::Error>;
+
+    /// Unconditionally insert or replace a named root manifest.
+    async fn put_root(&self, name: &[u8], manifest: &RootManifest) -> Result<(), Self::Error>;
+
+    /// Delete a named root manifest. Deleting a missing name is not an error.
+    async fn delete_root(&self, name: &[u8]) -> Result<(), Self::Error>;
+
+    /// Atomically update a named root if the current manifest matches
+    /// `expected`.
+    ///
+    /// `expected == None` means the name must be absent. `new == None` deletes
+    /// the name when the compare succeeds.
+    async fn compare_and_swap_root(
+        &self,
+        name: &[u8],
+        expected: Option<&RootManifest>,
+        new: Option<&RootManifest>,
+    ) -> Result<ManifestUpdate, Self::Error>;
+}
+
+/// Async manifest stores that can enumerate durable named roots.
+///
+/// Scanning remains optional because point lookups and compare-and-swap are
+/// enough for normal publish/fetch paths, while retention and GC need listing.
+#[cfg(feature = "async-store")]
+#[allow(async_fn_in_trait)]
+pub trait AsyncManifestStoreScan: AsyncManifestStore {
+    /// List all durable named root manifests.
+    async fn list_roots(&self) -> Result<Vec<NamedRootManifest>, Self::Error>;
+}
+
 impl<T: ManifestStore> ManifestStore for Arc<T> {
     type Error = T::Error;
 
@@ -515,6 +560,39 @@ impl<T: ManifestStore> ManifestStore for Arc<T> {
 impl<T: ManifestStoreScan> ManifestStoreScan for Arc<T> {
     fn list_roots(&self) -> Result<Vec<NamedRootManifest>, Self::Error> {
         (**self).list_roots()
+    }
+}
+
+#[cfg(feature = "async-store")]
+impl<T: AsyncManifestStore> AsyncManifestStore for Arc<T> {
+    type Error = T::Error;
+
+    async fn get_root(&self, name: &[u8]) -> Result<Option<RootManifest>, Self::Error> {
+        (**self).get_root(name).await
+    }
+
+    async fn put_root(&self, name: &[u8], manifest: &RootManifest) -> Result<(), Self::Error> {
+        (**self).put_root(name, manifest).await
+    }
+
+    async fn delete_root(&self, name: &[u8]) -> Result<(), Self::Error> {
+        (**self).delete_root(name).await
+    }
+
+    async fn compare_and_swap_root(
+        &self,
+        name: &[u8],
+        expected: Option<&RootManifest>,
+        new: Option<&RootManifest>,
+    ) -> Result<ManifestUpdate, Self::Error> {
+        (**self).compare_and_swap_root(name, expected, new).await
+    }
+}
+
+#[cfg(feature = "async-store")]
+impl<T: AsyncManifestStoreScan> AsyncManifestStoreScan for Arc<T> {
+    async fn list_roots(&self) -> Result<Vec<NamedRootManifest>, Self::Error> {
+        (**self).list_roots().await
     }
 }
 

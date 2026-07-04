@@ -26,6 +26,11 @@ use std::collections::{hash_map::Entry, HashMap};
 use std::sync::Arc;
 
 use super::cid::Cid;
+#[cfg(feature = "async-store")]
+use super::manifest::{
+    AsyncManifestStore, AsyncManifestStoreScan, ManifestStore, ManifestStoreScan, ManifestUpdate,
+    NamedRootManifest, RootManifest,
+};
 
 pub(crate) struct OrderedBatchReadPlan<'a> {
     unique_keys: Vec<&'a [u8]>,
@@ -602,6 +607,39 @@ impl<S: Store> AsyncStore for SyncStoreAsAsync<S> {
     }
 }
 
+#[cfg(feature = "async-store")]
+impl<S: ManifestStore> AsyncManifestStore for SyncStoreAsAsync<S> {
+    type Error = S::Error;
+
+    async fn get_root(&self, name: &[u8]) -> Result<Option<RootManifest>, Self::Error> {
+        self.inner.get_root(name)
+    }
+
+    async fn put_root(&self, name: &[u8], manifest: &RootManifest) -> Result<(), Self::Error> {
+        self.inner.put_root(name, manifest)
+    }
+
+    async fn delete_root(&self, name: &[u8]) -> Result<(), Self::Error> {
+        self.inner.delete_root(name)
+    }
+
+    async fn compare_and_swap_root(
+        &self,
+        name: &[u8],
+        expected: Option<&RootManifest>,
+        new: Option<&RootManifest>,
+    ) -> Result<ManifestUpdate, Self::Error> {
+        self.inner.compare_and_swap_root(name, expected, new)
+    }
+}
+
+#[cfg(feature = "async-store")]
+impl<S: ManifestStoreScan> AsyncManifestStoreScan for SyncStoreAsAsync<S> {
+    async fn list_roots(&self) -> Result<Vec<NamedRootManifest>, Self::Error> {
+        self.inner.list_roots()
+    }
+}
+
 /// Error returned by [`TokioBlockingStore`].
 #[cfg(feature = "tokio")]
 #[derive(Debug)]
@@ -850,6 +888,74 @@ where
             store.batch_put_with_hint(&entries, &namespace, &key, &value)
         })
         .await
+    }
+}
+
+#[cfg(feature = "tokio")]
+async fn spawn_manifest_blocking<S, F, R>(
+    store: std::sync::Arc<S>,
+    operation: F,
+) -> Result<R, TokioBlockingStoreError<<S as ManifestStore>::Error>>
+where
+    S: ManifestStore + 'static,
+    F: FnOnce(std::sync::Arc<S>) -> Result<R, <S as ManifestStore>::Error> + Send + 'static,
+    R: Send + 'static,
+{
+    tokio::task::spawn_blocking(move || operation(store))
+        .await
+        .map_err(TokioBlockingStoreError::Join)?
+        .map_err(TokioBlockingStoreError::Store)
+}
+
+#[cfg(feature = "tokio")]
+impl<S> AsyncManifestStore for TokioBlockingStore<S>
+where
+    S: ManifestStore + 'static,
+{
+    type Error = TokioBlockingStoreError<<S as ManifestStore>::Error>;
+
+    async fn get_root(&self, name: &[u8]) -> Result<Option<RootManifest>, Self::Error> {
+        let name = name.to_vec();
+        spawn_manifest_blocking(self.inner.clone(), move |store| store.get_root(&name)).await
+    }
+
+    async fn put_root(&self, name: &[u8], manifest: &RootManifest) -> Result<(), Self::Error> {
+        let name = name.to_vec();
+        let manifest = manifest.clone();
+        spawn_manifest_blocking(self.inner.clone(), move |store| {
+            store.put_root(&name, &manifest)
+        })
+        .await
+    }
+
+    async fn delete_root(&self, name: &[u8]) -> Result<(), Self::Error> {
+        let name = name.to_vec();
+        spawn_manifest_blocking(self.inner.clone(), move |store| store.delete_root(&name)).await
+    }
+
+    async fn compare_and_swap_root(
+        &self,
+        name: &[u8],
+        expected: Option<&RootManifest>,
+        new: Option<&RootManifest>,
+    ) -> Result<ManifestUpdate, Self::Error> {
+        let name = name.to_vec();
+        let expected = expected.cloned();
+        let new = new.cloned();
+        spawn_manifest_blocking(self.inner.clone(), move |store| {
+            store.compare_and_swap_root(&name, expected.as_ref(), new.as_ref())
+        })
+        .await
+    }
+}
+
+#[cfg(feature = "tokio")]
+impl<S> AsyncManifestStoreScan for TokioBlockingStore<S>
+where
+    S: ManifestStoreScan + 'static,
+{
+    async fn list_roots(&self) -> Result<Vec<NamedRootManifest>, Self::Error> {
+        spawn_manifest_blocking(self.inner.clone(), move |store| store.list_roots()).await
     }
 }
 

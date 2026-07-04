@@ -9,14 +9,16 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 
-use common::{assert_async_store_contract, assert_tree_invariants};
+use common::{
+    assert_async_manifest_store_contract, assert_async_store_contract, assert_tree_invariants,
+};
 use futures_util::StreamExt as _;
 use prolly::{
     AsyncBlobStore, AsyncProlly, BatchBuilder, BatchOp, BlobRef, BlobStore, Cid, Config,
     CrdtConfig, CrdtResolution, DeletePolicy, Diff, Error, LargeValueConfig, MemBlobStore,
-    MemBlobStoreError, MemStore, MemStoreError, MultiValueSet, Mutation, Prolly, RangeCursor,
-    Resolution, ReverseCursor, Store, SyncBlobStoreAsAsync, SyncStoreAsAsync, TimestampedValue,
-    ValueRef,
+    MemBlobStoreError, MemStore, MemStoreError, MultiValueSet, Mutation, NamedRootRetention,
+    NamedRootUpdate, Prolly, RangeCursor, Resolution, ReverseCursor, Store, SyncBlobStoreAsAsync,
+    SyncStoreAsAsync, TimestampedValue, ValueRef,
 };
 #[cfg(feature = "tokio")]
 use prolly::{AsyncStore, TokioBlockingBlobStore, TokioBlockingStore};
@@ -277,9 +279,157 @@ fn sync_store_as_async_satisfies_async_store_contract() {
 }
 
 #[test]
+fn sync_store_as_async_satisfies_async_manifest_store_contract() {
+    let store = SyncStoreAsAsync::new(MemStore::new());
+    block_on(assert_async_manifest_store_contract(&store));
+}
+
+#[test]
 fn async_arc_adapter_satisfies_async_store_contract() {
     let store = Arc::new(SyncStoreAsAsync::new(MemStore::new()));
     block_on(assert_async_store_contract(&store));
+}
+
+#[test]
+fn async_arc_adapter_satisfies_async_manifest_store_contract() {
+    let store = Arc::new(SyncStoreAsAsync::new(MemStore::new()));
+    block_on(assert_async_manifest_store_contract(&store));
+}
+
+#[test]
+fn async_prolly_named_root_helpers_publish_load_cas_delete_and_select() {
+    block_on(async {
+        let store = Arc::new(MemStore::new());
+        let async_prolly = AsyncProlly::new(SyncStoreAsAsync::new(store), Config::default());
+
+        let empty = async_prolly.create();
+        let first = async_prolly
+            .put(&empty, b"project/name".to_vec(), b"crabdb".to_vec())
+            .await
+            .unwrap();
+        let second = async_prolly
+            .put(&first, b"project/name".to_vec(), b"prolly-map".to_vec())
+            .await
+            .unwrap();
+        let third = async_prolly
+            .put(&second, b"project/name".to_vec(), b"remote-ready".to_vec())
+            .await
+            .unwrap();
+
+        assert_eq!(async_prolly.load_named_root(b"main").await.unwrap(), None);
+
+        async_prolly
+            .publish_named_root_at_millis(b"main", &first, 100)
+            .await
+            .unwrap();
+        assert_eq!(
+            async_prolly.load_named_root(b"main").await.unwrap(),
+            Some(first.clone())
+        );
+
+        let conflict = async_prolly
+            .compare_and_swap_named_root_at_millis(b"main", Some(&empty), Some(&second), 150)
+            .await
+            .unwrap();
+        assert_eq!(
+            conflict,
+            NamedRootUpdate::Conflict {
+                current: Some(first.clone())
+            }
+        );
+
+        assert!(async_prolly
+            .compare_and_swap_named_root_at_millis(b"main", Some(&first), Some(&second), 200)
+            .await
+            .unwrap()
+            .is_applied());
+        assert_eq!(
+            async_prolly.load_named_root(b"main").await.unwrap(),
+            Some(second.clone())
+        );
+
+        async_prolly
+            .publish_named_root_at_millis(b"checkpoint/0001", &first, 100)
+            .await
+            .unwrap();
+        async_prolly
+            .publish_named_root_at_millis(b"checkpoint/0002", &second, 200)
+            .await
+            .unwrap();
+        async_prolly
+            .publish_named_root_at_millis(b"checkpoint/0003", &third, 300)
+            .await
+            .unwrap();
+
+        let manifest = async_prolly
+            .list_named_root_manifests()
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|root| root.name == b"main")
+            .unwrap()
+            .manifest;
+        assert_eq!(manifest.created_at_millis, Some(100));
+        assert_eq!(manifest.updated_at_millis, Some(200));
+
+        let exact = async_prolly
+            .load_named_roots(vec![
+                b"checkpoint/0002".as_slice(),
+                b"missing".as_slice(),
+                b"checkpoint/0002".as_slice(),
+            ])
+            .await
+            .unwrap();
+        assert_eq!(
+            exact
+                .roots
+                .iter()
+                .map(|root| root.name.clone())
+                .collect::<Vec<_>>(),
+            vec![b"checkpoint/0002".to_vec()]
+        );
+        assert_eq!(exact.missing_names, vec![b"missing".to_vec()]);
+
+        let newest = async_prolly
+            .load_retained_named_roots(&NamedRootRetention::newest_by_name(b"checkpoint/", 2))
+            .await
+            .unwrap();
+        assert_eq!(
+            newest
+                .roots
+                .iter()
+                .map(|root| root.name.clone())
+                .collect::<Vec<_>>(),
+            vec![b"checkpoint/0002".to_vec(), b"checkpoint/0003".to_vec()]
+        );
+
+        let recent = async_prolly
+            .load_retained_named_roots(&NamedRootRetention::updated_since(b"checkpoint/", 250))
+            .await
+            .unwrap();
+        assert_eq!(
+            recent
+                .roots
+                .iter()
+                .map(|root| root.name.clone())
+                .collect::<Vec<_>>(),
+            vec![b"checkpoint/0003".to_vec()]
+        );
+
+        assert!(async_prolly
+            .compare_and_swap_named_root_at_millis(b"main", Some(&second), None, 350)
+            .await
+            .unwrap()
+            .is_applied());
+        assert_eq!(async_prolly.load_named_root(b"main").await.unwrap(), None);
+
+        async_prolly
+            .publish_named_root(b"main", &first)
+            .await
+            .unwrap();
+        async_prolly.delete_named_root(b"main").await.unwrap();
+        assert_eq!(async_prolly.load_named_root(b"main").await.unwrap(), None);
+    });
 }
 
 #[test]
@@ -2355,6 +2505,17 @@ fn tokio_blocking_store_satisfies_async_store_contract() {
 
     runtime.block_on(async {
         assert_async_store_contract(&store).await;
+    });
+}
+
+#[cfg(feature = "tokio")]
+#[test]
+fn tokio_blocking_store_satisfies_async_manifest_store_contract() {
+    let runtime = tokio_runtime();
+    let store = TokioBlockingStore::from_arc(Arc::new(MemStore::new()));
+
+    runtime.block_on(async {
+        assert_async_manifest_store_contract(&store).await;
     });
 }
 

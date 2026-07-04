@@ -1,0 +1,27 @@
+[package]
+name = "prolly-store-redis"
+description = "Redis store adapter for prolly-map."
+edition.workspace = true
+rust-version.workspace = true
+version.workspace = true
+license.workspace = true
+repository = "https://github.com/crabbuild/prolly"
+
+[lib]
+name = "prolly_store_redis"
+path = "src/lib.rs"
+
+[dependencies]
+prolly = { package = "prolly-map", path = "..", version = "0.1.0", features = ["async-store"] }
+redis-client = { package = "redis", version = "0.32.7", default-features = false, features = [
+    "aio",
+    "tokio-comp",
+    "connection-manager",
+    "script",
+] }
+
+[dev-dependencies]
+tokio.workspace = true
+
+[lints]
+workspace = true

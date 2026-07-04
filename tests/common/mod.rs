@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 #[cfg(feature = "async-store")]
-use prolly::AsyncStore;
+use prolly::{AsyncManifestStore, AsyncManifestStoreScan, AsyncStore};
 use prolly::{
     BatchOp, Cid, Config, Diff, ManifestStore, ManifestStoreScan, ManifestUpdate, MemStore, Node,
     NodeStoreScan, Prolly, RootManifest, Store, Tree,
@@ -220,6 +220,104 @@ where
     store.delete_root(b"alpha").unwrap();
     store.delete_root(b"zeta").unwrap();
     assert!(store.list_roots().unwrap().is_empty());
+}
+
+#[cfg(feature = "async-store")]
+pub async fn assert_async_manifest_store_contract<S>(store: &S)
+where
+    S: AsyncManifestStore + AsyncManifestStoreScan,
+    S::Error: std::fmt::Debug,
+{
+    let config = Config::builder()
+        .min_chunk_size(2)
+        .max_chunk_size(8)
+        .chunking_factor(4)
+        .hash_seed(42)
+        .build();
+    let main_v1 = RootManifest::new(Some(Cid::from_bytes(b"main-v1")), config.clone());
+    let main_v2 = RootManifest::new(Some(Cid::from_bytes(b"main-v2")), config.clone());
+    let empty = RootManifest::new(None, config);
+
+    assert_eq!(store.get_root(b"main").await.unwrap(), None);
+    store.delete_root(b"main").await.unwrap();
+
+    store.put_root(b"main", &main_v1).await.unwrap();
+    assert_eq!(
+        store.get_root(b"main").await.unwrap(),
+        Some(main_v1.clone())
+    );
+
+    store.put_root(b"main", &empty).await.unwrap();
+    assert_eq!(store.get_root(b"main").await.unwrap(), Some(empty.clone()));
+
+    store.delete_root(b"main").await.unwrap();
+    assert_eq!(store.get_root(b"main").await.unwrap(), None);
+
+    assert!(store
+        .compare_and_swap_root(b"main", None, Some(&main_v1))
+        .await
+        .unwrap()
+        .is_applied());
+    assert_eq!(
+        store.get_root(b"main").await.unwrap(),
+        Some(main_v1.clone())
+    );
+
+    let stale_create = store
+        .compare_and_swap_root(b"main", None, Some(&main_v2))
+        .await
+        .unwrap();
+    assert_eq!(
+        stale_create,
+        ManifestUpdate::Conflict {
+            current: Some(main_v1.clone())
+        }
+    );
+
+    assert!(store
+        .compare_and_swap_root(b"main", Some(&main_v1), Some(&main_v2))
+        .await
+        .unwrap()
+        .is_applied());
+    assert_eq!(
+        store.get_root(b"main").await.unwrap(),
+        Some(main_v2.clone())
+    );
+
+    let stale_delete = store
+        .compare_and_swap_root(b"main", Some(&main_v1), None)
+        .await
+        .unwrap();
+    assert_eq!(
+        stale_delete,
+        ManifestUpdate::Conflict {
+            current: Some(main_v2.clone())
+        }
+    );
+
+    assert!(store
+        .compare_and_swap_root(b"main", Some(&main_v2), None)
+        .await
+        .unwrap()
+        .is_applied());
+    assert_eq!(store.get_root(b"main").await.unwrap(), None);
+
+    store.put_root(b"zeta", &main_v1).await.unwrap();
+    store.put_root(b"alpha", &main_v2).await.unwrap();
+    let listed = store.list_roots().await.unwrap();
+    assert_eq!(
+        listed
+            .iter()
+            .map(|root| root.name.clone())
+            .collect::<Vec<_>>(),
+        vec![b"alpha".to_vec(), b"zeta".to_vec()]
+    );
+    assert_eq!(listed[0].manifest, main_v2);
+    assert_eq!(listed[1].manifest, main_v1);
+
+    store.delete_root(b"alpha").await.unwrap();
+    store.delete_root(b"zeta").await.unwrap();
+    assert!(store.list_roots().await.unwrap().is_empty());
 }
 
 pub fn assert_node_store_scan_contract<S>(store: S)

@@ -1,0 +1,47 @@
+name: prolly-store-services
+
+services:
+  dynamodb:
+    image: amazon/dynamodb-local:latest
+    command: ["-jar", "DynamoDBLocal.jar", "-sharedDb", "-inMemory"]
+    ports:
+      - "${PROLLY_STORE_DYNAMODB_PORT:-8000}:8000"
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${PROLLY_STORE_REDIS_PORT:-56379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: prolly
+      POSTGRES_PASSWORD: prolly
+      POSTGRES_USER: prolly
+    ports:
+      - "${PROLLY_STORE_POSTGRES_PORT:-55432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U prolly -d prolly"]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_DATABASE: prolly
+      MYSQL_PASSWORD: prolly
+      MYSQL_ROOT_PASSWORD: prolly
+      MYSQL_USER: prolly
+    ports:
+      - "${PROLLY_STORE_MYSQL_PORT:-53306}:3306"
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uprolly -pprolly --silent"]
+      interval: 2s
+      timeout: 2s
+      retries: 90
