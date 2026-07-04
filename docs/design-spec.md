@@ -168,6 +168,7 @@ Required behavior:
 
 - loading a missing root returns `None`;
 - publishing a root records its tree handle and metadata;
+- map mutations do not mutate or advance a named root;
 - deleting a root removes the name, not the nodes;
 - compare-and-swap updates apply only if the expected root matches.
 
@@ -176,6 +177,19 @@ application-defined byte strings.
 
 CAS is the concurrency primitive. If CAS fails, callers should reload and
 retry, merge, or surface a conflict to the application.
+
+The lifecycle is:
+
+```text
+load named root -> immutable Tree
+apply map mutations -> new immutable Tree
+publish or CAS -> named root moves
+```
+
+A raw tree root is not a commit. It has no parents, message, author, or reflog.
+Applications that need version-control behavior should store commit-like
+metadata separately and use named roots as branch, tag, checkpoint, or
+remote-tracking pointers to tree handles.
 
 ## Diff Contract
 
@@ -351,4 +365,3 @@ A non-Rust implementation should not claim compatibility until it can:
 
 The language port may expose idiomatic APIs, but the storage contract must stay
 byte-compatible where compatibility is promised.
-

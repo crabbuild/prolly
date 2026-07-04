@@ -943,6 +943,13 @@ Immutable tree handles are useful in memory, but applications need durable names
 for branches, checkpoints, workspaces, and sync cursors. `ManifestStore` stores
 named `RootManifest` values beside content-addressed nodes.
 
+Named roots are mutable pointers to immutable tree handles. Calling `put`,
+`delete`, `batch`, or `merge` never advances a named root by itself. Those
+operations return a new `Tree`; the application must publish that tree with
+`publish_named_root` or, for concurrent writers, `compare_and_swap_named_root`.
+This is similar to creating a new Git tree object and then updating a ref to
+point at it.
+
 ```rust
 use prolly::{Config, FileNodeStore, Prolly};
 use std::sync::Arc;
@@ -967,6 +974,27 @@ assert_eq!(
 );
 ```
 
+The same rule applies after the name exists:
+
+```rust
+let current = prolly.load_named_root(b"main").unwrap().unwrap();
+let next = prolly
+    .put(&current, b"project/owner".to_vec(), b"team-a".to_vec())
+    .unwrap();
+
+// `main` still points at `current` here.
+let still_current = prolly.load_named_root(b"main").unwrap().unwrap();
+assert_eq!(
+    prolly.get(&still_current, b"project/owner").unwrap(),
+    None
+);
+
+let update = prolly
+    .compare_and_swap_named_root(b"main", Some(&current), Some(&next))
+    .unwrap();
+assert!(update.is_applied());
+```
+
 `compare_and_swap_named_root` lets concurrent writers update a named root only
 when the current tree matches the expected tree. `publish_named_root` replaces a
 name unconditionally, and `delete_named_root` removes the name without removing
@@ -984,6 +1012,31 @@ prefix, the lexicographically newest N roots under a prefix, or roots updated
 since a Unix-millisecond timestamp. Manager-level publish and CAS helpers stamp
 `created_at_millis` and `updated_at_millis`; `*_at_millis` variants accept
 explicit timestamps for deterministic import and tests.
+
+### Git-like application primitives
+
+Named roots are intentionally low-level. Applications can layer Git-like
+operations on top by combining named roots, immutable trees, app-defined commit
+metadata, diff, merge, and GC retention:
+
+| Operation | Prolly building blocks | Notes |
+| --- | --- | --- |
+| Resolve head | `load_named_root(name)` | Load the current tree for `refs/heads/main`, `workspace/<id>/head`, or another app name. |
+| Snapshot / commit | `put`/`delete`/`batch` -> new `Tree`, then CAS the head | Store commit-like metadata separately if you need parents, author, message, or timestamps. |
+| Branch | Load source head, publish it under a new name | Use `compare_and_swap_named_root(new, None, Some(tree))` to avoid overwriting an existing branch. |
+| Tag or checkpoint | Publish a stable name to an existing tree | Prefer CAS with `expected = None` for immutable tags/checkpoints. |
+| Status | Compare an editable candidate tree to the named head | For filesystems, build a candidate path map from changed paths, then diff against the head. |
+| Diff | `diff(left, right)` | Named roots are resolved first; diff works on immutable `Tree` handles. |
+| Fast-forward | CAS branch from old head to new head | Requires app-level ancestry metadata; a raw tree root does not record parents. |
+| Merge | Load base, target, and source trees; call `merge`; CAS target | Store the chosen base in app metadata so conflicts can be reproduced. |
+| Reset / rewind | CAS a head name back to an earlier tree | Keep a reflog/checkpoint name if users need recovery. |
+| Checkout / materialize | Range-read the tree into app state or a workdir | Validate paths and write through a staging area for filesystem targets. |
+| Fetch / push | Copy missing nodes/blobs, then CAS remote-tracking names | Publish refs only after the referenced closure is present. |
+| GC | `NamedRootRetention` plus `plan_store_gc_for_retention` | Retain branch heads, tags, checkpoints, worktree manifests, and active sync cursors. |
+
+The key design boundary is that prolly trees provide content-addressed ordered
+snapshots. Names provide movable heads. Commit ancestry, reflogs, permissions,
+and user-facing branch semantics belong in the application layer.
 
 ## Large Value Offloading
 

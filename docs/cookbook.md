@@ -7,6 +7,7 @@ The examples use Rust today. The storage patterns are byte-oriented and portable
 ## Recipe index
 
 - [Shared conventions](#shared-conventions)
+- [Git-like primitives for applications](#git-like-primitives-for-applications)
 - [Basic ordered map](#basic-ordered-map)
 - [Bulk import and tree statistics](#bulk-import-and-tree-statistics)
 - [Local-first application state](#local-first-application-state)
@@ -92,6 +93,15 @@ Use value envelopes to record:
 
 Raw `Tree` values are immutable snapshots. Named roots are mutable application pointers.
 
+Map writes do not move those pointers. `put`, `delete`, `batch`, and `merge`
+return a new `Tree`; the named root still points at the old tree until your
+application publishes the new handle. Treat this as a two-step workflow:
+
+```text
+edit tree -> get new immutable tree
+publish/CAS named root -> make that tree visible as the head
+```
+
 Recommended root patterns:
 
 ```text
@@ -129,6 +139,65 @@ The tree is designed to skip unchanged content-addressed subtrees. Prefer:
 - `merge` over last-writer-wins at the root pointer
 - `plan_missing_nodes` and `copy_missing_nodes` over exporting full snapshots
 - retention-aware garbage collection (GC) over deleting files directly
+
+## Git-like primitives for applications
+
+You can build Git-like behavior on top of `prolly-map`, but the boundaries are
+different from Git:
+
+- A `Tree` is the content-addressed snapshot of an ordered map.
+- A named root is a mutable pointer to one `Tree`.
+- A commit is an application-defined record if you need parents, messages,
+  authors, signatures, policies, or a reflog.
+
+The table below shows useful primitives and how to compose them.
+
+| Primitive | Suggested shape | Prolly operations |
+| --- | --- | --- |
+| Head resolve | `resolve(name) -> Option<Tree>` | `load_named_root(name)` |
+| Head update | `update_ref(name, expected, replacement)` | `compare_and_swap_named_root` |
+| Snapshot write | `write_snapshot(base, changes) -> Tree` | `put`, `delete`, or `batch` |
+| Branch create | `branch(new_name, from_name)` | Load source, CAS new name from `None` to source tree |
+| Tag create | `tag(tag_name, tree)` | CAS tag name from `None` to tree |
+| Checkpoint | `checkpoint(prefix, sequence, tree)` | `publish_named_root_at_millis` or CAS from `None` |
+| Status | `status(head, candidate)` | Build a candidate tree, then `diff(head, candidate)` |
+| Diff | `diff_names(left_name, right_name)` | Load both names, then `diff(left, right)` |
+| Commit record | `Commit { tree, parents, message, author }` | Store outside the map or inside a separate metadata tree |
+| Fast-forward | `ff(name, old_commit, new_commit)` | Verify ancestry in app metadata, then CAS the named root |
+| Three-way merge | `merge(base, target, source)` | Load three trees, call `merge`, then CAS target head |
+| Reset / rewind | `reset(name, expected, target_tree)` | CAS name from expected tree to target tree |
+| Revert | `revert(base, bad, head)` | Compute inverse app-level patch, apply to head, then CAS |
+| Cherry-pick | `cherry_pick(base, picked, head)` | Replay `diff(base, picked)` onto head, resolve conflicts, CAS |
+| Checkout | `materialize(tree, destination)` | Range-read tree entries, write through a staging area |
+| Fetch | `fetch(remote)` | Copy missing nodes/blobs, then update remote-tracking names |
+| Push | `push(local, remote)` | Copy closure first, then CAS the remote named root |
+| GC | `collect(retention)` | Retain branch, tag, checkpoint, and active cursor names |
+
+Recommended root-name layout:
+
+```text
+refs/heads/<branch>
+refs/tags/<tag>
+refs/checkpoints/<scope>/<sequence>
+refs/remotes/<remote>/<branch>
+refs/worktrees/<id>/head
+refs/sync/<peer>/cursor
+```
+
+For single-writer local tools, `publish_named_root` is often acceptable. For
+multi-writer branches, sync jobs, remote pushes, or browser tabs sharing one
+store, use CAS every time. A failed CAS has the same shape as a Git push race:
+reload the current head, merge or reapply your changes, then retry.
+
+Keep these records if users need history instead of only latest state:
+
+- `CommitRecord`: tree, parent commit IDs, author, message, and created time.
+- `RefLogEntry`: name, old tree or commit, new tree or commit, actor, reason,
+  and timestamp.
+- `RemoteRef`: remote name, local tracking name, last fetched tree or commit,
+  and sync cursor.
+- `RetentionPolicy`: which heads, tags, checkpoints, worktrees, and sync
+  cursors protect nodes from GC.
 
 ## Basic ordered map
 

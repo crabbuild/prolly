@@ -157,6 +157,24 @@ an application-level concurrency boundary through compare-and-swap updates.
 The manifest layer is separate from the tree nodes. A tree root CID can exist
 without a name, and a name can be moved from one root to another.
 
+Tree updates do not move names. `put`, `delete`, `batch`, and `merge` return a
+new immutable `Tree` handle. The named root still points at the old tree until
+the application explicitly publishes the new handle with `publish_named_root` or
+updates it with `compare_and_swap_named_root`.
+
+Use this mental model:
+
+```text
+prolly root CID   immutable tree snapshot
+named root        mutable application pointer to a tree
+CAS publish       ref update from expected tree to replacement tree
+```
+
+If an application needs Git-like commit semantics, keep commit metadata above
+the map layer. Parent links, authors, messages, reflogs, branch policies, and
+remote-tracking state are application records that point at tree handles; they
+are not part of a raw prolly root.
+
 ## Diff
 
 Diff compares two roots:
@@ -273,4 +291,3 @@ AI-native applications often need more than a single mutable database row:
 
 Prolly trees give those workflows a storage primitive with cheap snapshots,
 content IDs, diff, merge, and portable byte-level semantics.
-

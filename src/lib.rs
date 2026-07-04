@@ -121,6 +121,12 @@
 //! Use named-root helpers when an application needs durable names for immutable
 //! tree snapshots:
 //!
+//! A named root is a mutable pointer, not a live view. `put`, `delete`, `batch`,
+//! and `merge` return new immutable [`Tree`] handles and do not automatically
+//! advance any name. Publish the replacement tree explicitly, preferably with
+//! `compare_and_swap_named_root` when another writer could update the same
+//! name.
+//!
 //! ```rust
 //! use prolly::{Config, MemStore, Prolly};
 //! use std::sync::Arc;
