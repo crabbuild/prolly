@@ -11,7 +11,7 @@ homepage = "https://github.com/crabbuild/prolly"
 documentation = "https://docs.rs/prolly-map"
 keywords = ["prolly-tree", "versioned-map", "content-addressed", "local-first", "merge"]
 categories = ["data-structures", "database-implementations"]
-exclude = ["docker-compose.store-services.yml", "scripts/", "prolly-store-*/"]
+exclude = ["docker-compose.store-services.yml", "scripts/", "stores/"]
 
 [lib]
 name = "prolly"

@@ -12,7 +12,7 @@ name = "prolly_store_redis"
 path = "src/lib.rs"
 
 [dependencies]
-prolly = { package = "prolly-map", path = "..", version = "0.1.0", features = ["async-store"] }
+prolly = { package = "prolly-map", path = "../..", version = "0.1.0", features = ["async-store"] }
 redis-client = { package = "redis", version = "0.32.7", default-features = false, features = [
     "aio",
     "tokio-comp",
