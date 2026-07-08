@@ -4,9 +4,9 @@ These examples use the Rust-backed UniFFI package exposed as `prolly`. Build the
 native library first or install the package with `maturin develop`.
 
 ```sh
-cargo build -p prolly-bindings
+cargo build --manifest-path bindings/uniffi/Cargo.toml --target-dir target
 PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" \
-  PYTHONPATH=crates/prolly/bindings/python \
+  PYTHONPATH=bindings/python \
   python3 app.py
 ```
 
@@ -14,16 +14,16 @@ Runnable scenarios live as separate files under `examples/`, matching the Rust
 example style:
 
 ```sh
-cargo build -p prolly-bindings
+cargo build --manifest-path bindings/uniffi/Cargo.toml --target-dir target
 PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" \
-  PYTHONPATH=crates/prolly/bindings/python \
-  python3 crates/prolly/bindings/python/examples/cookbook_scenarios.py
+  PYTHONPATH=bindings/python \
+  python3 bindings/python/examples/cookbook_scenarios.py
 PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" \
-  PYTHONPATH=crates/prolly/bindings/python \
-  python3 crates/prolly/bindings/python/examples/basic_map.py
+  PYTHONPATH=bindings/python \
+  python3 bindings/python/examples/basic_map.py
 PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" \
-  PYTHONPATH=crates/prolly/bindings/python \
-  python3 crates/prolly/bindings/python/examples/secondary_index.py
+  PYTHONPATH=bindings/python \
+  python3 bindings/python/examples/secondary_index.py
 ```
 
 Application-style files include `batch_build.py`, `local_first_state.py`,

@@ -162,11 +162,11 @@ assert_eq!(
 
 ## Running The Example
 
-From the CrabDB workspace root:
+From the standalone repository root:
 
 ```bash
 export PROLLY_STORE_MYSQL_URL=mysql://prolly:prolly@127.0.0.1:53306/prolly
-cargo run -p prolly-store-mysql --example basic_usage
+cargo run --manifest-path stores/prolly-store-mysql/Cargo.toml --example basic_usage
 ```
 
 The example initializes schema, writes and branches a tree, diffs and merges

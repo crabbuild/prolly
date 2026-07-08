@@ -26,6 +26,10 @@ tests described here.
 - [Object-Store VCS Design](object-store-vcs-design.md): technical design for
   direct object-store node/blob storage, distributed ref CAS, publish protocol,
   and GC for Git-like version-control systems.
+- [prolly-vcs Design](prolly-vcs-design.md): proposed neutral high-level
+  repository crate with a general backend-neutral `KvStore` substrate, commits,
+  refs, reflogs, patches, merge orchestration, sync planning, GC policy, and an
+  implementation roadmap.
 - [Cookbook](cookbook.md): application recipes for local-first state, RAG
   indexes, agent memory, event logs, compaction, vector sidecars, provenance,
   secondary indexes, materialized views, blob storage, durable SQLite, object

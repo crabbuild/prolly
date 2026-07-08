@@ -249,6 +249,7 @@ class ProllyFixtureTest {
 
     private static Path fixturePath() {
         for (Path candidate : List.of(
+                Paths.get("conformance/prolly-fixtures.v1.json"),
                 Paths.get("crates/prolly/conformance/prolly-fixtures.v1.json"),
                 Paths.get("../../conformance/prolly-fixtures.v1.json"))) {
             Path normalized = candidate.toAbsolutePath().normalize();

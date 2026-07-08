@@ -31,7 +31,13 @@ started material, guides, cookbook recipes, architecture, design spec,
 implementation notes, roadmap, and language-porting guidance. The canonical
 cookbook is [`docs/cookbook.md`](docs/cookbook.md).
 
-## What This Crate Gives You
+For application builders who want a Git-like repository layer on top of prolly
+trees, see the proposed [`prolly-vcs` design](docs/prolly-vcs-design.md). It
+keeps `prolly-map` focused on immutable ordered maps while outlining a separate
+crate with a general backend-neutral `KvStore` substrate for commits, refs,
+reflogs, patches, merge orchestration, sync planning, and repository-level GC.
+
+## What this crate gives you
 
 - Ordered byte-key lookup with lexicographic key ordering.
 - Immutable updates: `put`, `delete`, and `batch` return a new `Tree`.
@@ -53,7 +59,7 @@ cookbook is [`docs/cookbook.md`](docs/cookbook.md).
   and diff-page proofs for a tree root.
 - Tree statistics for inspecting shape, fill factor, fanout, and serialized size.
 
-## Quick Start
+## Quick start
 
 ```rust
 use prolly::{Config, MemStore, Prolly};
@@ -75,6 +81,29 @@ assert!(prolly.get(&tree, b"name").unwrap().is_none());
 
 All update APIs are persistent. The old `Tree` handle remains valid as long as
 the store still contains the nodes it references.
+
+## Standalone checkout
+
+This directory can be opened as its own repository. The Rust manifests under
+this tree declare their own package metadata, dependency versions, and lint
+settings.
+
+Run the core crate from the repository root:
+
+```sh
+cargo check --all-targets
+cargo test
+cargo run --example basic_map
+```
+
+Provider stores and Rust bindings live in nested packages. Check them with
+`--manifest-path`:
+
+```sh
+cargo check --manifest-path stores/prolly-store-redis/Cargo.toml --all-targets
+cargo check --manifest-path bindings/uniffi/Cargo.toml --all-targets
+cargo check --manifest-path bindings/wasm/Cargo.toml --target wasm32-unknown-unknown
+```
 
 More copyable examples live in [`examples/`](examples/):
 
@@ -106,7 +135,7 @@ More copyable examples live in [`examples/`](examples/):
 - [`filesystem_snapshot.rs`](examples/filesystem_snapshot.rs): Git-like
   filesystem snapshots with file blobs and named roots.
 
-## Key Helpers
+## Key helpers
 
 Keys are raw bytes and sort lexicographically. For application-level schemas,
 use `KeyBuilder` to build segment-safe composite keys and `prefix_range` to scan
@@ -143,27 +172,27 @@ Use `push_u64`, `push_u128`, `push_i64`, `push_i128`, and
 `push_timestamp_millis` when numeric order must match byte order. Use
 `decode_segments` in tests and diagnostics, and `debug_key` for readable logs.
 
-## Key And Range Proofs
+## Key and range proofs
 
-Use `prove_key` when another process needs to verify a value or absence against
-a root CID without having the backing store. A proof carries the root, key, and
-root-to-leaf node path. Verification recomputes node CIDs and checks the child
-links before returning a verified value. Use `prove_keys` to share proof nodes
-across multiple keys, `prove_range` to prove every entry in `[start, end)`, and
-`prove_prefix` to prove all entries in a logical namespace without giving the
-verifier access to the store. Use `prove_range_page` when a client consumes a
-cursor-based page and needs a proof for exactly that page window without
-downloading the backing store. Use `prove_diff_page` when a sync peer needs a
-bounded diff page it can verify offline against both the base and target roots.
-Use `inspect_proof_bundle` when a receiver needs to route opaque canonical
-bundle bytes to the right proof decoder or display root/bounds/count metadata
-before verification. Use `verify_proof_bundle` when a receiver only needs a
-store-independent aggregate verification result for opaque bundle bytes. Any
-canonical proof bundle can also be wrapped in an HMAC-SHA256 authenticated
-envelope when peers need tamper detection, application context, key IDs, nonces,
-and optional issue/expiration times. Use `verify_authenticated_proof_bundle`
-when a receiver has serialized envelope bytes and wants one call to authenticate
-the envelope and verify the enclosed proof bundle.
+Proof APIs let a reader verify map content against a root CID without opening
+the backing store. Verification recomputes node CIDs and checks child links
+before returning verified data.
+
+Use the smallest proof shape that matches the exchange:
+
+- `prove_key`: prove one value or one absence
+- `prove_keys`: prove several keys while sharing proof nodes
+- `prove_range`: prove every entry in `[start, end)`
+- `prove_prefix`: prove every entry under one logical key prefix
+- `prove_range_page`: prove one cursor page
+- `prove_diff_page`: prove one bounded diff page against base and target roots
+- `inspect_proof_bundle`: read bundle kind, bounds, roots, and counts
+- `verify_proof_bundle`: verify opaque canonical bundle bytes
+
+Wrap canonical bundle bytes in an HMAC-SHA256 envelope when peers need tamper
+detection, application context, key IDs, nonces, or issue/expiration times. Use
+`verify_authenticated_proof_bundle` to authenticate the envelope and verify the
+enclosed proof bundle in one call.
 
 ```rust
 use prolly::{
@@ -323,15 +352,15 @@ pass encode/decode policy around:
 ```rust
 use prolly::{JsonCodec, ValueCodec, VersionedJsonCodec};
 
-# #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
-# struct MemoryRecord {
-#     source: String,
-#     content: String,
-# }
-# let record = MemoryRecord {
-#     source: "conversation/c42".to_string(),
-#     content: "User likes durable local-first state.".to_string(),
-# };
+#[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+struct MemoryRecord {
+    source: String,
+    content: String,
+}
+let record = MemoryRecord {
+    source: "conversation/c42".to_string(),
+    content: "User likes durable local-first state.".to_string(),
+};
 let json = JsonCodec;
 let bytes = json.encode(&record).unwrap();
 let decoded = json.decode::<MemoryRecord>(&bytes).unwrap();
@@ -348,15 +377,15 @@ Use `VersionedValue` when stored bytes need schema and migration metadata:
 ```rust
 use prolly::{Config, MemStore, Prolly, VersionedValue};
 
-# #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
-# struct MemoryRecord {
-#     source: String,
-#     content: String,
-# }
-# let record = MemoryRecord {
-#     source: "conversation/c42".to_string(),
-#     content: "User likes durable local-first state.".to_string(),
-# };
+#[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+struct MemoryRecord {
+    source: String,
+    content: String,
+}
+let record = MemoryRecord {
+    source: "conversation/c42".to_string(),
+    content: "User likes durable local-first state.".to_string(),
+};
 let prolly = Prolly::new(MemStore::new(), Config::default());
 let tree = prolly.create();
 
@@ -928,13 +957,13 @@ Feature flags:
 - `slatedb`: enables `SlateDbStore`.
 
 ```sh
-cargo test -p prolly-map
-cargo test -p prolly-map --features async-store
-cargo test -p prolly-map --features tokio
-cargo test -p prolly-map --features sqlite
-cargo test -p prolly-map --features rocksdb
-cargo test -p prolly-map --features pglite
-cargo test -p prolly-map --features slatedb
+cargo test
+cargo test --features async-store
+cargo test --features tokio
+cargo test --features sqlite
+cargo test --features rocksdb
+cargo test --features pglite
+cargo test --features slatedb
 ```
 
 ## Root Manifests
@@ -1443,28 +1472,33 @@ where
 }
 ```
 
-`AsyncProlly` currently supports `create`, `get`, `get_many`, `put`, `delete`,
-route-planned coalesced `batch`, range scanning, eager `diff`, `range_diff`,
-streaming diff, conflict streaming, standard three-way `merge`, merge
-diagnostics through `merge_explain`, CRDT `crdt_merge`, `collect_stats`,
-`stats_diff`, `debug_tree`, `debug_compare_trees`, `mark_reachable`,
-`plan_missing_nodes`, `copy_missing_nodes`,
-cache inspection, cache pinning, and cache clearing. Async batch routes sorted mutation ranges
-through ordered async node loads, applies each touched leaf once, rebuilds only
-touched ancestors, and flushes rewritten nodes once. Async diff skips equal
-subtrees by CID and hydrates changed frontiers through ordered async batch reads
-when the store prefers batched reads. Async streaming diff exposes the same
-structural pruning lazily through `AsyncDiffIter::next().await` and an
-`into_stream()` adapter for `futures_util::Stream`. Async merge uses the same
-delete-aware resolver model as sync merge, and async `merge_explain` preserves a
-typed trace across successful merges and `Error::Conflict`; async CRDT merge
-uses the same conflict-free resolution strategies as sync CRDT merge. The range
-iterator supports `next().await`, resumable
-`RangeCursor` tokens, `range_after`, `range_from_cursor`, bounded `range_page`,
-bounded `reverse_page`, and an `into_stream()` adapter for
-`futures_util::Stream`. Append-heavy async
-batches use the same rightmost-path hint namespace as sync append batches so
-fresh async managers can hydrate the append anchor through ordered reads.
+`AsyncProlly` mirrors the sync API for common tree work:
+
+- Reads and writes: `create`, `get`, `get_many`, `put`, `delete`, and `batch`
+- Scans: range iteration, `range_after`, `range_from_cursor`, `range_page`, and
+  `reverse_page`
+- Diffs: eager `diff`, `range_diff`, streaming diff, and conflict streaming
+- Merges: standard three-way `merge`, `merge_explain`, and CRDT `crdt_merge`
+- Operations: stats, debug views, reachability, missing-node sync, cache stats,
+  cache pinning, and cache clearing
+
+Async batch routes sorted mutation ranges through ordered async node loads. It
+applies each touched leaf once, rebuilds only touched ancestors, and flushes
+rewritten nodes once.
+
+Async diff skips equal subtrees by CID and hydrates changed frontiers through
+ordered async batch reads when the store prefers batched reads. Streaming diff
+exposes the same pruning through `AsyncDiffIter::next().await` and
+`into_stream()`.
+
+Async merge uses the same delete-aware resolver model as sync merge.
+`merge_explain` preserves a typed trace across successful merges and
+`Error::Conflict`, while async CRDT merge uses the same conflict-free strategies
+as sync CRDT merge.
+
+Append-heavy async batches use the same rightmost-path hint namespace as sync
+append batches, so fresh async managers can hydrate the append anchor through
+ordered reads.
 
 See [`docs/async-store.md`](docs/async-store.md) for the larger async roadmap, including
 `AsyncProlly`, object-store backends, browser/WASM storage, and remote sync.
@@ -1691,12 +1725,12 @@ The `prolly-inspect` binary inspects named roots in a filesystem-backed
 checks before GC or sync jobs:
 
 ```sh
-cargo run -p prolly-map --bin prolly-inspect -- /path/to/store roots
-cargo run -p prolly-map --bin prolly-inspect -- /path/to/store stats main
-cargo run -p prolly-map --bin prolly-inspect -- /path/to/store walk main
-cargo run -p prolly-map --bin prolly-inspect -- /path/to/store compare main feature
-cargo run -p prolly-map --bin prolly-inspect -- /path/to/store changed main feature
-cargo run -p prolly-map --bin prolly-inspect -- /path/to/store verify --all
+cargo run --bin prolly-inspect -- /path/to/store roots
+cargo run --bin prolly-inspect -- /path/to/store stats main
+cargo run --bin prolly-inspect -- /path/to/store walk main
+cargo run --bin prolly-inspect -- /path/to/store compare main feature
+cargo run --bin prolly-inspect -- /path/to/store changed main feature
+cargo run --bin prolly-inspect -- /path/to/store verify --all
 ```
 
 The commands list named roots, print tree stats, render node levels and fill
@@ -1722,33 +1756,33 @@ Approximate costs:
 Run crate tests:
 
 ```sh
-cargo test -p prolly-map
+cargo test
 ```
 
 Run with SQLite support:
 
 ```sh
-cargo test -p prolly-map --features sqlite
+cargo test --features sqlite
 ```
 
 Run release-quality checks used by CI:
 
 ```sh
-RUSTDOCFLAGS="-D warnings" cargo doc -p prolly-map --no-deps --features "tokio sqlite"
-cargo check -p prolly-map --bin prolly-inspect
-cargo check -p prolly-map --examples
-cargo check -p prolly-map --benches --features "tokio sqlite"
+RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --features "tokio sqlite"
+cargo check --bin prolly-inspect
+cargo check --examples
+cargo check --benches --features "tokio sqlite"
 ```
 
 Run shared store contract coverage:
 
 ```sh
-cargo test -p prolly-map --test store_conformance
-cargo test -p prolly-map --features async-store --test async_store
-cargo test -p prolly-map --features sqlite --test sqlite_store
-cargo test -p prolly-map --features rocksdb --test rocksdb_store
-cargo test -p prolly-map --features slatedb --test slatedb_store
-cargo test -p prolly-map --features pglite --test pglite_store
+cargo test --test store_conformance
+cargo test --features async-store --test async_store
+cargo test --features sqlite --test sqlite_store
+cargo test --features rocksdb --test rocksdb_store
+cargo test --features slatedb --test slatedb_store
+cargo test --features pglite --test pglite_store
 ```
 
 The PGlite contract compiles by default and opens the Node.js sidecar only when
@@ -1758,19 +1792,19 @@ The PGlite contract compiles by default and opens the Node.js sidecar only when
 mkdir -p /tmp/prolly-pglite-node
 npm install --prefix /tmp/prolly-pglite-node @electric-sql/pglite@0.5.3
 PROLLY_PGLITE_TEST=1 PROLLY_PGLITE_NODE_CWD=/tmp/prolly-pglite-node \
-  cargo test -p prolly-map --features pglite --test pglite_store
+  cargo test --features pglite --test pglite_store
 ```
 
 Run the main benchmark harness:
 
 ```sh
-PROLLY_BENCH_SCALE=5000 cargo bench -p prolly-map --bench prolly_bench --features sqlite
+PROLLY_BENCH_SCALE=5000 cargo bench --bench prolly_bench --features sqlite
 ```
 
 Run the AI/local-first workload harness:
 
 ```sh
-PROLLY_AI_BENCH_SCALE=10000 cargo bench -p prolly-map --bench ai_workloads_bench
+PROLLY_AI_BENCH_SCALE=10000 cargo bench --bench ai_workloads_bench
 ```
 
 Run the focused SQLite scale harness:
@@ -1778,7 +1812,7 @@ Run the focused SQLite scale harness:
 ```sh
 PROLLY_SQLITE_SCALE_STAGES=1000000,10000000 \
 PROLLY_SQLITE_SCALE_BATCH=100000 \
-cargo bench -p prolly-map --bench sqlite_scale_bench --features sqlite
+cargo bench --bench sqlite_scale_bench --features sqlite
 ```
 
 See [`docs/performance.md`](docs/performance.md) for the performance guide,

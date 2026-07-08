@@ -62,7 +62,7 @@ The boundary detection uses xxHash64 for fast, deterministic chunking. A boundar
 
 ### Tree Structure
 
-```
+```text
 Root (Internal Node)
 ├─ [key1] → Child1 (Internal/Leaf)
 ├─ [key2] → Child2 (Internal/Leaf)

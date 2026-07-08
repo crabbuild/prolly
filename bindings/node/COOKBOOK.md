@@ -4,20 +4,20 @@ The Node package exposes a native Node-API engine and async Promise wrappers.
 Build the native module before running examples from the source tree.
 
 ```sh
-npm --prefix crates/prolly/bindings/node ci
-npm --prefix crates/prolly/bindings/node run build:native
-node --test crates/prolly/bindings/node/test/*.test.ts
+npm --prefix bindings/node ci
+npm --prefix bindings/node run build:native
+node --test bindings/node/test/*.test.ts
 ```
 
 Runnable scenarios live as separate files under `examples/`, matching the Rust
 example style:
 
 ```sh
-npm --prefix crates/prolly/bindings/node ci
-npm --prefix crates/prolly/bindings/node run build:native
-npm --prefix crates/prolly/bindings/node run example:cookbook
-npm --prefix crates/prolly/bindings/node run example:basic-map
-npm --prefix crates/prolly/bindings/node run example:secondary-index
+npm --prefix bindings/node ci
+npm --prefix bindings/node run build:native
+npm --prefix bindings/node run example:cookbook
+npm --prefix bindings/node run example:basic-map
+npm --prefix bindings/node run example:secondary-index
 ```
 
 Application-style files include `batch-build.ts`, `local-first-state.ts`,

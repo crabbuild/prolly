@@ -2,10 +2,10 @@
 name = "prolly-bindings"
 description = "UniFFI bindings for prolly-map"
 readme = "README.md"
-edition.workspace = true
-rust-version.workspace = true
-version.workspace = true
-license.workspace = true
+edition = "2021"
+rust-version = "1.81"
+version = "0.1.0"
+license = "MIT OR Apache-2.0"
 repository = "https://github.com/crabbuild/prolly"
 homepage = "https://github.com/crabbuild/prolly"
 
@@ -21,13 +21,13 @@ sqlite = ["prolly-map/sqlite"]
 
 [dependencies]
 prolly-map = { path = "../.." }
-serde.workspace = true
-serde_json.workspace = true
-thiserror.workspace = true
-uniffi.workspace = true
+serde = "1.0"
+serde_json = "1.0"
+thiserror = "1.0"
+uniffi = "=0.31.0"
 
 [dev-dependencies]
-hex.workspace = true
+hex = "0.4"
 
-[lints]
-workspace = true
+[lints.rust]
+unsafe_code = "allow"

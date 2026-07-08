@@ -10,6 +10,7 @@ stores.
 ## Develop
 
 ```sh
+cd bindings/python
 python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install "maturin>=1.10,<2.0" "uniffi-bindgen==0.31.0"
@@ -17,46 +18,30 @@ maturin develop
 python -m unittest discover -s tests
 ```
 
-`maturin develop` builds `crates/prolly/bindings/uniffi` and installs the
-generated module as `prolly.uniffi`.
+`maturin develop` builds `bindings/uniffi` and installs the generated module as
+`prolly.uniffi`.
 
 For source-tree checks without a maturin install, build the Rust library and
 point the generated loader at it:
 
 ```sh
-cargo build -p prolly-bindings
+cargo build --manifest-path bindings/uniffi/Cargo.toml --target-dir target
 PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" \
-  PYTHONPATH=crates/prolly/bindings/python \
+  PYTHONPATH=bindings/python \
   python -c "import prolly.uniffi"
 ```
 
 The current Rust-backed surface includes memory, file, and SQLite engines;
-CRUD, batch, batch-with-stats, Rust bulk-build, sorted bulk-build,
-append-batch, append-batch-with-stats, parallel batch, and parallel-batch-with-stats operations; eager
-range, prefix scans/pages, ordered boundary helpers, reverse and prefix-reverse pages, range-after/cursor resumption with cursor constructors, cursor windows, cursor-resumed diffs, and paged
-range/diff; paged
-three-way conflict inspection; merge with built-in resolver names and merge
-explanations with typed trace events plus JSON trace compatibility; Python
-`MergeResolverCallback` custom resolvers for full-tree,
-range-limited, and prefix-limited merges; merge policy registries with named
-and Python callback resolvers; mutation constructors; merge/CRDT resolution constructors and built-in resolver helper functions; Python `HostStoreCallback` custom stores;
-named root
-publish/load/list/manifest-list/delete/CAS; root manifest bytes; node/CID helpers; key
-helpers, including prefix bounds, segment encoding/decoding, and composite key
-construction; encoding helpers and tree/large-value/parallel config
-constructors; boundary
-checks; range-limited diffs; structural diff cursor pages with typed resume;
-typed stats/debug records plus stats/debug JSON; GC planning and sweeping, including named-root retention
-policy constructors; store-to-store missing-node sync; portable snapshot bundle
-export/import plus canonical bundle bytes, digests, summaries, and self-contained
-verification; cache and metrics inspection;
-changed-span constructors for performance hints; optional performance hints; CRDT merge presets and `CrdtResolverCallback`
-custom resolvers; tombstone envelopes; versioned values with schema
-match/require guards; memory/file blob
-stores; large-value offload/resolution;
-value-ref inspection and stored-byte helpers; blob-ref byte validation; store-independent single-key, multi-key, range, cursor-page, diff-page, and prefix proofs
-with compact path-node export/import, canonical bundle bytes, proof-bundle introspection/routing summaries, one-shot proof-bundle verification, HMAC-authenticated proof envelopes, and one-shot authenticated proof-bundle verification; blob GC; and
-value/blob envelopes.
+CRUD, batch, append, parallel batch, and bulk-build operations.
+
+It also exposes:
+
+- prefix, range, cursor, reverse-page, diff-page, and boundary helpers;
+- conflict inspection, merge policies, merge traces, and Python callbacks;
+- named roots, root manifests, node/CID helpers, GC, sync, cache, and metrics;
+- key encoders, mutation constructors, CRDT helpers, and versioned values;
+- blob stores, large-value offload, value refs, blob refs, and blob GC;
+- portable snapshot bundles and store-independent proof bundles.
 
 The source tree keeps the generated Python glue under
 `prolly/uniffi` for offline review. Native libraries produced by
@@ -86,16 +71,19 @@ For installed development:
 
 ```sh
 python -m pip install "maturin>=1.10,<2.0" "uniffi-bindgen==0.31.0"
-python -m maturin develop --manifest-path crates/prolly/bindings/uniffi/Cargo.toml
-python crates/prolly/bindings/python/examples/local_first_state.py
+cd bindings/python
+python -m maturin develop
+python examples/local_first_state.py
 ```
 
 For source-tree checks, build the Rust library first and run the scenario from
 the repository root:
 
 ```sh
-cargo build -p prolly-bindings
-python crates/prolly/bindings/python/examples/cookbook_scenarios.py
+cargo build --manifest-path bindings/uniffi/Cargo.toml --target-dir target
+PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" \
+  PYTHONPATH=bindings/python \
+  python3 bindings/python/examples/cookbook_scenarios.py
 ```
 
 Each scenario inserts the binding directory into `sys.path` before importing
@@ -140,7 +128,9 @@ tools. Verify a bundle before importing it into a durable store.
 Run Python tests after rebuilding the native library:
 
 ```sh
-python -m unittest discover -s crates/prolly/bindings/python/tests
+PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" \
+  PYTHONPATH=bindings/python \
+  python3 -m unittest discover -s bindings/python/tests
 ```
 
 Keep fixture tests focused on byte compatibility and record conversion. Add

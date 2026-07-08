@@ -3,7 +3,7 @@
 import PackageDescription
 
 let localLibrarySearchPath =
-    Context.environment["PROLLY_BINDINGS_LIBRARY_DIR"] ?? "../../../../target/debug"
+    Context.environment["PROLLY_BINDINGS_LIBRARY_DIR"] ?? "../../target/debug"
 
 let package = Package(
     name: "Prolly",

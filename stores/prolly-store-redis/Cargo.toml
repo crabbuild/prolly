@@ -1,10 +1,10 @@
 [package]
 name = "prolly-store-redis"
 description = "Redis store adapter for prolly-map."
-edition.workspace = true
-rust-version.workspace = true
-version.workspace = true
-license.workspace = true
+edition = "2021"
+rust-version = "1.81"
+version = "0.1.0"
+license = "MIT OR Apache-2.0"
 repository = "https://github.com/crabbuild/prolly"
 
 [lib]
@@ -21,7 +21,7 @@ redis-client = { package = "redis", version = "0.32.7", default-features = false
 ] }
 
 [dev-dependencies]
-tokio.workspace = true
+tokio = { version = "1.45", features = ["rt-multi-thread", "time"] }
 
-[lints]
-workspace = true
+[lints.rust]
+unsafe_code = "allow"

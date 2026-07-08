@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "type": "module",
   "private": true,
-  "description": "Browser WASM binding for CrabDB prolly-map",
+  "description": "Browser WASM binding for prolly-map",
   "exports": {
     ".": "./src/index.ts"
   },
@@ -11,8 +11,8 @@
     "example:agent-event-log": "node examples/agent-event-log.ts",
     "example:background-compaction": "node examples/background-compaction.ts",
     "example:batch-build": "node examples/batch-build.ts",
-    "check:rust": "cargo check -p prolly-wasm --target wasm32-unknown-unknown",
-    "build:wasm": "cargo build -p prolly-wasm --release --target wasm32-unknown-unknown && wasm-bindgen ../../../../target/wasm32-unknown-unknown/release/prolly_wasm.wasm --target web --typescript --out-dir pkg",
+    "check:rust": "cargo check --manifest-path Cargo.toml --target wasm32-unknown-unknown --target-dir ../../target",
+    "build:wasm": "cargo build --manifest-path Cargo.toml --release --target wasm32-unknown-unknown --target-dir ../../target && wasm-bindgen ../../target/wasm32-unknown-unknown/release/prolly_wasm.wasm --target web --typescript --out-dir pkg",
     "example:basic-map": "node examples/basic-map.ts",
     "example:browser-storage": "node examples/browser-storage.ts",
     "example:cookbook": "node examples/browser-scenarios.ts",

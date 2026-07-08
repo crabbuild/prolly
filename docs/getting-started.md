@@ -20,7 +20,7 @@ From crates.io, once published:
 prolly-map = "0.1"
 ```
 
-From this workspace during development:
+From a project that vendors this repository under `crates/prolly`:
 
 ```toml
 [dependencies]
@@ -313,15 +313,15 @@ Use `tokio` when you want blocking sync stores to run on Tokio's blocking pool:
 prolly-map = { version = "0.1", features = ["tokio"] }
 ```
 
-## Run Examples
+## Run examples
 
-From the workspace root:
+From this repository root:
 
 ```sh
-cargo run -p prolly-map --example basic_map
-cargo run -p prolly-map --example resolver
-cargo run -p prolly-map --example conversation_memory
-cargo run -p prolly-map --example deterministic_rag_snapshot
+cargo run --example basic_map
+cargo run --example resolver
+cargo run --example conversation_memory
+cargo run --example deterministic_rag_snapshot
 ```
 
 Useful examples:

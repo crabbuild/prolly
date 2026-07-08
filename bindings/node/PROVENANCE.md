@@ -1,10 +1,10 @@
 # Generated Node-API Sources
 
-Generated from `crates/prolly/bindings/node/native` with:
+Generated from `bindings/node/native` with:
 
 ```sh
-npm install
-npm run build:native
+npm --prefix bindings/node install
+npm --prefix bindings/node run build:native
 ```
 
 Generated source artifacts checked in:

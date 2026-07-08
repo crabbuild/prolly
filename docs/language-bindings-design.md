@@ -16,7 +16,7 @@ share the same conformance fixtures, wire format, and release process.
 - Prefer UniFFI for shared interface definition and generated bindings.
 - Allow language-specific adapters when they provide a better package,
   runtime, or developer experience than UniFFI for that language.
-- Reuse `crates/prolly/conformance/prolly-fixtures.v1.json` for every binding.
+- Reuse `conformance/prolly-fixtures.v1.json` for every binding.
 - Treat tier labels as delivery order only. A tier 2 language can ship later,
   but it must still reach the same Rust feature parity before it is marked
   complete.
@@ -33,19 +33,19 @@ Non-goals for the first binding release:
 The current Rust crate remains the core:
 
 ```text
-crates/prolly
-  src/                 Rust implementation
-  bindings/uniffi/     Rust FFI facade and UniFFI generator config
-  bindings/python/     Python package and generated bindings
-  bindings/go/         Go package and generated bindings
-  bindings/node/       Node/TypeScript package
-  bindings/wasm/       Browser WASM package
-  bindings/java/       Java facade package
-  bindings/kotlin/     Kotlin/JVM package
-  bindings/ruby/       Ruby gem
-  bindings/swift/      Swift package
-  conformance/         shared fixtures generated from Rust
-  docs/                wire format, behavior, and binding design
+.
+  src/                Rust implementation
+  bindings/uniffi/    Rust FFI facade and UniFFI generator config
+  bindings/python/    Python package and generated bindings
+  bindings/go/        Go package and generated bindings
+  bindings/node/      Node/TypeScript package
+  bindings/wasm/      Browser WASM package
+  bindings/java/      Java facade package
+  bindings/kotlin/    Kotlin/JVM package
+  bindings/ruby/      Ruby gem
+  bindings/swift/     Swift package
+  conformance/        shared fixtures generated from Rust
+  docs/               wire format, behavior, and binding design
 ```
 
 Bindings should call Rust code through a small facade instead of binding the
@@ -55,7 +55,7 @@ Rust modules continue to evolve.
 The binding crate location is fixed:
 
 ```text
-crates/prolly/bindings/uniffi/
+bindings/uniffi/
   Cargo.toml           package `prolly-bindings`
   src/lib.rs           FFI-safe facade over `prolly-map`
   uniffi.toml          language generator settings
@@ -73,9 +73,9 @@ This keeps UniFFI, Node-API, JNI, or WASM dependencies out of the core
 ## Resolved Design Decisions
 
 - The shared Rust UniFFI facade lives under
-  `crates/prolly/bindings/uniffi`.
+  `bindings/uniffi`.
 - Every language binding package lives under its own
-  `crates/prolly/bindings/<language>` folder.
+  `bindings/<language>` folder.
 - Java ships as a Java-friendly wrapper over generated Kotlin/JVM UniFFI
   bindings.
 - Node/TypeScript ships both Node-API and browser WASM packages in the same
@@ -172,7 +172,7 @@ The first implementation uses UniFFI proc macros, matching the SlateDB binding
 layout this project follows. A UDL file can still be added later if reviewers
 want a language-neutral interface artifact, but the authoritative contract for
 the initial binding is the proc-macro facade in
-`crates/prolly/bindings/uniffi/src/lib.rs` plus `uniffi.toml`.
+`bindings/uniffi/src/lib.rs` plus `uniffi.toml`.
 
 UniFFI support status from the current guide:
 
@@ -534,17 +534,21 @@ callbacks, but store callbacks add cross-language overhead to every node load,
 complicate threading, and make browser support harder.
 
 `MergeResolverCallback`, `CrdtResolverCallback`, and merge policy callback
-rules are the first host callback APIs. `MergeResolverCallback` must be
-available for full-tree, range-limited, and prefix-limited merge methods in
-every binding that claims P6 resolver parity. `CrdtResolverCallback` must be
-available for CRDT merges and returns only value/delete resolutions because
-CRDT merges cannot remain unresolved. Merge policy registries must support
-default, prefix, and exact-key rules with both named built-in resolvers and
-host callback resolvers. Host callback implementations must keep handle maps
-alive for the full FFI call or for the lifetime of a policy registry, convert
-callback exceptions into binding errors or unresolved/delete fallback
-resolutions according to the language facade, and must not panic or unwind
-across the FFI boundary.
+rules are the first host callback APIs.
+
+Callback requirements:
+
+- `MergeResolverCallback` must cover full-tree, range-limited, and prefix-limited
+  merge methods in every binding that claims P6 resolver parity.
+- `CrdtResolverCallback` must be available for CRDT merges and return only
+  value/delete resolutions because CRDT merges cannot remain unresolved.
+- Merge policy registries must support default, prefix, and exact-key rules
+  with both named built-in resolvers and host callback resolvers.
+- Host callback implementations must keep handle maps alive for the full FFI
+  call or for the lifetime of a policy registry.
+- Callback exceptions must become binding errors or unresolved/delete fallback
+  resolutions according to the language facade.
+- Host callbacks must not panic or unwind across the FFI boundary.
 
 ### Errors
 
@@ -629,7 +633,7 @@ binding is marked feature complete.
 
 Deliverables:
 
-- Python package under `crates/prolly/bindings/python`;
+- Python package under `bindings/python`;
 - generated UniFFI Python module and native library via maturin;
 - `bytes`-first public API;
 - unittest/pytest conformance tests;
@@ -637,9 +641,9 @@ Deliverables:
 
 Use UniFFI as the primary binding path because Python is officially supported.
 Package with `maturin` first, following the implemented
-`crates/prolly/bindings/python/pyproject.toml`.
+`bindings/python/pyproject.toml`.
 
-The existing `crates/prolly/bindings/python/src` implementation remains a
+The existing `bindings/python/src` implementation remains a
 temporary fixture harness and source-tree fallback. The package-level
 `prolly` module loads the generated Rust binding once built with maturin.
 
@@ -683,7 +687,7 @@ package quality, Android compatibility, or offline build requirements.
 
 Deliverables:
 
-- Go module under `crates/prolly/bindings/go`;
+- Go module under `bindings/go`;
 - generated bindings or cgo wrapper;
 - `[]byte` API and table-driven conformance tests.
 
@@ -702,8 +706,8 @@ Fallback:
 
 Deliverables:
 
-- npm package under `crates/prolly/bindings/node`;
-- browser WASM package under `crates/prolly/bindings/wasm`;
+- npm package under `bindings/node`;
+- browser WASM package under `bindings/wasm`;
 - TypeScript declarations;
 - prebuilt binaries for common Node targets;
 - WASM bundle for browser use;
@@ -724,7 +728,7 @@ Chosen first version:
 
 Deliverables:
 
-- gem under `crates/prolly/bindings/ruby`;
+- gem under `bindings/ruby`;
 - generated Ruby bindings;
 - fixture tests.
 
@@ -749,7 +753,7 @@ package for offline builds.
 
 Deliverables:
 
-- browser package under `crates/prolly/bindings/wasm` as part of the
+- browser package under `bindings/wasm` as part of the
   Node/TypeScript tier 1 delivery;
 - standalone WASM embedding package after the binding ABI is stable;
 - generated TypeScript declarations;
@@ -797,17 +801,17 @@ without letting generated code drift from the UniFFI facade.
 Generated sources should live inside each language package, not in a shared
 scratch directory. Suggested paths:
 
-- Python: `crates/prolly/bindings/python/prolly/uniffi`;
-- Kotlin/JVM: `crates/prolly/bindings/kotlin/src/main/kotlin/build/crab/prolly/generated`;
-- Java facade: `crates/prolly/bindings/java/src/main/java/build/crab/prolly`;
-- Go: `crates/prolly/bindings/go/internal/generated`;
-- Node/TypeScript: `crates/prolly/bindings/node/src/generated`;
-- browser WASM: `crates/prolly/bindings/wasm/src` for the handwritten ESM
-  loader/types and `crates/prolly/bindings/wasm/pkg` for `wasm-bindgen`
+- Python: `bindings/python/prolly/uniffi`;
+- Kotlin/JVM: `bindings/kotlin/src/main/kotlin/build/crab/prolly/generated`;
+- Java facade: `bindings/java/src/main/java/build/crab/prolly`;
+- Go: `bindings/go/internal/generated`;
+- Node/TypeScript: `bindings/node/src/generated`;
+- browser WASM: `bindings/wasm/src` for the handwritten ESM
+  loader/types and `bindings/wasm/pkg` for `wasm-bindgen`
   generated JS/TS glue during release builds. The release `pkg` directory and
   compiled `.wasm` output are built in CI and not checked in.
-- Swift: `crates/prolly/bindings/swift/Sources/Prolly` and
-  `crates/prolly/bindings/swift/Sources/prollyFFI/include`.
+- Swift: `bindings/swift/Sources/Prolly` and
+  `bindings/swift/Sources/prollyFFI/include`.
 
 Each generated directory should include a small provenance file with the
 generator name, generator version, command line, enabled Cargo features, and
@@ -872,7 +876,7 @@ assert engine.range(tree, b"", None) == [(b"a", b"1")]
 
 Phase 0: binding contract
 
-- add `prolly-bindings` crate at `crates/prolly/bindings/uniffi`;
+- add `prolly-bindings` crate at `bindings/uniffi`;
 - implement the proc-macro UniFFI facade and `uniffi.toml`;
 - expose P0 and P1: memory/file stores, tree handles, get, get_many, put,
   delete, batch, range, range page, CID, node bytes, key helpers, and
@@ -925,14 +929,14 @@ Phase 5: callback and host integration
 
 Minimum CI before publishing any binding:
 
-- Rust: `cargo test -p prolly-map --test conformance_fixtures`
+- Rust: `cargo test --test conformance_fixtures`
 - Binding crate: facade unit tests and generated binding smoke tests
 - Generated source freshness: regenerate bindings and fail on any diff
 - Kotlin/JVM: Gradle test on Linux
 - Java: Maven or Gradle JUnit conformance tests
 - Go: `go test ./...`
 - Node/TypeScript: `npm test` for Node-API and browser WASM packages
-- Python: `python -m unittest discover -s crates/prolly/bindings/python/tests`
+- Python: `python -m unittest discover -s bindings/python/tests`
 - SQLite: conformance tests for every non-WASM package
 
 Feature-complete CI must also run one parity test group per P-level. The CI
@@ -1005,8 +1009,8 @@ Semantic drift:
 
 ## Finalized Decisions
 
-- `prolly-bindings` is a nested crate under `crates/prolly/bindings/uniffi`.
-- Language packages live under `crates/prolly/bindings/<language>`.
+- `prolly-bindings` is a nested crate under `bindings/uniffi`.
+- Language packages live under `bindings/<language>`.
 - Java is a wrapper over generated Kotlin/JVM bindings.
 - Node/TypeScript ships Node-API and browser WASM artifacts together.
 - SQLite is the first persistent store beyond memory and file.

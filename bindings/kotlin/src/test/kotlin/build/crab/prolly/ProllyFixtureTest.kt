@@ -249,6 +249,7 @@ class ProllyFixtureTest {
 
     private fun fixturePath(): Path {
         val candidates = listOf(
+            Paths.get("conformance/prolly-fixtures.v1.json"),
             Paths.get("crates/prolly/conformance/prolly-fixtures.v1.json"),
             Paths.get("../../conformance/prolly-fixtures.v1.json"),
         ).map { it.toAbsolutePath().normalize() }

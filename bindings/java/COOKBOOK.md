@@ -8,17 +8,17 @@ Runnable scenarios live as separate classes under
 `build.crab.prolly.examples`, matching the Rust example style:
 
 ```sh
-cargo build -p prolly-bindings
-mvn -q -f crates/prolly/bindings/pom.xml install -Dmaven.test.skip=true
-mvn -q -f crates/prolly/bindings/java/pom.xml \
+cargo build --manifest-path bindings/uniffi/Cargo.toml --target-dir target
+mvn -q -f bindings/pom.xml install -Dmaven.test.skip=true
+mvn -q -f bindings/java/pom.xml \
   compile \
   -Dexec.mainClass=build.crab.prolly.examples.CookbookScenarios \
   exec:java
-mvn -q -f crates/prolly/bindings/java/pom.xml \
+mvn -q -f bindings/java/pom.xml \
   compile \
   -Dexec.mainClass=build.crab.prolly.examples.BasicMap \
   exec:java
-mvn -q -f crates/prolly/bindings/java/pom.xml \
+mvn -q -f bindings/java/pom.xml \
   compile \
   -Dexec.mainClass=build.crab.prolly.examples.SecondaryIndex \
   exec:java

@@ -152,12 +152,12 @@ assert_eq!(
 
 ## Running The Example
 
-From the CrabDB workspace root:
+From the standalone repository root:
 
 ```bash
 export PROLLY_STORE_SPANNER_DATABASE=projects/<project>/instances/<instance>/databases/<database>
 export PROLLY_STORE_SPANNER_AUTH=1
-cargo run -p prolly-store-spanner --example basic_usage
+cargo run --manifest-path stores/prolly-store-spanner/Cargo.toml --example basic_usage
 ```
 
 The example writes a base tree, diffs and merges branches, resolves a conflict,

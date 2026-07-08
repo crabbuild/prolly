@@ -25,7 +25,7 @@ for the Rust `prolly-map` reference implementation.
 - `swift`: Swift Package Manager module with generated UniFFI Swift sources,
   runnable fixture checks, and cookbook scenario executables.
 
-Language bindings consume `crates/prolly/conformance/prolly-fixtures.v1.json`.
+Language bindings consume `conformance/prolly-fixtures.v1.json`.
 The Go, Node native, Kotlin/JVM, Java facade, Ruby, and Swift packages now run
 fixture coverage for:
 
@@ -111,27 +111,27 @@ binding supports blob stores, and a secondary-index application scenario.
 Local smoke checks:
 
 ```sh
-cargo build -p prolly-bindings
-cargo test -p prolly-bindings
+cargo build --manifest-path bindings/uniffi/Cargo.toml --target-dir target
+cargo test --manifest-path bindings/uniffi/Cargo.toml --target-dir target
 PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" \
-  PYTHONPATH=crates/prolly/bindings/python \
+  PYTHONPATH=bindings/python \
   python -c "import prolly.uniffi"
-mvn -f crates/prolly/bindings/pom.xml test
-(cd crates/prolly/bindings/go && go test ./...)
-npm ci --prefix crates/prolly/bindings/node
-npm --prefix crates/prolly/bindings/node run build:native
-npm --prefix crates/prolly/bindings/node test
-cargo check -p prolly-wasm --target wasm32-unknown-unknown
-npm --prefix crates/prolly/bindings/wasm test
+mvn -f bindings/pom.xml test
+(cd bindings/go && go test ./...)
+npm ci --prefix bindings/node
+npm --prefix bindings/node run build:native
+npm --prefix bindings/node test
+cargo check --manifest-path bindings/wasm/Cargo.toml --target wasm32-unknown-unknown --target-dir target
+npm --prefix bindings/wasm test
 DYLD_LIBRARY_PATH="$PWD/target/debug" \
-  swift run --package-path crates/prolly/bindings/swift prolly-fixture-check
-BUNDLE_GEMFILE=crates/prolly/bindings/ruby/Gemfile \
+  swift run --package-path bindings/swift prolly-fixture-check
+BUNDLE_GEMFILE=bindings/ruby/Gemfile \
   BUNDLE_PATH=/tmp/prolly-ruby-bundle \
   bundle install
 PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" \
-  BUNDLE_GEMFILE=crates/prolly/bindings/ruby/Gemfile \
+  BUNDLE_GEMFILE=bindings/ruby/Gemfile \
   BUNDLE_PATH=/tmp/prolly-ruby-bundle \
   bundle exec \
-  ruby -Icrates/prolly/bindings/ruby/lib \
-  crates/prolly/bindings/ruby/test/prolly_smoke_test.rb
+  ruby -Ibindings/ruby/lib \
+  bindings/ruby/test/prolly_smoke_test.rb
 ```

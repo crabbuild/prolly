@@ -5,34 +5,34 @@ values. Point `PROLLY_BINDINGS_LIBRARY` at the local Cargo dylib when running
 from the source tree.
 
 ```sh
-cargo build -p prolly-bindings
+cargo build --manifest-path bindings/uniffi/Cargo.toml --target-dir target
 PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" \
-  ruby -Icrates/prolly/bindings/ruby/lib app.rb
+  ruby -Ibindings/ruby/lib app.rb
 ```
 
 Runnable scenarios live as separate files under `examples/`, matching the Rust
 example style:
 
 ```sh
-cargo build -p prolly-bindings
-BUNDLE_GEMFILE=crates/prolly/bindings/ruby/Gemfile \
+cargo build --manifest-path bindings/uniffi/Cargo.toml --target-dir target
+BUNDLE_GEMFILE=bindings/ruby/Gemfile \
   BUNDLE_PATH=/tmp/prolly-ruby-bundle \
   bundle install
 PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" \
-  BUNDLE_GEMFILE=crates/prolly/bindings/ruby/Gemfile \
+  BUNDLE_GEMFILE=bindings/ruby/Gemfile \
   BUNDLE_PATH=/tmp/prolly-ruby-bundle \
-  bundle exec ruby -Icrates/prolly/bindings/ruby/lib \
-  crates/prolly/bindings/ruby/examples/cookbook_scenarios.rb
+  bundle exec ruby -Ibindings/ruby/lib \
+  bindings/ruby/examples/cookbook_scenarios.rb
 PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" \
-  BUNDLE_GEMFILE=crates/prolly/bindings/ruby/Gemfile \
+  BUNDLE_GEMFILE=bindings/ruby/Gemfile \
   BUNDLE_PATH=/tmp/prolly-ruby-bundle \
-  bundle exec ruby -Icrates/prolly/bindings/ruby/lib \
-  crates/prolly/bindings/ruby/examples/basic_map.rb
+  bundle exec ruby -Ibindings/ruby/lib \
+  bindings/ruby/examples/basic_map.rb
 PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" \
-  BUNDLE_GEMFILE=crates/prolly/bindings/ruby/Gemfile \
+  BUNDLE_GEMFILE=bindings/ruby/Gemfile \
   BUNDLE_PATH=/tmp/prolly-ruby-bundle \
-  bundle exec ruby -Icrates/prolly/bindings/ruby/lib \
-  crates/prolly/bindings/ruby/examples/secondary_index.rb
+  bundle exec ruby -Ibindings/ruby/lib \
+  bindings/ruby/examples/secondary_index.rb
 ```
 
 Application-style files include `batch_build.rb`, `local_first_state.rb`,

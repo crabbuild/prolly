@@ -5,7 +5,7 @@ build-backend = "maturin"
 [project]
 name = "crabdb-prolly-binding"
 version = "0.1.0"
-description = "Python binding compatibility harness for CrabDB prolly-map fixtures"
+description = "Python binding compatibility harness for prolly-map fixtures"
 requires-python = ">=3.10"
 
 [project.optional-dependencies]

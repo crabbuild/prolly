@@ -28,61 +28,63 @@ tree behavior.
 
 | Native surface | Verification files | Command |
 | --- | --- | --- |
-| Rust async store | `crates/prolly/tests/async_store.rs`, async doctests | `cargo test -p prolly-map --features async-store` |
+| Rust async store | `tests/async_store.rs`, async doctests | `cargo test --features async-store` |
 
 | Binding | Verification files | Command |
 | --- | --- | --- |
-| Rust UniFFI facade | `bindings/uniffi/src/lib.rs` unit tests | `cargo test -p prolly-bindings` |
-| Python | `bindings/python/tests/test_uniffi_binding.py`, `test_fixtures.py` | `PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" PYTHONPATH=crates/prolly/bindings/python python3 -m unittest discover -s crates/prolly/bindings/python/tests` |
-| Go | `bindings/go/prolly_test.go` | `(cd crates/prolly/bindings/go && go test ./...)` |
-| Node/TypeScript | `bindings/node/test/*.test.ts` | `npm --prefix crates/prolly/bindings/node run build:native && npm --prefix crates/prolly/bindings/node test` |
-| Browser WASM | `bindings/wasm/test/wasm.test.ts` | `cargo check -p prolly-wasm --target wasm32-unknown-unknown && npm --prefix crates/prolly/bindings/wasm test` |
-| Kotlin/JVM | `bindings/kotlin/src/test/kotlin/build/crab/prolly/*.kt` | `mvn -f crates/prolly/bindings/kotlin/pom.xml test` |
-| Java | `bindings/java/src/test/java/build/crab/prolly/*.java` | `mvn -f crates/prolly/bindings/java/pom.xml test` |
-| JVM aggregate | Kotlin and Java modules together | `mvn -f crates/prolly/bindings/pom.xml test` |
-| Ruby | `bindings/ruby/test/prolly_smoke_test.rb` | `PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" BUNDLE_GEMFILE=crates/prolly/bindings/ruby/Gemfile BUNDLE_PATH=/tmp/prolly-ruby-bundle bundle exec ruby -Icrates/prolly/bindings/ruby/lib crates/prolly/bindings/ruby/test/prolly_smoke_test.rb` |
-| Swift | `bindings/swift/Examples/FixtureCheck`, cookbook executable targets | `DYLD_LIBRARY_PATH="$PWD/target/debug" swift run --package-path crates/prolly/bindings/swift prolly-fixture-check` |
+| Rust UniFFI facade | `bindings/uniffi/src/lib.rs` unit tests | `cargo test --manifest-path bindings/uniffi/Cargo.toml --target-dir target` |
+| Python | `bindings/python/tests/test_uniffi_binding.py`, `test_fixtures.py` | `PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" PYTHONPATH=bindings/python python3 -m unittest discover -s bindings/python/tests` |
+| Go | `bindings/go/prolly_test.go` | `(cd bindings/go && go test ./...)` |
+| Node/TypeScript | `bindings/node/test/*.test.ts` | `npm --prefix bindings/node run build:native && npm --prefix bindings/node test` |
+| Browser WASM | `bindings/wasm/test/wasm.test.ts` | `cargo check --manifest-path bindings/wasm/Cargo.toml --target wasm32-unknown-unknown --target-dir target && npm --prefix bindings/wasm test` |
+| Kotlin/JVM | `bindings/kotlin/src/test/kotlin/build/crab/prolly/*.kt` | `mvn -f bindings/kotlin/pom.xml test` |
+| Java | `bindings/java/src/test/java/build/crab/prolly/*.java` | `mvn -f bindings/pom.xml -pl java -am test` |
+| JVM aggregate | Kotlin and Java modules together | `mvn -f bindings/pom.xml test` |
+| Ruby | `bindings/ruby/test/prolly_smoke_test.rb` | `PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" BUNDLE_GEMFILE=bindings/ruby/Gemfile BUNDLE_PATH=/tmp/prolly-ruby-bundle bundle exec ruby -Ibindings/ruby/lib bindings/ruby/test/prolly_smoke_test.rb` |
+| Swift | `bindings/swift/Examples/FixtureCheck`, cookbook executable targets | `DYLD_LIBRARY_PATH="$PWD/target/debug" swift run --package-path bindings/swift prolly-fixture-check` |
 
 ## Runnable Cookbook Scenarios
 
 These example programs mirror the Rust examples with real assertions and short
-success output. Each binding keeps separate scenario files. Native bindings
-cover the full application set: `batch_build`, `local_first_state`, `resolver`,
-`crdt_merge`, `conversation_memory`, `agent_event_log`,
-`background_compaction`, `deterministic_rag_snapshot`,
+success output. Each binding keeps separate scenario files.
+
+Native bindings cover the full application set: `batch_build`,
+`local_first_state`, `resolver`, `crdt_merge`, `conversation_memory`,
+`agent_event_log`, `background_compaction`, `deterministic_rag_snapshot`,
 `document_chunk_index`, `vector_sidecar`, `provenance_values`,
-`materialized_view`, `filesystem_snapshot`, and `durable_sqlite`, alongside
-the existing `basic_map`, `diff_merge`, `file_blob_store`, and
-`secondary_index`. Browser WASM keeps the browser-safe subset and replaces
-native file/SQLite scenarios with `browser_storage`.
+`materialized_view`, `filesystem_snapshot`, and `durable_sqlite`.
+
+They also keep the existing `basic_map`, `diff_merge`, `file_blob_store`, and
+`secondary_index` examples. Browser WASM keeps the browser-safe subset and
+replaces native file/SQLite scenarios with `browser_storage`.
 
 ```sh
 PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" \
-  PYTHONPATH=crates/prolly/bindings/python \
-  python3 crates/prolly/bindings/python/examples/cookbook_scenarios.py
-(cd crates/prolly/bindings/go && go run ./examples/cookbook_scenarios)
-npm --prefix crates/prolly/bindings/node run example:cookbook
-mvn -q -f crates/prolly/bindings/kotlin/pom.xml compile \
+  PYTHONPATH=bindings/python \
+  python3 bindings/python/examples/cookbook_scenarios.py
+(cd bindings/go && go run ./examples/cookbook_scenarios)
+npm --prefix bindings/node run example:cookbook
+mvn -q -f bindings/kotlin/pom.xml compile \
   -Dexec.mainClass=build.crab.prolly.examples.CookbookScenariosKt exec:java
-mvn -q -f crates/prolly/bindings/pom.xml install -Dmaven.test.skip=true
-mvn -q -f crates/prolly/bindings/java/pom.xml compile \
+mvn -q -f bindings/pom.xml install -Dmaven.test.skip=true
+mvn -q -f bindings/java/pom.xml compile \
   -Dexec.mainClass=build.crab.prolly.examples.CookbookScenarios exec:java
 PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" \
-  BUNDLE_GEMFILE=crates/prolly/bindings/ruby/Gemfile \
+  BUNDLE_GEMFILE=bindings/ruby/Gemfile \
   BUNDLE_PATH=/tmp/prolly-ruby-bundle \
-  bundle exec ruby -Icrates/prolly/bindings/ruby/lib \
-  crates/prolly/bindings/ruby/examples/cookbook_scenarios.rb
-npm --prefix crates/prolly/bindings/wasm run build:wasm
-npm --prefix crates/prolly/bindings/wasm run example:cookbook
+  bundle exec ruby -Ibindings/ruby/lib \
+  bindings/ruby/examples/cookbook_scenarios.rb
+npm --prefix bindings/wasm run build:wasm
+npm --prefix bindings/wasm run example:cookbook
 DYLD_LIBRARY_PATH="$PWD/target/debug" \
-  swift run --package-path crates/prolly/bindings/swift prolly-cookbook-scenarios
+  swift run --package-path bindings/swift prolly-cookbook-scenarios
 ```
 
 ## Release Gate
 
 Before publishing a binding release:
 
-1. Build the Rust facade with `cargo build -p prolly-bindings`.
+1. Build the Rust facade with `cargo build --manifest-path bindings/uniffi/Cargo.toml --target-dir target`.
 2. If `bindings/uniffi/src/lib.rs` changed, regenerate checked-in UniFFI
    language glue using each package's `PROVENANCE.md` command, then review the
    generated diff.

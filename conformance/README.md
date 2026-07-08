@@ -4,7 +4,7 @@
 It is generated from the Rust reference implementation:
 
 ```sh
-cargo run -p prolly-map --bin prolly-conformance -- --write crates/prolly/conformance/prolly-fixtures.v1.json
+cargo run --bin prolly-conformance -- --write conformance/prolly-fixtures.v1.json
 ```
 
 The fixture file uses lowercase hex for every byte string. Bindings should treat

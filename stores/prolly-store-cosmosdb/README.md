@@ -148,14 +148,14 @@ assert_eq!(
 
 ## Running The Example
 
-From the CrabDB workspace root:
+From the standalone repository root:
 
 ```bash
 export PROLLY_STORE_COSMOS_ENDPOINT=https://<account>.documents.azure.com:443
 export PROLLY_STORE_COSMOS_KEY=<base64-account-key>
 export PROLLY_STORE_COSMOS_DATABASE=prolly
 export PROLLY_STORE_COSMOS_CONTAINER=prolly_store
-cargo run -p prolly-store-cosmosdb --example basic_usage
+cargo run --manifest-path stores/prolly-store-cosmosdb/Cargo.toml --example basic_usage
 ```
 
 The example writes into a unique key prefix, publishes a named root, reloads it,

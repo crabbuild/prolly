@@ -28,13 +28,14 @@ object ProllyNative {
         }
         val cwd = Paths.get("").toAbsolutePath().normalize()
         val candidates = listOf(
+            cwd.resolve("../../target/debug/$libraryName"),
             cwd.resolve("../../../../target/debug/$libraryName"),
             cwd.resolve("../../../target/debug/$libraryName"),
             cwd.resolve("target/debug/$libraryName"),
         ).map { it.normalize() }
 
         val path = candidates.firstOrNull { Files.exists(it) }
-            ?: error("Could not find $libraryName. Run `cargo build -p prolly-bindings` first.")
+            ?: error("Could not find $libraryName. Run `cargo build --manifest-path bindings/uniffi/Cargo.toml --target-dir target` first.")
         useLibrary(path)
         return path
     }

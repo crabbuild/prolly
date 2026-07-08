@@ -7,7 +7,7 @@ import { loadProllyWasm } from "../src/index.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const pkgWasm = join(here, "../pkg/prolly_wasm_bg.wasm");
-if (!existsSync(pkgWasm)) throw new Error("Run `npm --prefix crates/prolly/bindings/wasm run build:wasm` first.");
+if (!existsSync(pkgWasm)) throw new Error("Run `npm --prefix bindings/wasm run build:wasm` first.");
 
 const wasm = await loadProllyWasm("../pkg/prolly_wasm.js", readFileSync(pkgWasm));
 const bytes = (value: string): Uint8Array => new TextEncoder().encode(value);

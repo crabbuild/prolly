@@ -57,12 +57,13 @@ Current surface:
 Local smoke test:
 
 ```sh
-cargo build -p prolly-bindings
-(cd crates/prolly/bindings/go && go test ./...)
+cargo build --manifest-path bindings/uniffi/Cargo.toml --target-dir target
+(cd bindings/go && go test ./...)
 ```
 
-The cgo wrapper links against `target/debug/libprolly_bindings.*` for local
-tests. Release packages should replace this with CI-built native artifacts.
+The cgo wrapper first links against `target/debug/libprolly_bindings.*` in this
+repository, then falls back to the parent workspace target. Release packages
+should replace this with CI-built native artifacts.
 
 ## Source Tree Layout
 
@@ -87,14 +88,14 @@ Important files:
 Run one scenario while iterating:
 
 ```sh
-cargo build -p prolly-bindings
-(cd crates/prolly/bindings/go && go run ./examples/local_first_state)
+cargo build --manifest-path bindings/uniffi/Cargo.toml --target-dir target
+(cd bindings/go && go run ./examples/local_first_state)
 ```
 
 Run every scenario:
 
 ```sh
-(cd crates/prolly/bindings/go && go run ./examples/cookbook_scenarios)
+(cd bindings/go && go run ./examples/cookbook_scenarios)
 ```
 
 The scenarios cover basic maps, batch build, local-first state, resolver
@@ -173,9 +174,8 @@ each release.
 
 ## Troubleshooting
 
-- `dlopen` or missing-library errors usually mean `cargo build -p prolly-bindings`
-  has not run for the current platform or the library path does not include
-  `target/debug`.
+- `dlopen` or missing-library errors usually mean the UniFFI build has not run
+  for the current platform or the library path does not include `target/debug`.
 - Unexpected merge results usually mean the resolver name does not match the
   value semantics. Reproduce with a small base, left, and right tree before
   debugging a full application tree.

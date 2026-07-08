@@ -383,7 +383,7 @@ Use debug views when validating tree structure, fanout, and changed nodes.
 The crate also includes a CLI binary:
 
 ```sh
-cargo run -p prolly-map --bin prolly-inspect -- --help
+cargo run --bin prolly-inspect -- --help
 ```
 
 Use it for local inspection while tuning chunking, testing stores, or debugging

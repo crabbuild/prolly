@@ -1,8 +1,9 @@
 # Generated UniFFI Python Sources
 
-Generated from `crates/prolly/bindings/uniffi` with:
+Generated from `bindings/uniffi` with:
 
 ```sh
+cd bindings/python
 VIRTUAL_ENV=/tmp/prolly-uniffi-venv \
 PATH=/tmp/prolly-uniffi-venv/bin:$PATH \
 maturin develop

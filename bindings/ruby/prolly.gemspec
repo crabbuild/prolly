@@ -3,7 +3,7 @@
 Gem::Specification.new do |spec|
   spec.name = 'crabdb-prolly'
   spec.version = '0.1.0'
-  spec.summary = 'Ruby bindings for CrabDB prolly-map'
+  spec.summary = 'Ruby bindings for prolly-map'
   spec.authors = ['CrabDB Contributors']
   spec.email = ['opensource@crab.build']
   spec.license = 'MIT OR Apache-2.0'

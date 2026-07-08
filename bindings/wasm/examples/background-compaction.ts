@@ -23,7 +23,7 @@ const del = (key: string) => ({ kind: "delete", key: bytes(key) });
 
 async function loadWasm() {
   if (!existsSync(pkgJs) || !existsSync(pkgWasm)) {
-    throw new Error("WASM package is not built. Run npm --prefix crates/prolly/bindings/wasm run build:wasm first.");
+    throw new Error("WASM package is not built. Run npm --prefix bindings/wasm run build:wasm first.");
   }
   return loadProllyWasm("../pkg/prolly_wasm.js", readFileSync(pkgWasm));
 }

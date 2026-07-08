@@ -237,7 +237,7 @@ debugging backend behavior.
 Run:
 
 ```sh
-cargo run -p prolly-map --bin prolly-inspect -- --help
+cargo run --bin prolly-inspect -- --help
 ```
 
 ## Adding a Feature
@@ -269,13 +269,12 @@ Useful local gates:
 
 ```sh
 cargo fmt --check
-cargo test -p prolly-map
-cargo test -p prolly-map --features async-store
-cargo test -p prolly-map --features tokio
-cargo test -p prolly-map --features sqlite
-cargo clippy -p prolly-map --all-targets -- -D warnings
-RUSTDOCFLAGS="-D warnings" cargo doc -p prolly-map --no-deps --features async-store
+cargo test
+cargo test --features async-store
+cargo test --features tokio
+cargo test --features sqlite
+cargo clippy --all-targets -- -D warnings
+RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --features async-store
 ```
 
 Before publishing, also run packaging checks and example builds.
-

@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "type": "module",
   "private": true,
-  "description": "Node/TypeScript binding compatibility harness for CrabDB prolly-map fixtures",
+  "description": "Node/TypeScript binding compatibility harness for prolly-map fixtures",
   "scripts": {
     "build:native": "napi build --cargo-cwd native --platform --js index.cjs",
     "example:agent-event-log": "node examples/agent-event-log.ts",

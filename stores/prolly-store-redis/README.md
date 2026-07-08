@@ -151,11 +151,11 @@ backend.clear_namespace().await?;
 
 ## Running The Example
 
-From the CrabDB workspace root:
+From the standalone repository root:
 
 ```bash
 export PROLLY_STORE_REDIS_URL=redis://127.0.0.1:56379/
-cargo run -p prolly-store-redis --example basic_usage
+cargo run --manifest-path stores/prolly-store-redis/Cargo.toml --example basic_usage
 ```
 
 The example writes a unique Redis namespace, publishes a named root, reloads it,

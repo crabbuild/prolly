@@ -8,8 +8,8 @@ package.
 ## Build
 
 ```sh
-cargo check -p prolly-wasm --target wasm32-unknown-unknown
-npm --prefix crates/prolly/bindings/wasm test
+npm --prefix bindings/wasm run check:rust
+npm --prefix bindings/wasm test
 ```
 
 Release builds should run `wasm-pack build` or the package build command used
@@ -19,10 +19,10 @@ Runnable browser/worker scenarios live as separate files under `examples/`.
 They require generated `pkg/` artifacts:
 
 ```sh
-npm --prefix crates/prolly/bindings/wasm run build:wasm
-npm --prefix crates/prolly/bindings/wasm run example:cookbook
-npm --prefix crates/prolly/bindings/wasm run example:basic-map
-npm --prefix crates/prolly/bindings/wasm run example:secondary-index
+npm --prefix bindings/wasm run build:wasm
+npm --prefix bindings/wasm run example:cookbook
+npm --prefix bindings/wasm run example:basic-map
+npm --prefix bindings/wasm run example:secondary-index
 ```
 
 Browser-safe application files include `batch-build.ts`,

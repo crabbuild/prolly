@@ -9,6 +9,12 @@ The broader CrabDB product design can build on these primitives. This document
 does not replace `docs/design/distributed-prolly-vcs.md`; it narrows the problem
 to the reusable `prolly-map` storage and concurrency contracts.
 
+For the proposed high-level repository crate built on those contracts, see
+[`prolly-vcs-design.md`](prolly-vcs-design.md). That companion design covers
+the neutral `Repository` API, general backend-neutral `KvStore` storage
+substrate, commits, refs, reflogs, patches, merge orchestration, sync planning,
+GC policy, and implementation roadmap.
+
 ## Status
 
 Proposed.

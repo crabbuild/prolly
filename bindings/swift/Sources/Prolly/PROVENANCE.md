@@ -1,15 +1,15 @@
 # Generated Swift UniFFI Sources
 
-Generated from `crates/prolly/bindings/uniffi` with:
+Generated from `bindings/uniffi` with:
 
 ```sh
-cargo build -p prolly-bindings
+cargo build --manifest-path bindings/uniffi/Cargo.toml --target-dir target
 VIRTUAL_ENV=/tmp/prolly-uniffi-venv \
 PATH=/tmp/prolly-uniffi-venv/bin:$PATH \
 uniffi-bindgen generate target/debug/libprolly_bindings.dylib \
   --language swift \
-  --out-dir crates/prolly/bindings/swift/Sources/Prolly \
-  --config crates/prolly/bindings/uniffi/uniffi.toml
+  --out-dir bindings/swift/Sources/Prolly \
+  --config bindings/uniffi/uniffi.toml
 ```
 
 The generated `prollyFFI.h` and module map are stored under

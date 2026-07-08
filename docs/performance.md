@@ -413,7 +413,7 @@ Command:
 
 ```sh
 PROLLY_BENCH_SCALE=5000 \
-cargo bench -p prolly-map --bench prolly_bench --features sqlite
+cargo bench --bench prolly_bench --features sqlite
 ```
 
 ### AI and local-first workload benchmark
@@ -431,7 +431,7 @@ Command:
 ```sh
 PROLLY_AI_BENCH_SCALE=10000 \
 PROLLY_AI_BENCH_BATCH=256 \
-cargo bench -p prolly-map --bench ai_workloads_bench
+cargo bench --bench ai_workloads_bench
 ```
 
 ### Store diff and merge benchmark
@@ -443,13 +443,13 @@ Command:
 ```sh
 PROLLY_DIFF_MERGE_STAGES=10000,100000 \
 PROLLY_DIFF_MERGE_CHANGES=1000 \
-cargo bench -p prolly-map --bench store_diff_merge_bench --features sqlite
+cargo bench --bench store_diff_merge_bench --features sqlite
 ```
 
 Enable optional stores with their feature flags:
 
 ```sh
-cargo bench -p prolly-map --bench store_diff_merge_bench \
+cargo bench --bench store_diff_merge_bench \
   --features "sqlite pglite slatedb"
 ```
 
@@ -464,7 +464,7 @@ PROLLY_SQLITE_SCALE_STAGES=1000000,10000000,100000000 \
 PROLLY_SQLITE_SCALE_BATCH=100000 \
 PROLLY_SQLITE_SCALE_MAX_SECONDS=900 \
 PROLLY_SQLITE_SCALE_MAX_DB_GB=70 \
-cargo bench -p prolly-map --bench sqlite_scale_bench --features sqlite
+cargo bench --bench sqlite_scale_bench --features sqlite
 ```
 
 ### Optional backend scale benchmarks
@@ -505,7 +505,7 @@ PROLLY_SLATEDB_SECRET_ACCESS_KEY=crab \
 PROLLY_SLATEDB_WORKLOAD_STAGES=10k \
 PROLLY_SLATEDB_WORKLOAD_BATCH=5k \
 PROLLY_SLATEDB_WORKLOAD_OPS=500 \
-cargo bench -p prolly-map --bench slatedb_workload_bench --features slatedb
+cargo bench --bench slatedb_workload_bench --features slatedb
 ```
 
 Large staged run:
@@ -532,7 +532,7 @@ PROLLY_SLATEDB_L0_FLUSH_PARALLELISM=16 \
 PROLLY_SLATEDB_READ_PARALLELISM=512 \
 PROLLY_SLATEDB_COMPACTION_CONCURRENCY=16 \
 PROLLY_SLATEDB_COMPACTION_SUBCOMPACTIONS=8 \
-cargo bench -p prolly-map --bench slatedb_workload_bench --features slatedb
+cargo bench --bench slatedb_workload_bench --features slatedb
 ```
 
 Important controls:
@@ -593,7 +593,7 @@ PROLLY_SLATEDB_L0_FLUSH_PARALLELISM=16 \
 PROLLY_SLATEDB_READ_PARALLELISM=512 \
 PROLLY_SLATEDB_COMPACTION_CONCURRENCY=16 \
 PROLLY_SLATEDB_COMPACTION_SUBCOMPACTIONS=8 \
-cargo bench -p prolly-map --bench slatedb_workload_bench --features slatedb
+cargo bench --bench slatedb_workload_bench --features slatedb
 ```
 
 This command requires real capacity. With 128-byte values, the append-only 1M

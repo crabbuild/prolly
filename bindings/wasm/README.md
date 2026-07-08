@@ -39,14 +39,14 @@ Local checks:
 
 ```sh
 rustup target add wasm32-unknown-unknown
-cargo check -p prolly-wasm --target wasm32-unknown-unknown
-npm --prefix crates/prolly/bindings/wasm test
+npm --prefix bindings/wasm run check:rust
+npm --prefix bindings/wasm test
 ```
 
 To produce browser artifacts, install a matching `wasm-bindgen` CLI and run:
 
 ```sh
-npm --prefix crates/prolly/bindings/wasm run build:wasm
+npm --prefix bindings/wasm run build:wasm
 ```
 
 The generated `pkg/` directory and compiled `.wasm` output are release
@@ -72,19 +72,19 @@ Build browser artifacts first:
 
 ```sh
 rustup target add wasm32-unknown-unknown
-npm --prefix crates/prolly/bindings/wasm run build:wasm
+npm --prefix bindings/wasm run build:wasm
 ```
 
 Run one scenario under Node using the generated WASM package:
 
 ```sh
-node crates/prolly/bindings/wasm/examples/local-first-state.ts
+node bindings/wasm/examples/local-first-state.ts
 ```
 
 Run all browser-oriented scenarios:
 
 ```sh
-node crates/prolly/bindings/wasm/examples/browser-scenarios.ts
+node bindings/wasm/examples/browser-scenarios.ts
 ```
 
 The run-all file launches each scenario as its own process. Scenario files stay
@@ -135,8 +135,8 @@ chunk and vector sidecar scenarios show this split.
 Run Rust and TypeScript checks:
 
 ```sh
-cargo check -p prolly-wasm --target wasm32-unknown-unknown
-npm --prefix crates/prolly/bindings/wasm test
+npm --prefix bindings/wasm run check:rust
+npm --prefix bindings/wasm test
 ```
 
 Add browser integration tests around application-owned storage, worker startup,

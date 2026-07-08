@@ -4,8 +4,8 @@ The Go binding is a cgo wrapper over the Rust UniFFI facade. Build the Rust
 library before running Go programs locally.
 
 ```sh
-cargo build -p prolly-bindings
-cd crates/prolly/bindings/go
+cargo build --manifest-path bindings/uniffi/Cargo.toml --target-dir target
+cd bindings/go
 go test ./...
 ```
 
@@ -13,10 +13,10 @@ Runnable scenarios live as separate `go run` targets under `examples/`,
 matching the Rust example style:
 
 ```sh
-cargo build -p prolly-bindings
-(cd crates/prolly/bindings/go && go run ./examples/cookbook_scenarios)
-(cd crates/prolly/bindings/go && go run ./examples/basic_map)
-(cd crates/prolly/bindings/go && go run ./examples/secondary_index)
+cargo build --manifest-path bindings/uniffi/Cargo.toml --target-dir target
+(cd bindings/go && go run ./examples/cookbook_scenarios)
+(cd bindings/go && go run ./examples/basic_map)
+(cd bindings/go && go run ./examples/secondary_index)
 ```
 
 Application-style directories include `batch_build`, `local_first_state`,

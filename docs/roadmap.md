@@ -175,14 +175,14 @@ Priority: **P0**
 
 ### Acceptance criteria
 
-- `cargo test -p prolly-map --all-targets` passes on default features
-- `cargo test -p prolly-map --features async-store` passes
-- `cargo test -p prolly-map --features tokio` passes
-- `cargo test -p prolly-map --features sqlite` passes
-- `cargo test -p prolly-map --doc` passes
-- `cargo test -p prolly-map --examples` passes
+- `cargo test --all-targets` passes on default features
+- `cargo test --features async-store` passes
+- `cargo test --features tokio` passes
+- `cargo test --features sqlite` passes
+- `cargo test --doc` passes
+- `cargo test --examples` passes
 - Every example listed in the cookbook runs successfully
-- `cargo package -p prolly-map --allow-dirty --no-verify` includes `docs/`
+- `cargo package --allow-dirty --no-verify` includes `docs/`
 
 ## Compatibility and format stability
 
@@ -432,6 +432,39 @@ Priority: **P1**
 - Users can inspect root shape, changed spans, and retained nodes
 - Benchmarks map to documented workloads
 - Metrics tell users whether stores, caches, or chunking cause bottlenecks
+
+## prolly-vcs repository layer
+
+Goal: provide a separate, business-neutral `prolly-vcs` crate for applications
+that want Git-like repository workflows over prolly tree snapshots.
+
+Status: **Candidate**
+Priority: **P2**
+
+Design: [`prolly-vcs-design.md`](prolly-vcs-design.md)
+
+### Proposed scope
+
+- Add `crates/prolly/vcs` as package `prolly-vcs`, crate `prolly_vcs`.
+- Keep `prolly-map` focused on immutable ordered maps and named roots.
+- Add one general backend-neutral `KvStore` substrate with repository ID,
+  partition key, sort key, value, version, and metadata records.
+- Implement `RepositoryStore`, `CommitStore`, `ObjectStore`, `RefStore`, and
+  other higher-level stores as typed wrappers over that `KvStore`.
+- Add a `Repository` facade with commits, refs, reflogs, graph traversal,
+  patches, merge orchestration, sync planning, and repository-level GC.
+- Keep the crate business-neutral: keys and values remain bytes, while domain
+  codecs, checkout, authorization, and policy live in applications.
+- Make the safe write path explicit: write tree nodes and commit objects first,
+  then move refs with CAS.
+
+### Acceptance criteria
+
+- Users can commit to a ref without manually handling named-root publication.
+- Ref updates use compare-and-swap and report conflicts explicitly.
+- Commit ancestry supports fast-forward checks and merge-base lookup.
+- Merge conflicts never move target refs.
+- GC policy retains branch, tag, checkpoint, remote-tracking, and reflog roots.
 
 ## Language ports
 

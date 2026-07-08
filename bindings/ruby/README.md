@@ -8,36 +8,30 @@ See `COOKBOOK.md` for Ruby application patterns covering SQLite-backed indexes,
 prefix queries, futures, merge callbacks, large values, and custom stores.
 
 The smoke test covers memory, file, SQLite, SQLite-in-memory, generated wire
-helpers, paged range/diff/conflict inspection, typed structural diff cursor
-resume, merge/named-root flows, Rust bulk-build, sorted bulk-build,
-append-batch, parallel batch, batch/append/parallel batch execution statistics, ordered boundary helpers, range-after/cursor resumption with cursor helpers, reverse and prefix-reverse pages, cursor-resumed diffs,
-cursor windows,
-host `Prolly::MergeResolverCallback` custom resolvers for full-tree,
-range-limited, and prefix-limited merges, merge policy registries with named
-and Ruby callback rules, typed merge explanation traces with JSON trace
-compatibility, `Prolly::HostStoreCallback` custom stores,
-operational APIs, sync/GC, portable snapshot bundle export/import with
-canonical bytes, digests, summaries, and self-contained verification, retained named-root GC with retention policy helpers, blob
-stores, large-value helpers, key helpers for prefix bounds and segment
-encoding/decoding plus composite key construction, value-ref stored-byte helpers, blob-ref byte validation, blob GC, CRDT
-merge presets, single-key, multi-key, range, cursor-page, diff-page, and prefix proofs with compact path-node export/import, canonical bundle bytes, proof-bundle introspection/routing summaries, one-shot proof-bundle verification, HMAC-authenticated proof envelopes, and one-shot authenticated proof-bundle verification,
-`Prolly::CrdtResolverCallback` custom resolvers, timestamped
-value envelopes, multi-value set helpers, tombstone
-envelopes, tombstone upsert, tombstone compaction, mutation constructors, changed-span constructors, merge/CRDT resolution helpers, built-in resolver helper functions, versioned-value schema
-guards, encoding helpers, and tree/large-value/parallel config constructors
-through the generated Ruby API. `Prolly::AsyncEngine` provides dependency-free `Future` wrappers for
-the generated engine surface, and `Prolly::AsyncBlobStore` wraps blob-store
-methods. Named-root flows include manifest metadata listing. The async wrappers cover create/read/write, range/diff, merge,
-named-root, typed stats/debug/cache, hint, GC/sync, large-value, and blob-store flows.
+helpers, and core tree operations.
+
+It also covers:
+
+- paged range, diff, conflict, reverse-page, and cursor-resume flows;
+- bulk-build, append-batch, parallel-batch, and execution-stat APIs;
+- merge policies, Ruby callbacks, CRDT helpers, and explanation traces;
+- named roots, retention policies, sync, node GC, blob stores, and large values;
+- key encoders, mutation constructors, versioned values, and hints;
+- portable snapshot bundles and store-independent proof bundles.
+
+`Prolly::AsyncEngine` and `Prolly::AsyncBlobStore` provide dependency-free
+`Future` wrappers for create/read/write, range/diff, merge, named-root,
+stats/debug/cache, hint, GC/sync, large-value, and blob-store flows.
 
 Local smoke test:
 
 ```sh
-cargo build -p prolly-bindings
-bundle install
+cargo build --manifest-path bindings/uniffi/Cargo.toml --target-dir target
+BUNDLE_GEMFILE=bindings/ruby/Gemfile bundle install
 PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" \
-  bundle exec ruby -Icrates/prolly/bindings/ruby/lib \
-  crates/prolly/bindings/ruby/test/prolly_smoke_test.rb
+  BUNDLE_GEMFILE=bindings/ruby/Gemfile \
+  bundle exec ruby -Ibindings/ruby/lib \
+  bindings/ruby/test/prolly_smoke_test.rb
 ```
 
 Use `.so` on Linux and `.dll` on Windows. Compiled native libraries are built
@@ -62,22 +56,24 @@ Important files:
 Install dependencies and build the native Rust facade:
 
 ```sh
-bundle install
-cargo build -p prolly-bindings
+BUNDLE_GEMFILE=bindings/ruby/Gemfile bundle install
+cargo build --manifest-path bindings/uniffi/Cargo.toml --target-dir target
 ```
 
 Run one scenario:
 
 ```sh
 PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" \
-  bundle exec ruby crates/prolly/bindings/ruby/examples/local_first_state.rb
+  BUNDLE_GEMFILE=bindings/ruby/Gemfile \
+  bundle exec ruby bindings/ruby/examples/local_first_state.rb
 ```
 
 Run all scenarios:
 
 ```sh
 PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" \
-  bundle exec ruby crates/prolly/bindings/ruby/examples/cookbook_scenarios.rb
+  BUNDLE_GEMFILE=bindings/ruby/Gemfile \
+  bundle exec ruby bindings/ruby/examples/cookbook_scenarios.rb
 ```
 
 Use `.so` on Linux and `.dll` on Windows. The run-all file launches each
@@ -130,8 +126,9 @@ Run the smoke test after rebuilding the native library:
 
 ```sh
 PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" \
-  bundle exec ruby -Icrates/prolly/bindings/ruby/lib \
-  crates/prolly/bindings/ruby/test/prolly_smoke_test.rb
+  BUNDLE_GEMFILE=bindings/ruby/Gemfile \
+  bundle exec ruby -Ibindings/ruby/lib \
+  bindings/ruby/test/prolly_smoke_test.rb
 ```
 
 Add focused tests for wrapper behavior and Ruby callback semantics. Keep

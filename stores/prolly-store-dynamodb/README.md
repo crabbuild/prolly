@@ -168,13 +168,13 @@ assert_eq!(
 
 ## Running The Example
 
-From the CrabDB workspace root:
+From the standalone repository root:
 
 ```bash
 export PROLLY_STORE_DYNAMODB_ENDPOINT=http://127.0.0.1:8000
 export PROLLY_STORE_DYNAMODB_TABLE=prolly_store_example
 export AWS_REGION=us-west-2
-cargo run -p prolly-store-dynamodb --example basic_usage
+cargo run --manifest-path stores/prolly-store-dynamodb/Cargo.toml --example basic_usage
 ```
 
 The example supports both DynamoDB Local and AWS DynamoDB. With

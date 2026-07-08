@@ -165,11 +165,11 @@ assert_eq!(
 
 ## Running The Example
 
-From the CrabDB workspace root:
+From the standalone repository root:
 
 ```bash
 export PROLLY_STORE_POSTGRES_URL=postgres://prolly:prolly@127.0.0.1:55432/prolly
-cargo run -p prolly-store-postgres --example basic_usage
+cargo run --manifest-path stores/prolly-store-postgres/Cargo.toml --example basic_usage
 ```
 
 The example initializes schema, writes a base tree, computes diffs, merges

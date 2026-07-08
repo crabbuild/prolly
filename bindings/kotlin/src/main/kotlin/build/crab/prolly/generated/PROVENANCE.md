@@ -1,15 +1,15 @@
 # Generated Kotlin UniFFI Sources
 
-Generated from `crates/prolly/bindings/uniffi` with:
+Generated from `bindings/uniffi` with:
 
 ```sh
-cargo build -p prolly-bindings
+cargo build --manifest-path bindings/uniffi/Cargo.toml --target-dir target
 VIRTUAL_ENV=/tmp/prolly-uniffi-venv \
 PATH=/tmp/prolly-uniffi-venv/bin:$PATH \
 uniffi-bindgen generate target/debug/libprolly_bindings.dylib \
   --language kotlin \
-  --out-dir crates/prolly/bindings/kotlin/src/main/kotlin/build/crab/prolly/generated \
-  --config crates/prolly/bindings/uniffi/uniffi.toml
+  --out-dir bindings/kotlin/src/main/kotlin/build/crab/prolly/generated \
+  --config bindings/uniffi/uniffi.toml
 ```
 
 Tool versions used for this snapshot:

@@ -1,13 +1,13 @@
 [package]
 name = "prolly-wasm"
-description = "Browser WASM bindings for CrabDB prolly-map"
+description = "Browser WASM bindings for prolly-map"
 readme = "README.md"
-edition.workspace = true
-rust-version.workspace = true
-version.workspace = true
-license.workspace = true
-repository = "https://github.com/crabbuild/crabdb"
-homepage = "https://github.com/crabbuild/crabdb"
+edition = "2021"
+rust-version = "1.81"
+version = "0.1.0"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/crabbuild/prolly"
+homepage = "https://github.com/crabbuild/prolly"
 publish = false
 
 [lib]
@@ -17,9 +17,9 @@ bench = false
 
 [dependencies]
 prolly-map = { path = "../.." }
-js-sys.workspace = true
-serde_json.workspace = true
-wasm-bindgen.workspace = true
+js-sys = "0.3.103"
+serde_json = "1.0"
+wasm-bindgen = "0.2.126"
 
-[lints]
-workspace = true
+[lints.rust]
+unsafe_code = "allow"

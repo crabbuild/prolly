@@ -117,6 +117,7 @@ func optionalHexData(_ value: Any?) throws -> Data? {
 func fixtureURL() throws -> URL {
     let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
     let candidates = [
+        cwd.appendingPathComponent("conformance/prolly-fixtures.v1.json"),
         cwd.appendingPathComponent("crates/prolly/conformance/prolly-fixtures.v1.json"),
         cwd.appendingPathComponent("../../conformance/prolly-fixtures.v1.json"),
         cwd.appendingPathComponent("../../../conformance/prolly-fixtures.v1.json"),
