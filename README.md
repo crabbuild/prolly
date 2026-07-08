@@ -194,6 +194,8 @@ detection, application context, key IDs, nonces, or issue/expiration times. Use
 `verify_authenticated_proof_bundle` to authenticate the envelope and verify the
 enclosed proof bundle in one call.
 
+Start with a small tree:
+
 ```rust
 use prolly::{
     inspect_proof_bundle, sign_proof_bundle_hmac_sha256, verify_authenticated_proof_bundle,
@@ -205,17 +207,29 @@ let prolly = Prolly::new(MemStore::new(), Config::default());
 let tree = prolly
     .put(&prolly.create(), b"name".to_vec(), b"Alice".to_vec())
     .unwrap();
+```
 
+Prove one key and verify the result without reading from the store:
+
+```rust
 let proof = prolly.prove_key(&tree, b"name").unwrap();
 let verified = proof.verify();
 assert!(verified.exists());
 assert_eq!(verified.value, Some(b"Alice".to_vec()));
+```
 
+Export compact proof nodes when a peer wants to rebuild the same proof shape:
+
+```rust
 let portable_path = proof.path_node_bytes();
 let rebuilt = KeyProof::from_node_bytes(proof.root.clone(), proof.key.clone(), portable_path)
     .unwrap();
 assert!(rebuilt.verify().valid);
+```
 
+Use canonical bundle bytes when the receiver only needs an opaque proof payload:
+
+```rust
 let proof_bundle = proof.to_bundle_bytes().unwrap();
 let bundle_summary = inspect_proof_bundle(&proof_bundle).unwrap();
 assert_eq!(bundle_summary.kind_name(), "key");
@@ -223,9 +237,14 @@ assert_eq!(bundle_summary.key_count, 1);
 let bundle_verified = verify_proof_bundle(&proof_bundle).unwrap();
 assert!(bundle_verified.valid);
 assert_eq!(bundle_verified.exists_count, 1);
+
 let bundled = KeyProof::from_bundle_bytes(&proof_bundle).unwrap();
 assert!(bundled.verify().exists());
+```
 
+Use multi-key, range, and prefix proofs when one request covers several entries:
+
+```rust
 let batch_proof = prolly
     .prove_keys(&tree, &[b"name".as_slice(), b"missing".as_slice()])
     .unwrap();
@@ -248,7 +267,11 @@ assert_eq!(range_bundled.verify().entries.len(), 1);
 
 let prefix_proof = prolly.prove_prefix(&tree, b"na").unwrap();
 assert_eq!(prefix_proof.verify().entries.len(), 1);
+```
 
+Use page proofs for cursor-based range scans:
+
+```rust
 let page_tree = prolly
     .build_from_sorted_entries(vec![
         (b"a".to_vec(), b"A".to_vec()),
@@ -264,7 +287,11 @@ assert_eq!(proved_page.proof.verify().entries, proved_page.page.entries);
 let page_bundle = proved_page.proof.to_bundle_bytes().unwrap();
 let page_bundled = RangePageProof::from_bundle_bytes(&page_bundle).unwrap();
 assert_eq!(page_bundled.verify().entries.len(), 1);
+```
 
+Use diff-page proofs when a peer needs to verify one page of changes:
+
+```rust
 let diff_tree = prolly.delete(&page_tree, b"a").unwrap();
 let diff_tree = prolly
     .put(&diff_tree, b"b".to_vec(), b"B2".to_vec())
@@ -291,7 +318,11 @@ assert!(diff_bundle_verified.valid);
 assert_eq!(diff_bundle_verified.diff_count, 1);
 let diff_bundled = DiffPageProof::from_bundle_bytes(&diff_bundle).unwrap();
 assert!(diff_bundled.verify().lookahead_valid);
+```
 
+Sign bundle bytes when the receiver also needs envelope authentication:
+
+```rust
 let signed = sign_proof_bundle_hmac_sha256(
     proof_bundle.clone(),
     b"proof-key-v1".to_vec(),
@@ -311,6 +342,11 @@ assert!(KeyProof::from_bundle_bytes(&authenticated.proof_bundle)
     .unwrap()
     .verify()
     .exists());
+```
+
+Or authenticate the envelope and verify the enclosed proof bundle in one call:
+
+```rust
 let authenticated_bundle =
     verify_authenticated_proof_bundle(&envelope, b"shared secret", Some(1_700_000_050_000))
         .unwrap();
