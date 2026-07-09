@@ -1078,6 +1078,63 @@ since a Unix-millisecond timestamp. Manager-level publish and CAS helpers stamp
 `created_at_millis` and `updated_at_millis`; `*_at_millis` variants accept
 explicit timestamps for deterministic import and tests.
 
+## Transactions and MVCC
+
+Tree handles are immutable MVCC snapshots: readers that hold an old `Tree` keep
+seeing that version while writers build a new one. Strict transactions add a
+staging layer around those immutable writes. A transaction buffers new
+content-addressed nodes and named-root writes in memory, validates every named
+root it read, then asks the store to commit staged nodes and roots atomically.
+If the closure returns an error, validation fails, or the backend commit fails,
+the staged overlay is discarded and no partial root update is made visible.
+
+`SqliteStore` supports strict transactions with one SQL transaction. Other
+built-in stores return `Error::UnsupportedTransactions` until they grow an
+equivalent atomic commit primitive.
+
+```rust
+use prolly::{Config, Prolly, SqliteStore};
+
+let store = SqliteStore::open_in_memory().unwrap();
+let prolly = Prolly::new(store, Config::default());
+
+let commit = prolly
+    .transaction(|tx| {
+        let source = tx.put(
+            &tx.create(),
+            b"ticket/123/status".to_vec(),
+            b"open".to_vec(),
+        )?;
+        let by_status = tx.put(
+            &tx.create(),
+            b"by_status/open/123".to_vec(),
+            b"ticket/123".to_vec(),
+        )?;
+
+        // Store a small application manifest that points to both snapshots.
+        let manifest = tx
+            .put(&tx.create(), b"source".to_vec(), serde_cbor::to_vec(&source).unwrap())?;
+        let manifest = tx.put(
+            &manifest,
+            b"by_status".to_vec(),
+            serde_cbor::to_vec(&by_status).unwrap(),
+        )?;
+
+        tx.publish_named_root(b"tickets/current", &manifest)?;
+        Ok(manifest)
+    })
+    .unwrap();
+
+assert_eq!(prolly.load_named_root(b"tickets/current").unwrap(), Some(commit));
+```
+
+For materialized views and secondary indexes, prefer one authoritative commit
+root such as `tickets/current` that points to an application manifest containing
+the source and index snapshots. Readers load that one root and get a consistent
+pair. Writers build candidate source/index trees in a transaction and publish
+only the commit root. Multiple named roots can be updated in one transaction,
+but a single commit root keeps reader coordination simple.
+
 ### Git-like application primitives
 
 Named roots are intentionally low-level. Applications can layer Git-like

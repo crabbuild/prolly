@@ -127,6 +127,7 @@ pub mod stats;
 pub mod store;
 pub mod sync;
 pub mod tombstone;
+pub mod transaction;
 pub mod tree;
 pub mod value;
 

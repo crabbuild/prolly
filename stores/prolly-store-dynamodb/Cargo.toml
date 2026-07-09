@@ -32,5 +32,9 @@ prolly = { package = "prolly-map", path = "../..", version = "0.1.0", features =
 aws-config = { version = "=1.5.18", features = ["behavior-version-latest"] }
 tokio = { version = "1.45", features = ["rt-multi-thread", "time"] }
 
+[[example]]
+name = "dynamodb_basic_usage"
+path = "examples/basic_usage.rs"
+
 [lints.rust]
 unsafe_code = "allow"

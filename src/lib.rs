@@ -368,6 +368,10 @@ pub use prolly::sync::{
 pub use prolly::tombstone::{
     is_tombstone_value, tombstone_compaction, tombstone_upsert, Tombstone,
 };
+pub use prolly::transaction::{
+    ProllyTransaction, RootCondition, RootWrite, TransactionConflict, TransactionNodeWrite,
+    TransactionOverlayError, TransactionUpdate, TransactionalStore,
+};
 pub use prolly::tree::Tree;
 pub use prolly::value::{
     decode_cbor, decode_json, encode_cbor, encode_json, CborCodec, JsonCodec, ValueCodec,

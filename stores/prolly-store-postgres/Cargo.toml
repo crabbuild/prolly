@@ -18,5 +18,9 @@ sqlx = { version = "0.8", default-features = false, features = ["postgres", "run
 [dev-dependencies]
 tokio = { version = "1.45", features = ["rt-multi-thread", "time"] }
 
+[[example]]
+name = "postgres_basic_usage"
+path = "examples/basic_usage.rs"
+
 [lints.rust]
 unsafe_code = "allow"

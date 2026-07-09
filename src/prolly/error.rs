@@ -185,6 +185,8 @@ pub mod resolver {
     }
 }
 
+use super::transaction::TransactionConflict;
+
 /// Prolly tree errors
 #[derive(Debug)]
 pub enum Error {
@@ -212,6 +214,10 @@ pub enum Error {
     MissingNamedRoots { names: Vec<Vec<u8>> },
     /// A portable snapshot bundle is malformed or not self-contained.
     InvalidSnapshotBundle(String),
+    /// The configured store does not support strict atomic transactions.
+    UnsupportedTransactions { store: &'static str },
+    /// A transaction could not commit because a validated named root changed.
+    TransactionConflict(TransactionConflict),
 }
 
 impl std::fmt::Display for Error {
@@ -241,6 +247,16 @@ impl std::fmt::Display for Error {
             }
             Error::InvalidSnapshotBundle(message) => {
                 write!(f, "invalid snapshot bundle: {message}")
+            }
+            Error::UnsupportedTransactions { store } => {
+                write!(f, "store does not support strict transactions: {store}")
+            }
+            Error::TransactionConflict(conflict) => {
+                write!(
+                    f,
+                    "transaction conflict for named root: {:?}",
+                    conflict.name
+                )
             }
         }
     }

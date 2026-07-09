@@ -1217,6 +1217,17 @@ impl From<prolly::Error> for ProllyBindingError {
                 message: format!("missing named roots for retention policy: {names:?}"),
             },
             prolly::Error::InvalidSnapshotBundle(message) => Self::InvalidArgument { message },
+            prolly::Error::UnsupportedTransactions { store } => Self::Internal {
+                message: format!("store does not support strict transactions: {store}"),
+            },
+            prolly::Error::TransactionConflict(conflict) => Self::Internal {
+                message: format!(
+                    "transaction conflict for named root: {:?} (expected: {:?}, current: {:?})",
+                    String::from_utf8_lossy(&conflict.name),
+                    conflict.expected,
+                    conflict.current,
+                ),
+            },
         }
     }
 }

@@ -26,5 +26,9 @@ sha2 = "0.10"
 [dev-dependencies]
 tokio = { version = "1.45", features = ["rt-multi-thread", "time"] }
 
+[[example]]
+name = "cosmosdb_basic_usage"
+path = "examples/basic_usage.rs"
+
 [lints.rust]
 unsafe_code = "allow"

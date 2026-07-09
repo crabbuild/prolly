@@ -23,5 +23,9 @@ redis-client = { package = "redis", version = "0.32.7", default-features = false
 [dev-dependencies]
 tokio = { version = "1.45", features = ["rt-multi-thread", "time"] }
 
+[[example]]
+name = "redis_basic_usage"
+path = "examples/basic_usage.rs"
+
 [lints.rust]
 unsafe_code = "allow"

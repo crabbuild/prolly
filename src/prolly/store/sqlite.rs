@@ -7,9 +7,14 @@ use std::time::Duration;
 
 use rusqlite::{params, Connection, OptionalExtension};
 
+use super::super::error::Error;
 use super::super::manifest::{
     sort_named_root_manifests, ManifestStore, ManifestStoreScan, ManifestUpdate, NamedRootManifest,
     RootManifest,
+};
+use super::super::transaction::{
+    RootCondition, RootWrite, TransactionConflict, TransactionNodeWrite, TransactionUpdate,
+    TransactionalStore,
 };
 use super::{cid_from_store_key, sort_cids, BatchOp, NodeStoreScan, OrderedBatchReadPlan, Store};
 
@@ -517,6 +522,133 @@ impl ManifestStoreScan for SqliteStore {
         }
         sort_named_root_manifests(&mut roots);
         Ok(roots)
+    }
+}
+
+impl TransactionalStore for SqliteStore {
+    fn supports_transactions(&self) -> bool {
+        true
+    }
+
+    fn commit_transaction(
+        &self,
+        node_writes: &[TransactionNodeWrite],
+        root_conditions: &[RootCondition],
+        root_writes: &[RootWrite],
+    ) -> Result<TransactionUpdate, Error> {
+        let mut conn = self
+            .connection()
+            .map_err(|err| Error::Store(Box::new(err)))?;
+        let tx = conn.transaction().map_err(|err| {
+            Error::Store(Box::new(SqliteStoreError::from_sqlite(
+                err,
+                "Failed to start transaction commit",
+            )))
+        })?;
+
+        for condition in root_conditions {
+            let current_bytes = tx
+                .query_row(SELECT_ROOT_SQL, params![condition.name], |row| row.get(0))
+                .optional()
+                .map_err(|err| {
+                    Error::Store(Box::new(SqliteStoreError::from_sqlite(
+                        err,
+                        "Failed to read root manifest during transaction commit",
+                    )))
+                })?;
+            let current =
+                decode_root_manifest(current_bytes).map_err(|err| Error::Store(Box::new(err)))?;
+            if current != condition.expected {
+                return Ok(TransactionUpdate::Conflict(TransactionConflict::new(
+                    condition.name.clone(),
+                    condition.expected.clone(),
+                    current,
+                )));
+            }
+        }
+
+        {
+            let mut upsert_node = tx.prepare_cached(UPSERT_SQL).map_err(|err| {
+                Error::Store(Box::new(SqliteStoreError::from_sqlite(
+                    err,
+                    "Failed to prepare transaction node write",
+                )))
+            })?;
+            let mut delete_node = tx.prepare_cached(DELETE_SQL).map_err(|err| {
+                Error::Store(Box::new(SqliteStoreError::from_sqlite(
+                    err,
+                    "Failed to prepare transaction node delete",
+                )))
+            })?;
+            for write in node_writes {
+                match write {
+                    TransactionNodeWrite::Upsert { key, value } => {
+                        upsert_node.execute(params![key, value]).map_err(|err| {
+                            Error::Store(Box::new(SqliteStoreError::from_sqlite(
+                                err,
+                                "Failed to write node during transaction commit",
+                            )))
+                        })?;
+                    }
+                    TransactionNodeWrite::Delete { key } => {
+                        delete_node.execute(params![key]).map_err(|err| {
+                            Error::Store(Box::new(SqliteStoreError::from_sqlite(
+                                err,
+                                "Failed to delete node during transaction commit",
+                            )))
+                        })?;
+                    }
+                }
+            }
+        }
+
+        {
+            let mut upsert_root = tx.prepare_cached(UPSERT_ROOT_SQL).map_err(|err| {
+                Error::Store(Box::new(SqliteStoreError::from_sqlite(
+                    err,
+                    "Failed to prepare transaction root write",
+                )))
+            })?;
+            let mut delete_root = tx.prepare_cached(DELETE_ROOT_SQL).map_err(|err| {
+                Error::Store(Box::new(SqliteStoreError::from_sqlite(
+                    err,
+                    "Failed to prepare transaction root delete",
+                )))
+            })?;
+            for write in root_writes {
+                match write {
+                    RootWrite::Put { name, manifest } => {
+                        let bytes = encode_root_manifest(manifest)
+                            .map_err(|err| Error::Store(Box::new(err)))?;
+                        upsert_root.execute(params![name, bytes]).map_err(|err| {
+                            Error::Store(Box::new(SqliteStoreError::from_sqlite(
+                                err,
+                                "Failed to write root during transaction commit",
+                            )))
+                        })?;
+                    }
+                    RootWrite::Delete { name } => {
+                        delete_root.execute(params![name]).map_err(|err| {
+                            Error::Store(Box::new(SqliteStoreError::from_sqlite(
+                                err,
+                                "Failed to delete root during transaction commit",
+                            )))
+                        })?;
+                    }
+                }
+            }
+        }
+
+        tx.commit().map_err(|err| {
+            Error::Store(Box::new(SqliteStoreError::from_sqlite(
+                err,
+                "Failed to commit transaction",
+            )))
+        })?;
+        Ok(TransactionUpdate::Applied {
+            nodes_written: node_writes.len(),
+            roots_written: root_writes.len(),
+        })
     }
 }
 

@@ -191,6 +191,42 @@ Applications that need version-control behavior should store commit-like
 metadata separately and use named roots as branch, tag, checkpoint, or
 remote-tracking pointers to tree handles.
 
+## Transaction Contract
+
+Strict transactions provide optimistic MVCC over named roots and immutable tree
+nodes.
+
+Required behavior:
+
+- map writes are staged in a transaction overlay until commit;
+- reads inside the transaction see staged nodes before the base store;
+- named-root reads are recorded as root conditions;
+- named-root writes are staged until commit;
+- commit validates all root conditions before applying writes;
+- commit applies staged node writes and named-root writes atomically when the
+  backend supports transactions;
+- failed closures, failed validation, and backend commit errors leave no staged
+  writes visible;
+- unsupported stores return a clear unsupported-transaction error.
+
+Backends that implement strict transactions must expose one atomic commit
+primitive equivalent to:
+
+```text
+begin backend transaction
+validate root conditions
+if any condition fails: rollback and report TransactionConflict
+write staged content-addressed nodes
+apply staged named-root writes/deletes
+commit backend transaction
+```
+
+For applications that maintain several logical views, the recommended pattern
+is one authoritative commit root, for example `tickets/current`, whose manifest
+contains the source snapshot and all derived index/view snapshots. Readers load
+that one root to get a consistent set. Writers build all candidate snapshots in
+a transaction and publish the commit root as the visibility point.
+
 ## Diff Contract
 
 Diff compares two snapshots and returns logical changes:
