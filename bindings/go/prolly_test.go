@@ -369,6 +369,80 @@ func TestMemoryEngineCrudAndRange(t *testing.T) {
 	}
 }
 
+func TestMemoryEngineTransactionCommitsNamedRoots(t *testing.T) {
+	engine, err := OpenMemory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer engine.Close()
+
+	tx, err := engine.BeginTransaction()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Close()
+
+	source, err := tx.Create()
+	if err != nil {
+		t.Fatal(err)
+	}
+	source, err = tx.Put(source, []byte("ticket/123/status"), []byte("open"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	byStatus, err := tx.Create()
+	if err != nil {
+		t.Fatal(err)
+	}
+	byStatus, err = tx.Put(byStatus, []byte("by_status/open/123"), []byte("ticket/123"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.PublishNamedRoot([]byte("tickets/source/current"), source); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.PublishNamedRoot([]byte("tickets/view/by-status/current"), byStatus); err != nil {
+		t.Fatal(err)
+	}
+	update, err := tx.Commit()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !update.Applied || update.Conflict || update.NodesWritten == 0 || update.RootsWritten != 2 {
+		t.Fatalf("unexpected transaction update: %+v", update)
+	}
+
+	loadedSource, err := engine.LoadNamedRoot([]byte("tickets/source/current"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loadedSource == nil {
+		t.Fatal("missing source root")
+	}
+	value, ok, err := engine.Get(*loadedSource, []byte("ticket/123/status"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok || !bytes.Equal(value, []byte("open")) {
+		t.Fatalf("unexpected source value %q ok=%v", value, ok)
+	}
+
+	loadedByStatus, err := engine.LoadNamedRoot([]byte("tickets/view/by-status/current"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loadedByStatus == nil {
+		t.Fatal("missing by-status root")
+	}
+	value, ok, err = engine.Get(*loadedByStatus, []byte("by_status/open/123"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok || !bytes.Equal(value, []byte("ticket/123")) {
+		t.Fatalf("unexpected by-status value %q ok=%v", value, ok)
+	}
+}
+
 func TestCustomStoreCallbacksDriveEngine(t *testing.T) {
 	config, err := DefaultConfig()
 	if err != nil {

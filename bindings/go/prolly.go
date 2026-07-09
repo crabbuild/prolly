@@ -1,9 +1,9 @@
 package prolly
 
 /*
-#cgo darwin LDFLAGS: -L${SRCDIR}/../../target/debug -L${SRCDIR}/../../../../target/debug -Wl,-rpath,${SRCDIR}/../../target/debug -Wl,-rpath,${SRCDIR}/../../../../target/debug -lprolly_bindings
-#cgo linux LDFLAGS: -L${SRCDIR}/../../target/debug -L${SRCDIR}/../../../../target/debug -Wl,-rpath,${SRCDIR}/../../target/debug -Wl,-rpath,${SRCDIR}/../../../../target/debug -lprolly_bindings
-#cgo windows LDFLAGS: -L${SRCDIR}/../../target/debug -L${SRCDIR}/../../../../target/debug -lprolly_bindings
+#cgo darwin LDFLAGS: -L${SRCDIR}/../../target/debug -L${SRCDIR}/../../../target/debug -Wl,-rpath,${SRCDIR}/../../target/debug -Wl,-rpath,${SRCDIR}/../../../target/debug -lprolly_bindings
+#cgo linux LDFLAGS: -L${SRCDIR}/../../target/debug -L${SRCDIR}/../../../target/debug -Wl,-rpath,${SRCDIR}/../../target/debug -Wl,-rpath,${SRCDIR}/../../../target/debug -lprolly_bindings
+#cgo windows LDFLAGS: -L${SRCDIR}/../../target/debug -L${SRCDIR}/../../../target/debug -lprolly_bindings
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -177,6 +177,20 @@ extern uint64_t uniffi_prolly_bindings_fn_constructor_prollyengine_file(RustBuff
 extern uint64_t uniffi_prolly_bindings_fn_constructor_prollyengine_memory(RustBuffer config, RustCallStatus *out_err);
 extern uint64_t uniffi_prolly_bindings_fn_constructor_prollyengine_sqlite(RustBuffer path, RustBuffer config, RustCallStatus *out_err);
 extern uint64_t uniffi_prolly_bindings_fn_constructor_prollyengine_sqlite_in_memory(RustBuffer config, RustCallStatus *out_err);
+extern uint64_t uniffi_prolly_bindings_fn_method_prollyengine_begin_transaction(uint64_t ptr, RustCallStatus *out_err);
+extern uint64_t uniffi_prolly_bindings_fn_clone_prollytransaction(uint64_t ptr, RustCallStatus *out_err);
+extern void uniffi_prolly_bindings_fn_free_prollytransaction(uint64_t ptr, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_prollytransaction_batch(uint64_t ptr, RustBuffer tree, RustBuffer mutations, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_prollytransaction_commit(uint64_t ptr, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_prollytransaction_compare_and_swap_named_root(uint64_t ptr, RustBuffer name, RustBuffer expected, RustBuffer replacement, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_prollytransaction_create(uint64_t ptr, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_prollytransaction_delete(uint64_t ptr, RustBuffer tree, RustBuffer key, RustCallStatus *out_err);
+extern void uniffi_prolly_bindings_fn_method_prollytransaction_delete_named_root(uint64_t ptr, RustBuffer name, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_prollytransaction_get(uint64_t ptr, RustBuffer tree, RustBuffer key, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_prollytransaction_load_named_root(uint64_t ptr, RustBuffer name, RustCallStatus *out_err);
+extern void uniffi_prolly_bindings_fn_method_prollytransaction_publish_named_root(uint64_t ptr, RustBuffer name, RustBuffer tree, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_prollytransaction_put(uint64_t ptr, RustBuffer tree, RustBuffer key, RustBuffer value, RustCallStatus *out_err);
+extern void uniffi_prolly_bindings_fn_method_prollytransaction_rollback(uint64_t ptr, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_func_changed_span(RustBuffer start, RustBuffer end, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_func_changed_span_for_prefix(RustBuffer prefix, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_func_changed_span_from_key(RustBuffer key, RustCallStatus *out_err);
@@ -925,6 +939,20 @@ type NamedRootUpdate struct {
 	Current  *Tree
 }
 
+type TransactionConflict struct {
+	Name     []byte
+	Expected *RootManifestRecord
+	Current  *RootManifestRecord
+}
+
+type TransactionUpdate struct {
+	Applied        bool
+	Conflict       bool
+	NodesWritten   uint64
+	RootsWritten   uint64
+	ConflictDetail *TransactionConflict
+}
+
 type SnapshotNamespace struct {
 	Kind         string
 	CustomPrefix []byte
@@ -1438,6 +1466,11 @@ type Engine struct {
 	hostStoreHandle uint64
 }
 
+type Transaction struct {
+	handle C.uint64_t
+	closed atomic.Bool
+}
+
 type BlobStore struct {
 	handle C.uint64_t
 	closed atomic.Bool
@@ -1917,6 +1950,16 @@ func (e *Engine) Close() {
 	}
 }
 
+func (t *Transaction) Close() {
+	if t == nil || t.closed.Swap(true) || t.handle == 0 {
+		return
+	}
+	var status C.RustCallStatus
+	C.uniffi_prolly_bindings_fn_free_prollytransaction(t.handle, &status)
+	_ = statusError(&status)
+	t.handle = 0
+}
+
 func (s *BlobStore) Close() {
 	if s == nil || s.closed.Swap(true) || s.handle == 0 {
 		return
@@ -2033,6 +2076,21 @@ func (e *Engine) Create() (Tree, error) {
 	return Tree{raw: copyRustBuffer(buf)}, nil
 }
 
+func (e *Engine) BeginTransaction() (*Transaction, error) {
+	handle, err := e.cloneHandle()
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	txHandle := C.uniffi_prolly_bindings_fn_method_prollyengine_begin_transaction(handle, &status)
+	if err := statusError(&status); err != nil {
+		return nil, err
+	}
+	tx := &Transaction{handle: txHandle}
+	runtime.SetFinalizer(tx, (*Transaction).Close)
+	return tx, nil
+}
+
 func (e *Engine) Put(tree Tree, key []byte, value []byte) (Tree, error) {
 	handle, err := e.cloneHandle()
 	if err != nil {
@@ -2099,6 +2157,120 @@ func (e *Engine) Get(tree Tree, key []byte) ([]byte, bool, error) {
 
 	var status C.RustCallStatus
 	buf := C.uniffi_prolly_bindings_fn_method_prollyengine_get(handle, treeBuf, keyBuf, &status)
+	if err := statusError(&status); err != nil {
+		return nil, false, err
+	}
+	defer freeRustBuffer(buf)
+	return decodeOptionalByteArray(copyRustBuffer(buf))
+}
+
+func (t *Transaction) Create() (Tree, error) {
+	handle, err := t.cloneHandle()
+	if err != nil {
+		return Tree{}, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_prollytransaction_create(handle, &status)
+	if err := statusError(&status); err != nil {
+		return Tree{}, err
+	}
+	defer freeRustBuffer(buf)
+	return Tree{raw: copyRustBuffer(buf)}, nil
+}
+
+func (t *Transaction) Put(tree Tree, key []byte, value []byte) (Tree, error) {
+	handle, err := t.cloneHandle()
+	if err != nil {
+		return Tree{}, err
+	}
+	treeBuf, err := rustBufferFromBytes(tree.raw)
+	if err != nil {
+		return Tree{}, err
+	}
+	keyBuf, err := rustBufferFromBytes(encodeByteArray(key))
+	if err != nil {
+		return Tree{}, err
+	}
+	valueBuf, err := rustBufferFromBytes(encodeByteArray(value))
+	if err != nil {
+		return Tree{}, err
+	}
+
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_prollytransaction_put(handle, treeBuf, keyBuf, valueBuf, &status)
+	if err := statusError(&status); err != nil {
+		return Tree{}, err
+	}
+	defer freeRustBuffer(buf)
+	return Tree{raw: copyRustBuffer(buf)}, nil
+}
+
+func (t *Transaction) Delete(tree Tree, key []byte) (Tree, error) {
+	handle, err := t.cloneHandle()
+	if err != nil {
+		return Tree{}, err
+	}
+	treeBuf, err := rustBufferFromBytes(tree.raw)
+	if err != nil {
+		return Tree{}, err
+	}
+	keyBuf, err := rustBufferFromBytes(encodeByteArray(key))
+	if err != nil {
+		return Tree{}, err
+	}
+
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_prollytransaction_delete(handle, treeBuf, keyBuf, &status)
+	if err := statusError(&status); err != nil {
+		return Tree{}, err
+	}
+	defer freeRustBuffer(buf)
+	return Tree{raw: copyRustBuffer(buf)}, nil
+}
+
+func (t *Transaction) Batch(tree Tree, mutations []Mutation) (Tree, error) {
+	handle, err := t.cloneHandle()
+	if err != nil {
+		return Tree{}, err
+	}
+	treeBuf, err := rustBufferFromBytes(tree.raw)
+	if err != nil {
+		return Tree{}, err
+	}
+	mutationBytes, err := encodeMutations(mutations)
+	if err != nil {
+		return Tree{}, err
+	}
+	mutationsBuf, err := rustBufferFromBytes(mutationBytes)
+	if err != nil {
+		return Tree{}, err
+	}
+
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_prollytransaction_batch(handle, treeBuf, mutationsBuf, &status)
+	if err := statusError(&status); err != nil {
+		return Tree{}, err
+	}
+	defer freeRustBuffer(buf)
+	return Tree{raw: copyRustBuffer(buf)}, nil
+}
+
+func (t *Transaction) Get(tree Tree, key []byte) ([]byte, bool, error) {
+	handle, err := t.cloneHandle()
+	if err != nil {
+		return nil, false, err
+	}
+	treeBuf, err := rustBufferFromBytes(tree.raw)
+	if err != nil {
+		return nil, false, err
+	}
+	keyBuf, err := rustBufferFromBytes(encodeByteArray(key))
+	if err != nil {
+		return nil, false, err
+	}
+
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_prollytransaction_get(handle, treeBuf, keyBuf, &status)
 	if err := statusError(&status); err != nil {
 		return nil, false, err
 	}
@@ -3576,6 +3748,110 @@ func (e *Engine) DeleteNamedRoot(name []byte) error {
 
 	var status C.RustCallStatus
 	C.uniffi_prolly_bindings_fn_method_prollyengine_delete_named_root(handle, nameBuf, &status)
+	return statusError(&status)
+}
+
+func (t *Transaction) PublishNamedRoot(name []byte, tree Tree) error {
+	handle, err := t.cloneHandle()
+	if err != nil {
+		return err
+	}
+	nameBuf, err := rustBufferFromBytes(encodeByteArray(name))
+	if err != nil {
+		return err
+	}
+	treeBuf, err := rustBufferFromBytes(tree.raw)
+	if err != nil {
+		return err
+	}
+	var status C.RustCallStatus
+	C.uniffi_prolly_bindings_fn_method_prollytransaction_publish_named_root(handle, nameBuf, treeBuf, &status)
+	return statusError(&status)
+}
+
+func (t *Transaction) LoadNamedRoot(name []byte) (*Tree, error) {
+	handle, err := t.cloneHandle()
+	if err != nil {
+		return nil, err
+	}
+	nameBuf, err := rustBufferFromBytes(encodeByteArray(name))
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_prollytransaction_load_named_root(handle, nameBuf, &status)
+	if err := statusError(&status); err != nil {
+		return nil, err
+	}
+	defer freeRustBuffer(buf)
+	tree, ok, err := decodeOptionalTree(copyRustBuffer(buf))
+	if err != nil || !ok {
+		return nil, err
+	}
+	return &tree, nil
+}
+
+func (t *Transaction) CompareAndSwapNamedRoot(name []byte, expected *Tree, replacement *Tree) (NamedRootUpdate, error) {
+	handle, err := t.cloneHandle()
+	if err != nil {
+		return NamedRootUpdate{}, err
+	}
+	nameBuf, err := rustBufferFromBytes(encodeByteArray(name))
+	if err != nil {
+		return NamedRootUpdate{}, err
+	}
+	expectedBuf, err := rustBufferFromBytes(encodeOptionalTree(expected))
+	if err != nil {
+		return NamedRootUpdate{}, err
+	}
+	replacementBuf, err := rustBufferFromBytes(encodeOptionalTree(replacement))
+	if err != nil {
+		return NamedRootUpdate{}, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_prollytransaction_compare_and_swap_named_root(handle, nameBuf, expectedBuf, replacementBuf, &status)
+	if err := statusError(&status); err != nil {
+		return NamedRootUpdate{}, err
+	}
+	defer freeRustBuffer(buf)
+	return decodeNamedRootUpdate(copyRustBuffer(buf))
+}
+
+func (t *Transaction) DeleteNamedRoot(name []byte) error {
+	handle, err := t.cloneHandle()
+	if err != nil {
+		return err
+	}
+	nameBuf, err := rustBufferFromBytes(encodeByteArray(name))
+	if err != nil {
+		return err
+	}
+	var status C.RustCallStatus
+	C.uniffi_prolly_bindings_fn_method_prollytransaction_delete_named_root(handle, nameBuf, &status)
+	return statusError(&status)
+}
+
+func (t *Transaction) Commit() (TransactionUpdate, error) {
+	handle, err := t.cloneHandle()
+	if err != nil {
+		return TransactionUpdate{}, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_prollytransaction_commit(handle, &status)
+	if err := statusError(&status); err != nil {
+		return TransactionUpdate{}, err
+	}
+	defer freeRustBuffer(buf)
+	return decodeTransactionUpdate(copyRustBuffer(buf))
+}
+
+func (t *Transaction) Rollback() error {
+	handle, err := t.cloneHandle()
+	if err != nil {
+		return err
+	}
+	var status C.RustCallStatus
+	C.uniffi_prolly_bindings_fn_method_prollytransaction_rollback(handle, &status)
 	return statusError(&status)
 }
 
@@ -6039,6 +6315,18 @@ func (e *Engine) cloneHandle() (C.uint64_t, error) {
 	return handle, nil
 }
 
+func (t *Transaction) cloneHandle() (C.uint64_t, error) {
+	if t == nil || t.closed.Load() || t.handle == 0 {
+		return 0, errors.New("prolly transaction is closed")
+	}
+	var status C.RustCallStatus
+	handle := C.uniffi_prolly_bindings_fn_clone_prollytransaction(t.handle, &status)
+	if err := statusError(&status); err != nil {
+		return 0, err
+	}
+	return handle, nil
+}
+
 func (s *BlobStore) cloneHandle() (C.uint64_t, error) {
 	if s == nil || s.closed.Load() || s.handle == 0 {
 		return 0, errors.New("prolly blob store is closed")
@@ -7634,6 +7922,40 @@ func decodeNamedRootUpdate(data []byte) (NamedRootUpdate, error) {
 	update := NamedRootUpdate{Applied: applied, Conflict: conflict}
 	if ok {
 		update.Current = &current
+	}
+	return update, decoder.done()
+}
+
+func decodeTransactionUpdate(data []byte) (TransactionUpdate, error) {
+	decoder := byteDecoder{data: data}
+	applied, err := decoder.readBool()
+	if err != nil {
+		return TransactionUpdate{}, err
+	}
+	conflict, err := decoder.readBool()
+	if err != nil {
+		return TransactionUpdate{}, err
+	}
+	nodesWritten, err := decoder.readUint64()
+	if err != nil {
+		return TransactionUpdate{}, err
+	}
+	rootsWritten, err := decoder.readUint64()
+	if err != nil {
+		return TransactionUpdate{}, err
+	}
+	conflictDetail, ok, err := decoder.readOptionalTransactionConflict()
+	if err != nil {
+		return TransactionUpdate{}, err
+	}
+	update := TransactionUpdate{
+		Applied:      applied,
+		Conflict:     conflict,
+		NodesWritten: nodesWritten,
+		RootsWritten: rootsWritten,
+	}
+	if ok {
+		update.ConflictDetail = &conflictDetail
 	}
 	return update, decoder.done()
 }
@@ -9909,6 +10231,53 @@ func (d *byteDecoder) readRootManifestRecord() (RootManifestRecord, error) {
 		CreatedAtMillis: createdAtMillis,
 		UpdatedAtMillis: updatedAtMillis,
 	}, nil
+}
+
+func (d *byteDecoder) readOptionalRootManifestRecord() (RootManifestRecord, bool, error) {
+	present, err := d.readByte()
+	if err != nil {
+		return RootManifestRecord{}, false, err
+	}
+	if present == 0 {
+		return RootManifestRecord{}, false, nil
+	}
+	manifest, err := d.readRootManifestRecord()
+	return manifest, true, err
+}
+
+func (d *byteDecoder) readTransactionConflict() (TransactionConflict, error) {
+	name, err := d.readByteArray()
+	if err != nil {
+		return TransactionConflict{}, err
+	}
+	expected, hasExpected, err := d.readOptionalRootManifestRecord()
+	if err != nil {
+		return TransactionConflict{}, err
+	}
+	current, hasCurrent, err := d.readOptionalRootManifestRecord()
+	if err != nil {
+		return TransactionConflict{}, err
+	}
+	conflict := TransactionConflict{Name: name}
+	if hasExpected {
+		conflict.Expected = &expected
+	}
+	if hasCurrent {
+		conflict.Current = &current
+	}
+	return conflict, nil
+}
+
+func (d *byteDecoder) readOptionalTransactionConflict() (TransactionConflict, bool, error) {
+	present, err := d.readByte()
+	if err != nil {
+		return TransactionConflict{}, false, err
+	}
+	if present == 0 {
+		return TransactionConflict{}, false, nil
+	}
+	conflict, err := d.readTransactionConflict()
+	return conflict, true, err
 }
 
 func (d *byteDecoder) readNamedRootManifests() ([]NamedRootManifestRecord, error) {

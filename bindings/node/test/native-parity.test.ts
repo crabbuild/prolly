@@ -689,6 +689,41 @@ test("native file and SQLite stores reopen Rust nodes", { skip: native === null 
   }
 });
 
+test("native transactions commit rollback and report named-root conflicts", { skip: native === null }, () => {
+  assert.ok(native);
+  const engine = native.NativeProllyEngine.memory();
+  const sourceName = bytes("tickets/source/current");
+  const rollbackName = bytes("tickets/source/rolled-back");
+  const conflictName = bytes("tickets/source/conflict");
+
+  const tx = engine.beginTransaction();
+  const tree = tx.put(tx.create(), bytes("ticket/123/status"), bytes("open"));
+  tx.publishNamedRoot(sourceName, tree);
+  const update = tx.commit();
+  assert.equal(update.applied, true);
+  assert.equal(update.conflict, false);
+  assert.ok(Number(update.nodesWritten) > 0);
+  assert.deepEqual(engine.loadNamedRoot(sourceName)?.root, tree.root);
+
+  const rollbackTx = engine.beginTransaction();
+  const rolledBack = rollbackTx.put(rollbackTx.create(), bytes("ticket/456/status"), bytes("closed"));
+  rollbackTx.publishNamedRoot(rollbackName, rolledBack);
+  rollbackTx.rollback();
+  assert.equal(engine.loadNamedRoot(rollbackName), null);
+
+  const staleTx = engine.beginTransaction();
+  assert.equal(staleTx.loadNamedRoot(conflictName), null);
+  const winner = engine.put(engine.create(), bytes("ticket/789/status"), bytes("open"));
+  engine.publishNamedRoot(conflictName, winner);
+  const loser = staleTx.put(staleTx.create(), bytes("ticket/789/status"), bytes("closed"));
+  staleTx.publishNamedRoot(conflictName, loser);
+  const conflict = staleTx.commit();
+  assert.equal(conflict.applied, false);
+  assert.equal(conflict.conflict, true);
+  assert.deepEqual(conflict.conflictDetail?.name, conflictName);
+  assert.deepEqual(engine.loadNamedRoot(conflictName)?.root, winner.root);
+});
+
 test("native custom store callbacks drive Rust engine", { skip: native === null }, () => {
   assert.ok(native);
   const hostStore = makeHostStore(native);

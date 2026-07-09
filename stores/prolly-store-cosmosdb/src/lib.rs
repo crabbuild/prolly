@@ -1,11 +1,13 @@
 //! Cosmos DB store adapter for prolly-map.
 
 pub use prolly::{
-    RemoteBatchOp, RemoteManifestUpdate, RemoteNamedRoot, RemoteProllyStore, RemoteStoreBackend,
+    RemoteBatchOp, RemoteManifestUpdate, RemoteNamedRoot, RemoteProllyStore, RemoteRootCondition,
+    RemoteRootWrite, RemoteStoreBackend, RemoteTransactionConflict, RemoteTransactionUpdate,
 };
 
 /// Cosmos DB adapter entry point.
 pub mod cosmosdb {
+    use std::collections::{HashMap, HashSet};
     use std::error::Error as StdError;
     use std::fmt;
     use std::time::SystemTime;
@@ -18,7 +20,10 @@ pub mod cosmosdb {
     use serde::{Deserialize, Serialize};
     use sha2::Sha256;
 
-    use crate::{RemoteBatchOp, RemoteManifestUpdate, RemoteNamedRoot, RemoteStoreBackend};
+    use crate::{
+        RemoteBatchOp, RemoteManifestUpdate, RemoteNamedRoot, RemoteRootCondition, RemoteRootWrite,
+        RemoteStoreBackend, RemoteTransactionConflict, RemoteTransactionUpdate,
+    };
 
     /// Store adapter for Cosmos DB-backed prolly nodes and roots.
     pub type CosmosDbStore = crate::RemoteProllyStore<CosmosDbBackend>;
@@ -26,9 +31,9 @@ pub mod cosmosdb {
     /// Cosmos DB REST-backed backend.
     ///
     /// The container must use `/kind` as its partition key. The adapter stores
-    /// JSON documents with `id`, `kind`, `key`, and `value` fields; `key` is
-    /// hex-encoded logical key bytes and `value` is base64-encoded payload
-    /// bytes.
+    /// all documents for one backend instance under a single `kind` partition
+    /// value so Cosmos DB transactional batches can atomically commit nodes and
+    /// roots together. The logical document family lives in `family`.
     #[derive(Clone, Debug)]
     pub struct CosmosDbBackend {
         http: reqwest::Client,
@@ -38,6 +43,7 @@ pub mod cosmosdb {
         container_id: String,
         container_link: String,
         key_prefix: Vec<u8>,
+        partition_key: String,
         read_parallelism: usize,
     }
 
@@ -84,6 +90,7 @@ pub mod cosmosdb {
                 container_id,
                 container_link,
                 key_prefix: DEFAULT_KEY_PREFIX.to_vec(),
+                partition_key: DEFAULT_PARTITION_KEY.to_string(),
                 read_parallelism: DEFAULT_READ_PARALLELISM,
             })
         }
@@ -108,9 +115,23 @@ pub mod cosmosdb {
             &self.key_prefix
         }
 
+        /// Return the `/kind` partition value used by this backend instance.
+        pub fn partition_key_value(&self) -> &str {
+            &self.partition_key
+        }
+
         /// Set the namespace prefix prepended to all logical keys.
         pub fn with_key_prefix(mut self, key_prefix: impl Into<Vec<u8>>) -> Self {
             self.key_prefix = key_prefix.into();
+            self
+        }
+
+        /// Set the `/kind` partition value used by this backend instance.
+        ///
+        /// All nodes, roots, and hints for the backend must share this value for
+        /// Cosmos DB transactional batch support.
+        pub fn with_partition_key_value(mut self, partition_key: impl Into<String>) -> Self {
+            self.partition_key = partition_key.into();
             self
         }
 
@@ -225,14 +246,14 @@ pub mod cosmosdb {
 
         async fn read_document(
             &self,
-            kind: &'static str,
+            _kind: &'static str,
             logical_key: &[u8],
         ) -> Result<Option<CosmosReadDocument>, CosmosDbBackendError> {
             let id = document_id(logical_key);
             let link = self.document_link(&id);
             let response = self
                 .authorized_request(Method::GET, DOCS_RESOURCE, &link, self.resource_url(&link))?
-                .header("x-ms-documentdb-partitionkey", partition_key(kind))
+                .header("x-ms-documentdb-partitionkey", self.partition_key_header())
                 .send()
                 .await
                 .map_err(CosmosDbBackendError::Http)?;
@@ -260,7 +281,7 @@ pub mod cosmosdb {
             logical_key: &[u8],
             value: &[u8],
         ) -> Result<(), CosmosDbBackendError> {
-            let doc = CosmosProllyDocument::new(kind, logical_key, value);
+            let doc = self.document(kind, logical_key, value);
             let link = self.feed_link();
             let response = self
                 .authorized_request(
@@ -270,7 +291,7 @@ pub mod cosmosdb {
                     self.resource_url(&link),
                 )?
                 .header("content-type", "application/json")
-                .header("x-ms-documentdb-partitionkey", partition_key(kind))
+                .header("x-ms-documentdb-partitionkey", self.partition_key_header())
                 .header("x-ms-documentdb-is-upsert", "True")
                 .json(&doc)
                 .send()
@@ -286,7 +307,7 @@ pub mod cosmosdb {
             logical_key: &[u8],
             value: &[u8],
         ) -> Result<bool, CosmosDbBackendError> {
-            let doc = CosmosProllyDocument::new(kind, logical_key, value);
+            let doc = self.document(kind, logical_key, value);
             let link = self.feed_link();
             let response = self
                 .authorized_request(
@@ -297,7 +318,7 @@ pub mod cosmosdb {
                 )?
                 .header("content-type", "application/json")
                 .header("if-none-match", "*")
-                .header("x-ms-documentdb-partitionkey", partition_key(kind))
+                .header("x-ms-documentdb-partitionkey", self.partition_key_header())
                 .json(&doc)
                 .send()
                 .await
@@ -317,13 +338,13 @@ pub mod cosmosdb {
             etag: &str,
         ) -> Result<bool, CosmosDbBackendError> {
             let id = document_id(logical_key);
-            let doc = CosmosProllyDocument::new(kind, logical_key, value);
+            let doc = self.document(kind, logical_key, value);
             let link = self.document_link(&id);
             let response = self
                 .authorized_request(Method::PUT, DOCS_RESOURCE, &link, self.resource_url(&link))?
                 .header("content-type", "application/json")
                 .header("if-match", etag)
-                .header("x-ms-documentdb-partitionkey", partition_key(kind))
+                .header("x-ms-documentdb-partitionkey", self.partition_key_header())
                 .json(&doc)
                 .send()
                 .await
@@ -337,7 +358,7 @@ pub mod cosmosdb {
 
         async fn delete_document(
             &self,
-            kind: &'static str,
+            _kind: &'static str,
             logical_key: &[u8],
             etag: Option<&str>,
             ignore_missing: bool,
@@ -351,7 +372,7 @@ pub mod cosmosdb {
                     &link,
                     self.resource_url(&link),
                 )?
-                .header("x-ms-documentdb-partitionkey", partition_key(kind));
+                .header("x-ms-documentdb-partitionkey", self.partition_key_header());
             if let Some(etag) = etag {
                 request = request.header("if-match", etag);
             }
@@ -377,8 +398,11 @@ pub mod cosmosdb {
             loop {
                 let link = self.feed_link();
                 let body = serde_json::json!({
-                    "query": "SELECT * FROM c WHERE c.kind = @kind",
-                    "parameters": [{ "name": "@kind", "value": kind }]
+                    "query": "SELECT * FROM c WHERE c.kind = @kind AND c.family = @family",
+                    "parameters": [
+                        { "name": "@kind", "value": self.partition_key },
+                        { "name": "@family", "value": kind }
+                    ]
                 });
                 let mut request = self
                     .authorized_request(
@@ -389,7 +413,7 @@ pub mod cosmosdb {
                     )?
                     .header("content-type", "application/query+json")
                     .header("x-ms-documentdb-isquery", "True")
-                    .header("x-ms-documentdb-partitionkey", partition_key(kind))
+                    .header("x-ms-documentdb-partitionkey", self.partition_key_header())
                     .header("x-ms-max-item-count", "100")
                     .json(&body);
                 if let Some(token) = continuation.as_deref() {
@@ -416,6 +440,246 @@ pub mod cosmosdb {
             }
 
             Ok(documents)
+        }
+
+        fn document(
+            &self,
+            kind: &'static str,
+            logical_key: &[u8],
+            value: &[u8],
+        ) -> CosmosProllyDocument {
+            CosmosProllyDocument::new(&self.partition_key, kind, logical_key, value)
+        }
+
+        fn partition_key_header(&self) -> String {
+            partition_key(&self.partition_key)
+        }
+
+        fn batch_partition_key(&self) -> String {
+            self.partition_key_header()
+        }
+
+        async fn execute_transaction_batch(
+            &self,
+            operations: &[CosmosBatchOperation],
+        ) -> Result<Vec<CosmosBatchOperationResponse>, CosmosDbBackendError> {
+            let link = self.feed_link();
+            let response = self
+                .authorized_request(
+                    Method::POST,
+                    DOCS_RESOURCE,
+                    &self.container_link,
+                    self.resource_url(&link),
+                )?
+                .header("content-type", "application/json")
+                .header("x-ms-documentdb-partitionkey", self.partition_key_header())
+                .header("x-ms-cosmos-is-batch-request", "True")
+                .header("x-ms-cosmos-batch-atomic", "True")
+                .json(operations)
+                .send()
+                .await
+                .map_err(CosmosDbBackendError::Http)?;
+
+            let response = ensure_status(response).await?;
+            response
+                .json::<Vec<CosmosBatchOperationResponse>>()
+                .await
+                .map_err(CosmosDbBackendError::Http)
+        }
+
+        async fn push_root_condition_operation(
+            &self,
+            operations: &mut Vec<CosmosBatchOperation>,
+            operation_conditions: &mut Vec<Option<RemoteRootCondition>>,
+            condition: &RemoteRootCondition,
+        ) -> Result<(), CosmosDbBackendError> {
+            let logical_key = self.root_key(&condition.name);
+            match condition.expected.as_deref() {
+                Some(expected) => {
+                    let Some(current) = self.read_document(ROOT_KIND, &logical_key).await? else {
+                        return Err(CosmosDbBackendError::RootConditionConflict(
+                            RemoteTransactionConflict::new(
+                                condition.name.clone(),
+                                condition.expected.clone(),
+                                None,
+                            ),
+                        ));
+                    };
+                    let current_value = current.document.value_bytes()?;
+                    if current_value.as_slice() != expected {
+                        return Err(CosmosDbBackendError::RootConditionConflict(
+                            RemoteTransactionConflict::new(
+                                condition.name.clone(),
+                                condition.expected.clone(),
+                                Some(current_value),
+                            ),
+                        ));
+                    }
+
+                    operations.push(CosmosBatchOperation::read(
+                        document_id(&logical_key),
+                        self.batch_partition_key(),
+                        current.etag,
+                    ));
+                    operation_conditions.push(Some(condition.clone()));
+                }
+                None => {
+                    let doc = self.document(ROOT_KIND, &logical_key, &[]);
+                    operations.push(CosmosBatchOperation::create_if_absent(
+                        self.batch_partition_key(),
+                        doc,
+                    ));
+                    operation_conditions.push(Some(condition.clone()));
+                    operations.push(CosmosBatchOperation::delete(
+                        document_id(&logical_key),
+                        self.batch_partition_key(),
+                        None,
+                    ));
+                    operation_conditions.push(Some(condition.clone()));
+                }
+            }
+            Ok(())
+        }
+
+        async fn push_root_write_operation(
+            &self,
+            operations: &mut Vec<CosmosBatchOperation>,
+            operation_conditions: &mut Vec<Option<RemoteRootCondition>>,
+            write: &RemoteRootWrite,
+            condition: Option<&RemoteRootCondition>,
+        ) -> Result<(), CosmosDbBackendError> {
+            let name = root_write_name(write);
+            let logical_key = self.root_key(name);
+            match (
+                condition.and_then(|condition| condition.expected.as_deref()),
+                write,
+            ) {
+                (Some(expected), RemoteRootWrite::Put { manifest, .. }) => {
+                    let Some(current) = self.read_document(ROOT_KIND, &logical_key).await? else {
+                        return Err(CosmosDbBackendError::RootConditionConflict(
+                            RemoteTransactionConflict::new(
+                                name.to_vec(),
+                                Some(expected.to_vec()),
+                                None,
+                            ),
+                        ));
+                    };
+                    let current_value = current.document.value_bytes()?;
+                    if current_value.as_slice() != expected {
+                        return Err(CosmosDbBackendError::RootConditionConflict(
+                            RemoteTransactionConflict::new(
+                                name.to_vec(),
+                                Some(expected.to_vec()),
+                                Some(current_value),
+                            ),
+                        ));
+                    }
+
+                    operations.push(CosmosBatchOperation::replace(
+                        document_id(&logical_key),
+                        self.batch_partition_key(),
+                        current.etag,
+                        self.document(ROOT_KIND, &logical_key, manifest),
+                    ));
+                    operation_conditions.push(condition.cloned());
+                }
+                (Some(expected), RemoteRootWrite::Delete { .. }) => {
+                    let Some(current) = self.read_document(ROOT_KIND, &logical_key).await? else {
+                        return Err(CosmosDbBackendError::RootConditionConflict(
+                            RemoteTransactionConflict::new(
+                                name.to_vec(),
+                                Some(expected.to_vec()),
+                                None,
+                            ),
+                        ));
+                    };
+                    let current_value = current.document.value_bytes()?;
+                    if current_value.as_slice() != expected {
+                        return Err(CosmosDbBackendError::RootConditionConflict(
+                            RemoteTransactionConflict::new(
+                                name.to_vec(),
+                                Some(expected.to_vec()),
+                                Some(current_value),
+                            ),
+                        ));
+                    }
+
+                    operations.push(CosmosBatchOperation::delete(
+                        document_id(&logical_key),
+                        self.batch_partition_key(),
+                        Some(current.etag),
+                    ));
+                    operation_conditions.push(condition.cloned());
+                }
+                (None, RemoteRootWrite::Put { manifest, .. }) if condition.is_some() => {
+                    operations.push(CosmosBatchOperation::create_if_absent(
+                        self.batch_partition_key(),
+                        self.document(ROOT_KIND, &logical_key, manifest),
+                    ));
+                    operation_conditions.push(condition.cloned());
+                }
+                (None, RemoteRootWrite::Delete { .. }) if condition.is_some() => {
+                    self.push_root_condition_operation(
+                        operations,
+                        operation_conditions,
+                        condition.expect("condition checked"),
+                    )
+                    .await?;
+                }
+                (None, RemoteRootWrite::Put { manifest, .. }) => {
+                    operations.push(CosmosBatchOperation::upsert(
+                        self.batch_partition_key(),
+                        self.document(ROOT_KIND, &logical_key, manifest),
+                    ));
+                    operation_conditions.push(None);
+                }
+                (None, RemoteRootWrite::Delete { .. }) => {
+                    if let Some(current) = self.read_document(ROOT_KIND, &logical_key).await? {
+                        operations.push(CosmosBatchOperation::delete(
+                            document_id(&logical_key),
+                            self.batch_partition_key(),
+                            Some(current.etag),
+                        ));
+                        operation_conditions.push(None);
+                    }
+                }
+            }
+            Ok(())
+        }
+
+        async fn conflict_from_batch_response(
+            &self,
+            responses: &[CosmosBatchOperationResponse],
+            operation_conditions: &[Option<RemoteRootCondition>],
+            root_conditions: &[RemoteRootCondition],
+        ) -> Result<Option<RemoteTransactionConflict>, CosmosDbBackendError> {
+            for (response, condition) in responses.iter().zip(operation_conditions) {
+                if response.is_success() {
+                    continue;
+                }
+                let Some(condition) = condition else {
+                    continue;
+                };
+                let current = self.get_root_manifest(&condition.name).await?;
+                return Ok(Some(RemoteTransactionConflict::new(
+                    condition.name.clone(),
+                    condition.expected.clone(),
+                    current,
+                )));
+            }
+
+            for condition in root_conditions {
+                let current = self.get_root_manifest(&condition.name).await?;
+                if current != condition.expected {
+                    return Ok(Some(RemoteTransactionConflict::new(
+                        condition.name.clone(),
+                        condition.expected.clone(),
+                        current,
+                    )));
+                }
+            }
+
+            Ok(None)
         }
     }
 
@@ -642,6 +906,119 @@ pub mod cosmosdb {
             roots.sort_by(|left, right| left.name.cmp(&right.name));
             Ok(roots)
         }
+
+        fn supports_transactions(&self) -> bool {
+            true
+        }
+
+        async fn commit_transaction(
+            &self,
+            node_writes: &[RemoteBatchOp<'_>],
+            root_conditions: &[RemoteRootCondition],
+            root_writes: &[RemoteRootWrite],
+        ) -> Result<RemoteTransactionUpdate, Self::Error> {
+            let conditions_by_name = root_conditions
+                .iter()
+                .map(|condition| (condition.name.as_slice(), condition))
+                .collect::<HashMap<_, _>>();
+            let written_roots = root_writes
+                .iter()
+                .map(|write| root_write_name(write))
+                .collect::<HashSet<_>>();
+
+            let mut operations = Vec::new();
+            let mut operation_conditions = Vec::new();
+
+            for condition in root_conditions {
+                if !written_roots.contains(condition.name.as_slice()) {
+                    if let Err(err) = self
+                        .push_root_condition_operation(
+                            &mut operations,
+                            &mut operation_conditions,
+                            condition,
+                        )
+                        .await
+                    {
+                        return match err {
+                            CosmosDbBackendError::RootConditionConflict(conflict) => {
+                                Ok(RemoteTransactionUpdate::Conflict(conflict))
+                            }
+                            err => Err(err),
+                        };
+                    }
+                }
+            }
+
+            for write in root_writes {
+                if let Err(err) = self
+                    .push_root_write_operation(
+                        &mut operations,
+                        &mut operation_conditions,
+                        write,
+                        conditions_by_name.get(root_write_name(write)).copied(),
+                    )
+                    .await
+                {
+                    return match err {
+                        CosmosDbBackendError::RootConditionConflict(conflict) => {
+                            Ok(RemoteTransactionUpdate::Conflict(conflict))
+                        }
+                        err => Err(err),
+                    };
+                }
+            }
+
+            for write in node_writes {
+                match write {
+                    RemoteBatchOp::Upsert { key, value } => {
+                        let logical_key = self.node_key(key);
+                        operations.push(CosmosBatchOperation::upsert(
+                            self.batch_partition_key(),
+                            self.document(NODE_KIND, &logical_key, value),
+                        ));
+                        operation_conditions.push(None);
+                    }
+                    RemoteBatchOp::Delete { key } => {
+                        let logical_key = self.node_key(key);
+                        if let Some(current) = self.read_document(NODE_KIND, &logical_key).await? {
+                            operations.push(CosmosBatchOperation::delete(
+                                document_id(&logical_key),
+                                self.batch_partition_key(),
+                                Some(current.etag),
+                            ));
+                            operation_conditions.push(None);
+                        }
+                    }
+                }
+            }
+
+            if operations.len() > COSMOS_BATCH_OPERATION_LIMIT {
+                return Err(CosmosDbBackendError::TransactionTooLarge {
+                    operations: operations.len(),
+                    limit: COSMOS_BATCH_OPERATION_LIMIT,
+                });
+            }
+            if operations.is_empty() {
+                return Ok(RemoteTransactionUpdate::Applied);
+            }
+
+            let responses = self.execute_transaction_batch(&operations).await?;
+            if responses
+                .iter()
+                .all(CosmosBatchOperationResponse::is_success)
+            {
+                return Ok(RemoteTransactionUpdate::Applied);
+            }
+
+            if let Some(conflict) = self
+                .conflict_from_batch_response(&responses, &operation_conditions, root_conditions)
+                .await?
+            {
+                return Ok(RemoteTransactionUpdate::Conflict(conflict));
+            }
+
+            Err(batch_response_error(&responses))
+        }
     }
 
     /// Error returned by the Cosmos DB backend.
@@ -661,6 +1038,10 @@ pub mod cosmosdb {
         MissingEtag,
         /// Backend configuration is unsafe or invalid.
         InvalidConfiguration(String),
+        /// The staged transaction exceeds Cosmos DB transactional batch limits.
+        TransactionTooLarge { operations: usize, limit: usize },
+        /// A root condition failed while building a transactional batch.
+        RootConditionConflict(RemoteTransactionConflict),
     }
 
     impl fmt::Display for CosmosDbBackendError {
@@ -677,6 +1058,15 @@ pub mod cosmosdb {
                 }
                 Self::MissingEtag => f.write_str("Cosmos DB response missing ETag"),
                 Self::InvalidConfiguration(message) => f.write_str(message),
+                Self::TransactionTooLarge { operations, limit } => write!(
+                    f,
+                    "Cosmos DB transaction has {operations} operations, exceeding the limit of {limit}"
+                ),
+                Self::RootConditionConflict(conflict) => write!(
+                    f,
+                    "Cosmos DB root condition conflict for {:?}",
+                    String::from_utf8_lossy(&conflict.name)
+                ),
             }
         }
     }
@@ -697,15 +1087,23 @@ pub mod cosmosdb {
     struct CosmosProllyDocument {
         id: String,
         kind: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        family: Option<String>,
         key: String,
         value: String,
     }
 
     impl CosmosProllyDocument {
-        fn new(kind: &'static str, logical_key: &[u8], value: &[u8]) -> Self {
+        fn new(
+            partition_key: &str,
+            family: &'static str,
+            logical_key: &[u8],
+            value: &[u8],
+        ) -> Self {
             Self {
                 id: document_id(logical_key),
-                kind: kind.to_string(),
+                kind: partition_key.to_string(),
+                family: Some(family.to_string()),
                 key: hex::encode(logical_key),
                 value: BASE64.encode(value),
             }
@@ -719,6 +1117,96 @@ pub mod cosmosdb {
             BASE64
                 .decode(&self.value)
                 .map_err(CosmosDbBackendError::InvalidValueBase64)
+        }
+    }
+
+    #[derive(Debug, Serialize)]
+    struct CosmosBatchOperation {
+        #[serde(rename = "operationType")]
+        operation_type: &'static str,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        id: Option<String>,
+        #[serde(rename = "partitionKey")]
+        partition_key: String,
+        #[serde(rename = "ifMatch")]
+        if_match: String,
+        #[serde(rename = "ifNoneMatch")]
+        if_none_match: String,
+        #[serde(rename = "resourceBody", skip_serializing_if = "Option::is_none")]
+        resource_body: Option<CosmosProllyDocument>,
+    }
+
+    impl CosmosBatchOperation {
+        fn create_if_absent(partition_key: String, document: CosmosProllyDocument) -> Self {
+            Self {
+                operation_type: "Create",
+                id: None,
+                partition_key,
+                if_match: String::new(),
+                if_none_match: "*".to_string(),
+                resource_body: Some(document),
+            }
+        }
+
+        fn upsert(partition_key: String, document: CosmosProllyDocument) -> Self {
+            Self {
+                operation_type: "Upsert",
+                id: None,
+                partition_key,
+                if_match: String::new(),
+                if_none_match: String::new(),
+                resource_body: Some(document),
+            }
+        }
+
+        fn replace(
+            id: String,
+            partition_key: String,
+            etag: String,
+            document: CosmosProllyDocument,
+        ) -> Self {
+            Self {
+                operation_type: "Replace",
+                id: Some(id),
+                partition_key,
+                if_match: etag,
+                if_none_match: String::new(),
+                resource_body: Some(document),
+            }
+        }
+
+        fn read(id: String, partition_key: String, etag: String) -> Self {
+            Self {
+                operation_type: "Read",
+                id: Some(id),
+                partition_key,
+                if_match: etag,
+                if_none_match: String::new(),
+                resource_body: None,
+            }
+        }
+
+        fn delete(id: String, partition_key: String, etag: Option<String>) -> Self {
+            Self {
+                operation_type: "Delete",
+                id: Some(id),
+                partition_key,
+                if_match: etag.unwrap_or_default(),
+                if_none_match: String::new(),
+                resource_body: None,
+            }
+        }
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct CosmosBatchOperationResponse {
+        #[serde(rename = "statusCode")]
+        status_code: u16,
+    }
+
+    impl CosmosBatchOperationResponse {
+        fn is_success(&self) -> bool {
+            StatusCode::from_u16(self.status_code).is_ok_and(|status| status.is_success())
         }
     }
 
@@ -752,8 +1240,8 @@ pub mod cosmosdb {
         )
     }
 
-    fn partition_key(kind: &'static str) -> String {
-        format!(r#"["{kind}"]"#)
+    fn partition_key(value: &str) -> String {
+        serde_json::to_string(&[value]).expect("serialize Cosmos DB partition key")
     }
 
     fn document_id(logical_key: &[u8]) -> String {
@@ -764,11 +1252,43 @@ pub mod cosmosdb {
         utf8_percent_encode(segment, NON_ALPHANUMERIC).to_string()
     }
 
+    fn root_write_name(write: &RemoteRootWrite) -> &[u8] {
+        match write {
+            RemoteRootWrite::Put { name, .. } | RemoteRootWrite::Delete { name } => name,
+        }
+    }
+
+    fn batch_response_error(responses: &[CosmosBatchOperationResponse]) -> CosmosDbBackendError {
+        let (index, response) = responses
+            .iter()
+            .enumerate()
+            .find(|(_, response)| !response.is_success())
+            .unwrap_or_else(|| {
+                (
+                    0,
+                    responses
+                        .first()
+                        .expect("transactional batch response is not empty"),
+                )
+            });
+        let status =
+            StatusCode::from_u16(response.status_code).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+        CosmosDbBackendError::UnexpectedStatus {
+            status,
+            body: format!(
+                "Cosmos DB transactional batch operation {index} returned status {}; response={response:?}",
+                response.status_code
+            ),
+        }
+    }
+
     const COSMOS_API_VERSION: &str = "2018-12-31";
     const DOCS_RESOURCE: &str = "docs";
 
     const DEFAULT_KEY_PREFIX: &[u8] = b"prolly:";
+    const DEFAULT_PARTITION_KEY: &str = "prolly";
     const DEFAULT_READ_PARALLELISM: usize = 16;
+    const COSMOS_BATCH_OPERATION_LIMIT: usize = 100;
 
     const NODE_KIND: &str = "node";
     const ROOT_KIND: &str = "root";
@@ -778,12 +1298,56 @@ pub mod cosmosdb {
     const ROOT_FAMILY: &[u8] = b"root:";
     const HINT_FAMILY: &[u8] = b"hint:";
 
-    /// Recommended logical partition for immutable nodes.
-    pub const NODE_PARTITION: &str = "nodes";
-    /// Recommended logical partition for named root manifests.
-    pub const ROOT_PARTITION: &str = "roots";
-    /// Recommended logical partition for hints.
-    pub const HINT_PARTITION: &str = "hints";
+    /// Default `/kind` partition value used by the adapter.
+    pub const DEFAULT_PARTITION: &str = DEFAULT_PARTITION_KEY;
+    /// Default logical partition for immutable nodes.
+    pub const NODE_PARTITION: &str = DEFAULT_PARTITION_KEY;
+    /// Default logical partition for named root manifests.
+    pub const ROOT_PARTITION: &str = DEFAULT_PARTITION_KEY;
+    /// Default logical partition for hints.
+    pub const HINT_PARTITION: &str = DEFAULT_PARTITION_KEY;
+
+    #[cfg(test)]
+    mod tests {
+        use serde_json::json;
+
+        use super::*;
+
+        #[test]
+        fn document_layout_uses_shared_partition_and_family() {
+            let document = CosmosProllyDocument::new("tenant-a", NODE_KIND, b"node:abc", b"value");
+
+            assert_eq!(document.kind, "tenant-a");
+            assert_eq!(document.family.as_deref(), Some(NODE_KIND));
+            assert_eq!(document.key, hex::encode(b"node:abc"));
+            assert_eq!(document.value_bytes().unwrap(), b"value");
+        }
+
+        #[test]
+        fn transactional_batch_operation_uses_cosmos_rest_shape() {
+            let document = CosmosProllyDocument::new("prolly", ROOT_KIND, b"root:main", b"root");
+            let operation =
+                CosmosBatchOperation::create_if_absent(partition_key("prolly"), document);
+            let value = serde_json::to_value(operation).unwrap();
+
+            assert_eq!(
+                value,
+                json!({
+                    "operationType": "Create",
+                    "partitionKey": "[\"prolly\"]",
+                    "ifMatch": "",
+                    "ifNoneMatch": "*",
+                    "resourceBody": {
+                        "id": document_id(b"root:main"),
+                        "kind": "prolly",
+                        "family": "root",
+                        "key": hex::encode(b"root:main"),
+                        "value": BASE64.encode(b"root")
+                    }
+                })
+            );
+        }
+    }
 }
 
 pub use cosmosdb::*;

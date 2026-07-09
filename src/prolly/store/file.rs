@@ -12,9 +12,14 @@ use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::super::cid::Cid;
+use super::super::error::Error;
 use super::super::manifest::{
     sort_named_root_manifests, ManifestStore, ManifestStoreScan, ManifestUpdate, NamedRootManifest,
     RootManifest,
+};
+use super::super::transaction::{
+    RootCondition, RootWrite, TransactionConflict, TransactionNodeWrite, TransactionUpdate,
+    TransactionalStore,
 };
 use super::{sort_cids, BatchOp, NodeStoreScan, Store};
 
@@ -419,6 +424,127 @@ impl ManifestStoreScan for FileNodeStore {
 
         sort_named_root_manifests(&mut roots);
         Ok(roots)
+    }
+}
+
+impl TransactionalStore for FileNodeStore {
+    fn supports_transactions(&self) -> bool {
+        true
+    }
+
+    fn commit_transaction(
+        &self,
+        node_writes: &[TransactionNodeWrite],
+        root_conditions: &[RootCondition],
+        root_writes: &[RootWrite],
+    ) -> Result<TransactionUpdate, Error> {
+        let mut validated_nodes = Vec::with_capacity(node_writes.len());
+        for write in node_writes {
+            match write {
+                TransactionNodeWrite::Upsert { key, value } => {
+                    let cid = cid_from_node_key(key).map_err(|err| Error::Store(Box::new(err)))?;
+                    validate_node_bytes(&cid, &self.node_path(&cid), value)
+                        .map_err(|err| Error::Store(Box::new(err)))?;
+                    validated_nodes.push(BatchOpOwned::Upsert {
+                        cid,
+                        value: value.clone(),
+                    });
+                }
+                TransactionNodeWrite::Delete { key } => {
+                    validated_nodes.push(BatchOpOwned::Delete {
+                        cid: cid_from_node_key(key).map_err(|err| Error::Store(Box::new(err)))?,
+                    });
+                }
+            }
+        }
+
+        let _guard = self.manifest_lock.lock().map_err(|err| {
+            Error::Store(Box::new(FileNodeStoreError::LockPoisoned(err.to_string())))
+        })?;
+
+        for condition in root_conditions {
+            let current = self
+                .read_root_path(&self.root_path(&condition.name))
+                .map_err(|err| Error::Store(Box::new(err)))?;
+            if current != condition.expected {
+                return Ok(TransactionUpdate::Conflict(TransactionConflict::new(
+                    condition.name.clone(),
+                    condition.expected.clone(),
+                    current,
+                )));
+            }
+        }
+
+        for op in validated_nodes {
+            match op {
+                BatchOpOwned::Upsert { cid, value } => {
+                    self.write_node(&cid, &value)
+                        .map_err(|err| Error::Store(Box::new(err)))?;
+                }
+                BatchOpOwned::Delete { cid } => self
+                    .delete(cid.as_bytes())
+                    .map_err(|err| Error::Store(Box::new(err)))?,
+            }
+        }
+
+        let snapshots = root_writes
+            .iter()
+            .map(|write| {
+                let name = write.name().to_vec();
+                self.read_root_path(&self.root_path(&name))
+                    .map(|previous| (name, previous))
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|err| Error::Store(Box::new(err)))?;
+
+        let mut applied: Vec<(Vec<u8>, Option<RootManifest>)> = Vec::new();
+        for write in root_writes {
+            if let Err(err) = self.apply_root_write_unlocked(write) {
+                for (name, previous) in applied.into_iter().rev() {
+                    let _ = self.restore_root_unlocked(&name, previous.as_ref());
+                }
+                return Err(Error::Store(Box::new(err)));
+            }
+            applied.push((
+                write.name().to_vec(),
+                snapshots
+                    .iter()
+                    .find(|(name, _)| name.as_slice() == write.name())
+                    .and_then(|(_, previous)| previous.clone()),
+            ));
+        }
+
+        Ok(TransactionUpdate::Applied {
+            nodes_written: node_writes.len(),
+            roots_written: root_writes.len(),
+        })
+    }
+}
+
+impl FileNodeStore {
+    fn apply_root_write_unlocked(&self, write: &RootWrite) -> Result<(), FileNodeStoreError> {
+        match write {
+            RootWrite::Put { name, manifest } => {
+                self.write_root_path(&self.root_path(name), manifest)
+            }
+            RootWrite::Delete { name } => self.restore_root_unlocked(name, None),
+        }
+    }
+
+    fn restore_root_unlocked(
+        &self,
+        name: &[u8],
+        manifest: Option<&RootManifest>,
+    ) -> Result<(), FileNodeStoreError> {
+        let path = self.root_path(name);
+        match manifest {
+            Some(manifest) => self.write_root_path(&path, manifest),
+            None => match fs::remove_file(&path) {
+                Ok(()) => Ok(()),
+                Err(source) if source.kind() == std::io::ErrorKind::NotFound => Ok(()),
+                Err(source) => Err(FileNodeStoreError::Io { path, source }),
+            },
+        }
     }
 }
 

@@ -12,10 +12,15 @@ use std::sync::Arc;
 
 use super::cid::Cid;
 use super::config::Config;
+use super::error::Error;
 use super::manifest::{
     AsyncManifestStore, AsyncManifestStoreScan, ManifestUpdate, NamedRootManifest, RootManifest,
 };
 use super::store::{AsyncStore, BatchOp};
+use super::transaction::{
+    AsyncTransactionalStore, RootCondition, RootWrite, TransactionConflict, TransactionNodeWrite,
+    TransactionUpdate,
+};
 
 /// Batch operation passed to a remote backend.
 #[derive(Debug, Clone, Copy)]
@@ -52,6 +57,70 @@ pub enum RemoteManifestUpdate {
         /// Current serialized manifest stored under the requested name.
         current: Option<Vec<u8>>,
     },
+}
+
+/// Serialized named-root value that must still match at transaction commit time.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RemoteRootCondition {
+    /// Durable root name.
+    pub name: Vec<u8>,
+    /// Serialized manifest observed by the transaction.
+    pub expected: Option<Vec<u8>>,
+}
+
+impl RemoteRootCondition {
+    /// Create a serialized root validation condition.
+    pub fn new(name: Vec<u8>, expected: Option<Vec<u8>>) -> Self {
+        Self { name, expected }
+    }
+}
+
+/// Serialized named-root write staged by a transaction.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RemoteRootWrite {
+    /// Insert or replace a serialized named root manifest.
+    Put {
+        /// Durable root name.
+        name: Vec<u8>,
+        /// Serialized manifest to store under `name`.
+        manifest: Vec<u8>,
+    },
+    /// Delete a named root.
+    Delete {
+        /// Durable root name.
+        name: Vec<u8>,
+    },
+}
+
+/// Details for a failed backend-level transaction validation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RemoteTransactionConflict {
+    /// Durable root name that failed validation.
+    pub name: Vec<u8>,
+    /// Serialized manifest expected by the transaction.
+    pub expected: Option<Vec<u8>>,
+    /// Serialized manifest currently stored by the backend.
+    pub current: Option<Vec<u8>>,
+}
+
+impl RemoteTransactionConflict {
+    /// Create a backend transaction conflict record.
+    pub fn new(name: Vec<u8>, expected: Option<Vec<u8>>, current: Option<Vec<u8>>) -> Self {
+        Self {
+            name,
+            expected,
+            current,
+        }
+    }
+}
+
+/// Result of a backend-level transaction commit.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RemoteTransactionUpdate {
+    /// The transaction was applied.
+    Applied,
+    /// A root condition failed; no writes were applied.
+    Conflict(RemoteTransactionConflict),
 }
 
 /// Backend capability contract used by all provider adapters.
@@ -181,6 +250,25 @@ pub trait RemoteStoreBackend: Send + Sync {
 
     /// List serialized root manifests sorted by raw name bytes.
     async fn list_root_manifests(&self) -> Result<Vec<RemoteNamedRoot>, Self::Error>;
+
+    /// Whether this backend can atomically validate root conditions and commit
+    /// staged node/root writes.
+    fn supports_transactions(&self) -> bool {
+        false
+    }
+
+    /// Atomically validate serialized root conditions, write nodes, and apply
+    /// serialized root writes. Implementations should return
+    /// [`RemoteTransactionUpdate::Conflict`] without applying any writes when a
+    /// condition fails.
+    async fn commit_transaction(
+        &self,
+        _node_writes: &[RemoteBatchOp<'_>],
+        _root_conditions: &[RemoteRootCondition],
+        _root_writes: &[RemoteRootWrite],
+    ) -> Result<RemoteTransactionUpdate, Self::Error> {
+        unreachable!("remote backend did not advertise transaction support")
+    }
 }
 
 impl<T: RemoteStoreBackend> RemoteStoreBackend for Arc<T> {
@@ -279,6 +367,21 @@ impl<T: RemoteStoreBackend> RemoteStoreBackend for Arc<T> {
 
     async fn list_root_manifests(&self) -> Result<Vec<RemoteNamedRoot>, Self::Error> {
         (**self).list_root_manifests().await
+    }
+
+    fn supports_transactions(&self) -> bool {
+        (**self).supports_transactions()
+    }
+
+    async fn commit_transaction(
+        &self,
+        node_writes: &[RemoteBatchOp<'_>],
+        root_conditions: &[RemoteRootCondition],
+        root_writes: &[RemoteRootWrite],
+    ) -> Result<RemoteTransactionUpdate, Self::Error> {
+        (**self)
+            .commit_transaction(node_writes, root_conditions, root_writes)
+            .await
     }
 }
 
@@ -517,6 +620,101 @@ impl<B: RemoteStoreBackend> AsyncManifestStoreScan for RemoteProllyStore<B> {
     }
 }
 
+impl<B: RemoteStoreBackend> AsyncTransactionalStore for RemoteProllyStore<B> {
+    fn supports_transactions(&self) -> bool {
+        self.backend.supports_transactions()
+    }
+
+    async fn commit_transaction(
+        &self,
+        node_writes: &[TransactionNodeWrite],
+        root_conditions: &[RootCondition],
+        root_writes: &[RootWrite],
+    ) -> Result<TransactionUpdate, Error> {
+        if !self.backend.supports_transactions() {
+            return Err(Error::UnsupportedTransactions {
+                store: std::any::type_name::<B>(),
+            });
+        }
+
+        for write in node_writes {
+            if let TransactionNodeWrite::Upsert { key, value } = write {
+                self.verify_node::<B::Error>(key, value)
+                    .map_err(|err| Error::Store(Box::new(err)))?;
+            }
+        }
+
+        let remote_node_writes = node_writes
+            .iter()
+            .map(|write| match write {
+                TransactionNodeWrite::Upsert { key, value } => RemoteBatchOp::Upsert {
+                    key: key.as_slice(),
+                    value: value.as_slice(),
+                },
+                TransactionNodeWrite::Delete { key } => RemoteBatchOp::Delete {
+                    key: key.as_slice(),
+                },
+            })
+            .collect::<Vec<_>>();
+        let remote_root_conditions = root_conditions
+            .iter()
+            .map(|condition| {
+                encode_optional_root_manifest::<B::Error>(&condition.expected)
+                    .map(|expected| RemoteRootCondition::new(condition.name.clone(), expected))
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|err| Error::Store(Box::new(err)))?;
+        let remote_root_writes = root_writes
+            .iter()
+            .map(|write| match write {
+                RootWrite::Put { name, manifest } => encode_root_manifest::<B::Error>(manifest)
+                    .map(|manifest| RemoteRootWrite::Put {
+                        name: name.clone(),
+                        manifest,
+                    }),
+                RootWrite::Delete { name } => Ok(RemoteRootWrite::Delete { name: name.clone() }),
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|err| Error::Store(Box::new(err)))?;
+
+        let update = self
+            .backend
+            .commit_transaction(
+                &remote_node_writes,
+                &remote_root_conditions,
+                &remote_root_writes,
+            )
+            .await
+            .map_err(|err| Error::Store(Box::new(RemoteAdapterError::Backend(err))))?;
+
+        match update {
+            RemoteTransactionUpdate::Applied => Ok(TransactionUpdate::Applied {
+                nodes_written: node_writes.len(),
+                roots_written: root_writes.len(),
+            }),
+            RemoteTransactionUpdate::Conflict(conflict) => {
+                let expected = conflict
+                    .expected
+                    .as_deref()
+                    .map(decode_root_manifest::<B::Error>)
+                    .transpose()
+                    .map_err(|err| Error::Store(Box::new(err)))?;
+                let current = conflict
+                    .current
+                    .as_deref()
+                    .map(decode_root_manifest::<B::Error>)
+                    .transpose()
+                    .map_err(|err| Error::Store(Box::new(err)))?;
+                Ok(TransactionUpdate::Conflict(TransactionConflict::new(
+                    conflict.name,
+                    expected,
+                    current,
+                )))
+            }
+        }
+    }
+}
+
 impl<B> RemoteProllyStore<B> {
     fn verify_node<E>(&self, key: &[u8], bytes: &[u8]) -> Result<(), RemoteAdapterError<E>>
     where
@@ -599,6 +797,15 @@ where
     manifest
         .to_bytes()
         .map_err(|err| RemoteAdapterError::RootManifest(err.to_string()))
+}
+
+fn encode_optional_root_manifest<E>(
+    manifest: &Option<RootManifest>,
+) -> Result<Option<Vec<u8>>, RemoteAdapterError<E>>
+where
+    E: StdError + Send + Sync + 'static,
+{
+    manifest.as_ref().map(encode_root_manifest).transpose()
 }
 
 fn decode_root_manifest<E>(bytes: &[u8]) -> Result<RootManifest, RemoteAdapterError<E>>
@@ -762,6 +969,81 @@ pub mod conformance {
         let mut expected_cids = vec![alpha_cid.as_bytes().to_vec(), gamma_cid.as_bytes().to_vec()];
         expected_cids.sort();
         assert_eq!(listed_cids, expected_cids);
+    }
+
+    /// Assert the optional backend transaction contract. Providers that return
+    /// `true` from `supports_transactions` should run this in addition to the
+    /// base backend contract.
+    pub async fn assert_remote_backend_transaction_contract<B>(backend: &B)
+    where
+        B: RemoteStoreBackend,
+        B::Error: Debug,
+    {
+        assert!(backend.supports_transactions());
+
+        let config = Config::default();
+        let main_v1 = RootManifest::new(Some(Cid::from_bytes(b"txn-main-v1")), config.clone())
+            .to_bytes()
+            .unwrap();
+        let main_v2 = RootManifest::new(Some(Cid::from_bytes(b"txn-main-v2")), config)
+            .to_bytes()
+            .unwrap();
+        let alpha = b"transaction-alpha-node";
+        let beta = b"transaction-beta-node";
+        let alpha_cid = Cid::from_bytes(alpha);
+        let beta_cid = Cid::from_bytes(beta);
+
+        let update = backend
+            .commit_transaction(
+                &[RemoteBatchOp::Upsert {
+                    key: alpha_cid.as_bytes(),
+                    value: alpha,
+                }],
+                &[RemoteRootCondition::new(b"txn/main".to_vec(), None)],
+                &[RemoteRootWrite::Put {
+                    name: b"txn/main".to_vec(),
+                    manifest: main_v1.clone(),
+                }],
+            )
+            .await
+            .unwrap();
+        assert_eq!(update, RemoteTransactionUpdate::Applied);
+        assert_eq!(
+            backend.get_node(alpha_cid.as_bytes()).await.unwrap(),
+            Some(alpha.to_vec())
+        );
+        assert_eq!(
+            backend.get_root_manifest(b"txn/main").await.unwrap(),
+            Some(main_v1.clone())
+        );
+
+        let update = backend
+            .commit_transaction(
+                &[RemoteBatchOp::Upsert {
+                    key: beta_cid.as_bytes(),
+                    value: beta,
+                }],
+                &[RemoteRootCondition::new(b"txn/main".to_vec(), None)],
+                &[RemoteRootWrite::Put {
+                    name: b"txn/main".to_vec(),
+                    manifest: main_v2.clone(),
+                }],
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            update,
+            RemoteTransactionUpdate::Conflict(RemoteTransactionConflict::new(
+                b"txn/main".to_vec(),
+                None,
+                Some(main_v1.clone())
+            ))
+        );
+        assert_eq!(backend.get_node(beta_cid.as_bytes()).await.unwrap(), None);
+        assert_eq!(
+            backend.get_root_manifest(b"txn/main").await.unwrap(),
+            Some(main_v1)
+        );
     }
 }
 
@@ -941,6 +1223,57 @@ mod tests {
             Ok(RemoteManifestUpdate::Applied)
         }
 
+        fn supports_transactions(&self) -> bool {
+            true
+        }
+
+        async fn commit_transaction(
+            &self,
+            node_writes: &[RemoteBatchOp<'_>],
+            root_conditions: &[RemoteRootCondition],
+            root_writes: &[RemoteRootWrite],
+        ) -> Result<RemoteTransactionUpdate, Self::Error> {
+            let mut nodes = self.nodes.lock().unwrap();
+            let mut roots = self.roots.lock().unwrap();
+
+            for condition in root_conditions {
+                let current = roots.get(&condition.name).cloned();
+                if current != condition.expected {
+                    return Ok(RemoteTransactionUpdate::Conflict(
+                        RemoteTransactionConflict::new(
+                            condition.name.clone(),
+                            condition.expected.clone(),
+                            current,
+                        ),
+                    ));
+                }
+            }
+
+            for write in node_writes {
+                match write {
+                    RemoteBatchOp::Upsert { key, value } => {
+                        nodes.insert((*key).to_vec(), (*value).to_vec());
+                    }
+                    RemoteBatchOp::Delete { key } => {
+                        nodes.remove(*key);
+                    }
+                }
+            }
+
+            for write in root_writes {
+                match write {
+                    RemoteRootWrite::Put { name, manifest } => {
+                        roots.insert(name.clone(), manifest.clone());
+                    }
+                    RemoteRootWrite::Delete { name } => {
+                        roots.remove(name);
+                    }
+                }
+            }
+
+            Ok(RemoteTransactionUpdate::Applied)
+        }
+
         async fn list_root_manifests(&self) -> Result<Vec<RemoteNamedRoot>, Self::Error> {
             Ok(self
                 .roots
@@ -967,6 +1300,14 @@ mod tests {
         block_on(async {
             let backend = MemoryBackend::default();
             conformance::assert_remote_backend_contract(&backend).await;
+        });
+    }
+
+    #[test]
+    fn memory_backend_satisfies_remote_transaction_contract() {
+        block_on(async {
+            let backend = MemoryBackend::default();
+            conformance::assert_remote_backend_transaction_contract(&backend).await;
         });
     }
 
@@ -1020,6 +1361,65 @@ mod tests {
                     .map(|root| root.name)
                     .collect::<Vec<_>>(),
                 vec![b"main".to_vec()]
+            );
+        });
+    }
+
+    #[test]
+    fn remote_adapter_supports_async_prolly_transactions() {
+        block_on(async {
+            let store = Arc::new(MemoryBackend::default());
+            let adapter = RemoteProllyStore::new(store);
+            let prolly = AsyncProlly::new(adapter, Config::default());
+
+            let (source, by_status) = prolly
+                .transaction(|tx| {
+                    Box::pin(async move {
+                        let source = tx
+                            .put(
+                                &tx.create(),
+                                b"ticket/123/status".to_vec(),
+                                b"open".to_vec(),
+                            )
+                            .await?;
+                        let by_status = tx
+                            .put(
+                                &tx.create(),
+                                b"by_status/open/123".to_vec(),
+                                b"ticket/123".to_vec(),
+                            )
+                            .await?;
+                        tx.publish_named_root(b"tickets/source/current", &source)
+                            .await?;
+                        tx.publish_named_root(b"tickets/view/by-status/current", &by_status)
+                            .await?;
+                        Ok((source, by_status))
+                    })
+                })
+                .await
+                .unwrap();
+
+            assert_eq!(
+                prolly
+                    .load_named_root(b"tickets/source/current")
+                    .await
+                    .unwrap(),
+                Some(source.clone())
+            );
+            assert_eq!(
+                prolly
+                    .load_named_root(b"tickets/view/by-status/current")
+                    .await
+                    .unwrap(),
+                Some(by_status.clone())
+            );
+            assert_eq!(
+                prolly.get(&source, b"ticket/123/status").await.unwrap(),
+                Some(b"open".to_vec())
+            );
+            assert_eq!(
+                prolly.get(&by_status, b"by_status/open/123").await.unwrap(),
+                Some(b"ticket/123".to_vec())
             );
         });
     }

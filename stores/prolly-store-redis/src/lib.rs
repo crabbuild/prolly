@@ -1,14 +1,18 @@
 //! Redis store adapter for prolly-map.
 
 pub use prolly::{
-    RemoteBatchOp, RemoteManifestUpdate, RemoteNamedRoot, RemoteProllyStore, RemoteStoreBackend,
+    RemoteBatchOp, RemoteManifestUpdate, RemoteNamedRoot, RemoteProllyStore, RemoteRootCondition,
+    RemoteRootWrite, RemoteStoreBackend, RemoteTransactionConflict, RemoteTransactionUpdate,
 };
 
 /// Redis adapter entry point.
 pub mod redis {
     use redis_client::{ErrorKind, RedisError, Script, Value};
 
-    use crate::{RemoteBatchOp, RemoteManifestUpdate, RemoteNamedRoot, RemoteStoreBackend};
+    use crate::{
+        RemoteBatchOp, RemoteManifestUpdate, RemoteNamedRoot, RemoteRootCondition, RemoteRootWrite,
+        RemoteStoreBackend, RemoteTransactionConflict, RemoteTransactionUpdate,
+    };
 
     /// Store adapter for Redis-backed prolly nodes and roots.
     ///
@@ -404,6 +408,71 @@ pub mod redis {
             }
             Ok(roots)
         }
+
+        fn supports_transactions(&self) -> bool {
+            true
+        }
+
+        async fn commit_transaction(
+            &self,
+            node_writes: &[RemoteBatchOp<'_>],
+            root_conditions: &[RemoteRootCondition],
+            root_writes: &[RemoteRootWrite],
+        ) -> Result<RemoteTransactionUpdate, Self::Error> {
+            let script = Script::new(TRANSACTION_COMMIT_LUA);
+            let mut invocation = script.prepare_invoke();
+            for condition in root_conditions {
+                invocation.key(self.root_key(&condition.name));
+            }
+            for write in node_writes {
+                match write {
+                    RemoteBatchOp::Upsert { key, .. } | RemoteBatchOp::Delete { key } => {
+                        invocation.key(self.node_key(key));
+                    }
+                }
+            }
+            for write in root_writes {
+                match write {
+                    RemoteRootWrite::Put { name, .. } | RemoteRootWrite::Delete { name } => {
+                        invocation.key(self.root_key(name));
+                    }
+                }
+            }
+
+            invocation
+                .arg(root_conditions.len())
+                .arg(node_writes.len())
+                .arg(root_writes.len());
+            for condition in root_conditions {
+                invocation
+                    .arg(if condition.expected.is_some() { b"1" } else { b"0" }.as_slice())
+                    .arg(condition.expected.as_deref().unwrap_or_default());
+            }
+            for write in node_writes {
+                match write {
+                    RemoteBatchOp::Upsert { value, .. } => {
+                        invocation.arg("upsert").arg(*value);
+                    }
+                    RemoteBatchOp::Delete { .. } => {
+                        invocation.arg("delete");
+                    }
+                }
+            }
+            for write in root_writes {
+                match write {
+                    RemoteRootWrite::Put { manifest, .. } => {
+                        invocation.arg("put").arg(manifest);
+                    }
+                    RemoteRootWrite::Delete { .. } => {
+                        invocation.arg("delete");
+                    }
+                }
+            }
+
+            let mut connection = self.connection.clone();
+            let response: Value = invocation.invoke_async(&mut connection).await?;
+            parse_transaction_response(response, root_conditions)
+        }
     }
 
     fn parse_root_cas_response(response: Value) -> Result<RemoteManifestUpdate, RedisError> {
@@ -434,6 +503,15 @@ pub mod redis {
         }
     }
 
+    fn value_to_usize(value: Value) -> Result<usize, RedisError> {
+        match value {
+            Value::Int(value) if value >= 0 => Ok(value as usize),
+            other => Err(redis_type_error(format!(
+                "transaction script returned invalid conflict index: {other:?}"
+            ))),
+        }
+    }
+
     fn value_to_optional_bytes(value: Value) -> Result<Option<Vec<u8>>, RedisError> {
         match value {
             Value::Nil => Ok(None),
@@ -444,6 +522,38 @@ pub mod redis {
             ))),
         }
     }
+
+    fn parse_transaction_response(
+        response: Value,
+        root_conditions: &[RemoteRootCondition],
+    ) -> Result<RemoteTransactionUpdate, RedisError> {
+        let Value::Array(values) = response else {
+            return Err(redis_type_error("transaction script returned a non-array"));
+        };
+        let [applied, conflict_index, current] = values
+            .try_into()
+            .map_err(|_| redis_type_error("transaction script returned wrong arity"))?;
+
+        if value_to_bool(applied)? {
+            return Ok(RemoteTransactionUpdate::Applied);
+        }
+
+        let index = value_to_usize(conflict_index)?;
+        if index == 0 || index > root_conditions.len() {
+            return Err(redis_type_error(format!(
+                "transaction script returned out-of-range conflict index: {index}"
+            )));
+        }
+        let condition = &root_conditions[index - 1];
+        Ok(RemoteTransactionUpdate::Conflict(
+            RemoteTransactionConflict::new(
+                condition.name.clone(),
+                condition.expected.clone(),
+                value_to_optional_bytes(current)?,
+            ),
+        ))
+    }
+
 
     fn redis_type_error(detail: impl Into<String>) -> RedisError {
         (
@@ -494,6 +604,64 @@ else
 end
 
 return {1, false}
+"#;
+
+    const TRANSACTION_COMMIT_LUA: &str = r#"
+local condition_count = tonumber(ARGV[1])
+local node_write_count = tonumber(ARGV[2])
+local root_write_count = tonumber(ARGV[3])
+local arg_index = 4
+
+for i = 1, condition_count do
+  local current = redis.call('GET', KEYS[i])
+  local has_expected = ARGV[arg_index]
+  local expected = ARGV[arg_index + 1]
+  arg_index = arg_index + 2
+
+  if has_expected == '1' then
+    if current == false or current ~= expected then
+      return {0, i, current}
+    end
+  else
+    if current ~= false then
+      return {0, i, current}
+    end
+  end
+end
+
+local node_key_offset = condition_count
+for i = 1, node_write_count do
+  local kind = ARGV[arg_index]
+  arg_index = arg_index + 1
+  local key = KEYS[node_key_offset + i]
+
+  if kind == 'upsert' then
+    redis.call('SET', key, ARGV[arg_index])
+    arg_index = arg_index + 1
+  elseif kind == 'delete' then
+    redis.call('DEL', key)
+  else
+    error('unknown transaction node op: ' .. tostring(kind))
+  end
+end
+
+local root_key_offset = condition_count + node_write_count
+for i = 1, root_write_count do
+  local kind = ARGV[arg_index]
+  arg_index = arg_index + 1
+  local key = KEYS[root_key_offset + i]
+
+  if kind == 'put' then
+    redis.call('SET', key, ARGV[arg_index])
+    arg_index = arg_index + 1
+  elseif kind == 'delete' then
+    redis.call('DEL', key)
+  else
+    error('unknown transaction root op: ' .. tostring(kind))
+  end
+end
+
+return {1, 0, false}
 "#;
 }
 

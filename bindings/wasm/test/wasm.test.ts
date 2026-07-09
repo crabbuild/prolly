@@ -638,3 +638,39 @@ test("wasm fixtures decode, build, and query through Rust memory engine", { skip
   assert.ok(debugComparison.levels.some((level: any) => level.nodes.some((node: any) => node.status === "RightOnly")));
   assert.match(engine.debugCompareTreesText(base, merged), /left_only/i);
 });
+
+test("wasm transactions commit rollback and report named-root conflicts", { skip: !generatedPresent }, () => {
+  assert.ifError(runtimeError);
+  assert.ok(wasm);
+  const engine = wasm.WasmProllyEngine.memory();
+  const sourceName = utf8("tickets/source/current");
+  const rollbackName = utf8("tickets/source/rolled-back");
+  const conflictName = utf8("tickets/source/conflict");
+
+  const tx = engine.beginTransaction();
+  const tree = tx.put(tx.create(), utf8("ticket/123/status"), utf8("open"));
+  tx.publishNamedRoot(sourceName, tree);
+  const update = tx.commit();
+  assert.equal(update.applied, true);
+  assert.equal(update.conflict, false);
+  assert.equal(update.nodesWritten > 0, true);
+  assert.equal(toHex(engine.loadNamedRoot(sourceName).root), toHex(tree.root));
+
+  const rollbackTx = engine.beginTransaction();
+  const rolledBack = rollbackTx.put(rollbackTx.create(), utf8("ticket/456/status"), utf8("closed"));
+  rollbackTx.publishNamedRoot(rollbackName, rolledBack);
+  rollbackTx.rollback();
+  assert.equal(engine.loadNamedRoot(rollbackName), null);
+
+  const staleTx = engine.beginTransaction();
+  assert.equal(staleTx.loadNamedRoot(conflictName), null);
+  const winner = engine.put(engine.create(), utf8("ticket/789/status"), utf8("open"));
+  engine.publishNamedRoot(conflictName, winner);
+  const loser = staleTx.put(staleTx.create(), utf8("ticket/789/status"), utf8("closed"));
+  staleTx.publishNamedRoot(conflictName, loser);
+  const conflict = staleTx.commit();
+  assert.equal(conflict.applied, false);
+  assert.equal(conflict.conflict, true);
+  assert.equal(toHex(conflict.conflictDetail.name), toHex(conflictName));
+  assert.equal(toHex(engine.loadNamedRoot(conflictName).root), toHex(winner.root));
+});

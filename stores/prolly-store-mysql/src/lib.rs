@@ -1,14 +1,18 @@
 //! MySQL store adapter for prolly-map.
 
 pub use prolly::{
-    RemoteBatchOp, RemoteManifestUpdate, RemoteNamedRoot, RemoteProllyStore, RemoteStoreBackend,
+    RemoteBatchOp, RemoteManifestUpdate, RemoteNamedRoot, RemoteProllyStore, RemoteRootCondition,
+    RemoteRootWrite, RemoteStoreBackend, RemoteTransactionConflict, RemoteTransactionUpdate,
 };
 
 /// MySQL adapter entry point.
 pub mod mysql {
     use sqlx::{MySqlPool, Row};
 
-    use crate::{RemoteBatchOp, RemoteManifestUpdate, RemoteNamedRoot, RemoteStoreBackend};
+    use crate::{
+        RemoteBatchOp, RemoteManifestUpdate, RemoteNamedRoot, RemoteRootCondition, RemoteRootWrite,
+        RemoteStoreBackend, RemoteTransactionConflict, RemoteTransactionUpdate,
+    };
 
     /// Store adapter for MySQL-backed prolly nodes and roots.
     pub type MySqlStore = crate::RemoteProllyStore<MySqlBackend>;
@@ -311,6 +315,86 @@ pub mod mysql {
                     ))
                 })
                 .collect()
+        }
+
+        fn supports_transactions(&self) -> bool {
+            true
+        }
+
+        async fn commit_transaction(
+            &self,
+            node_writes: &[RemoteBatchOp<'_>],
+            root_conditions: &[RemoteRootCondition],
+            root_writes: &[RemoteRootWrite],
+        ) -> Result<RemoteTransactionUpdate, Self::Error> {
+            let mut tx = self.pool.begin().await?;
+
+            for condition in root_conditions {
+                let current =
+                    sqlx::query("SELECT manifest FROM prolly_roots WHERE name = ? FOR UPDATE")
+                        .bind(&condition.name)
+                        .fetch_optional(&mut *tx)
+                        .await?
+                        .map(|row| row.try_get("manifest"))
+                        .transpose()?;
+                if current != condition.expected {
+                    tx.rollback().await?;
+                    return Ok(RemoteTransactionUpdate::Conflict(
+                        RemoteTransactionConflict::new(
+                            condition.name.clone(),
+                            condition.expected.clone(),
+                            current,
+                        ),
+                    ));
+                }
+            }
+
+            for write in node_writes {
+                match write {
+                    RemoteBatchOp::Upsert { key, value } => {
+                        sqlx::query(
+                            "\
+                            INSERT INTO prolly_nodes (cid, node) VALUES (?, ?) \
+                            ON DUPLICATE KEY UPDATE node = VALUES(node)",
+                        )
+                        .bind(*key)
+                        .bind(*value)
+                        .execute(&mut *tx)
+                        .await?;
+                    }
+                    RemoteBatchOp::Delete { key } => {
+                        sqlx::query("DELETE FROM prolly_nodes WHERE cid = ?")
+                            .bind(*key)
+                            .execute(&mut *tx)
+                            .await?;
+                    }
+                }
+            }
+
+            for write in root_writes {
+                match write {
+                    RemoteRootWrite::Put { name, manifest } => {
+                        sqlx::query(
+                            "\
+                            INSERT INTO prolly_roots (name, manifest) VALUES (?, ?) \
+                            ON DUPLICATE KEY UPDATE manifest = VALUES(manifest)",
+                        )
+                        .bind(name)
+                        .bind(manifest)
+                        .execute(&mut *tx)
+                        .await?;
+                    }
+                    RemoteRootWrite::Delete { name } => {
+                        sqlx::query("DELETE FROM prolly_roots WHERE name = ?")
+                            .bind(name)
+                            .execute(&mut *tx)
+                            .await?;
+                    }
+                }
+            }
+
+            tx.commit().await?;
+            Ok(RemoteTransactionUpdate::Applied)
         }
     }
 

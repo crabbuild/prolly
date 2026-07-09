@@ -282,6 +282,18 @@ export interface NodeNamedRootUpdateRecord {
   conflict: boolean
   current?: NodeTreeRecord
 }
+export interface NodeTransactionConflictRecord {
+  name: Buffer
+  expected?: NodeRootManifestRecord
+  current?: NodeRootManifestRecord
+}
+export interface NodeTransactionUpdateRecord {
+  applied: boolean
+  conflict: boolean
+  nodesWritten: string
+  rootsWritten: string
+  conflictDetail?: NodeTransactionConflictRecord
+}
 export interface NodeSnapshotNamespaceRecord {
   kind: string
   customPrefix?: Buffer
@@ -684,6 +696,19 @@ export declare class NativeMergePolicyRegistry {
 export declare class NativeHostStore {
   constructor(get: (arg: NodeHostStoreKeyRequest) => NodeHostStoreBytesResult, put: (arg: NodeHostStorePutRequest) => NodeHostStoreUnitResult, delete: (arg: NodeHostStoreKeyRequest) => NodeHostStoreUnitResult, batch: (arg: NodeHostStoreBatchRequest) => NodeHostStoreUnitResult, batchGetOrdered: (arg: NodeHostStoreBatchGetRequest) => NodeHostStoreBatchGetResult, prefersBatchReads: (arg: NodeHostStoreEmptyRequest) => NodeHostStoreBoolResult, supportsHints: (arg: NodeHostStoreEmptyRequest) => NodeHostStoreBoolResult, getHint: (arg: NodeHostStoreHintRequest) => NodeHostStoreBytesResult, putHint: (arg: NodeHostStorePutHintRequest) => NodeHostStoreUnitResult, listNodeCids: (arg: NodeHostStoreEmptyRequest) => NodeHostStoreListBytesResult, getRoot: (arg: NodeHostStoreRootRequest) => NodeHostStoreRootResult, putRoot: (arg: NodeHostStorePutRootRequest) => NodeHostStoreUnitResult, deleteRoot: (arg: NodeHostStoreRootRequest) => NodeHostStoreUnitResult, compareAndSwapRoot: (arg: NodeHostStoreCasRootRequest) => NodeHostStoreCasResult, listRoots: (arg: NodeHostStoreEmptyRequest) => NodeHostStoreListRootsResult)
 }
+export declare class NativeProllyTransaction {
+  create(): NodeTreeRecord
+  get(tree: NodeTreeRecord, key: Buffer): Buffer | null
+  put(tree: NodeTreeRecord, key: Buffer, value: Buffer): NodeTreeRecord
+  delete(tree: NodeTreeRecord, key: Buffer): NodeTreeRecord
+  batch(tree: NodeTreeRecord, mutations: Array<NodeMutationRecord>): NodeTreeRecord
+  loadNamedRoot(name: Buffer): NodeTreeRecord | null
+  publishNamedRoot(name: Buffer, tree: NodeTreeRecord): void
+  deleteNamedRoot(name: Buffer): void
+  compareAndSwapNamedRoot(name: Buffer, expected?: NodeTreeRecord | undefined | null, replacement?: NodeTreeRecord | undefined | null): NodeNamedRootUpdateRecord
+  commit(): NodeTransactionUpdateRecord
+  rollback(): void
+}
 export declare class NativeProllyEngine {
   static memory(): NativeProllyEngine
   static memoryWithConfigJson(configJson: string): NativeProllyEngine
@@ -696,6 +721,7 @@ export declare class NativeProllyEngine {
   static sqliteInMemory(): NativeProllyEngine
   static sqliteInMemoryWithConfigJson(configJson: string): NativeProllyEngine
   create(): NodeTreeRecord
+  beginTransaction(): NativeProllyTransaction
   put(tree: NodeTreeRecord, key: Buffer, value: Buffer): NodeTreeRecord
   delete(tree: NodeTreeRecord, key: Buffer): NodeTreeRecord
   get(tree: NodeTreeRecord, key: Buffer): Buffer | null

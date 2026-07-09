@@ -1,7 +1,8 @@
 //! DynamoDB store adapter for prolly-map.
 
 pub use prolly::{
-    RemoteBatchOp, RemoteManifestUpdate, RemoteNamedRoot, RemoteProllyStore, RemoteStoreBackend,
+    RemoteBatchOp, RemoteManifestUpdate, RemoteNamedRoot, RemoteProllyStore, RemoteRootCondition,
+    RemoteRootWrite, RemoteStoreBackend, RemoteTransactionConflict, RemoteTransactionUpdate,
 };
 
 /// DynamoDB adapter entry point.
@@ -17,12 +18,16 @@ pub mod dynamodb {
     use aws_sdk_dynamodb::operation::put_item::PutItemError;
     use aws_sdk_dynamodb::primitives::Blob;
     use aws_sdk_dynamodb::types::{
-        AttributeDefinition, AttributeValue, BillingMode, DeleteRequest, KeySchemaElement, KeyType,
-        KeysAndAttributes, PutRequest, ReturnValuesOnConditionCheckFailure, ScalarAttributeType,
-        TableDescription, WriteRequest,
+        AttributeDefinition, AttributeValue, BillingMode, ConditionCheck,
+        Delete as TransactDelete, DeleteRequest, KeySchemaElement, KeyType, KeysAndAttributes,
+        Put as TransactPut, PutRequest, ReturnValuesOnConditionCheckFailure, ScalarAttributeType,
+        TableDescription, TransactWriteItem, WriteRequest,
     };
 
-    use crate::{RemoteBatchOp, RemoteManifestUpdate, RemoteNamedRoot, RemoteStoreBackend};
+    use crate::{
+        RemoteBatchOp, RemoteManifestUpdate, RemoteNamedRoot, RemoteRootCondition, RemoteRootWrite,
+        RemoteStoreBackend, RemoteTransactionConflict, RemoteTransactionUpdate,
+    };
 
     /// Store adapter for DynamoDB-backed prolly nodes and roots.
     pub type DynamoDbStore = crate::RemoteProllyStore<DynamoDbBackend>;
@@ -339,6 +344,95 @@ pub mod dynamodb {
 
             Ok(())
         }
+
+        fn condition_check_item(
+            &self,
+            condition: &RemoteRootCondition,
+        ) -> Result<TransactWriteItem, DynamoDbBackendError> {
+            let check = self
+                .apply_root_condition(
+                    ConditionCheck::builder()
+                        .table_name(&self.table_name)
+                        .set_key(Some(self.key_item(self.root_key(&condition.name)))),
+                    condition.expected.as_deref(),
+                )
+                .build()
+                .map_err(DynamoDbBackendError::sdk)?;
+            Ok(TransactWriteItem::builder().condition_check(check).build())
+        }
+
+        fn root_put_item(
+            &self,
+            name: &[u8],
+            manifest: &[u8],
+            condition: Option<&RemoteRootCondition>,
+        ) -> Result<TransactWriteItem, DynamoDbBackendError> {
+            let mut builder = TransactPut::builder()
+                .table_name(&self.table_name)
+                .set_item(Some(self.item(self.root_key(name), manifest)));
+            if let Some(condition) = condition {
+                builder = self.apply_root_condition(builder, condition.expected.as_deref());
+            }
+            let put = builder.build().map_err(DynamoDbBackendError::sdk)?;
+            Ok(TransactWriteItem::builder().put(put).build())
+        }
+
+        fn root_delete_item(
+            &self,
+            name: &[u8],
+            condition: Option<&RemoteRootCondition>,
+        ) -> Result<TransactWriteItem, DynamoDbBackendError> {
+            let mut builder = TransactDelete::builder()
+                .table_name(&self.table_name)
+                .set_key(Some(self.key_item(self.root_key(name))));
+            if let Some(condition) = condition {
+                builder = self.apply_root_condition(builder, condition.expected.as_deref());
+            }
+            let delete = builder.build().map_err(DynamoDbBackendError::sdk)?;
+            Ok(TransactWriteItem::builder().delete(delete).build())
+        }
+
+        fn node_put_item(
+            &self,
+            key: &[u8],
+            value: &[u8],
+        ) -> Result<TransactWriteItem, DynamoDbBackendError> {
+            let put = TransactPut::builder()
+                .table_name(&self.table_name)
+                .set_item(Some(self.item(self.node_key(key), value)))
+                .build()
+                .map_err(DynamoDbBackendError::sdk)?;
+            Ok(TransactWriteItem::builder().put(put).build())
+        }
+
+        fn node_delete_item(&self, key: &[u8]) -> Result<TransactWriteItem, DynamoDbBackendError> {
+            let delete = TransactDelete::builder()
+                .table_name(&self.table_name)
+                .set_key(Some(self.key_item(self.node_key(key))))
+                .build()
+                .map_err(DynamoDbBackendError::sdk)?;
+            Ok(TransactWriteItem::builder().delete(delete).build())
+        }
+
+        fn apply_root_condition<B>(
+            &self,
+            builder: B,
+            expected: Option<&[u8]>,
+        ) -> B
+        where
+            B: RootConditionBuilder,
+        {
+            match expected {
+                Some(expected) => builder
+                    .condition_expression("#value = :expected")
+                    .expression_attribute_names("#value", VALUE_ATTR)
+                    .expression_attribute_values(":expected", binary_attr(expected)),
+                None => builder
+                    .condition_expression("attribute_not_exists(#pk)")
+                    .expression_attribute_names("#pk", PK_ATTR),
+            }
+            .return_values_on_condition_check_failure(ReturnValuesOnConditionCheckFailure::AllOld)
+        }
     }
 
     impl RemoteStoreBackend for DynamoDbBackend {
@@ -654,6 +748,104 @@ pub mod dynamodb {
             }
             Ok(roots)
         }
+
+        fn supports_transactions(&self) -> bool {
+            true
+        }
+
+        async fn commit_transaction(
+            &self,
+            node_writes: &[RemoteBatchOp<'_>],
+            root_conditions: &[RemoteRootCondition],
+            root_writes: &[RemoteRootWrite],
+        ) -> Result<RemoteTransactionUpdate, Self::Error> {
+            let mut items = Vec::new();
+            let conditions_by_name = root_conditions
+                .iter()
+                .map(|condition| (condition.name.as_slice(), condition))
+                .collect::<HashMap<_, _>>();
+            let written_roots = root_writes
+                .iter()
+                .map(|write| match write {
+                    RemoteRootWrite::Put { name, .. } | RemoteRootWrite::Delete { name } => {
+                        name.as_slice()
+                    }
+                })
+                .collect::<HashSet<_>>();
+
+            for condition in root_conditions {
+                if !written_roots.contains(condition.name.as_slice()) {
+                    items.push(self.condition_check_item(condition)?);
+                }
+            }
+            for write in root_writes {
+                match write {
+                    RemoteRootWrite::Put { name, manifest } => {
+                        items.push(self.root_put_item(
+                            name,
+                            manifest,
+                            conditions_by_name.get(name.as_slice()).copied(),
+                        )?);
+                    }
+                    RemoteRootWrite::Delete { name } => {
+                        items.push(self.root_delete_item(
+                            name,
+                            conditions_by_name.get(name.as_slice()).copied(),
+                        )?);
+                    }
+                }
+            }
+            for write in node_writes {
+                match write {
+                    RemoteBatchOp::Upsert { key, value } => {
+                        items.push(self.node_put_item(key, value)?);
+                    }
+                    RemoteBatchOp::Delete { key } => {
+                        items.push(self.node_delete_item(key)?);
+                    }
+                }
+            }
+
+            if items.len() > DYNAMODB_TRANSACTION_WRITE_LIMIT {
+                return Err(DynamoDbBackendError::TransactionTooLarge {
+                    items: items.len(),
+                    limit: DYNAMODB_TRANSACTION_WRITE_LIMIT,
+                });
+            }
+            if items.is_empty() {
+                return Ok(RemoteTransactionUpdate::Applied);
+            }
+
+            match self
+                .client
+                .transact_write_items()
+                .set_transact_items(Some(items))
+                .send()
+                .await
+            {
+                Ok(_) => Ok(RemoteTransactionUpdate::Applied),
+                Err(err)
+                    if err
+                        .as_service_error()
+                        .is_some_and(|err| err.is_transaction_canceled_exception()) =>
+                {
+                    for condition in root_conditions {
+                        let current = self.get_root_manifest(&condition.name).await?;
+                        if current != condition.expected {
+                            return Ok(RemoteTransactionUpdate::Conflict(
+                                RemoteTransactionConflict::new(
+                                    condition.name.clone(),
+                                    condition.expected.clone(),
+                                    current,
+                                ),
+                            ));
+                        }
+                    }
+                    Err(DynamoDbBackendError::sdk(err))
+                }
+                Err(err) => Err(DynamoDbBackendError::sdk(err)),
+            }
+        }
     }
 
     /// Error returned by the DynamoDB backend.
@@ -673,6 +865,13 @@ pub mod dynamodb {
             operation: &'static str,
             /// Number of keys or write requests that remained unprocessed.
             remaining: usize,
+        },
+        /// A single DynamoDB transaction would exceed the service item limit.
+        TransactionTooLarge {
+            /// Number of transaction items requested.
+            items: usize,
+            /// Maximum transaction items allowed by DynamoDB.
+            limit: usize,
         },
     }
 
@@ -699,6 +898,10 @@ pub mod dynamodb {
                 } => write!(
                     f,
                     "DynamoDB {operation} left {remaining} entries unprocessed"
+                ),
+                Self::TransactionTooLarge { items, limit } => write!(
+                    f,
+                    "DynamoDB transaction has {items} items, exceeding the {limit} item limit"
                 ),
             }
         }
@@ -747,6 +950,126 @@ pub mod dynamodb {
         AttributeValue::B(Blob::new(bytes))
     }
 
+    trait RootConditionBuilder: Sized {
+        fn condition_expression(self, input: impl Into<String>) -> Self;
+        fn expression_attribute_names(self, key: impl Into<String>, value: impl Into<String>)
+            -> Self;
+        fn expression_attribute_values(
+            self,
+            key: impl Into<String>,
+            value: AttributeValue,
+        ) -> Self;
+        fn return_values_on_condition_check_failure(
+            self,
+            input: ReturnValuesOnConditionCheckFailure,
+        ) -> Self;
+    }
+
+    impl RootConditionBuilder for aws_sdk_dynamodb::types::builders::ConditionCheckBuilder {
+        fn condition_expression(self, input: impl Into<String>) -> Self {
+            aws_sdk_dynamodb::types::builders::ConditionCheckBuilder::condition_expression(
+                self, input,
+            )
+        }
+
+        fn expression_attribute_names(
+            self,
+            key: impl Into<String>,
+            value: impl Into<String>,
+        ) -> Self {
+            aws_sdk_dynamodb::types::builders::ConditionCheckBuilder::expression_attribute_names(
+                self, key, value,
+            )
+        }
+
+        fn expression_attribute_values(
+            self,
+            key: impl Into<String>,
+            value: AttributeValue,
+        ) -> Self {
+            aws_sdk_dynamodb::types::builders::ConditionCheckBuilder::expression_attribute_values(
+                self, key, value,
+            )
+        }
+
+        fn return_values_on_condition_check_failure(
+            self,
+            input: ReturnValuesOnConditionCheckFailure,
+        ) -> Self {
+            aws_sdk_dynamodb::types::builders::ConditionCheckBuilder::return_values_on_condition_check_failure(self, input)
+        }
+    }
+
+    impl RootConditionBuilder for aws_sdk_dynamodb::types::builders::PutBuilder {
+        fn condition_expression(self, input: impl Into<String>) -> Self {
+            aws_sdk_dynamodb::types::builders::PutBuilder::condition_expression(self, input)
+        }
+
+        fn expression_attribute_names(
+            self,
+            key: impl Into<String>,
+            value: impl Into<String>,
+        ) -> Self {
+            aws_sdk_dynamodb::types::builders::PutBuilder::expression_attribute_names(
+                self, key, value,
+            )
+        }
+
+        fn expression_attribute_values(
+            self,
+            key: impl Into<String>,
+            value: AttributeValue,
+        ) -> Self {
+            aws_sdk_dynamodb::types::builders::PutBuilder::expression_attribute_values(
+                self, key, value,
+            )
+        }
+
+        fn return_values_on_condition_check_failure(
+            self,
+            input: ReturnValuesOnConditionCheckFailure,
+        ) -> Self {
+            aws_sdk_dynamodb::types::builders::PutBuilder::return_values_on_condition_check_failure(
+                self, input,
+            )
+        }
+    }
+
+    impl RootConditionBuilder for aws_sdk_dynamodb::types::builders::DeleteBuilder {
+        fn condition_expression(self, input: impl Into<String>) -> Self {
+            aws_sdk_dynamodb::types::builders::DeleteBuilder::condition_expression(self, input)
+        }
+
+        fn expression_attribute_names(
+            self,
+            key: impl Into<String>,
+            value: impl Into<String>,
+        ) -> Self {
+            aws_sdk_dynamodb::types::builders::DeleteBuilder::expression_attribute_names(
+                self, key, value,
+            )
+        }
+
+        fn expression_attribute_values(
+            self,
+            key: impl Into<String>,
+            value: AttributeValue,
+        ) -> Self {
+            aws_sdk_dynamodb::types::builders::DeleteBuilder::expression_attribute_values(
+                self, key, value,
+            )
+        }
+
+        fn return_values_on_condition_check_failure(
+            self,
+            input: ReturnValuesOnConditionCheckFailure,
+        ) -> Self {
+            aws_sdk_dynamodb::types::builders::DeleteBuilder::return_values_on_condition_check_failure(
+                self, input,
+            )
+        }
+    }
+
     fn binary_value_attr(
         item: &HashMap<String, AttributeValue>,
         attribute: &'static str,
@@ -764,6 +1087,7 @@ pub mod dynamodb {
     const DEFAULT_READ_PARALLELISM: usize = 16;
     const DYNAMODB_BATCH_GET_LIMIT: usize = 100;
     const DYNAMODB_BATCH_WRITE_LIMIT: usize = 25;
+    const DYNAMODB_TRANSACTION_WRITE_LIMIT: usize = 100;
     const DYNAMODB_BATCH_RETRY_LIMIT: usize = 8;
     const PK_ATTR: &str = "pk";
     const VALUE_ATTR: &str = "value";

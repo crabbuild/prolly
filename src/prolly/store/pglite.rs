@@ -11,9 +11,14 @@ use std::sync::{Mutex, MutexGuard};
 
 use serde_json::{json, Map, Value};
 
+use super::super::error::Error;
 use super::super::manifest::{
     sort_named_root_manifests, ManifestStore, ManifestStoreScan, ManifestUpdate, NamedRootManifest,
     RootManifest,
+};
+use super::super::transaction::{
+    RootCondition, RootWrite, TransactionConflict, TransactionNodeWrite, TransactionUpdate,
+    TransactionalStore,
 };
 use super::{cid_from_store_key, sort_cids, BatchOp, NodeStoreScan, OrderedBatchReadPlan, Store};
 
@@ -218,6 +223,44 @@ async function handle(request) {
           await upsertRoot(request.name, request.new);
         }
         return { applied: true, current: request.new };
+      });
+    case 'commit_transaction':
+      return await inTransaction(async () => {
+        for (const condition of request.root_conditions || []) {
+          const current = await readRoot(condition.name);
+          if (current !== condition.expected) {
+            return {
+              applied: false,
+              conflict: {
+                name: condition.name,
+                expected: condition.expected,
+                current
+              }
+            };
+          }
+        }
+
+        for (const op of request.node_writes || []) {
+          if (op.kind === 'upsert') {
+            await upsertNode(op.key, op.value);
+          } else if (op.kind === 'delete') {
+            await deleteNode(op.key);
+          } else {
+            throw new Error(`unknown transaction node op: ${op.kind}`);
+          }
+        }
+
+        for (const op of request.root_writes || []) {
+          if (op.kind === 'put') {
+            await upsertRoot(op.name, op.manifest);
+          } else if (op.kind === 'delete') {
+            await deleteRoot(op.name);
+          } else {
+            throw new Error(`unknown transaction root op: ${op.kind}`);
+          }
+        }
+
+        return { applied: true };
       });
     case 'shutdown':
       await db.close();
@@ -737,6 +780,106 @@ impl ManifestStoreScan for PgliteStore {
         }
         sort_named_root_manifests(&mut roots);
         Ok(roots)
+    }
+}
+
+impl TransactionalStore for PgliteStore {
+    fn supports_transactions(&self) -> bool {
+        true
+    }
+
+    fn commit_transaction(
+        &self,
+        node_writes: &[TransactionNodeWrite],
+        root_conditions: &[RootCondition],
+        root_writes: &[RootWrite],
+    ) -> Result<TransactionUpdate, Error> {
+        let nodes_written = node_writes.len();
+        let roots_written = root_writes.len();
+        let node_writes = node_writes
+            .iter()
+            .map(|write| match write {
+                TransactionNodeWrite::Upsert { key, value } => json!({
+                    "kind": "upsert",
+                    "key": hex::encode(key),
+                    "value": hex::encode(value)
+                }),
+                TransactionNodeWrite::Delete { key } => json!({
+                    "kind": "delete",
+                    "key": hex::encode(key)
+                }),
+            })
+            .collect::<Vec<_>>();
+        let root_conditions = root_conditions
+            .iter()
+            .map(|condition| {
+                Ok(json!({
+                    "name": hex::encode(&condition.name),
+                    "expected": optional_root_manifest_json(condition.expected.as_ref())?
+                }))
+            })
+            .collect::<Result<Vec<_>, PgliteStoreError>>()
+            .map_err(|err| Error::Store(Box::new(err)))?;
+        let root_writes = root_writes
+            .iter()
+            .map(|write| match write {
+                RootWrite::Put { name, manifest } => Ok(json!({
+                    "kind": "put",
+                    "name": hex::encode(name),
+                    "manifest": root_manifest_hex(manifest)?
+                })),
+                RootWrite::Delete { name } => Ok(json!({
+                    "kind": "delete",
+                    "name": hex::encode(name)
+                })),
+            })
+            .collect::<Result<Vec<_>, PgliteStoreError>>()
+            .map_err(|err| Error::Store(Box::new(err)))?;
+
+        let mut fields = Map::new();
+        fields.insert("node_writes".to_string(), Value::Array(node_writes));
+        fields.insert("root_conditions".to_string(), Value::Array(root_conditions));
+        fields.insert("root_writes".to_string(), Value::Array(root_writes));
+
+        let result = self
+            .request("commit_transaction", fields)
+            .map_err(|err| Error::Store(Box::new(err)))?;
+        let applied = result
+            .get("applied")
+            .and_then(Value::as_bool)
+            .ok_or_else(|| {
+                Error::Store(Box::new(PgliteStoreError::new(
+                    "PGlite transaction response missing applied flag",
+                )))
+            })?;
+        if applied {
+            return Ok(TransactionUpdate::Applied {
+                nodes_written,
+                roots_written,
+            });
+        }
+
+        let conflict = result.get("conflict").ok_or_else(|| {
+            Error::Store(Box::new(PgliteStoreError::new(
+                "PGlite transaction conflict response missing conflict",
+            )))
+        })?;
+        let name = hex_value(
+            conflict.get("name").ok_or_else(|| {
+                Error::Store(Box::new(PgliteStoreError::new(
+                    "PGlite transaction conflict missing name",
+                )))
+            })?,
+            "transaction conflict name",
+        )
+        .map_err(|err| Error::Store(Box::new(err)))?;
+        let expected = root_manifest_option(conflict.get("expected"))
+            .map_err(|err| Error::Store(Box::new(err)))?;
+        let current = root_manifest_option(conflict.get("current"))
+            .map_err(|err| Error::Store(Box::new(err)))?;
+        Ok(TransactionUpdate::Conflict(TransactionConflict::new(
+            name, expected, current,
+        )))
     }
 }
 

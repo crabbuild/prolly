@@ -32,6 +32,60 @@ class ProllySmokeTest {
     }
 
     @Test
+    void memoryTransactionCommitsRollsBackAndConflicts() throws Exception {
+        Prolly.useLocalDebugLibrary();
+
+        try (Prolly prolly = Prolly.memory()) {
+            byte[] sourceName = "tickets/source/current".getBytes();
+            byte[] rollbackName = "tickets/source/rolled-back".getBytes();
+            byte[] conflictName = "tickets/source/conflict".getBytes();
+
+            try (Transaction transaction = prolly.beginTransaction()) {
+                TreeRecord tree = transaction.put(
+                        transaction.create(),
+                        "ticket/123/status".getBytes(),
+                        "open".getBytes());
+                transaction.publishNamedRoot(sourceName, tree);
+                TransactionUpdate update = transaction.commit();
+                assertTrue(update.applied());
+                assertFalse(update.conflict());
+                assertTrue(update.nodesWritten() > 0);
+                assertEquals(1, update.rootsWritten());
+                assertArrayEquals(tree.getRoot(), prolly.loadNamedRoot(sourceName).orElseThrow().getRoot());
+            }
+
+            try (Transaction transaction = prolly.beginTransaction()) {
+                TreeRecord rolledBack = transaction.put(
+                        transaction.create(),
+                        "ticket/456/status".getBytes(),
+                        "closed".getBytes());
+                transaction.publishNamedRoot(rollbackName, rolledBack);
+                transaction.rollback();
+                assertTrue(prolly.loadNamedRoot(rollbackName).isEmpty());
+            }
+
+            try (Transaction stale = prolly.beginTransaction()) {
+                assertTrue(stale.loadNamedRoot(conflictName).isEmpty());
+                TreeRecord winner = prolly.put(
+                        prolly.create(),
+                        "ticket/789/status".getBytes(),
+                        "open".getBytes());
+                prolly.publishNamedRoot(conflictName, winner);
+                TreeRecord loser = stale.put(
+                        stale.create(),
+                        "ticket/789/status".getBytes(),
+                        "closed".getBytes());
+                stale.publishNamedRoot(conflictName, loser);
+                TransactionUpdate conflict = stale.commit();
+                assertFalse(conflict.applied());
+                assertTrue(conflict.conflict());
+                assertArrayEquals(conflictName, conflict.conflictDetail().name());
+                assertArrayEquals(winner.getRoot(), prolly.loadNamedRoot(conflictName).orElseThrow().getRoot());
+            }
+        }
+    }
+
+    @Test
     void customStoreCallbacksDriveEngine() throws Exception {
         Prolly.useLocalDebugLibrary();
 

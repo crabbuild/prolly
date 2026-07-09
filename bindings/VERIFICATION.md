@@ -15,6 +15,7 @@ async wrappers.
 | Diff/merge | eager diff, range diff, conflict pages, built-in resolvers, merge explanations, range/prefix merge |
 | Host callbacks | custom merge resolvers, custom CRDT resolvers, custom merge policies, custom stores |
 | Stores/roots | memory, file, SQLite, SQLite in-memory, named roots, snapshot namespaces, CAS, retention |
+| Transactions | built-in transaction begin/commit/rollback, read-own-writes, named-root conflict detection |
 | Operational | stats JSON, debug text/JSON, cache pin/clear stats, metrics reset, hints |
 | Data flows | large values, blob stores, blob GC, node GC, missing-node sync, CRDT helpers, tombstones |
 | Async/context | Promise, coroutine, `CompletableFuture`, Ruby `Future`, Swift `async` wrapper follow-ups, and Go `context.Context` wrappers where available |

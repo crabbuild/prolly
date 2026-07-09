@@ -2104,6 +2104,50 @@ end
     end
   end
 
+  # The Record type TransactionConflictRecord.
+
+  def self.check_lower_TypeTransactionConflictRecord(v)
+
+    RustBuffer.check_lower_OptionalTypeRootManifestRecord(v.expected)
+    RustBuffer.check_lower_OptionalTypeRootManifestRecord(v.current)
+  end
+
+  def self.alloc_from_TypeTransactionConflictRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeTransactionConflictRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeTransactionConflictRecord
+    consumeWithStream do |stream|
+      return stream.readTypeTransactionConflictRecord
+    end
+  end
+
+  # The Record type TransactionUpdateRecord.
+
+  def self.check_lower_TypeTransactionUpdateRecord(v)
+
+
+
+
+    RustBuffer.check_lower_OptionalTypeTransactionConflictRecord(v.conflict_detail)
+  end
+
+  def self.alloc_from_TypeTransactionUpdateRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeTransactionUpdateRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeTransactionUpdateRecord
+    consumeWithStream do |stream|
+      return stream.readTypeTransactionUpdateRecord
+    end
+  end
+
   # The Record type TreeDebugComparedNodeRecord.
 
   def self.check_lower_TypeTreeDebugComparedNodeRecord(v)
@@ -3071,6 +3115,27 @@ end
     end
   end
 
+  # The Optional<T> type for TypeTransactionConflictRecord.
+
+  def self.check_lower_OptionalTypeTransactionConflictRecord(v)
+    if not v.nil?
+      RustBuffer.check_lower_TypeTransactionConflictRecord(v)
+    end
+  end
+
+  def self.alloc_from_OptionalTypeTransactionConflictRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_OptionalTypeTransactionConflictRecord(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoOptionalTypeTransactionConflictRecord
+    consumeWithStream do |stream|
+      return stream.readOptionalTypeTransactionConflictRecord
+    end
+  end
+
   # The Optional<T> type for TypeTreeRecord.
 
   def self.check_lower_OptionalTypeTreeRecord(v)
@@ -3878,6 +3943,13 @@ class RustBufferStream
   def readTypeProllyEngine
     handle = unpack_from 8, 'Q>'
     return ProllyEngine.uniffi_allocate(handle)
+  end
+
+  # The Object type ProllyTransaction.
+
+  def readTypeProllyTransaction
+    handle = unpack_from 8, 'Q>'
+    return ProllyTransaction.uniffi_allocate(handle)
   end
 
   # The Record type AuthenticatedProofBundleVerificationRecord.
@@ -4890,6 +4962,28 @@ class RustBufferStream
     )
   end
 
+  # The Record type TransactionConflictRecord.
+
+  def readTypeTransactionConflictRecord
+    TransactionConflictRecord.new(
+      name: readBytes,
+      expected: readOptionalTypeRootManifestRecord,
+      current: readOptionalTypeRootManifestRecord
+    )
+  end
+
+  # The Record type TransactionUpdateRecord.
+
+  def readTypeTransactionUpdateRecord
+    TransactionUpdateRecord.new(
+      applied: readBool,
+      conflict: readBool,
+      nodes_written: readU64,
+      roots_written: readU64,
+      conflict_detail: readOptionalTypeTransactionConflictRecord
+    )
+  end
+
   # The Record type TreeDebugComparedNodeRecord.
 
   def readTypeTreeDebugComparedNodeRecord
@@ -5746,6 +5840,20 @@ class RustBufferStream
     end
   end
 
+  # The Optional<T> type for TypeTransactionConflictRecord.
+
+  def readOptionalTypeTransactionConflictRecord
+    flag = unpack_from 1, 'c'
+
+    if flag == 0
+      return nil
+    elsif flag == 1
+      return readTypeTransactionConflictRecord
+    else
+      raise InternalError, 'Unexpected flag byte for OptionalTypeTransactionConflictRecord'
+    end
+  end
+
   # The Optional<T> type for TypeTreeRecord.
 
   def readOptionalTypeTreeRecord
@@ -6374,6 +6482,13 @@ class RustBufferBuilder
 
   def write_TypeProllyEngine(obj)
     handle = ProllyEngine.uniffi_lower obj
+    pack_into(8, 'Q>', handle)
+  end
+
+  # The Object type ProllyTransaction.
+
+  def write_TypeProllyTransaction(obj)
+    handle = ProllyTransaction.uniffi_lower obj
     pack_into(8, 'Q>', handle)
   end
 
@@ -7211,6 +7326,24 @@ class RustBufferBuilder
     self.write_SequenceTypeTombstoneMetadataRecord(v.causal_metadata)
   end
 
+  # The Record type TransactionConflictRecord.
+
+  def write_TypeTransactionConflictRecord(v)
+    self.write_Bytes(v.name)
+    self.write_OptionalTypeRootManifestRecord(v.expected)
+    self.write_OptionalTypeRootManifestRecord(v.current)
+  end
+
+  # The Record type TransactionUpdateRecord.
+
+  def write_TypeTransactionUpdateRecord(v)
+    self.write_Bool(v.applied)
+    self.write_Bool(v.conflict)
+    self.write_U64(v.nodes_written)
+    self.write_U64(v.roots_written)
+    self.write_OptionalTypeTransactionConflictRecord(v.conflict_detail)
+  end
+
   # The Record type TreeDebugComparedNodeRecord.
 
   def write_TypeTreeDebugComparedNodeRecord(v)
@@ -7646,6 +7779,17 @@ class RustBufferBuilder
     end
   end
 
+  # The Optional<T> type for TypeTransactionConflictRecord.
+
+  def write_OptionalTypeTransactionConflictRecord(v)
+    if v.nil?
+      pack_into(1, 'c', 0)
+    else
+      pack_into(1, 'c', 1)
+      self.write_TypeTransactionConflictRecord(v)
+    end
+  end
+
   # The Optional<T> type for TypeTreeRecord.
 
   def write_OptionalTypeTreeRecord(v)
@@ -8035,107 +8179,107 @@ CALL_PANIC = 2
 
 module ProllyBindingError
   class InvalidArgument < StandardError
-    def initialize(message)
-        @message = message
+    def initialize(reason)
+        @reason = reason
         super()
       end
 
-    attr_reader :message
+    attr_reader :reason
 
 
     def to_s
-     "#{self.class.name}(message=#{@message.inspect})"
+     "#{self.class.name}(reason=#{@reason.inspect})"
     end
   end
   class InvalidCid < StandardError
-    def initialize(message)
-        @message = message
+    def initialize(reason)
+        @reason = reason
         super()
       end
 
-    attr_reader :message
+    attr_reader :reason
 
 
     def to_s
-     "#{self.class.name}(message=#{@message.inspect})"
+     "#{self.class.name}(reason=#{@reason.inspect})"
     end
   end
   class InvalidNode < StandardError
-    def initialize(message)
-        @message = message
+    def initialize(reason)
+        @reason = reason
         super()
       end
 
-    attr_reader :message
+    attr_reader :reason
 
 
     def to_s
-     "#{self.class.name}(message=#{@message.inspect})"
+     "#{self.class.name}(reason=#{@reason.inspect})"
     end
   end
   class NotFound < StandardError
-    def initialize(message)
-        @message = message
+    def initialize(reason)
+        @reason = reason
         super()
       end
 
-    attr_reader :message
+    attr_reader :reason
 
 
     def to_s
-     "#{self.class.name}(message=#{@message.inspect})"
+     "#{self.class.name}(reason=#{@reason.inspect})"
     end
   end
   class Conflict < StandardError
-    def initialize(message)
-        @message = message
+    def initialize(reason)
+        @reason = reason
         super()
       end
 
-    attr_reader :message
+    attr_reader :reason
 
 
     def to_s
-     "#{self.class.name}(message=#{@message.inspect})"
+     "#{self.class.name}(reason=#{@reason.inspect})"
     end
   end
   class Store < StandardError
-    def initialize(message)
-        @message = message
+    def initialize(reason)
+        @reason = reason
         super()
       end
 
-    attr_reader :message
+    attr_reader :reason
 
 
     def to_s
-     "#{self.class.name}(message=#{@message.inspect})"
+     "#{self.class.name}(reason=#{@reason.inspect})"
     end
   end
   class Serialization < StandardError
-    def initialize(message)
-        @message = message
+    def initialize(reason)
+        @reason = reason
         super()
       end
 
-    attr_reader :message
+    attr_reader :reason
 
 
     def to_s
-     "#{self.class.name}(message=#{@message.inspect})"
+     "#{self.class.name}(reason=#{@reason.inspect})"
     end
   end
   class Internal < StandardError
-    def initialize(message)
-        @message = message
+    def initialize(reason)
+        @reason = reason
         super()
       end
 
-    attr_reader :message
+    attr_reader :reason
 
 
     def to_s
-     "#{self.class.name}(message=#{@message.inspect})"
+     "#{self.class.name}(reason=#{@reason.inspect})"
     end
   end
 
@@ -8236,7 +8380,7 @@ module UniFFILib
   extend FFI::Library
 
 
-  ffi_lib ENV['PROLLY_BINDINGS_LIBRARY'] || 'prolly_bindings'
+  ffi_lib 'prolly_bindings'
 
 
   attach_function :uniffi_prolly_bindings_fn_clone_crdtresolvercallback,
@@ -8413,6 +8557,9 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_fn_method_prollyengine_batch_with_stats,
     [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_prollyengine_begin_transaction,
+    [:uint64, RustCallStatus.by_ref],
+    :uint64
   attach_function :uniffi_prolly_bindings_fn_method_prollyengine_build_from_entries,
     [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
@@ -8737,6 +8884,45 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_fn_method_prollyengine_upper_bound,
     [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_clone_prollytransaction,
+    [:uint64, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_free_prollytransaction,
+    [:uint64, RustCallStatus.by_ref],
+    :void
+  attach_function :uniffi_prolly_bindings_fn_method_prollytransaction_batch,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_prollytransaction_commit,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_prollytransaction_compare_and_swap_named_root,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_prollytransaction_create,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_prollytransaction_delete,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_prollytransaction_delete_named_root,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    :void
+  attach_function :uniffi_prolly_bindings_fn_method_prollytransaction_get,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_prollytransaction_load_named_root,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_prollytransaction_publish_named_root,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    :void
+  attach_function :uniffi_prolly_bindings_fn_method_prollytransaction_put,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_prollytransaction_rollback,
+    [:uint64, RustCallStatus.by_ref],
+    :void
   attach_function :uniffi_prolly_bindings_fn_func_authenticated_proof_envelope_from_bytes,
     [RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
@@ -9586,6 +9772,9 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_batch_with_stats,
     [RustCallStatus.by_ref],
     :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_begin_transaction,
+    [RustCallStatus.by_ref],
+    :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_build_from_entries,
     [RustCallStatus.by_ref],
     :uint16
@@ -9908,6 +10097,39 @@ module UniFFILib
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_upper_bound,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_prollytransaction_batch,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_prollytransaction_commit,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_prollytransaction_compare_and_swap_named_root,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_prollytransaction_create,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_prollytransaction_delete,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_prollytransaction_delete_named_root,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_prollytransaction_get,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_prollytransaction_load_named_root,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_prollytransaction_publish_named_root,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_prollytransaction_put,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_prollytransaction_rollback,
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_constructor_mergepolicyregistry_new,
@@ -12889,6 +13111,64 @@ class TombstoneRecord
   end
 end
 
+  # Record type TransactionConflictRecord
+class TransactionConflictRecord
+  attr_reader :name, :expected, :current
+
+  def initialize(name:, expected:, current:)
+    @name = name
+    @expected = expected
+    @current = current
+  end
+
+  def ==(other)
+    if @name != other.name
+      return false
+    end
+    if @expected != other.expected
+      return false
+    end
+    if @current != other.current
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type TransactionUpdateRecord
+class TransactionUpdateRecord
+  attr_reader :applied, :conflict, :nodes_written, :roots_written, :conflict_detail
+
+  def initialize(applied:, conflict:, nodes_written:, roots_written:, conflict_detail:)
+    @applied = applied
+    @conflict = conflict
+    @nodes_written = nodes_written
+    @roots_written = roots_written
+    @conflict_detail = conflict_detail
+  end
+
+  def ==(other)
+    if @applied != other.applied
+      return false
+    end
+    if @conflict != other.conflict
+      return false
+    end
+    if @nodes_written != other.nodes_written
+      return false
+    end
+    if @roots_written != other.roots_written
+      return false
+    end
+    if @conflict_detail != other.conflict_detail
+      return false
+    end
+
+    true
+  end
+end
+
   # Record type TreeDebugComparedNodeRecord
 class TreeDebugComparedNodeRecord
   attr_reader :status, :node
@@ -13374,10 +13654,10 @@ def self.changed_span(start, _end)
     start = Prolly::uniffi_bytes(start)
 
 
-    _end = (_end ? Prolly::uniffi_bytes(_end) : nil)
-    RustBuffer.check_lower_Optionalbytes(_end)
+    end = (end ? Prolly::uniffi_bytes(end) : nil)
+    RustBuffer.check_lower_Optionalbytes(end)
 
-  result = Prolly.rust_call(:uniffi_prolly_bindings_fn_func_changed_span,RustBuffer.allocFromBytes(start),RustBuffer.alloc_from_Optionalbytes(_end))
+  result = Prolly.rust_call(:uniffi_prolly_bindings_fn_func_changed_span,RustBuffer.allocFromBytes(start),RustBuffer.alloc_from_Optionalbytes(end))
   return result.consumeIntoTypeChangedSpanRecord
 end
 
@@ -13983,13 +14263,13 @@ def self.range_page_proof_from_node_bytes(root, after, _end, path_node_bytes)
     after = (after ? Prolly::uniffi_bytes(after) : nil)
     RustBuffer.check_lower_Optionalbytes(after)
 
-    _end = (_end ? Prolly::uniffi_bytes(_end) : nil)
-    RustBuffer.check_lower_Optionalbytes(_end)
+    end = (end ? Prolly::uniffi_bytes(end) : nil)
+    RustBuffer.check_lower_Optionalbytes(end)
 
     path_node_bytes = path_node_bytes.map { |v| Prolly::uniffi_bytes(v) }
     RustBuffer.check_lower_Sequencebytes(path_node_bytes)
 
-  result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_func_range_page_proof_from_node_bytes,RustBuffer.alloc_from_Optionalbytes(root),RustBuffer.alloc_from_Optionalbytes(after),RustBuffer.alloc_from_Optionalbytes(_end),RustBuffer.alloc_from_Sequencebytes(path_node_bytes))
+  result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_func_range_page_proof_from_node_bytes,RustBuffer.alloc_from_Optionalbytes(root),RustBuffer.alloc_from_Optionalbytes(after),RustBuffer.alloc_from_Optionalbytes(end),RustBuffer.alloc_from_Sequencebytes(path_node_bytes))
   return result.consumeIntoTypeRangePageProofRecord
 end
 
@@ -14040,13 +14320,13 @@ def self.range_proof_from_node_bytes(root, start, _end, path_node_bytes)
     start = Prolly::uniffi_bytes(start)
 
 
-    _end = (_end ? Prolly::uniffi_bytes(_end) : nil)
-    RustBuffer.check_lower_Optionalbytes(_end)
+    end = (end ? Prolly::uniffi_bytes(end) : nil)
+    RustBuffer.check_lower_Optionalbytes(end)
 
     path_node_bytes = path_node_bytes.map { |v| Prolly::uniffi_bytes(v) }
     RustBuffer.check_lower_Sequencebytes(path_node_bytes)
 
-  result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_func_range_proof_from_node_bytes,RustBuffer.alloc_from_Optionalbytes(root),RustBuffer.allocFromBytes(start),RustBuffer.alloc_from_Optionalbytes(_end),RustBuffer.alloc_from_Sequencebytes(path_node_bytes))
+  result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_func_range_proof_from_node_bytes,RustBuffer.alloc_from_Optionalbytes(root),RustBuffer.allocFromBytes(start),RustBuffer.alloc_from_Optionalbytes(end),RustBuffer.alloc_from_Sequencebytes(path_node_bytes))
   return result.consumeIntoTypeRangeProofRecord
 end
 
@@ -15462,6 +15742,10 @@ end
     result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_batch_with_stats,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.alloc_from_SequenceTypeMutationRecord(mutations))
     return result.consumeIntoTypeBatchApplyResultRecord
   end
+  def begin_transaction()
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_begin_transaction,uniffi_clone_handle(),)
+    return ProllyTransaction.uniffi_allocate(result)
+  end
   def build_from_entries(entries)
         entries = entries
         RustBuffer.check_lower_SequenceTypeEntryRecord(entries)
@@ -15599,11 +15883,11 @@ end
         RustBuffer.check_lower_TypeTreeRecord(tree)
         key = Prolly::uniffi_bytes(key)
 
-        _end = (_end ? Prolly::uniffi_bytes(_end) : nil)
-        RustBuffer.check_lower_Optionalbytes(_end)
+        end = (end ? Prolly::uniffi_bytes(end) : nil)
+        RustBuffer.check_lower_Optionalbytes(end)
         limit = Prolly::uniffi_in_range(limit, "u64", 0, 2**64)
 
-    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_cursor_window,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.allocFromBytes(key),RustBuffer.alloc_from_Optionalbytes(_end),limit)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_cursor_window,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.allocFromBytes(key),RustBuffer.alloc_from_Optionalbytes(end),limit)
     return result.consumeIntoTypeCursorWindowRecord
   end
   def debug_compare_trees(left, right)
@@ -15685,9 +15969,9 @@ end
         RustBuffer.check_lower_TypeTreeRecord(other)
         cursor = (cursor ? cursor : nil)
         RustBuffer.check_lower_OptionalTypeRangeCursorRecord(cursor)
-        _end = (_end ? Prolly::uniffi_bytes(_end) : nil)
-        RustBuffer.check_lower_Optionalbytes(_end)
-    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_diff_from_cursor,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(base),RustBuffer.alloc_from_TypeTreeRecord(other),RustBuffer.alloc_from_OptionalTypeRangeCursorRecord(cursor),RustBuffer.alloc_from_Optionalbytes(_end))
+        end = (end ? Prolly::uniffi_bytes(end) : nil)
+        RustBuffer.check_lower_Optionalbytes(end)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_diff_from_cursor,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(base),RustBuffer.alloc_from_TypeTreeRecord(other),RustBuffer.alloc_from_OptionalTypeRangeCursorRecord(cursor),RustBuffer.alloc_from_Optionalbytes(end))
     return result.consumeIntoSequenceTypeDiffRecord
   end
   def diff_page(base, other, cursor, _end, limit)
@@ -15697,11 +15981,11 @@ end
         RustBuffer.check_lower_TypeTreeRecord(other)
         cursor = (cursor ? cursor : nil)
         RustBuffer.check_lower_OptionalTypeRangeCursorRecord(cursor)
-        _end = (_end ? Prolly::uniffi_bytes(_end) : nil)
-        RustBuffer.check_lower_Optionalbytes(_end)
+        end = (end ? Prolly::uniffi_bytes(end) : nil)
+        RustBuffer.check_lower_Optionalbytes(end)
         limit = Prolly::uniffi_in_range(limit, "u64", 0, 2**64)
 
-    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_diff_page,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(base),RustBuffer.alloc_from_TypeTreeRecord(other),RustBuffer.alloc_from_OptionalTypeRangeCursorRecord(cursor),RustBuffer.alloc_from_Optionalbytes(_end),limit)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_diff_page,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(base),RustBuffer.alloc_from_TypeTreeRecord(other),RustBuffer.alloc_from_OptionalTypeRangeCursorRecord(cursor),RustBuffer.alloc_from_Optionalbytes(end),limit)
     return result.consumeIntoTypeDiffPageRecord
   end
   def export_snapshot(tree)
@@ -15949,11 +16233,11 @@ end
         RustBuffer.check_lower_TypeTreeRecord(right)
         start = Prolly::uniffi_bytes(start)
 
-        _end = (_end ? Prolly::uniffi_bytes(_end) : nil)
-        RustBuffer.check_lower_Optionalbytes(_end)
+        end = (end ? Prolly::uniffi_bytes(end) : nil)
+        RustBuffer.check_lower_Optionalbytes(end)
         resolver = (resolver ? Prolly::uniffi_utf8(resolver) : nil)
         RustBuffer.check_lower_Optionalstring(resolver)
-    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_merge_range,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(base),RustBuffer.alloc_from_TypeTreeRecord(left),RustBuffer.alloc_from_TypeTreeRecord(right),RustBuffer.allocFromBytes(start),RustBuffer.alloc_from_Optionalbytes(_end),RustBuffer.alloc_from_Optionalstring(resolver))
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_merge_range,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(base),RustBuffer.alloc_from_TypeTreeRecord(left),RustBuffer.alloc_from_TypeTreeRecord(right),RustBuffer.allocFromBytes(start),RustBuffer.alloc_from_Optionalbytes(end),RustBuffer.alloc_from_Optionalstring(resolver))
     return result.consumeIntoTypeTreeRecord
   end
   def merge_range_with_policy(base, left, right, start, _end, policy)
@@ -15965,11 +16249,11 @@ end
         RustBuffer.check_lower_TypeTreeRecord(right)
         start = Prolly::uniffi_bytes(start)
 
-        _end = (_end ? Prolly::uniffi_bytes(_end) : nil)
-        RustBuffer.check_lower_Optionalbytes(_end)
+        end = (end ? Prolly::uniffi_bytes(end) : nil)
+        RustBuffer.check_lower_Optionalbytes(end)
         policy = policy
         (MergePolicyRegistry.uniffi_check_lower policy)
-    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_merge_range_with_policy,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(base),RustBuffer.alloc_from_TypeTreeRecord(left),RustBuffer.alloc_from_TypeTreeRecord(right),RustBuffer.allocFromBytes(start),RustBuffer.alloc_from_Optionalbytes(_end),(MergePolicyRegistry.uniffi_lower policy))
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_merge_range_with_policy,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(base),RustBuffer.alloc_from_TypeTreeRecord(left),RustBuffer.alloc_from_TypeTreeRecord(right),RustBuffer.allocFromBytes(start),RustBuffer.alloc_from_Optionalbytes(end),(MergePolicyRegistry.uniffi_lower policy))
     return result.consumeIntoTypeTreeRecord
   end
   def merge_range_with_resolver(base, left, right, start, _end, resolver)
@@ -15981,11 +16265,11 @@ end
         RustBuffer.check_lower_TypeTreeRecord(right)
         start = Prolly::uniffi_bytes(start)
 
-        _end = (_end ? Prolly::uniffi_bytes(_end) : nil)
-        RustBuffer.check_lower_Optionalbytes(_end)
+        end = (end ? Prolly::uniffi_bytes(end) : nil)
+        RustBuffer.check_lower_Optionalbytes(end)
         resolver = resolver
         (MergeResolverCallback.uniffi_check_lower resolver)
-    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_merge_range_with_resolver,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(base),RustBuffer.alloc_from_TypeTreeRecord(left),RustBuffer.alloc_from_TypeTreeRecord(right),RustBuffer.allocFromBytes(start),RustBuffer.alloc_from_Optionalbytes(_end),(MergeResolverCallback.uniffi_lower resolver))
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_merge_range_with_resolver,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(base),RustBuffer.alloc_from_TypeTreeRecord(left),RustBuffer.alloc_from_TypeTreeRecord(right),RustBuffer.allocFromBytes(start),RustBuffer.alloc_from_Optionalbytes(end),(MergeResolverCallback.uniffi_lower resolver))
     return result.consumeIntoTypeTreeRecord
   end
   def merge_with_policy(base, left, right, policy)
@@ -16135,11 +16419,11 @@ end
         RustBuffer.check_lower_TypeTreeRecord(other)
         cursor = (cursor ? cursor : nil)
         RustBuffer.check_lower_OptionalTypeRangeCursorRecord(cursor)
-        _end = (_end ? Prolly::uniffi_bytes(_end) : nil)
-        RustBuffer.check_lower_Optionalbytes(_end)
+        end = (end ? Prolly::uniffi_bytes(end) : nil)
+        RustBuffer.check_lower_Optionalbytes(end)
         limit = Prolly::uniffi_in_range(limit, "u64", 0, 2**64)
 
-    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_prove_diff_page,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(base),RustBuffer.alloc_from_TypeTreeRecord(other),RustBuffer.alloc_from_OptionalTypeRangeCursorRecord(cursor),RustBuffer.alloc_from_Optionalbytes(_end),limit)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_prove_diff_page,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(base),RustBuffer.alloc_from_TypeTreeRecord(other),RustBuffer.alloc_from_OptionalTypeRangeCursorRecord(cursor),RustBuffer.alloc_from_Optionalbytes(end),limit)
     return result.consumeIntoTypeProvedDiffPageRecord
   end
   def prove_key(tree, key)
@@ -16171,9 +16455,9 @@ end
         RustBuffer.check_lower_TypeTreeRecord(tree)
         start = Prolly::uniffi_bytes(start)
 
-        _end = (_end ? Prolly::uniffi_bytes(_end) : nil)
-        RustBuffer.check_lower_Optionalbytes(_end)
-    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_prove_range,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.allocFromBytes(start),RustBuffer.alloc_from_Optionalbytes(_end))
+        end = (end ? Prolly::uniffi_bytes(end) : nil)
+        RustBuffer.check_lower_Optionalbytes(end)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_prove_range,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.allocFromBytes(start),RustBuffer.alloc_from_Optionalbytes(end))
     return result.consumeIntoTypeRangeProofRecord
   end
   def prove_range_page(tree, cursor, _end, limit)
@@ -16181,11 +16465,11 @@ end
         RustBuffer.check_lower_TypeTreeRecord(tree)
         cursor = (cursor ? cursor : nil)
         RustBuffer.check_lower_OptionalTypeRangeCursorRecord(cursor)
-        _end = (_end ? Prolly::uniffi_bytes(_end) : nil)
-        RustBuffer.check_lower_Optionalbytes(_end)
+        end = (end ? Prolly::uniffi_bytes(end) : nil)
+        RustBuffer.check_lower_Optionalbytes(end)
         limit = Prolly::uniffi_in_range(limit, "u64", 0, 2**64)
 
-    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_prove_range_page,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.alloc_from_OptionalTypeRangeCursorRecord(cursor),RustBuffer.alloc_from_Optionalbytes(_end),limit)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_prove_range_page,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.alloc_from_OptionalTypeRangeCursorRecord(cursor),RustBuffer.alloc_from_Optionalbytes(end),limit)
     return result.consumeIntoTypeProvedRangePageRecord
   end
   def publish_changed_spans_hint(base, changed, spans)
@@ -16275,9 +16559,9 @@ end
         RustBuffer.check_lower_TypeTreeRecord(tree)
         start = Prolly::uniffi_bytes(start)
 
-        _end = (_end ? Prolly::uniffi_bytes(_end) : nil)
-        RustBuffer.check_lower_Optionalbytes(_end)
-    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_range,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.allocFromBytes(start),RustBuffer.alloc_from_Optionalbytes(_end))
+        end = (end ? Prolly::uniffi_bytes(end) : nil)
+        RustBuffer.check_lower_Optionalbytes(end)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_range,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.allocFromBytes(start),RustBuffer.alloc_from_Optionalbytes(end))
     return result.consumeIntoSequenceTypeEntryRecord
   end
   def range_after(tree, after_key, _end)
@@ -16285,9 +16569,9 @@ end
         RustBuffer.check_lower_TypeTreeRecord(tree)
         after_key = Prolly::uniffi_bytes(after_key)
 
-        _end = (_end ? Prolly::uniffi_bytes(_end) : nil)
-        RustBuffer.check_lower_Optionalbytes(_end)
-    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_range_after,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.allocFromBytes(after_key),RustBuffer.alloc_from_Optionalbytes(_end))
+        end = (end ? Prolly::uniffi_bytes(end) : nil)
+        RustBuffer.check_lower_Optionalbytes(end)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_range_after,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.allocFromBytes(after_key),RustBuffer.alloc_from_Optionalbytes(end))
     return result.consumeIntoSequenceTypeEntryRecord
   end
   def range_diff(base, other, start, _end)
@@ -16297,9 +16581,9 @@ end
         RustBuffer.check_lower_TypeTreeRecord(other)
         start = Prolly::uniffi_bytes(start)
 
-        _end = (_end ? Prolly::uniffi_bytes(_end) : nil)
-        RustBuffer.check_lower_Optionalbytes(_end)
-    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_range_diff,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(base),RustBuffer.alloc_from_TypeTreeRecord(other),RustBuffer.allocFromBytes(start),RustBuffer.alloc_from_Optionalbytes(_end))
+        end = (end ? Prolly::uniffi_bytes(end) : nil)
+        RustBuffer.check_lower_Optionalbytes(end)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_range_diff,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(base),RustBuffer.alloc_from_TypeTreeRecord(other),RustBuffer.allocFromBytes(start),RustBuffer.alloc_from_Optionalbytes(end))
     return result.consumeIntoSequenceTypeDiffRecord
   end
   def range_from_cursor(tree, cursor, _end)
@@ -16307,9 +16591,9 @@ end
         RustBuffer.check_lower_TypeTreeRecord(tree)
         cursor = (cursor ? cursor : nil)
         RustBuffer.check_lower_OptionalTypeRangeCursorRecord(cursor)
-        _end = (_end ? Prolly::uniffi_bytes(_end) : nil)
-        RustBuffer.check_lower_Optionalbytes(_end)
-    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_range_from_cursor,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.alloc_from_OptionalTypeRangeCursorRecord(cursor),RustBuffer.alloc_from_Optionalbytes(_end))
+        end = (end ? Prolly::uniffi_bytes(end) : nil)
+        RustBuffer.check_lower_Optionalbytes(end)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_range_from_cursor,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.alloc_from_OptionalTypeRangeCursorRecord(cursor),RustBuffer.alloc_from_Optionalbytes(end))
     return result.consumeIntoSequenceTypeEntryRecord
   end
   def range_page(tree, cursor, _end, limit)
@@ -16317,11 +16601,11 @@ end
         RustBuffer.check_lower_TypeTreeRecord(tree)
         cursor = (cursor ? cursor : nil)
         RustBuffer.check_lower_OptionalTypeRangeCursorRecord(cursor)
-        _end = (_end ? Prolly::uniffi_bytes(_end) : nil)
-        RustBuffer.check_lower_Optionalbytes(_end)
+        end = (end ? Prolly::uniffi_bytes(end) : nil)
+        RustBuffer.check_lower_Optionalbytes(end)
         limit = Prolly::uniffi_in_range(limit, "u64", 0, 2**64)
 
-    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_range_page,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.alloc_from_OptionalTypeRangeCursorRecord(cursor),RustBuffer.alloc_from_Optionalbytes(_end),limit)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_range_page,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.alloc_from_OptionalTypeRangeCursorRecord(cursor),RustBuffer.alloc_from_Optionalbytes(end),limit)
     return result.consumeIntoTypeRangePageRecord
   end
   def reset_metrics()
@@ -16430,6 +16714,130 @@ end
     result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_upper_bound,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.allocFromBytes(key))
     return result.consumeIntoOptionalTypeEntryRecord
   end
+
+end
+
+  class ProllyTransaction
+
+  # A private helper for initializing instances of the class from a raw handle,
+  # bypassing any initialization logic and ensuring they are GC'd properly.
+  def self.uniffi_allocate(handle)
+    inst = allocate
+    inst.instance_variable_set :@handle, handle
+    ObjectSpace.define_finalizer(inst, uniffi_define_finalizer_by_handle(handle, inst.object_id))
+    return inst
+  end
+
+  # A private helper for registering an object finalizer.
+  # N.B. it's important that this does not capture a reference
+  # to the actual instance, only its underlying handle.
+  def self.uniffi_define_finalizer_by_handle(handle, object_id)
+    Proc.new do |_id|
+      Prolly.rust_call(
+        :uniffi_prolly_bindings_fn_free_prollytransaction,
+        handle
+      )
+    end
+  end
+
+  # A private helper for lowering instances into a raw handle.
+  # This does an explicit typecheck, because accidentally lowering a different type of
+  # object in a place where this type is expected, could lead to memory unsafety.
+  def self.uniffi_check_lower(inst)
+    if not inst.is_a? self
+      raise TypeError.new "Expected a ProllyTransaction instance, got #{inst}"
+    end
+  end
+
+  def uniffi_clone_handle()
+    return Prolly.rust_call(
+      :uniffi_prolly_bindings_fn_clone_prollytransaction,
+      @handle
+    )
+  end
+
+  def self.uniffi_lower(inst)
+    return inst.uniffi_clone_handle()
+  end
+
+
+
+  def batch(tree, mutations)
+        tree = tree
+        RustBuffer.check_lower_TypeTreeRecord(tree)
+        mutations = mutations
+        RustBuffer.check_lower_SequenceTypeMutationRecord(mutations)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollytransaction_batch,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.alloc_from_SequenceTypeMutationRecord(mutations))
+    return result.consumeIntoTypeTreeRecord
+  end
+  def commit()
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollytransaction_commit,uniffi_clone_handle(),)
+    return result.consumeIntoTypeTransactionUpdateRecord
+  end
+  def compare_and_swap_named_root(name, expected, replacement)
+        name = Prolly::uniffi_bytes(name)
+
+        expected = (expected ? expected : nil)
+        RustBuffer.check_lower_OptionalTypeTreeRecord(expected)
+        replacement = (replacement ? replacement : nil)
+        RustBuffer.check_lower_OptionalTypeTreeRecord(replacement)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollytransaction_compare_and_swap_named_root,uniffi_clone_handle(),RustBuffer.allocFromBytes(name),RustBuffer.alloc_from_OptionalTypeTreeRecord(expected),RustBuffer.alloc_from_OptionalTypeTreeRecord(replacement))
+    return result.consumeIntoTypeNamedRootUpdateRecord
+  end
+  def create()
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollytransaction_create,uniffi_clone_handle(),)
+    return result.consumeIntoTypeTreeRecord
+  end
+  def delete(tree, key)
+        tree = tree
+        RustBuffer.check_lower_TypeTreeRecord(tree)
+        key = Prolly::uniffi_bytes(key)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollytransaction_delete,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.allocFromBytes(key))
+    return result.consumeIntoTypeTreeRecord
+  end
+  def delete_named_root(name)
+        name = Prolly::uniffi_bytes(name)
+
+      Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollytransaction_delete_named_root,uniffi_clone_handle(),RustBuffer.allocFromBytes(name))
+  end
+
+  def get(tree, key)
+        tree = tree
+        RustBuffer.check_lower_TypeTreeRecord(tree)
+        key = Prolly::uniffi_bytes(key)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollytransaction_get,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.allocFromBytes(key))
+    return result.consumeIntoOptionalbytes
+  end
+  def load_named_root(name)
+        name = Prolly::uniffi_bytes(name)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollytransaction_load_named_root,uniffi_clone_handle(),RustBuffer.allocFromBytes(name))
+    return result.consumeIntoOptionalTypeTreeRecord
+  end
+  def publish_named_root(name, tree)
+        name = Prolly::uniffi_bytes(name)
+
+        tree = tree
+        RustBuffer.check_lower_TypeTreeRecord(tree)
+      Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollytransaction_publish_named_root,uniffi_clone_handle(),RustBuffer.allocFromBytes(name),RustBuffer.alloc_from_TypeTreeRecord(tree))
+  end
+
+  def put(tree, key, value)
+        tree = tree
+        RustBuffer.check_lower_TypeTreeRecord(tree)
+        key = Prolly::uniffi_bytes(key)
+
+        value = Prolly::uniffi_bytes(value)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollytransaction_put,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.allocFromBytes(key),RustBuffer.allocFromBytes(value))
+    return result.consumeIntoTypeTreeRecord
+  end
+  def rollback()
+      Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollytransaction_rollback,uniffi_clone_handle(),)
+  end
+
 
 end
 

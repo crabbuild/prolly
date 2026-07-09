@@ -22,6 +22,5 @@ Compiled native libraries are intentionally not checked in.
 
 Local adaptation:
 
-- generated `ProllyBindingException` subclass fields named `message` were
-  changed to `override val message` for Kotlin/JVM compilers that reject
-  hiding `Throwable.message`.
+- binding error payload fields are exported from Rust as `reason` so generated
+  Kotlin does not hide `Throwable.message`.

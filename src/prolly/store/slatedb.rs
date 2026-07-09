@@ -11,9 +11,14 @@ use slatedb::object_store::ObjectStore;
 use slatedb::{Db, WriteBatch};
 use tokio::runtime::{Builder, Runtime};
 
+use super::super::error::Error;
 use super::super::manifest::{
     sort_named_root_manifests, ManifestStore, ManifestStoreScan, ManifestUpdate, NamedRootManifest,
     RootManifest,
+};
+use super::super::transaction::{
+    RootCondition, RootWrite, TransactionConflict, TransactionNodeWrite, TransactionUpdate,
+    TransactionalStore,
 };
 use super::{cid_from_store_key, sort_cids, BatchOp, NodeStoreScan, OrderedBatchReadPlan, Store};
 
@@ -554,6 +559,71 @@ impl ManifestStoreScan for SlateDbStore {
             .collect::<Result<Vec<_>, SlateDbStoreError>>()?;
         sort_named_root_manifests(&mut roots);
         Ok(roots)
+    }
+}
+
+impl TransactionalStore for SlateDbStore {
+    fn supports_transactions(&self) -> bool {
+        true
+    }
+
+    fn commit_transaction(
+        &self,
+        node_writes: &[TransactionNodeWrite],
+        root_conditions: &[RootCondition],
+        root_writes: &[RootWrite],
+    ) -> Result<TransactionUpdate, Error> {
+        let _guard = self.manifest_lock.lock().map_err(|err| {
+            Error::Store(Box::new(SlateDbStoreError::new(format!(
+                "manifest lock poisoned: {err}"
+            ))))
+        })?;
+
+        for condition in root_conditions {
+            let key = root_key(&condition.name);
+            let current_bytes = self
+                .block_on(
+                    async { self.db.get(key).await },
+                    "failed to read root manifest during transaction commit",
+                )
+                .map_err(|err| Error::Store(Box::new(err)))?
+                .map(|bytes| bytes.to_vec());
+            let current =
+                decode_root_manifest(current_bytes).map_err(|err| Error::Store(Box::new(err)))?;
+            if current != condition.expected {
+                return Ok(TransactionUpdate::Conflict(TransactionConflict::new(
+                    condition.name.clone(),
+                    condition.expected.clone(),
+                    current,
+                )));
+            }
+        }
+
+        let mut batch = WriteBatch::new();
+        for write in node_writes {
+            match write {
+                TransactionNodeWrite::Upsert { key, value } => batch.put(node_key(key), value),
+                TransactionNodeWrite::Delete { key } => batch.delete(node_key(key)),
+            }
+        }
+
+        for write in root_writes {
+            match write {
+                RootWrite::Put { name, manifest } => {
+                    let bytes = encode_root_manifest(manifest)
+                        .map_err(|err| Error::Store(Box::new(err)))?;
+                    batch.put(root_key(name), bytes);
+                }
+                RootWrite::Delete { name } => batch.delete(root_key(name)),
+            }
+        }
+
+        self.write_batch(batch, "failed to commit transaction")
+            .map_err(|err| Error::Store(Box::new(err)))?;
+        Ok(TransactionUpdate::Applied {
+            nodes_written: node_writes.len(),
+            roots_written: root_writes.len(),
+        })
     }
 }
 

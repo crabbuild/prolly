@@ -2054,6 +2054,8 @@ public protocol ProllyEngineProtocol: AnyObject, Sendable {
 
     func batchWithStats(tree: TreeRecord, mutations: [MutationRecord]) throws  -> BatchApplyResultRecord
 
+    func beginTransaction() throws  -> ProllyTransaction
+
     func buildFromEntries(entries: [EntryRecord]) throws  -> TreeRecord
 
     func buildFromSortedEntries(entries: [EntryRecord]) throws  -> TreeRecord
@@ -2403,6 +2405,14 @@ open func batchWithStats(tree: TreeRecord, mutations: [MutationRecord])throws  -
             self.uniffiCloneHandle(),
         FfiConverterTypeTreeRecord_lower(tree),
         FfiConverterSequenceTypeMutationRecord.lower(mutations),$0
+    )
+})
+}
+
+open func beginTransaction()throws  -> ProllyTransaction  {
+    return try  FfiConverterTypeProllyTransaction_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_prollyengine_begin_transaction(
+            self.uniffiCloneHandle(),$0
     )
 })
 }
@@ -3574,6 +3584,235 @@ public func FfiConverterTypeProllyEngine_lift(_ handle: UInt64) throws -> Prolly
 #endif
 public func FfiConverterTypeProllyEngine_lower(_ value: ProllyEngine) -> UInt64 {
     return FfiConverterTypeProllyEngine.lower(value)
+}
+
+
+
+
+
+
+public protocol ProllyTransactionProtocol: AnyObject, Sendable {
+
+    func batch(tree: TreeRecord, mutations: [MutationRecord]) throws  -> TreeRecord
+
+    func commit() throws  -> TransactionUpdateRecord
+
+    func compareAndSwapNamedRoot(name: Data, expected: TreeRecord?, replacement: TreeRecord?) throws  -> NamedRootUpdateRecord
+
+    func create() throws  -> TreeRecord
+
+    func delete(tree: TreeRecord, key: Data) throws  -> TreeRecord
+
+    func deleteNamedRoot(name: Data) throws
+
+    func get(tree: TreeRecord, key: Data) throws  -> Data?
+
+    func loadNamedRoot(name: Data) throws  -> TreeRecord?
+
+    func publishNamedRoot(name: Data, tree: TreeRecord) throws
+
+    func put(tree: TreeRecord, key: Data, value: Data) throws  -> TreeRecord
+
+    func rollback() throws
+
+}
+open class ProllyTransaction: ProllyTransactionProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_prolly_bindings_fn_clone_prollytransaction(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_prolly_bindings_fn_free_prollytransaction(handle, $0) }
+    }
+
+
+
+
+open func batch(tree: TreeRecord, mutations: [MutationRecord])throws  -> TreeRecord  {
+    return try  FfiConverterTypeTreeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_prollytransaction_batch(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeTreeRecord_lower(tree),
+        FfiConverterSequenceTypeMutationRecord.lower(mutations),$0
+    )
+})
+}
+
+open func commit()throws  -> TransactionUpdateRecord  {
+    return try  FfiConverterTypeTransactionUpdateRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_prollytransaction_commit(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func compareAndSwapNamedRoot(name: Data, expected: TreeRecord?, replacement: TreeRecord?)throws  -> NamedRootUpdateRecord  {
+    return try  FfiConverterTypeNamedRootUpdateRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_prollytransaction_compare_and_swap_named_root(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(name),
+        FfiConverterOptionTypeTreeRecord.lower(expected),
+        FfiConverterOptionTypeTreeRecord.lower(replacement),$0
+    )
+})
+}
+
+open func create()throws  -> TreeRecord  {
+    return try  FfiConverterTypeTreeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_prollytransaction_create(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func delete(tree: TreeRecord, key: Data)throws  -> TreeRecord  {
+    return try  FfiConverterTypeTreeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_prollytransaction_delete(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeTreeRecord_lower(tree),
+        FfiConverterData.lower(key),$0
+    )
+})
+}
+
+open func deleteNamedRoot(name: Data)throws   {try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_prollytransaction_delete_named_root(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(name),$0
+    )
+}
+}
+
+open func get(tree: TreeRecord, key: Data)throws  -> Data?  {
+    return try  FfiConverterOptionData.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_prollytransaction_get(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeTreeRecord_lower(tree),
+        FfiConverterData.lower(key),$0
+    )
+})
+}
+
+open func loadNamedRoot(name: Data)throws  -> TreeRecord?  {
+    return try  FfiConverterOptionTypeTreeRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_prollytransaction_load_named_root(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(name),$0
+    )
+})
+}
+
+open func publishNamedRoot(name: Data, tree: TreeRecord)throws   {try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_prollytransaction_publish_named_root(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(name),
+        FfiConverterTypeTreeRecord_lower(tree),$0
+    )
+}
+}
+
+open func put(tree: TreeRecord, key: Data, value: Data)throws  -> TreeRecord  {
+    return try  FfiConverterTypeTreeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_prollytransaction_put(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeTreeRecord_lower(tree),
+        FfiConverterData.lower(key),
+        FfiConverterData.lower(value),$0
+    )
+})
+}
+
+open func rollback()throws   {try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_prollytransaction_rollback(
+            self.uniffiCloneHandle(),$0
+    )
+}
+}
+
+
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProllyTransaction: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = ProllyTransaction
+
+    public static func lift(_ handle: UInt64) throws -> ProllyTransaction {
+        return ProllyTransaction(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: ProllyTransaction) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProllyTransaction {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: ProllyTransaction, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProllyTransaction_lift(_ handle: UInt64) throws -> ProllyTransaction {
+    return try FfiConverterTypeProllyTransaction.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProllyTransaction_lower(_ value: ProllyTransaction) -> UInt64 {
+    return FfiConverterTypeProllyTransaction.lower(value)
 }
 
 
@@ -9203,6 +9442,130 @@ public func FfiConverterTypeTombstoneRecord_lower(_ value: TombstoneRecord) -> R
 }
 
 
+public struct TransactionConflictRecord: Equatable, Hashable {
+    public var name: Data
+    public var expected: RootManifestRecord?
+    public var current: RootManifestRecord?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(name: Data, expected: RootManifestRecord?, current: RootManifestRecord?) {
+        self.name = name
+        self.expected = expected
+        self.current = current
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension TransactionConflictRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTransactionConflictRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TransactionConflictRecord {
+        return
+            try TransactionConflictRecord(
+                name: FfiConverterData.read(from: &buf),
+                expected: FfiConverterOptionTypeRootManifestRecord.read(from: &buf),
+                current: FfiConverterOptionTypeRootManifestRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: TransactionConflictRecord, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.name, into: &buf)
+        FfiConverterOptionTypeRootManifestRecord.write(value.expected, into: &buf)
+        FfiConverterOptionTypeRootManifestRecord.write(value.current, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTransactionConflictRecord_lift(_ buf: RustBuffer) throws -> TransactionConflictRecord {
+    return try FfiConverterTypeTransactionConflictRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTransactionConflictRecord_lower(_ value: TransactionConflictRecord) -> RustBuffer {
+    return FfiConverterTypeTransactionConflictRecord.lower(value)
+}
+
+
+public struct TransactionUpdateRecord: Equatable, Hashable {
+    public var applied: Bool
+    public var conflict: Bool
+    public var nodesWritten: UInt64
+    public var rootsWritten: UInt64
+    public var conflictDetail: TransactionConflictRecord?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(applied: Bool, conflict: Bool, nodesWritten: UInt64, rootsWritten: UInt64, conflictDetail: TransactionConflictRecord?) {
+        self.applied = applied
+        self.conflict = conflict
+        self.nodesWritten = nodesWritten
+        self.rootsWritten = rootsWritten
+        self.conflictDetail = conflictDetail
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension TransactionUpdateRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTransactionUpdateRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TransactionUpdateRecord {
+        return
+            try TransactionUpdateRecord(
+                applied: FfiConverterBool.read(from: &buf),
+                conflict: FfiConverterBool.read(from: &buf),
+                nodesWritten: FfiConverterUInt64.read(from: &buf),
+                rootsWritten: FfiConverterUInt64.read(from: &buf),
+                conflictDetail: FfiConverterOptionTypeTransactionConflictRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: TransactionUpdateRecord, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.applied, into: &buf)
+        FfiConverterBool.write(value.conflict, into: &buf)
+        FfiConverterUInt64.write(value.nodesWritten, into: &buf)
+        FfiConverterUInt64.write(value.rootsWritten, into: &buf)
+        FfiConverterOptionTypeTransactionConflictRecord.write(value.conflictDetail, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTransactionUpdateRecord_lift(_ buf: RustBuffer) throws -> TransactionUpdateRecord {
+    return try FfiConverterTypeTransactionUpdateRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTransactionUpdateRecord_lower(_ value: TransactionUpdateRecord) -> RustBuffer {
+    return FfiConverterTypeTransactionUpdateRecord.lower(value)
+}
+
+
 public struct TreeDebugComparedNodeRecord: Equatable, Hashable {
     public var status: TreeDebugNodeStatusKind
     public var node: TreeDebugNodeRecord
@@ -11068,21 +11431,21 @@ public enum ProllyBindingError: Swift.Error, Equatable, Hashable, Foundation.Loc
 
 
 
-    case InvalidArgument(message: String
+    case InvalidArgument(reason: String
     )
-    case InvalidCid(message: String
+    case InvalidCid(reason: String
     )
-    case InvalidNode(message: String
+    case InvalidNode(reason: String
     )
-    case NotFound(message: String
+    case NotFound(reason: String
     )
-    case Conflict(message: String
+    case Conflict(reason: String
     )
-    case Store(message: String
+    case Store(reason: String
     )
-    case Serialization(message: String
+    case Serialization(reason: String
     )
-    case Internal(message: String
+    case Internal(reason: String
     )
 
 
@@ -11114,28 +11477,28 @@ public struct FfiConverterTypeProllyBindingError: FfiConverterRustBuffer {
 
 
         case 1: return .InvalidArgument(
-            message: try FfiConverterString.read(from: &buf)
+            reason: try FfiConverterString.read(from: &buf)
             )
         case 2: return .InvalidCid(
-            message: try FfiConverterString.read(from: &buf)
+            reason: try FfiConverterString.read(from: &buf)
             )
         case 3: return .InvalidNode(
-            message: try FfiConverterString.read(from: &buf)
+            reason: try FfiConverterString.read(from: &buf)
             )
         case 4: return .NotFound(
-            message: try FfiConverterString.read(from: &buf)
+            reason: try FfiConverterString.read(from: &buf)
             )
         case 5: return .Conflict(
-            message: try FfiConverterString.read(from: &buf)
+            reason: try FfiConverterString.read(from: &buf)
             )
         case 6: return .Store(
-            message: try FfiConverterString.read(from: &buf)
+            reason: try FfiConverterString.read(from: &buf)
             )
         case 7: return .Serialization(
-            message: try FfiConverterString.read(from: &buf)
+            reason: try FfiConverterString.read(from: &buf)
             )
         case 8: return .Internal(
-            message: try FfiConverterString.read(from: &buf)
+            reason: try FfiConverterString.read(from: &buf)
             )
 
          default: throw UniffiInternalError.unexpectedEnumCase
@@ -11149,44 +11512,44 @@ public struct FfiConverterTypeProllyBindingError: FfiConverterRustBuffer {
 
 
 
-        case let .InvalidArgument(message):
+        case let .InvalidArgument(reason):
             writeInt(&buf, Int32(1))
-            FfiConverterString.write(message, into: &buf)
+            FfiConverterString.write(reason, into: &buf)
 
 
-        case let .InvalidCid(message):
+        case let .InvalidCid(reason):
             writeInt(&buf, Int32(2))
-            FfiConverterString.write(message, into: &buf)
+            FfiConverterString.write(reason, into: &buf)
 
 
-        case let .InvalidNode(message):
+        case let .InvalidNode(reason):
             writeInt(&buf, Int32(3))
-            FfiConverterString.write(message, into: &buf)
+            FfiConverterString.write(reason, into: &buf)
 
 
-        case let .NotFound(message):
+        case let .NotFound(reason):
             writeInt(&buf, Int32(4))
-            FfiConverterString.write(message, into: &buf)
+            FfiConverterString.write(reason, into: &buf)
 
 
-        case let .Conflict(message):
+        case let .Conflict(reason):
             writeInt(&buf, Int32(5))
-            FfiConverterString.write(message, into: &buf)
+            FfiConverterString.write(reason, into: &buf)
 
 
-        case let .Store(message):
+        case let .Store(reason):
             writeInt(&buf, Int32(6))
-            FfiConverterString.write(message, into: &buf)
+            FfiConverterString.write(reason, into: &buf)
 
 
-        case let .Serialization(message):
+        case let .Serialization(reason):
             writeInt(&buf, Int32(7))
-            FfiConverterString.write(message, into: &buf)
+            FfiConverterString.write(reason, into: &buf)
 
 
-        case let .Internal(message):
+        case let .Internal(reason):
             writeInt(&buf, Int32(8))
-            FfiConverterString.write(message, into: &buf)
+            FfiConverterString.write(reason, into: &buf)
 
         }
     }
@@ -11956,6 +12319,30 @@ fileprivate struct FfiConverterOptionTypeTombstoneRecord: FfiConverterRustBuffer
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeTombstoneRecord.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeTransactionConflictRecord: FfiConverterRustBuffer {
+    typealias SwiftType = TransactionConflictRecord?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeTransactionConflictRecord.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeTransactionConflictRecord.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -14124,6 +14511,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_prolly_bindings_checksum_method_prollyengine_batch_with_stats() != 44272) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_prolly_bindings_checksum_method_prollyengine_begin_transaction() != 46980) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_prolly_bindings_checksum_method_prollyengine_build_from_entries() != 64496) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -14446,6 +14836,39 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_prollyengine_upper_bound() != 36418) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_prollytransaction_batch() != 26023) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_prollytransaction_commit() != 44978) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_prollytransaction_compare_and_swap_named_root() != 9399) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_prollytransaction_create() != 37776) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_prollytransaction_delete() != 5992) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_prollytransaction_delete_named_root() != 64116) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_prollytransaction_get() != 61562) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_prollytransaction_load_named_root() != 2696) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_prollytransaction_publish_named_root() != 51685) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_prollytransaction_put() != 9747) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_prollytransaction_rollback() != 34302) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_constructor_mergepolicyregistry_new() != 19304) {

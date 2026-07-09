@@ -91,6 +91,7 @@ use std::collections::{hash_map::Entry, HashMap, HashSet, VecDeque};
 use std::ops::Range;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, RwLock};
+#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const PARALLEL_NODE_DECODE_THRESHOLD: usize = 16;
@@ -100,6 +101,12 @@ const STATS_FRONTIER_PREFETCH_PARALLELISM: usize = 16;
 #[cfg(feature = "async-store")]
 const ASYNC_NODE_PREFETCH_BATCH_SIZE: usize = 64;
 
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+fn current_unix_time_millis() -> u64 {
+    js_sys::Date::now().max(0.0).min(u64::MAX as f64) as u64
+}
+
+#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 fn current_unix_time_millis() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)

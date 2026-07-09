@@ -343,7 +343,8 @@ pub use prolly::range::{AsyncRangeIter, AsyncRangePage, AsyncReversePage};
 #[cfg(feature = "async-store")]
 pub use prolly::remote::{
     conformance as remote_conformance, RemoteAdapterError, RemoteBatchOp, RemoteManifestUpdate,
-    RemoteNamedRoot, RemoteProllyStore, RemoteStoreBackend, RemoteStoreConfig,
+    RemoteNamedRoot, RemoteProllyStore, RemoteRootCondition, RemoteRootWrite, RemoteStoreBackend,
+    RemoteStoreConfig, RemoteTransactionConflict, RemoteTransactionUpdate,
 };
 pub use prolly::stats::{StatsComparison, StatsDiff, StatsPercentageChange, TreeStats};
 #[cfg(feature = "async-store")]
@@ -368,9 +369,14 @@ pub use prolly::sync::{
 pub use prolly::tombstone::{
     is_tombstone_value, tombstone_compaction, tombstone_upsert, Tombstone,
 };
+#[cfg(feature = "async-store")]
 pub use prolly::transaction::{
-    ProllyTransaction, RootCondition, RootWrite, TransactionConflict, TransactionNodeWrite,
-    TransactionOverlayError, TransactionUpdate, TransactionalStore,
+    AsyncProllyTransaction, AsyncTransactionOverlayStore, AsyncTransactionalStore,
+};
+pub use prolly::transaction::{
+    OwnedProllyTransaction, OwnedTransactionOverlayStore, ProllyTransaction, RootCondition,
+    RootWrite, TransactionConflict, TransactionNodeWrite, TransactionOverlayError,
+    TransactionUpdate, TransactionalStore,
 };
 pub use prolly::tree::Tree;
 pub use prolly::value::{

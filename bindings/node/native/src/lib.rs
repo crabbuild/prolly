@@ -91,7 +91,8 @@ use prolly_bindings::{
     NamedRootSelectionRecord as BindingNamedRootSelectionRecord,
     NamedRootUpdateRecord as BindingNamedRootUpdateRecord,
     ParallelConfigRecord as BindingParallelConfigRecord, ProllyBindingError, ProllyBlobStore,
-    ProllyEngine, ProofBundleSummaryRecord as BindingProofBundleSummaryRecord,
+    ProllyEngine, ProllyTransaction as BindingProllyTransaction,
+    ProofBundleSummaryRecord as BindingProofBundleSummaryRecord,
     ProofBundleVerificationRecord as BindingProofBundleVerificationRecord,
     ProvedDiffPageRecord as BindingProvedDiffPageRecord,
     ProvedRangePageRecord as BindingProvedRangePageRecord,
@@ -114,6 +115,8 @@ use prolly_bindings::{
     StructuralDiffMarkerRecord as BindingStructuralDiffMarkerRecord,
     StructuralDiffPageRecord as BindingStructuralDiffPageRecord,
     TimestampedValueRecord as BindingTimestampedValueRecord,
+    TransactionConflictRecord as BindingTransactionConflictRecord,
+    TransactionUpdateRecord as BindingTransactionUpdateRecord,
     TombstoneMetadataRecord as BindingTombstoneMetadataRecord,
     TombstoneRecord as BindingTombstoneRecord, TreeRecord, ValueRefKind,
     ValueRefRecord as BindingValueRefRecord,
@@ -524,6 +527,22 @@ pub struct NodeNamedRootUpdateRecord {
     pub applied: bool,
     pub conflict: bool,
     pub current: Option<NodeTreeRecord>,
+}
+
+#[napi(object)]
+pub struct NodeTransactionConflictRecord {
+    pub name: Buffer,
+    pub expected: Option<NodeRootManifestRecord>,
+    pub current: Option<NodeRootManifestRecord>,
+}
+
+#[napi(object)]
+pub struct NodeTransactionUpdateRecord {
+    pub applied: bool,
+    pub conflict: bool,
+    pub nodes_written: String,
+    pub roots_written: String,
+    pub conflict_detail: Option<NodeTransactionConflictRecord>,
 }
 
 #[napi(object)]
@@ -1477,6 +1496,114 @@ impl BindingHostStoreCallback for NodeHostStore {
 }
 
 #[napi]
+pub struct NativeProllyTransaction {
+    inner: Arc<BindingProllyTransaction>,
+    config: ConfigRecord,
+}
+
+#[napi]
+impl NativeProllyTransaction {
+    #[napi]
+    pub fn create(&self) -> Result<NodeTreeRecord> {
+        self.inner.create().map(Into::into).map_err(to_napi_error)
+    }
+
+    #[napi]
+    pub fn get(&self, tree: NodeTreeRecord, key: Buffer) -> Result<Option<Buffer>> {
+        let value = self
+            .inner
+            .get(tree.into_tree(self.config.clone()), key.to_vec())
+            .map_err(to_napi_error)?;
+        Ok(value.map(Buffer::from))
+    }
+
+    #[napi]
+    pub fn put(&self, tree: NodeTreeRecord, key: Buffer, value: Buffer) -> Result<NodeTreeRecord> {
+        self.inner
+            .put(
+                tree.into_tree(self.config.clone()),
+                key.to_vec(),
+                value.to_vec(),
+            )
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi]
+    pub fn delete(&self, tree: NodeTreeRecord, key: Buffer) -> Result<NodeTreeRecord> {
+        self.inner
+            .delete(tree.into_tree(self.config.clone()), key.to_vec())
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi]
+    pub fn batch(
+        &self,
+        tree: NodeTreeRecord,
+        mutations: Vec<NodeMutationRecord>,
+    ) -> Result<NodeTreeRecord> {
+        let mutations = mutations
+            .into_iter()
+            .map(MutationRecord::try_from)
+            .collect::<Result<Vec<_>>>()?;
+        self.inner
+            .batch(tree.into_tree(self.config.clone()), mutations)
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "loadNamedRoot")]
+    pub fn load_named_root(&self, name: Buffer) -> Result<Option<NodeTreeRecord>> {
+        self.inner
+            .load_named_root(name.to_vec())
+            .map(|tree| tree.map(Into::into))
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "publishNamedRoot")]
+    pub fn publish_named_root(&self, name: Buffer, tree: NodeTreeRecord) -> Result<()> {
+        self.inner
+            .publish_named_root(name.to_vec(), tree.into_tree(self.config.clone()))
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "deleteNamedRoot")]
+    pub fn delete_named_root(&self, name: Buffer) -> Result<()> {
+        self.inner
+            .delete_named_root(name.to_vec())
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "compareAndSwapNamedRoot")]
+    pub fn compare_and_swap_named_root(
+        &self,
+        name: Buffer,
+        expected: Option<NodeTreeRecord>,
+        replacement: Option<NodeTreeRecord>,
+    ) -> Result<NodeNamedRootUpdateRecord> {
+        self.inner
+            .compare_and_swap_named_root(
+                name.to_vec(),
+                expected.map(|tree| tree.into_tree(self.config.clone())),
+                replacement.map(|tree| tree.into_tree(self.config.clone())),
+            )
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi]
+    pub fn commit(&self) -> Result<NodeTransactionUpdateRecord> {
+        self.inner.commit().map(Into::into).map_err(to_napi_error)
+    }
+
+    #[napi]
+    pub fn rollback(&self) -> Result<()> {
+        self.inner.rollback().map_err(to_napi_error)
+    }
+}
+
+#[napi]
 pub struct NativeProllyEngine {
     inner: Arc<ProllyEngine>,
     config: ConfigRecord,
@@ -1592,6 +1719,15 @@ impl NativeProllyEngine {
     #[napi]
     pub fn create(&self) -> NodeTreeRecord {
         self.inner.create().into()
+    }
+
+    #[napi(js_name = "beginTransaction")]
+    pub fn begin_transaction(&self) -> Result<NativeProllyTransaction> {
+        let inner = self.inner.begin_transaction().map_err(to_napi_error)?;
+        Ok(NativeProllyTransaction {
+            inner,
+            config: self.config.clone(),
+        })
     }
 
     #[napi]
@@ -3983,6 +4119,28 @@ impl From<BindingNamedRootUpdateRecord> for NodeNamedRootUpdateRecord {
             applied: update.applied,
             conflict: update.conflict,
             current: update.current.map(Into::into),
+        }
+    }
+}
+
+impl From<BindingTransactionConflictRecord> for NodeTransactionConflictRecord {
+    fn from(conflict: BindingTransactionConflictRecord) -> Self {
+        Self {
+            name: Buffer::from(conflict.name),
+            expected: conflict.expected.map(Into::into),
+            current: conflict.current.map(Into::into),
+        }
+    }
+}
+
+impl From<BindingTransactionUpdateRecord> for NodeTransactionUpdateRecord {
+    fn from(update: BindingTransactionUpdateRecord) -> Self {
+        Self {
+            applied: update.applied,
+            conflict: update.conflict,
+            nodes_written: update.nodes_written.to_string(),
+            roots_written: update.roots_written.to_string(),
+            conflict_detail: update.conflict_detail.map(Into::into),
         }
     }
 }

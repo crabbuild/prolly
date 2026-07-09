@@ -749,6 +749,10 @@ public final class Prolly implements AutoCloseable {
         return engine.create();
     }
 
+    public Transaction beginTransaction() throws ProllyBindingException {
+        return new Transaction(engine.beginTransaction());
+    }
+
     public Optional<byte[]> get(TreeRecord tree, byte[] key) throws ProllyBindingException {
         return Optional.ofNullable(engine.get(tree, key.clone())).map(byte[]::clone);
     }

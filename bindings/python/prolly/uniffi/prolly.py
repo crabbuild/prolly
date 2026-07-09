@@ -465,7 +465,7 @@ def _uniffi_load_indirect():
         libname = "lib{}.so"
 
     libname = libname.format("prolly_bindings")
-    path = os.environ.get("PROLLY_BINDINGS_LIBRARY") or os.path.join(os.path.dirname(__file__), libname)
+    path = os.path.join(os.path.dirname(__file__), libname)
     lib = ctypes.cdll.LoadLibrary(path)
     return lib
 
@@ -808,6 +808,8 @@ def _uniffi_check_api_checksums(lib):
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_prollyengine_batch_with_stats() != 44272:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_prollyengine_begin_transaction() != 46980:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_prollyengine_build_from_entries() != 64496:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_prollyengine_build_from_sorted_entries() != 55031:
@@ -1023,6 +1025,28 @@ def _uniffi_check_api_checksums(lib):
     if lib.uniffi_prolly_bindings_checksum_method_prollyengine_unpin_all_cache_nodes() != 58636:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_prollyengine_upper_bound() != 36418:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_prollytransaction_batch() != 26023:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_prollytransaction_commit() != 44978:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_prollytransaction_compare_and_swap_named_root() != 9399:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_prollytransaction_create() != 37776:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_prollytransaction_delete() != 5992:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_prollytransaction_delete_named_root() != 64116:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_prollytransaction_get() != 61562:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_prollytransaction_load_named_root() != 2696:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_prollytransaction_publish_named_root() != 51685:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_prollytransaction_put() != 9747:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_prollytransaction_rollback() != 34302:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
 
 # A ctypes library to expose the extern-C FFI definitions.
@@ -1347,6 +1371,16 @@ _UniffiLib.uniffi_prolly_bindings_fn_free_prollyengine.argtypes = (
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UniffiLib.uniffi_prolly_bindings_fn_free_prollyengine.restype = None
+_UniffiLib.uniffi_prolly_bindings_fn_clone_prollytransaction.argtypes = (
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_clone_prollytransaction.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_free_prollytransaction.argtypes = (
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_free_prollytransaction.restype = None
 _UNIFFI_CALLBACK_INTERFACE_PROLLY_CRDT_RESOLVER_CALLBACK_METHOD0 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,ctypes.POINTER(_UniffiRustBuffer),
     ctypes.POINTER(_UniffiRustCallStatus),
 )
@@ -2354,6 +2388,11 @@ _UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_batch_with_stats.argtyp
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_batch_with_stats.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_begin_transaction.argtypes = (
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_begin_transaction.restype = ctypes.c_uint64
 _UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_build_from_entries.argtypes = (
     ctypes.c_uint64,
     _UniffiRustBuffer,
@@ -3162,6 +3201,77 @@ _UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_upper_bound.argtypes = 
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_upper_bound.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollytransaction_batch.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollytransaction_batch.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollytransaction_commit.argtypes = (
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollytransaction_commit.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollytransaction_compare_and_swap_named_root.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollytransaction_compare_and_swap_named_root.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollytransaction_create.argtypes = (
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollytransaction_create.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollytransaction_delete.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollytransaction_delete.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollytransaction_delete_named_root.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollytransaction_delete_named_root.restype = None
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollytransaction_get.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollytransaction_get.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollytransaction_load_named_root.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollytransaction_load_named_root.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollytransaction_publish_named_root.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollytransaction_publish_named_root.restype = None
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollytransaction_put.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollytransaction_put.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollytransaction_rollback.argtypes = (
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollytransaction_rollback.restype = None
 _UniffiLib.ffi_prolly_bindings_uniffi_contract_version.argtypes = (
 )
 _UniffiLib.ffi_prolly_bindings_uniffi_contract_version.restype = ctypes.c_uint32
@@ -3660,6 +3770,9 @@ _UniffiLib.uniffi_prolly_bindings_checksum_method_prollyengine_batch.restype = c
 _UniffiLib.uniffi_prolly_bindings_checksum_method_prollyengine_batch_with_stats.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_prollyengine_batch_with_stats.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollyengine_begin_transaction.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollyengine_begin_transaction.restype = ctypes.c_uint16
 _UniffiLib.uniffi_prolly_bindings_checksum_method_prollyengine_build_from_entries.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_prollyengine_build_from_entries.restype = ctypes.c_uint16
@@ -3984,6 +4097,39 @@ _UniffiLib.uniffi_prolly_bindings_checksum_method_prollyengine_unpin_all_cache_n
 _UniffiLib.uniffi_prolly_bindings_checksum_method_prollyengine_upper_bound.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_prollyengine_upper_bound.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollytransaction_batch.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollytransaction_batch.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollytransaction_commit.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollytransaction_commit.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollytransaction_compare_and_swap_named_root.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollytransaction_compare_and_swap_named_root.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollytransaction_create.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollytransaction_create.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollytransaction_delete.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollytransaction_delete.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollytransaction_delete_named_root.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollytransaction_delete_named_root.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollytransaction_get.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollytransaction_get.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollytransaction_load_named_root.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollytransaction_load_named_root.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollytransaction_publish_named_root.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollytransaction_publish_named_root.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollytransaction_put.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollytransaction_put.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollytransaction_rollback.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollytransaction_rollback.restype = ctypes.c_uint16
 
 _uniffi_check_contract_api_version(_UniffiLib)
 # _uniffi_check_api_checksums(_UniffiLib)
@@ -10609,6 +10755,127 @@ class _UniffiFfiConverterTypeTombstoneRecord(_UniffiConverterRustBuffer):
         _UniffiFfiConverterUInt64.write(value.timestamp_millis, buf)
         _UniffiFfiConverterSequenceTypeTombstoneMetadataRecord.write(value.causal_metadata, buf)
 
+@dataclass
+class TransactionConflictRecord:
+    def __init__(self, *, name:bytes, expected:typing.Optional[RootManifestRecord], current:typing.Optional[RootManifestRecord]):
+        self.name = name
+        self.expected = expected
+        self.current = current
+
+
+
+
+    def __str__(self):
+        return "TransactionConflictRecord(name={}, expected={}, current={})".format(self.name, self.expected, self.current)
+    def __eq__(self, other):
+        if self.name != other.name:
+            return False
+        if self.expected != other.expected:
+            return False
+        if self.current != other.current:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeTransactionConflictRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return TransactionConflictRecord(
+            name=_UniffiFfiConverterBytes.read(buf),
+            expected=_UniffiFfiConverterOptionalTypeRootManifestRecord.read(buf),
+            current=_UniffiFfiConverterOptionalTypeRootManifestRecord.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterBytes.check_lower(value.name)
+        _UniffiFfiConverterOptionalTypeRootManifestRecord.check_lower(value.expected)
+        _UniffiFfiConverterOptionalTypeRootManifestRecord.check_lower(value.current)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterBytes.write(value.name, buf)
+        _UniffiFfiConverterOptionalTypeRootManifestRecord.write(value.expected, buf)
+        _UniffiFfiConverterOptionalTypeRootManifestRecord.write(value.current, buf)
+
+class _UniffiFfiConverterOptionalTypeTransactionConflictRecord(_UniffiConverterRustBuffer):
+    @classmethod
+    def check_lower(cls, value):
+        if value is not None:
+            _UniffiFfiConverterTypeTransactionConflictRecord.check_lower(value)
+
+    @classmethod
+    def write(cls, value, buf):
+        if value is None:
+            buf.write_u8(0)
+            return
+
+        buf.write_u8(1)
+        _UniffiFfiConverterTypeTransactionConflictRecord.write(value, buf)
+
+    @classmethod
+    def read(cls, buf):
+        flag = buf.read_u8()
+        if flag == 0:
+            return None
+        elif flag == 1:
+            return _UniffiFfiConverterTypeTransactionConflictRecord.read(buf)
+        else:
+            raise InternalError("Unexpected flag byte for optional type")
+
+@dataclass
+class TransactionUpdateRecord:
+    def __init__(self, *, applied:bool, conflict:bool, nodes_written:int, roots_written:int, conflict_detail:typing.Optional[TransactionConflictRecord]):
+        self.applied = applied
+        self.conflict = conflict
+        self.nodes_written = nodes_written
+        self.roots_written = roots_written
+        self.conflict_detail = conflict_detail
+
+
+
+
+    def __str__(self):
+        return "TransactionUpdateRecord(applied={}, conflict={}, nodes_written={}, roots_written={}, conflict_detail={})".format(self.applied, self.conflict, self.nodes_written, self.roots_written, self.conflict_detail)
+    def __eq__(self, other):
+        if self.applied != other.applied:
+            return False
+        if self.conflict != other.conflict:
+            return False
+        if self.nodes_written != other.nodes_written:
+            return False
+        if self.roots_written != other.roots_written:
+            return False
+        if self.conflict_detail != other.conflict_detail:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeTransactionUpdateRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return TransactionUpdateRecord(
+            applied=_UniffiFfiConverterBoolean.read(buf),
+            conflict=_UniffiFfiConverterBoolean.read(buf),
+            nodes_written=_UniffiFfiConverterUInt64.read(buf),
+            roots_written=_UniffiFfiConverterUInt64.read(buf),
+            conflict_detail=_UniffiFfiConverterOptionalTypeTransactionConflictRecord.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterBoolean.check_lower(value.applied)
+        _UniffiFfiConverterBoolean.check_lower(value.conflict)
+        _UniffiFfiConverterUInt64.check_lower(value.nodes_written)
+        _UniffiFfiConverterUInt64.check_lower(value.roots_written)
+        _UniffiFfiConverterOptionalTypeTransactionConflictRecord.check_lower(value.conflict_detail)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterBoolean.write(value.applied, buf)
+        _UniffiFfiConverterBoolean.write(value.conflict, buf)
+        _UniffiFfiConverterUInt64.write(value.nodes_written, buf)
+        _UniffiFfiConverterUInt64.write(value.roots_written, buf)
+        _UniffiFfiConverterOptionalTypeTransactionConflictRecord.write(value.conflict_detail, buf)
+
 
 
 
@@ -11239,88 +11506,88 @@ class ProllyBindingError:  # type: ignore
 
     class InvalidArgument(_UniffiTempProllyBindingError):
 
-        def __init__(self, message):
+        def __init__(self, reason):
             super().__init__(", ".join([
-                "message={!r}".format(message),
+                "reason={!r}".format(reason),
             ]))
-            self.message = message
+            self.reason = reason
 
         def __repr__(self):
             return "ProllyBindingError.InvalidArgument({})".format(str(self))
     _UniffiTempProllyBindingError.InvalidArgument = InvalidArgument # type: ignore
     class InvalidCid(_UniffiTempProllyBindingError):
 
-        def __init__(self, message):
+        def __init__(self, reason):
             super().__init__(", ".join([
-                "message={!r}".format(message),
+                "reason={!r}".format(reason),
             ]))
-            self.message = message
+            self.reason = reason
 
         def __repr__(self):
             return "ProllyBindingError.InvalidCid({})".format(str(self))
     _UniffiTempProllyBindingError.InvalidCid = InvalidCid # type: ignore
     class InvalidNode(_UniffiTempProllyBindingError):
 
-        def __init__(self, message):
+        def __init__(self, reason):
             super().__init__(", ".join([
-                "message={!r}".format(message),
+                "reason={!r}".format(reason),
             ]))
-            self.message = message
+            self.reason = reason
 
         def __repr__(self):
             return "ProllyBindingError.InvalidNode({})".format(str(self))
     _UniffiTempProllyBindingError.InvalidNode = InvalidNode # type: ignore
     class NotFound(_UniffiTempProllyBindingError):
 
-        def __init__(self, message):
+        def __init__(self, reason):
             super().__init__(", ".join([
-                "message={!r}".format(message),
+                "reason={!r}".format(reason),
             ]))
-            self.message = message
+            self.reason = reason
 
         def __repr__(self):
             return "ProllyBindingError.NotFound({})".format(str(self))
     _UniffiTempProllyBindingError.NotFound = NotFound # type: ignore
     class Conflict(_UniffiTempProllyBindingError):
 
-        def __init__(self, message):
+        def __init__(self, reason):
             super().__init__(", ".join([
-                "message={!r}".format(message),
+                "reason={!r}".format(reason),
             ]))
-            self.message = message
+            self.reason = reason
 
         def __repr__(self):
             return "ProllyBindingError.Conflict({})".format(str(self))
     _UniffiTempProllyBindingError.Conflict = Conflict # type: ignore
     class Store(_UniffiTempProllyBindingError):
 
-        def __init__(self, message):
+        def __init__(self, reason):
             super().__init__(", ".join([
-                "message={!r}".format(message),
+                "reason={!r}".format(reason),
             ]))
-            self.message = message
+            self.reason = reason
 
         def __repr__(self):
             return "ProllyBindingError.Store({})".format(str(self))
     _UniffiTempProllyBindingError.Store = Store # type: ignore
     class Serialization(_UniffiTempProllyBindingError):
 
-        def __init__(self, message):
+        def __init__(self, reason):
             super().__init__(", ".join([
-                "message={!r}".format(message),
+                "reason={!r}".format(reason),
             ]))
-            self.message = message
+            self.reason = reason
 
         def __repr__(self):
             return "ProllyBindingError.Serialization({})".format(str(self))
     _UniffiTempProllyBindingError.Serialization = Serialization # type: ignore
     class Internal(_UniffiTempProllyBindingError):
 
-        def __init__(self, message):
+        def __init__(self, reason):
             super().__init__(", ".join([
-                "message={!r}".format(message),
+                "reason={!r}".format(reason),
             ]))
-            self.message = message
+            self.reason = reason
 
         def __repr__(self):
             return "ProllyBindingError.Internal({})".format(str(self))
@@ -11371,56 +11638,56 @@ class _UniffiFfiConverterTypeProllyBindingError(_UniffiConverterRustBuffer):
     @staticmethod
     def check_lower(value):
         if isinstance(value, ProllyBindingError.InvalidArgument):
-            _UniffiFfiConverterString.check_lower(value.message)
+            _UniffiFfiConverterString.check_lower(value.reason)
             return
         if isinstance(value, ProllyBindingError.InvalidCid):
-            _UniffiFfiConverterString.check_lower(value.message)
+            _UniffiFfiConverterString.check_lower(value.reason)
             return
         if isinstance(value, ProllyBindingError.InvalidNode):
-            _UniffiFfiConverterString.check_lower(value.message)
+            _UniffiFfiConverterString.check_lower(value.reason)
             return
         if isinstance(value, ProllyBindingError.NotFound):
-            _UniffiFfiConverterString.check_lower(value.message)
+            _UniffiFfiConverterString.check_lower(value.reason)
             return
         if isinstance(value, ProllyBindingError.Conflict):
-            _UniffiFfiConverterString.check_lower(value.message)
+            _UniffiFfiConverterString.check_lower(value.reason)
             return
         if isinstance(value, ProllyBindingError.Store):
-            _UniffiFfiConverterString.check_lower(value.message)
+            _UniffiFfiConverterString.check_lower(value.reason)
             return
         if isinstance(value, ProllyBindingError.Serialization):
-            _UniffiFfiConverterString.check_lower(value.message)
+            _UniffiFfiConverterString.check_lower(value.reason)
             return
         if isinstance(value, ProllyBindingError.Internal):
-            _UniffiFfiConverterString.check_lower(value.message)
+            _UniffiFfiConverterString.check_lower(value.reason)
             return
 
     @staticmethod
     def write(value, buf):
         if isinstance(value, ProllyBindingError.InvalidArgument):
             buf.write_i32(1)
-            _UniffiFfiConverterString.write(value.message, buf)
+            _UniffiFfiConverterString.write(value.reason, buf)
         if isinstance(value, ProllyBindingError.InvalidCid):
             buf.write_i32(2)
-            _UniffiFfiConverterString.write(value.message, buf)
+            _UniffiFfiConverterString.write(value.reason, buf)
         if isinstance(value, ProllyBindingError.InvalidNode):
             buf.write_i32(3)
-            _UniffiFfiConverterString.write(value.message, buf)
+            _UniffiFfiConverterString.write(value.reason, buf)
         if isinstance(value, ProllyBindingError.NotFound):
             buf.write_i32(4)
-            _UniffiFfiConverterString.write(value.message, buf)
+            _UniffiFfiConverterString.write(value.reason, buf)
         if isinstance(value, ProllyBindingError.Conflict):
             buf.write_i32(5)
-            _UniffiFfiConverterString.write(value.message, buf)
+            _UniffiFfiConverterString.write(value.reason, buf)
         if isinstance(value, ProllyBindingError.Store):
             buf.write_i32(6)
-            _UniffiFfiConverterString.write(value.message, buf)
+            _UniffiFfiConverterString.write(value.reason, buf)
         if isinstance(value, ProllyBindingError.Serialization):
             buf.write_i32(7)
-            _UniffiFfiConverterString.write(value.message, buf)
+            _UniffiFfiConverterString.write(value.reason, buf)
         if isinstance(value, ProllyBindingError.Internal):
             buf.write_i32(8)
-            _UniffiFfiConverterString.write(value.message, buf)
+            _UniffiFfiConverterString.write(value.reason, buf)
 
 
 class CrdtResolverCallback():
@@ -12762,6 +13029,266 @@ class _UniffiFfiConverterTypeProllyBlobStore:
     def write(cls, value: ProllyBlobStore, buf: _UniffiRustBuffer):
         buf.write_u64(cls.lower(value))
 
+
+class ProllyTransactionProtocol(typing.Protocol):
+
+    def batch(self, tree: TreeRecord,mutations: typing.List[MutationRecord]) -> TreeRecord:
+        raise NotImplementedError
+    def commit(self, ) -> TransactionUpdateRecord:
+        raise NotImplementedError
+    def compare_and_swap_named_root(self, name: bytes,expected: typing.Optional[TreeRecord],replacement: typing.Optional[TreeRecord]) -> NamedRootUpdateRecord:
+        raise NotImplementedError
+    def create(self, ) -> TreeRecord:
+        raise NotImplementedError
+    def delete(self, tree: TreeRecord,key: bytes) -> TreeRecord:
+        raise NotImplementedError
+    def delete_named_root(self, name: bytes) -> None:
+        raise NotImplementedError
+    def get(self, tree: TreeRecord,key: bytes) -> typing.Optional[bytes]:
+        raise NotImplementedError
+    def load_named_root(self, name: bytes) -> typing.Optional[TreeRecord]:
+        raise NotImplementedError
+    def publish_named_root(self, name: bytes,tree: TreeRecord) -> None:
+        raise NotImplementedError
+    def put(self, tree: TreeRecord,key: bytes,value: bytes) -> TreeRecord:
+        raise NotImplementedError
+    def rollback(self, ) -> None:
+        raise NotImplementedError
+
+class ProllyTransaction(ProllyTransactionProtocol):
+
+    _handle: ctypes.c_uint64
+
+    def __init__(self, *args, **kwargs):
+        raise ValueError("This class has no default constructor")
+
+    def __del__(self):
+        # In case of partial initialization of instances.
+        handle = getattr(self, "_handle", None)
+        if handle is not None:
+            _uniffi_rust_call(_UniffiLib.uniffi_prolly_bindings_fn_free_prollytransaction, handle)
+
+    def _uniffi_clone_handle(self):
+        return _uniffi_rust_call(_UniffiLib.uniffi_prolly_bindings_fn_clone_prollytransaction, self._handle)
+
+    # Used by alternative constructors or any methods which return this type.
+    @classmethod
+    def _uniffi_make_instance(cls, handle):
+        # Lightly yucky way to bypass the usual __init__ logic
+        # and just create a new instance with the required handle.
+        inst = cls.__new__(cls)
+        inst._handle = handle
+        return inst
+    def batch(self, tree: TreeRecord,mutations: typing.List[MutationRecord]) -> TreeRecord:
+
+        _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
+
+        _UniffiFfiConverterSequenceTypeMutationRecord.check_lower(mutations)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeTreeRecord.lower(tree),
+            _UniffiFfiConverterSequenceTypeMutationRecord.lower(mutations),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeTreeRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_prollytransaction_batch,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def commit(self, ) -> TransactionUpdateRecord:
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeTransactionUpdateRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_prollytransaction_commit,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def compare_and_swap_named_root(self, name: bytes,expected: typing.Optional[TreeRecord],replacement: typing.Optional[TreeRecord]) -> NamedRootUpdateRecord:
+
+        _UniffiFfiConverterBytes.check_lower(name)
+
+        _UniffiFfiConverterOptionalTypeTreeRecord.check_lower(expected)
+
+        _UniffiFfiConverterOptionalTypeTreeRecord.check_lower(replacement)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterBytes.lower(name),
+            _UniffiFfiConverterOptionalTypeTreeRecord.lower(expected),
+            _UniffiFfiConverterOptionalTypeTreeRecord.lower(replacement),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeNamedRootUpdateRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_prollytransaction_compare_and_swap_named_root,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def create(self, ) -> TreeRecord:
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeTreeRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_prollytransaction_create,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def delete(self, tree: TreeRecord,key: bytes) -> TreeRecord:
+
+        _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
+
+        _UniffiFfiConverterBytes.check_lower(key)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeTreeRecord.lower(tree),
+            _UniffiFfiConverterBytes.lower(key),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeTreeRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_prollytransaction_delete,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def delete_named_root(self, name: bytes) -> None:
+
+        _UniffiFfiConverterBytes.check_lower(name)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterBytes.lower(name),
+        )
+        _uniffi_lift_return = lambda val: None
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_prollytransaction_delete_named_root,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def get(self, tree: TreeRecord,key: bytes) -> typing.Optional[bytes]:
+
+        _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
+
+        _UniffiFfiConverterBytes.check_lower(key)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeTreeRecord.lower(tree),
+            _UniffiFfiConverterBytes.lower(key),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterOptionalBytes.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_prollytransaction_get,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def load_named_root(self, name: bytes) -> typing.Optional[TreeRecord]:
+
+        _UniffiFfiConverterBytes.check_lower(name)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterBytes.lower(name),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterOptionalTypeTreeRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_prollytransaction_load_named_root,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def publish_named_root(self, name: bytes,tree: TreeRecord) -> None:
+
+        _UniffiFfiConverterBytes.check_lower(name)
+
+        _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterBytes.lower(name),
+            _UniffiFfiConverterTypeTreeRecord.lower(tree),
+        )
+        _uniffi_lift_return = lambda val: None
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_prollytransaction_publish_named_root,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def put(self, tree: TreeRecord,key: bytes,value: bytes) -> TreeRecord:
+
+        _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
+
+        _UniffiFfiConverterBytes.check_lower(key)
+
+        _UniffiFfiConverterBytes.check_lower(value)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeTreeRecord.lower(tree),
+            _UniffiFfiConverterBytes.lower(key),
+            _UniffiFfiConverterBytes.lower(value),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeTreeRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_prollytransaction_put,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def rollback(self, ) -> None:
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+        )
+        _uniffi_lift_return = lambda val: None
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_prollytransaction_rollback,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+
+
+
+
+
+class _UniffiFfiConverterTypeProllyTransaction:
+    @staticmethod
+    def lift(value: int) -> ProllyTransaction:
+        return ProllyTransaction._uniffi_make_instance(value)
+
+    @staticmethod
+    def check_lower(value: ProllyTransaction):
+        if not isinstance(value, ProllyTransaction):
+            raise TypeError("Expected ProllyTransaction instance, {} found".format(type(value).__name__))
+
+    @staticmethod
+    def lower(value: ProllyTransaction) -> ctypes.c_uint64:
+        return value._uniffi_clone_handle()
+
+    @classmethod
+    def read(cls, buf: _UniffiRustBuffer) -> ProllyTransaction:
+        ptr = buf.read_u64()
+        if ptr == 0:
+            raise InternalError("Raw handle value was null")
+        return cls.lift(ptr)
+
+    @classmethod
+    def write(cls, value: ProllyTransaction, buf: _UniffiRustBuffer):
+        buf.write_u64(cls.lower(value))
+
 class _UniffiFfiConverterOptionalTypeEntryRecord(_UniffiConverterRustBuffer):
     @classmethod
     def check_lower(cls, value):
@@ -12893,6 +13420,8 @@ class ProllyEngineProtocol(typing.Protocol):
     def batch(self, tree: TreeRecord,mutations: typing.List[MutationRecord]) -> TreeRecord:
         raise NotImplementedError
     def batch_with_stats(self, tree: TreeRecord,mutations: typing.List[MutationRecord]) -> BatchApplyResultRecord:
+        raise NotImplementedError
+    def begin_transaction(self, ) -> ProllyTransaction:
         raise NotImplementedError
     def build_from_entries(self, entries: typing.List[EntryRecord]) -> TreeRecord:
         raise NotImplementedError
@@ -13288,6 +13817,18 @@ class ProllyEngine(ProllyEngineProtocol):
         _uniffi_ffi_result = _uniffi_rust_call_with_error(
             _uniffi_error_converter,
             _UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_batch_with_stats,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def begin_transaction(self, ) -> ProllyTransaction:
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeProllyTransaction.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_begin_transaction,
             *_uniffi_lowered_args,
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
@@ -17391,6 +17932,8 @@ __all__ = [
     "TimestampedValueRecord",
     "TombstoneMetadataRecord",
     "TombstoneRecord",
+    "TransactionConflictRecord",
+    "TransactionUpdateRecord",
     "TreeDebugNodeRecord",
     "TreeDebugComparedNodeRecord",
     "TreeDebugComparisonLevelRecord",
@@ -17531,6 +18074,8 @@ __all__ = [
     "MergePolicyRegistryProtocol",
     "ProllyBlobStore",
     "ProllyBlobStoreProtocol",
+    "ProllyTransaction",
+    "ProllyTransactionProtocol",
     "ProllyEngine",
     "ProllyEngineProtocol",
 ]

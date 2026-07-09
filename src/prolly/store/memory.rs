@@ -3,9 +3,14 @@
 use std::collections::{BTreeMap, HashMap};
 use std::sync::RwLock;
 
+use super::super::error::Error;
 use super::super::manifest::{
     sort_named_root_manifests, ManifestStore, ManifestStoreScan, ManifestUpdate, NamedRootManifest,
     RootManifest,
+};
+use super::super::transaction::{
+    RootCondition, RootWrite, TransactionConflict, TransactionNodeWrite, TransactionUpdate,
+    TransactionalStore,
 };
 use super::{cid_from_store_key, sort_cids, BatchOp, NodeStoreScan, OrderedBatchReadPlan, Store};
 
@@ -237,6 +242,64 @@ impl ManifestStoreScan for MemStore {
             .collect::<Vec<_>>();
         sort_named_root_manifests(&mut roots);
         Ok(roots)
+    }
+}
+
+impl TransactionalStore for MemStore {
+    fn supports_transactions(&self) -> bool {
+        true
+    }
+
+    fn commit_transaction(
+        &self,
+        node_writes: &[TransactionNodeWrite],
+        root_conditions: &[RootCondition],
+        root_writes: &[RootWrite],
+    ) -> Result<TransactionUpdate, Error> {
+        let mut data = self.data.write().map_err(|err| {
+            Error::Store(Box::new(MemStoreError(format!("lock poisoned: {err}"))))
+        })?;
+        let mut roots = self.roots.write().map_err(|err| {
+            Error::Store(Box::new(MemStoreError(format!("lock poisoned: {err}"))))
+        })?;
+
+        for condition in root_conditions {
+            let current = roots.get(&condition.name).cloned();
+            if current != condition.expected {
+                return Ok(TransactionUpdate::Conflict(TransactionConflict::new(
+                    condition.name.clone(),
+                    condition.expected.clone(),
+                    current,
+                )));
+            }
+        }
+
+        for write in node_writes {
+            match write {
+                TransactionNodeWrite::Upsert { key, value } => {
+                    data.insert(key.clone(), value.clone());
+                }
+                TransactionNodeWrite::Delete { key } => {
+                    data.remove(key);
+                }
+            }
+        }
+
+        for write in root_writes {
+            match write {
+                RootWrite::Put { name, manifest } => {
+                    roots.insert(name.clone(), manifest.clone());
+                }
+                RootWrite::Delete { name } => {
+                    roots.remove(name);
+                }
+            }
+        }
+
+        Ok(TransactionUpdate::Applied {
+            nodes_written: node_writes.len(),
+            roots_written: root_writes.len(),
+        })
     }
 }
 

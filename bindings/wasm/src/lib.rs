@@ -4,15 +4,16 @@ use js_sys::{Array, Object, Reflect, Uint8Array};
 use prolly::{
     is_boundary_config as core_is_boundary_config, AuthenticatedProofEnvelope, BatchApplyResult,
     BatchApplyStats, Cid, Config, Conflict, Diff, DiffPageProof, Encoding, Error, KeyProof,
-    MemStore, MultiKeyProof, Mutation, Node, ParallelConfig, Prolly, RangeCursor, RangePageProof,
-    RangeProof, Resolver, ReverseCursor, SnapshotBundle, SnapshotBundleNode, SnapshotNamespace,
-    StructuralDiffCursor, StructuralDiffMarker, Tree,
+    MemStore, MultiKeyProof, Mutation, Node, OwnedProllyTransaction, ParallelConfig, Prolly,
+    RangeCursor, RangePageProof, RangeProof, Resolver, ReverseCursor, SnapshotBundle,
+    SnapshotBundleNode, SnapshotNamespace, StructuralDiffCursor, StructuralDiffMarker, Tree,
 };
 use serde_json::Value;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 
 type WasmEngine = Prolly<Arc<MemStore>>;
+type WasmTransactionInner = OwnedProllyTransaction<Arc<MemStore>>;
 
 #[wasm_bindgen(js_name = WasmConfig)]
 #[derive(Clone)]
@@ -96,6 +97,119 @@ impl WasmTree {
     #[wasm_bindgen(js_name = isEmpty)]
     pub fn is_empty(&self) -> bool {
         self.inner.is_empty()
+    }
+}
+
+#[wasm_bindgen(js_name = WasmTransaction)]
+pub struct WasmTransaction {
+    inner: Option<WasmTransactionInner>,
+}
+
+impl WasmTransaction {
+    fn inner(&self) -> Result<&WasmTransactionInner, JsValue> {
+        self.inner
+            .as_ref()
+            .ok_or_else(|| JsValue::from_str("transaction is already completed"))
+    }
+
+    fn take(&mut self) -> Result<WasmTransactionInner, JsValue> {
+        self.inner
+            .take()
+            .ok_or_else(|| JsValue::from_str("transaction is already completed"))
+    }
+}
+
+#[wasm_bindgen(js_class = WasmTransaction)]
+impl WasmTransaction {
+    pub fn create(&self) -> Result<WasmTree, JsValue> {
+        Ok(WasmTree {
+            inner: self.inner()?.create(),
+        })
+    }
+
+    pub fn get(&self, tree: &WasmTree, key: Uint8Array) -> Result<JsValue, JsValue> {
+        self.inner()?
+            .get(&tree.inner, &key.to_vec())
+            .map(optional_bytes)
+            .map_err(js_error)
+    }
+
+    pub fn put(
+        &self,
+        tree: &WasmTree,
+        key: Uint8Array,
+        value: Uint8Array,
+    ) -> Result<WasmTree, JsValue> {
+        self.inner()?
+            .put(&tree.inner, key.to_vec(), value.to_vec())
+            .map(|inner| WasmTree { inner })
+            .map_err(js_error)
+    }
+
+    pub fn delete(&self, tree: &WasmTree, key: Uint8Array) -> Result<WasmTree, JsValue> {
+        self.inner()?
+            .delete(&tree.inner, &key.to_vec())
+            .map(|inner| WasmTree { inner })
+            .map_err(js_error)
+    }
+
+    pub fn batch(&self, tree: &WasmTree, mutations: Array) -> Result<WasmTree, JsValue> {
+        let mutations = mutations_array(mutations)?;
+        self.inner()?
+            .batch(&tree.inner, mutations)
+            .map(|inner| WasmTree { inner })
+            .map_err(js_error)
+    }
+
+    #[wasm_bindgen(js_name = loadNamedRoot)]
+    pub fn load_named_root(&self, name: Uint8Array) -> Result<JsValue, JsValue> {
+        self.inner()?
+            .load_named_root(&name.to_vec())
+            .map(optional_tree)
+            .map_err(js_error)
+    }
+
+    #[wasm_bindgen(js_name = publishNamedRoot)]
+    pub fn publish_named_root(&self, name: Uint8Array, tree: &WasmTree) -> Result<(), JsValue> {
+        self.inner()?
+            .publish_named_root(&name.to_vec(), &tree.inner)
+            .map_err(js_error)
+    }
+
+    #[wasm_bindgen(js_name = deleteNamedRoot)]
+    pub fn delete_named_root(&self, name: Uint8Array) -> Result<(), JsValue> {
+        self.inner()?
+            .delete_named_root(&name.to_vec())
+            .map_err(js_error)
+    }
+
+    #[wasm_bindgen(js_name = compareAndSwapNamedRoot)]
+    pub fn compare_and_swap_named_root(
+        &self,
+        name: Uint8Array,
+        expected: Option<WasmTree>,
+        replacement: Option<WasmTree>,
+    ) -> Result<Object, JsValue> {
+        self.inner()?
+            .compare_and_swap_named_root(
+                &name.to_vec(),
+                expected.as_ref().map(|tree| &tree.inner),
+                replacement.as_ref().map(|tree| &tree.inner),
+            )
+            .map_err(js_error)
+            .and_then(named_root_update_to_object)
+    }
+
+    pub fn commit(&mut self) -> Result<Object, JsValue> {
+        self.take()?
+            .commit()
+            .map_err(js_error)
+            .and_then(transaction_update_to_object)
+    }
+
+    pub fn rollback(&mut self) -> Result<(), JsValue> {
+        self.take()?.rollback();
+        Ok(())
     }
 }
 
@@ -313,6 +427,14 @@ impl WasmProllyEngine {
         }
     }
 
+    #[wasm_bindgen(js_name = beginTransaction)]
+    pub fn begin_transaction(&self) -> Result<WasmTransaction, JsValue> {
+        self.inner
+            .begin_owned_transaction()
+            .map(|inner| WasmTransaction { inner: Some(inner) })
+            .map_err(js_error)
+    }
+
     pub fn get(&self, tree: &WasmTree, key: Uint8Array) -> Result<JsValue, JsValue> {
         self.inner
             .get(&tree.inner, &key.to_vec())
@@ -406,6 +528,45 @@ impl WasmProllyEngine {
             .delete(&tree.inner, &key.to_vec())
             .map(|inner| WasmTree { inner })
             .map_err(js_error)
+    }
+
+    #[wasm_bindgen(js_name = loadNamedRoot)]
+    pub fn load_named_root(&self, name: Uint8Array) -> Result<JsValue, JsValue> {
+        self.inner
+            .load_named_root(&name.to_vec())
+            .map(optional_tree)
+            .map_err(js_error)
+    }
+
+    #[wasm_bindgen(js_name = publishNamedRoot)]
+    pub fn publish_named_root(&self, name: Uint8Array, tree: &WasmTree) -> Result<(), JsValue> {
+        self.inner
+            .publish_named_root(&name.to_vec(), &tree.inner)
+            .map_err(js_error)
+    }
+
+    #[wasm_bindgen(js_name = deleteNamedRoot)]
+    pub fn delete_named_root(&self, name: Uint8Array) -> Result<(), JsValue> {
+        self.inner
+            .delete_named_root(&name.to_vec())
+            .map_err(js_error)
+    }
+
+    #[wasm_bindgen(js_name = compareAndSwapNamedRoot)]
+    pub fn compare_and_swap_named_root(
+        &self,
+        name: Uint8Array,
+        expected: Option<WasmTree>,
+        replacement: Option<WasmTree>,
+    ) -> Result<Object, JsValue> {
+        self.inner
+            .compare_and_swap_named_root(
+                &name.to_vec(),
+                expected.as_ref().map(|tree| &tree.inner),
+                replacement.as_ref().map(|tree| &tree.inner),
+            )
+            .map_err(js_error)
+            .and_then(named_root_update_to_object)
     }
 
     pub fn batch(&self, tree: &WasmTree, mutations: Array) -> Result<WasmTree, JsValue> {
@@ -1588,6 +1749,119 @@ fn optional_bytes(value: Option<Vec<u8>>) -> JsValue {
     value
         .map(|bytes| Uint8Array::from(bytes.as_slice()).into())
         .unwrap_or(JsValue::NULL)
+}
+
+fn optional_tree(value: Option<Tree>) -> JsValue {
+    value
+        .map(|inner| JsValue::from(WasmTree { inner }))
+        .unwrap_or(JsValue::NULL)
+}
+
+fn optional_u64(value: Option<u64>) -> JsValue {
+    value
+        .map(|value| JsValue::from_f64(value as f64))
+        .unwrap_or(JsValue::NULL)
+}
+
+fn root_manifest_to_object(manifest: prolly::RootManifest) -> Result<Object, JsValue> {
+    let created_at_millis = manifest.created_at_millis;
+    let updated_at_millis = manifest.updated_at_millis;
+    let tree = manifest.into_tree();
+    let object = Object::new();
+    Reflect::set(&object, &"tree".into(), &JsValue::from(WasmTree { inner: tree }))?;
+    Reflect::set(
+        &object,
+        &"createdAtMillis".into(),
+        &optional_u64(created_at_millis),
+    )?;
+    Reflect::set(
+        &object,
+        &"updatedAtMillis".into(),
+        &optional_u64(updated_at_millis),
+    )?;
+    Ok(object)
+}
+
+fn optional_root_manifest(value: Option<prolly::RootManifest>) -> Result<JsValue, JsValue> {
+    value
+        .map(root_manifest_to_object)
+        .transpose()
+        .map(|value| value.map(JsValue::from).unwrap_or(JsValue::NULL))
+}
+
+fn named_root_update_to_object(update: prolly::NamedRootUpdate) -> Result<Object, JsValue> {
+    let object = Object::new();
+    match update {
+        prolly::NamedRootUpdate::Applied => {
+            Reflect::set(&object, &"applied".into(), &JsValue::TRUE)?;
+            Reflect::set(&object, &"conflict".into(), &JsValue::FALSE)?;
+            Reflect::set(&object, &"current".into(), &JsValue::NULL)?;
+        }
+        prolly::NamedRootUpdate::Conflict { current } => {
+            Reflect::set(&object, &"applied".into(), &JsValue::FALSE)?;
+            Reflect::set(&object, &"conflict".into(), &JsValue::TRUE)?;
+            Reflect::set(&object, &"current".into(), &optional_tree(current))?;
+        }
+    }
+    Ok(object)
+}
+
+fn transaction_conflict_to_object(
+    conflict: prolly::TransactionConflict,
+) -> Result<Object, JsValue> {
+    let object = Object::new();
+    Reflect::set(
+        &object,
+        &"name".into(),
+        &Uint8Array::from(conflict.name.as_slice()).into(),
+    )?;
+    Reflect::set(
+        &object,
+        &"expected".into(),
+        &optional_root_manifest(conflict.expected)?,
+    )?;
+    Reflect::set(
+        &object,
+        &"current".into(),
+        &optional_root_manifest(conflict.current)?,
+    )?;
+    Ok(object)
+}
+
+fn transaction_update_to_object(update: prolly::TransactionUpdate) -> Result<Object, JsValue> {
+    let object = Object::new();
+    match update {
+        prolly::TransactionUpdate::Applied {
+            nodes_written,
+            roots_written,
+        } => {
+            Reflect::set(&object, &"applied".into(), &JsValue::TRUE)?;
+            Reflect::set(&object, &"conflict".into(), &JsValue::FALSE)?;
+            Reflect::set(
+                &object,
+                &"nodesWritten".into(),
+                &JsValue::from_f64(nodes_written as f64),
+            )?;
+            Reflect::set(
+                &object,
+                &"rootsWritten".into(),
+                &JsValue::from_f64(roots_written as f64),
+            )?;
+            Reflect::set(&object, &"conflictDetail".into(), &JsValue::NULL)?;
+        }
+        prolly::TransactionUpdate::Conflict(conflict) => {
+            Reflect::set(&object, &"applied".into(), &JsValue::FALSE)?;
+            Reflect::set(&object, &"conflict".into(), &JsValue::TRUE)?;
+            Reflect::set(&object, &"nodesWritten".into(), &JsValue::from_f64(0.0))?;
+            Reflect::set(&object, &"rootsWritten".into(), &JsValue::from_f64(0.0))?;
+            Reflect::set(
+                &object,
+                &"conflictDetail".into(),
+                &JsValue::from(transaction_conflict_to_object(conflict)?),
+            )?;
+        }
+    }
+    Ok(object)
 }
 
 fn cids_to_array(cids: Vec<Cid>) -> Array {

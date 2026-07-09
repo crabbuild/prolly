@@ -442,12 +442,70 @@ export type WasmTree = import("../pkg/prolly_wasm.js").WasmTree;
 export type WasmConfig = import("../pkg/prolly_wasm.js").WasmConfig;
 export type WasmRangeCursor = import("../pkg/prolly_wasm.js").WasmRangeCursor;
 export type WasmReverseCursor = import("../pkg/prolly_wasm.js").WasmReverseCursor;
+export type RawWasmTransaction = import("../pkg/prolly_wasm.js").WasmTransaction;
 export type RawWasmProllyEngine = import("../pkg/prolly_wasm.js").WasmProllyEngine;
 
+export interface WasmRootManifestRecord {
+  tree: WasmTree;
+  createdAtMillis?: number | null;
+  updatedAtMillis?: number | null;
+}
+
+export interface WasmNamedRootUpdateRecord {
+  applied: boolean;
+  conflict: boolean;
+  current?: WasmTree | null;
+}
+
+export interface WasmTransactionConflictRecord {
+  name: Uint8Array;
+  expected?: WasmRootManifestRecord | null;
+  current?: WasmRootManifestRecord | null;
+}
+
+export interface WasmTransactionUpdateRecord {
+  applied: boolean;
+  conflict: boolean;
+  nodesWritten: number;
+  rootsWritten: number;
+  conflictDetail?: WasmTransactionConflictRecord | null;
+}
+
+export interface WasmTransactionInstance
+  extends Omit<RawWasmTransaction, "loadNamedRoot" | "compareAndSwapNamedRoot" | "commit"> {
+  loadNamedRoot(name: Uint8Array): WasmTree | null;
+  compareAndSwapNamedRoot(
+    name: Uint8Array,
+    expected?: WasmTree | null,
+    replacement?: WasmTree | null,
+  ): WasmNamedRootUpdateRecord;
+  commit(): WasmTransactionUpdateRecord;
+}
+
 export interface WasmProllyEngineInstance
-  extends Omit<RawWasmProllyEngine, "firstEntry" | "lastEntry" | "lowerBound" | "upperBound" | "prefix" | "prefixPage" | "prefixReversePage" | "reversePage"> {
+  extends Omit<
+    RawWasmProllyEngine,
+    | "beginTransaction"
+    | "firstEntry"
+    | "lastEntry"
+    | "loadNamedRoot"
+    | "compareAndSwapNamedRoot"
+    | "lowerBound"
+    | "upperBound"
+    | "prefix"
+    | "prefixPage"
+    | "prefixReversePage"
+    | "reversePage"
+  > {
+  beginTransaction(): WasmTransactionInstance;
   firstEntry(tree: WasmTree): WasmOptionalEntryRecord;
   lastEntry(tree: WasmTree): WasmOptionalEntryRecord;
+  loadNamedRoot(name: Uint8Array): WasmTree | null;
+  compareAndSwapNamedRoot(
+    name: Uint8Array,
+    expected?: WasmTree | null,
+    replacement?: WasmTree | null,
+  ): WasmNamedRootUpdateRecord;
   lowerBound(tree: WasmTree, key: Uint8Array): WasmOptionalEntryRecord;
   upperBound(tree: WasmTree, key: Uint8Array): WasmOptionalEntryRecord;
   prefix(tree: WasmTree, prefix: Uint8Array): WasmEntryRecord[];

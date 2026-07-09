@@ -6,9 +6,14 @@ use std::sync::Mutex;
 
 use rocksdb::{ColumnFamilyDescriptor, DBCompressionType, IteratorMode, Options, WriteBatch, DB};
 
+use super::super::error::Error;
 use super::super::manifest::{
     sort_named_root_manifests, ManifestStore, ManifestStoreScan, ManifestUpdate, NamedRootManifest,
     RootManifest,
+};
+use super::super::transaction::{
+    RootCondition, RootWrite, TransactionConflict, TransactionNodeWrite, TransactionUpdate,
+    TransactionalStore,
 };
 use super::{cid_from_store_key, sort_cids, BatchOp, NodeStoreScan, OrderedBatchReadPlan, Store};
 
@@ -432,6 +437,74 @@ impl ManifestStoreScan for RocksDBStore {
         }
         sort_named_root_manifests(&mut roots);
         Ok(roots)
+    }
+}
+
+impl TransactionalStore for RocksDBStore {
+    fn supports_transactions(&self) -> bool {
+        true
+    }
+
+    fn commit_transaction(
+        &self,
+        node_writes: &[TransactionNodeWrite],
+        root_conditions: &[RootCondition],
+        root_writes: &[RootWrite],
+    ) -> Result<TransactionUpdate, Error> {
+        let _guard = self.manifest_lock.lock().map_err(|err| {
+            Error::Store(Box::new(RocksDBStoreError::new(format!(
+                "manifest lock poisoned: {err}"
+            ))))
+        })?;
+
+        let cf = self.roots_cf().map_err(|err| Error::Store(Box::new(err)))?;
+        for condition in root_conditions {
+            let current_bytes = self.db.get_cf(&cf, &condition.name).map_err(|err| {
+                Error::Store(Box::new(RocksDBStoreError::from_rocksdb(
+                    err,
+                    "Failed to read root manifest during transaction commit",
+                )))
+            })?;
+            let current =
+                decode_root_manifest(current_bytes).map_err(|err| Error::Store(Box::new(err)))?;
+            if current != condition.expected {
+                return Ok(TransactionUpdate::Conflict(TransactionConflict::new(
+                    condition.name.clone(),
+                    condition.expected.clone(),
+                    current,
+                )));
+            }
+        }
+
+        let mut batch = WriteBatch::default();
+        for write in node_writes {
+            match write {
+                TransactionNodeWrite::Upsert { key, value } => batch.put(key, value),
+                TransactionNodeWrite::Delete { key } => batch.delete(key),
+            }
+        }
+
+        for write in root_writes {
+            match write {
+                RootWrite::Put { name, manifest } => {
+                    let bytes = encode_root_manifest(manifest)
+                        .map_err(|err| Error::Store(Box::new(err)))?;
+                    batch.put_cf(&cf, name, bytes);
+                }
+                RootWrite::Delete { name } => batch.delete_cf(&cf, name),
+            }
+        }
+
+        self.db.write(batch).map_err(|err| {
+            Error::Store(Box::new(RocksDBStoreError::from_rocksdb(
+                err,
+                "Failed to commit transaction",
+            )))
+        })?;
+        Ok(TransactionUpdate::Applied {
+            nodes_written: node_writes.len(),
+            roots_written: root_writes.len(),
+        })
     }
 }
 

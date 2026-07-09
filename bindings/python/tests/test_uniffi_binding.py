@@ -39,6 +39,39 @@ class UniFfiBindingTests(unittest.TestCase):
         self.assertEqual(len(diffs), 1)
         self.assertEqual(diffs[0].key, b"a")
 
+    def test_memory_transaction_commits_rolls_back_and_conflicts(self) -> None:
+        engine = prolly.ProllyEngine.memory(prolly.default_config())
+        source_name = b"tickets/source/current"
+        rollback_name = b"tickets/source/rolled-back"
+        conflict_name = b"tickets/source/conflict"
+
+        tx = engine.begin_transaction()
+        tree = tx.put(tx.create(), b"ticket/123/status", b"open")
+        tx.publish_named_root(source_name, tree)
+        update = tx.commit()
+        self.assertTrue(update.applied)
+        self.assertFalse(update.conflict)
+        self.assertGreater(update.nodes_written, 0)
+        self.assertEqual(engine.load_named_root(source_name).root, tree.root)
+
+        rollback_tx = engine.begin_transaction()
+        rolled_back = rollback_tx.put(rollback_tx.create(), b"ticket/456/status", b"closed")
+        rollback_tx.publish_named_root(rollback_name, rolled_back)
+        rollback_tx.rollback()
+        self.assertIsNone(engine.load_named_root(rollback_name))
+
+        stale_tx = engine.begin_transaction()
+        self.assertIsNone(stale_tx.load_named_root(conflict_name))
+        winner = engine.put(engine.create(), b"ticket/789/status", b"open")
+        engine.publish_named_root(conflict_name, winner)
+        loser = stale_tx.put(stale_tx.create(), b"ticket/789/status", b"closed")
+        stale_tx.publish_named_root(conflict_name, loser)
+        conflict = stale_tx.commit()
+        self.assertFalse(conflict.applied)
+        self.assertTrue(conflict.conflict)
+        self.assertEqual(conflict.conflict_detail.name, conflict_name)
+        self.assertEqual(engine.load_named_root(conflict_name).root, winner.root)
+
     def test_key_helpers_build_composite_keys(self) -> None:
         segments = [b"tenant", b"\x00\x01\xff", b""]
         expected = b"tenant\x00\x00\x00\xff\x01\xff\x00\x00\x00\x00"

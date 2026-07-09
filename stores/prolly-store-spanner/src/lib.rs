@@ -1,7 +1,8 @@
 //! Cloud Spanner store adapter for prolly-map.
 
 pub use prolly::{
-    RemoteBatchOp, RemoteManifestUpdate, RemoteNamedRoot, RemoteProllyStore, RemoteStoreBackend,
+    RemoteBatchOp, RemoteManifestUpdate, RemoteNamedRoot, RemoteProllyStore, RemoteRootCondition,
+    RemoteRootWrite, RemoteStoreBackend, RemoteTransactionConflict, RemoteTransactionUpdate,
 };
 
 /// Spanner adapter entry point.
@@ -13,7 +14,10 @@ pub mod spanner {
     use google_cloud_spanner::statement::Statement;
     use google_cloud_spanner::transaction_rw::ReadWriteTransaction;
 
-    use crate::{RemoteBatchOp, RemoteManifestUpdate, RemoteNamedRoot, RemoteStoreBackend};
+    use crate::{
+        RemoteBatchOp, RemoteManifestUpdate, RemoteNamedRoot, RemoteRootCondition, RemoteRootWrite,
+        RemoteStoreBackend, RemoteTransactionConflict, RemoteTransactionUpdate,
+    };
 
     /// Store adapter for Spanner-backed prolly nodes and roots.
     pub type SpannerStore = crate::RemoteProllyStore<SpannerBackend>;
@@ -265,6 +269,78 @@ pub mod spanner {
                 ));
             }
             Ok(roots)
+        }
+
+        fn supports_transactions(&self) -> bool {
+            true
+        }
+
+        async fn commit_transaction(
+            &self,
+            node_writes: &[RemoteBatchOp<'_>],
+            root_conditions: &[RemoteRootCondition],
+            root_writes: &[RemoteRootWrite],
+        ) -> Result<RemoteTransactionUpdate, Self::Error> {
+            let node_writes = node_writes
+                .iter()
+                .map(|write| match write {
+                    RemoteBatchOp::Upsert { key, value } => {
+                        (true, key.to_vec(), value.to_vec())
+                    }
+                    RemoteBatchOp::Delete { key } => (false, key.to_vec(), Vec::new()),
+                })
+                .collect::<Vec<_>>();
+            let root_conditions = root_conditions.to_vec();
+            let root_writes = root_writes.to_vec();
+
+            let (_, update) = self
+                .client
+                .read_write_transaction(|tx| {
+                    let node_writes = node_writes.clone();
+                    let root_conditions = root_conditions.clone();
+                    let root_writes = root_writes.clone();
+                    Box::pin(async move {
+                        for condition in &root_conditions {
+                            let current = read_root_in_transaction(tx, &condition.name).await?;
+                            if current != condition.expected {
+                                return Ok::<RemoteTransactionUpdate, Error>(
+                                    RemoteTransactionUpdate::Conflict(
+                                        RemoteTransactionConflict::new(
+                                            condition.name.clone(),
+                                            condition.expected.clone(),
+                                            current,
+                                        ),
+                                    ),
+                                );
+                            }
+                        }
+
+                        let mut mutations = Vec::new();
+                        for (is_upsert, key, value) in &node_writes {
+                            if *is_upsert {
+                                mutations.push(node_upsert(key, value));
+                            } else {
+                                mutations.push(node_delete(key));
+                            }
+                        }
+                        for write in &root_writes {
+                            match write {
+                                RemoteRootWrite::Put { name, manifest } => {
+                                    mutations.push(root_upsert(name, manifest));
+                                }
+                                RemoteRootWrite::Delete { name } => {
+                                    mutations.push(root_delete(name));
+                                }
+                            }
+                        }
+                        if !mutations.is_empty() {
+                            tx.buffer_write(mutations);
+                        }
+                        Ok::<RemoteTransactionUpdate, Error>(RemoteTransactionUpdate::Applied)
+                    })
+                })
+                .await?;
+            Ok(update)
         }
     }
 

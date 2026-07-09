@@ -752,6 +752,14 @@ object ProllyJavaAdapters {
         record.writtenBytes.toLong()
 
     @JvmStatic
+    fun transactionUpdateNodesWritten(record: TransactionUpdateRecord): Long =
+        record.nodesWritten.toLong()
+
+    @JvmStatic
+    fun transactionUpdateRootsWritten(record: TransactionUpdateRecord): Long =
+        record.rootsWritten.toLong()
+
+    @JvmStatic
     fun gcReachabilityLiveNodes(record: GcReachabilityRecord): Long =
         record.liveNodes.toLong()
 

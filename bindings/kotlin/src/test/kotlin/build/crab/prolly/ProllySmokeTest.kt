@@ -25,6 +25,63 @@ class ProllySmokeTest {
     }
 
     @Test
+    fun memoryTransactionCommitsRollsBackAndConflicts() {
+        ProllyNative.useLocalDebugLibrary()
+
+        ProllyEngine.memory(defaultConfig()).use { engine ->
+            val sourceName = "tickets/source/current".toByteArray()
+            val rollbackName = "tickets/source/rolled-back".toByteArray()
+            val conflictName = "tickets/source/conflict".toByteArray()
+
+            engine.beginTransaction().use { transaction ->
+                val tree = transaction.put(
+                    transaction.create(),
+                    "ticket/123/status".toByteArray(),
+                    "open".toByteArray(),
+                )
+                transaction.publishNamedRoot(sourceName, tree)
+                val update = transaction.commit()
+                assertTrue(update.applied)
+                assertFalse(update.conflict)
+                assertTrue(update.nodesWritten > 0UL)
+                assertArrayEquals(tree.root, engine.loadNamedRoot(sourceName)?.root)
+            }
+
+            engine.beginTransaction().use { transaction ->
+                val rolledBack = transaction.put(
+                    transaction.create(),
+                    "ticket/456/status".toByteArray(),
+                    "closed".toByteArray(),
+                )
+                transaction.publishNamedRoot(rollbackName, rolledBack)
+                transaction.rollback()
+                assertEquals(null, engine.loadNamedRoot(rollbackName))
+            }
+
+            engine.beginTransaction().use { stale ->
+                assertEquals(null, stale.loadNamedRoot(conflictName))
+                val winner = engine.put(
+                    engine.create(),
+                    "ticket/789/status".toByteArray(),
+                    "open".toByteArray(),
+                )
+                engine.publishNamedRoot(conflictName, winner)
+                val loser = stale.put(
+                    stale.create(),
+                    "ticket/789/status".toByteArray(),
+                    "closed".toByteArray(),
+                )
+                stale.publishNamedRoot(conflictName, loser)
+                val conflict = stale.commit()
+                assertFalse(conflict.applied)
+                assertTrue(conflict.conflict)
+                assertArrayEquals(conflictName, conflict.conflictDetail?.name)
+                assertArrayEquals(winner.root, engine.loadNamedRoot(conflictName)?.root)
+            }
+        }
+    }
+
+    @Test
     fun customStoreCallbacksDriveEngine() {
         ProllyNative.useLocalDebugLibrary()
 

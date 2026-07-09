@@ -29,9 +29,17 @@ The adapter expects a Cosmos DB SQL API container with partition key:
 Documents have these fields:
 
 - `id`: deterministic document id derived from the logical key.
-- `kind`: `node`, `root`, or `hint`; also the partition key.
+- `kind`: the shared partition-key value for one backend instance. The default
+  is `prolly`.
+- `family`: `node`, `root`, or `hint`.
 - `key`: hex-encoded logical key bytes.
 - `value`: base64-encoded payload bytes.
+
+Cosmos DB transactional batch operations are scoped to one logical partition, so
+this adapter stores nodes, roots, and hints for a backend instance in the same
+`/kind` partition. Use `with_key_prefix` to separate tenants or test runs inside
+that partition. Use `with_partition_key_value` only when you intentionally want
+a separate logical partition; transactions cannot span two different values.
 
 The adapter does not create the database or container. Create them through Azure
 CLI, ARM/Bicep/Terraform, or the Azure portal before running the adapter.
@@ -93,6 +101,17 @@ prolly.publish_named_root(b"items/main", &tree).await?;
 # Ok(())
 # }
 ```
+
+## Transactions
+
+The backend advertises `supports_transactions() == true` and maps prolly
+transactions to Cosmos DB transactional batch requests. A commit validates named
+root conditions and applies staged node/root writes atomically; if a root changed
+since the transaction read it, the commit returns a conflict and Cosmos rolls the
+batch back.
+
+Cosmos DB limits one transactional batch to a single partition key and up to 100
+operations. Large transactions should be split by the caller.
 
 ## Diff And Merge
 

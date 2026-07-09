@@ -214,6 +214,20 @@ export interface NativeNamedRootUpdateRecord {
   current?: NativeTreeRecord | null;
 }
 
+export interface NativeTransactionConflictRecord {
+  name: Uint8Array;
+  expected?: NativeRootManifestRecord | null;
+  current?: NativeRootManifestRecord | null;
+}
+
+export interface NativeTransactionUpdateRecord {
+  applied: boolean;
+  conflict: boolean;
+  nodesWritten: string;
+  rootsWritten: string;
+  conflictDetail?: NativeTransactionConflictRecord | null;
+}
+
 export interface NativeSnapshotNamespaceRecord {
   kind: "branch" | "tag" | "checkpoint" | "custom";
   customPrefix?: Uint8Array | null;
@@ -805,8 +819,27 @@ export interface NativeMergePolicyRegistry {
   pushExactResolver(key: Uint8Array, resolver: NativeMergeResolver): void;
 }
 
+export interface NativeProllyTransaction {
+  create(): NativeTreeRecord;
+  put(tree: NativeTreeRecord, key: Uint8Array, value: Uint8Array): NativeTreeRecord;
+  delete(tree: NativeTreeRecord, key: Uint8Array): NativeTreeRecord;
+  batch(tree: NativeTreeRecord, mutations: NativeMutationRecord[]): NativeTreeRecord;
+  get(tree: NativeTreeRecord, key: Uint8Array): Uint8Array | null;
+  loadNamedRoot(name: Uint8Array): NativeTreeRecord | null;
+  publishNamedRoot(name: Uint8Array, tree: NativeTreeRecord): void;
+  deleteNamedRoot(name: Uint8Array): void;
+  compareAndSwapNamedRoot(
+    name: Uint8Array,
+    expected?: NativeTreeRecord | null,
+    replacement?: NativeTreeRecord | null,
+  ): NativeNamedRootUpdateRecord;
+  commit(): NativeTransactionUpdateRecord;
+  rollback(): void;
+}
+
 export interface NativeProllyEngine {
   create(): NativeTreeRecord;
+  beginTransaction(): NativeProllyTransaction;
   put(tree: NativeTreeRecord, key: Uint8Array, value: Uint8Array): NativeTreeRecord;
   delete(tree: NativeTreeRecord, key: Uint8Array): NativeTreeRecord;
   get(tree: NativeTreeRecord, key: Uint8Array): Uint8Array | null;

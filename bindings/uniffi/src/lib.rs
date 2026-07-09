@@ -16,9 +16,10 @@ use prolly::{
     MergeReuseReason, MergeTrace, MergeTraceEvent, MergeTraceStage, MissingNodeCopy,
     MissingNodePlan, MultiKeyProof, MultiKeyProofVerification, MultiValueSet, Mutation,
     NamedRootManifest, NamedRootRetention, NamedRootUpdate, Node, NodeStoreScan, ParallelConfig,
-    Prolly, ProllyMetricsSnapshot, ProofBundleSummary, ProofBundleVerification, ProvedDiffPage,
-    ProvedRangePage, RangeCursor, RangePageProof, RangePageProofVerification, RangeProof,
-    RangeProofVerification, Resolver, ReverseCursor, RootManifest,
+    OwnedProllyTransaction, Prolly, ProllyMetricsSnapshot, ProofBundleSummary,
+    ProofBundleVerification, ProvedDiffPage, ProvedRangePage, RangeCursor, RangePageProof,
+    RangePageProofVerification, RangeProof, RangeProofVerification, Resolver, ReverseCursor,
+    RootManifest,
     SnapshotBundle as CoreSnapshotBundle, SnapshotBundleNode as CoreSnapshotBundleNode,
     SnapshotBundleSummary, SnapshotBundleVerification, SnapshotNamespace, SnapshotRoot,
     SnapshotSelection, StatsComparison, StatsDiff, StatsPercentageChange, Store,
@@ -34,6 +35,10 @@ type FileEngine = Prolly<Arc<FileNodeStore>>;
 #[cfg(feature = "sqlite")]
 type SqliteEngine = Prolly<Arc<SqliteStore>>;
 type HostEngine = Prolly<Arc<HostStore>>;
+type MemoryTransaction = OwnedProllyTransaction<Arc<MemStore>>;
+type FileTransaction = OwnedProllyTransaction<Arc<FileNodeStore>>;
+#[cfg(feature = "sqlite")]
+type SqliteTransaction = OwnedProllyTransaction<Arc<SqliteStore>>;
 
 enum BindingEngine {
     Memory(MemoryEngine),
@@ -41,6 +46,13 @@ enum BindingEngine {
     #[cfg(feature = "sqlite")]
     Sqlite(SqliteEngine),
     Host(HostEngine),
+}
+
+enum BindingTransaction {
+    Memory(MemoryTransaction),
+    File(FileTransaction),
+    #[cfg(feature = "sqlite")]
+    Sqlite(SqliteTransaction),
 }
 
 type MemoryBlobStore = Arc<MemBlobStore>;
@@ -59,6 +71,17 @@ macro_rules! with_engine {
             #[cfg(feature = "sqlite")]
             BindingEngine::Sqlite($engine) => $body,
             BindingEngine::Host($engine) => $body,
+        }
+    };
+}
+
+macro_rules! with_transaction {
+    ($transaction:expr, $tx:ident, $body:block) => {
+        match $transaction {
+            BindingTransaction::Memory($tx) => $body,
+            BindingTransaction::File($tx) => $body,
+            #[cfg(feature = "sqlite")]
+            BindingTransaction::Sqlite($tx) => $body,
         }
     };
 }
@@ -946,6 +969,22 @@ pub struct NamedRootUpdateRecord {
     pub current: Option<TreeRecord>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct TransactionConflictRecord {
+    pub name: Vec<u8>,
+    pub expected: Option<RootManifestRecord>,
+    pub current: Option<RootManifestRecord>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct TransactionUpdateRecord {
+    pub applied: bool,
+    pub conflict: bool,
+    pub nodes_written: u64,
+    pub roots_written: u64,
+    pub conflict_detail: Option<TransactionConflictRecord>,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, uniffi::Enum)]
 pub enum SnapshotNamespaceKind {
     Branch,
@@ -1160,68 +1199,68 @@ pub struct TombstoneRecord {
 
 #[derive(Debug, Error, uniffi::Error)]
 pub enum ProllyBindingError {
-    #[error("{message}")]
-    InvalidArgument { message: String },
-    #[error("{message}")]
-    InvalidCid { message: String },
-    #[error("{message}")]
-    InvalidNode { message: String },
-    #[error("{message}")]
-    NotFound { message: String },
-    #[error("{message}")]
-    Conflict { message: String },
-    #[error("{message}")]
-    Store { message: String },
-    #[error("{message}")]
-    Serialization { message: String },
-    #[error("{message}")]
-    Internal { message: String },
+    #[error("{reason}")]
+    InvalidArgument { reason: String },
+    #[error("{reason}")]
+    InvalidCid { reason: String },
+    #[error("{reason}")]
+    InvalidNode { reason: String },
+    #[error("{reason}")]
+    NotFound { reason: String },
+    #[error("{reason}")]
+    Conflict { reason: String },
+    #[error("{reason}")]
+    Store { reason: String },
+    #[error("{reason}")]
+    Serialization { reason: String },
+    #[error("{reason}")]
+    Internal { reason: String },
 }
 
 impl From<prolly::Error> for ProllyBindingError {
     fn from(error: prolly::Error) -> Self {
         match error {
             prolly::Error::NotFound(cid) => Self::NotFound {
-                message: format!("node not found: {}", hex_bytes(cid.as_bytes())),
+                reason: format!("node not found: {}", hex_bytes(cid.as_bytes())),
             },
             prolly::Error::InvalidNode => Self::InvalidNode {
-                message: "invalid node structure".to_string(),
+                reason: "invalid node structure".to_string(),
             },
             prolly::Error::Deserialize(message) | prolly::Error::Serialize(message) => {
-                Self::Serialization { message }
+                Self::Serialization { reason: message }
             }
             prolly::Error::Store(error) => Self::Store {
-                message: error.to_string(),
+                reason: error.to_string(),
             },
             prolly::Error::CidMismatch { expected, actual } => Self::InvalidCid {
-                message: format!(
+                reason: format!(
                     "content CID mismatch: expected {}, got {}",
                     hex_bytes(expected.as_bytes()),
                     hex_bytes(actual.as_bytes())
                 ),
             },
             prolly::Error::Conflict(conflict) => Self::Conflict {
-                message: format!("merge conflict at key: {}", hex_bytes(&conflict.key)),
+                reason: format!("merge conflict at key: {}", hex_bytes(&conflict.key)),
             },
             prolly::Error::BufferFull => Self::InvalidArgument {
-                message: "mutation buffer is full".to_string(),
+                reason: "mutation buffer is full".to_string(),
             },
             prolly::Error::UnsortedInput { previous, next } => Self::InvalidArgument {
-                message: format!(
+                reason: format!(
                     "sorted input keys are out of order: previous={} next={}",
                     hex_bytes(&previous),
                     hex_bytes(&next)
                 ),
             },
             prolly::Error::MissingNamedRoots { names } => Self::InvalidArgument {
-                message: format!("missing named roots for retention policy: {names:?}"),
+                reason: format!("missing named roots for retention policy: {names:?}"),
             },
-            prolly::Error::InvalidSnapshotBundle(message) => Self::InvalidArgument { message },
+            prolly::Error::InvalidSnapshotBundle(message) => Self::InvalidArgument { reason: message },
             prolly::Error::UnsupportedTransactions { store } => Self::Internal {
-                message: format!("store does not support strict transactions: {store}"),
+                reason: format!("store does not support strict transactions: {store}"),
             },
             prolly::Error::TransactionConflict(conflict) => Self::Internal {
-                message: format!(
+                reason: format!(
                     "transaction conflict for named root: {:?} (expected: {:?}, current: {:?})",
                     String::from_utf8_lossy(&conflict.name),
                     conflict.expected,
@@ -1672,6 +1711,194 @@ impl ManifestStoreScan for HostStore {
 }
 
 #[derive(uniffi::Object)]
+pub struct ProllyTransaction {
+    inner: Mutex<Option<BindingTransaction>>,
+}
+
+impl ProllyTransaction {
+    fn new(inner: BindingTransaction) -> Self {
+        Self {
+            inner: Mutex::new(Some(inner)),
+        }
+    }
+
+    fn completed_error() -> ProllyBindingError {
+        invalid_argument("transaction is already completed")
+    }
+}
+
+#[uniffi::export]
+impl ProllyTransaction {
+    pub fn create(&self) -> Result<TreeRecord, ProllyBindingError> {
+        let guard = self
+            .inner
+            .lock()
+            .map_err(|error| internal_error(format!("transaction lock poisoned: {error}")))?;
+        let transaction = guard.as_ref().ok_or_else(Self::completed_error)?;
+        Ok(with_transaction!(transaction, tx, { tx.create().into() }))
+    }
+
+    pub fn get(
+        &self,
+        tree: TreeRecord,
+        key: Vec<u8>,
+    ) -> Result<Option<Vec<u8>>, ProllyBindingError> {
+        let tree = tree.try_into()?;
+        let guard = self
+            .inner
+            .lock()
+            .map_err(|error| internal_error(format!("transaction lock poisoned: {error}")))?;
+        let transaction = guard.as_ref().ok_or_else(Self::completed_error)?;
+        with_transaction!(transaction, tx, {
+            tx.get(&tree, &key).map_err(Into::into)
+        })
+    }
+
+    pub fn put(
+        &self,
+        tree: TreeRecord,
+        key: Vec<u8>,
+        value: Vec<u8>,
+    ) -> Result<TreeRecord, ProllyBindingError> {
+        let tree = tree.try_into()?;
+        let guard = self
+            .inner
+            .lock()
+            .map_err(|error| internal_error(format!("transaction lock poisoned: {error}")))?;
+        let transaction = guard.as_ref().ok_or_else(Self::completed_error)?;
+        with_transaction!(transaction, tx, {
+            tx.put(&tree, key, value).map(TreeRecord::from).map_err(Into::into)
+        })
+    }
+
+    pub fn delete(&self, tree: TreeRecord, key: Vec<u8>) -> Result<TreeRecord, ProllyBindingError> {
+        let tree = tree.try_into()?;
+        let guard = self
+            .inner
+            .lock()
+            .map_err(|error| internal_error(format!("transaction lock poisoned: {error}")))?;
+        let transaction = guard.as_ref().ok_or_else(Self::completed_error)?;
+        with_transaction!(transaction, tx, {
+            tx.delete(&tree, &key)
+                .map(TreeRecord::from)
+                .map_err(Into::into)
+        })
+    }
+
+    pub fn batch(
+        &self,
+        tree: TreeRecord,
+        mutations: Vec<MutationRecord>,
+    ) -> Result<TreeRecord, ProllyBindingError> {
+        let tree = tree.try_into()?;
+        let mutations = mutations
+            .into_iter()
+            .map(Mutation::try_from)
+            .collect::<Result<Vec<_>, _>>()?;
+        let guard = self
+            .inner
+            .lock()
+            .map_err(|error| internal_error(format!("transaction lock poisoned: {error}")))?;
+        let transaction = guard.as_ref().ok_or_else(Self::completed_error)?;
+        with_transaction!(transaction, tx, {
+            tx.batch(&tree, mutations)
+                .map(TreeRecord::from)
+                .map_err(Into::into)
+        })
+    }
+
+    pub fn load_named_root(
+        &self,
+        name: Vec<u8>,
+    ) -> Result<Option<TreeRecord>, ProllyBindingError> {
+        let guard = self
+            .inner
+            .lock()
+            .map_err(|error| internal_error(format!("transaction lock poisoned: {error}")))?;
+        let transaction = guard.as_ref().ok_or_else(Self::completed_error)?;
+        with_transaction!(transaction, tx, {
+            tx.load_named_root(&name)
+                .map(|tree| tree.map(TreeRecord::from))
+                .map_err(Into::into)
+        })
+    }
+
+    pub fn publish_named_root(
+        &self,
+        name: Vec<u8>,
+        tree: TreeRecord,
+    ) -> Result<(), ProllyBindingError> {
+        let tree = tree.try_into()?;
+        let guard = self
+            .inner
+            .lock()
+            .map_err(|error| internal_error(format!("transaction lock poisoned: {error}")))?;
+        let transaction = guard.as_ref().ok_or_else(Self::completed_error)?;
+        with_transaction!(transaction, tx, {
+            tx.publish_named_root(&name, &tree).map_err(Into::into)
+        })
+    }
+
+    pub fn delete_named_root(&self, name: Vec<u8>) -> Result<(), ProllyBindingError> {
+        let guard = self
+            .inner
+            .lock()
+            .map_err(|error| internal_error(format!("transaction lock poisoned: {error}")))?;
+        let transaction = guard.as_ref().ok_or_else(Self::completed_error)?;
+        with_transaction!(transaction, tx, {
+            tx.delete_named_root(&name).map_err(Into::into)
+        })
+    }
+
+    pub fn compare_and_swap_named_root(
+        &self,
+        name: Vec<u8>,
+        expected: Option<TreeRecord>,
+        replacement: Option<TreeRecord>,
+    ) -> Result<NamedRootUpdateRecord, ProllyBindingError> {
+        let expected = expected.map(Tree::try_from).transpose()?;
+        let replacement = replacement.map(Tree::try_from).transpose()?;
+        let guard = self
+            .inner
+            .lock()
+            .map_err(|error| internal_error(format!("transaction lock poisoned: {error}")))?;
+        let transaction = guard.as_ref().ok_or_else(Self::completed_error)?;
+        with_transaction!(transaction, tx, {
+            tx.compare_and_swap_named_root(&name, expected.as_ref(), replacement.as_ref())
+                .map(NamedRootUpdateRecord::from)
+                .map_err(Into::into)
+        })
+    }
+
+    pub fn commit(&self) -> Result<TransactionUpdateRecord, ProllyBindingError> {
+        let transaction = self
+            .inner
+            .lock()
+            .map_err(|error| internal_error(format!("transaction lock poisoned: {error}")))?
+            .take()
+            .ok_or_else(Self::completed_error)?;
+        with_transaction!(transaction, tx, {
+            tx.commit()
+                .map(TransactionUpdateRecord::from)
+                .map_err(Into::into)
+        })
+    }
+
+    pub fn rollback(&self) -> Result<(), ProllyBindingError> {
+        let transaction = self
+            .inner
+            .lock()
+            .map_err(|error| internal_error(format!("transaction lock poisoned: {error}")))?
+            .take()
+            .ok_or_else(Self::completed_error)?;
+        with_transaction!(transaction, tx, {
+            tx.rollback();
+            Ok(())
+        })
+    }
+}
+
+#[derive(uniffi::Object)]
 pub struct ProllyEngine {
     inner: BindingEngine,
 }
@@ -1710,6 +1937,25 @@ impl ProllyEngine {
 
     pub fn create(&self) -> TreeRecord {
         with_engine!(self, engine, { engine.create().into() })
+    }
+
+    pub fn begin_transaction(&self) -> Result<Arc<ProllyTransaction>, ProllyBindingError> {
+        let transaction = match &self.inner {
+            BindingEngine::Memory(engine) => {
+                BindingTransaction::Memory(engine.begin_owned_transaction()?)
+            }
+            BindingEngine::File(engine) => BindingTransaction::File(engine.begin_owned_transaction()?),
+            #[cfg(feature = "sqlite")]
+            BindingEngine::Sqlite(engine) => {
+                BindingTransaction::Sqlite(engine.begin_owned_transaction()?)
+            }
+            BindingEngine::Host(_) => {
+                return Err(ProllyBindingError::Internal {
+                    reason: "custom host stores do not expose strict transactions".to_string(),
+                });
+            }
+        };
+        Ok(Arc::new(ProllyTransaction::new(transaction)))
     }
 
     pub fn get(
@@ -4130,7 +4376,7 @@ pub fn retain_named_roots_updated_since(
 #[uniffi::export]
 pub fn decode_segments(key: Vec<u8>) -> Result<Vec<Vec<u8>>, ProllyBindingError> {
     prolly::decode_segments(&key).map_err(|error| ProllyBindingError::InvalidArgument {
-        message: error.to_string(),
+        reason: error.to_string(),
     })
 }
 
@@ -4629,7 +4875,7 @@ impl TryFrom<NodeRecord> for Node {
     fn try_from(value: NodeRecord) -> Result<Self, Self::Error> {
         if value.keys.len() != value.vals.len() {
             return Err(ProllyBindingError::InvalidNode {
-                message: "node keys and vals must have the same length".to_string(),
+                reason: "node keys and vals must have the same length".to_string(),
             });
         }
 
@@ -5873,6 +6119,40 @@ impl From<NamedRootUpdate> for NamedRootUpdateRecord {
     }
 }
 
+impl From<prolly::TransactionConflict> for TransactionConflictRecord {
+    fn from(value: prolly::TransactionConflict) -> Self {
+        Self {
+            name: value.name,
+            expected: value.expected.map(RootManifestRecord::from),
+            current: value.current.map(RootManifestRecord::from),
+        }
+    }
+}
+
+impl From<prolly::TransactionUpdate> for TransactionUpdateRecord {
+    fn from(value: prolly::TransactionUpdate) -> Self {
+        match value {
+            prolly::TransactionUpdate::Applied {
+                nodes_written,
+                roots_written,
+            } => Self {
+                applied: true,
+                conflict: false,
+                nodes_written: nodes_written as u64,
+                roots_written: roots_written as u64,
+                conflict_detail: None,
+            },
+            prolly::TransactionUpdate::Conflict(conflict) => Self {
+                applied: false,
+                conflict: true,
+                nodes_written: 0,
+                roots_written: 0,
+                conflict_detail: Some(conflict.into()),
+            },
+        }
+    }
+}
+
 impl From<SnapshotNamespace> for SnapshotNamespaceRecord {
     fn from(value: SnapshotNamespace) -> Self {
         match value {
@@ -6412,7 +6692,7 @@ fn cid_from_vec(bytes: Vec<u8>) -> Result<Cid, ProllyBindingError> {
         bytes
             .try_into()
             .map_err(|bytes: Vec<u8>| ProllyBindingError::InvalidCid {
-                message: format!("CID must be exactly 32 bytes, got {}", bytes.len()),
+                reason: format!("CID must be exactly 32 bytes, got {}", bytes.len()),
             })?;
     Ok(Cid(bytes))
 }
@@ -6455,7 +6735,7 @@ fn json_document(value: &impl Serialize) -> Result<JsonDocumentRecord, ProllyBin
 
 fn json_error(error: serde_json::Error) -> ProllyBindingError {
     ProllyBindingError::Serialization {
-        message: error.to_string(),
+        reason: error.to_string(),
     }
 }
 
@@ -6472,19 +6752,19 @@ fn cache_stats<S: prolly::Store>(
 
 fn invalid_argument(message: impl Into<String>) -> ProllyBindingError {
     ProllyBindingError::InvalidArgument {
-        message: message.into(),
+        reason: message.into(),
     }
 }
 
 fn internal_error(message: impl Into<String>) -> ProllyBindingError {
     ProllyBindingError::Internal {
-        message: message.into(),
+        reason: message.into(),
     }
 }
 
 fn store_error(error: impl std::error::Error) -> ProllyBindingError {
     ProllyBindingError::Store {
-        message: error.to_string(),
+        reason: error.to_string(),
     }
 }
 
@@ -6500,7 +6780,7 @@ fn resolver_from_name(name: Option<String>) -> Result<Option<Resolver>, ProllyBi
         "update_wins" => Box::new(prolly::resolver::update_wins),
         other => {
             return Err(ProllyBindingError::InvalidArgument {
-                message: format!(
+                reason: format!(
                     "unknown resolver {other:?}; expected prefer_left, prefer_right, delete_wins, or update_wins"
                 ),
             });
@@ -6528,7 +6808,7 @@ fn policy_fn_from_name(name: String) -> Result<MergePolicyFn, ProllyBindingError
         "update_wins" => Arc::new(prolly::resolver::update_wins),
         other => {
             return Err(ProllyBindingError::InvalidArgument {
-                message: format!(
+                reason: format!(
                     "unknown resolver {other:?}; expected prefer_left, prefer_right, delete_wins, or update_wins"
                 ),
             });

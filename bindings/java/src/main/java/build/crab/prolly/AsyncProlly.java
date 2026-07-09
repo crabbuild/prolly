@@ -97,6 +97,10 @@ public final class AsyncProlly implements AutoCloseable {
         return supply(inner::create);
     }
 
+    public CompletableFuture<Transaction> beginTransaction() {
+        return supply(inner::beginTransaction);
+    }
+
     public CompletableFuture<Optional<byte[]>> get(TreeRecord tree, byte[] key) {
         return supply(() -> inner.get(tree, key));
     }
