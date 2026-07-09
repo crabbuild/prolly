@@ -3,7 +3,7 @@ requires = ["maturin>=1.10,<2.0", "uniffi-bindgen==0.31.0"]
 build-backend = "maturin"
 
 [project]
-name = "crabdb-prolly-binding"
+name = "trail-prolly-binding"
 version = "0.1.0"
 description = "Python binding compatibility harness for prolly-map fixtures"
 requires-python = ">=3.10"

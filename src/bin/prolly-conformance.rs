@@ -317,7 +317,7 @@ fn custom_encoding_fixture_node() -> Node {
         .chunking_factor(64)
         .hash_seed(42)
         .encoding(Encoding::Custom(
-            "application/x-crabdb-node-test".to_string(),
+            "application/x-trail-node-test".to_string(),
         ))
         .build()
 }
@@ -562,7 +562,7 @@ fn value_fixtures() -> Result<Vec<ValueFixture>, Box<dyn std::error::Error>> {
     let custom = VersionedValue::with_encoding(
         "memory.custom",
         1,
-        Encoding::Custom("application/x-crabdb-test".to_string()),
+        Encoding::Custom("application/x-trail-test".to_string()),
         b"custom-payload",
     );
 
@@ -619,7 +619,7 @@ fn manifest_fixture() -> Result<ManifestFixture, Box<dyn std::error::Error>> {
     let config = port_config();
     let store = Arc::new(MemStore::new());
     let prolly = Prolly::new(store, config.clone());
-    let tree = prolly.put(&prolly.create(), b"name".to_vec(), b"CrabDB".to_vec())?;
+    let tree = prolly.put(&prolly.create(), b"name".to_vec(), b"Trail".to_vec())?;
     let manifest = RootManifest::from_tree_with_timestamps_millis(
         &tree,
         Some(1_700_000_000_000),

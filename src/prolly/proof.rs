@@ -31,7 +31,7 @@ const PROOF_BUNDLE_KIND_RANGE_PAGE: u8 = 4;
 const PROOF_BUNDLE_KIND_DIFF_PAGE: u8 = 5;
 const AUTHENTICATED_PROOF_ENVELOPE_VERSION: u64 = 1;
 const AUTHENTICATED_PROOF_ENVELOPE_ALGORITHM_HMAC_SHA256: &str = "hmac-sha256";
-const AUTHENTICATED_PROOF_ENVELOPE_DOMAIN: &[u8] = b"crabdb.prolly.authenticated-proof-envelope.v1";
+const AUTHENTICATED_PROOF_ENVELOPE_DOMAIN: &[u8] = b"trail.prolly.authenticated-proof-envelope.v1";
 
 #[derive(Serialize, Deserialize)]
 struct ProofBundleWire {

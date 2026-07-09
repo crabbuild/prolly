@@ -29,7 +29,7 @@ def document_chunk_index
     blob_store,
     engine.create,
     text_key,
-    ('CrabDB stores large chunk text outside prolly leaves.' * 8).b,
+    ('Trail stores large chunk text outside prolly leaves.' * 8).b,
     Prolly::LargeValueConfigRecord.new(inline_threshold: 32)
   )
   tree = engine.put(tree, metadata_key, 'doc-1|chunk-0001|0|384|vector-0001'.b)
@@ -38,7 +38,7 @@ def document_chunk_index
   loaded_text = engine.get_large_value(blob_store, tree, text_key)
 
   assert_equal 1, metadata.length, 'metadata count'
-  raise 'missing chunk text' unless loaded_text.start_with?('CrabDB stores'.b)
+  raise 'missing chunk text' unless loaded_text.start_with?('Trail stores'.b)
 
   puts 'document_chunk_index: metadata and blob-backed chunk text are linked'
 end

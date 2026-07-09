@@ -2,7 +2,7 @@
 
 - Binding path: direct `wasm-bindgen` wrapper over `prolly-map`
 - Rust crate: `bindings/wasm`
-- Package: `@crabdb/prolly-wasm`
+- Package: `@trail/prolly-wasm`
 - Generated artifacts: `pkg/` from `wasm-bindgen --target web --typescript`
 - Compiled artifacts checked in: none
 

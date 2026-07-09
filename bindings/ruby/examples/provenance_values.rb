@@ -21,14 +21,14 @@ end
 
 def provenance_values
   engine = Prolly::ProllyEngine.memory(Prolly.default_config)
-  source = 'CrabDB language bindings design'.b
+  source = 'Trail language bindings design'.b
   source_cid = Prolly.cid_from_bytes(source).unpack1('H*')
   chunk_cid = Prolly.cid_from_bytes(source[0, 16]).unpack1('H*')
   tree = engine.batch(
     engine.create,
     [
       upsert('provenance/chunk/file-1/chunk-1', "source=#{source_cid}|chunk=#{chunk_cid}|parser=v1"),
-      upsert('provenance/claim/file-1/claim-1', 'CrabDB uses Rust-backed bindings|chunk=file-1/chunk-1')
+      upsert('provenance/claim/file-1/claim-1', 'Trail uses Rust-backed bindings|chunk=file-1/chunk-1')
     ]
   )
 

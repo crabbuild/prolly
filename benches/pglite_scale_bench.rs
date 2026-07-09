@@ -134,7 +134,7 @@ fn db_path() -> PathBuf {
         .unwrap()
         .as_nanos();
     std::env::temp_dir().join(format!(
-        "crabdb-prolly-pglite-scale-{}-{nanos}",
+        "trail-prolly-pglite-scale-{}-{nanos}",
         std::process::id()
     ))
 }

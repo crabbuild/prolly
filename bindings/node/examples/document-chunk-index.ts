@@ -32,11 +32,11 @@ async function documentChunkIndex(): Promise<void> {
     const metadataKey = bytes("doc-index/corpus/parser/parser-v1/document/doc-1/chunk/000000");
 
     let tree = engine.create();
-    tree = engine.putLargeValue(blobStore, tree, textKey, bytes("CrabDB stores large chunk text outside prolly leaves.".repeat(8)), { inlineThreshold: "32" });
+    tree = engine.putLargeValue(blobStore, tree, textKey, bytes("Trail stores large chunk text outside prolly leaves.".repeat(8)), { inlineThreshold: "32" });
     tree = engine.put(tree, metadataKey, bytes("doc-1|chunk-0001|0|384|vector-0001"));
 
     assert.equal(engine.range(tree, bytes("doc-index/corpus/parser/"), bytes("doc-index/corpus/parser0")).length, 1);
-    assert.ok(text(engine.getLargeValue(blobStore, tree, textKey))?.startsWith("CrabDB stores"));
+    assert.ok(text(engine.getLargeValue(blobStore, tree, textKey))?.startsWith("Trail stores"));
 
     console.log("document_chunk_index: metadata and blob-backed chunk text are linked");
   });

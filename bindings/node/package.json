@@ -1,5 +1,5 @@
 {
-  "name": "@crabdb/prolly-node",
+  "name": "@trail/prolly-node",
   "version": "0.1.0",
   "type": "module",
   "private": true,

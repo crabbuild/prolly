@@ -711,7 +711,7 @@ Current technical limits:
 - node encoding compatibility still needs fixture files before language ports can claim structural compatibility
 - remote object-store backends are design patterns, not first-party implementations yet
 - benchmark gates are local scripts rather than a published performance dashboard
-- some root-level docs still describe broader CrabDB performance rather than `prolly-map` alone
+- some root-level docs still describe broader Trail performance rather than `prolly-map` alone
 
 ## Future enhancements
 
@@ -772,5 +772,5 @@ Any encoding or layout change must preserve a migration path. Once cross-languag
 - [Design spec](design-spec.md)
 - [Implementation notes](implementation.md)
 - [Cookbook](cookbook.md)
-- [CrabDB performance and scale benchmarks](../../../docs/guides/performance-and-scale-benchmarks.md)
+- [Trail performance and scale benchmarks](../../../docs/guides/performance-and-scale-benchmarks.md)
 - [Accelerating Prolly Trees: Simplified Chunking for Rapid Updates](https://ceur-ws.org/Vol-3791/paper8.pdf)

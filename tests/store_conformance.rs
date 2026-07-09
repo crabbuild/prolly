@@ -44,7 +44,7 @@ fn prolly_named_root_helpers_publish_load_cas_and_delete() {
 
     let empty = prolly.create();
     let first = prolly
-        .put(&empty, b"project/name".to_vec(), b"crabdb".to_vec())
+        .put(&empty, b"project/name".to_vec(), b"trail".to_vec())
         .unwrap();
     let second = prolly
         .put(&first, b"project/name".to_vec(), b"prolly-map".to_vec())

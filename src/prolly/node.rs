@@ -519,7 +519,7 @@ mod tests {
         "010c6c65676163792d6368696c64"
     );
     const COMPACT_CUSTOM_ENCODING_FIXTURE_HEX: &str = concat!(
-        "43524142010100028001402a031e6170706c69636174696f6e2f782d6372616264622d6e6f6465",
+        "43524142010100028001402a031d6170706c69636174696f6e2f782d747261696c2d6e6f6465",
         "2d746573740200016101310001620132"
     );
     const LEGACY_CBOR_LEAF_FIXTURE_HEX: &str = concat!(
@@ -605,7 +605,7 @@ mod tests {
             .chunking_factor(64)
             .hash_seed(42)
             .encoding(Encoding::Custom(
-                "application/x-crabdb-node-test".to_string(),
+                "application/x-trail-node-test".to_string(),
             ))
             .build()
     }
@@ -796,7 +796,7 @@ mod tests {
     #[test]
     fn compact_serialization_prefix_compresses_path_like_keys() {
         let keys = (0..32)
-            .map(|i| format!("crates/crabdb/src/db/storage/path/to/file_{i:04}.rs").into_bytes())
+            .map(|i| format!("crates/trail/src/db/storage/path/to/file_{i:04}.rs").into_bytes())
             .collect::<Vec<_>>();
         let vals = (0..32)
             .map(|i| format!("value-{i:04}").into_bytes())
@@ -891,7 +891,7 @@ mod tests {
             .chunking_factor(64)
             .hash_seed(42)
             .encoding(Encoding::Custom(
-                "application/x-crabdb-node-test".to_string(),
+                "application/x-trail-node-test".to_string(),
             ))
             .build();
 

@@ -53,7 +53,7 @@ fn slatedb_store_persists_named_root_across_reopen() {
         let prolly = Prolly::new(store, config.clone());
         let tree = prolly.create();
         let tree = prolly
-            .put(&tree, b"project/name".to_vec(), b"crabdb".to_vec())
+            .put(&tree, b"project/name".to_vec(), b"trail".to_vec())
             .unwrap();
         prolly.publish_named_root(b"main", &tree).unwrap();
         tree
@@ -65,6 +65,6 @@ fn slatedb_store_persists_named_root_across_reopen() {
     assert_eq!(loaded, tree);
     assert_eq!(
         prolly.get(&loaded, b"project/name").unwrap(),
-        Some(b"crabdb".to_vec())
+        Some(b"trail".to_vec())
     );
 }

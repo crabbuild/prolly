@@ -842,7 +842,7 @@ mod tests {
         }
 
         let path =
-            std::env::temp_dir().join(format!("crabdb-pglite-store-test-{}", std::process::id()));
+            std::env::temp_dir().join(format!("trail-pglite-store-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&path);
         {
             let store = PgliteStore::open(path.to_string_lossy().to_string()).unwrap();

@@ -12,7 +12,7 @@ package_name = "build.crab.prolly"
 cdylib_name = "prolly_bindings"
 
 [bindings.node]
-package_name = "@crabdb/prolly-node"
+package_name = "@trail/prolly-node"
 node_engine = ">=20"
 bundled_prebuilds = true
 manual_load = false

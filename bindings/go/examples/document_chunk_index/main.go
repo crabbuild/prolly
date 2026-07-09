@@ -27,7 +27,7 @@ func DocumentChunkIndex() error {
 
 	textKey := bytesOf("doc-index/corpus/text/parser-v1/doc-1/chunk-0001")
 	metadataKey := bytesOf("doc-index/corpus/parser/parser-v1/document/doc-1/chunk/000000")
-	tree, err := engine.PutLargeValue(blobStore, mustCreate(engine), textKey, bytes.Repeat(bytesOf("CrabDB stores large chunk text outside prolly leaves."), 8), prolly.LargeValueConfig{InlineThreshold: 32})
+	tree, err := engine.PutLargeValue(blobStore, mustCreate(engine), textKey, bytes.Repeat(bytesOf("Trail stores large chunk text outside prolly leaves."), 8), prolly.LargeValueConfig{InlineThreshold: 32})
 	if err != nil {
 		return err
 	}
@@ -43,7 +43,7 @@ func DocumentChunkIndex() error {
 	if err != nil {
 		return err
 	}
-	if len(metadata) != 1 || !ok || !bytes.HasPrefix(loaded, bytesOf("CrabDB stores")) {
+	if len(metadata) != 1 || !ok || !bytes.HasPrefix(loaded, bytesOf("Trail stores")) {
 		return fmt.Errorf("document chunk validation failed")
 	}
 	fmt.Println("document_chunk_index: metadata and blob-backed chunk text are linked")

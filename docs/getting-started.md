@@ -267,13 +267,13 @@ let store = Arc::new(MemStore::new());
 let prolly = Prolly::new(store, Config::default());
 
 let tree = prolly.create();
-let tree = prolly.put(&tree, b"name".to_vec(), b"CrabDB".to_vec())?;
+let tree = prolly.put(&tree, b"name".to_vec(), b"Trail".to_vec())?;
 
 let update = prolly.compare_and_swap_named_root(b"main", None, Some(&tree))?;
 assert!(update.is_applied());
 
 let loaded = prolly.load_named_root(b"main")?.unwrap();
-assert_eq!(prolly.get(&loaded, b"name")?, Some(b"CrabDB".to_vec()));
+assert_eq!(prolly.get(&loaded, b"name")?, Some(b"Trail".to_vec()));
 ```
 
 Use compare-and-swap when multiple processes or agents may publish to the same

@@ -33,7 +33,7 @@ def delete(key: str) -> prolly.MutationRecord:
 
 def provenance_values() -> None:
     engine = prolly.ProllyEngine.memory(prolly.default_config())
-    source = b"CrabDB language bindings design"
+    source = b"Trail language bindings design"
     source_cid = prolly.cid_from_bytes(source).hex()
     chunk_cid = prolly.cid_from_bytes(source[:16]).hex()
 
@@ -41,7 +41,7 @@ def provenance_values() -> None:
         engine.create(),
         [
             upsert("provenance/chunk/file-1/chunk-1", f"source={source_cid}|chunk={chunk_cid}|parser=v1"),
-            upsert("provenance/claim/file-1/claim-1", "CrabDB uses Rust-backed bindings|chunk=file-1/chunk-1"),
+            upsert("provenance/claim/file-1/claim-1", "Trail uses Rust-backed bindings|chunk=file-1/chunk-1"),
         ],
     )
 

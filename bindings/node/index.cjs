@@ -37,7 +37,7 @@ switch (platform) {
           if (localFileExisted) {
             nativeBinding = require('./index.android-arm64.node')
           } else {
-            nativeBinding = require('@crabdb/prolly-node-android-arm64')
+            nativeBinding = require('@trail/prolly-node-android-arm64')
           }
         } catch (e) {
           loadError = e
@@ -49,7 +49,7 @@ switch (platform) {
           if (localFileExisted) {
             nativeBinding = require('./index.android-arm-eabi.node')
           } else {
-            nativeBinding = require('@crabdb/prolly-node-android-arm-eabi')
+            nativeBinding = require('@trail/prolly-node-android-arm-eabi')
           }
         } catch (e) {
           loadError = e
@@ -69,7 +69,7 @@ switch (platform) {
           if (localFileExisted) {
             nativeBinding = require('./index.win32-x64-msvc.node')
           } else {
-            nativeBinding = require('@crabdb/prolly-node-win32-x64-msvc')
+            nativeBinding = require('@trail/prolly-node-win32-x64-msvc')
           }
         } catch (e) {
           loadError = e
@@ -83,7 +83,7 @@ switch (platform) {
           if (localFileExisted) {
             nativeBinding = require('./index.win32-ia32-msvc.node')
           } else {
-            nativeBinding = require('@crabdb/prolly-node-win32-ia32-msvc')
+            nativeBinding = require('@trail/prolly-node-win32-ia32-msvc')
           }
         } catch (e) {
           loadError = e
@@ -97,7 +97,7 @@ switch (platform) {
           if (localFileExisted) {
             nativeBinding = require('./index.win32-arm64-msvc.node')
           } else {
-            nativeBinding = require('@crabdb/prolly-node-win32-arm64-msvc')
+            nativeBinding = require('@trail/prolly-node-win32-arm64-msvc')
           }
         } catch (e) {
           loadError = e
@@ -113,7 +113,7 @@ switch (platform) {
       if (localFileExisted) {
         nativeBinding = require('./index.darwin-universal.node')
       } else {
-        nativeBinding = require('@crabdb/prolly-node-darwin-universal')
+        nativeBinding = require('@trail/prolly-node-darwin-universal')
       }
       break
     } catch {}
@@ -124,7 +124,7 @@ switch (platform) {
           if (localFileExisted) {
             nativeBinding = require('./index.darwin-x64.node')
           } else {
-            nativeBinding = require('@crabdb/prolly-node-darwin-x64')
+            nativeBinding = require('@trail/prolly-node-darwin-x64')
           }
         } catch (e) {
           loadError = e
@@ -138,7 +138,7 @@ switch (platform) {
           if (localFileExisted) {
             nativeBinding = require('./index.darwin-arm64.node')
           } else {
-            nativeBinding = require('@crabdb/prolly-node-darwin-arm64')
+            nativeBinding = require('@trail/prolly-node-darwin-arm64')
           }
         } catch (e) {
           loadError = e
@@ -157,7 +157,7 @@ switch (platform) {
       if (localFileExisted) {
         nativeBinding = require('./index.freebsd-x64.node')
       } else {
-        nativeBinding = require('@crabdb/prolly-node-freebsd-x64')
+        nativeBinding = require('@trail/prolly-node-freebsd-x64')
       }
     } catch (e) {
       loadError = e
@@ -174,7 +174,7 @@ switch (platform) {
             if (localFileExisted) {
               nativeBinding = require('./index.linux-x64-musl.node')
             } else {
-              nativeBinding = require('@crabdb/prolly-node-linux-x64-musl')
+              nativeBinding = require('@trail/prolly-node-linux-x64-musl')
             }
           } catch (e) {
             loadError = e
@@ -187,7 +187,7 @@ switch (platform) {
             if (localFileExisted) {
               nativeBinding = require('./index.linux-x64-gnu.node')
             } else {
-              nativeBinding = require('@crabdb/prolly-node-linux-x64-gnu')
+              nativeBinding = require('@trail/prolly-node-linux-x64-gnu')
             }
           } catch (e) {
             loadError = e
@@ -203,7 +203,7 @@ switch (platform) {
             if (localFileExisted) {
               nativeBinding = require('./index.linux-arm64-musl.node')
             } else {
-              nativeBinding = require('@crabdb/prolly-node-linux-arm64-musl')
+              nativeBinding = require('@trail/prolly-node-linux-arm64-musl')
             }
           } catch (e) {
             loadError = e
@@ -216,7 +216,7 @@ switch (platform) {
             if (localFileExisted) {
               nativeBinding = require('./index.linux-arm64-gnu.node')
             } else {
-              nativeBinding = require('@crabdb/prolly-node-linux-arm64-gnu')
+              nativeBinding = require('@trail/prolly-node-linux-arm64-gnu')
             }
           } catch (e) {
             loadError = e
@@ -232,7 +232,7 @@ switch (platform) {
             if (localFileExisted) {
               nativeBinding = require('./index.linux-arm-musleabihf.node')
             } else {
-              nativeBinding = require('@crabdb/prolly-node-linux-arm-musleabihf')
+              nativeBinding = require('@trail/prolly-node-linux-arm-musleabihf')
             }
           } catch (e) {
             loadError = e
@@ -245,7 +245,7 @@ switch (platform) {
             if (localFileExisted) {
               nativeBinding = require('./index.linux-arm-gnueabihf.node')
             } else {
-              nativeBinding = require('@crabdb/prolly-node-linux-arm-gnueabihf')
+              nativeBinding = require('@trail/prolly-node-linux-arm-gnueabihf')
             }
           } catch (e) {
             loadError = e
@@ -261,7 +261,7 @@ switch (platform) {
             if (localFileExisted) {
               nativeBinding = require('./index.linux-riscv64-musl.node')
             } else {
-              nativeBinding = require('@crabdb/prolly-node-linux-riscv64-musl')
+              nativeBinding = require('@trail/prolly-node-linux-riscv64-musl')
             }
           } catch (e) {
             loadError = e
@@ -274,7 +274,7 @@ switch (platform) {
             if (localFileExisted) {
               nativeBinding = require('./index.linux-riscv64-gnu.node')
             } else {
-              nativeBinding = require('@crabdb/prolly-node-linux-riscv64-gnu')
+              nativeBinding = require('@trail/prolly-node-linux-riscv64-gnu')
             }
           } catch (e) {
             loadError = e
@@ -289,7 +289,7 @@ switch (platform) {
           if (localFileExisted) {
             nativeBinding = require('./index.linux-s390x-gnu.node')
           } else {
-            nativeBinding = require('@crabdb/prolly-node-linux-s390x-gnu')
+            nativeBinding = require('@trail/prolly-node-linux-s390x-gnu')
           }
         } catch (e) {
           loadError = e

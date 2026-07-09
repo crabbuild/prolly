@@ -23,12 +23,12 @@ public final class DocumentChunkIndex {
                     blobStore,
                     prolly.create(),
                     textKey,
-                    bytes("CrabDB stores large chunk text outside prolly leaves.".repeat(8)),
+                    bytes("Trail stores large chunk text outside prolly leaves.".repeat(8)),
                     Prolly.largeValueConfig(32));
             tree = prolly.put(tree, metadataKey, bytes("doc-1|chunk-0001|0|384|vector-0001"));
 
             require(prolly.range(tree, bytes("doc-index/corpus/parser/"), Optional.of(bytes("doc-index/corpus/parser0"))).size() == 1, "metadata missing");
-            require(new String(prolly.getLargeValue(blobStore, tree, textKey).orElseThrow(), StandardCharsets.UTF_8).startsWith("CrabDB stores"), "chunk text missing");
+            require(new String(prolly.getLargeValue(blobStore, tree, textKey).orElseThrow(), StandardCharsets.UTF_8).startsWith("Trail stores"), "chunk text missing");
 
             System.out.println("document_chunk_index: metadata and blob-backed chunk text are linked");
         }

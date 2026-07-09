@@ -29,7 +29,7 @@ async function deterministicRagSnapshot(): Promise<void> {
     const engine = native.NativeProllyEngine.memory();
     const indexRoot = bytes("rag/corpus/docs/root/index/current");
     const indexV1 = engine.batch(engine.create(), [
-      upsert("rag/corpus/docs/chunk/doc-1/0001", "vector:v1|CrabDB stores deterministic roots"),
+      upsert("rag/corpus/docs/chunk/doc-1/0001", "vector:v1|Trail stores deterministic roots"),
       upsert("rag/corpus/docs/chunk/doc-2/0001", "vector:v2|Prolly trees diff by key"),
     ]);
     engine.publishNamedRoot(indexRoot, indexV1);

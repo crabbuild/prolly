@@ -25,7 +25,7 @@ def deterministic_rag_snapshot
   index_v1 = engine.batch(
     engine.create,
     [
-      upsert('rag/corpus/docs/chunk/doc-1/0001', 'vector:v1|CrabDB stores deterministic roots'),
+      upsert('rag/corpus/docs/chunk/doc-1/0001', 'vector:v1|Trail stores deterministic roots'),
       upsert('rag/corpus/docs/chunk/doc-2/0001', 'vector:v2|Prolly trees diff by key')
     ]
   )

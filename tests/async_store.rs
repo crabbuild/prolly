@@ -304,7 +304,7 @@ fn async_prolly_named_root_helpers_publish_load_cas_delete_and_select() {
 
         let empty = async_prolly.create();
         let first = async_prolly
-            .put(&empty, b"project/name".to_vec(), b"crabdb".to_vec())
+            .put(&empty, b"project/name".to_vec(), b"trail".to_vec())
             .await
             .unwrap();
         let second = async_prolly

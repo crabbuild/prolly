@@ -21,7 +21,7 @@ private fun documentChunkIndex() {
                     blobStore,
                     engine.create(),
                     textKey,
-                    bytes("CrabDB stores large chunk text outside prolly leaves.".repeat(8)),
+                    bytes("Trail stores large chunk text outside prolly leaves.".repeat(8)),
                     LargeValueConfigRecord(32UL),
                 )
             tree = engine.put(tree, metadataKey, bytes("doc-1|chunk-0001|0|384|vector-0001"))
@@ -29,7 +29,7 @@ private fun documentChunkIndex() {
             require(engine.range(tree, bytes("doc-index/corpus/parser/"), bytes("doc-index/corpus/parser0")).size == 1) {
                 "metadata missing"
             }
-            require(requireNotNull(engine.getLargeValue(blobStore, tree, textKey)).decodeToString().startsWith("CrabDB stores")) {
+            require(requireNotNull(engine.getLargeValue(blobStore, tree, textKey)).decodeToString().startsWith("Trail stores")) {
                 "chunk text missing"
             }
 

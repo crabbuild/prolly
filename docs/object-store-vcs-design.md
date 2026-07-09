@@ -5,7 +5,7 @@ production Git-like version-control system whose durable substrate is an object
 store. It focuses on the library-level infrastructure: object-store-backed
 nodes, blobs, manifests, distributed ref updates, sync, and garbage collection.
 
-The broader CrabDB product design can build on these primitives. This document
+The broader Trail product design can build on these primitives. This document
 does not replace `docs/design/distributed-prolly-vcs.md`; it narrows the problem
 to the reusable `prolly-map` storage and concurrency contracts.
 
@@ -885,7 +885,7 @@ GC:
 
 ## Open Questions
 
-- Should commit/tag object helpers live in `prolly-map`, `crabdb`, or a new
+- Should commit/tag object helpers live in `prolly-map`, `trail`, or a new
   `prolly-vcs` crate?
 - Should `AsyncManifestStore` be stabilized before `RefStore`, or should
   distributed refs be the first object-store manifest API?

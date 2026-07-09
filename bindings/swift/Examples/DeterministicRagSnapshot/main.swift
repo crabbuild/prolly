@@ -28,7 +28,7 @@ let indexRoot = bytes("rag/corpus/docs/root/index/current")
 let indexV1 = try engine.batch(
     tree: engine.create(),
     mutations: [
-        upsert("rag/corpus/docs/chunk/doc-1/0001", bytes("vector:v1|CrabDB stores deterministic roots")),
+        upsert("rag/corpus/docs/chunk/doc-1/0001", bytes("vector:v1|Trail stores deterministic roots")),
         upsert("rag/corpus/docs/chunk/doc-2/0001", bytes("vector:v2|Prolly trees diff by key")),
     ]
 )

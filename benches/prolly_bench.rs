@@ -1136,7 +1136,7 @@ fn temp_db_path(label: &str) -> std::path::PathBuf {
         .unwrap()
         .as_nanos();
     std::env::temp_dir().join(format!(
-        "crabdb-prolly-bench-{label}-{}-{nanos}.db",
+        "trail-prolly-bench-{label}-{}-{nanos}.db",
         std::process::id()
     ))
 }

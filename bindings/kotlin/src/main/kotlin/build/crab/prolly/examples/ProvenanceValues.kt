@@ -14,7 +14,7 @@ fun main() {
 
 private fun provenanceValues() {
     ProllyEngine.memory(defaultConfig()).use { engine ->
-        val source = bytes("CrabDB language bindings design")
+        val source = bytes("Trail language bindings design")
         val sourceCid = cidFromBytes(source).toHex()
         val chunkCid = cidFromBytes(source.copyOfRange(0, 16)).toHex()
         val tree =
@@ -22,7 +22,7 @@ private fun provenanceValues() {
                 engine.create(),
                 listOf(
                     upsert("provenance/chunk/file-1/chunk-1", bytes("source=$sourceCid|chunk=$chunkCid|parser=v1")),
-                    upsert("provenance/claim/file-1/claim-1", bytes("CrabDB uses Rust-backed bindings|chunk=file-1/chunk-1")),
+                    upsert("provenance/claim/file-1/claim-1", bytes("Trail uses Rust-backed bindings|chunk=file-1/chunk-1")),
                 ),
             )
 

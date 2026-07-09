@@ -22,7 +22,7 @@ func DeterministicRagSnapshot() error {
 
 	indexRoot := bytesOf("rag/corpus/docs/root/index/current")
 	indexV1, err := engine.Batch(mustCreate(engine), []prolly.Mutation{
-		upsertText("rag/corpus/docs/chunk/doc-1/0001", "vector:v1|CrabDB stores deterministic roots"),
+		upsertText("rag/corpus/docs/chunk/doc-1/0001", "vector:v1|Trail stores deterministic roots"),
 		upsertText("rag/corpus/docs/chunk/doc-2/0001", "vector:v2|Prolly trees diff by key"),
 	})
 	if err != nil {

@@ -31,7 +31,7 @@ var tree = try engine.putLargeValue(
     blobStore: blobStore,
     tree: engine.create(),
     key: textKey,
-    value: bytes(String(repeating: "CrabDB stores large chunk text outside prolly leaves.", count: 8)),
+    value: bytes(String(repeating: "Trail stores large chunk text outside prolly leaves.", count: 8)),
     config: LargeValueConfigRecord(inlineThreshold: 32)
 )
 tree = try engine.put(tree: tree, key: metadataKey, value: bytes("doc-1|chunk-0001|0|384|vector-0001"))
@@ -39,6 +39,6 @@ tree = try engine.put(tree: tree, key: metadataKey, value: bytes("doc-1|chunk-00
 let metadata = try engine.range(tree: tree, start: bytes("doc-index/corpus/parser/"), end: bytes("doc-index/corpus/parser0"))
 let loadedText = try engine.getLargeValue(blobStore: blobStore, tree: tree, key: textKey)
 precondition(metadata.count == 1)
-precondition(text(loadedText)?.hasPrefix("CrabDB stores") == true)
+precondition(text(loadedText)?.hasPrefix("Trail stores") == true)
 
 print("document_chunk_index: metadata and blob-backed chunk text are linked")

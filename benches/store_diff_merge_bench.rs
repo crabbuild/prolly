@@ -450,7 +450,7 @@ fn sqlite_path(records: usize) -> PathBuf {
     if let Ok(path) = std::env::var("PROLLY_DIFF_MERGE_SQLITE_DB") {
         return PathBuf::from(path);
     }
-    temp_path(format!("crabdb-prolly-diff-merge-sqlite-{records}"), ".db")
+    temp_path(format!("trail-prolly-diff-merge-sqlite-{records}"), ".db")
 }
 
 #[cfg(feature = "sqlite")]
@@ -474,7 +474,7 @@ fn pglite_path(records: usize) -> PathBuf {
     if let Ok(path) = std::env::var("PROLLY_DIFF_MERGE_PGLITE_DB") {
         return PathBuf::from(path);
     }
-    temp_path(format!("crabdb-prolly-diff-merge-pglite-{records}"), "")
+    temp_path(format!("trail-prolly-diff-merge-pglite-{records}"), "")
 }
 
 #[cfg(feature = "pglite")]
@@ -530,7 +530,7 @@ fn slatedb_path(label: &str, records: usize) -> String {
         return path.trim().trim_matches('/').to_string();
     }
     let prefix = std::env::var("PROLLY_SLATEDB_PATH_PREFIX")
-        .unwrap_or_else(|_| "crabdb/prolly-bench".to_string());
+        .unwrap_or_else(|_| "trail/prolly-bench".to_string());
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()

@@ -24,14 +24,14 @@ extension Data {
 }
 
 let engine = try ProllyEngine.memory(config: defaultConfig())
-let source = bytes("CrabDB language bindings design")
+let source = bytes("Trail language bindings design")
 let sourceCid = cidFromBytes(bytes: source).hex()
 let chunkCid = cidFromBytes(bytes: source.prefix(16)).hex()
 let tree = try engine.batch(
     tree: engine.create(),
     mutations: [
         upsert("provenance/chunk/file-1/chunk-1", bytes("source=\(sourceCid)|chunk=\(chunkCid)|parser=v1")),
-        upsert("provenance/claim/file-1/claim-1", bytes("CrabDB uses Rust-backed bindings|chunk=file-1/chunk-1")),
+        upsert("provenance/claim/file-1/claim-1", bytes("Trail uses Rust-backed bindings|chunk=file-1/chunk-1")),
     ]
 )
 let claims = try engine.range(tree: tree, start: bytes("provenance/claim/file-1/"), end: bytes("provenance/claim/file-10"))

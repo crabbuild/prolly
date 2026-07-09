@@ -20,7 +20,7 @@ func ProvenanceValues() error {
 		return err
 	}
 	defer engine.Close()
-	source := bytesOf("CrabDB language bindings design")
+	source := bytesOf("Trail language bindings design")
 	sourceCid, err := prolly.CidFromBytes(source)
 	if err != nil {
 		return err
@@ -31,7 +31,7 @@ func ProvenanceValues() error {
 	}
 	tree, err := engine.Batch(mustCreate(engine), []prolly.Mutation{
 		upsertText("provenance/chunk/file-1/chunk-1", "source="+hex.EncodeToString(sourceCid)+"|chunk="+hex.EncodeToString(chunkCid)+"|parser=v1"),
-		upsertText("provenance/claim/file-1/claim-1", "CrabDB uses Rust-backed bindings|chunk=file-1/chunk-1"),
+		upsertText("provenance/claim/file-1/claim-1", "Trail uses Rust-backed bindings|chunk=file-1/chunk-1"),
 	})
 	if err != nil {
 		return err

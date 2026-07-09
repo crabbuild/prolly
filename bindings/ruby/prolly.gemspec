@@ -1,10 +1,10 @@
 # frozen_string_literal: true
 
 Gem::Specification.new do |spec|
-  spec.name = 'crabdb-prolly'
+  spec.name = 'trail-prolly'
   spec.version = '0.1.0'
   spec.summary = 'Ruby bindings for prolly-map'
-  spec.authors = ['CrabDB Contributors']
+  spec.authors = ['Trail Contributors']
   spec.email = ['opensource@crab.build']
   spec.license = 'MIT OR Apache-2.0'
   spec.required_ruby_version = '>= 2.6'

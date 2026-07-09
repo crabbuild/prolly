@@ -1024,7 +1024,7 @@ let prolly = Prolly::new(store.clone(), Config::default());
 
 let tree = prolly.create();
 let tree = prolly
-    .put(&tree, b"project/name".to_vec(), b"crabdb".to_vec())
+    .put(&tree, b"project/name".to_vec(), b"trail".to_vec())
     .unwrap();
 
 let update = prolly
@@ -1035,7 +1035,7 @@ assert!(update.is_applied());
 let loaded = prolly.load_named_root(b"main").unwrap().unwrap();
 assert_eq!(
     prolly.get(&loaded, b"project/name").unwrap(),
-    Some(b"crabdb".to_vec())
+    Some(b"trail".to_vec())
 );
 ```
 
@@ -1880,5 +1880,5 @@ current benchmark coverage, and measured SQLite scale results.
 Use this crate when you need an ordered map that can cheaply keep multiple
 versions, diff them, merge them, or persist them into a content-addressed store.
 It is a good fit for local-first databases, versioned metadata indexes,
-replication/sync state, and systems like CrabDB that need stable structural
+replication/sync state, and systems like Trail that need stable structural
 identity between snapshots.

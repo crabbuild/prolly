@@ -1,5 +1,5 @@
 {
-  "name": "@crabdb/prolly-wasm",
+  "name": "@trail/prolly-wasm",
   "version": "0.1.0",
   "type": "module",
   "private": true,

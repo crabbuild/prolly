@@ -31,12 +31,12 @@ async function loadWasm() {
 async function provenanceValues(): Promise<void> {
   const wasm = await loadWasm();
   const engine = wasm.WasmProllyEngine.memory();
-  const source = bytes("CrabDB language bindings design");
+  const source = bytes("Trail language bindings design");
   const sourceCid = Buffer.from(wasm.cidFromBytes(source)).toString("hex");
   const chunkCid = Buffer.from(wasm.cidFromBytes(source.slice(0, 16))).toString("hex");
   const tree = engine.batch(engine.create(), [
     upsert("provenance/chunk/file-1/chunk-1", `source=${sourceCid}|chunk=${chunkCid}|parser=v1`),
-    upsert("provenance/claim/file-1/claim-1", "CrabDB uses Rust-backed bindings|chunk=file-1/chunk-1"),
+    upsert("provenance/claim/file-1/claim-1", "Trail uses Rust-backed bindings|chunk=file-1/chunk-1"),
   ]);
   const claims = engine.range(tree, bytes("provenance/claim/file-1/"), bytes("provenance/claim/file-10"));
 

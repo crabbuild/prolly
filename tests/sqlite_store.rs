@@ -92,7 +92,7 @@ fn sqlite_store_persists_named_root_across_reopen() {
         let prolly = Prolly::new(store.clone(), config.clone());
         let tree = prolly.create();
         let tree = prolly
-            .put(&tree, b"project/name".to_vec(), b"crabdb".to_vec())
+            .put(&tree, b"project/name".to_vec(), b"trail".to_vec())
             .unwrap();
 
         prolly.publish_named_root(b"main", &tree).unwrap();
@@ -107,7 +107,7 @@ fn sqlite_store_persists_named_root_across_reopen() {
 
         assert_eq!(
             prolly.get(&loaded, b"project/name").unwrap(),
-            Some(b"crabdb".to_vec())
+            Some(b"trail".to_vec())
         );
     }
 
@@ -120,7 +120,7 @@ fn temp_db_path(label: &str) -> PathBuf {
         .unwrap()
         .as_nanos();
     std::env::temp_dir().join(format!(
-        "crabdb-prolly-{label}-{}-{nanos}.db",
+        "trail-prolly-{label}-{}-{nanos}.db",
         std::process::id()
     ))
 }

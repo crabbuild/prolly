@@ -21,7 +21,7 @@ public final class DeterministicRagSnapshot {
         try (Prolly prolly = Prolly.memory()) {
             byte[] indexRoot = bytes("rag/corpus/docs/root/index/current");
             TreeRecord indexV1 = prolly.batch(prolly.create(), List.of(
-                    upsertText("rag/corpus/docs/chunk/doc-1/0001", "vector:v1|CrabDB stores deterministic roots"),
+                    upsertText("rag/corpus/docs/chunk/doc-1/0001", "vector:v1|Trail stores deterministic roots"),
                     upsertText("rag/corpus/docs/chunk/doc-2/0001", "vector:v2|Prolly trees diff by key")));
             prolly.publishNamedRoot(indexRoot, indexV1);
             TreeRecord answers = prolly.put(

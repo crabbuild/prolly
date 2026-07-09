@@ -41,7 +41,7 @@ fn pglite_store_persists_named_root_across_reopen_when_enabled() {
     }
 
     let path = std::env::temp_dir().join(format!(
-        "crabdb-pglite-root-manifest-test-{}",
+        "trail-pglite-root-manifest-test-{}",
         std::process::id()
     ));
     let _ = std::fs::remove_dir_all(&path);
@@ -57,7 +57,7 @@ fn pglite_store_persists_named_root_across_reopen_when_enabled() {
         let prolly = Prolly::new(store, config.clone());
         let tree = prolly.create();
         let tree = prolly
-            .put(&tree, b"project/name".to_vec(), b"crabdb".to_vec())
+            .put(&tree, b"project/name".to_vec(), b"trail".to_vec())
             .unwrap();
 
         prolly.publish_named_root(b"main", &tree).unwrap();
@@ -71,7 +71,7 @@ fn pglite_store_persists_named_root_across_reopen_when_enabled() {
         assert_eq!(loaded, tree);
         assert_eq!(
             prolly.get(&loaded, b"project/name").unwrap(),
-            Some(b"crabdb".to_vec())
+            Some(b"trail".to_vec())
         );
     }
 
