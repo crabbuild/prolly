@@ -1,8 +1,6 @@
 use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, Mutex};
 
-#[cfg(feature = "sqlite")]
-use prolly_store_sqlite::SqliteStore;
 use prolly::{
     self, is_boundary_config as core_is_boundary_config, AuthenticatedProofBundleVerification,
     AuthenticatedProofEnvelope, AuthenticatedProofEnvelopeVerification, BatchApplyResult,
@@ -15,18 +13,20 @@ use prolly::{
     MergePolicyRegistry as CoreMergePolicyRegistry, MergeResolutionKind as CoreMergeResolutionKind,
     MergeReuseReason, MergeTrace, MergeTraceEvent, MergeTraceStage, MissingNodeCopy,
     MissingNodePlan, MultiKeyProof, MultiKeyProofVerification, MultiValueSet, Mutation,
-    NamedRootManifest, NamedRootRetention, NamedRootUpdate, Node, NodeStoreScan, ParallelConfig,
-    OwnedProllyTransaction, Prolly, ProllyMetricsSnapshot, ProofBundleSummary,
+    NamedRootManifest, NamedRootRetention, NamedRootUpdate, Node, NodeStoreScan,
+    OwnedProllyTransaction, ParallelConfig, Prolly, ProllyMetricsSnapshot, ProofBundleSummary,
     ProofBundleVerification, ProvedDiffPage, ProvedRangePage, RangeCursor, RangePageProof,
     RangePageProofVerification, RangeProof, RangeProofVerification, Resolver, ReverseCursor,
-    RootManifest,
-    SnapshotBundle as CoreSnapshotBundle, SnapshotBundleNode as CoreSnapshotBundleNode,
-    SnapshotBundleSummary, SnapshotBundleVerification, SnapshotNamespace, SnapshotRoot,
-    SnapshotSelection, StatsComparison, StatsDiff, StatsPercentageChange, Store,
-    StructuralDiffCursor, StructuralDiffMarker, StructuralDiffPage, TimestampedValue, Tombstone,
-    Tree, TreeDebugComparedNode, TreeDebugComparison, TreeDebugComparisonLevel, TreeDebugLevel,
+    RootManifest, SnapshotBundle as CoreSnapshotBundle,
+    SnapshotBundleNode as CoreSnapshotBundleNode, SnapshotBundleSummary,
+    SnapshotBundleVerification, SnapshotNamespace, SnapshotRoot, SnapshotSelection,
+    StatsComparison, StatsDiff, StatsPercentageChange, Store, StructuralDiffCursor,
+    StructuralDiffMarker, StructuralDiffPage, TimestampedValue, Tombstone, Tree,
+    TreeDebugComparedNode, TreeDebugComparison, TreeDebugComparisonLevel, TreeDebugLevel,
     TreeDebugNode, TreeDebugNodeStatus, TreeDebugView, TreeStats, ValueRef, VersionedValue,
 };
+#[cfg(feature = "sqlite")]
+use prolly_store_sqlite::SqliteStore;
 use serde::Serialize;
 use thiserror::Error;
 
@@ -1255,7 +1255,9 @@ impl From<prolly::Error> for ProllyBindingError {
             prolly::Error::MissingNamedRoots { names } => Self::InvalidArgument {
                 reason: format!("missing named roots for retention policy: {names:?}"),
             },
-            prolly::Error::InvalidSnapshotBundle(message) => Self::InvalidArgument { reason: message },
+            prolly::Error::InvalidSnapshotBundle(message) => {
+                Self::InvalidArgument { reason: message }
+            }
             prolly::Error::UnsupportedTransactions { store } => Self::Internal {
                 reason: format!("store does not support strict transactions: {store}"),
             },
@@ -1749,9 +1751,7 @@ impl ProllyTransaction {
             .lock()
             .map_err(|error| internal_error(format!("transaction lock poisoned: {error}")))?;
         let transaction = guard.as_ref().ok_or_else(Self::completed_error)?;
-        with_transaction!(transaction, tx, {
-            tx.get(&tree, &key).map_err(Into::into)
-        })
+        with_transaction!(transaction, tx, { tx.get(&tree, &key).map_err(Into::into) })
     }
 
     pub fn put(
@@ -1767,7 +1767,9 @@ impl ProllyTransaction {
             .map_err(|error| internal_error(format!("transaction lock poisoned: {error}")))?;
         let transaction = guard.as_ref().ok_or_else(Self::completed_error)?;
         with_transaction!(transaction, tx, {
-            tx.put(&tree, key, value).map(TreeRecord::from).map_err(Into::into)
+            tx.put(&tree, key, value)
+                .map(TreeRecord::from)
+                .map_err(Into::into)
         })
     }
 
@@ -1807,10 +1809,7 @@ impl ProllyTransaction {
         })
     }
 
-    pub fn load_named_root(
-        &self,
-        name: Vec<u8>,
-    ) -> Result<Option<TreeRecord>, ProllyBindingError> {
+    pub fn load_named_root(&self, name: Vec<u8>) -> Result<Option<TreeRecord>, ProllyBindingError> {
         let guard = self
             .inner
             .lock()
@@ -1944,7 +1943,9 @@ impl ProllyEngine {
             BindingEngine::Memory(engine) => {
                 BindingTransaction::Memory(engine.begin_owned_transaction()?)
             }
-            BindingEngine::File(engine) => BindingTransaction::File(engine.begin_owned_transaction()?),
+            BindingEngine::File(engine) => {
+                BindingTransaction::File(engine.begin_owned_transaction()?)
+            }
             #[cfg(feature = "sqlite")]
             BindingEngine::Sqlite(engine) => {
                 BindingTransaction::Sqlite(engine.begin_owned_transaction()?)

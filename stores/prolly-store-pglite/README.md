@@ -6,6 +6,6 @@ Node.js sidecar with `@electric-sql/pglite` available in its working directory.
 
 ```toml
 [dependencies]
-prolly-map = "0.1"
+prolly-map = "0.2"
 prolly-store-pglite = "0.1"
 ```

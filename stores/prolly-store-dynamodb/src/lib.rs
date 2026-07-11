@@ -18,10 +18,10 @@ pub mod dynamodb {
     use aws_sdk_dynamodb::operation::put_item::PutItemError;
     use aws_sdk_dynamodb::primitives::Blob;
     use aws_sdk_dynamodb::types::{
-        AttributeDefinition, AttributeValue, BillingMode, ConditionCheck,
-        Delete as TransactDelete, DeleteRequest, KeySchemaElement, KeyType, KeysAndAttributes,
-        Put as TransactPut, PutRequest, ReturnValuesOnConditionCheckFailure, ScalarAttributeType,
-        TableDescription, TransactWriteItem, WriteRequest,
+        AttributeDefinition, AttributeValue, BillingMode, ConditionCheck, Delete as TransactDelete,
+        DeleteRequest, KeySchemaElement, KeyType, KeysAndAttributes, Put as TransactPut,
+        PutRequest, ReturnValuesOnConditionCheckFailure, ScalarAttributeType, TableDescription,
+        TransactWriteItem, WriteRequest,
     };
 
     use crate::{
@@ -414,11 +414,7 @@ pub mod dynamodb {
             Ok(TransactWriteItem::builder().delete(delete).build())
         }
 
-        fn apply_root_condition<B>(
-            &self,
-            builder: B,
-            expected: Option<&[u8]>,
-        ) -> B
+        fn apply_root_condition<B>(&self, builder: B, expected: Option<&[u8]>) -> B
         where
             B: RootConditionBuilder,
         {
@@ -952,13 +948,13 @@ pub mod dynamodb {
 
     trait RootConditionBuilder: Sized {
         fn condition_expression(self, input: impl Into<String>) -> Self;
-        fn expression_attribute_names(self, key: impl Into<String>, value: impl Into<String>)
-            -> Self;
-        fn expression_attribute_values(
+        fn expression_attribute_names(
             self,
             key: impl Into<String>,
-            value: AttributeValue,
+            value: impl Into<String>,
         ) -> Self;
+        fn expression_attribute_values(self, key: impl Into<String>, value: AttributeValue)
+            -> Self;
         fn return_values_on_condition_check_failure(
             self,
             input: ReturnValuesOnConditionCheckFailure,

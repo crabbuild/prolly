@@ -115,10 +115,10 @@ use prolly_bindings::{
     StructuralDiffMarkerRecord as BindingStructuralDiffMarkerRecord,
     StructuralDiffPageRecord as BindingStructuralDiffPageRecord,
     TimestampedValueRecord as BindingTimestampedValueRecord,
-    TransactionConflictRecord as BindingTransactionConflictRecord,
-    TransactionUpdateRecord as BindingTransactionUpdateRecord,
     TombstoneMetadataRecord as BindingTombstoneMetadataRecord,
-    TombstoneRecord as BindingTombstoneRecord, TreeRecord, ValueRefKind,
+    TombstoneRecord as BindingTombstoneRecord,
+    TransactionConflictRecord as BindingTransactionConflictRecord,
+    TransactionUpdateRecord as BindingTransactionUpdateRecord, TreeRecord, ValueRefKind,
     ValueRefRecord as BindingValueRefRecord,
 };
 use serde::Deserialize;

@@ -1768,7 +1768,11 @@ fn root_manifest_to_object(manifest: prolly::RootManifest) -> Result<Object, JsV
     let updated_at_millis = manifest.updated_at_millis;
     let tree = manifest.into_tree();
     let object = Object::new();
-    Reflect::set(&object, &"tree".into(), &JsValue::from(WasmTree { inner: tree }))?;
+    Reflect::set(
+        &object,
+        &"tree".into(),
+        &JsValue::from(WasmTree { inner: tree }),
+    )?;
     Reflect::set(
         &object,
         &"createdAtMillis".into(),

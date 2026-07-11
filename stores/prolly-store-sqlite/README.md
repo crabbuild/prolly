@@ -4,7 +4,7 @@ SQLite storage adapter for [`prolly-map`](https://crates.io/crates/prolly-map).
 
 ```toml
 [dependencies]
-prolly-map = "0.1"
+prolly-map = "0.2"
 prolly-store-sqlite = "0.1"
 ```
 

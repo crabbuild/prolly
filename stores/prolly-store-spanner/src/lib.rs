@@ -284,9 +284,7 @@ pub mod spanner {
             let node_writes = node_writes
                 .iter()
                 .map(|write| match write {
-                    RemoteBatchOp::Upsert { key, value } => {
-                        (true, key.to_vec(), value.to_vec())
-                    }
+                    RemoteBatchOp::Upsert { key, value } => (true, key.to_vec(), value.to_vec()),
                     RemoteBatchOp::Delete { key } => (false, key.to_vec(), Vec::new()),
                 })
                 .collect::<Vec<_>>();

@@ -445,7 +445,14 @@ pub mod redis {
                 .arg(root_writes.len());
             for condition in root_conditions {
                 invocation
-                    .arg(if condition.expected.is_some() { b"1" } else { b"0" }.as_slice())
+                    .arg(
+                        if condition.expected.is_some() {
+                            b"1"
+                        } else {
+                            b"0"
+                        }
+                        .as_slice(),
+                    )
                     .arg(condition.expected.as_deref().unwrap_or_default());
             }
             for write in node_writes {
@@ -553,7 +560,6 @@ pub mod redis {
             ),
         ))
     }
-
 
     fn redis_type_error(detail: impl Into<String>) -> RedisError {
         (
