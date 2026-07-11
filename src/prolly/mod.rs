@@ -137,6 +137,7 @@ pub mod tombstone;
 pub mod transaction;
 pub mod tree;
 pub mod value;
+pub mod versioned_map;
 
 // Public submodules - each handles a specific concern
 pub mod batch;
@@ -1031,11 +1032,11 @@ impl<S: Store> Prolly<S> {
         }
     }
 
-    /// Build a tree from key/value entries using [`BatchBuilder`].
+    /// Build a tree from key/value entries using [`builder::BatchBuilder`].
     ///
     /// The builder sorts entries by byte-lexicographic key order before
     /// chunking, so callers may provide unsorted input. Duplicate keys are
-    /// preserved with the same semantics as [`BatchBuilder`].
+    /// preserved with the same semantics as [`builder::BatchBuilder`].
     pub fn build_from_entries(&self, entries: Vec<(Vec<u8>, Vec<u8>)>) -> Result<Tree, Error>
     where
         S: Clone + Send + Sync,
@@ -1050,7 +1051,7 @@ impl<S: Store> Prolly<S> {
 
     /// Build a tree from entries that are already sorted by key.
     ///
-    /// This delegates to [`SortedBatchBuilder`] and returns
+    /// This delegates to [`builder::SortedBatchBuilder`] and returns
     /// [`Error::UnsortedInput`] if any key is lower than the previous key.
     pub fn build_from_sorted_entries(&self, entries: Vec<(Vec<u8>, Vec<u8>)>) -> Result<Tree, Error>
     where
@@ -3877,6 +3878,11 @@ impl<S: Store> Prolly<S> {
         &self.store
     }
 
+    /// Borrow this manager's tree configuration.
+    pub fn config(&self) -> &Config {
+        &self.config
+    }
+
     pub(crate) fn record_batch_write_metrics(&self, nodes: usize, bytes: usize) {
         self.metrics.record_batch_write(nodes, bytes);
     }
@@ -4143,7 +4149,7 @@ impl<S: Store> Prolly<S> {
 
     /// Apply batch mutations with tunable batched route hydration.
     ///
-    /// This method uses the production batch writer with a [`ParallelConfig`]
+    /// This method uses the production batch writer with a [`parallel::ParallelConfig`]
     /// adapter. Stores that prefer batched reads use `max_threads` as the
     /// ordered route-hydration width once the mutation count reaches
     /// `parallelism_threshold`; smaller batches use a narrow route path to avoid
@@ -4192,7 +4198,7 @@ impl<S: Store> Prolly<S> {
             .tree)
     }
 
-    /// Apply batch mutations with [`ParallelConfig`] and return execution stats.
+    /// Apply batch mutations with [`parallel::ParallelConfig`] and return execution stats.
     ///
     /// The returned counters mirror [`Prolly::batch_with_stats`] and make the
     /// parallel-batch route observable across storage backends and language

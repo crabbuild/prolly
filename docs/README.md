@@ -17,6 +17,10 @@ tests described here.
 
 - [Getting Started](getting-started.md): install the crate, build your first
   tree, run examples, choose features, and understand the core mental model.
+- [Versioned Map Guide](versioned-map.md): comprehensive guide to managed map
+  lifecycle, snapshots, history, proofs, merge, backup and sync, large values,
+  retention and GC, ingestion, multi-map database indexes, typed schemas,
+  migrations, async access, and change subscriptions.
 - [Guides](guides.md): practical guidance for keys, values, range scans,
   named roots, merge resolvers, async storage, large values, GC, sync, and
   operational inspection.
@@ -26,6 +30,9 @@ tests described here.
 - [Object-Store VCS Design](object-store-vcs-design.md): technical design for
   direct object-store node/blob storage, distributed ref CAS, publish protocol,
   and GC for Git-like version-control systems.
+- [Versioned Secondary Indexes](secondary-index-design.md): technical design for
+  strict derived `VersionedMap`s, atomic source/index publication, historical
+  queries, lifecycle management, retention, backup, sync, and bindings.
 - [prolly-vcs Design](prolly-vcs-design.md): proposed neutral high-level
   repository crate with a general backend-neutral `KvStore` substrate, commits,
   refs, reflogs, patches, merge orchestration, sync planning, GC policy, and an
@@ -52,6 +59,9 @@ tests described here.
 - [Language Bindings Design](language-bindings-design.md): technical design
   for exposing the Rust implementation through UniFFI and language-specific
   binding adapters.
+- [Cross-Language Store Adapters Design](language-store-adapters-design.md):
+  implementation design for optional DynamoDB, PostgreSQL, MySQL, and other
+  host-language store packages over a shared async protocol.
 
 ## What Prolly Gives You
 

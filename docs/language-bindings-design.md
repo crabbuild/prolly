@@ -5,6 +5,10 @@ other languages without reimplementing the tree in each ecosystem. The goal is
 to keep one authoritative engine in Rust, then ship thin language bindings that
 share the same conformance fixtures, wire format, and release process.
 
+Store packaging and true async foreign-store decisions in
+[`language-store-adapters-design.md`](language-store-adapters-design.md)
+supersede older store-constructor sequencing in this document.
+
 ## Goals
 
 - Keep Rust as the native implementation and source of truth.
@@ -25,8 +29,8 @@ Non-goals for the first binding release:
 
 - no independent native implementation in each language;
 - no direct exposure of Rust generics, lifetimes, traits, or borrowed data;
-- no async FFI surface until the synchronous API is stable, although async
-  feature parity remains required before a language binding is complete.
+- no remote database adapter implemented by blocking through the synchronous
+  FFI surface; async adapter parity follows the cross-language store design.
 
 ## Source Of Truth
 
@@ -80,8 +84,9 @@ This keeps UniFFI, Node-API, JNI, or WASM dependencies out of the core
   bindings.
 - Node/TypeScript ships both Node-API and browser WASM packages in the same
   tier 1 release.
-- SQLite is the first required persistent store beyond memory and file for
-  non-WASM binding artifacts.
+- Core binding artifacts include only memory and file stores. SQLite and all
+  database/cloud stores ship as optional packages governed by
+  [`language-store-adapters-design.md`](language-store-adapters-design.md).
 - Generated binding sources are checked in to support vendored and offline
   builds; compiled binaries and package outputs are not checked in.
 
@@ -126,9 +131,9 @@ semantics, errors, stats, and root CIDs match Rust.
 | `merge`, `merge_explain`, `merge_range`, `merge_prefix` | merge methods plus explanation records | Built-in resolvers must be available in every binding. |
 | `Conflict`, `Resolution`, `Resolver`, `resolver::*` | records/enums, built-in resolver names, and P6 custom callbacks | Custom resolver callbacks require callback safety rules per language. |
 | `RootManifest`, named root load/publish/CAS/retention | manifest records and engine methods | CAS result must preserve applied/current/missing semantics. |
-| `Store`, `NodeStoreScan`, concrete stores | store-kind constructors, scan APIs, and P6 host store callbacks | Rust-backed stores ship before host-language stores. |
+| `Store`, `NodeStoreScan`, concrete stores | memory/file constructors plus sync and async host-store protocols | Database stores ship as independent host-language adapter packages. |
 | `MemStore`, `FileNodeStore` | required store kinds | Available in every non-WASM binding. |
-| `SqliteStore`, `RocksDBStore`, `PgliteStore`, `SlateDbStore` | optional adapter-backed store kinds | Bindings opt into the corresponding `prolly-store-*` dependency when packaging that store. |
+| `SqliteStore`, `RocksDBStore`, `PgliteStore`, `SlateDbStore` | optional host-language adapter packages | Adapter packages use an idiomatic host driver and the shared store protocol; Rust applications use the corresponding `prolly-store-*` crate directly. |
 | `ValueRef`, `BlobRef`, `LargeValueConfig`, blob stores | value/blob records and large-value methods | Blob GC must use the same reachability records as Rust. |
 | JSON/CBOR/versioned value codecs | encode/decode helper functions | Language-specific JSON values should remain outside the core byte API. |
 | key helpers and `KeyBuilder` | functions plus segment builder | Numeric encodings must match Rust signed/unsigned byte ordering. |
@@ -151,11 +156,12 @@ it, but the package must say so explicitly.
 Examples:
 
 - WASM/browser packages do not expose filesystem stores in browser builds.
-- Node packages must expose memory, file, and SQLite stores. Browser WASM
-  packages should start with memory and browser-hosted stores.
-- SQLite is the baseline persistent store for non-WASM binding artifacts.
-- RocksDB, PGlite, and SlateDB are optional artifacts because their Rust crates
-  and native dependencies change package size and platform support.
+- Node packages must expose memory and file stores. Browser WASM packages
+  should start with memory and browser-hosted stores.
+- SQLite and other persistent stores are optional adapter packages and must not
+  add dependencies to the core binding artifact.
+- RocksDB, PGlite, and SlateDB are optional adapter packages because their
+  native dependencies and platform support vary by language.
 - Host-language custom callbacks for stores, merge resolvers, CRDT resolvers,
   and merge policy functions are P6 features. A language without P6 can be
   useful, but it is not fully feature-parity complete.
@@ -400,10 +406,10 @@ byte fields predictably.
 ProllyEngine
   constructor memory(config: ConfigRecord)
   constructor file(path: string, config: ConfigRecord)
-  constructor sqlite(path: string, config: ConfigRecord)
-  constructor rocksdb(path: string, config: ConfigRecord)
-  constructor pglite(path: string, config: ConfigRecord)
-  constructor slatedb(path: string, config: ConfigRecord)
+  constructor custom_store(store: HostStoreCallback, config: ConfigRecord)
+
+AsyncProllyEngine
+  async constructor open_remote(store: ForeignRemoteStore, config: ConfigRecord)
 
   create() -> TreeHandle
   get(tree: TreeHandle, key: bytes) -> optional<bytes>
@@ -525,13 +531,13 @@ is_tombstone_value(value: bytes) -> bool
 
 - memory store for tests, examples, and short-lived snapshots;
 - file node store for local persistent use;
-- SQLite store for the first persistent cross-language backend beyond file;
-- RocksDB, PGlite, and SlateDB store constructors only in artifacts compiled
-  with those Rust features.
+- synchronous host stores for compatibility and embedded integrations;
+- asynchronous foreign stores through the separately packaged adapter design.
 
-Language-provided stores are P6. UniFFI callback interfaces can model host
-callbacks, but store callbacks add cross-language overhead to every node load,
-complicate threading, and make browser support harder.
+Language-provided stores are P6. Synchronous stores use the existing callback
+interface. Remote stores use the versioned async foreign-store protocol so host
+runtimes can await database clients without blocking. Both paths must use
+batching and Rust's node cache to control cross-language overhead.
 
 `MergeResolverCallback`, `CrdtResolverCallback`, and merge policy callback
 rules are the first host callback APIs.
@@ -584,16 +590,14 @@ pub struct BindingEngine {
 enum BindingStore {
     Memory(prolly::Prolly<prolly::MemStore>),
     File(prolly::Prolly<prolly::FileNodeStore>),
-    #[cfg(feature = "sqlite")]
-    Sqlite(prolly::Prolly<prolly_store_sqlite::SqliteStore>),
-    #[cfg(feature = "rocksdb")]
-    RocksDb(prolly::Prolly<prolly_store_rocksdb::RocksDBStore>),
-    #[cfg(feature = "pglite")]
-    Pglite(prolly::Prolly<prolly_store_pglite::PgliteStore>),
-    #[cfg(feature = "slatedb")]
-    SlateDb(prolly::Prolly<prolly_store_slatedb::SlateDbStore>),
+    Host(prolly::Prolly<HostStore>),
 }
 ```
+
+True async database/cloud adapters use the separate async binding engine
+defined by
+[`language-store-adapters-design.md`](language-store-adapters-design.md), not
+this synchronous enum.
 
 Each method matches on `BindingStore` and calls the native Rust method. This
 avoids trait objects around `Store`, which are awkward because `Store` has an
@@ -900,8 +904,7 @@ Phase 2: tier 1 package adapters
 Phase 3: parity expansion
 
 - add P2 diff/merge parity, including conflict records and built-in resolvers;
-- add P3 named roots, manifest CAS, retention, SQLite, and adapter-backed store
-  constructors for RocksDB, PGlite, and SlateDB;
+- add P3 named roots, manifest CAS, retention, and memory/file store parity;
 - add P4 stats, debug views, cursors, metrics, and hints;
 - add P5 large values, GC, sync, CRDT, tombstones, streaming/page APIs, and
   async equivalents;
@@ -923,7 +926,7 @@ Phase 5: callback and host integration
 - language-hosted store callbacks;
 - browser IndexedDB/OPFS stores;
 - remote/object-store adapters;
-- async store callbacks if profiling shows they are worth the complexity.
+- async store callbacks and independently packaged database adapters.
 
 ## CI Matrix
 
@@ -937,7 +940,8 @@ Minimum CI before publishing any binding:
 - Go: `go test ./...`
 - Node/TypeScript: `npm test` for Node-API and browser WASM packages
 - Python: `python -m unittest discover -s bindings/python/tests`
-- SQLite: conformance tests for every non-WASM package
+- optional store adapters: protocol and provider conformance tests for every
+  published package
 
 Feature-complete CI must also run one parity test group per P-level. The CI
 status for each package should report the highest passing P-level, for example
@@ -1013,5 +1017,6 @@ Semantic drift:
 - Language packages live under `bindings/<language>`.
 - Java is a wrapper over generated Kotlin/JVM bindings.
 - Node/TypeScript ships Node-API and browser WASM artifacts together.
-- SQLite is the first persistent store beyond memory and file.
+- Memory and file are the only stores built into core language packages;
+  persistent database/cloud stores are independent adapter packages.
 - Generated binding sources are checked in for vendored and offline builds.

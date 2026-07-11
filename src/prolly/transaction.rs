@@ -793,6 +793,17 @@ where
         self.manager.publish_named_root(name, tree)
     }
 
+    /// Stage an unconditional named-root publish with an explicit timestamp.
+    pub fn publish_named_root_at_millis(
+        &self,
+        name: &[u8],
+        tree: &Tree,
+        timestamp_millis: u64,
+    ) -> Result<(), Error> {
+        self.manager
+            .publish_named_root_at_millis(name, tree, timestamp_millis)
+    }
+
     /// Stage an unconditional named-root delete.
     pub fn delete_named_root(&self, name: &[u8]) -> Result<(), Error> {
         self.manager.delete_named_root(name)
@@ -1027,6 +1038,18 @@ where
     /// Stage an unconditional named-root publish.
     pub async fn publish_named_root(&self, name: &[u8], tree: &Tree) -> Result<(), Error> {
         self.manager.publish_named_root(name, tree).await
+    }
+
+    /// Stage an unconditional named-root publish with an explicit timestamp.
+    pub async fn publish_named_root_at_millis(
+        &self,
+        name: &[u8],
+        tree: &Tree,
+        timestamp_millis: u64,
+    ) -> Result<(), Error> {
+        self.manager
+            .publish_named_root_at_millis(name, tree, timestamp_millis)
+            .await
     }
 
     /// Stage an unconditional named-root delete.

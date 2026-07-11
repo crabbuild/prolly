@@ -38,6 +38,54 @@ fn block_on<F: Future>(future: F) -> F::Output {
     }
 }
 
+#[test]
+fn async_versioned_map_supports_atomic_updates_pinned_reads_pages_and_proofs() {
+    block_on(async {
+        let store = Arc::new(MemStore::new());
+        let prolly = AsyncProlly::new(SyncStoreAsAsync::new(store), Config::default());
+        let map = prolly.versioned_map(b"async-users");
+        let first = map.put(b"user/1", b"Ada").await.unwrap();
+        let second = map
+            .edit(|edit| {
+                edit.put(b"user/2", b"Grace");
+                edit.put(b"user/3", b"Margaret");
+            })
+            .await
+            .unwrap();
+        assert_ne!(first.id, second.id);
+        assert_eq!(map.get(b"user/2").await.unwrap(), Some(b"Grace".to_vec()));
+
+        let snapshot = map.snapshot().await.unwrap().unwrap();
+        assert_eq!(
+            snapshot
+                .get_many(&[b"user/1".as_slice(), b"missing".as_slice()])
+                .await
+                .unwrap(),
+            vec![Some(b"Ada".to_vec()), None]
+        );
+        let page = snapshot
+            .prefix_page(b"user/", &RangeCursor::start(), 2)
+            .await
+            .unwrap();
+        assert_eq!(page.entries.len(), 2);
+        assert!(snapshot.prove_key(b"user/1").await.unwrap().verify().valid);
+        assert_eq!(snapshot.stats().await.unwrap().total_key_value_pairs, 3);
+
+        let historical = map.snapshot_at(&first.id).await.unwrap().unwrap();
+        assert_eq!(historical.get(b"user/2").await.unwrap(), None);
+
+        let mut subscription = map.subscribe().await.unwrap();
+        assert!(subscription.poll().await.unwrap().is_none());
+
+        map.delete(b"user/2").await.unwrap();
+        assert_eq!(map.get(b"user/2").await.unwrap(), None);
+        let event = subscription.poll().await.unwrap().unwrap();
+        assert_eq!(event.previous, Some(second.id));
+        assert_eq!(event.diffs.len(), 1);
+        assert!(subscription.poll().await.unwrap().is_none());
+    });
+}
+
 #[cfg(feature = "tokio")]
 fn tokio_runtime() -> tokio::runtime::Runtime {
     tokio::runtime::Builder::new_multi_thread()

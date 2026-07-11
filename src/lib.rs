@@ -376,6 +376,16 @@ pub use prolly::value::{
     VersionedCborCodec, VersionedJsonCodec, VersionedValue,
 };
 #[cfg(feature = "async-store")]
+pub use prolly::versioned_map::{AsyncMapChangeSubscription, AsyncMapSnapshot, AsyncVersionedMap};
+pub use prolly::versioned_map::{
+    BytesKeyCodec, KeyCodec, MapBackupVersion, MapCatalogVerification, MapChangeEvent,
+    MapChangeSubscription, MapComparison, MapMerge, MapReverseIter, MapSnapshot, MapVersion,
+    MapVersionId, ProofAuthentication, StringKeyCodec, TypedMigrationResult, TypedVersionedMap,
+    VersionPruneResult, VersionedMap, VersionedMapBackup, VersionedMapBatchResult,
+    VersionedMapEditor, VersionedMapUpdate, VersionedMapsTransaction,
+    DEFAULT_VERSIONED_MAP_RETRIES, VERSIONED_MAP_ROOT_PREFIX,
+};
+#[cfg(feature = "async-store")]
 pub use prolly::AsyncProlly;
 
 // Re-export constants
