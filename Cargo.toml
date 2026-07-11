@@ -18,9 +18,9 @@ keywords = [
 ]
 categories = ["data-structures", "database-implementations"]
 include = [
-    "Cargo.toml",
-    "LICENSE",
-    "README.md",
+    "/Cargo.toml",
+    "/LICENSE",
+    "/README.md",
     "benches/**",
     "conformance/prolly-fixtures.v1.json",
     "diagram/**",
