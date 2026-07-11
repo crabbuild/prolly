@@ -17,7 +17,18 @@ keywords = [
     "merge",
 ]
 categories = ["data-structures", "database-implementations"]
-exclude = ["docker-compose.store-services.yml", "scripts/", "stores/"]
+include = [
+    "Cargo.toml",
+    "LICENSE",
+    "README.md",
+    "benches/**",
+    "conformance/prolly-fixtures.v1.json",
+    "diagram/**",
+    "docs/**",
+    "examples/**",
+    "src/**",
+    "tests/**",
+]
 
 [lib]
 name = "prolly"
