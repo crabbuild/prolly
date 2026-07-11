@@ -33,11 +33,12 @@ Then in Rust:
 use prolly::{Config, MemStore, Prolly};
 ```
 
-Optional feature flags:
+Optional async runtime features and storage adapters:
 
 ```toml
 [dependencies]
-prolly-map = { version = "0.1", features = ["async-store", "tokio", "sqlite"] }
+prolly-map = { version = "0.1", features = ["async-store", "tokio"] }
+prolly-store-sqlite = "0.1"
 ```
 
 Feature guide:
@@ -45,10 +46,8 @@ Feature guide:
 - `async-store`: enables `AsyncStore`, `AsyncProlly`, async range and diff
   iterators, and sync-to-async store adapters.
 - `tokio`: enables Tokio blocking adapters for sync stores and blob stores.
-- `sqlite`: enables the SQLite node store.
-- `rocksdb`: enables the RocksDB node store.
-- `slatedb`: enables the SlateDB backend.
-- `pglite`: enables the PGlite backend.
+- Storage engines are separate `prolly-store-*` crates; add only the adapters
+  the application uses.
 
 The default feature set is intentionally small.
 

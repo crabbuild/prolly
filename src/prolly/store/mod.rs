@@ -2,23 +2,6 @@
 
 mod file;
 mod memory;
-#[cfg(feature = "pglite")]
-mod pglite;
-#[cfg(feature = "rocksdb")]
-mod rocksdb;
-#[cfg(feature = "slatedb")]
-mod slatedb;
-#[cfg(feature = "sqlite")]
-mod sqlite;
-
-#[cfg(feature = "pglite")]
-pub use self::pglite::{PgliteStore, PgliteStoreConfig, PgliteStoreError};
-#[cfg(feature = "rocksdb")]
-pub use self::rocksdb::{CompressionType, RocksDBConfig, RocksDBStore, RocksDBStoreError};
-#[cfg(feature = "slatedb")]
-pub use self::slatedb::{SlateDbStore, SlateDbStoreConfig, SlateDbStoreError};
-#[cfg(feature = "sqlite")]
-pub use self::sqlite::{SqliteStore, SqliteStoreConfig, SqliteStoreError};
 pub use file::{FileNodeStore, FileNodeStoreError};
 pub use memory::{MemStore, MemStoreError};
 

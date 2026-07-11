@@ -7,9 +7,6 @@ use prolly::{
     Store, TransactionUpdate, TransactionalStore,
 };
 
-#[cfg(feature = "sqlite")]
-use prolly::SqliteStore;
-
 fn memory_prolly() -> Prolly<Arc<MemStore>> {
     Prolly::new(Arc::new(MemStore::new()), Config::default())
 }
@@ -28,14 +25,6 @@ fn with_file_prolly(test: impl FnOnce(&Prolly<Arc<FileNodeStore>>)) {
     let prolly = Prolly::new(store, Config::default());
     test(&prolly);
     let _ = std::fs::remove_dir_all(path);
-}
-
-#[cfg(feature = "sqlite")]
-fn sqlite_prolly() -> Prolly<Arc<SqliteStore>> {
-    Prolly::new(
-        Arc::new(SqliteStore::open_in_memory().unwrap()),
-        Config::default(),
-    )
 }
 
 fn assert_transaction_rolls_back_staged_writes_when_closure_fails<S>(prolly: &Prolly<S>)
@@ -270,16 +259,4 @@ fn file_store_supports_strict_root_transactions() {
     with_file_prolly(assert_manual_commit_reports_applied_counts);
     with_file_prolly(assert_manual_commit_reports_conflict_without_applying_writes);
     with_file_prolly(assert_owned_transaction_commits);
-}
-
-#[cfg(feature = "sqlite")]
-#[test]
-fn sqlite_store_supports_strict_transactions() {
-    assert_transaction_rolls_back_staged_writes_when_closure_fails(&sqlite_prolly());
-    assert_transaction_commits_multiple_named_roots_atomically(&sqlite_prolly());
-    assert_transaction_reads_its_own_staged_tree_writes(&sqlite_prolly());
-    assert_transaction_detects_concurrent_writer_from_root_read_set(&sqlite_prolly());
-    assert_manual_commit_reports_applied_counts(&sqlite_prolly());
-    assert_manual_commit_reports_conflict_without_applying_writes(&sqlite_prolly());
-    assert_owned_transaction_commits(&sqlite_prolly());
 }

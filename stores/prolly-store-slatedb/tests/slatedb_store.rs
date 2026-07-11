@@ -1,10 +1,7 @@
-#![cfg(feature = "slatedb")]
-
-mod common;
-
 use std::sync::Arc;
 
-use prolly::{Config, Prolly, SlateDbStore};
+use prolly::{Config, Prolly};
+use prolly_store_slatedb::SlateDbStore;
 use slatedb::object_store::ObjectStore;
 
 #[test]
@@ -14,7 +11,7 @@ fn slatedb_store_satisfies_store_contract() {
     let path = format!("contract-{}", std::process::id());
     let store = SlateDbStore::open(path, object_store).unwrap();
 
-    common::assert_store_contract(&store);
+    prolly_store_test::assert_store_contract(&store);
 }
 
 #[test]
@@ -24,7 +21,7 @@ fn slatedb_store_satisfies_manifest_store_contract() {
     let path = format!("manifest-contract-{}", std::process::id());
     let store = SlateDbStore::open(path, object_store).unwrap();
 
-    common::assert_manifest_store_contract(&store);
+    prolly_store_test::assert_manifest_store_contract(&store);
 }
 
 #[test]
@@ -34,7 +31,7 @@ fn slatedb_store_satisfies_node_scan_contract() {
     let path = format!("scan-contract-{}", std::process::id());
     let store = SlateDbStore::open(path, object_store).unwrap();
 
-    common::assert_node_store_scan_contract(store);
+    prolly_store_test::assert_node_store_scan_contract(store);
 }
 
 #[test]

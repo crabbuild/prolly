@@ -1172,11 +1172,12 @@ mod tests {
             key: &[u8],
             value: &[u8],
         ) -> Result<(), Self::Error> {
-            let mut nodes = self.nodes.lock().unwrap();
-            for (key, value) in entries {
-                nodes.insert((*key).to_vec(), (*value).to_vec());
+            {
+                let mut nodes = self.nodes.lock().unwrap();
+                for (key, value) in entries {
+                    nodes.insert((*key).to_vec(), (*value).to_vec());
+                }
             }
-            drop(nodes);
             self.put_hint(namespace, key, value).await
         }
 

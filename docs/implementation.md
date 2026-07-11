@@ -180,10 +180,13 @@ Current store families include:
 
 - `MemStore`: in-memory development and tests.
 - `FileNodeStore`: file-backed node storage.
-- `SqliteStore`: durable embedded store behind `sqlite`.
-- `RocksDBStore`: RocksDB backend behind `rocksdb`.
-- `SlateDbStore`: SlateDB backend behind `slatedb`.
-- `PgliteStore`: PGlite backend behind `pglite`.
+- `prolly-store-sqlite`: durable embedded SQLite adapter.
+- `prolly-store-rocksdb`: RocksDB adapter.
+- `prolly-store-slatedb`: SlateDB adapter.
+- `prolly-store-pglite`: PGlite adapter.
+
+Only memory and file storage ship in `prolly-map`; database engines are selected
+as separate dependencies.
 
 Store conformance tests should check:
 
@@ -272,7 +275,7 @@ cargo fmt --check
 cargo test
 cargo test --features async-store
 cargo test --features tokio
-cargo test --features sqlite
+cargo test --manifest-path stores/prolly-store-sqlite/Cargo.toml
 cargo clippy --all-targets -- -D warnings
 RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --features async-store
 ```

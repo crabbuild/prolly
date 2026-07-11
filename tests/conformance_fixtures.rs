@@ -75,7 +75,7 @@ fn checked_in_tree_fixture_loads_through_rust_api() {
     let config = config_from_fixture(&fixture["config"]);
     let prolly = Prolly::new(store, config.clone());
     let tree = prolly::Tree {
-        root: fixture["root"].as_str().map(|root| cid_from_hex(root)),
+        root: fixture["root"].as_str().map(cid_from_hex),
         config,
     };
 

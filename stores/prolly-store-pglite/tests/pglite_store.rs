@@ -1,8 +1,5 @@
-#![cfg(feature = "pglite")]
-
-mod common;
-
-use prolly::{Config, PgliteStore, Prolly};
+use prolly::{Config, Prolly};
+use prolly_store_pglite::PgliteStore;
 
 #[test]
 fn pglite_store_satisfies_store_contract_when_enabled() {
@@ -11,7 +8,7 @@ fn pglite_store_satisfies_store_contract_when_enabled() {
     }
 
     let store = PgliteStore::open_in_memory().unwrap();
-    common::assert_store_contract(&store);
+    prolly_store_test::assert_store_contract(&store);
 }
 
 #[test]
@@ -21,7 +18,7 @@ fn pglite_store_satisfies_manifest_contract_when_enabled() {
     }
 
     let store = PgliteStore::open_in_memory().unwrap();
-    common::assert_manifest_store_contract(&store);
+    prolly_store_test::assert_manifest_store_contract(&store);
 }
 
 #[test]
@@ -31,7 +28,7 @@ fn pglite_store_satisfies_node_scan_contract_when_enabled() {
     }
 
     let store = PgliteStore::open_in_memory().unwrap();
-    common::assert_node_store_scan_contract(store);
+    prolly_store_test::assert_node_store_scan_contract(store);
 }
 
 #[test]

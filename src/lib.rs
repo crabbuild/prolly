@@ -352,14 +352,6 @@ pub use prolly::store::{AsyncStore, SyncStoreAsAsync};
 pub use prolly::store::{
     BatchOp, FileNodeStore, FileNodeStoreError, MemStore, MemStoreError, NodeStoreScan, Store,
 };
-#[cfg(feature = "rocksdb")]
-pub use prolly::store::{CompressionType, RocksDBConfig, RocksDBStore, RocksDBStoreError};
-#[cfg(feature = "pglite")]
-pub use prolly::store::{PgliteStore, PgliteStoreConfig, PgliteStoreError};
-#[cfg(feature = "slatedb")]
-pub use prolly::store::{SlateDbStore, SlateDbStoreConfig, SlateDbStoreError};
-#[cfg(feature = "sqlite")]
-pub use prolly::store::{SqliteStore, SqliteStoreConfig, SqliteStoreError};
 #[cfg(feature = "tokio")]
 pub use prolly::store::{TokioBlockingStore, TokioBlockingStoreError};
 pub use prolly::sync::{

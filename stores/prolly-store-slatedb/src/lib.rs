@@ -1,6 +1,6 @@
 //! SlateDB storage backend implementation.
 
-use std::collections::HashMap;
+use std::collections::{hash_map::Entry, HashMap};
 use std::future::Future;
 use std::sync::{Arc, Mutex};
 
@@ -11,16 +11,75 @@ use slatedb::object_store::ObjectStore;
 use slatedb::{Db, WriteBatch};
 use tokio::runtime::{Builder, Runtime};
 
-use super::super::error::Error;
-use super::super::manifest::{
-    sort_named_root_manifests, ManifestStore, ManifestStoreScan, ManifestUpdate, NamedRootManifest,
-    RootManifest,
+use prolly::{
+    BatchOp, Cid, Error, ManifestStore, ManifestStoreScan, ManifestUpdate, NamedRootManifest,
+    NodeStoreScan, RootCondition, RootManifest, RootWrite, Store, TransactionConflict,
+    TransactionNodeWrite, TransactionUpdate, TransactionalStore,
 };
-use super::super::transaction::{
-    RootCondition, RootWrite, TransactionConflict, TransactionNodeWrite, TransactionUpdate,
-    TransactionalStore,
-};
-use super::{cid_from_store_key, sort_cids, BatchOp, NodeStoreScan, OrderedBatchReadPlan, Store};
+
+struct OrderedBatchReadPlan<'a> {
+    unique_keys: Vec<&'a [u8]>,
+    positions: Option<Vec<usize>>,
+}
+
+impl<'a> OrderedBatchReadPlan<'a> {
+    fn new(keys: &[&'a [u8]]) -> Self {
+        let mut unique_indexes = HashMap::with_capacity(keys.len());
+        let mut unique_keys = Vec::with_capacity(keys.len());
+        let mut positions = None;
+        for key in keys {
+            match unique_indexes.entry(*key) {
+                Entry::Occupied(entry) => positions
+                    .get_or_insert_with(|| (0..unique_keys.len()).collect::<Vec<_>>())
+                    .push(*entry.get()),
+                Entry::Vacant(entry) => {
+                    let index = unique_keys.len();
+                    unique_keys.push(*key);
+                    if let Some(positions) = positions.as_mut() {
+                        positions.push(index);
+                    }
+                    entry.insert(index);
+                }
+            }
+        }
+        Self {
+            unique_keys,
+            positions,
+        }
+    }
+
+    fn unique_keys(&self) -> &[&'a [u8]] {
+        &self.unique_keys
+    }
+
+    fn expand_owned<T: Clone>(&self, values: Vec<Option<T>>) -> Vec<Option<T>> {
+        match &self.positions {
+            Some(positions) => positions
+                .iter()
+                .map(|&index| values[index].clone())
+                .collect(),
+            None => values,
+        }
+    }
+}
+
+fn cid_from_store_key(key: &[u8], context: &str) -> Result<Cid, String> {
+    let bytes: [u8; 32] = key.try_into().map_err(|_| {
+        format!(
+            "{context} key has invalid CID length {}, expected 32",
+            key.len()
+        )
+    })?;
+    Ok(Cid(bytes))
+}
+
+fn sort_cids(cids: &mut [Cid]) {
+    cids.sort_by(|left, right| left.as_bytes().cmp(right.as_bytes()));
+}
+
+fn sort_named_root_manifests(roots: &mut [NamedRootManifest]) {
+    roots.sort_by(|left, right| left.name.cmp(&right.name));
+}
 
 const NODE_PREFIX: &[u8] = b"node:";
 const HINT_PREFIX: &[u8] = b"hint:";
@@ -410,7 +469,7 @@ impl Store for SlateDbStore {
 impl NodeStoreScan for SlateDbStore {
     type Error = SlateDbStoreError;
 
-    fn list_node_cids(&self) -> Result<Vec<super::super::cid::Cid>, Self::Error> {
+    fn list_node_cids(&self) -> Result<Vec<Cid>, Self::Error> {
         self.block_on(
             async {
                 let mut iter = self.db.scan_prefix(NODE_PREFIX, ..).await?;
@@ -667,7 +726,7 @@ fn decode_root_manifest(bytes: Option<Vec<u8>>) -> Result<Option<RootManifest>, 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::prolly::{Config, Prolly};
+    use prolly::{Config, Prolly};
 
     fn in_memory_store(path: &str) -> SlateDbStore {
         let object_store: Arc<dyn ObjectStore> =

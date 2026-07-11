@@ -1,0 +1,11 @@
+[package]
+name = "prolly-store-test"
+description = "Shared conformance tests for prolly-map store adapters."
+edition = "2021"
+rust-version = "1.81"
+version = "0.1.0"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[dependencies]
+prolly = { package = "prolly-map", path = "../.." }

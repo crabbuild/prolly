@@ -128,7 +128,7 @@ semantics, errors, stats, and root CIDs match Rust.
 | `RootManifest`, named root load/publish/CAS/retention | manifest records and engine methods | CAS result must preserve applied/current/missing semantics. |
 | `Store`, `NodeStoreScan`, concrete stores | store-kind constructors, scan APIs, and P6 host store callbacks | Rust-backed stores ship before host-language stores. |
 | `MemStore`, `FileNodeStore` | required store kinds | Available in every non-WASM binding. |
-| `SqliteStore`, `RocksDBStore`, `PgliteStore`, `SlateDbStore` | optional feature-gated store kinds | Bindings expose these only in artifacts compiled with the matching Rust feature. |
+| `SqliteStore`, `RocksDBStore`, `PgliteStore`, `SlateDbStore` | optional adapter-backed store kinds | Bindings opt into the corresponding `prolly-store-*` dependency when packaging that store. |
 | `ValueRef`, `BlobRef`, `LargeValueConfig`, blob stores | value/blob records and large-value methods | Blob GC must use the same reachability records as Rust. |
 | JSON/CBOR/versioned value codecs | encode/decode helper functions | Language-specific JSON values should remain outside the core byte API. |
 | key helpers and `KeyBuilder` | functions plus segment builder | Numeric encodings must match Rust signed/unsigned byte ordering. |
@@ -585,13 +585,13 @@ enum BindingStore {
     Memory(prolly::Prolly<prolly::MemStore>),
     File(prolly::Prolly<prolly::FileNodeStore>),
     #[cfg(feature = "sqlite")]
-    Sqlite(prolly::Prolly<prolly::SqliteStore>),
+    Sqlite(prolly::Prolly<prolly_store_sqlite::SqliteStore>),
     #[cfg(feature = "rocksdb")]
-    RocksDb(prolly::Prolly<prolly::RocksDBStore>),
+    RocksDb(prolly::Prolly<prolly_store_rocksdb::RocksDBStore>),
     #[cfg(feature = "pglite")]
-    Pglite(prolly::Prolly<prolly::PgliteStore>),
+    Pglite(prolly::Prolly<prolly_store_pglite::PgliteStore>),
     #[cfg(feature = "slatedb")]
-    SlateDb(prolly::Prolly<prolly::SlateDbStore>),
+    SlateDb(prolly::Prolly<prolly_store_slatedb::SlateDbStore>),
 }
 ```
 
@@ -900,7 +900,7 @@ Phase 2: tier 1 package adapters
 Phase 3: parity expansion
 
 - add P2 diff/merge parity, including conflict records and built-in resolvers;
-- add P3 named roots, manifest CAS, retention, SQLite, and feature-gated store
+- add P3 named roots, manifest CAS, retention, SQLite, and adapter-backed store
   constructors for RocksDB, PGlite, and SlateDB;
 - add P4 stats, debug views, cursors, metrics, and hints;
 - add P5 large values, GC, sync, CRDT, tombstones, streaming/page APIs, and

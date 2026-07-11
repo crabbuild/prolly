@@ -178,7 +178,7 @@ Priority: **P0**
 - `cargo test --all-targets` passes on default features
 - `cargo test --features async-store` passes
 - `cargo test --features tokio` passes
-- `cargo test --features sqlite` passes
+- `cargo test --manifest-path stores/prolly-store-sqlite/Cargo.toml` passes
 - `cargo test --doc` passes
 - `cargo test --examples` passes
 - Every example listed in the cookbook runs successfully

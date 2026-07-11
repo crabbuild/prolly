@@ -401,7 +401,7 @@ let prolly = Prolly::new(store, Config::default());
 ### RocksDB Store
 
 ```rust
-use prolly::RocksDBStore;
+use prolly_store_rocksdb::RocksDBStore;
 
 let store = RocksDBStore::open("./data").unwrap();
 let prolly = Prolly::new(store, Config::default());

@@ -1,12 +1,9 @@
-#![cfg(feature = "rocksdb")]
-
-mod common;
-
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use prolly::{Config, Prolly, RocksDBStore};
+use prolly::{Config, Prolly};
+use prolly_store_rocksdb::RocksDBStore;
 
 #[test]
 fn rocksdb_store_satisfies_store_contract() {
@@ -15,7 +12,7 @@ fn rocksdb_store_satisfies_store_contract() {
 
     {
         let store = RocksDBStore::open(&path).unwrap();
-        common::assert_store_contract(&store);
+        prolly_store_test::assert_store_contract(&store);
     }
 
     remove_rocksdb_dir(&path);
@@ -28,7 +25,7 @@ fn rocksdb_store_satisfies_manifest_store_contract() {
 
     {
         let store = RocksDBStore::open(&path).unwrap();
-        common::assert_manifest_store_contract(&store);
+        prolly_store_test::assert_manifest_store_contract(&store);
     }
 
     remove_rocksdb_dir(&path);
@@ -41,7 +38,7 @@ fn rocksdb_store_satisfies_node_store_scan_contract() {
 
     {
         let store = RocksDBStore::open(&path).unwrap();
-        common::assert_node_store_scan_contract(store);
+        prolly_store_test::assert_node_store_scan_contract(store);
     }
 
     remove_rocksdb_dir(&path);

@@ -1257,18 +1257,20 @@ Use this recipe when a desktop app, local-first app, command-line tool, or agent
 
 ### Reference design
 
-Cargo feature:
+Cargo dependencies:
 
 ```toml
 [dependencies]
-prolly-map = { version = "0.1", features = ["sqlite"] }
+prolly-map = "0.1"
+prolly-store-sqlite = "0.1"
 ```
 
 Setup:
 
 ```rust
 use std::sync::Arc;
-use prolly::{Config, Prolly, SqliteStore, SqliteStoreConfig};
+use prolly::{Config, Prolly};
+use prolly_store_sqlite::{SqliteStore, SqliteStoreConfig};
 
 let store = Arc::new(SqliteStore::open_with_config(
     "app.prolly.sqlite",

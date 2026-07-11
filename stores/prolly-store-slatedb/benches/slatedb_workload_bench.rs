@@ -1,3 +1,5 @@
+#![allow(clippy::too_many_arguments)]
+
 use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -7,9 +9,10 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use futures_util::StreamExt;
 use prolly::{
     BatchApplyStats, BatchOp, BatchWriter, BatchWriterConfig, Config, ManifestStore,
-    ManifestStoreScan, ManifestUpdate, Mutation, NamedRootManifest, Prolly, RootManifest,
-    SlateDbStore, SlateDbStoreConfig, Store, Tree, TreeStats,
+    ManifestStoreScan, ManifestUpdate, Mutation, NamedRootManifest, Prolly, RootManifest, Store,
+    Tree, TreeStats,
 };
+use prolly_store_slatedb::{SlateDbStore, SlateDbStoreConfig};
 use slatedb::config::{CompressionCodec, Settings};
 use slatedb::object_store::aws::AmazonS3Builder;
 use slatedb::object_store::path::Path as ObjectPath;

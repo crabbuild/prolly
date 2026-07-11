@@ -6,8 +6,9 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use futures_util::StreamExt;
 use prolly::{
     append_batch, BatchApplyResult, BatchApplyStats, BatchOp, BatchWriter, BatchWriterConfig,
-    Config, Error, Mutation, Prolly, Resolution, Resolver, SlateDbStore, Store, Tree,
+    Config, Error, Mutation, Prolly, Resolution, Resolver, Store, Tree,
 };
+use prolly_store_slatedb::SlateDbStore;
 use slatedb::object_store::aws::AmazonS3Builder;
 use slatedb::object_store::path::Path as ObjectPath;
 use slatedb::object_store::{ObjectStore, ObjectStoreExt};

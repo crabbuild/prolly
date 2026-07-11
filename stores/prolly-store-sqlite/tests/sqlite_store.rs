@@ -1,13 +1,10 @@
-#![cfg(feature = "sqlite")]
-
-mod common;
-
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use prolly::{Config, Prolly, SqliteStore};
+use prolly::{Config, Error, Prolly};
+use prolly_store_sqlite::SqliteStore;
 
 #[test]
 fn sqlite_store_is_send_and_sync() {
@@ -19,19 +16,45 @@ fn sqlite_store_is_send_and_sync() {
 #[test]
 fn sqlite_store_supports_store_contract_operations() {
     let store = SqliteStore::open_in_memory().unwrap();
-    common::assert_store_contract(&store);
+    prolly_store_test::assert_store_contract(&store);
 }
 
 #[test]
 fn sqlite_store_supports_manifest_contract_operations() {
     let store = SqliteStore::open_in_memory().unwrap();
-    common::assert_manifest_store_contract(&store);
+    prolly_store_test::assert_manifest_store_contract(&store);
 }
 
 #[test]
 fn sqlite_store_supports_node_scan_contract_operations() {
     let store = SqliteStore::open_in_memory().unwrap();
-    common::assert_node_store_scan_contract(store);
+    prolly_store_test::assert_node_store_scan_contract(store);
+}
+
+#[test]
+fn sqlite_store_commits_and_rolls_back_strict_transactions() {
+    let store = Arc::new(SqliteStore::open_in_memory().unwrap());
+    let prolly = Prolly::new(store, Config::default());
+
+    let committed = prolly
+        .transaction(|tx| {
+            let tree = tx.put(&tx.create(), b"key".to_vec(), b"committed".to_vec())?;
+            tx.publish_named_root(b"main", &tree)?;
+            Ok(tree)
+        })
+        .unwrap();
+    assert_eq!(
+        prolly.load_named_root(b"main").unwrap(),
+        Some(committed.clone())
+    );
+
+    let result: Result<(), Error> = prolly.transaction(|tx| {
+        let tree = tx.put(&committed, b"key".to_vec(), b"rolled-back".to_vec())?;
+        tx.publish_named_root(b"main", &tree)?;
+        Err(Error::Serialize("force rollback".to_string()))
+    });
+    assert!(matches!(result, Err(Error::Serialize(_))));
+    assert_eq!(prolly.load_named_root(b"main").unwrap(), Some(committed));
 }
 
 #[test]

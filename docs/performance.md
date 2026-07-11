@@ -407,13 +407,13 @@ Run benchmarks from the workspace root.
 - diff and stream diff
 - range diff
 - merge
-- SQLite persistence when `sqlite` is enabled
+- in-memory core store behavior
 
 Command:
 
 ```sh
 PROLLY_BENCH_SCALE=5000 \
-cargo bench --bench prolly_bench --features sqlite
+cargo bench -p prolly-map --bench prolly_bench
 ```
 
 ### AI and local-first workload benchmark
@@ -436,21 +436,16 @@ cargo bench --bench ai_workloads_bench
 
 ### Store diff and merge benchmark
 
-`store_diff_merge_bench` compares stores on branch, diff, and merge workloads.
+`store_diff_merge_bench` measures the built-in memory store on branch, diff,
+and merge workloads. Backend-specific scale harnesses live with their adapter
+crates.
 
 Command:
 
 ```sh
 PROLLY_DIFF_MERGE_STAGES=10000,100000 \
 PROLLY_DIFF_MERGE_CHANGES=1000 \
-cargo bench --bench store_diff_merge_bench --features sqlite
-```
-
-Enable optional stores with their feature flags:
-
-```sh
-cargo bench --bench store_diff_merge_bench \
-  --features "sqlite pglite slatedb"
+cargo bench -p prolly-map --bench store_diff_merge_bench
 ```
 
 ### SQLite scale benchmark
@@ -464,7 +459,7 @@ PROLLY_SQLITE_SCALE_STAGES=1000000,10000000,100000000 \
 PROLLY_SQLITE_SCALE_BATCH=100000 \
 PROLLY_SQLITE_SCALE_MAX_SECONDS=900 \
 PROLLY_SQLITE_SCALE_MAX_DB_GB=70 \
-cargo bench --bench sqlite_scale_bench --features sqlite
+cargo bench --manifest-path stores/prolly-store-sqlite/Cargo.toml --bench sqlite_scale_bench
 ```
 
 ### Optional backend scale benchmarks
@@ -476,7 +471,8 @@ The crate also includes:
 - `slatedb_ops_bench`
 - `slatedb_workload_bench`
 
-Run them only when their external dependencies and feature flags are configured.
+Run them from their adapter packages when their external dependencies are
+configured.
 
 ### SlateDB production workload benchmark
 
@@ -505,7 +501,7 @@ PROLLY_SLATEDB_SECRET_ACCESS_KEY=crab \
 PROLLY_SLATEDB_WORKLOAD_STAGES=10k \
 PROLLY_SLATEDB_WORKLOAD_BATCH=5k \
 PROLLY_SLATEDB_WORKLOAD_OPS=500 \
-cargo bench --bench slatedb_workload_bench --features slatedb
+cargo bench --manifest-path stores/prolly-store-slatedb/Cargo.toml --bench slatedb_workload_bench
 ```
 
 Large staged run:
@@ -532,7 +528,7 @@ PROLLY_SLATEDB_L0_FLUSH_PARALLELISM=16 \
 PROLLY_SLATEDB_READ_PARALLELISM=512 \
 PROLLY_SLATEDB_COMPACTION_CONCURRENCY=16 \
 PROLLY_SLATEDB_COMPACTION_SUBCOMPACTIONS=8 \
-cargo bench --bench slatedb_workload_bench --features slatedb
+cargo bench --manifest-path stores/prolly-store-slatedb/Cargo.toml --bench slatedb_workload_bench
 ```
 
 Important controls:
@@ -593,7 +589,7 @@ PROLLY_SLATEDB_L0_FLUSH_PARALLELISM=16 \
 PROLLY_SLATEDB_READ_PARALLELISM=512 \
 PROLLY_SLATEDB_COMPACTION_CONCURRENCY=16 \
 PROLLY_SLATEDB_COMPACTION_SUBCOMPACTIONS=8 \
-cargo bench --bench slatedb_workload_bench --features slatedb
+cargo bench --manifest-path stores/prolly-store-slatedb/Cargo.toml --bench slatedb_workload_bench
 ```
 
 This command requires real capacity. With 128-byte values, the append-only 1M

@@ -937,8 +937,8 @@ Compatibility promises for early adopters:
 - Node serialization is deterministic for a given node payload and encoding
   version. Changing serialization, chunking config, or encoding config can
   change newly produced CIDs and roots.
-- Feature flags are additive. Disabling a backend feature removes that backend's
-  types from the public API.
+- Storage adapters are separate crates, so applications only compile and ship
+  the database engines they select.
 - `async-store` avoids a hard Tokio dependency. Tokio-specific adapters remain
   behind the `tokio` feature.
 - Resolver and CRDT custom merge callbacks should be deterministic and
@@ -974,32 +974,29 @@ Built-in stores:
 - `FileNodeStore`: durable content-addressed file/object-layout store. It keeps
   immutable nodes under a sharded CID namespace, verifies node bytes on read and
   write, and stores hints and named roots in separate namespaces.
-- `SqliteStore`: persistent SQLite backend behind the `sqlite` feature.
-- `RocksDBStore`: optional RocksDB backend behind the `rocksdb` feature.
-- `PgliteStore`: optional PGlite/Node sidecar backend behind the `pglite`
-  feature.
-- `SlateDbStore`: optional object-store-backed SlateDB backend behind the
-  `slatedb` feature.
+
+Optional adapter crates:
+
+- `prolly-store-sqlite`: persistent SQLite backend.
+- `prolly-store-rocksdb`: embedded RocksDB backend.
+- `prolly-store-pglite`: PGlite/Node sidecar backend.
+- `prolly-store-slatedb`: object-store-backed SlateDB backend.
+- Additional service adapters live under [`stores/`](stores/).
 
 Feature flags:
 
 - `async-store`: async store/blob traits, adapters, and `AsyncProlly` without a
   hard Tokio dependency.
 - `tokio`: enables `async-store` plus the Tokio blocking-store adapter.
-- `sqlite`: enables `SqliteStore`.
-- `rocksdb`: enables `RocksDBStore`.
-- `pglite`: enables `PgliteStore`; real sidecar tests require
-  `PROLLY_PGLITE_TEST=1`.
-- `slatedb`: enables `SlateDbStore`.
 
 ```sh
 cargo test
 cargo test --features async-store
 cargo test --features tokio
-cargo test --features sqlite
-cargo test --features rocksdb
-cargo test --features pglite
-cargo test --features slatedb
+cargo test --manifest-path stores/prolly-store-sqlite/Cargo.toml
+cargo test --manifest-path stores/prolly-store-rocksdb/Cargo.toml
+cargo test --manifest-path stores/prolly-store-pglite/Cargo.toml
+cargo test --manifest-path stores/prolly-store-slatedb/Cargo.toml
 ```
 
 ## Root Manifests
@@ -1064,7 +1061,7 @@ assert!(update.is_applied());
 when the current tree matches the expected tree. `publish_named_root` replaces a
 name unconditionally, and `delete_named_root` removes the name without removing
 content-addressed nodes. `MemStore` supports this for tests and lightweight use.
-`SqliteStore` and `PgliteStore` store roots in a dedicated table. `RocksDBStore`
+The SQLite and PGlite adapters store roots in a dedicated table. `RocksDBStore`
 stores roots in a dedicated column family. `SlateDbStore` stores roots under a
 dedicated key prefix. Durable stores keep named-root data separate from
 content-addressed node bytes.
@@ -1088,12 +1085,11 @@ root it read, then asks the store to commit staged nodes and roots atomically.
 If the closure returns an error, validation fails, or the backend commit fails,
 the staged overlay is discarded and no partial root update is made visible.
 
-`SqliteStore` supports strict transactions with one SQL transaction. Other
-built-in stores return `Error::UnsupportedTransactions` until they grow an
-equivalent atomic commit primitive.
+`SqliteStore` supports strict transactions with one SQL transaction.
 
 ```rust
-use prolly::{Config, Prolly, SqliteStore};
+use prolly::{Config, Prolly};
+use prolly_store_sqlite::SqliteStore;
 
 let store = SqliteStore::open_in_memory().unwrap();
 let prolly = Prolly::new(store, Config::default());
@@ -1852,19 +1848,19 @@ Run crate tests:
 cargo test
 ```
 
-Run with SQLite support:
+Run the SQLite adapter tests:
 
 ```sh
-cargo test --features sqlite
+cargo test --manifest-path stores/prolly-store-sqlite/Cargo.toml
 ```
 
 Run release-quality checks used by CI:
 
 ```sh
-RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --features "tokio sqlite"
+RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --features tokio
 cargo check --bin prolly-inspect
 cargo check --examples
-cargo check --benches --features "tokio sqlite"
+cargo check --benches --features tokio
 ```
 
 Run shared store contract coverage:
@@ -1872,10 +1868,10 @@ Run shared store contract coverage:
 ```sh
 cargo test --test store_conformance
 cargo test --features async-store --test async_store
-cargo test --features sqlite --test sqlite_store
-cargo test --features rocksdb --test rocksdb_store
-cargo test --features slatedb --test slatedb_store
-cargo test --features pglite --test pglite_store
+cargo test --manifest-path stores/prolly-store-sqlite/Cargo.toml
+cargo test --manifest-path stores/prolly-store-rocksdb/Cargo.toml
+cargo test --manifest-path stores/prolly-store-slatedb/Cargo.toml
+cargo test --manifest-path stores/prolly-store-pglite/Cargo.toml
 ```
 
 The PGlite contract compiles by default and opens the Node.js sidecar only when
@@ -1885,13 +1881,13 @@ The PGlite contract compiles by default and opens the Node.js sidecar only when
 mkdir -p /tmp/prolly-pglite-node
 npm install --prefix /tmp/prolly-pglite-node @electric-sql/pglite@0.5.3
 PROLLY_PGLITE_TEST=1 PROLLY_PGLITE_NODE_CWD=/tmp/prolly-pglite-node \
-  cargo test --features pglite --test pglite_store
+  cargo test --manifest-path stores/prolly-store-pglite/Cargo.toml
 ```
 
 Run the main benchmark harness:
 
 ```sh
-PROLLY_BENCH_SCALE=5000 cargo bench --bench prolly_bench --features sqlite
+PROLLY_BENCH_SCALE=5000 cargo bench -p prolly-map --bench prolly_bench
 ```
 
 Run the AI/local-first workload harness:
@@ -1905,7 +1901,7 @@ Run the focused SQLite scale harness:
 ```sh
 PROLLY_SQLITE_SCALE_STAGES=1000000,10000000 \
 PROLLY_SQLITE_SCALE_BATCH=100000 \
-cargo bench --bench sqlite_scale_bench --features sqlite
+cargo bench --manifest-path stores/prolly-store-sqlite/Cargo.toml --bench sqlite_scale_bench
 ```
 
 See [`docs/performance.md`](docs/performance.md) for the performance guide,

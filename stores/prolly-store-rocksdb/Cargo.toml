@@ -1,0 +1,22 @@
+[package]
+name = "prolly-store-rocksdb"
+description = "RocksDB store adapter for prolly-map."
+edition = "2021"
+rust-version = "1.81"
+version = "0.1.0"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/crabbuild/prolly"
+
+[lib]
+name = "prolly_store_rocksdb"
+path = "src/lib.rs"
+
+[dependencies]
+prolly = { package = "prolly-map", path = "../..", version = "0.1.0" }
+rocksdb = "0.22"
+
+[dev-dependencies]
+prolly-store-test = { path = "../prolly-store-test" }
+
+[lints.rust]
+unsafe_code = "allow"

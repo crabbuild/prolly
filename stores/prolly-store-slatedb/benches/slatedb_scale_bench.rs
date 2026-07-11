@@ -2,7 +2,8 @@ use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use futures_util::StreamExt;
-use prolly::{append_batch, Config, Mutation, Prolly, SlateDbStore, SlateDbStoreConfig, Tree};
+use prolly::{append_batch, Config, Mutation, Prolly, Tree};
+use prolly_store_slatedb::{SlateDbStore, SlateDbStoreConfig};
 use slatedb::object_store::aws::AmazonS3Builder;
 use slatedb::object_store::path::Path as ObjectPath;
 use slatedb::object_store::{ObjectStore, ObjectStoreExt};

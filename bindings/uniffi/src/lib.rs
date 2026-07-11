@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, Mutex};
 
 #[cfg(feature = "sqlite")]
-use prolly::SqliteStore;
+use prolly_store_sqlite::SqliteStore;
 use prolly::{
     self, is_boundary_config as core_is_boundary_config, AuthenticatedProofBundleVerification,
     AuthenticatedProofEnvelope, AuthenticatedProofEnvelopeVerification, BatchApplyResult,
