@@ -1258,6 +1258,9 @@ impl From<prolly::Error> for ProllyBindingError {
             prolly::Error::InvalidSnapshotBundle(message) => {
                 Self::InvalidArgument { reason: message }
             }
+            prolly::Error::InvalidVersionedMap(message) => {
+                Self::InvalidArgument { reason: message }
+            }
             prolly::Error::UnsupportedTransactions { store } => Self::Internal {
                 reason: format!("store does not support strict transactions: {store}"),
             },
