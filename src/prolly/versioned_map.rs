@@ -468,6 +468,19 @@ impl<'a, S: Store> MapMerge<'a, S> {
         )
     }
 
+    /// Build a conflict-free merged tree and retain engine diagnostics.
+    pub fn crdt_merge_explain(
+        &self,
+        config: &super::crdt::CrdtConfig,
+    ) -> super::diff::MergeExplanation {
+        self.prolly.crdt_merge_explain(
+            &self.base.tree,
+            &self.head.tree,
+            &self.candidate.tree,
+            config,
+        )
+    }
+
     /// Merge and publish only if the pinned head is still current.
     pub fn publish(
         &self,

@@ -331,6 +331,9 @@ let merged = prolly.crdt_merge(&base, &left, &right, &config).unwrap();
 - **MultiValue (MV)**: Preserve all concurrent values as a set
 - **Custom**: User-provided merge function
 
+Use `crdt_merge_explain` to retain structured diagnostics about subtree reuse,
+fallback paths, and automatic conflict resolutions.
+
 #### `parallel_batch(&tree, mutations, config) -> Result<Tree, Error>`
 Apply batch mutations through the tunable high-throughput batch path.
 Use `parallel_batch_with_stats` when you need the same route/write telemetry

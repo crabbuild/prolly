@@ -123,7 +123,8 @@ More copyable examples live in [`examples/`](examples/):
   secondary index incrementally from source-tree diffs.
 - [`materialized_view.rs`](examples/materialized_view.rs): derive and update a
   materialized view from source diffs, with source/view roots in manifests.
-- [`crdt_merge.rs`](examples/crdt_merge.rs): custom CRDT value and delete resolution.
+- [`crdt_merge.rs`](examples/crdt_merge.rs): LWW, multi-value, delete/update,
+  diagnostics, and base-aware custom merge examples.
 - [`conversation_memory.rs`](examples/conversation_memory.rs): canonical memory
   roots, agent attempt branches, merge, and CAS publish.
 - [`deterministic_rag_snapshot.rs`](examples/deterministic_rag_snapshot.rs):
@@ -913,6 +914,8 @@ let merged = prolly.merge(&base, &left, &right, Some(policies.as_resolver()));
 
 `crdt_merge` uses `CrdtConfig` for automatic conflict-free merge behavior such
 as last-writer-wins, multi-value preservation, or a custom merge function.
+Use `crdt_merge_explain` when you also need structured events for subtree
+reuse, fallback paths, and each automatic conflict resolution.
 
 ## Public API Surface
 

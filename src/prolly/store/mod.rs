@@ -1009,6 +1009,76 @@ impl<T: Store> Store for std::sync::Arc<T> {
     }
 }
 
+/// Implement `Store` for shared references.
+///
+/// This lets short-lived managers reuse an existing store without requiring
+/// ownership or an `Arc`, while preserving backend-specific batch and hint
+/// behavior instead of falling back to the trait defaults.
+impl<T: Store + ?Sized> Store for &T {
+    type Error = T::Error;
+
+    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
+        (**self).get(key)
+    }
+
+    fn put(&self, key: &[u8], value: &[u8]) -> Result<(), Self::Error> {
+        (**self).put(key, value)
+    }
+
+    fn delete(&self, key: &[u8]) -> Result<(), Self::Error> {
+        (**self).delete(key)
+    }
+
+    fn batch(&self, ops: &[BatchOp]) -> Result<(), Self::Error> {
+        (**self).batch(ops)
+    }
+
+    fn batch_get(&self, keys: &[&[u8]]) -> Result<HashMap<Vec<u8>, Vec<u8>>, Self::Error> {
+        (**self).batch_get(keys)
+    }
+
+    fn batch_get_ordered(&self, keys: &[&[u8]]) -> Result<Vec<Option<Vec<u8>>>, Self::Error> {
+        (**self).batch_get_ordered(keys)
+    }
+
+    fn batch_get_ordered_unique(
+        &self,
+        keys: &[&[u8]],
+    ) -> Result<Vec<Option<Vec<u8>>>, Self::Error> {
+        (**self).batch_get_ordered_unique(keys)
+    }
+
+    fn prefers_batch_reads(&self) -> bool {
+        (**self).prefers_batch_reads()
+    }
+
+    fn batch_put(&self, entries: &[(&[u8], &[u8])]) -> Result<(), Self::Error> {
+        (**self).batch_put(entries)
+    }
+
+    fn supports_hints(&self) -> bool {
+        (**self).supports_hints()
+    }
+
+    fn get_hint(&self, namespace: &[u8], key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
+        (**self).get_hint(namespace, key)
+    }
+
+    fn put_hint(&self, namespace: &[u8], key: &[u8], value: &[u8]) -> Result<(), Self::Error> {
+        (**self).put_hint(namespace, key, value)
+    }
+
+    fn batch_put_with_hint(
+        &self,
+        entries: &[(&[u8], &[u8])],
+        namespace: &[u8],
+        key: &[u8],
+        value: &[u8],
+    ) -> Result<(), Self::Error> {
+        (**self).batch_put_with_hint(entries, namespace, key, value)
+    }
+}
+
 #[cfg(feature = "async-store")]
 impl<T: AsyncStore> AsyncStore for std::sync::Arc<T> {
     type Error = T::Error;

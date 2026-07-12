@@ -4143,8 +4143,23 @@ impl<S: Store> Prolly<S> {
         right: &Tree,
         config: &crdt::CrdtConfig,
     ) -> Result<Tree, Error> {
-        let merger = crdt::DefaultConflictFreeMerger::new();
-        crdt::ConflictFreeMerger::crdt_merge(&merger, &self.store, base, left, right, config)
+        self.merge(base, left, right, Some(crdt::resolver(config)))
+    }
+
+    /// CRDT-merge two trees and retain structured merge diagnostics.
+    ///
+    /// The trace reports fast paths, reused subtrees, fallback decisions, and
+    /// every automatic conflict resolution. The CRDT resolver always chooses a
+    /// value or deletion, so a conflict error indicates a lower-layer contract
+    /// violation rather than an unresolved application conflict.
+    pub fn crdt_merge_explain(
+        &self,
+        base: &Tree,
+        left: &Tree,
+        right: &Tree,
+        config: &crdt::CrdtConfig,
+    ) -> diff::MergeExplanation {
+        self.merge_explain(base, left, right, Some(crdt::resolver(config)))
     }
 
     /// Apply batch mutations with tunable batched route hydration.
@@ -5743,13 +5758,20 @@ where
         right: &Tree,
         config: &crdt::CrdtConfig,
     ) -> Result<Tree, Error> {
-        let config = config.clone();
-        let resolver: Resolver = Box::new(move |conflict| {
-            crdt::resolve_conflict(&config, conflict)
-                .map(error::Resolution::value)
-                .unwrap_or_else(error::Resolution::delete)
-        });
-        self.merge(base, left, right, Some(resolver)).await
+        self.merge(base, left, right, Some(crdt::resolver(config)))
+            .await
+    }
+
+    /// Async CRDT merge with structured diagnostics.
+    pub async fn crdt_merge_explain(
+        &self,
+        base: &Tree,
+        left: &Tree,
+        right: &Tree,
+        config: &crdt::CrdtConfig,
+    ) -> diff::MergeExplanation {
+        self.merge_explain(base, left, right, Some(crdt::resolver(config)))
+            .await
     }
 
     /// Collect comprehensive statistics about a tree through the async store.

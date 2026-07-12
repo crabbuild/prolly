@@ -2,8 +2,8 @@ mod common;
 
 use common::configured_prolly;
 use prolly::{
-    Error, MergeFallbackReason, MergeFastPath, MergeResolutionKind, MergeTraceEvent,
-    MergeTraceStage, Resolution,
+    CrdtConfig, Error, MergeFallbackReason, MergeFastPath, MergeResolutionKind, MergeTraceEvent,
+    MergeTraceStage, Resolution, TimestampedValue,
 };
 
 #[test]
@@ -199,6 +199,47 @@ fn merge_explain_reports_delete_resolution_fallback_to_batch_path() {
     )));
 }
 
+#[test]
+fn crdt_merge_explain_reports_automatic_resolution() {
+    let prolly = configured_prolly();
+    let base = prolly
+        .put(
+            &prolly.create(),
+            b"k".to_vec(),
+            TimestampedValue::new(b"base".to_vec(), 100).to_bytes(),
+        )
+        .unwrap();
+    let left = prolly
+        .put(
+            &base,
+            b"k".to_vec(),
+            TimestampedValue::new(b"left".to_vec(), 300).to_bytes(),
+        )
+        .unwrap();
+    let right = prolly
+        .put(
+            &base,
+            b"k".to_vec(),
+            TimestampedValue::new(b"right".to_vec(), 200).to_bytes(),
+        )
+        .unwrap();
+
+    let explanation = prolly.crdt_merge_explain(&base, &left, &right, &CrdtConfig::lww());
+    let merged = explanation.result.unwrap();
+    let value = prolly.get(&merged, b"k").unwrap().unwrap();
+    let value = TimestampedValue::from_bytes(&value).unwrap();
+
+    assert_eq!(value.value, b"left".to_vec());
+    assert!(explanation.trace.events.iter().any(|event| matches!(
+        event,
+        MergeTraceEvent::ResolverCalled {
+            key,
+            resolution: MergeResolutionKind::Value,
+            ..
+        } if key == b"k"
+    )));
+}
+
 #[cfg(feature = "async-store")]
 mod async_tests {
     use super::*;
@@ -331,6 +372,37 @@ mod async_tests {
                 stage: MergeTraceStage::Batch,
                 key,
                 resolution: MergeResolutionKind::Unresolved,
+            } if key == b"k"
+        )));
+    }
+
+    #[test]
+    fn async_crdt_merge_explain_reports_automatic_resolution() {
+        let (sync_prolly, async_prolly) = async_pair();
+        let base = sync_prolly
+            .put(&sync_prolly.create(), b"k".to_vec(), b"base".to_vec())
+            .unwrap();
+        let left = sync_prolly
+            .put(&base, b"k".to_vec(), b"left".to_vec())
+            .unwrap();
+        let right = sync_prolly
+            .put(&base, b"k".to_vec(), b"right".to_vec())
+            .unwrap();
+
+        let explanation = block_on(async_prolly.crdt_merge_explain(
+            &base,
+            &left,
+            &right,
+            &CrdtConfig::multi_value(),
+        ));
+
+        assert!(explanation.result.is_ok());
+        assert!(explanation.trace.events.iter().any(|event| matches!(
+            event,
+            MergeTraceEvent::ResolverCalled {
+                key,
+                resolution: MergeResolutionKind::Value,
+                ..
             } if key == b"k"
         )));
     }

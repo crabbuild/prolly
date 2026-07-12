@@ -1,8 +1,8 @@
 use prolly::{
-    verify_authenticated_proof_bundle, ChangedSpan, Config, Diff, FileNodeStore, LargeValueConfig,
-    MapVersionId, MemBlobStore, MemStore, MergePolicyRegistry, Mutation, ParallelConfig, Prolly,
-    ProofAuthentication, RangeCursor, Resolution, ReverseCursor, StringKeyCodec, ValueRef,
-    VersionedJsonCodec, VersionedMapBackup, VersionedMapUpdate,
+    verify_authenticated_proof_bundle, ChangedSpan, Config, CrdtConfig, Diff, FileNodeStore,
+    LargeValueConfig, MapVersionId, MemBlobStore, MemStore, MergePolicyRegistry, MergeTraceEvent,
+    Mutation, ParallelConfig, Prolly, ProofAuthentication, RangeCursor, Resolution, ReverseCursor,
+    StringKeyCodec, ValueRef, VersionedJsonCodec, VersionedMapBackup, VersionedMapUpdate,
 };
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -615,6 +615,11 @@ fn pinned_merge_streams_conflicts_and_cas_publishes_standard_and_policy_merges()
             .len(),
         1
     );
+    let crdt_explanation = conflict_merge.crdt_merge_explain(&CrdtConfig::multi_value());
+    assert!(crdt_explanation.result.is_ok());
+    assert!(crdt_explanation.trace.events.iter().any(
+        |event| matches!(event, MergeTraceEvent::ResolverCalled { key, .. } if key == b"choice")
+    ));
     let policies = MergePolicyRegistry::with_default(|conflict| {
         conflict
             .right

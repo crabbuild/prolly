@@ -193,24 +193,22 @@ impl MultiValueSet {
     /// The resulting set contains all values from both sets,
     /// sorted lexicographically for deterministic ordering.
     pub fn merge(&self, other: &Self) -> Self {
-        let mut values = self.values.clone();
-        for v in &other.values {
-            if !values.contains(v) {
-                values.push(v.clone());
-            }
-        }
-        // Sort for deterministic ordering
-        values.sort();
-        Self { values }
+        let mut values = Vec::with_capacity(self.values.len().saturating_add(other.values.len()));
+        values.extend(self.values.iter().cloned());
+        values.extend(other.values.iter().cloned());
+        Self::from_values(values)
     }
 
     /// Serialize to bytes (length-prefixed values).
     ///
     /// Format: `[4-byte count][4-byte len][value]...`
     pub fn to_bytes(&self) -> Vec<u8> {
+        // Keep persisted bytes canonical even if callers constructed the
+        // public `values` field directly rather than through `from_values`.
+        let canonical = Self::from_values(self.values.clone());
         let mut bytes = Vec::new();
-        bytes.extend(&(self.values.len() as u32).to_be_bytes());
-        for v in &self.values {
+        bytes.extend(&(canonical.values.len() as u32).to_be_bytes());
+        for v in &canonical.values {
             bytes.extend(&(v.len() as u32).to_be_bytes());
             bytes.extend(v);
         }
@@ -225,6 +223,11 @@ impl MultiValueSet {
             return None;
         }
         let count = u32::from_be_bytes(bytes[..4].try_into().ok()?) as usize;
+        // Every encoded value needs at least its four-byte length. Reject an
+        // impossible count before allocating from untrusted bytes.
+        if count > (bytes.len() - 4) / 4 {
+            return None;
+        }
         let mut values = Vec::with_capacity(count);
         let mut offset = 4;
         for _ in 0..count {
@@ -233,13 +236,19 @@ impl MultiValueSet {
             }
             let len = u32::from_be_bytes(bytes[offset..offset + 4].try_into().ok()?) as usize;
             offset += 4;
-            if offset + len > bytes.len() {
+            let end = offset.checked_add(len)?;
+            if end > bytes.len() {
                 return None;
             }
-            values.push(bytes[offset..offset + len].to_vec());
-            offset += len;
+            values.push(bytes[offset..end].to_vec());
+            offset = end;
         }
-        Some(Self { values })
+        // A valid prefix followed by unrelated bytes must not be accepted as a
+        // complete set during MV merges.
+        if offset != bytes.len() {
+            return None;
+        }
+        Some(Self::from_values(values))
     }
 
     /// Check if the set is empty.
@@ -306,7 +315,10 @@ pub enum MergeStrategy {
     /// Custom: use provided merge function.
     ///
     /// The function receives the full conflict and returns a value-or-delete
-    /// resolution.
+    /// resolution. It must be pure and deterministic: the merge engine may
+    /// evaluate the same conflict again when a structural fast path falls back
+    /// to the general diff/batch path. Symmetric results are also required if
+    /// callers expect convergence when left and right are exchanged.
     Custom(CustomMergeFn),
 }
 
@@ -416,6 +428,9 @@ impl CrdtConfig {
     }
 
     /// Create a new CrdtConfig with a custom merge function.
+    ///
+    /// The callback must be pure and deterministic and may be invoked more than
+    /// once for a conflict while the engine changes execution paths.
     pub fn custom<F>(merge_fn: F) -> Self
     where
         F: Fn(&Conflict) -> CrdtResolution + Send + Sync + 'static,
@@ -446,9 +461,10 @@ impl CrdtConfig {
 // ConflictFreeMerger Trait
 // ============================================================================
 
-use super::error::{Conflict, Error};
+use super::error::{Conflict, Error, Resolution, Resolver};
 use super::store::Store;
 use super::tree::Tree;
+use super::Prolly;
 
 /// Trait for conflict-free merge operations using CRDT semantics.
 ///
@@ -457,19 +473,16 @@ use super::tree::Tree;
 /// resolution strategies. This makes it suitable for distributed systems where
 /// concurrent modifications are common and automatic resolution is preferred.
 ///
-/// # CRDT Semantics
-///
-/// CRDT (Conflict-free Replicated Data Type) merges ensure:
-/// - **Commutativity**: merge(A, B) = merge(B, A)
-/// - **Associativity**: merge(merge(A, B), C) = merge(A, merge(B, C))
-/// - **Idempotence**: merge(A, A) = A
-///
-/// These properties guarantee eventual consistency in distributed systems.
+/// This API performs a conflict-free *three-way* merge over immutable tree
+/// snapshots. The built-in LWW and multi-value resolvers are symmetric and
+/// deterministic for a fixed base. This is not an operation-log CRDT: callers
+/// must still retain ancestry, and custom resolvers are responsible for their
+/// own determinism and symmetry.
 ///
 /// # Guarantees
 ///
 /// - **Never returns `Error::Conflict`**: All conflicts are automatically resolved
-/// - **Deterministic**: Same inputs always produce the same output
+/// - **Deterministic built-ins**: Same inputs produce the same output
 /// - **Preserves non-conflicting changes**: Changes to different keys are always preserved
 ///
 /// # Type Parameters
@@ -675,11 +688,10 @@ impl DefaultConflictFreeMerger {
     }
 }
 
-#[cfg(feature = "async-store")]
 /// Resolve one CRDT conflict using the default strategy implementation.
 ///
-/// This is used by async manager-level CRDT merge so built-in and custom
-/// conflict-free semantics stay aligned with the sync CRDT merger.
+/// Manager-level and trait-level merge paths share this function so sync,
+/// async, explained, and direct-store merges cannot drift semantically.
 pub(crate) fn resolve_conflict(config: &CrdtConfig, conflict: &Conflict) -> Option<Vec<u8>> {
     DefaultConflictFreeMerger::resolve_conflict(
         &conflict.key,
@@ -690,8 +702,15 @@ pub(crate) fn resolve_conflict(config: &CrdtConfig, conflict: &Conflict) -> Opti
     )
 }
 
-use super::boundary::is_boundary_config;
-use super::config::Config;
+/// Build a standard merge resolver from CRDT configuration.
+pub(crate) fn resolver(config: &CrdtConfig) -> Resolver {
+    let config = config.clone();
+    Box::new(move |conflict| {
+        resolve_conflict(&config, conflict)
+            .map(Resolution::value)
+            .unwrap_or_else(Resolution::delete)
+    })
+}
 
 impl<S: Store> ConflictFreeMerger<S> for DefaultConflictFreeMerger {
     fn crdt_merge(
@@ -702,299 +721,12 @@ impl<S: Store> ConflictFreeMerger<S> for DefaultConflictFreeMerger {
         right: &Tree,
         config: &CrdtConfig,
     ) -> Result<Tree, Error> {
-        // Create a Prolly instance for tree operations
-        // Clone the store if it implements Clone, otherwise we need a different approach
-        // For now, we'll work with the store reference directly
-
-        // Get the config from the base tree
-        let tree_config = base.config.clone();
-
-        // We need to create a wrapper that can use the store reference
-        // Since Prolly owns its store, we'll use a different approach:
-        // Create helper functions that work with store references
-
-        crdt_merge_impl(store, base, left, right, config, &tree_config)
+        // Reuse the production structural/diff/batch merge engine. A borrowed
+        // Store implementation avoids taking ownership while retaining the
+        // backend's optimized batch operations.
+        let prolly = Prolly::new(store, base.config.clone());
+        prolly.merge(base, left, right, Some(resolver(config)))
     }
-}
-
-/// Internal implementation of CRDT merge that works with store references.
-fn crdt_merge_impl<S: Store>(
-    store: &S,
-    base: &Tree,
-    left: &Tree,
-    right: &Tree,
-    config: &CrdtConfig,
-    tree_config: &Config,
-) -> Result<Tree, Error> {
-    // Collect entries from trees for diff computation
-    let base_entries = collect_entries(store, base)?;
-    let left_entries = collect_entries(store, left)?;
-    let right_entries = collect_entries(store, right)?;
-
-    // Compute changes from base
-    let left_changes = compute_changes(&base_entries, &left_entries);
-    let right_changes = compute_changes(&base_entries, &right_entries);
-
-    // Start with left tree entries and apply right changes with CRDT resolution
-    let mut result_entries = left_entries.clone();
-
-    // Apply right changes
-    for (key, right_val) in &right_changes {
-        let left_val = left_changes.get(key);
-
-        match (left_val, right_val) {
-            // Both made the same change - already in result
-            (Some(l), r) if l == r => {
-                continue;
-            }
-
-            // Only right changed (left didn't touch this key)
-            (None, Some(val)) => {
-                result_entries.insert(key.clone(), val.clone());
-            }
-            (None, None) => {
-                result_entries.remove(key);
-            }
-
-            // Both changed - resolve conflict using CRDT strategy
-            (Some(left_change), right_change) => {
-                let base_value = base_entries.get(key).cloned();
-                let resolved = DefaultConflictFreeMerger::resolve_conflict(
-                    key,
-                    &base_value,
-                    left_change,
-                    right_change,
-                    config,
-                );
-
-                match resolved {
-                    Some(value) => {
-                        result_entries.insert(key.clone(), value);
-                    }
-                    None => {
-                        result_entries.remove(key);
-                    }
-                }
-            }
-        }
-    }
-
-    // Build the result tree from entries
-    build_tree_from_entries(store, &result_entries, tree_config)
-}
-
-use super::cid::Cid;
-use super::encoding::INIT_LEVEL;
-use super::node::Node;
-use std::collections::BTreeMap;
-
-/// Collect all entries from a tree into a BTreeMap.
-fn collect_entries<S: Store>(store: &S, tree: &Tree) -> Result<BTreeMap<Vec<u8>, Vec<u8>>, Error> {
-    let mut entries = BTreeMap::new();
-
-    let Some(root_cid) = &tree.root else {
-        return Ok(entries);
-    };
-
-    collect_entries_recursive(store, root_cid, &mut entries)?;
-    Ok(entries)
-}
-
-/// Recursively collect entries from a node.
-fn collect_entries_recursive<S: Store>(
-    store: &S,
-    cid: &Cid,
-    entries: &mut BTreeMap<Vec<u8>, Vec<u8>>,
-) -> Result<(), Error> {
-    let bytes = store
-        .get(cid.as_bytes())
-        .map_err(|e| Error::Store(Box::new(e)))?
-        .ok_or_else(|| Error::NotFound(cid.clone()))?;
-
-    let node = Node::from_bytes(&bytes)?;
-
-    if node.leaf {
-        for (key, val) in node.keys.iter().zip(node.vals.iter()) {
-            entries.insert(key.clone(), val.clone());
-        }
-    } else {
-        for child_cid_bytes in &node.vals {
-            let child_cid = Cid(child_cid_bytes
-                .as_slice()
-                .try_into()
-                .map_err(|_| Error::InvalidNode)?);
-            collect_entries_recursive(store, &child_cid, entries)?;
-        }
-    }
-
-    Ok(())
-}
-
-/// Compute changes from base to target.
-fn compute_changes(
-    base: &BTreeMap<Vec<u8>, Vec<u8>>,
-    target: &BTreeMap<Vec<u8>, Vec<u8>>,
-) -> BTreeMap<Vec<u8>, Option<Vec<u8>>> {
-    let mut changes = BTreeMap::new();
-
-    // Find additions and modifications
-    for (key, val) in target {
-        match base.get(key) {
-            None => {
-                // Added
-                changes.insert(key.clone(), Some(val.clone()));
-            }
-            Some(base_val) if base_val != val => {
-                // Changed
-                changes.insert(key.clone(), Some(val.clone()));
-            }
-            _ => {
-                // Unchanged
-            }
-        }
-    }
-
-    // Find deletions
-    for key in base.keys() {
-        if !target.contains_key(key) {
-            changes.insert(key.clone(), None);
-        }
-    }
-
-    changes
-}
-
-/// Build a tree from a map of entries.
-fn build_tree_from_entries<S: Store>(
-    store: &S,
-    entries: &BTreeMap<Vec<u8>, Vec<u8>>,
-    config: &Config,
-) -> Result<Tree, Error> {
-    if entries.is_empty() {
-        return Ok(Tree {
-            root: None,
-            config: config.clone(),
-        });
-    }
-
-    // Build leaf nodes
-    let mut leaf_nodes = Vec::new();
-    let mut current_node = create_leaf_node(config);
-
-    for (key, val) in entries {
-        current_node.keys.push(key.clone());
-        current_node.vals.push(val.clone());
-
-        // Check if we should split (using boundary detection)
-        if current_node.keys.len() >= config.min_chunk_size {
-            let last_key = current_node.keys.last().unwrap();
-            let last_val = current_node.vals.last().unwrap();
-            if is_boundary_config(config, current_node.keys.len(), last_key, last_val)
-                || current_node.keys.len() >= config.max_chunk_size
-            {
-                leaf_nodes.push(current_node);
-                current_node = create_leaf_node(config);
-            }
-        }
-    }
-
-    // Don't forget the last node
-    if !current_node.keys.is_empty() {
-        leaf_nodes.push(current_node);
-    }
-
-    // Save leaf nodes and build parent levels
-    let mut current_level_cids: Vec<(Vec<u8>, Cid)> = Vec::new();
-
-    for node in leaf_nodes {
-        let bytes = node.to_bytes();
-        let cid = Cid::from_bytes(&bytes);
-        store
-            .put(cid.as_bytes(), &bytes)
-            .map_err(|e| Error::Store(Box::new(e)))?;
-
-        let first_key = node.keys.first().cloned().unwrap_or_default();
-        current_level_cids.push((first_key, cid));
-    }
-
-    // Build internal nodes until we have a single root
-    let mut level = INIT_LEVEL + 1;
-    while current_level_cids.len() > 1 {
-        let mut next_level_cids = Vec::new();
-        let mut current_node = create_internal_node(config, level);
-
-        for (key, cid) in current_level_cids {
-            current_node.keys.push(key);
-            current_node.vals.push(cid.as_bytes().to_vec());
-
-            // Check if we should split
-            if current_node.keys.len() >= config.min_chunk_size {
-                let last_key = current_node.keys.last().unwrap();
-                let last_val = current_node.vals.last().unwrap();
-                if is_boundary_config(config, current_node.keys.len(), last_key, last_val)
-                    || current_node.keys.len() >= config.max_chunk_size
-                {
-                    let bytes = current_node.to_bytes();
-                    let node_cid = Cid::from_bytes(&bytes);
-                    store
-                        .put(node_cid.as_bytes(), &bytes)
-                        .map_err(|e| Error::Store(Box::new(e)))?;
-
-                    let first_key = current_node.keys.first().cloned().unwrap_or_default();
-                    next_level_cids.push((first_key, node_cid));
-                    current_node = create_internal_node(config, level);
-                }
-            }
-        }
-
-        // Don't forget the last node
-        if !current_node.keys.is_empty() {
-            let bytes = current_node.to_bytes();
-            let node_cid = Cid::from_bytes(&bytes);
-            store
-                .put(node_cid.as_bytes(), &bytes)
-                .map_err(|e| Error::Store(Box::new(e)))?;
-
-            let first_key = current_node.keys.first().cloned().unwrap_or_default();
-            next_level_cids.push((first_key, node_cid));
-        }
-
-        current_level_cids = next_level_cids;
-        level += 1;
-    }
-
-    let root_cid = current_level_cids.into_iter().next().map(|(_, cid)| cid);
-
-    Ok(Tree {
-        root: root_cid,
-        config: config.clone(),
-    })
-}
-
-/// Create a new leaf node with the given config.
-fn create_leaf_node(config: &Config) -> Node {
-    Node::builder()
-        .leaf(true)
-        .level(INIT_LEVEL)
-        .min_chunk_size(config.min_chunk_size)
-        .max_chunk_size(config.max_chunk_size)
-        .chunking_factor(config.chunking_factor)
-        .hash_seed(config.hash_seed)
-        .encoding(config.encoding.clone())
-        .build()
-}
-
-/// Create a new internal node with the given config and level.
-fn create_internal_node(config: &Config, level: u8) -> Node {
-    Node::builder()
-        .leaf(false)
-        .level(level)
-        .min_chunk_size(config.min_chunk_size)
-        .max_chunk_size(config.max_chunk_size)
-        .chunking_factor(config.chunking_factor)
-        .hash_seed(config.hash_seed)
-        .encoding(config.encoding.clone())
-        .build()
 }
 
 #[cfg(test)]
@@ -1109,6 +841,31 @@ mod tests {
         // Count says 1 value, but no value data
         let bytes = vec![0, 0, 0, 1, 0, 0, 0, 5]; // count=1, len=5, but no value
         assert!(MultiValueSet::from_bytes(&bytes).is_none());
+    }
+
+    #[test]
+    fn test_multi_value_set_rejects_trailing_bytes() {
+        let mut bytes = MultiValueSet::single(b"value".to_vec()).to_bytes();
+        bytes.extend_from_slice(b"trailing");
+
+        assert!(MultiValueSet::from_bytes(&bytes).is_none());
+    }
+
+    #[test]
+    fn test_multi_value_set_rejects_impossible_count_before_allocating() {
+        let bytes = u32::MAX.to_be_bytes();
+
+        assert!(MultiValueSet::from_bytes(&bytes).is_none());
+    }
+
+    #[test]
+    fn test_multi_value_set_serialization_is_canonical() {
+        let non_canonical = MultiValueSet {
+            values: vec![b"b".to_vec(), b"a".to_vec(), b"b".to_vec()],
+        };
+
+        let decoded = MultiValueSet::from_bytes(&non_canonical.to_bytes()).unwrap();
+        assert_eq!(decoded.values, vec![b"a".to_vec(), b"b".to_vec()]);
     }
 
     // CrdtConfig tests
@@ -1409,6 +1166,28 @@ mod tests {
         assert_eq!(prolly.get(&merged, b"a").unwrap(), Some(b"1".to_vec()));
         assert_eq!(prolly.get(&merged, b"b").unwrap(), Some(b"2".to_vec()));
         assert_eq!(prolly.get(&merged, b"c").unwrap(), Some(b"3".to_vec()));
+    }
+
+    #[test]
+    fn test_crdt_merge_reuses_production_root_fast_path() {
+        use crate::prolly::config::Config;
+        use crate::prolly::store::MemStore;
+        use crate::prolly::Prolly;
+
+        let store = MemStore::new();
+        let prolly = Prolly::new(&store, Config::default());
+        let base = prolly
+            .put(&prolly.create(), b"key".to_vec(), b"base".to_vec())
+            .unwrap();
+        let right = prolly
+            .put(&base, b"key".to_vec(), b"right".to_vec())
+            .unwrap();
+
+        let merged = DefaultConflictFreeMerger::new()
+            .crdt_merge(&store, &base, &base, &right, &CrdtConfig::lww())
+            .unwrap();
+
+        assert_eq!(merged.root, right.root);
     }
 
     #[test]
