@@ -119,6 +119,95 @@ Status: **Shipped**
 - Versioned value envelope
 - Reusable JSON, CBOR, versioned JSON, and versioned CBOR codec objects
 - Feature-flag docs for `async-store`, `tokio`, `sqlite`, `rocksdb`, `pglite`, and `slatedb`
+- Built-in `VersionedMap` facade for atomic head updates, immutable version
+  catalogs, pinned reads and proofs, comparison and merge, portable backup and
+  sync, typed codecs and migrations, subscriptions, multi-map transactions,
+  ingestion helpers, blob offload, rollback, and retention-safe GC
+
+## Application adoption and developer experience
+
+Goal: let an application reach safe durable state with one obvious path, while
+keeping advanced storage and VCS concepts available as progressive disclosure.
+
+Status: **Planned**
+
+Priority: **P0-P2**
+
+### Shipped foundation
+
+- [x] `VersionedMap` removes manual `Tree` plus named-root coordination for
+  authoritative application maps with linear history
+- [x] Convenience mutations retry optimistic transaction conflicts
+- [x] Conditional updates expose explicit stale-head detection
+- [x] Map history, time travel, diff, rollback, and a matching GC retention
+  policy are discoverable from one handle
+- [x] Arbitrary application map IDs are safely isolated in the root namespace
+- [x] Snapshot-consistent bulk reads, prefix scans, and cursor pagination are
+  available for both head and historical versions
+- [x] Conditional put, delete, and edit helpers expose request-level optimistic
+  concurrency without manual mutation construction
+- [x] Transactional version pruning bounds catalog growth while always retaining
+  the current head
+- [x] Pinned `MapSnapshot` and `MapComparison` handles provide repeatable
+  queries, proofs, paged diffs, statistics, and changed-span hints
+- [x] Portable verified backup/restore, snapshot import/export, missing-node
+  transfer, and store-to-store push are exposed on managed maps
+- [x] Three-way merge pins base/head/candidate and supports strict, registered
+  policy, and CRDT publication with stale-head detection
+- [x] Blob-aware values, map-triggered store-safe blob/node GC, sorted rebuild,
+  append, and parallel ingestion are integrated with managed versions
+- [x] Strict multi-map transactions atomically maintain authoritative maps,
+  secondary indexes, and materialized views
+
+### P0: reduce setup and correctness burden
+
+- [ ] Add an `EngineBuilder` with validated presets for memory, local durable,
+  server, and browser deployments
+- [ ] Add a startup health report that checks store capabilities, format
+  compatibility, writable roots, and transaction support
+- [x] Define a typed `KeyCodec`/`ValueCodec` map wrapper so most applications
+  do not manipulate `Vec<u8>` directly
+- [x] Provide schema/version validation and CAS-safe whole-map migration hooks
+- [x] Add first-class retention policies `keep_last`, `keep_for`, and
+  `keep_versions`, plus scoped plan/sweep GC APIs
+- [ ] Return structured retryability and recovery guidance from public errors
+
+### P1: common application workflows
+
+- [x] Add the core async `VersionedMap` path for remote and browser stores
+- [x] Add resumable sync and async change subscriptions that emit head/version
+  plus logical diffs
+- [x] Add an atomic source-plus-derived-index coordinator for secondary indexes
+  and materialized views
+- [ ] Add first-class secondary-index definitions, automatic derived-map
+  maintenance, historical checkpoints, write fencing, rebuilds, and coordinated
+  operations following the
+  [versioned secondary-index design](secondary-index-design.md)
+- [x] Add snapshot export/import and backup/restore directly from the versioned
+  map handle
+- [ ] Add framework adapters for request-scoped transactions, graceful shutdown,
+  metrics, and tracing
+- [ ] Add a maintenance runner for cache warming, compaction, verification, and
+  GC with explicit resource budgets
+
+### P2: ecosystem and operational polish
+
+- [ ] Generate typed keyspaces and codecs from a small declarative schema
+- [ ] Add an inspection UI/CLI for versions, diffs, storage growth, and recovery
+- [ ] Publish migration guides from SQLite tables, JSON files, key/value stores,
+  and common embedded databases
+- [ ] Add workload presets and diagnostics that recommend chunking/cache settings
+- [ ] Stabilize the repository/VCS layer for ancestry, branches, messages,
+  authors, tags, and reflogs without expanding the core index mental model
+
+### Acceptance criteria
+
+- A first-time adopter can open a durable typed index, write, read, inspect an
+  earlier version, and configure safe retention without manually managing roots
+- Startup fails early with actionable capability or format diagnostics
+- The default API is safe under concurrent writers and crash/reopen tests
+- Advanced users can drop down to raw trees, manifests, transactions, and stores
+  without duplicating data
 
 ### AI-native and local-first examples
 

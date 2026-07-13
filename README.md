@@ -55,6 +55,10 @@ reflogs, patches, merge orchestration, sync planning, and repository-level GC.
   RocksDB implementations.
 - Merkle-style missing-node planning and copy helpers for store sync.
 - Snapshot namespace helpers for branch, tag, checkpoint, and custom roots.
+- A transaction-safe `VersionedMap` facade with automatic heads, immutable
+  content-derived versions, pinned reads, proofs, comparison and merge,
+  backup/sync, typed codecs, subscriptions, multi-map transactions, bounded
+  history, and scoped GC.
 - Store-independent single-key, shared multi-key, complete range, cursor-page,
   and diff-page proofs for a tree root.
 - Tree statistics for inspecting shape, fill factor, fanout, and serialized size.
@@ -128,6 +132,8 @@ More copyable examples live in [`examples/`](examples/):
   key conventions, blob-backed text, and vector sidecar IDs.
 - [`vector_sidecar.rs`](examples/vector_sidecar.rs): keep embeddings in a
   sidecar vector engine while prolly roots preserve retrieval metadata.
+- [`versioned_map.rs`](examples/versioned_map.rs): use the built-in managed map
+  facade for atomic edits, history, diff, rollback, and retention.
 - [`provenance_values.rs`](examples/provenance_values.rs): values that carry
   source, parser, embedding, model, parent chunk, and CID provenance.
 - [`file_blob_store.rs`](examples/file_blob_store.rs): durable blob offload and
@@ -540,7 +546,7 @@ roughly `1 / 128`. Lower factors produce more, smaller chunks. Higher factors
 produce fewer, larger chunks.
 
 This is the key property that makes prolly trees good for local-first storage
-and versioned indexes: small edits usually rewrite a local leaf and ancestor
+and versioned maps or database indexes: small edits usually rewrite a local leaf and ancestor
 path, while unchanged content keeps identical CIDs.
 
 ## Read Path
@@ -1374,6 +1380,139 @@ assert!(deleted.is_applied());
 let tags = prolly.snapshots(SnapshotNamespace::tag());
 tags.publish(b"v1", &tree).unwrap();
 ```
+
+## Built-in Versioned Map
+
+Use `VersionedMap` when an application wants a durable map with linear history
+but does not need a full Git-like repository model. The facade removes
+manual tree and named-root coordination from the common path:
+
+```rust
+use prolly::{Config, MemStore, Prolly};
+
+let prolly = Prolly::new(MemStore::new(), Config::default());
+let users = prolly.versioned_map(b"users");
+
+let v1 = users.edit(|edit| {
+    edit.put(b"user/1", b"Ada");
+    edit.put(b"user/2", b"Grace");
+}).unwrap();
+
+let v2 = users.put(b"user/1", b"Ada Lovelace").unwrap();
+assert_eq!(users.get(b"user/1").unwrap(), Some(b"Ada Lovelace".to_vec()));
+assert_eq!(users.get_at(&v1.id, b"user/1").unwrap(), Some(b"Ada".to_vec()));
+
+let changes = users.diff(&v1.id, &v2.id).unwrap();
+assert_eq!(changes.len(), 1);
+
+users.rollback_to(&v1.id).unwrap();
+assert_eq!(users.get(b"user/1").unwrap(), Some(b"Ada".to_vec()));
+```
+
+The managed-map API also exposes snapshot-consistent bulk reads and cursor
+pages. Pin pages to a version when a request sequence must not move with head:
+
+```rust
+use prolly::RangeCursor;
+
+let values = users.get_many(&[b"user/1", b"user/2"]).unwrap();
+assert_eq!(values.len(), 2);
+
+let page = users
+    .prefix_page_at(&v1.id, b"user/", &RangeCursor::start(), 100)
+    .unwrap();
+assert_eq!(page.entries.len(), 2);
+```
+
+Use conditional helpers for request-level optimistic concurrency:
+
+```rust
+let expected = users.head_id().unwrap();
+let update = users.edit_if(expected.as_ref(), |edit| {
+    edit.put(b"user/3", b"Margaret");
+}).unwrap();
+assert!(!update.is_conflict());
+```
+
+Pin a `MapSnapshot` at the beginning of a request when every read and proof
+must use one immutable root, even if another writer advances the map head:
+
+```rust
+let snapshot = users.snapshot().unwrap().unwrap();
+let page = snapshot
+    .prefix_page(b"user/", &RangeCursor::start(), 100)
+    .unwrap();
+let proof = snapshot.prove_prefix(b"user/").unwrap();
+assert!(proof.verify().valid);
+assert_eq!(page.entries.len(), 2);
+```
+
+The same pinned model supports comparisons and collaboration. `compare` gives
+repeatable diff streams, cursor pages, proofs, statistics, and changed-span
+hints. `prepare_merge` pins base, current head, and candidate, then publishes
+with CAS using strict, policy-registry, or CRDT conflict handling.
+
+Operational workflows stay on the managed-map handle:
+
+- `backup`/`restore_backup`, snapshot export/import, missing-node copy, and
+  `push_to` provide portable verification and store-to-store transfer.
+- `put_large_value` and `get_large_value` use configured blob offload;
+  `plan_blob_gc` and `sweep_blob_gc` remain scoped to retained map versions.
+- `initialize_sorted`, `append`, `parallel_apply`, and `rebuild_sorted_if`
+  cover first load, append-heavy ingestion, parallel mutation, and atomic
+  replacement.
+- `verify_catalog`, `keep_last`, `keep_for`, and `keep_versions` make catalog
+  maintenance map-scoped; `plan_gc`/`sweep_gc` safely retain every other named
+  root because content-addressed node and blob stores may be shared.
+- `versioned_maps_transaction` atomically changes authoritative maps, derived
+  database indexes, and materialized views together.
+
+Apps can remove most serialization boilerplate with `typed::<K,V,KC,VC>`.
+`StringKeyCodec` or an application-defined order-preserving `KeyCodec` owns key
+encoding; `VersionedJsonCodec` and `VersionedCborCodec` validate the value
+schema and version. `migrate_from` decodes one pinned old version, rewrites its
+values, and CAS-publishes only if it is still head. `subscribe` and
+`subscribe_from` emit resumable head transitions with logical diffs. With the
+`async-store` feature, `AsyncVersionedMap`, pinned async snapshots, and async
+subscriptions provide the corresponding remote/browser path.
+
+The engine atomically writes new nodes, advances the head, and catalogs the
+version through `TransactionalStore`. Convenience writes retry optimistic
+conflicts; use `apply_if` when the application must reject a stale caller.
+Map version IDs identify unique tree states, not update events. Authors, messages,
+parent commits, branches, and reflogs remain concerns of the proposed
+`prolly-vcs` repository layer.
+
+The retention policy identifies this map's complete catalog when composing a
+custom store-level policy:
+
+```rust
+let retention = users.retention_policy();
+let retained = prolly.load_retained_named_roots(&retention).unwrap();
+assert!(!retained.roots.is_empty());
+```
+
+Catalog growth is explicit. `prune_versions(n)` retains the newest `n`
+snapshots and always retains the current head, including an older rolled-back
+head. It removes version roots transactionally; run retention-aware GC afterward
+to reclaim unreachable nodes:
+
+```rust
+let pruned = users.prune_versions(10).unwrap();
+println!("removed {} old versions", pruned.removed_count());
+let sweep = users.sweep_gc().unwrap();
+```
+
+`sweep_gc` retains every remaining named root in the shared store. Do not pass
+one map's prefix directly to a store-wide sweep when other maps share that
+store.
+
+Here, “map” is the authoritative ordered key/value collection. A database-style
+index remains a separate, derived map—for example `email -> user_id`—usually
+maintained from source-map diffs or in the same strict multi-map transaction.
+`VersionedMap` is therefore a lifecycle facade over a prolly tree, not a claim
+that every managed map is a database index. See
+[`secondary_index.rs`](examples/secondary_index.rs) for that distinct pattern.
 
 ## Store Synchronization
 

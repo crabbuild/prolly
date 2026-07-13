@@ -218,6 +218,8 @@ pub enum Error {
     UnsupportedTransactions { store: &'static str },
     /// A transaction could not commit because a validated named root changed.
     TransactionConflict(TransactionConflict),
+    /// A built-in versioned-map catalog is missing or internally inconsistent.
+    InvalidVersionedMap(String),
 }
 
 impl std::fmt::Display for Error {
@@ -257,6 +259,9 @@ impl std::fmt::Display for Error {
                     "transaction conflict for named root: {:?}",
                     conflict.name
                 )
+            }
+            Error::InvalidVersionedMap(message) => {
+                write!(f, "invalid versioned map: {message}")
             }
         }
     }
