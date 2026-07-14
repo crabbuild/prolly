@@ -2,13 +2,10 @@
 
 mod builder;
 mod cache;
-mod codec;
-mod descriptor;
 mod distance;
 mod map;
 mod mutation;
-mod node;
-mod record;
+mod storage;
 mod vector;
 
 use super::cid::Cid;

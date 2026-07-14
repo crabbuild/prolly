@@ -1,7 +1,7 @@
 use super::super::cid::Cid;
 use super::super::error::Error;
 use super::distance::score;
-use super::node::{ProximityEntry, ProximityNode};
+use super::storage::{PhysicalNodeKind, ProximityEntry, ProximityNode, VectorRef};
 use super::vector::promotion_level;
 use super::ProximityConfig;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -32,8 +32,10 @@ pub(crate) fn build_hierarchy_at_level(
 ) -> Result<BuiltHierarchy, Error> {
     if records.is_empty() {
         let node = ProximityNode {
+            kind: PhysicalNodeKind::Leaf,
             level: 0,
             subtree_count: 0,
+            quantizer: None,
             entries: Vec::new(),
         };
         let bytes = node.encode()?;
@@ -148,7 +150,7 @@ fn build_node(
     let mut entries = Vec::with_capacity(ids.len());
     let mut subtree_count = 0u64;
     for id in ids {
-        let child = if level == 0 {
+        let (child, child_count) = if level == 0 {
             subtree_count =
                 subtree_count
                     .checked_add(1)
@@ -156,7 +158,7 @@ fn build_node(
                         kind: "builder",
                         reason: "subtree count overflow".to_owned(),
                     })?;
-            None
+            (None, 1)
         } else {
             let mut child_prefix = prefix.to_vec();
             child_prefix.push(id);
@@ -168,17 +170,28 @@ fn build_node(
                     reason: "subtree count overflow".to_owned(),
                 }
             })?;
-            Some(child)
+            (Some(child), child_count)
         };
+        let key = records[id].key.clone();
         entries.push(ProximityEntry {
-            key: records[id].key.clone(),
-            vector: records[id].vector.clone(),
+            min_key: key.clone(),
+            max_key: key.clone(),
+            key,
+            vector: VectorRef::Inline(records[id].vector.clone()),
             child,
+            child_count,
+            covering_radius: 0.0,
         });
     }
     let node = ProximityNode {
+        kind: if level == 0 {
+            PhysicalNodeKind::Leaf
+        } else {
+            PhysicalNodeKind::Route
+        },
         level,
         subtree_count,
+        quantizer: None,
         entries,
     };
     let bytes = node.encode()?;

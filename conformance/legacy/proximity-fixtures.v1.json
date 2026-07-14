@@ -1,6 +1,6 @@
 {
   "format_version": 1,
-  "description": "Canonical Rust-native proximity object fixture",
+  "description": "Legacy-only Rust-native proximity v1 object fixture",
   "objects": {
     "record": {
       "cid": "5120bdbba1fc2baa6633037a49c3a6a19455b2e082109def295032b8600a2bf8",
@@ -16,13 +16,6 @@
     }
   },
   "empty": {
-    "config": {
-      "dimensions": 3,
-      "metric": "l2_squared",
-      "log_chunk_size": 2,
-      "level_hash_seed": 19,
-      "max_node_bytes": 262144
-    },
     "descriptor_cid": "0d20cb4a7b55d3e7f1e9920c9d40fa17bdfca49e4ba00641689d07c1613e8a9f",
     "descriptor_bytes": "50525849010103010213000000000000008080100000048080408001000000000000000000000045e5c59fba73aceb988c06780c0a3d84ba15354a7df2f42e13ca9268d020112400",
     "root_cid": "45e5c59fba73aceb988c06780c0a3d84ba15354a7df2f42e13ca9268d0201124",

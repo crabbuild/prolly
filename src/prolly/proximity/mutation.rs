@@ -3,7 +3,7 @@ use super::super::error::Error;
 use super::super::store::Store;
 use super::builder::{build_hierarchy_at_level, IndexedRecord};
 use super::distance::score;
-use super::node::{ProximityEntry, ProximityNode};
+use super::storage::{PhysicalNodeKind, ProximityEntry, ProximityNode};
 use super::{ProximityConfig, ProximityMutationStats};
 use std::collections::{BTreeMap, HashMap, HashSet};
 
@@ -62,8 +62,8 @@ impl<S: Store> Context<'_, S> {
             let mut entries: BTreeMap<Vec<u8>, Vec<f32>> = node
                 .entries
                 .iter()
-                .map(|entry| (entry.key.clone(), entry.vector.clone()))
-                .collect();
+                .map(|entry| Ok((entry.key.clone(), entry.vector.inline()?.to_vec())))
+                .collect::<Result<_, Error>>()?;
             for edit in edits {
                 if edit.old.is_some() {
                     entries.remove(&edit.key);
@@ -73,15 +73,13 @@ impl<S: Store> Context<'_, S> {
                 }
             }
             let replacement = ProximityNode {
+                kind: PhysicalNodeKind::Leaf,
                 level: 0,
                 subtree_count: entries.len() as u64,
+                quantizer: None,
                 entries: entries
                     .into_iter()
-                    .map(|(key, vector)| ProximityEntry {
-                        key,
-                        vector,
-                        child: None,
-                    })
+                    .map(|(key, vector)| ProximityEntry::inline_leaf(key, vector))
                     .collect(),
             };
             return self.finish_node(old_cid, replacement);
@@ -168,11 +166,17 @@ impl<S: Store> Context<'_, S> {
                 key: entry.key.clone(),
                 vector: entry.vector.clone(),
                 child: Some(new_child),
+                child_count,
+                covering_radius: 0.0,
+                min_key: entry.key.clone(),
+                max_key: entry.key.clone(),
             });
         }
         let replacement = ProximityNode {
+            kind: PhysicalNodeKind::Route,
             level: node.level,
             subtree_count,
+            quantizer: None,
             entries,
         };
         self.finish_node(old_cid, replacement)
@@ -201,7 +205,7 @@ impl<S: Store> Context<'_, S> {
         let mut best: Option<(usize, f64)> = None;
         for (index, entry) in entries.iter().enumerate() {
             self.stats.distance_evaluations += 1;
-            let distance = score(self.config.metric, vector, &entry.vector);
+            let distance = score(self.config.metric, vector, entry.vector.inline()?);
             if best.map_or(true, |(best_index, best_distance)| {
                 distance
                     .total_cmp(&best_distance)
@@ -226,7 +230,10 @@ impl<S: Store> Context<'_, S> {
         let (node, _) = self.load_node(cid)?;
         if node.level == 0 {
             for entry in node.entries {
-                if records.insert(entry.key, entry.vector).is_some() {
+                if records
+                    .insert(entry.key, entry.vector.into_inline()?)
+                    .is_some()
+                {
                     return Err(Error::InvalidProximityObject {
                         kind: "mutation",
                         reason: "duplicate leaf identity while rebuilding cluster".to_owned(),

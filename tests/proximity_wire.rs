@@ -76,7 +76,7 @@ fn proximity_roots_are_independent_of_bulk_input_order() {
 }
 
 #[test]
-fn proximity_load_rejects_corrupt_descriptor_version_and_trailing_bytes() {
+fn proximity_load_rejects_v1_and_trailing_bytes() {
     let store = Arc::new(MemStore::new());
     let map = ProximityMap::build(store.clone(), config(), records()).unwrap();
     let bytes = store
@@ -85,12 +85,15 @@ fn proximity_load_rejects_corrupt_descriptor_version_and_trailing_bytes() {
         .unwrap();
 
     let mut bad_version = bytes.clone();
-    bad_version[4] = 2;
+    bad_version[4] = 1;
     let bad_version_cid = Cid::from_bytes(&bad_version);
     store.put(bad_version_cid.as_bytes(), &bad_version).unwrap();
     assert!(matches!(
         ProximityMap::load(store.clone(), bad_version_cid),
-        Err(Error::InvalidProximityObject { .. })
+        Err(Error::UnsupportedProximityVersion {
+            found: 1,
+            required: 2
+        })
     ));
 
     let mut trailing = bytes;
@@ -163,6 +166,11 @@ fn checked_in_empty_proximity_fixture_matches_canonical_bytes() {
         .get(map.tree().proximity_root.as_bytes())
         .unwrap()
         .unwrap();
+    assert_eq!(
+        descriptor[4], 2,
+        "descriptor must use the hard-cut v2 format"
+    );
+    assert_eq!(root[4], 2, "node must use the hard-cut v2 format");
     let hex = |bytes: &[u8]| {
         bytes
             .iter()
@@ -170,7 +178,7 @@ fn checked_in_empty_proximity_fixture_matches_canonical_bytes() {
             .collect::<String>()
     };
     let fixture: serde_json::Value =
-        serde_json::from_str(include_str!("../conformance/proximity-fixtures.v1.json")).unwrap();
+        serde_json::from_str(include_str!("../conformance/proximity-fixtures.v2.json")).unwrap();
     let empty = &fixture["empty"];
     assert_eq!(
         hex(map.tree().descriptor.as_bytes()),

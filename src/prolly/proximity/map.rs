@@ -6,11 +6,9 @@ use super::super::store::Store;
 use super::super::Prolly;
 use super::builder::{build_hierarchy, IndexedRecord};
 use super::cache::{ContentCache, DEFAULT_PROXIMITY_CACHE_NODES};
-use super::descriptor::Descriptor;
 use super::distance::{prepare_vector, score};
 use super::mutation::{mutate_hierarchy, LogicalEdit};
-use super::node::ProximityNode;
-use super::record::StoredRecord;
+use super::storage::{Descriptor, ProximityNode, StoredRecord};
 use super::vector::promotion_level;
 use super::{
     ExactProximityRecord, Neighbor, ProximityConfig, ProximityMutation, ProximityMutationStats,
@@ -107,7 +105,7 @@ where
                 reason: "root exceeds descriptor max_node_bytes".to_owned(),
             });
         }
-        let root = super::node::ProximityNode::decode(&root_bytes, descriptor.config.dimensions)?;
+        let root = ProximityNode::decode(&root_bytes, descriptor.config.dimensions)?;
         if root.subtree_count != descriptor.count {
             return Err(Error::InvalidProximityObject {
                 kind: "descriptor",
@@ -319,7 +317,7 @@ where
             &options,
             self.tree.config.metric,
             &mut stats,
-        );
+        )?;
         let mut level = root.level;
 
         while level > 0 && !current.is_empty() && !stats.budget_exhausted {
@@ -365,7 +363,7 @@ where
                     &options,
                     self.tree.config.metric,
                     &mut stats,
-                ) {
+                )? {
                     next_by_key
                         .entry(candidate.key.clone())
                         .and_modify(|existing| {
@@ -577,7 +575,10 @@ where
         &self,
         cid: &Cid,
         expected_level: Option<u8>,
-        parent: Option<(&super::node::ProximityEntry, &[super::node::ProximityEntry])>,
+        parent: Option<(
+            &super::storage::ProximityEntry,
+            &[super::storage::ProximityEntry],
+        )>,
         state: &mut VerificationState<'_>,
     ) -> Result<u64, Error> {
         if !state.seen_nodes.insert(cid.clone()) {
@@ -605,12 +606,18 @@ where
 
         if let Some((selected, candidates)) = parent {
             for entry in &node.entries {
-                let selected_distance =
-                    score(self.tree.config.metric, &entry.vector, &selected.vector);
+                let selected_distance = score(
+                    self.tree.config.metric,
+                    entry.vector.inline()?,
+                    selected.vector.inline()?,
+                );
                 for candidate in candidates {
                     state.summary.distance_checks += 1;
-                    let candidate_distance =
-                        score(self.tree.config.metric, &entry.vector, &candidate.vector);
+                    let candidate_distance = score(
+                        self.tree.config.metric,
+                        entry.vector.inline()?,
+                        candidate.vector.inline()?,
+                    );
                     let candidate_is_better = candidate_distance
                         .total_cmp(&selected_distance)
                         .then_with(|| candidate.key.cmp(&selected.key))
@@ -655,7 +662,7 @@ where
                             kind: "node",
                             reason: "leaf key is absent from exact directory".to_owned(),
                         })?;
-                if record.vector != entry.vector {
+                if record.vector.as_slice() != entry.vector.inline()? {
                     return Err(Error::InvalidProximityObject {
                         kind: "node",
                         reason: "leaf vector disagrees with exact directory".to_owned(),
@@ -726,7 +733,7 @@ fn score_entries(
     options: &SearchOptions,
     metric: super::DistanceMetric,
     stats: &mut ProximitySearchStats,
-) -> Vec<Candidate> {
+) -> Result<Vec<Candidate>, Error> {
     let mut candidates = Vec::with_capacity(node.entries.len().min(limit));
     for entry in &node.entries {
         let distance = if let Some(distance) = known.get(&entry.key) {
@@ -740,18 +747,18 @@ fn score_entries(
                 break;
             }
             stats.distance_evaluations += 1;
-            score(metric, query, &entry.vector)
+            score(metric, query, entry.vector.inline()?)
         };
         candidates.push(Candidate {
             key: entry.key.clone(),
-            vector: entry.vector.clone(),
+            vector: entry.vector.inline()?.to_vec(),
             child: entry.child.clone(),
             distance,
         });
     }
     candidates.sort_by(candidate_order);
     candidates.truncate(limit);
-    candidates
+    Ok(candidates)
 }
 
 fn load_content<S: Store>(store: &S, cid: &Cid) -> Result<Vec<u8>, Error> {
@@ -948,7 +955,7 @@ mod tests {
             .unwrap()
             .unwrap();
         let mut root = ProximityNode::decode(&bytes, 1).unwrap();
-        root.entries[0].vector = vec![2.0];
+        root.entries[0].vector = super::super::storage::VectorRef::Inline(vec![2.0]);
         let corrupt = publish_replacement_root(&store, &map, root);
 
         assert!(matches!(
