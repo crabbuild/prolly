@@ -157,7 +157,7 @@ fn typed_walk_covers_proximity_and_accelerator_graphs_with_limits_and_sharing() 
     tiny.max_objects = 1;
     assert!(matches!(
         walk_content_graph(&store, std::slice::from_ref(&descriptor), &tiny),
-        Err(prolly::Error::IndexResourceLimitExceeded { .. })
+        Err(prolly::Error::ContentGraphResourceLimitExceeded { .. })
     ));
 
     let (pq, _) = ProductQuantizer::build(
@@ -335,7 +335,7 @@ fn traversal_is_deterministic_bounded_and_rejects_missing_corrupt_or_conflicting
     ] {
         assert!(matches!(
             walk_content_graph(&store, std::slice::from_ref(&root), &constrained),
-            Err(prolly::Error::IndexResourceLimitExceeded { resource: actual, .. })
+            Err(prolly::Error::ContentGraphResourceLimitExceeded { resource: actual, .. })
                 if actual == resource
         ));
     }

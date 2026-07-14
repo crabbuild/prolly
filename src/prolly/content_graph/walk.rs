@@ -311,7 +311,7 @@ fn validate_limits(limits: &ContentGraphLimits) -> Result<(), Error> {
 }
 
 fn limit(resource: &'static str, limit: usize, actual: usize) -> Error {
-    Error::IndexResourceLimitExceeded {
+    Error::ContentGraphResourceLimitExceeded {
         resource,
         limit,
         actual,

@@ -245,6 +245,12 @@ pub enum Error {
         encoded_bytes: usize,
         limit: usize,
     },
+    /// A typed content-graph traversal exceeded a configured resource limit.
+    ContentGraphResourceLimitExceeded {
+        resource: &'static str,
+        limit: usize,
+        actual: usize,
+    },
 }
 
 impl std::fmt::Display for Error {
@@ -322,6 +328,14 @@ impl std::fmt::Display for Error {
             } => write!(
                 f,
                 "proximity node exceeds byte limit: level={level} entries={entries} bytes={encoded_bytes} limit={limit}"
+            ),
+            Error::ContentGraphResourceLimitExceeded {
+                resource,
+                limit,
+                actual,
+            } => write!(
+                f,
+                "content graph resource limit exceeded: resource={resource} limit={limit} actual={actual}"
             ),
         }
     }
