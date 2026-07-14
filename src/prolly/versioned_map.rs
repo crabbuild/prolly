@@ -1426,6 +1426,10 @@ where
         }
     }
 
+    pub(crate) fn raw_transaction(&self) -> &super::transaction::ProllyTransaction<'engine, S> {
+        self.tx
+    }
+
     /// Load the staged or original head for one map.
     pub fn head(&self, map_id: impl AsRef<[u8]>) -> Result<Option<MapVersion>, Error> {
         let (_, head_name, _) = versioned_map_names(map_id.as_ref());
@@ -1470,6 +1474,63 @@ where
             mutations,
             MapWriteAuthority::IndexMaintenance(permit),
         )
+    }
+
+    pub(crate) fn publish_tree_index_maintenance(
+        &self,
+        permit: &IndexMaintenancePermit,
+        expected: Option<&MapVersionId>,
+        tree: &Tree,
+    ) -> Result<VersionedMapUpdate, Error> {
+        let map_id = permit.map_id.as_slice();
+        guard_managed_map_write(self.tx, map_id, MapWriteAuthority::IndexMaintenance(permit))?;
+        let (_, head_name, mut versions_prefix) = versioned_map_names(map_id);
+        let current_tree = self.tx.load_named_root(&head_name)?;
+        let current_id = current_tree
+            .as_ref()
+            .map(MapVersionId::for_tree)
+            .transpose()?;
+        if current_id.as_ref() != expected {
+            return Ok(VersionedMapUpdate::Conflict {
+                current: current_tree
+                    .map(|tree| MapVersion::new(tree, None, true))
+                    .transpose()?,
+            });
+        }
+        if current_tree.as_ref() == Some(tree) {
+            return Ok(VersionedMapUpdate::Unchanged {
+                current: current_tree
+                    .map(|tree| MapVersion::new(tree, None, true))
+                    .transpose()?,
+            });
+        }
+
+        let id = MapVersionId::for_tree(tree)?;
+        versions_prefix.extend_from_slice(id.as_cid().as_bytes());
+        match self.tx.load_named_root(&versions_prefix)? {
+            Some(existing) if existing != *tree => {
+                return Err(Error::InvalidVersionedMap(format!(
+                    "content identifier collision for indexed transaction version {id}"
+                )));
+            }
+            Some(_) => {}
+            None => self.tx.publish_named_root_at_millis(
+                &versions_prefix,
+                tree,
+                self.timestamp_millis,
+            )?,
+        }
+        self.tx
+            .publish_named_root_at_millis(&head_name, tree, self.timestamp_millis)?;
+        Ok(VersionedMapUpdate::Applied {
+            previous: current_id,
+            current: MapVersion {
+                id,
+                tree: tree.clone(),
+                created_at_millis: Some(self.timestamp_millis),
+                is_head: true,
+            },
+        })
     }
 
     fn apply_with_authority(

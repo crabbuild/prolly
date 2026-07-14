@@ -204,3 +204,154 @@ fn indexed_map_open_fails_closed_when_control_has_no_catalog() {
         Err(Error::InvalidVersionedMap(_))
     ));
 }
+
+#[test]
+fn ensure_index_builds_a_populated_source_and_activates_atomically() {
+    let prolly = Prolly::new(Arc::new(MemStore::new()), Config::default());
+    let source = prolly.versioned_map(b"users");
+    source.put(b"user-1", b"active,red").unwrap();
+    let source_version = source.put(b"user-2", b"inactive,blue").unwrap();
+    let by_tag = SecondaryIndex::non_unique("by-tag", 1, "app.users.by-tag/v1", |_, value| {
+        Ok(value
+            .split(|byte| *byte == b',')
+            .map(|term| term.to_vec())
+            .collect())
+    })
+    .unwrap();
+    let registry = SecondaryIndexRegistry::new().register(by_tag).unwrap();
+    let indexed = prolly.indexed_map(b"users", registry.clone()).unwrap();
+
+    let built = indexed.ensure_index(b"by-tag").unwrap();
+    assert!(built.activated);
+    assert_eq!(built.source_version, source_version.id);
+    assert_eq!(built.entries, 4);
+    assert_eq!(built.attempts, 1);
+
+    let health = indexed.health().unwrap();
+    assert_eq!(health.active_indexes.len(), 1);
+    assert_eq!(health.active_indexes[0].name, b"by-tag");
+    assert_eq!(health.active_indexes[0].index_version, built.index_version);
+    let hidden = prolly.versioned_map(&health.active_indexes[0].index_map_id);
+    let hidden_snapshot = hidden.snapshot().unwrap().unwrap();
+    assert_eq!(
+        hidden_snapshot
+            .range(&[], None)
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+            .len(),
+        4
+    );
+    assert_eq!(
+        hidden_snapshot
+            .get(&prolly::physical_index_key(b"red", b"user-1").unwrap())
+            .unwrap(),
+        Some(Vec::new())
+    );
+
+    let idempotent = indexed.ensure_index(b"by-tag").unwrap();
+    assert!(!idempotent.activated);
+    assert_eq!(idempotent.index_version, built.index_version);
+    assert!(matches!(
+        source.put(b"user-3", b"active,green"),
+        Err(Error::IndexesRequireIndexedMap { .. })
+    ));
+
+    assert!(matches!(
+        prolly.indexed_map(b"users", SecondaryIndexRegistry::new()),
+        Err(Error::IndexRuntimeDefinitionMissing { name, generation: 1 }) if name == b"by-tag"
+    ));
+    let mismatched = SecondaryIndexRegistry::new()
+        .register(
+            SecondaryIndex::non_unique("by-tag", 1, "app.users.by-tag/v2", |_, _| Ok(Vec::new()))
+                .unwrap(),
+        )
+        .unwrap();
+    assert!(matches!(
+        prolly.indexed_map(b"users", mismatched),
+        Err(Error::IndexDefinitionMismatch { name, .. }) if name == b"by-tag"
+    ));
+}
+
+#[test]
+fn ensure_index_initializes_an_absent_source() {
+    let prolly = Prolly::new(Arc::new(MemStore::new()), Config::default());
+    let registry = SecondaryIndexRegistry::new()
+        .register(
+            SecondaryIndex::non_unique("by-tag", 1, "app.users.by-tag/v1", |_, _| Ok(Vec::new()))
+                .unwrap(),
+        )
+        .unwrap();
+    let indexed = prolly.indexed_map(b"users", registry).unwrap();
+    let built = indexed.ensure_index(b"by-tag").unwrap();
+    assert!(built.activated);
+    assert_eq!(built.entries, 0);
+    assert!(indexed.source().head().unwrap().is_some());
+    assert_eq!(indexed.health().unwrap().active_indexes.len(), 1);
+}
+
+#[test]
+fn ensure_index_builds_sparse_include_and_all_projections() {
+    let prolly = Prolly::new(Arc::new(MemStore::new()), Config::default());
+    let source = prolly.versioned_map(b"users");
+    source.put(b"user-1", b"Ada").unwrap();
+    source.put(b"skip", b"ignored").unwrap();
+    let include = SecondaryIndex::builder("by-name", 1, "app.users.by-name/v1")
+        .projection(IndexProjection::Include)
+        .extract(|key, value| {
+            if key == b"skip" {
+                Ok(Vec::new())
+            } else {
+                Ok(vec![SecondaryIndexEntry::included(value, b"display")])
+            }
+        })
+        .unwrap();
+    let all = SecondaryIndex::builder("by-name-all", 1, "app.users.by-name-all/v1")
+        .projection(IndexProjection::All)
+        .extract_terms(|key, value| {
+            if key == b"skip" {
+                Ok(Vec::new())
+            } else {
+                Ok(vec![value.to_vec()])
+            }
+        })
+        .unwrap();
+    let registry = SecondaryIndexRegistry::new()
+        .register(include)
+        .unwrap()
+        .register(all)
+        .unwrap();
+    let indexed = prolly.indexed_map(b"users", registry).unwrap();
+    indexed.ensure_index(b"by-name").unwrap();
+    indexed.ensure_index(b"by-name-all").unwrap();
+
+    let health = indexed.health().unwrap();
+    for (name, expected) in [
+        (
+            b"by-name".as_slice(),
+            prolly::IndexValue::Included(b"display".to_vec()),
+        ),
+        (
+            b"by-name-all".as_slice(),
+            prolly::IndexValue::FullSource(b"Ada".to_vec()),
+        ),
+    ] {
+        let active = health
+            .active_indexes
+            .iter()
+            .find(|active| active.name == name)
+            .unwrap();
+        let value = prolly
+            .versioned_map(&active.index_map_id)
+            .snapshot()
+            .unwrap()
+            .unwrap()
+            .get(&prolly::physical_index_key(b"Ada", b"user-1").unwrap())
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            prolly::IndexValue::from_bytes(&value, 1024).unwrap(),
+            expected
+        );
+    }
+}

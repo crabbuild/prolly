@@ -7,7 +7,7 @@ mod coordinator;
 mod definition;
 mod storage;
 
-pub use coordinator::{ActiveIndexHealth, IndexedMap, IndexedMapHealth};
+pub use coordinator::{ActiveIndexHealth, IndexBuildResult, IndexedMap, IndexedMapHealth};
 pub use definition::{
     IndexProjection, SecondaryIndex, SecondaryIndexBuilder, SecondaryIndexEntry,
     SecondaryIndexError, SecondaryIndexExtractor, SecondaryIndexLimits, SecondaryIndexRegistry,
