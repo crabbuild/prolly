@@ -149,6 +149,7 @@ pub mod range;
 pub mod rebalance;
 #[cfg(feature = "async-store")]
 pub mod remote;
+pub mod secondary_index;
 pub mod streaming;
 pub mod utils;
 

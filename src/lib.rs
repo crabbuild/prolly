@@ -331,6 +331,10 @@ pub use prolly::proof::{
 pub use prolly::range::{
     CursorWindow, RangeCursor, RangeIter, RangePage, ReverseCursor, ReversePage,
 };
+pub use prolly::secondary_index::{
+    IndexProjection, SecondaryIndex, SecondaryIndexBuilder, SecondaryIndexEntry,
+    SecondaryIndexError, SecondaryIndexExtractor, SecondaryIndexLimits, SecondaryIndexRegistry,
+};
 pub use prolly::snapshot::{
     snapshot_id_from_name, snapshot_root_name, SnapshotManager, SnapshotNamespace, SnapshotRoot,
     SnapshotSelection, SNAPSHOT_BRANCH_PREFIX, SNAPSHOT_CHECKPOINT_PREFIX, SNAPSHOT_TAG_PREFIX,

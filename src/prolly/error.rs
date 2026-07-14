@@ -185,7 +185,9 @@ pub mod resolver {
     }
 }
 
+use super::secondary_index::IndexProjection;
 use super::transaction::TransactionConflict;
+use super::versioned_map::MapVersionId;
 
 /// Prolly tree errors
 #[derive(Debug)]
@@ -220,6 +222,64 @@ pub enum Error {
     TransactionConflict(TransactionConflict),
     /// A built-in versioned-map catalog is missing or internally inconsistent.
     InvalidVersionedMap(String),
+    /// A runtime secondary-index definition is invalid.
+    InvalidIndexDefinition { reason: String },
+    /// Persisted active index semantics have no matching runtime extractor.
+    IndexRuntimeDefinitionMissing { name: Vec<u8>, generation: u64 },
+    /// Runtime and persisted descriptor fingerprints disagree.
+    IndexDefinitionMismatch {
+        name: Vec<u8>,
+        persisted: Cid,
+        runtime: Cid,
+    },
+    /// A managed source map must be mutated through `IndexedMap`.
+    IndexesRequireIndexedMap {
+        map_id: Vec<u8>,
+        active_indexes: Vec<Vec<u8>>,
+    },
+    /// The requested operation has no safe indexed implementation in v1.
+    IndexOperationUnsupported { operation: &'static str },
+    /// An application extractor rejected one source record.
+    IndexExtractionFailed {
+        name: Vec<u8>,
+        primary_key: Vec<u8>,
+        reason: String,
+    },
+    /// An extractor emission is incompatible with its projection mode.
+    IndexProjectionMismatch {
+        name: Vec<u8>,
+        mode: IndexProjection,
+        primary_key: Vec<u8>,
+    },
+    /// One source record emitted different projections for the same term.
+    ConflictingIndexProjection {
+        name: Vec<u8>,
+        primary_key: Vec<u8>,
+        term: Vec<u8>,
+    },
+    /// Repeated source movement prevented index activation.
+    IndexBuildConflictLimitExceeded { name: Vec<u8>, attempts: usize },
+    /// No exact checkpoint exists for an index at the selected source version.
+    IndexUnavailableAtVersion {
+        name: Vec<u8>,
+        source_version: MapVersionId,
+    },
+    /// A persisted checkpoint disagrees with the selected source or index root.
+    IndexCheckpointMismatch {
+        name: Vec<u8>,
+        source_version: MapVersionId,
+        reason: String,
+    },
+    /// A cursor belongs to a different immutable indexed snapshot.
+    IndexCursorVersionMismatch { expected: String, actual: String },
+    /// Index work exceeded a configured resource bound.
+    IndexResourceLimitExceeded {
+        resource: &'static str,
+        limit: usize,
+        actual: usize,
+    },
+    /// A current indexed-snapshot bundle is malformed or inconsistent.
+    InvalidIndexedSnapshotBundle { reason: String },
 }
 
 impl std::fmt::Display for Error {
@@ -262,6 +322,89 @@ impl std::fmt::Display for Error {
             }
             Error::InvalidVersionedMap(message) => {
                 write!(f, "invalid versioned map: {message}")
+            }
+            Error::InvalidIndexDefinition { reason } => {
+                write!(f, "invalid secondary index definition: {reason}")
+            }
+            Error::IndexRuntimeDefinitionMissing { name, generation } => write!(
+                f,
+                "runtime secondary index definition missing: name={name:?} generation={generation}"
+            ),
+            Error::IndexDefinitionMismatch {
+                name,
+                persisted,
+                runtime,
+            } => write!(
+                f,
+                "secondary index definition mismatch: name={name:?} persisted={persisted:?} runtime={runtime:?}"
+            ),
+            Error::IndexesRequireIndexedMap {
+                map_id,
+                active_indexes,
+            } => write!(
+                f,
+                "managed map requires IndexedMap coordinator: map_id={map_id:?} active_indexes={active_indexes:?}"
+            ),
+            Error::IndexOperationUnsupported { operation } => {
+                write!(f, "indexed map operation is unsupported in v1: {operation}")
+            }
+            Error::IndexExtractionFailed {
+                name,
+                primary_key,
+                reason,
+            } => write!(
+                f,
+                "secondary index extraction failed: name={name:?} primary_key={primary_key:?}: {reason}"
+            ),
+            Error::IndexProjectionMismatch {
+                name,
+                mode,
+                primary_key,
+            } => write!(
+                f,
+                "secondary index projection mismatch: name={name:?} mode={mode:?} primary_key={primary_key:?}"
+            ),
+            Error::ConflictingIndexProjection {
+                name,
+                primary_key,
+                term,
+            } => write!(
+                f,
+                "conflicting secondary index projection: name={name:?} primary_key={primary_key:?} term={term:?}"
+            ),
+            Error::IndexBuildConflictLimitExceeded { name, attempts } => write!(
+                f,
+                "secondary index build conflict limit exceeded: name={name:?} attempts={attempts}"
+            ),
+            Error::IndexUnavailableAtVersion {
+                name,
+                source_version,
+            } => write!(
+                f,
+                "secondary index unavailable at source version: name={name:?} source_version={source_version}"
+            ),
+            Error::IndexCheckpointMismatch {
+                name,
+                source_version,
+                reason,
+            } => write!(
+                f,
+                "secondary index checkpoint mismatch: name={name:?} source_version={source_version}: {reason}"
+            ),
+            Error::IndexCursorVersionMismatch { expected, actual } => write!(
+                f,
+                "secondary index cursor snapshot mismatch: expected={expected} actual={actual}"
+            ),
+            Error::IndexResourceLimitExceeded {
+                resource,
+                limit,
+                actual,
+            } => write!(
+                f,
+                "secondary index resource limit exceeded: resource={resource} limit={limit} actual={actual}"
+            ),
+            Error::InvalidIndexedSnapshotBundle { reason } => {
+                write!(f, "invalid indexed snapshot bundle: {reason}")
             }
         }
     }
