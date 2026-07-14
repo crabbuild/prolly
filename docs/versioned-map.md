@@ -126,11 +126,16 @@ There are four related concepts:
 | `Tree` | One immutable ordered byte-key/byte-value snapshot. |
 | `VersionedMap<'a, S>` | A named lifecycle facade with a current head and immutable version catalog. |
 | `MapSnapshot<'a, S>` | A request-scoped view pinned to exactly one immutable map version. |
+| `IndexedMap<'a, S>` | A strict coordinator for one source `VersionedMap` and its derived secondary indexes. |
 
 A `VersionedMap` is not automatically a database secondary index. It can hold
 an authoritative collection, a secondary index, a materialized view, or any
 other ordered key/value state. “Versioned map” describes lifecycle and history;
 “database index” describes an application's data model.
+
+When the engine must maintain derived indexes synchronously and prevent writes
+from bypassing maintenance, use `IndexedMap` rather than manually coordinating
+separate `VersionedMap` heads. See [IndexedMap Secondary Indexes](secondary-index-design.md).
 
 For example:
 

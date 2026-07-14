@@ -32,6 +32,11 @@ fn sqlite_store_supports_node_scan_contract_operations() {
 }
 
 #[test]
+fn sqlite_store_supports_strict_indexed_maps() {
+    prolly_store_test::assert_indexed_map_contract(SqliteStore::open_in_memory().unwrap());
+}
+
+#[test]
 fn sqlite_store_commits_and_rolls_back_strict_transactions() {
     let store = Arc::new(SqliteStore::open_in_memory().unwrap());
     let prolly = Prolly::new(store, Config::default());

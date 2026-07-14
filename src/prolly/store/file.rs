@@ -467,10 +467,12 @@ impl TransactionalStore for FileNodeStore {
                 .read_root_path(&self.root_path(&condition.name))
                 .map_err(|err| Error::Store(Box::new(err)))?;
             if current != condition.expected {
-                return Ok(TransactionUpdate::Conflict(TransactionConflict::new(
-                    condition.name.clone(),
-                    condition.expected.clone(),
-                    current,
+                return Ok(TransactionUpdate::Conflict(Box::new(
+                    TransactionConflict::new(
+                        condition.name.clone(),
+                        condition.expected.clone(),
+                        current,
+                    ),
                 )));
             }
         }

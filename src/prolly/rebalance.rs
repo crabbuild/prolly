@@ -225,7 +225,7 @@ fn split_node<S: Store>(
     });
 
     // Ensure we don't create empty nodes
-    let split_idx = split_idx.min(node.len().saturating_sub(2)).max(0);
+    let split_idx = split_idx.min(node.len().saturating_sub(2));
 
     // Split node into left and right
     let mut left = prolly.new_node_like(&node);
@@ -772,12 +772,11 @@ pub fn split_into_chunks<S: Store>(prolly: &Prolly<S>, node: &Node, max_size: us
         // Safety check: if remaining_chunks is 0, we've created all expected chunks
         // but still have entries left. This can happen due to rounding in num_chunks calculation.
         // In this case, we need to create additional chunks.
-        let target_end = if remaining_chunks == 0 {
-            // Create a chunk with remaining entries, respecting capacity.
-            (start + remaining_entries).min(start + capacity)
-        } else {
-            start + (remaining_entries / remaining_chunks).max(1)
-        };
+        let target_size = remaining_entries
+            .checked_div(remaining_chunks)
+            .unwrap_or_else(|| remaining_entries.min(capacity))
+            .max(1);
+        let target_end = start + target_size;
 
         // Ensure we don't exceed capacity.
         // A chunk from start..end has size (end - start), so we want

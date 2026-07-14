@@ -527,10 +527,12 @@ impl TransactionalStore for RocksDBStore {
             let current =
                 decode_root_manifest(current_bytes).map_err(|err| Error::Store(Box::new(err)))?;
             if current != condition.expected {
-                return Ok(TransactionUpdate::Conflict(TransactionConflict::new(
-                    condition.name.clone(),
-                    condition.expected.clone(),
-                    current,
+                return Ok(TransactionUpdate::Conflict(Box::new(
+                    TransactionConflict::new(
+                        condition.name.clone(),
+                        condition.expected.clone(),
+                        current,
+                    ),
                 )));
             }
         }

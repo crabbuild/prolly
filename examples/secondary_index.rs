@@ -1,216 +1,109 @@
 use prolly::{
-    prefix_range, Config, Diff, Error, KeyBuilder, MemStore, Mutation, Prolly, VersionedValue,
+    Config, Error, IndexProjection, MemStore, Prolly, SecondaryIndex, SecondaryIndexEntry,
+    SecondaryIndexRegistry,
 };
-use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
-const USER_SCHEMA: &str = "app.user";
-const USER_SCHEMA_VERSION: u64 = 1;
-const INDEX_VALUE: &[u8] = b"1";
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-struct UserRecord {
-    tenant_id: String,
-    user_id: String,
-    status: String,
-    display_name: String,
+fn status(value: &[u8]) -> Vec<u8> {
+    value
+        .split(|byte| *byte == b'|')
+        .next()
+        .unwrap_or_default()
+        .to_vec()
 }
 
-fn user_key(tenant_id: &str, user_id: &str) -> Vec<u8> {
-    KeyBuilder::new()
-        .push_str("source")
-        .push_str("tenant")
-        .push_str(tenant_id)
-        .push_str("user")
-        .push_str(user_id)
-        .finish()
+fn name(value: &[u8]) -> Vec<u8> {
+    value
+        .splitn(2, |byte| *byte == b'|')
+        .nth(1)
+        .unwrap_or_default()
+        .to_vec()
 }
 
-fn status_index_prefix(tenant_id: &str, status: &str) -> Vec<u8> {
-    KeyBuilder::new()
-        .push_str("index")
-        .push_str("user-by-status")
-        .push_str("tenant")
-        .push_str(tenant_id)
-        .push_str("status")
-        .push_str(status)
-        .finish()
-}
-
-fn status_index_key(user: &UserRecord) -> Vec<u8> {
-    KeyBuilder::from_prefix(status_index_prefix(&user.tenant_id, &user.status))
-        .push_str(&user.user_id)
-        .finish()
-}
-
-fn root_name(name: &str) -> Vec<u8> {
-    KeyBuilder::new()
-        .push_str("secondary-index")
-        .push_str("root")
-        .push_str(name)
-        .finish()
-}
-
-fn encode_user(user: &UserRecord) -> Result<Vec<u8>, Error> {
-    VersionedValue::json(USER_SCHEMA, USER_SCHEMA_VERSION, user)?.to_bytes()
-}
-
-fn decode_user(bytes: &[u8]) -> Result<UserRecord, Error> {
-    let value = VersionedValue::from_bytes(bytes)?;
-    value.require_schema(USER_SCHEMA, USER_SCHEMA_VERSION)?;
-    value.decode_json()
-}
-
-fn put_user(
-    prolly: &Prolly<MemStore>,
-    tree: &prolly::Tree,
-    user: UserRecord,
-) -> Result<prolly::Tree, Error> {
-    prolly.put(
-        tree,
-        user_key(&user.tenant_id, &user.user_id),
-        encode_user(&user)?,
+fn by_status(generation: u64) -> Result<SecondaryIndex, Error> {
+    SecondaryIndex::non_unique(
+        "by-status",
+        generation,
+        format!("example.by-status/v{generation}"),
+        |_, value| Ok(vec![status(value)]),
     )
 }
 
-fn build_status_index(
-    prolly: &Prolly<MemStore>,
-    source: &prolly::Tree,
-) -> Result<prolly::Tree, Error> {
-    let mutations = prolly
-        .range(source, b"source", Some(b"sourcf"))?
-        .map(|entry| {
-            let (_, bytes) = entry?;
-            let user = decode_user(&bytes)?;
-            Ok(Mutation::Upsert {
-                key: status_index_key(&user),
-                val: INDEX_VALUE.to_vec(),
-            })
-        })
-        .collect::<Result<Vec<_>, Error>>()?;
-    prolly.batch(&prolly.create(), mutations)
-}
-
-fn apply_source_diff_to_status_index(
-    prolly: &Prolly<MemStore>,
-    index: &prolly::Tree,
-    source_diff: &[Diff],
-) -> Result<prolly::Tree, Error> {
-    let mut mutations = Vec::new();
-
-    for diff in source_diff {
-        match diff {
-            Diff::Added { val, .. } => {
-                let user = decode_user(val)?;
-                mutations.push(Mutation::Upsert {
-                    key: status_index_key(&user),
-                    val: INDEX_VALUE.to_vec(),
-                });
-            }
-            Diff::Removed { val, .. } => {
-                let user = decode_user(val)?;
-                mutations.push(Mutation::Delete {
-                    key: status_index_key(&user),
-                });
-            }
-            Diff::Changed { old, new, .. } => {
-                let old_user = decode_user(old)?;
-                let new_user = decode_user(new)?;
-                let old_index_key = status_index_key(&old_user);
-                let new_index_key = status_index_key(&new_user);
-                if old_index_key != new_index_key {
-                    mutations.push(Mutation::Delete { key: old_index_key });
-                    mutations.push(Mutation::Upsert {
-                        key: new_index_key,
-                        val: INDEX_VALUE.to_vec(),
-                    });
-                }
-            }
-        }
-    }
-
-    prolly.batch(index, mutations)
-}
-
-fn users_by_status(
-    prolly: &Prolly<MemStore>,
-    index: &prolly::Tree,
-    tenant_id: &str,
-    status: &str,
-) -> Result<Vec<Vec<u8>>, Error> {
-    let (start, end) = prefix_range(status_index_prefix(tenant_id, status));
-    prolly
-        .range(index, &start, end.as_deref())?
-        .map(|entry| entry.map(|(key, _)| key))
-        .collect()
+fn registry(status_generation: u64) -> Result<SecondaryIndexRegistry, Error> {
+    let include = SecondaryIndex::builder("by-status-name", 1, "example.by-status-name/v1")
+        .projection(IndexProjection::Include)
+        .extract(|_, value| {
+            Ok(vec![SecondaryIndexEntry::included(
+                status(value),
+                name(value),
+            )])
+        })?;
+    let all = SecondaryIndex::builder("by-status-all", 1, "example.by-status-all/v1")
+        .projection(IndexProjection::All)
+        .extract_terms(|_, value| Ok(vec![status(value)]))?;
+    SecondaryIndexRegistry::new()
+        .register(by_status(status_generation)?)?
+        .register(include)?
+        .register(all)
 }
 
 fn main() -> Result<(), Error> {
-    let prolly = Prolly::new(MemStore::new(), Config::default());
-    let empty = prolly.create();
+    let engine = Prolly::new(Arc::new(MemStore::new()), Config::default());
 
-    let source_v1 = put_user(
-        &prolly,
-        &empty,
-        UserRecord {
-            tenant_id: "acme".to_string(),
-            user_id: "u001".to_string(),
-            status: "active".to_string(),
-            display_name: "Ada".to_string(),
-        },
-    )?;
-    let source_v1 = put_user(
-        &prolly,
-        &source_v1,
-        UserRecord {
-            tenant_id: "acme".to_string(),
-            user_id: "u002".to_string(),
-            status: "invited".to_string(),
-            display_name: "Grace".to_string(),
-        },
-    )?;
+    // Indexes may be added after the source map is populated.
+    let raw_users = engine.versioned_map(b"users");
+    raw_users.put(b"user-1", b"active|Ada")?;
+    raw_users.put(b"user-2", b"invited|Grace")?;
+    let users = engine.indexed_map(b"users", registry(1)?)?;
+    users.ensure_index(b"by-status")?;
+    users.ensure_index(b"by-status-name")?;
+    users.ensure_index(b"by-status-all")?;
 
-    let index_v1 = build_status_index(&prolly, &source_v1)?;
-    prolly.publish_named_root(&root_name("users/source"), &source_v1)?;
-    prolly.publish_named_root(&root_name("users/by-status"), &index_v1)?;
+    // Source and every active index advance in one strict transaction.
+    users.edit(|edit| {
+        edit.put(b"user-2", b"active|Grace");
+        edit.put(b"user-3", b"active|Lin");
+    })?;
+    let snapshot = users.snapshot()?;
+    assert_eq!(
+        snapshot.index(b"by-status")?.primary_keys(b"active")?,
+        vec![b"user-1".to_vec(), b"user-2".to_vec(), b"user-3".to_vec()]
+    );
+    assert_eq!(
+        snapshot.index(b"by-status-name")?.projected(b"active")?[0].1,
+        Some(b"Ada".to_vec())
+    );
+    assert_eq!(
+        snapshot.index(b"by-status-all")?.projected(b"active")?[0].1,
+        Some(b"active|Ada".to_vec())
+    );
+    assert_eq!(snapshot.index(b"by-status")?.records(b"active")?.len(), 3);
+    assert!(users
+        .verify_index(b"by-status", &snapshot.id().source_version)?
+        .is_valid());
 
-    let source_v2 = put_user(
-        &prolly,
-        &source_v1,
-        UserRecord {
-            tenant_id: "acme".to_string(),
-            user_id: "u002".to_string(),
-            status: "active".to_string(),
-            display_name: "Grace".to_string(),
-        },
-    )?;
-    let source_v2 = put_user(
-        &prolly,
-        &source_v2,
-        UserRecord {
-            tenant_id: "globex".to_string(),
-            user_id: "u003".to_string(),
-            status: "active".to_string(),
-            display_name: "Linus".to_string(),
-        },
-    )?;
+    // A greater generation shadow-builds and atomically replaces the old one.
+    users.replace_index(b"by-status", by_status(2)?)?;
+    users.keep_last(2)?;
+    let bundle = users.export_current()?;
 
-    let source_changes = prolly.diff(&source_v1, &source_v2)?;
-    assert_eq!(source_changes.len(), 2);
-    let index_v2 = apply_source_diff_to_status_index(&prolly, &index_v1, &source_changes)?;
-    let rebuilt_index_v2 = build_status_index(&prolly, &source_v2)?;
-    assert_eq!(index_v2, rebuilt_index_v2);
-
-    let acme_active = users_by_status(&prolly, &index_v2, "acme", "active")?;
-    let acme_invited = users_by_status(&prolly, &index_v2, "acme", "invited")?;
-    let globex_active = users_by_status(&prolly, &index_v2, "globex", "active")?;
-
-    assert_eq!(acme_active.len(), 2);
-    assert!(acme_invited.is_empty());
-    assert_eq!(globex_active.len(), 1);
+    // Import verifies all nodes and records before atomically publishing roots.
+    let replica_engine = Prolly::new(Arc::new(MemStore::new()), Config::default());
+    let replica = replica_engine.indexed_map(b"users", registry(2)?)?;
+    replica.import_current(&bundle, None)?;
+    assert_eq!(
+        replica
+            .snapshot()?
+            .index(b"by-status")?
+            .primary_keys(b"active")?
+            .len(),
+        3
+    );
 
     println!(
-        "applied {} source diffs into secondary index",
-        source_changes.len()
+        "verified IndexedMap with {} active indexes and {} bundled nodes",
+        users.health()?.active_indexes.len(),
+        bundle.node_count()
     );
     Ok(())
 }

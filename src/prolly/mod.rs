@@ -101,6 +101,9 @@ const STATS_FRONTIER_PREFETCH_PARALLELISM: usize = 16;
 #[cfg(feature = "async-store")]
 const ASYNC_NODE_PREFETCH_BATCH_SIZE: usize = 64;
 
+/// An owned key-value entry returned by ordered tree lookups.
+pub type KeyValue = (Vec<u8>, Vec<u8>);
+
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 fn current_unix_time_millis() -> u64 {
     js_sys::Date::now().max(0.0).min(u64::MAX as f64) as u64
@@ -149,6 +152,7 @@ pub mod range;
 pub mod rebalance;
 #[cfg(feature = "async-store")]
 pub mod remote;
+pub mod secondary_index;
 pub mod streaming;
 pub mod utils;
 
@@ -1109,12 +1113,12 @@ impl<S: Store> Prolly<S> {
     }
 
     /// Return the first key-value entry in key order.
-    pub fn first_entry(&self, tree: &Tree) -> Result<Option<(Vec<u8>, Vec<u8>)>, Error> {
+    pub fn first_entry(&self, tree: &Tree) -> Result<Option<KeyValue>, Error> {
         self.lower_bound(tree, &[])
     }
 
     /// Return the last key-value entry in key order.
-    pub fn last_entry(&self, tree: &Tree) -> Result<Option<(Vec<u8>, Vec<u8>)>, Error> {
+    pub fn last_entry(&self, tree: &Tree) -> Result<Option<KeyValue>, Error> {
         let Some(root_cid) = &tree.root else {
             return Ok(None);
         };
@@ -1135,11 +1139,7 @@ impl<S: Store> Prolly<S> {
     }
 
     /// Return the first entry whose key is greater than or equal to `key`.
-    pub fn lower_bound(
-        &self,
-        tree: &Tree,
-        key: &[u8],
-    ) -> Result<Option<(Vec<u8>, Vec<u8>)>, Error> {
+    pub fn lower_bound(&self, tree: &Tree, key: &[u8]) -> Result<Option<KeyValue>, Error> {
         match self.range(tree, key, None)?.next() {
             Some(entry) => entry.map(Some),
             None => Ok(None),
@@ -1147,11 +1147,7 @@ impl<S: Store> Prolly<S> {
     }
 
     /// Return the first entry whose key is strictly greater than `key`.
-    pub fn upper_bound(
-        &self,
-        tree: &Tree,
-        key: &[u8],
-    ) -> Result<Option<(Vec<u8>, Vec<u8>)>, Error> {
+    pub fn upper_bound(&self, tree: &Tree, key: &[u8]) -> Result<Option<KeyValue>, Error> {
         match self.range_after(tree, key, None)?.next() {
             Some(entry) => entry.map(Some),
             None => Ok(None),
@@ -1597,7 +1593,7 @@ impl<S: Store> Prolly<S> {
         start: &[u8],
         limit: usize,
     ) -> Result<range::ReversePage, Error> {
-        self.reverse_page_bounded(tree, cursor, start, None, limit)
+        self.reverse_range_page(tree, cursor, start, None, limit)
     }
 
     /// Read a bounded page over keys that start with `prefix` in descending key
@@ -1614,10 +1610,11 @@ impl<S: Store> Prolly<S> {
         limit: usize,
     ) -> Result<range::ReversePage, Error> {
         let (start, end) = key::prefix_range(prefix);
-        self.reverse_page_bounded(tree, cursor, &start, end.as_deref(), limit)
+        self.reverse_range_page(tree, cursor, &start, end.as_deref(), limit)
     }
 
-    fn reverse_page_bounded(
+    /// Read a bounded descending page over the exact half-open range `[start, end)`.
+    pub fn reverse_range_page(
         &self,
         tree: &Tree,
         cursor: &range::ReverseCursor,
@@ -5506,7 +5503,7 @@ where
         start: &[u8],
         limit: usize,
     ) -> Result<range::AsyncReversePage, Error> {
-        self.reverse_page_bounded(tree, cursor, start, None, limit)
+        self.reverse_range_page(tree, cursor, start, None, limit)
             .await
     }
 
@@ -5520,11 +5517,12 @@ where
         limit: usize,
     ) -> Result<range::AsyncReversePage, Error> {
         let (start, end) = key::prefix_range(prefix);
-        self.reverse_page_bounded(tree, cursor, &start, end.as_deref(), limit)
+        self.reverse_range_page(tree, cursor, &start, end.as_deref(), limit)
             .await
     }
 
-    async fn reverse_page_bounded(
+    /// Read a bounded async descending page over `[start, end)`.
+    pub async fn reverse_range_page(
         &self,
         tree: &Tree,
         cursor: &range::ReverseCursor,
@@ -7145,11 +7143,11 @@ where
         while start < node.len() {
             let remaining_chunks = num_chunks - chunks.len();
             let remaining_entries = node.len() - start;
-            let target_end = if remaining_chunks == 0 {
-                (start + remaining_entries).min(start + capacity)
-            } else {
-                start + (remaining_entries / remaining_chunks).max(1)
-            };
+            let target_size = remaining_entries
+                .checked_div(remaining_chunks)
+                .unwrap_or_else(|| remaining_entries.min(capacity))
+                .max(1);
+            let target_end = start + target_size;
 
             let max_end = (start + capacity).min(node.len());
             let min_end = start + 1;

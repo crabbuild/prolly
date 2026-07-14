@@ -14,8 +14,9 @@ use common::{
 };
 use futures_util::StreamExt as _;
 use prolly::{
-    AsyncBlobStore, AsyncProlly, BatchBuilder, BatchOp, BlobRef, BlobStore, Cid, Config,
-    CrdtConfig, CrdtResolution, DeletePolicy, Diff, Error, LargeValueConfig, MemBlobStore,
+    catalog_map_id, control_record_key, control_root_name, ActiveIndexControl, AsyncBlobStore,
+    AsyncProlly, BatchBuilder, BatchOp, BlobRef, BlobStore, Cid, Config, CrdtConfig,
+    CrdtResolution, DeletePolicy, Diff, Error, IndexControl, LargeValueConfig, MemBlobStore,
     MemBlobStoreError, MemStore, MemStoreError, MultiValueSet, Mutation, NamedRootRetention,
     NamedRootUpdate, Prolly, RangeCursor, Resolution, ReverseCursor, Store, SyncBlobStoreAsAsync,
     SyncStoreAsAsync, TimestampedValue, ValueRef,
@@ -83,6 +84,42 @@ fn async_versioned_map_supports_atomic_updates_pinned_reads_pages_and_proofs() {
         assert_eq!(event.previous, Some(second.id));
         assert_eq!(event.diffs.len(), 1);
         assert!(subscription.poll().await.unwrap().is_none());
+    });
+}
+
+#[test]
+fn async_raw_versioned_map_writes_observe_the_index_control_fence() {
+    block_on(async {
+        let store = Arc::new(MemStore::new());
+        let prolly = AsyncProlly::new(SyncStoreAsAsync::new(store), Config::default());
+        let map = prolly.versioned_map(b"users");
+        map.put(b"user-1", b"Ada").await.unwrap();
+
+        let control = IndexControl {
+            source_map_id: b"users".to_vec(),
+            catalog_map_id: catalog_map_id(b"users"),
+            active: vec![ActiveIndexControl {
+                name: b"by-status".to_vec(),
+                fingerprint: Cid([7; 32]),
+            }],
+        };
+        let control_tree = prolly
+            .put(
+                &prolly.create(),
+                control_record_key(),
+                control.to_bytes().unwrap(),
+            )
+            .await
+            .unwrap();
+        prolly
+            .publish_named_root(&control_root_name(b"users"), &control_tree)
+            .await
+            .unwrap();
+
+        assert!(matches!(
+            map.put(b"user-2", b"Grace").await,
+            Err(Error::IndexesRequireIndexedMap { map_id, .. }) if map_id == b"users"
+        ));
     });
 }
 
@@ -1360,7 +1397,7 @@ fn async_collect_stats_splits_wide_frontiers_for_batched_stores() {
 
     let expected = sync_prolly.collect_stats(&tree).unwrap();
     assert!(
-        expected.num_leaves as usize > EXPECTED_ASYNC_NODE_PREFETCH_BATCH_CAP,
+        expected.num_leaves > EXPECTED_ASYNC_NODE_PREFETCH_BATCH_CAP,
         "test fixture must create a frontier wider than the async prefetch cap"
     );
 

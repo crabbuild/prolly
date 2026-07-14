@@ -14,7 +14,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use super::error::{Error, Mutation};
 use super::manifest::{ManifestStore, ManifestUpdate, NamedRootUpdate, RootManifest};
-use super::store::{BatchOp, Store};
+use super::store::{BatchOp, OrderedBatchReadPlan, Store};
 use super::tree::Tree;
 use super::Prolly;
 #[cfg(feature = "async-store")]
@@ -122,7 +122,7 @@ pub enum TransactionUpdate {
         roots_written: usize,
     },
     /// A named-root condition failed; no staged writes were applied.
-    Conflict(TransactionConflict),
+    Conflict(Box<TransactionConflict>),
 }
 
 impl TransactionUpdate {
@@ -401,6 +401,14 @@ where
         }
         Ok(())
     }
+
+    fn batch_get_ordered(&self, keys: &[&[u8]]) -> Result<Vec<Option<Vec<u8>>>, Self::Error> {
+        overlay_batch_get_ordered(self.base, &self.state, keys)
+    }
+
+    fn prefers_batch_reads(&self) -> bool {
+        self.base.prefers_batch_reads()
+    }
 }
 
 impl<S> ManifestStore for TransactionOverlayStore<'_, S>
@@ -525,6 +533,53 @@ where
         }
         Ok(())
     }
+
+    fn batch_get_ordered(&self, keys: &[&[u8]]) -> Result<Vec<Option<Vec<u8>>>, Self::Error> {
+        overlay_batch_get_ordered(&self.base, &self.state, keys)
+    }
+
+    fn prefers_batch_reads(&self) -> bool {
+        self.base.prefers_batch_reads()
+    }
+}
+
+fn overlay_batch_get_ordered<S: Store>(
+    base: &S,
+    state: &Arc<Mutex<TransactionState>>,
+    keys: &[&[u8]],
+) -> Result<Vec<Option<Vec<u8>>>, TransactionOverlayError> {
+    let staged = {
+        let state = state.lock().map_err(TransactionOverlayError::poisoned)?;
+        keys.iter()
+            .map(|key| state.node_writes.get(*key).cloned())
+            .collect::<Vec<_>>()
+    };
+
+    let mut results = vec![None; keys.len()];
+    let mut missing_keys = Vec::new();
+    let mut missing_positions = Vec::new();
+    for (position, staged_value) in staged.into_iter().enumerate() {
+        match staged_value {
+            Some(value) => results[position] = value,
+            None => {
+                missing_keys.push(keys[position]);
+                missing_positions.push(position);
+            }
+        }
+    }
+    if missing_keys.is_empty() {
+        return Ok(results);
+    }
+
+    let plan = OrderedBatchReadPlan::new(&missing_keys);
+    let unique_values = base
+        .batch_get_ordered_unique(plan.unique_keys())
+        .map_err(TransactionOverlayError::store)?;
+    let missing_values = plan.expand_owned(unique_values);
+    for (position, value) in missing_positions.into_iter().zip(missing_values) {
+        results[position] = value;
+    }
+    Ok(results)
 }
 
 impl<S> ManifestStore for OwnedTransactionOverlayStore<S>
@@ -657,6 +712,51 @@ where
         }
         Ok(())
     }
+
+    async fn batch_get_ordered(&self, keys: &[&[u8]]) -> Result<Vec<Option<Vec<u8>>>, Self::Error> {
+        let staged = {
+            let state = self.lock()?;
+            keys.iter()
+                .map(|key| state.node_writes.get(*key).cloned())
+                .collect::<Vec<_>>()
+        };
+
+        let mut results = vec![None; keys.len()];
+        let mut missing_keys = Vec::new();
+        let mut missing_positions = Vec::new();
+        for (position, staged_value) in staged.into_iter().enumerate() {
+            match staged_value {
+                Some(value) => results[position] = value,
+                None => {
+                    missing_keys.push(keys[position]);
+                    missing_positions.push(position);
+                }
+            }
+        }
+        if missing_keys.is_empty() {
+            return Ok(results);
+        }
+
+        let plan = OrderedBatchReadPlan::new(&missing_keys);
+        let unique_values = self
+            .base
+            .batch_get_ordered_unique(plan.unique_keys())
+            .await
+            .map_err(TransactionOverlayError::store)?;
+        let missing_values = plan.expand_owned(unique_values);
+        for (position, value) in missing_positions.into_iter().zip(missing_values) {
+            results[position] = value;
+        }
+        Ok(results)
+    }
+
+    fn prefers_batch_reads(&self) -> bool {
+        self.base.prefers_batch_reads()
+    }
+
+    fn read_parallelism(&self) -> usize {
+        self.base.read_parallelism()
+    }
 }
 
 #[cfg(feature = "async-store")]
@@ -781,6 +881,14 @@ where
     /// Apply a batch of logical map mutations inside the transaction.
     pub fn batch(&self, tree: &Tree, mutations: Vec<Mutation>) -> Result<Tree, Error> {
         self.manager.batch(tree, mutations)
+    }
+
+    /// Stage verified content-addressed node bytes for an atomic coordinator import.
+    pub(crate) fn stage_node_bytes(&self, entries: &[(&[u8], &[u8])]) -> Result<(), Error> {
+        self.manager
+            .store()
+            .batch_put(entries)
+            .map_err(|error| Error::Store(Box::new(error)))
     }
 
     /// Load a named root and add it to the transaction read set.
@@ -1201,5 +1309,161 @@ where
             TransactionUpdate::Applied { .. } => Ok(value),
             TransactionUpdate::Conflict(conflict) => Err(Error::TransactionConflict(conflict)),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::prolly::store::{MemStore, MemStoreError};
+    use std::collections::HashMap;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    #[cfg(feature = "async-store")]
+    use std::{
+        future::Future,
+        task::{Context, Poll},
+    };
+
+    #[derive(Clone, Default)]
+    struct CountingBatchStore {
+        inner: Arc<MemStore>,
+        point_reads: Arc<AtomicUsize>,
+        batch_reads: Arc<AtomicUsize>,
+        batch_keys: Arc<AtomicUsize>,
+    }
+
+    impl Store for CountingBatchStore {
+        type Error = MemStoreError;
+
+        fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
+            self.point_reads.fetch_add(1, Ordering::Relaxed);
+            self.inner.get(key)
+        }
+
+        fn put(&self, key: &[u8], value: &[u8]) -> Result<(), Self::Error> {
+            self.inner.put(key, value)
+        }
+
+        fn delete(&self, key: &[u8]) -> Result<(), Self::Error> {
+            self.inner.delete(key)
+        }
+
+        fn batch(&self, ops: &[BatchOp]) -> Result<(), Self::Error> {
+            self.inner.batch(ops)
+        }
+
+        fn batch_get_ordered(&self, keys: &[&[u8]]) -> Result<Vec<Option<Vec<u8>>>, Self::Error> {
+            self.batch_reads.fetch_add(1, Ordering::Relaxed);
+            self.batch_keys.fetch_add(keys.len(), Ordering::Relaxed);
+            self.inner.batch_get_ordered(keys)
+        }
+
+        fn batch_get(&self, keys: &[&[u8]]) -> Result<HashMap<Vec<u8>, Vec<u8>>, Self::Error> {
+            self.inner.batch_get(keys)
+        }
+
+        fn prefers_batch_reads(&self) -> bool {
+            true
+        }
+    }
+
+    fn seed(store: &CountingBatchStore) {
+        store.inner.put(b"a", b"base-a").unwrap();
+        store.inner.put(b"b", b"base-b").unwrap();
+        store.inner.put(b"c", b"base-c").unwrap();
+    }
+
+    fn assert_overlay_reads<S: Store<Error = TransactionOverlayError>>(overlay: &S) {
+        overlay.put(b"a", b"staged-a").unwrap();
+        overlay.delete(b"b").unwrap();
+        let values = overlay
+            .batch_get_ordered(&[b"a", b"c", b"a", b"b", b"missing"])
+            .unwrap();
+        assert_eq!(
+            values,
+            vec![
+                Some(b"staged-a".to_vec()),
+                Some(b"base-c".to_vec()),
+                Some(b"staged-a".to_vec()),
+                None,
+                None,
+            ]
+        );
+    }
+
+    #[test]
+    fn borrowed_overlay_batch_reads_preserve_order_and_staged_values() {
+        let base = CountingBatchStore::default();
+        seed(&base);
+        let overlay =
+            TransactionOverlayStore::new(&base, Arc::new(Mutex::new(TransactionState::default())));
+        assert_overlay_reads(&overlay);
+        assert_eq!(base.point_reads.load(Ordering::Relaxed), 0);
+        assert_eq!(base.batch_reads.load(Ordering::Relaxed), 1);
+        assert_eq!(base.batch_keys.load(Ordering::Relaxed), 2);
+    }
+
+    #[test]
+    fn owned_overlay_batch_reads_preserve_order_and_staged_values() {
+        let base = CountingBatchStore::default();
+        seed(&base);
+        let counters = base.clone();
+        let overlay = OwnedTransactionOverlayStore::new(
+            base,
+            Arc::new(Mutex::new(TransactionState::default())),
+        );
+        assert_overlay_reads(&overlay);
+        assert_eq!(counters.point_reads.load(Ordering::Relaxed), 0);
+        assert_eq!(counters.batch_reads.load(Ordering::Relaxed), 1);
+        assert_eq!(counters.batch_keys.load(Ordering::Relaxed), 2);
+    }
+
+    #[cfg(feature = "async-store")]
+    fn block_on<F: Future>(future: F) -> F::Output {
+        let waker = futures_util::task::noop_waker();
+        let mut context = Context::from_waker(&waker);
+        let mut future = Box::pin(future);
+        loop {
+            match future.as_mut().poll(&mut context) {
+                Poll::Ready(value) => return value,
+                Poll::Pending => std::thread::yield_now(),
+            }
+        }
+    }
+
+    #[cfg(feature = "async-store")]
+    #[test]
+    fn async_overlay_batch_reads_use_one_base_batch_without_holding_staged_state() {
+        use crate::prolly::store::SyncStoreAsAsync;
+
+        let base = CountingBatchStore::default();
+        seed(&base);
+        let counters = base.clone();
+        let base = SyncStoreAsAsync::new(base);
+        let overlay = AsyncTransactionOverlayStore::new(
+            &base,
+            Arc::new(Mutex::new(TransactionState::default())),
+        );
+        block_on(async {
+            overlay.put(b"a", b"staged-a").await.unwrap();
+            overlay.delete(b"b").await.unwrap();
+            let values = overlay
+                .batch_get_ordered(&[b"a", b"c", b"a", b"b", b"missing"])
+                .await
+                .unwrap();
+            assert_eq!(
+                values,
+                vec![
+                    Some(b"staged-a".to_vec()),
+                    Some(b"base-c".to_vec()),
+                    Some(b"staged-a".to_vec()),
+                    None,
+                    None,
+                ]
+            );
+        });
+        assert_eq!(counters.point_reads.load(Ordering::Relaxed), 0);
+        assert_eq!(counters.batch_reads.load(Ordering::Relaxed), 1);
+        assert_eq!(counters.batch_keys.load(Ordering::Relaxed), 2);
     }
 }

@@ -69,3 +69,7 @@ harness = false
 [[bench]]
 name = "store_diff_merge_bench"
 harness = false
+
+[[bench]]
+name = "secondary_index_bench"
+harness = false

@@ -266,10 +266,12 @@ impl TransactionalStore for MemStore {
         for condition in root_conditions {
             let current = roots.get(&condition.name).cloned();
             if current != condition.expected {
-                return Ok(TransactionUpdate::Conflict(TransactionConflict::new(
-                    condition.name.clone(),
-                    condition.expected.clone(),
-                    current,
+                return Ok(TransactionUpdate::Conflict(Box::new(
+                    TransactionConflict::new(
+                        condition.name.clone(),
+                        condition.expected.clone(),
+                        current,
+                    ),
                 )));
             }
         }

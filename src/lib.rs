@@ -304,8 +304,8 @@ pub use prolly::gc::{
     BlobGcPlan, BlobGcReachability, BlobGcSweep, GcPlan, GcReachability, GcSweep,
 };
 pub use prolly::key::{
-    debug_key, decode_segments, encode_segment, i128_key, i64_key, prefix_end, prefix_range,
-    timestamp_millis_key, u128_key, u64_key, KeyBuilder, KeyDecodeError,
+    debug_key, decode_segments, encode_segment, encode_segment_prefix, i128_key, i64_key,
+    prefix_end, prefix_range, timestamp_millis_key, u128_key, u64_key, KeyBuilder, KeyDecodeError,
 };
 #[cfg(feature = "async-store")]
 pub use prolly::manifest::{AsyncManifestStore, AsyncManifestStoreScan};
@@ -331,12 +331,29 @@ pub use prolly::proof::{
 pub use prolly::range::{
     CursorWindow, RangeCursor, RangeIter, RangePage, ReverseCursor, ReversePage,
 };
+pub use prolly::secondary_index::{
+    catalog_checkpoint_key, catalog_checkpoints_prefix, catalog_current_key,
+    catalog_descriptor_key, catalog_format_key, catalog_map_id, catalog_retired_key,
+    control_record_key, control_root_name, decode_physical_index_key, descriptor_fingerprint,
+    index_map_id, physical_index_key, term_bounds_exact, term_bounds_prefix, term_bounds_range,
+    ActiveIndexControl, ActiveIndexHealth, DecodedPhysicalIndexKey, IndexBuildResult,
+    IndexCheckpoint, IndexControl, IndexProjection, IndexValue, IndexVerification,
+    IndexedHeadRecord, IndexedMap, IndexedMapEditor, IndexedMapHealth, IndexedMapMetricsSnapshot,
+    IndexedMapUpdate, IndexedRetentionResult, IndexedSnapshot, IndexedSnapshotBundle,
+    IndexedSnapshotBundleIndex, IndexedSnapshotBundleSummary, IndexedSnapshotBundleVerification,
+    IndexedSnapshotId, IndexedSourceRecord, IndexedVersion, ProjectedIndexEntry, SecondaryIndex,
+    SecondaryIndexBuilder, SecondaryIndexCursor, SecondaryIndexDescriptor, SecondaryIndexDirection,
+    SecondaryIndexEntry, SecondaryIndexError, SecondaryIndexExtractor, SecondaryIndexLimits,
+    SecondaryIndexMatch, SecondaryIndexPage, SecondaryIndexRegistry, SecondaryIndexSnapshot,
+    TermBounds, INDEXED_SNAPSHOT_BUNDLE_FORMAT_VERSION, INDEX_PHYSICAL_LAYOUT_VERSION,
+    SECONDARY_INDEX_FORMAT_VERSION,
+};
 pub use prolly::snapshot::{
     snapshot_id_from_name, snapshot_root_name, SnapshotManager, SnapshotNamespace, SnapshotRoot,
     SnapshotSelection, SNAPSHOT_BRANCH_PREFIX, SNAPSHOT_CHECKPOINT_PREFIX, SNAPSHOT_TAG_PREFIX,
 };
 pub use prolly::streaming::{DefaultStreamingDiffer, StreamingDiffer};
-pub use prolly::{ChangedSpan, ChangedSpanHint, Prolly, ProllyMetricsSnapshot};
+pub use prolly::{ChangedSpan, ChangedSpanHint, KeyValue, Prolly, ProllyMetricsSnapshot};
 
 #[cfg(feature = "async-store")]
 pub use prolly::range::{AsyncRangeIter, AsyncRangePage, AsyncReversePage};

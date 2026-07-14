@@ -15,13 +15,15 @@ use std::marker::PhantomData;
 
 use super::cid::Cid;
 use super::error::{Diff, Error, Mutation};
+use super::key::decode_segments;
 use super::manifest::{ManifestStore, ManifestStoreScan, NamedRootRetention, RootManifest};
 use super::range::{CursorWindow, RangeCursor, RangeIter, RangePage, ReverseCursor, ReversePage};
+use super::secondary_index::{control_record_key, control_root_name, IndexControl};
 use super::stats::TreeStats;
 use super::store::Store;
 use super::transaction::{TransactionConflict, TransactionUpdate, TransactionalStore};
 use super::tree::Tree;
-use super::{current_unix_time_millis, Prolly};
+use super::{current_unix_time_millis, KeyValue, Prolly};
 
 /// Root namespace reserved for built-in versioned maps.
 pub const VERSIONED_MAP_ROOT_PREFIX: &[u8] = b"maps/versioned/";
@@ -32,6 +34,172 @@ pub const DEFAULT_VERSIONED_MAP_RETRIES: usize = 8;
 const HEAD_SUFFIX: &[u8] = b"/head";
 const VERSIONS_SUFFIX: &[u8] = b"/versions/";
 const VERSIONED_MAP_BACKUP_FORMAT_VERSION: u64 = 1;
+
+#[allow(dead_code)]
+pub(crate) enum MapWriteAuthority<'a> {
+    Unmanaged,
+    IndexMaintenance(&'a IndexMaintenancePermit),
+}
+
+#[cfg(feature = "async-store")]
+async fn guard_async_managed_map_write<S>(
+    tx: &super::transaction::AsyncProllyTransaction<'_, S>,
+    map_id: &[u8],
+    authority: MapWriteAuthority<'_>,
+) -> Result<Option<IndexControl>, Error>
+where
+    S: super::store::AsyncStore
+        + super::manifest::AsyncManifestStore
+        + super::transaction::AsyncTransactionalStore,
+    <S as super::store::AsyncStore>::Error: Send + Sync,
+    <S as super::manifest::AsyncManifestStore>::Error: Send + Sync,
+{
+    let indexed_source = indexed_internal_source_id(map_id);
+    let control_source = indexed_source.as_deref().unwrap_or(map_id);
+    let control_name = control_root_name(control_source);
+    let Some(control_tree) = tx.load_named_root(&control_name).await? else {
+        return match authority {
+            MapWriteAuthority::Unmanaged if indexed_source.is_none() => Ok(None),
+            MapWriteAuthority::Unmanaged => Err(Error::IndexesRequireIndexedMap {
+                map_id: map_id.to_vec(),
+                active_indexes: Vec::new(),
+            }),
+            MapWriteAuthority::IndexMaintenance(permit) if permit.map_id == map_id => Ok(None),
+            MapWriteAuthority::IndexMaintenance(_) => Err(Error::InvalidVersionedMap(
+                "index maintenance permit belongs to another managed map".to_string(),
+            )),
+        };
+    };
+    let bytes = tx
+        .get(&control_tree, &control_record_key())
+        .await?
+        .ok_or_else(|| {
+            Error::InvalidVersionedMap(
+                "secondary-index control tree is missing its canonical record".to_string(),
+            )
+        })?;
+    let control = IndexControl::from_bytes(&bytes)?;
+    if control.source_map_id != control_source {
+        return Err(Error::InvalidVersionedMap(
+            "secondary-index control record belongs to another source map".to_string(),
+        ));
+    }
+    match authority {
+        MapWriteAuthority::Unmanaged => Err(Error::IndexesRequireIndexedMap {
+            map_id: map_id.to_vec(),
+            active_indexes: control
+                .active
+                .iter()
+                .map(|entry| entry.name.clone())
+                .collect(),
+        }),
+        MapWriteAuthority::IndexMaintenance(permit) => {
+            let actual = control.fingerprint()?;
+            if permit.map_id != map_id || permit.control_fingerprint != actual {
+                return Err(Error::transaction_conflict(TransactionConflict::new(
+                    control_name,
+                    None,
+                    None,
+                )));
+            }
+            Ok(Some(control))
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct IndexMaintenancePermit {
+    map_id: Vec<u8>,
+    control_fingerprint: Cid,
+}
+
+impl IndexMaintenancePermit {
+    #[allow(dead_code)]
+    pub(crate) fn new(map_id: Vec<u8>, control_fingerprint: Cid) -> Self {
+        Self {
+            map_id,
+            control_fingerprint,
+        }
+    }
+}
+
+pub(crate) fn guard_managed_map_write<S>(
+    tx: &super::transaction::ProllyTransaction<'_, S>,
+    map_id: &[u8],
+    authority: MapWriteAuthority<'_>,
+) -> Result<Option<IndexControl>, Error>
+where
+    S: Store + ManifestStore + TransactionalStore,
+{
+    let indexed_source = indexed_internal_source_id(map_id);
+    let control_source = indexed_source.as_deref().unwrap_or(map_id);
+    let control_name = control_root_name(control_source);
+    let Some(control_tree) = tx.load_named_root(&control_name)? else {
+        return match authority {
+            MapWriteAuthority::Unmanaged if indexed_source.is_none() => Ok(None),
+            MapWriteAuthority::Unmanaged => Err(Error::IndexesRequireIndexedMap {
+                map_id: map_id.to_vec(),
+                active_indexes: Vec::new(),
+            }),
+            MapWriteAuthority::IndexMaintenance(permit) if permit.map_id == map_id => Ok(None),
+            MapWriteAuthority::IndexMaintenance(_) => Err(Error::InvalidVersionedMap(
+                "index maintenance permit belongs to another managed map".to_string(),
+            )),
+        };
+    };
+    let bytes = tx
+        .get(&control_tree, &control_record_key())?
+        .ok_or_else(|| {
+            Error::InvalidVersionedMap(
+                "secondary-index control tree is missing its canonical record".to_string(),
+            )
+        })?;
+    let control = IndexControl::from_bytes(&bytes)?;
+    if control.source_map_id != control_source {
+        return Err(Error::InvalidVersionedMap(
+            "secondary-index control record belongs to another source map".to_string(),
+        ));
+    }
+    match authority {
+        MapWriteAuthority::Unmanaged => Err(Error::IndexesRequireIndexedMap {
+            map_id: map_id.to_vec(),
+            active_indexes: control
+                .active
+                .iter()
+                .map(|entry| entry.name.clone())
+                .collect(),
+        }),
+        MapWriteAuthority::IndexMaintenance(permit) => {
+            let actual = control.fingerprint()?;
+            if permit.map_id != map_id || permit.control_fingerprint != actual {
+                return Err(Error::transaction_conflict(TransactionConflict::new(
+                    control_name,
+                    None,
+                    None,
+                )));
+            }
+            Ok(Some(control))
+        }
+    }
+}
+
+fn indexed_internal_source_id(map_id: &[u8]) -> Option<Vec<u8>> {
+    let segments = decode_segments(map_id).ok()?;
+    match segments.as_slice() {
+        [system, kind, source] if system == b"system" && kind == b"secondary-index-catalog" => {
+            Some(source.clone())
+        }
+        [system, kind, source, name, fingerprint]
+            if system == b"system"
+                && kind == b"secondary-index"
+                && !name.is_empty()
+                && fingerprint.len() == 32 =>
+        {
+            Some(source.clone())
+        }
+        _ => None,
+    }
+}
 
 /// Metadata attached when authenticating a snapshot proof bundle.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -104,6 +272,10 @@ impl MapVersionId {
     /// Consume this identifier and return its underlying CID.
     pub fn into_cid(self) -> Cid {
         self.0
+    }
+
+    pub(crate) fn from_cid(cid: Cid) -> Self {
+        Self(cid)
     }
 }
 
@@ -659,22 +831,22 @@ impl<'a, S: Store> MapSnapshot<'a, S> {
     }
 
     /// Return the first entry in key order.
-    pub fn first_entry(&self) -> Result<Option<(Vec<u8>, Vec<u8>)>, Error> {
+    pub fn first_entry(&self) -> Result<Option<KeyValue>, Error> {
         self.prolly.first_entry(self.tree())
     }
 
     /// Return the last entry in key order.
-    pub fn last_entry(&self) -> Result<Option<(Vec<u8>, Vec<u8>)>, Error> {
+    pub fn last_entry(&self) -> Result<Option<KeyValue>, Error> {
         self.prolly.last_entry(self.tree())
     }
 
     /// Return the first entry whose key is greater than or equal to `key`.
-    pub fn lower_bound(&self, key: &[u8]) -> Result<Option<(Vec<u8>, Vec<u8>)>, Error> {
+    pub fn lower_bound(&self, key: &[u8]) -> Result<Option<KeyValue>, Error> {
         self.prolly.lower_bound(self.tree(), key)
     }
 
     /// Return the first entry whose key is strictly greater than `key`.
-    pub fn upper_bound(&self, key: &[u8]) -> Result<Option<(Vec<u8>, Vec<u8>)>, Error> {
+    pub fn upper_bound(&self, key: &[u8]) -> Result<Option<KeyValue>, Error> {
         self.prolly.upper_bound(self.tree(), key)
     }
 
@@ -1258,6 +1430,14 @@ where
         }
     }
 
+    pub(crate) fn raw_transaction(&self) -> &super::transaction::ProllyTransaction<'engine, S> {
+        self.tx
+    }
+
+    pub(crate) fn stage_index_nodes(&self, entries: &[(&[u8], &[u8])]) -> Result<(), Error> {
+        self.tx.stage_node_bytes(entries)
+    }
+
     /// Load the staged or original head for one map.
     pub fn head(&self, map_id: impl AsRef<[u8]>) -> Result<Option<MapVersion>, Error> {
         let (_, head_name, _) = versioned_map_names(map_id.as_ref());
@@ -1288,7 +1468,118 @@ where
         map_id: impl AsRef<[u8]>,
         mutations: Vec<Mutation>,
     ) -> Result<MapVersion, Error> {
-        let map_id = map_id.as_ref();
+        self.apply_with_authority(map_id.as_ref(), mutations, MapWriteAuthority::Unmanaged)
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn apply_index_maintenance(
+        &self,
+        permit: &IndexMaintenancePermit,
+        mutations: Vec<Mutation>,
+    ) -> Result<MapVersion, Error> {
+        self.apply_with_authority(
+            &permit.map_id,
+            mutations,
+            MapWriteAuthority::IndexMaintenance(permit),
+        )
+    }
+
+    pub(crate) fn publish_tree_index_maintenance(
+        &self,
+        permit: &IndexMaintenancePermit,
+        expected: Option<&MapVersionId>,
+        tree: &Tree,
+    ) -> Result<VersionedMapUpdate, Error> {
+        let map_id = permit.map_id.as_slice();
+        guard_managed_map_write(self.tx, map_id, MapWriteAuthority::IndexMaintenance(permit))?;
+        let (_, head_name, mut versions_prefix) = versioned_map_names(map_id);
+        let current_tree = self.tx.load_named_root(&head_name)?;
+        let current_id = current_tree
+            .as_ref()
+            .map(MapVersionId::for_tree)
+            .transpose()?;
+        if current_id.as_ref() != expected {
+            return Ok(VersionedMapUpdate::Conflict {
+                current: current_tree
+                    .map(|tree| MapVersion::new(tree, None, true))
+                    .transpose()?,
+            });
+        }
+        if current_tree.as_ref() == Some(tree) {
+            return Ok(VersionedMapUpdate::Unchanged {
+                current: current_tree
+                    .map(|tree| MapVersion::new(tree, None, true))
+                    .transpose()?,
+            });
+        }
+
+        let id = MapVersionId::for_tree(tree)?;
+        versions_prefix.extend_from_slice(id.as_cid().as_bytes());
+        match self.tx.load_named_root(&versions_prefix)? {
+            Some(existing) if existing != *tree => {
+                return Err(Error::InvalidVersionedMap(format!(
+                    "content identifier collision for indexed transaction version {id}"
+                )));
+            }
+            Some(_) => {}
+            None => self.tx.publish_named_root_at_millis(
+                &versions_prefix,
+                tree,
+                self.timestamp_millis,
+            )?,
+        }
+        self.tx
+            .publish_named_root_at_millis(&head_name, tree, self.timestamp_millis)?;
+        Ok(VersionedMapUpdate::Applied {
+            previous: current_id,
+            current: MapVersion {
+                id,
+                tree: tree.clone(),
+                created_at_millis: Some(self.timestamp_millis),
+                is_head: true,
+            },
+        })
+    }
+
+    /// Publish only an immutable indexed-map version root without moving its head.
+    pub(crate) fn publish_version_index_maintenance(
+        &self,
+        permit: &IndexMaintenancePermit,
+        tree: &Tree,
+    ) -> Result<MapVersion, Error> {
+        let map_id = permit.map_id.as_slice();
+        guard_managed_map_write(self.tx, map_id, MapWriteAuthority::IndexMaintenance(permit))?;
+        let (_, _, mut versions_prefix) = versioned_map_names(map_id);
+        let id = MapVersionId::for_tree(tree)?;
+        versions_prefix.extend_from_slice(id.as_cid().as_bytes());
+        match self.tx.load_named_root(&versions_prefix)? {
+            Some(existing) if existing != *tree => {
+                return Err(Error::InvalidVersionedMap(format!(
+                    "content identifier collision for indexed immutable version {id}"
+                )));
+            }
+            Some(_) => {}
+            None => self.tx.publish_named_root_at_millis(
+                &versions_prefix,
+                tree,
+                self.timestamp_millis,
+            )?,
+        }
+        Ok(MapVersion {
+            id,
+            tree: tree.clone(),
+            created_at_millis: Some(self.timestamp_millis),
+            is_head: false,
+        })
+    }
+
+    fn apply_with_authority(
+        &self,
+        map_id: &[u8],
+        mutations: Vec<Mutation>,
+        authority: MapWriteAuthority<'_>,
+    ) -> Result<MapVersion, Error> {
+        guard_managed_map_write(self.tx, map_id, authority)?;
         let (_, head_name, versions_prefix) = versioned_map_names(map_id);
         let current = self.tx.load_named_root(&head_name)?;
         let base = current.clone().unwrap_or_else(|| self.tx.create());
@@ -2102,6 +2393,7 @@ where
         let mut last_conflict = None;
         for _ in 0..DEFAULT_VERSIONED_MAP_RETRIES {
             let tx = self.prolly.begin_transaction()?;
+            guard_async_managed_map_write(&tx, &self.id, MapWriteAuthority::Unmanaged).await?;
             let current = tx.load_named_root(&self.head_name).await?;
             let base = current.clone().unwrap_or_else(|| tx.create());
             let next = tx.batch(&base, mutations.clone()).await?;
@@ -2141,10 +2433,10 @@ where
                         is_head: true,
                     });
                 }
-                TransactionUpdate::Conflict(conflict) => last_conflict = Some(conflict),
+                TransactionUpdate::Conflict(conflict) => last_conflict = Some(*conflict),
             }
         }
-        Err(Error::TransactionConflict(
+        Err(Error::transaction_conflict(
             last_conflict.expect("retry loop records a conflict before exhaustion"),
         ))
     }
@@ -2314,6 +2606,7 @@ where
 
         for _ in 0..DEFAULT_VERSIONED_MAP_RETRIES {
             let tx = self.prolly.begin_transaction()?;
+            guard_managed_map_write(&tx, &self.id, MapWriteAuthority::Unmanaged)?;
             let current = tx.load_named_root(&self.head_name)?;
             if current.as_ref() == Some(&tree) {
                 tx.rollback();
@@ -2345,11 +2638,11 @@ where
                         is_head: true,
                     });
                 }
-                TransactionUpdate::Conflict(conflict) => last_conflict = Some(conflict),
+                TransactionUpdate::Conflict(conflict) => last_conflict = Some(*conflict),
             }
         }
 
-        Err(Error::TransactionConflict(
+        Err(Error::transaction_conflict(
             last_conflict.expect("retry loop records a conflict before exhaustion"),
         ))
     }
@@ -2374,6 +2667,7 @@ where
         }
 
         let tx = self.prolly.begin_transaction()?;
+        guard_managed_map_write(&tx, &self.id, MapWriteAuthority::Unmanaged)?;
         if tx.load_named_root(&self.head_name)?.is_some() {
             tx.rollback();
             return Err(Error::InvalidVersionedMap(
@@ -2448,7 +2742,7 @@ where
                 UpdateAttempt::Conflict(conflict) => last_conflict = Some(conflict),
             }
         }
-        Err(Error::TransactionConflict(
+        Err(Error::transaction_conflict(
             last_conflict.expect("retry loop records a conflict before exhaustion"),
         ))
     }
@@ -2680,6 +2974,7 @@ where
 
         for _ in 0..DEFAULT_VERSIONED_MAP_RETRIES {
             let tx = self.prolly.begin_transaction()?;
+            guard_managed_map_write(&tx, &self.id, MapWriteAuthority::Unmanaged)?;
             let current = tx.load_named_root(&self.head_name)?;
             if current.as_ref() == Some(&target.tree) {
                 return Ok(MapVersion {
@@ -2695,11 +2990,11 @@ where
                         ..target
                     });
                 }
-                TransactionUpdate::Conflict(conflict) => last_conflict = Some(conflict),
+                TransactionUpdate::Conflict(conflict) => last_conflict = Some(*conflict),
             }
         }
 
-        Err(Error::TransactionConflict(
+        Err(Error::transaction_conflict(
             last_conflict.expect("retry loop records a conflict before exhaustion"),
         ))
     }
@@ -2711,6 +3006,7 @@ where
         timestamp_millis: u64,
     ) -> Result<UpdateAttempt, Error> {
         let tx = self.prolly.begin_transaction()?;
+        guard_managed_map_write(&tx, &self.id, MapWriteAuthority::Unmanaged)?;
         let current_tree = tx.load_named_root(&self.head_name)?;
         let current_id = current_tree
             .as_ref()
@@ -2741,7 +3037,7 @@ where
             });
             return match tx.commit()? {
                 TransactionUpdate::Applied { .. } => Ok(UpdateAttempt::Unchanged(current)),
-                TransactionUpdate::Conflict(conflict) => Ok(UpdateAttempt::Conflict(conflict)),
+                TransactionUpdate::Conflict(conflict) => Ok(UpdateAttempt::Conflict(*conflict)),
             };
         }
 
@@ -2772,7 +3068,7 @@ where
                     is_head: true,
                 },
             }),
-            TransactionUpdate::Conflict(conflict) => Ok(UpdateAttempt::Conflict(conflict)),
+            TransactionUpdate::Conflict(conflict) => Ok(UpdateAttempt::Conflict(*conflict)),
         }
     }
 
@@ -2783,6 +3079,7 @@ where
         timestamp_millis: u64,
     ) -> Result<VersionedMapUpdate, Error> {
         let tx = self.prolly.begin_transaction()?;
+        guard_managed_map_write(&tx, &self.id, MapWriteAuthority::Unmanaged)?;
         let current_tree = tx.load_named_root(&self.head_name)?;
         let current_id = current_tree
             .as_ref()
@@ -2924,6 +3221,7 @@ where
 
         for _ in 0..DEFAULT_VERSIONED_MAP_RETRIES {
             let tx = self.prolly.begin_transaction()?;
+            guard_managed_map_write(&tx, &self.id, MapWriteAuthority::Unmanaged)?;
             let Some(head_tree) = tx.load_named_root(&self.head_name)? else {
                 tx.rollback();
                 let versions = self.versions()?;
@@ -2974,11 +3272,11 @@ where
                 TransactionUpdate::Applied { .. } => {
                     return Ok(VersionPruneResult { retained, removed });
                 }
-                TransactionUpdate::Conflict(conflict) => last_conflict = Some(conflict),
+                TransactionUpdate::Conflict(conflict) => last_conflict = Some(*conflict),
             }
         }
 
-        Err(Error::TransactionConflict(
+        Err(Error::transaction_conflict(
             last_conflict.expect("retry loop records a conflict before exhaustion"),
         ))
     }
@@ -3190,4 +3488,47 @@ fn versioned_map_names(id: &[u8]) -> (Vec<u8>, Vec<u8>, Vec<u8>) {
     let mut versions_prefix = root_prefix.clone();
     versions_prefix.extend_from_slice(VERSIONS_SUFFIX);
     (root_prefix, head_name, versions_prefix)
+}
+
+#[cfg(test)]
+mod index_fence_tests {
+    use super::*;
+    use crate::prolly::config::Config;
+    use crate::prolly::secondary_index::{
+        catalog_map_id, control_record_key, control_root_name, ActiveIndexControl, IndexControl,
+    };
+    use crate::prolly::store::MemStore;
+
+    #[test]
+    fn absent_control_read_conflicts_with_later_activation() {
+        let engine = Prolly::new(MemStore::new(), Config::default());
+        let tx = engine.begin_transaction().unwrap();
+        guard_managed_map_write(&tx, b"users", MapWriteAuthority::Unmanaged).unwrap();
+
+        let control = IndexControl {
+            source_map_id: b"users".to_vec(),
+            catalog_map_id: catalog_map_id(b"users"),
+            active: vec![ActiveIndexControl {
+                name: b"by-status".to_vec(),
+                fingerprint: Cid([7; 32]),
+            }],
+        };
+        let tree = engine
+            .put(
+                &engine.create(),
+                control_record_key(),
+                control.to_bytes().unwrap(),
+            )
+            .unwrap();
+        engine
+            .publish_named_root(&control_root_name(b"users"), &tree)
+            .unwrap();
+
+        let update = tx.commit().unwrap();
+        assert!(matches!(
+            update,
+            TransactionUpdate::Conflict(conflict)
+                if conflict.name == control_root_name(b"users")
+        ));
+    }
 }
