@@ -37,8 +37,8 @@ if ! grep -q 'name = "sqlite_workload_bench"' "$BASELINE_ROOT/stores/prolly-stor
     printf '\n[[bench]]\nname = "sqlite_workload_bench"\nharness = false\n' >>"$BASELINE_ROOT/stores/prolly-store-sqlite/Cargo.toml"
 fi
 
-current_harness_hash=$(shasum -a 256 "$ROOT/stores/prolly-store-sqlite/benches/sqlite_workload_bench.rs" "$ROOT/stores/prolly-store-sqlite/benches/sqlite_workload_support.rs" | shasum -a 256 | awk '{print $1}')
-baseline_harness_hash=$(shasum -a 256 "$BASELINE_ROOT/stores/prolly-store-sqlite/benches/sqlite_workload_bench.rs" "$BASELINE_ROOT/stores/prolly-store-sqlite/benches/sqlite_workload_support.rs" | shasum -a 256 | awk '{print $1}')
+current_harness_hash=$(shasum -a 256 "$ROOT/stores/prolly-store-sqlite/benches/sqlite_workload_bench.rs" "$ROOT/stores/prolly-store-sqlite/benches/sqlite_workload_support.rs" | awk '{print $1}' | shasum -a 256 | awk '{print $1}')
+baseline_harness_hash=$(shasum -a 256 "$BASELINE_ROOT/stores/prolly-store-sqlite/benches/sqlite_workload_bench.rs" "$BASELINE_ROOT/stores/prolly-store-sqlite/benches/sqlite_workload_support.rs" | awk '{print $1}' | shasum -a 256 | awk '{print $1}')
 if [ "$current_harness_hash" != "$baseline_harness_hash" ]; then
     printf '%s\n' 'shared harness hash mismatch' >&2
     exit 1
