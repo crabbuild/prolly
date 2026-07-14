@@ -64,9 +64,10 @@ reflogs, patches, merge orchestration, sync planning, and repository-level GC.
 - Store-independent single-key, shared multi-key, complete range, cursor-page,
   and diff-page proofs for a tree root.
 - Tree statistics for inspecting shape, fill factor, fanout, and serialized size.
-- A deterministic, content-addressed proximity map with exact key lookup,
-  persisted ANN beam search, structural verification, and localized
-  copy-on-write proximity mutation.
+- A hard-cut v2 deterministic proximity map with exact lookup, filtered
+  best-first search, localized canonical COW, overflow/external vectors,
+  SQ8/PQ/HNSW acceleration, async/SIMD execution, typed replication/GC, and
+  descriptor-bound proofs.
 
 ## Quick start
 

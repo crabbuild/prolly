@@ -854,13 +854,17 @@ tree = prolly.put(
 
 Use `ProximityMap` when the vector index itself must be reproducible from a
 content-addressed descriptor. It stores exact key/vector/value records in an
-ordered directory and uses a deterministic proximity hierarchy for ANN search.
-See [`proximity-map.md`](proximity-map.md) for build, load, search, mutation,
-verification, tuning, and persistence examples.
+ordered directory and uses a deterministic proximity hierarchy for exact L2 or
+honestly approximate filtered search. V2 includes cosine/inner product,
+localized canonical mutation, async/SIMD execution, overflow/external vectors,
+SQ8/PQ/HNSW, typed replication/GC, and descriptor-bound proofs. See
+[`proximity-map.md`](proximity-map.md) for complete examples.
 
 Choose this path for immutable versions, exact historical replay, duplicate
-vector identities, and structural sharing. Keep a sidecar for HNSW-style online
-graph mutation, quantization, GPU kernels, or specialized metrics.
+vector identities, structural sharing, deterministic accelerators, and
+verifiable execution. Use an external engine when GPU serving, arbitrary metric
+plugins, or continuously mutable graph latency matters more than canonical
+snapshot identity.
 
 ## Vector sidecars
 

@@ -107,55 +107,38 @@ Non-`PLVB` stored values are interpreted as inline bytes by large-value helpers.
 `Config`, and optional Unix millisecond timestamps. Ports that implement named
 roots must decode the conformance manifest fixture and preserve CAS semantics.
 
-## Proximity Objects: Version 1
+## Proximity Objects: Version 2
 
-Proximity objects occupy the same content-addressed store namespace but use
-independent magic values. All integer varints are canonical unsigned LEB128;
-all CIDs are 32 raw SHA-256 bytes. Decoders reject non-canonical varints,
-overflow, truncation, unknown flags, and trailing bytes.
+V2 is a hard cutoff. V1 proximity objects are rejected with
+`UnsupportedProximityVersion`; no decoder guesses or upgrades legacy bytes.
+Ordered `CRAB` version 1 nodes are unchanged.
 
-### `PRVR` exact-directory record
+All proximity integers use canonical unsigned LEB128 unless explicitly fixed
+width. CIDs are 32 raw SHA-256 bytes. Floating-point words are canonical finite
+little-endian IEEE-754; negative zero becomes positive zero. Every decoder
+rejects truncation, non-canonical lengths, allocation overflow, unknown flags,
+bad ordering/counts/references, unsupported encodings, and trailing bytes.
 
-1. ASCII magic `PRVR`
-2. one-byte version `1`
-3. vector dimension count as varint
-4. exactly that many little-endian IEEE-754 `f32` words
-5. opaque value length as varint
-6. opaque value bytes
+| Magic | Object | Committed content |
+| --- | --- | --- |
+| `PRVR` | exact record | v2, `f32-le` tag, dimension count, vector, opaque value |
+| `PRXI` | descriptor | metric/normalization, dimensions/count, hierarchy, overflow, vector/SQ8 config, complete ordered tree, PRXN root, radius policy, config fingerprint |
+| `PRXN` | physical hierarchy node | kind/level, subtree summary, optional PQS8 CID, sorted entries, child/key bounds/radii/vector references |
+| `PRXV` | external vector | v2 vector encoding and components |
+| `PQS8` | local scalar quantizer | dimensions/grouping/count, scales, signed codes, maximum error |
+| `PQPQ` | product-quantization manifest | source PRXI, metric/config, code-tree root, codebooks, quality |
+| `HNSW` | HNSW manifest | source PRXI, metric/config/fingerprint, graph root, entry point, level, canonical flag |
+| `HNSN` | HNSW graph value | level and key-sorted neighbors by layer |
+| `CRMF` | typed content-root manifest | typed CID, optional PRXN dimensions, logical version/time, sorted metadata |
 
-Negative zero is encoded as positive zero. NaN and infinity are forbidden.
+PRXN physical kinds distinguish ordinary leaves/routes from overflow pages and
+recursive overflow directories. Inline/external vectors and quantizer/child
+CIDs use explicit tags. The descriptor commits Euclidean-radius rounding and
+metric normalization policies, preventing a reader from interpreting bounds
+under different math.
 
-### `PRXN` proximity node
-
-1. ASCII magic `PRXN`
-2. one-byte version `1`
-3. one-byte flags; bit zero means leaf and all other bits are zero
-4. one-byte logical level; leaf status is equivalent to level zero
-5. logical leaf-descendant count as varint
-6. entry count as varint
-7. entries in strict byte-lexicographic key order
-
-Each entry stores key length, key bytes, the descriptor's fixed number of
-canonical `f32` words, and—only for internal nodes—a 32-byte child CID. Values
-are never duplicated in PRXN.
-
-### `PRXI` compound descriptor
-
-1. ASCII magic `PRXI`
-2. one-byte version `1`
-3. one-byte vector encoding `1` for canonical little-endian `f32`
-4. dimensions as varint
-5. one-byte metric `1` for squared L2
-6. one-byte `log_chunk_size`
-7. little-endian `u64` promotion hash seed
-8. maximum encoded PRXN bytes as varint
-9. logical record count as varint
-10. directory-root presence tag and optional 32-byte root CID
-11. complete ordered `Config`: min/max chunk sizes and chunking factor as
-    varints, little-endian hash seed, encoding tag/custom name, and tagged
-    optional node-cache limits
-12. 32-byte proximity root CID
-13. reserved-field count byte, required to be zero in version 1
-
-Search options are not persisted because they affect latency and recall rather
-than content identity.
+Search policies, budgets, async settings, query kernels, and caches are runtime
+only. PQ and HNSW have independent manifests because they are rebuildable
+source-bound accelerators. Frozen exact bytes and CIDs are maintained in
+`conformance/proximity-fixtures.v2.json`; legacy canonical fixtures are
+test-only rejection inputs.

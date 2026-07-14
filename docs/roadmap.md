@@ -47,22 +47,21 @@ Status: **Shipped**
 
 Status: **Shipped**
 
-- Compound exact-directory plus derived-ANN descriptor
-- Canonical finite `f32` vectors and squared-L2 distance
-- Deterministic key promotion and nearest-representative hierarchy
-- Independent result and beam widths with deterministic resource budgets
-- Exact absent-key and duplicate-vector-safe identity semantics
-- Strict PRVR/PRXN/PRXI versioned codecs
-- Structural verifier and clean-rebuild mutation oracle
-- Dolt-style localized copy-on-write PRXN mutation with root-level rebuild
-  fallback
-- Bounded typed proximity-node cache and batched child reads
+- Hard-cut v2 PRVR/PRXI/PRXN/PRXV/PQS8 codecs; v1 rejected
+- Exact ordered directory with canonical localized splice mutation
+- Deterministic nearest-representative PRXN hierarchy with compositional
+  summaries, content-defined overflow, and Dolt-style localized COW
+- L2, cosine, and inner-product metrics with deterministic scalar/SIMD queries
+- Best-first exact/filtered/adaptive search and honest budget completions
+- Byte-identical parallel construction and ordered async execution
+- Full-precision-reranked SQ8/PQ and source-bound deterministic HNSW
+- Typed graph walking, closed replication, CAS manifests, global GC, and cache
+  invalidation
+- Descriptor-bound membership, structural, and replayable search proofs
 
-The exact ordered directory is currently canonically bulk-rebuilt during a
-proximity mutation because the existing ordered batch writer can preserve a
-different valid physical shape after long edit histories. PRXN mutation remains
-localized. A canonical resynchronizing ordered writer can remove this
-directory-side O(n) fallback without changing proximity bytes.
+Future work is optimization without format changes: compressed proof bundles,
+incremental disposable HNSW maintenance, platform-specific prefetch tuning, and
+additional benchmark history across production hardware.
 
 ### Diff, merge, and collaboration
 

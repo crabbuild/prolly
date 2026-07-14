@@ -366,4 +366,7 @@ clusters while producing the same root as a clean build.
 
 See [`proximity-map.md`](proximity-map.md) for the public API, algorithms,
 mutation rules, resource budgets, and operational limitations. See
-[`wire-format.md`](wire-format.md) for PRVR, PRXN, and PRXI version 1.
+[`wire-format.md`](wire-format.md) for the hard-cut v2 object family. V2 adds
+canonical directory splicing, all three metrics, overflow/PRXV storage, SQ8,
+deterministic parallel and async execution, source-bound PQ/HNSW, typed content
+replication/GC, and descriptor-bound proofs.
