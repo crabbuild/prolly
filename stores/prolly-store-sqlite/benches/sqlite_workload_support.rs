@@ -310,6 +310,29 @@ pub fn right_edge_indexes(records: usize, count: usize) -> Vec<usize> {
     (records - wanted..records).collect()
 }
 
+pub fn mutation_indexes(workload: Workload, records: usize, count: usize) -> Vec<usize> {
+    match workload {
+        Workload::AppendBatchUpserts => (records..records + count).collect(),
+        Workload::RandomBatchUpdates | Workload::RandomBatchDeletes => {
+            random_indexes(records, count, RANDOM_SEED)
+        }
+        Workload::ClusteredBatchUpdates | Workload::ClusteredBatchDeletes => {
+            clustered_indexes(records, count)
+        }
+        _ => Vec::new(),
+    }
+}
+
+pub fn expected_result_entries(workload: Workload, records: usize, count: usize) -> usize {
+    match workload {
+        Workload::AppendBatchUpserts => records.saturating_add(count),
+        Workload::RandomBatchDeletes | Workload::ClusteredBatchDeletes => {
+            records.saturating_sub(count.min(records))
+        }
+        _ => records,
+    }
+}
+
 pub fn shuffled_ids(records: usize, seed: u64) -> Vec<usize> {
     let mut ids = (0..records).collect::<Vec<_>>();
     let mut state = seed;

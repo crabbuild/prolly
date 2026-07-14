@@ -1,21 +1,25 @@
 mod sqlite_workload_support;
 
+use std::hint::black_box;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
 
 use prolly::{
-    BatchBuilder, Config, ManifestStore, Prolly, ProllyMetricsSnapshot, RootManifest,
+    BatchBuilder, Config, ManifestStore, Mutation, Prolly, ProllyMetricsSnapshot, RootManifest,
     SortedBatchBuilder, Tree, TreeStats,
 };
 use prolly_store_sqlite::{SqliteStore, SqliteStoreConfig};
 use rusqlite::Connection;
 
 use sqlite_workload_support::{
-    key, shuffled_ids, value, BenchArgs, CsvRow, DurabilityProfile, Workload, RANDOM_SEED,
+    clustered_indexes, expected_result_entries, key, mutation_indexes, random_indexes,
+    right_edge_indexes, sample_count, shuffled_ids, value, BenchArgs, CsvRow, DurabilityProfile,
+    Workload, RANDOM_SEED, READ_OPERATIONS,
 };
 
 const BASE_ROOT_NAME: &[u8] = b"sqlite-workload-base";
+const RESULT_ROOT_NAME: &[u8] = b"sqlite-workload-result";
 
 fn main() {
     if let Err(err) = run() {
@@ -29,11 +33,229 @@ fn run() -> Result<(), String> {
     let row = match args.workload {
         Workload::SortedStreamBuild => run_sorted_build(&args)?,
         Workload::ShuffledBatchBuild => run_shuffled_build(&args)?,
+        Workload::RandomReadsColdManager
+        | Workload::RandomReadsWarmManager
+        | Workload::ClusteredReadsColdManager
+        | Workload::ClusteredReadsWarmManager
+        | Workload::RightEdgeReadsColdManager
+        | Workload::RightEdgeReadsWarmManager => run_reads(&args)?,
+        Workload::AppendBatchUpserts
+        | Workload::RandomBatchUpdates
+        | Workload::ClusteredBatchUpdates
+        | Workload::RandomBatchDeletes
+        | Workload::ClusteredBatchDeletes => run_mutations(&args)?,
         workload => return Err(format!("workload {} is not implemented", workload.as_str())),
     };
     println!("{}", CsvRow::header());
     println!("{}", row.to_csv());
     Ok(())
+}
+
+fn run_reads(args: &BenchArgs) -> Result<CsvRow, String> {
+    let db_before = sqlite_files(&args.db_path).total;
+    let (store, tree) = open_base(args)?;
+    let manager = Prolly::new(store, tree.config.clone());
+    let sample_ids = match args.workload {
+        Workload::RandomReadsColdManager | Workload::RandomReadsWarmManager => {
+            random_indexes(args.records, args.records.min(10_000), RANDOM_SEED)
+        }
+        Workload::ClusteredReadsColdManager | Workload::ClusteredReadsWarmManager => {
+            clustered_indexes(args.records, args.records.min(10_000))
+        }
+        Workload::RightEdgeReadsColdManager | Workload::RightEdgeReadsWarmManager => {
+            right_edge_indexes(args.records, args.records.min(10_000))
+        }
+        _ => return Err("read runner received a non-read workload".to_string()),
+    };
+    let warm = matches!(
+        args.workload,
+        Workload::RandomReadsWarmManager
+            | Workload::ClusteredReadsWarmManager
+            | Workload::RightEdgeReadsWarmManager
+    );
+    if warm {
+        execute_reads(&manager, &tree, &sample_ids, READ_OPERATIONS)?;
+    }
+    manager.reset_metrics();
+    let started = Instant::now();
+    execute_reads(&manager, &tree, &sample_ids, READ_OPERATIONS)?;
+    let total_ns = started.elapsed().as_nanos();
+    let metrics = manager.metrics();
+    let stats = manager.collect_stats(&tree).map_err(|err| err.to_string())?;
+    make_row(
+        args,
+        READ_OPERATIONS,
+        total_ns,
+        metrics,
+        &stats,
+        db_before,
+    )
+}
+
+fn execute_reads(
+    manager: &Prolly<Arc<SqliteStore>>,
+    tree: &Tree,
+    sample_ids: &[usize],
+    operations: usize,
+) -> Result<(), String> {
+    let mut observed_bytes = 0usize;
+    for operation in 0..operations {
+        let id = sample_ids[operation % sample_ids.len()];
+        let observed = manager
+            .get(tree, black_box(&key(id)))
+            .map_err(|err| err.to_string())?
+            .ok_or_else(|| format!("read workload did not find record {id}"))?;
+        let expected = value(id, 0);
+        if observed != expected {
+            return Err(format!("read workload returned the wrong value for record {id}"));
+        }
+        observed_bytes = observed_bytes.wrapping_add(observed.len());
+        black_box(&observed);
+    }
+    black_box(observed_bytes);
+    Ok(())
+}
+
+fn run_mutations(args: &BenchArgs) -> Result<CsvRow, String> {
+    let db_before = sqlite_files(&args.db_path).total;
+    let (store, base) = open_base(args)?;
+    let manager = Prolly::new(store.clone(), base.config.clone());
+    let count = sample_count(args.records);
+    let ids = mutation_indexes(args.workload, args.records, count);
+    let is_delete = matches!(
+        args.workload,
+        Workload::RandomBatchDeletes | Workload::ClusteredBatchDeletes
+    );
+    let generation = if matches!(args.workload, Workload::ClusteredBatchUpdates) {
+        2
+    } else {
+        1
+    };
+    let mutations = ids
+        .iter()
+        .map(|id| {
+            if is_delete {
+                Mutation::Delete { key: key(*id) }
+            } else {
+                Mutation::Upsert {
+                    key: key(*id),
+                    val: value(*id, generation),
+                }
+            }
+        })
+        .collect::<Vec<_>>();
+    manager.reset_metrics();
+    let started = Instant::now();
+    let changed = if matches!(args.workload, Workload::AppendBatchUpserts) {
+        manager
+            .append_batch(&base, black_box(mutations))
+            .map_err(|err| err.to_string())?
+    } else {
+        manager
+            .batch(&base, black_box(mutations))
+            .map_err(|err| err.to_string())?
+    };
+    let total_ns = started.elapsed().as_nanos();
+    let metrics = manager.metrics();
+    validate_mutation_result(
+        &manager,
+        &changed,
+        &ids,
+        is_delete,
+        generation,
+        expected_result_entries(args.workload, args.records, count),
+    )?;
+    store
+        .put_root(RESULT_ROOT_NAME, &RootManifest::from_tree(&changed))
+        .map_err(|err| err.to_string())?;
+    let stats = manager
+        .collect_stats(&changed)
+        .map_err(|err| err.to_string())?;
+    drop(manager);
+    drop(store);
+    verify_reopened_result(
+        args,
+        &ids,
+        is_delete,
+        generation,
+        stats.total_key_value_pairs,
+    )?;
+    make_row(args, count, total_ns, metrics, &stats, db_before)
+}
+
+fn validate_mutation_result(
+    manager: &Prolly<Arc<SqliteStore>>,
+    tree: &Tree,
+    ids: &[usize],
+    is_delete: bool,
+    generation: u8,
+    expected_entries: usize,
+) -> Result<(), String> {
+    for id in ids {
+        let observed = manager
+            .get(tree, &key(*id))
+            .map_err(|err| err.to_string())?;
+        let expected = if is_delete {
+            None
+        } else {
+            Some(value(*id, generation))
+        };
+        if observed != expected {
+            return Err(format!("mutation validation failed for record {id}"));
+        }
+    }
+    let stats = manager.collect_stats(tree).map_err(|err| err.to_string())?;
+    if stats.total_key_value_pairs != expected_entries {
+        return Err(format!(
+            "mutation cardinality mismatch: expected {expected_entries}, observed {}",
+            stats.total_key_value_pairs
+        ));
+    }
+    Ok(())
+}
+
+fn verify_reopened_result(
+    args: &BenchArgs,
+    ids: &[usize],
+    is_delete: bool,
+    generation: u8,
+    expected_entries: usize,
+) -> Result<(), String> {
+    let store = Arc::new(open_store(&args.db_path, args.profile)?);
+    let manifest = store
+        .get_root(RESULT_ROOT_NAME)
+        .map_err(|err| err.to_string())?
+        .ok_or_else(|| "workload database is missing the named result root".to_string())?;
+    let tree = manifest.to_tree();
+    let manager = Prolly::new(store, tree.config.clone());
+    for id in ids {
+        let observed = manager
+            .get(&tree, &key(*id))
+            .map_err(|err| err.to_string())?;
+        let expected = if is_delete {
+            None
+        } else {
+            Some(value(*id, generation))
+        };
+        if observed != expected {
+            return Err(format!("reopened mutation validation failed for record {id}"));
+        }
+    }
+    let stats = manager.collect_stats(&tree).map_err(|err| err.to_string())?;
+    if stats.total_key_value_pairs != expected_entries {
+        return Err("reopened mutation tree has the wrong cardinality".to_string());
+    }
+    Ok(())
+}
+
+fn open_base(args: &BenchArgs) -> Result<(Arc<SqliteStore>, Tree), String> {
+    let store = Arc::new(open_store(&args.db_path, args.profile)?);
+    let tree = store
+        .get_root(BASE_ROOT_NAME)
+        .map_err(|err| err.to_string())?
+        .ok_or_else(|| "workload fixture is missing the named base root".to_string())?
+        .to_tree();
+    Ok((store, tree))
 }
 
 fn run_sorted_build(args: &BenchArgs) -> Result<CsvRow, String> {

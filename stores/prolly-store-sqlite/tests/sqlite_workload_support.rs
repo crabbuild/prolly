@@ -72,3 +72,39 @@ fn csv_rows_match_the_declared_schema() {
     assert!(encoded.contains("current,full,1000,1,sorted_stream_build"));
     assert!(encoded.ends_with(",true,ok"));
 }
+
+#[test]
+fn mutation_workloads_have_exact_indexes_and_cardinality() {
+    use support::Workload;
+
+    let append = support::mutation_indexes(Workload::AppendBatchUpserts, 1_000, 100);
+    assert_eq!(append.first(), Some(&1_000));
+    assert_eq!(append.last(), Some(&1_099));
+    assert_eq!(
+        support::expected_result_entries(Workload::AppendBatchUpserts, 1_000, 100),
+        1_100
+    );
+
+    for workload in [
+        Workload::RandomBatchUpdates,
+        Workload::ClusteredBatchUpdates,
+    ] {
+        let indexes = support::mutation_indexes(workload, 1_000, 100);
+        assert_eq!(indexes.len(), 100);
+        assert!(indexes.iter().all(|id| *id < 1_000));
+        assert_eq!(
+            support::expected_result_entries(workload, 1_000, 100),
+            1_000
+        );
+    }
+
+    for workload in [
+        Workload::RandomBatchDeletes,
+        Workload::ClusteredBatchDeletes,
+    ] {
+        assert_eq!(
+            support::expected_result_entries(workload, 1_000, 100),
+            900
+        );
+    }
+}
