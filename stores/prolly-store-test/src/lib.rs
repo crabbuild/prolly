@@ -2,7 +2,7 @@
 
 use prolly::{
     BatchOp, Cid, Config, ManifestStore, ManifestStoreScan, ManifestUpdate, NodeStoreScan, Prolly,
-    RootManifest, Store,
+    RootManifest, SecondaryIndex, SecondaryIndexRegistry, Store, TransactionalStore,
 };
 
 pub fn assert_store_contract<S>(store: &S)
@@ -107,4 +107,47 @@ where
         .unwrap();
     assert_eq!(sweep.deleted_nodes, plan.reclaimable_nodes);
     assert_eq!(prolly.get(&updated, b"k").unwrap(), Some(b"new".to_vec()));
+}
+
+pub fn assert_indexed_map_contract<S>(store: S)
+where
+    S: Store + ManifestStore + TransactionalStore + Send + Sync,
+{
+    let prolly = Prolly::new(std::sync::Arc::new(store), Config::default());
+    let source = prolly.versioned_map(b"indexed-contract");
+    source.put(b"user-1", b"active").unwrap();
+
+    let registry = SecondaryIndexRegistry::new()
+        .register(
+            SecondaryIndex::non_unique(
+                "by-status",
+                1,
+                "store-contract.by-status/v1",
+                |_, value| Ok(vec![value.to_vec()]),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+    let indexed = prolly.indexed_map(b"indexed-contract", registry).unwrap();
+    indexed.ensure_index(b"by-status").unwrap();
+    indexed.put(b"user-2", b"pending").unwrap();
+
+    let snapshot = indexed.snapshot().unwrap();
+    assert_eq!(
+        snapshot
+            .index(b"by-status")
+            .unwrap()
+            .primary_keys(b"pending")
+            .unwrap(),
+        vec![b"user-2".to_vec()]
+    );
+    assert!(indexed
+        .verify_all(&snapshot.id().source_version)
+        .unwrap()
+        .iter()
+        .all(prolly::IndexVerification::is_valid));
+    assert!(matches!(
+        source.put(b"user-3", b"active"),
+        Err(prolly::Error::IndexesRequireIndexedMap { .. })
+    ));
 }

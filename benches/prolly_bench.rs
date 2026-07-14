@@ -507,11 +507,7 @@ where
 
     let total_ns = total.as_nanos();
     let total_items = iterations as u128 * items as u128;
-    let ns_per_item = if total_items == 0 {
-        0
-    } else {
-        total_ns / total_items
-    };
+    let ns_per_item = total_ns.checked_div(total_items).unwrap_or_default();
 
     println!(
         "{name},{:.3},{iterations},{items},{ns_per_item}",

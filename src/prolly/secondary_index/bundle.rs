@@ -418,7 +418,7 @@ where
 
         let current_source = self.source().head()?;
         if current_source.as_ref().map(|version| &version.id) != expected_source {
-            return Err(Error::TransactionConflict(TransactionConflict::new(
+            return Err(Error::transaction_conflict(TransactionConflict::new(
                 self.source().head_name().to_vec(),
                 None,
                 None,

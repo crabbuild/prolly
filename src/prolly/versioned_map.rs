@@ -23,7 +23,7 @@ use super::stats::TreeStats;
 use super::store::Store;
 use super::transaction::{TransactionConflict, TransactionUpdate, TransactionalStore};
 use super::tree::Tree;
-use super::{current_unix_time_millis, Prolly};
+use super::{current_unix_time_millis, KeyValue, Prolly};
 
 /// Root namespace reserved for built-in versioned maps.
 pub const VERSIONED_MAP_ROOT_PREFIX: &[u8] = b"maps/versioned/";
@@ -96,7 +96,7 @@ where
         MapWriteAuthority::IndexMaintenance(permit) => {
             let actual = control.fingerprint()?;
             if permit.map_id != map_id || permit.control_fingerprint != actual {
-                return Err(Error::TransactionConflict(TransactionConflict::new(
+                return Err(Error::transaction_conflict(TransactionConflict::new(
                     control_name,
                     None,
                     None,
@@ -172,7 +172,7 @@ where
         MapWriteAuthority::IndexMaintenance(permit) => {
             let actual = control.fingerprint()?;
             if permit.map_id != map_id || permit.control_fingerprint != actual {
-                return Err(Error::TransactionConflict(TransactionConflict::new(
+                return Err(Error::transaction_conflict(TransactionConflict::new(
                     control_name,
                     None,
                     None,
@@ -831,22 +831,22 @@ impl<'a, S: Store> MapSnapshot<'a, S> {
     }
 
     /// Return the first entry in key order.
-    pub fn first_entry(&self) -> Result<Option<(Vec<u8>, Vec<u8>)>, Error> {
+    pub fn first_entry(&self) -> Result<Option<KeyValue>, Error> {
         self.prolly.first_entry(self.tree())
     }
 
     /// Return the last entry in key order.
-    pub fn last_entry(&self) -> Result<Option<(Vec<u8>, Vec<u8>)>, Error> {
+    pub fn last_entry(&self) -> Result<Option<KeyValue>, Error> {
         self.prolly.last_entry(self.tree())
     }
 
     /// Return the first entry whose key is greater than or equal to `key`.
-    pub fn lower_bound(&self, key: &[u8]) -> Result<Option<(Vec<u8>, Vec<u8>)>, Error> {
+    pub fn lower_bound(&self, key: &[u8]) -> Result<Option<KeyValue>, Error> {
         self.prolly.lower_bound(self.tree(), key)
     }
 
     /// Return the first entry whose key is strictly greater than `key`.
-    pub fn upper_bound(&self, key: &[u8]) -> Result<Option<(Vec<u8>, Vec<u8>)>, Error> {
+    pub fn upper_bound(&self, key: &[u8]) -> Result<Option<KeyValue>, Error> {
         self.prolly.upper_bound(self.tree(), key)
     }
 
@@ -2433,10 +2433,10 @@ where
                         is_head: true,
                     });
                 }
-                TransactionUpdate::Conflict(conflict) => last_conflict = Some(conflict),
+                TransactionUpdate::Conflict(conflict) => last_conflict = Some(*conflict),
             }
         }
-        Err(Error::TransactionConflict(
+        Err(Error::transaction_conflict(
             last_conflict.expect("retry loop records a conflict before exhaustion"),
         ))
     }
@@ -2638,11 +2638,11 @@ where
                         is_head: true,
                     });
                 }
-                TransactionUpdate::Conflict(conflict) => last_conflict = Some(conflict),
+                TransactionUpdate::Conflict(conflict) => last_conflict = Some(*conflict),
             }
         }
 
-        Err(Error::TransactionConflict(
+        Err(Error::transaction_conflict(
             last_conflict.expect("retry loop records a conflict before exhaustion"),
         ))
     }
@@ -2742,7 +2742,7 @@ where
                 UpdateAttempt::Conflict(conflict) => last_conflict = Some(conflict),
             }
         }
-        Err(Error::TransactionConflict(
+        Err(Error::transaction_conflict(
             last_conflict.expect("retry loop records a conflict before exhaustion"),
         ))
     }
@@ -2990,11 +2990,11 @@ where
                         ..target
                     });
                 }
-                TransactionUpdate::Conflict(conflict) => last_conflict = Some(conflict),
+                TransactionUpdate::Conflict(conflict) => last_conflict = Some(*conflict),
             }
         }
 
-        Err(Error::TransactionConflict(
+        Err(Error::transaction_conflict(
             last_conflict.expect("retry loop records a conflict before exhaustion"),
         ))
     }
@@ -3037,7 +3037,7 @@ where
             });
             return match tx.commit()? {
                 TransactionUpdate::Applied { .. } => Ok(UpdateAttempt::Unchanged(current)),
-                TransactionUpdate::Conflict(conflict) => Ok(UpdateAttempt::Conflict(conflict)),
+                TransactionUpdate::Conflict(conflict) => Ok(UpdateAttempt::Conflict(*conflict)),
             };
         }
 
@@ -3068,7 +3068,7 @@ where
                     is_head: true,
                 },
             }),
-            TransactionUpdate::Conflict(conflict) => Ok(UpdateAttempt::Conflict(conflict)),
+            TransactionUpdate::Conflict(conflict) => Ok(UpdateAttempt::Conflict(*conflict)),
         }
     }
 
@@ -3272,11 +3272,11 @@ where
                 TransactionUpdate::Applied { .. } => {
                     return Ok(VersionPruneResult { retained, removed });
                 }
-                TransactionUpdate::Conflict(conflict) => last_conflict = Some(conflict),
+                TransactionUpdate::Conflict(conflict) => last_conflict = Some(*conflict),
             }
         }
 
-        Err(Error::TransactionConflict(
+        Err(Error::transaction_conflict(
             last_conflict.expect("retry loop records a conflict before exhaustion"),
         ))
     }

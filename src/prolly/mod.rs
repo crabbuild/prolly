@@ -101,6 +101,9 @@ const STATS_FRONTIER_PREFETCH_PARALLELISM: usize = 16;
 #[cfg(feature = "async-store")]
 const ASYNC_NODE_PREFETCH_BATCH_SIZE: usize = 64;
 
+/// An owned key-value entry returned by ordered tree lookups.
+pub type KeyValue = (Vec<u8>, Vec<u8>);
+
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 fn current_unix_time_millis() -> u64 {
     js_sys::Date::now().max(0.0).min(u64::MAX as f64) as u64
@@ -1110,12 +1113,12 @@ impl<S: Store> Prolly<S> {
     }
 
     /// Return the first key-value entry in key order.
-    pub fn first_entry(&self, tree: &Tree) -> Result<Option<(Vec<u8>, Vec<u8>)>, Error> {
+    pub fn first_entry(&self, tree: &Tree) -> Result<Option<KeyValue>, Error> {
         self.lower_bound(tree, &[])
     }
 
     /// Return the last key-value entry in key order.
-    pub fn last_entry(&self, tree: &Tree) -> Result<Option<(Vec<u8>, Vec<u8>)>, Error> {
+    pub fn last_entry(&self, tree: &Tree) -> Result<Option<KeyValue>, Error> {
         let Some(root_cid) = &tree.root else {
             return Ok(None);
         };
@@ -1136,11 +1139,7 @@ impl<S: Store> Prolly<S> {
     }
 
     /// Return the first entry whose key is greater than or equal to `key`.
-    pub fn lower_bound(
-        &self,
-        tree: &Tree,
-        key: &[u8],
-    ) -> Result<Option<(Vec<u8>, Vec<u8>)>, Error> {
+    pub fn lower_bound(&self, tree: &Tree, key: &[u8]) -> Result<Option<KeyValue>, Error> {
         match self.range(tree, key, None)?.next() {
             Some(entry) => entry.map(Some),
             None => Ok(None),
@@ -1148,11 +1147,7 @@ impl<S: Store> Prolly<S> {
     }
 
     /// Return the first entry whose key is strictly greater than `key`.
-    pub fn upper_bound(
-        &self,
-        tree: &Tree,
-        key: &[u8],
-    ) -> Result<Option<(Vec<u8>, Vec<u8>)>, Error> {
+    pub fn upper_bound(&self, tree: &Tree, key: &[u8]) -> Result<Option<KeyValue>, Error> {
         match self.range_after(tree, key, None)?.next() {
             Some(entry) => entry.map(Some),
             None => Ok(None),
@@ -7148,11 +7143,11 @@ where
         while start < node.len() {
             let remaining_chunks = num_chunks - chunks.len();
             let remaining_entries = node.len() - start;
-            let target_end = if remaining_chunks == 0 {
-                (start + remaining_entries).min(start + capacity)
-            } else {
-                start + (remaining_entries / remaining_chunks).max(1)
-            };
+            let target_size = remaining_entries
+                .checked_div(remaining_chunks)
+                .unwrap_or_else(|| remaining_entries.min(capacity))
+                .max(1);
+            let target_end = start + target_size;
 
             let max_end = (start + capacity).min(node.len());
             let min_end = start + 1;

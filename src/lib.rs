@@ -341,11 +341,11 @@ pub use prolly::secondary_index::{
     IndexedHeadRecord, IndexedMap, IndexedMapEditor, IndexedMapHealth, IndexedMapMetricsSnapshot,
     IndexedMapUpdate, IndexedRetentionResult, IndexedSnapshot, IndexedSnapshotBundle,
     IndexedSnapshotBundleIndex, IndexedSnapshotBundleSummary, IndexedSnapshotBundleVerification,
-    IndexedSnapshotId, IndexedVersion, SecondaryIndex, SecondaryIndexBuilder, SecondaryIndexCursor,
-    SecondaryIndexDescriptor, SecondaryIndexDirection, SecondaryIndexEntry, SecondaryIndexError,
-    SecondaryIndexExtractor, SecondaryIndexLimits, SecondaryIndexMatch, SecondaryIndexPage,
-    SecondaryIndexRegistry, SecondaryIndexSnapshot, TermBounds,
-    INDEXED_SNAPSHOT_BUNDLE_FORMAT_VERSION, INDEX_PHYSICAL_LAYOUT_VERSION,
+    IndexedSnapshotId, IndexedSourceRecord, IndexedVersion, ProjectedIndexEntry, SecondaryIndex,
+    SecondaryIndexBuilder, SecondaryIndexCursor, SecondaryIndexDescriptor, SecondaryIndexDirection,
+    SecondaryIndexEntry, SecondaryIndexError, SecondaryIndexExtractor, SecondaryIndexLimits,
+    SecondaryIndexMatch, SecondaryIndexPage, SecondaryIndexRegistry, SecondaryIndexSnapshot,
+    TermBounds, INDEXED_SNAPSHOT_BUNDLE_FORMAT_VERSION, INDEX_PHYSICAL_LAYOUT_VERSION,
     SECONDARY_INDEX_FORMAT_VERSION,
 };
 pub use prolly::snapshot::{
@@ -353,7 +353,7 @@ pub use prolly::snapshot::{
     SnapshotSelection, SNAPSHOT_BRANCH_PREFIX, SNAPSHOT_CHECKPOINT_PREFIX, SNAPSHOT_TAG_PREFIX,
 };
 pub use prolly::streaming::{DefaultStreamingDiffer, StreamingDiffer};
-pub use prolly::{ChangedSpan, ChangedSpanHint, Prolly, ProllyMetricsSnapshot};
+pub use prolly::{ChangedSpan, ChangedSpanHint, KeyValue, Prolly, ProllyMetricsSnapshot};
 
 #[cfg(feature = "async-store")]
 pub use prolly::range::{AsyncRangeIter, AsyncRangePage, AsyncReversePage};

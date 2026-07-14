@@ -1397,7 +1397,7 @@ fn async_collect_stats_splits_wide_frontiers_for_batched_stores() {
 
     let expected = sync_prolly.collect_stats(&tree).unwrap();
     assert!(
-        expected.num_leaves as usize > EXPECTED_ASYNC_NODE_PREFETCH_BATCH_CAP,
+        expected.num_leaves > EXPECTED_ASYNC_NODE_PREFETCH_BATCH_CAP,
         "test fixture must create a frontier wider than the async prefetch cap"
     );
 

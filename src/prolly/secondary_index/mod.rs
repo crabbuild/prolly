@@ -23,8 +23,9 @@ pub use definition::{
     SecondaryIndexError, SecondaryIndexExtractor, SecondaryIndexLimits, SecondaryIndexRegistry,
 };
 pub use snapshot::{
-    IndexedSnapshot, IndexedSnapshotId, SecondaryIndexCursor, SecondaryIndexDirection,
-    SecondaryIndexMatch, SecondaryIndexPage, SecondaryIndexSnapshot,
+    IndexedSnapshot, IndexedSnapshotId, IndexedSourceRecord, ProjectedIndexEntry,
+    SecondaryIndexCursor, SecondaryIndexDirection, SecondaryIndexMatch, SecondaryIndexPage,
+    SecondaryIndexSnapshot,
 };
 pub use storage::{
     catalog_checkpoint_key, catalog_checkpoints_prefix, catalog_current_key,

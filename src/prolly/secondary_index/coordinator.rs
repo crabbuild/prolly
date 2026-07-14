@@ -1027,7 +1027,7 @@ where
             })
             .and_then(|bytes| IndexedHeadRecord::from_bytes(&bytes))?;
         if current.source_version != source.id {
-            return Err(Error::TransactionConflict(TransactionConflict::new(
+            return Err(Error::transaction_conflict(TransactionConflict::new(
                 self.source().head_name().to_vec(),
                 None,
                 None,
@@ -1175,7 +1175,7 @@ where
             .and_then(|bytes| IndexedHeadRecord::from_bytes(&bytes))?;
         if current.source_version != source.id || health.source_version.as_ref() != Some(&source.id)
         {
-            return Err(Error::TransactionConflict(TransactionConflict::new(
+            return Err(Error::transaction_conflict(TransactionConflict::new(
                 self.source().head_name().to_vec(),
                 None,
                 None,
@@ -1287,12 +1287,12 @@ where
                 }
                 Err(Error::TransactionConflict(conflict)) => {
                     self.metrics.retries.fetch_add(1, Ordering::Relaxed);
-                    last_conflict = Some(conflict);
+                    last_conflict = Some(*conflict);
                 }
                 Err(error) => return Err(error),
             }
         }
-        Err(Error::TransactionConflict(last_conflict.unwrap_or_else(
+        Err(Error::transaction_conflict(last_conflict.unwrap_or_else(
             || TransactionConflict::new(self.source().head_name().to_vec(), None, None),
         )))
     }
@@ -1480,12 +1480,11 @@ where
                             .count() as u64,
                     );
                 for (key, old_projection) in &old_entries {
-                    if new_entries.get(key) != Some(old_projection) {
-                        if !new_entries.contains_key(key) {
-                            operation.physical_deletes =
-                                operation.physical_deletes.saturating_add(1);
-                            delta.insert(key.clone(), Mutation::Delete { key: key.clone() });
-                        }
+                    if new_entries.get(key) != Some(old_projection)
+                        && !new_entries.contains_key(key)
+                    {
+                        operation.physical_deletes = operation.physical_deletes.saturating_add(1);
+                        delta.insert(key.clone(), Mutation::Delete { key: key.clone() });
                     }
                 }
                 for (key, new_projection) in &new_entries {
@@ -1798,11 +1797,11 @@ where
         let mut last_conflict = None;
         for _ in 0..8 {
             match self.keep_last_once(count) {
-                Err(Error::TransactionConflict(conflict)) => last_conflict = Some(conflict),
+                Err(Error::TransactionConflict(conflict)) => last_conflict = Some(*conflict),
                 result => return result,
             }
         }
-        Err(Error::TransactionConflict(last_conflict.expect(
+        Err(Error::transaction_conflict(last_conflict.expect(
             "indexed retention retry exhaustion follows a transaction conflict",
         )))
     }
@@ -1850,7 +1849,7 @@ where
             })
             .and_then(|bytes| IndexedHeadRecord::from_bytes(&bytes))?;
         if current.source_version != source_head.id {
-            return Err(Error::TransactionConflict(TransactionConflict::new(
+            return Err(Error::transaction_conflict(TransactionConflict::new(
                 source_map.head_name().to_vec(),
                 None,
                 None,
@@ -2040,7 +2039,7 @@ pub(crate) fn require_non_conflict(
         } => Ok(current),
         VersionedMapUpdate::Unchanged { current: None }
         | VersionedMapUpdate::Conflict { current: None }
-        | VersionedMapUpdate::Conflict { current: Some(_) } => Err(Error::TransactionConflict(
+        | VersionedMapUpdate::Conflict { current: Some(_) } => Err(Error::transaction_conflict(
             TransactionConflict::new(conflict_name.to_vec(), None, None),
         )),
     }

@@ -35,6 +35,12 @@ pub struct SecondaryIndexMatch {
     pub projection: Option<Vec<u8>>,
 }
 
+/// One primary key and its optional projected bytes.
+pub type ProjectedIndexEntry = (Vec<u8>, Option<Vec<u8>>);
+
+/// One primary key and full source value resolved from the pinned snapshot.
+pub type IndexedSourceRecord = (Vec<u8>, Vec<u8>);
+
 /// Direction captured by a resumable secondary-index cursor.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SecondaryIndexDirection {
@@ -253,7 +259,7 @@ impl<'a, S: Store> SecondaryIndexSnapshot<'a, S> {
             .collect())
     }
 
-    pub fn projected(&self, term: &[u8]) -> Result<Vec<(Vec<u8>, Option<Vec<u8>>)>, Error> {
+    pub fn projected(&self, term: &[u8]) -> Result<Vec<ProjectedIndexEntry>, Error> {
         Ok(self
             .exact(term)?
             .into_iter()
@@ -262,7 +268,7 @@ impl<'a, S: Store> SecondaryIndexSnapshot<'a, S> {
     }
 
     /// Resolve matching primary keys with one ordered batched source read.
-    pub fn records(&self, term: &[u8]) -> Result<Vec<(Vec<u8>, Vec<u8>)>, Error> {
+    pub fn records(&self, term: &[u8]) -> Result<Vec<IndexedSourceRecord>, Error> {
         let matches = self.exact(term)?;
         let keys: Vec<&[u8]> = matches
             .iter()

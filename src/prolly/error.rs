@@ -219,7 +219,7 @@ pub enum Error {
     /// The configured store does not support strict atomic transactions.
     UnsupportedTransactions { store: &'static str },
     /// A transaction could not commit because a validated named root changed.
-    TransactionConflict(TransactionConflict),
+    TransactionConflict(Box<TransactionConflict>),
     /// A built-in versioned-map catalog is missing or internally inconsistent.
     InvalidVersionedMap(String),
     /// A runtime secondary-index definition is invalid.
@@ -280,6 +280,12 @@ pub enum Error {
     },
     /// A current indexed-snapshot bundle is malformed or inconsistent.
     InvalidIndexedSnapshotBundle { reason: String },
+}
+
+impl Error {
+    pub(crate) fn transaction_conflict(conflict: TransactionConflict) -> Self {
+        Self::TransactionConflict(Box::new(conflict))
+    }
 }
 
 impl std::fmt::Display for Error {

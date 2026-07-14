@@ -705,10 +705,8 @@ impl<B: RemoteStoreBackend> AsyncTransactionalStore for RemoteProllyStore<B> {
                     .map(decode_root_manifest::<B::Error>)
                     .transpose()
                     .map_err(|err| Error::Store(Box::new(err)))?;
-                Ok(TransactionUpdate::Conflict(TransactionConflict::new(
-                    conflict.name,
-                    expected,
-                    current,
+                Ok(TransactionUpdate::Conflict(Box::new(
+                    TransactionConflict::new(conflict.name, expected, current),
                 )))
             }
         }
@@ -1084,9 +1082,11 @@ mod tests {
     #[derive(Default)]
     struct MemoryBackend {
         nodes: Mutex<BTreeMap<Vec<u8>, Vec<u8>>>,
-        hints: Mutex<BTreeMap<(Vec<u8>, Vec<u8>), Vec<u8>>>,
+        hints: Mutex<BTreeMap<HintKey, Vec<u8>>>,
         roots: Mutex<BTreeMap<Vec<u8>, Vec<u8>>>,
     }
+
+    type HintKey = (Vec<u8>, Vec<u8>);
 
     impl RemoteStoreBackend for MemoryBackend {
         type Error = MemoryBackendError;

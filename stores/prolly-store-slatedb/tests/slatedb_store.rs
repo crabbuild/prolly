@@ -35,6 +35,16 @@ fn slatedb_store_satisfies_node_scan_contract() {
 }
 
 #[test]
+fn slatedb_store_supports_strict_indexed_maps() {
+    let object_store: Arc<dyn ObjectStore> =
+        Arc::new(slatedb::object_store::memory::InMemory::new());
+    let path = format!("indexed-map-contract-{}", std::process::id());
+    let store = SlateDbStore::open(path, object_store).unwrap();
+
+    prolly_store_test::assert_indexed_map_contract(store);
+}
+
+#[test]
 fn slatedb_store_persists_named_root_across_reopen() {
     let object_store: Arc<dyn ObjectStore> =
         Arc::new(slatedb::object_store::memory::InMemory::new());

@@ -32,6 +32,15 @@ fn pglite_store_satisfies_node_scan_contract_when_enabled() {
 }
 
 #[test]
+fn pglite_store_supports_strict_indexed_maps_when_enabled() {
+    if std::env::var("PROLLY_PGLITE_TEST").ok().as_deref() != Some("1") {
+        return;
+    }
+
+    prolly_store_test::assert_indexed_map_contract(PgliteStore::open_in_memory().unwrap());
+}
+
+#[test]
 fn pglite_store_persists_named_root_across_reopen_when_enabled() {
     if std::env::var("PROLLY_PGLITE_TEST").ok().as_deref() != Some("1") {
         return;

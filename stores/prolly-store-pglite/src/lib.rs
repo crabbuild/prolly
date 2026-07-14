@@ -936,8 +936,8 @@ impl TransactionalStore for PgliteStore {
             .map_err(|err| Error::Store(Box::new(err)))?;
         let current = root_manifest_option(conflict.get("current"))
             .map_err(|err| Error::Store(Box::new(err)))?;
-        Ok(TransactionUpdate::Conflict(TransactionConflict::new(
-            name, expected, current,
+        Ok(TransactionUpdate::Conflict(Box::new(
+            TransactionConflict::new(name, expected, current),
         )))
     }
 }

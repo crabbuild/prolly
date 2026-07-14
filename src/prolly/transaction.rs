@@ -122,7 +122,7 @@ pub enum TransactionUpdate {
         roots_written: usize,
     },
     /// A named-root condition failed; no staged writes were applied.
-    Conflict(TransactionConflict),
+    Conflict(Box<TransactionConflict>),
 }
 
 impl TransactionUpdate {

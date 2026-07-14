@@ -45,6 +45,16 @@ fn rocksdb_store_satisfies_node_store_scan_contract() {
 }
 
 #[test]
+fn rocksdb_store_supports_strict_indexed_maps() {
+    let path = temp_db_path("indexed-map-contract");
+    remove_rocksdb_dir(&path);
+
+    prolly_store_test::assert_indexed_map_contract(RocksDBStore::open(&path).unwrap());
+
+    remove_rocksdb_dir(&path);
+}
+
+#[test]
 fn rocksdb_store_persists_named_root_across_reopen() {
     let path = temp_db_path("root-manifest");
     remove_rocksdb_dir(&path);

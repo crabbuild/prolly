@@ -569,10 +569,7 @@ impl<'a, S: Store> Iterator for RangeIter<'a, S> {
 
             // If we've exhausted this node, advance to next
             if *idx >= node.len() {
-                match self.advance_to_next_leaf() {
-                    Some(result) => return Some(result),
-                    None => return None,
-                }
+                return self.advance_to_next_leaf();
             }
 
             // If we're at a leaf, yield the current entry
