@@ -25,7 +25,7 @@ The hardened v1 supports:
 - strict synchronous maintenance;
 - non-unique indexes;
 - zero-to-many terms emitted per source record;
-- primary-key-only index results;
+- `KeysOnly`, `Include`, and `All` projection modes;
 - runtime Rust definitions and callbacks;
 - dynamic index creation on empty or populated maps;
 - retryable snapshot builds;
@@ -53,13 +53,14 @@ are never merged independently.
    application on one extractor or retain unbounded history.
 9. Keep persisted formats independent of Rust closures and future derive
    macros.
+10. Support compact key-only indexes and bounded covering projections without
+    changing source authority or snapshot consistency.
 
 ## Non-goals
 
 V1 does not include:
 
 - unique constraints;
-- covering projections;
 - a derive macro;
 - guaranteed-progress online builds under continuous writes;
 - async APIs or language bindings;
@@ -68,6 +69,7 @@ V1 does not include:
 - indexed merge or general rollback publication;
 - immediate physical purge of retired generations;
 - full-history portable backups.
+- automatic blob offload for projected index values.
 
 Unsupported source-head operations fail behind the write fence. They do not
 silently skip index maintenance.
@@ -150,7 +152,8 @@ existing primitives above that layer.
 - `SecondaryIndex` is one runtime definition.
 - `SecondaryIndexRegistry` owns the runtime definitions supplied at open.
 - `SecondaryIndexSnapshot<'a, S>` queries one checkpointed hidden index map.
-- `SecondaryIndexMatch` contains a logical term and primary key.
+- `SecondaryIndexMatch` contains a logical term, primary key, and optional
+  projected bytes.
 
 `IndexCoordinator`, hidden map IDs, persisted record codecs, and write permits
 are crate-private implementation details.
@@ -204,27 +207,56 @@ pub trait SecondaryIndexExtractor: Send + Sync + 'static {
         &self,
         primary_key: &[u8],
         source_value: &[u8],
-    ) -> Result<Vec<Vec<u8>>, SecondaryIndexError>;
+    ) -> Result<Vec<SecondaryIndexEntry>, SecondaryIndexError>;
+}
+
+pub struct SecondaryIndexEntry {
+    pub term: Vec<u8>,
+    pub projection: Option<Vec<u8>>,
+}
+
+pub enum IndexProjection {
+    KeysOnly,
+    Include,
+    All,
 }
 ```
+
+`SecondaryIndex::non_unique` remains a concise `KeysOnly` constructor whose
+callback returns terms. The general builder selects a projection mode and uses
+the entry-returning extractor. `extract_terms` is also available for `All`,
+where the engine supplies the stored source bytes automatically.
+
+Projection semantics are:
+
+- `KeysOnly`: emitted entries must not contain projection bytes;
+- `Include`: every emitted entry contains deterministic application-encoded
+  projection bytes;
+- `All`: emitted entries must not contain projection bytes, and the engine
+  copies the complete raw source value stored at that source version.
 
 `SecondaryIndex::non_unique` binds an extractor to:
 
 - an arbitrary-byte stable name, with UTF-8 convenience constructors;
 - a positive generation number;
 - an application-controlled extractor ID;
+- one `IndexProjection` mode;
 - physical layout version 1;
 - explicit resource limits, using engine defaults when omitted.
 
 The persisted descriptor records semantic fields, not callback code. Its
 fingerprint hashes canonical descriptor bytes including source map ID, name,
-generation, extractor ID, index mode, and physical layout version. Applications
-must change the extractor ID or generation when extraction semantics change.
+generation, extractor ID, index mode, projection mode, and physical layout
+version. Applications must change the extractor ID or generation when
+extraction or projection semantics change.
 
-The engine sorts and deduplicates terms emitted by one source record. V1 has no
-projection payload, so repeated identical terms are harmless. Extractor errors
-abort without publication. A Rust panic unwinds without committing; structured
-panic conversion is deferred to the FFI phase.
+The engine sorts entries by canonical term bytes and deduplicates emissions
+with identical term and projection bytes. Emitting one term more than once with
+different projections from the same source record is
+`ConflictingIndexProjection`, because both emissions address the same physical
+key. Extractor and projection errors abort without publication. A Rust panic
+unwinds without committing; structured panic conversion is deferred to the
+FFI phase.
 
 ## Persisted State
 
@@ -270,6 +302,7 @@ pub struct SecondaryIndexDescriptor {
     pub generation: u64,
     pub extractor_id: String,
     pub fingerprint: Cid,
+    pub projection: IndexProjection,
     pub physical_layout_version: u32,
 }
 
@@ -311,19 +344,34 @@ that began before first-index activation from committing after activation.
 One logical non-unique relationship is:
 
 ```text
-term -> primary key
+term -> primary key + optional projected bytes
 ```
 
 Physical layout version 1 stores:
 
 ```text
 key   = encode_segment(term) || encode_segment(primary_key)
-value = empty bytes
+
+KeysOnly value = empty bytes
+Include value  = canonical IndexValue::Included(projection_bytes)
+All value      = canonical IndexValue::FullSource(source_value)
 ```
 
 The primary key is decoded from the physical key and is not duplicated in the
-value. Segment encoding preserves byte ordering and makes component boundaries
-unambiguous.
+value. The non-empty value envelope has a magic, version, projection kind, and
+bounded payload. Segment encoding preserves byte ordering and makes component
+boundaries unambiguous.
+
+`All` copies the exact raw bytes stored in the source tree. If those bytes are
+an application or engine blob reference, the reference is copied rather than
+the referenced blob contents. Projected index values remain inline in v1 and
+must satisfy the configured size limits.
+
+Changing projection mode or included-byte encoding requires a new definition
+generation. For `KeysOnly`, a source change that preserves emitted terms
+produces no index mutation. For `Include`, a projection-only change produces an
+upsert for the existing physical key. For `All`, every source-value change
+rewrites each index entry emitted by that record.
 
 The module adds an internal segment-prefix encoder that escapes a partial term
 without appending a segment terminator. Query translation is:
@@ -333,7 +381,8 @@ without appending a segment terminator. Query translation is:
 - term prefix: escaped partial term without its terminator;
 - complete iteration: the whole hidden index tree.
 
-Key and term limits are checked before physical keys are allocated.
+Key, term, and projected-value limits are checked before proportional physical
+key or value buffers are allocated.
 
 ## Dynamic Registration
 
@@ -350,7 +399,8 @@ V1 uses a retryable shadow build:
 
 1. Pin source head `Sbase`.
 2. Stream the immutable source snapshot.
-3. Run the extractor, enforce limits, and produce sorted physical entries.
+3. Run the extractor, construct projection values, enforce limits, and produce
+   sorted physical entries.
 4. Build the hidden index with the existing sorted builder under a memory
    budget.
 5. Start an activation transaction.
@@ -387,8 +437,10 @@ For `W` normalized changed source keys:
 6. Normalize duplicate source mutations with existing last-write-wins rules.
 7. Batch-load old source values for affected primary keys.
 8. Determine final new values.
-9. Extract, sort, and deduplicate old and new terms for every active index.
-10. Plan exact physical deletes from `old - new` and inserts from `new - old`.
+9. Extract, project, sort, and deduplicate old and new entries for every active
+   index.
+10. Compare physical key and value bytes: delete removed keys, insert new keys,
+    and upsert keys whose projected value changed.
 11. Enforce per-record and per-transaction resource limits.
 12. Stage the source mutation batch and obtain `Snext`.
 13. Stage one mutation batch per affected hidden index and obtain each `Inext`.
@@ -457,14 +509,22 @@ let keys = snapshot
 let records = snapshot
     .index("by-status")?
     .records(&active_term)?;
+
+let projected = snapshot
+    .index("by-status")?
+    .projected(&active_term)?;
 ```
 
 `records` performs one ordered `get_many` against the pinned source snapshot
-and preserves index order.
+and preserves index order for every projection mode. It is the authoritative
+record API. `projected` reads only the index: it returns no payload for
+`KeysOnly`, application-encoded bytes for `Include`, and the exact stored source
+bytes for `All`.
 
 `SecondaryIndexSnapshot` supports exact-term lookup, term-prefix and term-range
 iteration, forward and reverse cursor pages, primary-key iteration, and batched
-record resolution.
+record resolution. Match iteration exposes term, primary key, and optional
+projected bytes.
 
 ### Historical snapshots
 
@@ -607,6 +667,8 @@ IndexDefinitionMismatch { name, persisted, runtime }
 IndexesRequireIndexedMap { map_id, active_indexes }
 IndexOperationUnsupported { operation }
 IndexExtractionFailed { name, primary_key, reason }
+IndexProjectionMismatch { name, mode, primary_key }
+ConflictingIndexProjection { name, primary_key, term }
 IndexBuildConflictLimitExceeded { name, attempts }
 IndexUnavailableAtVersion { name, source_version }
 IndexCheckpointMismatch { name, source_version, reason }
@@ -625,6 +687,10 @@ Configuration bounds:
 
 - active definitions per source map;
 - term bytes;
+- projection bytes per entry;
+- projected bytes per source record;
+- projected bytes per source transaction;
+- raw source-value bytes accepted by an `All` index;
 - emitted terms per record;
 - derived mutations per source transaction;
 - extractor output bytes per transaction;
@@ -661,7 +727,9 @@ advertising strict indexed-map support.
 - canonical descriptor, checkpoint, control, and bundle codecs;
 - descriptor fingerprints and hidden ID construction;
 - physical key encoding, decoding, exact/range/prefix bounds, and ordering;
-- old/new emission set subtraction and deduplication;
+- projection value envelope encoding and decoding;
+- old/new emission comparison, projection-only upserts, and deduplication;
+- rejection of projection-mode mismatches and conflicting projections;
 - sparse and multi-term extraction;
 - resource-limit enforcement;
 - cursor identity validation;
@@ -678,14 +746,16 @@ full deterministic rebuild root
 ```
 
 Generate arbitrary inserts, replacements, deletes, duplicate mutations,
-non-indexed-field changes, empty emissions, multi-term emissions, and operation
-orderings. Also assert that every physical entry resolves to a source record
-that emits the term and every emitted term has one physical entry.
+non-indexed-field changes, empty emissions, multi-term emissions, projection
+changes, and operation orderings across all projection modes. Also assert that
+every physical entry resolves to a source record that emits the same term and
+projection, and every emitted entry has one physical entry.
 
 ### Transaction and fault tests
 
 - source, multiple indexes, checkpoints, and catalog commit all-or-nothing;
 - extraction failure and resource exhaustion publish nothing;
+- invalid, conflicting, or oversized projections publish nothing;
 - source writer versus first-index activation;
 - indexed writer versus replacement, deactivation, retention, and repair;
 - pre-activation unmanaged writer cannot commit post-activation;
@@ -711,20 +781,24 @@ that emits the term and every emitted term has one physical entry.
 ### Conformance fixtures
 
 Commit portable fixtures for descriptor bytes and fingerprints, control and
-catalog records, physical entry bytes, hidden IDs, snapshot bundle manifests,
-and expected source/index/catalog roots. The later derive macro and bindings
-must produce these same low-level definitions and roots.
+catalog records, physical key and projection-value bytes for every projection
+mode, hidden IDs, snapshot bundle manifests, and expected
+source/index/catalog roots. The later derive macro and bindings must produce
+these same low-level definitions and roots.
 
 ## Performance Model and Benchmarks
 
-For `W` changed source keys, `D` active indexes, and `E` emitted terms, a normal
-write should scale with `W * D + E`, not total source or index size.
+For `W` changed source keys, `D` active indexes, `E` emitted terms, and `P`
+projected bytes written, a normal write should scale with `W * D + E + P`, not
+total source or index size.
 
 Required benchmarks cover:
 
 - one and several active indexes;
 - indexed-field and non-indexed-field updates;
 - sparse and high-fanout extractors;
+- `KeysOnly`, small and large `Include`, and bounded `All` projections;
+- term-preserving projection changes and full-value write amplification;
 - exact, prefix, range, forward-page, and reverse-page queries;
 - batched source record resolution;
 - current and historical snapshots;
@@ -734,9 +808,9 @@ Required benchmarks cover:
 - concurrent writer conflicts.
 
 Metrics expose source keys normalized, records extracted, terms emitted,
-physical inserts/deletes, unchanged emissions skipped, nodes written by map,
-commit retries, build attempts, verification outcomes, and retained roots by
-generation.
+projected bytes, physical inserts/deletes/upserts, unchanged emissions skipped,
+nodes written by map, commit retries, build attempts, verification outcomes,
+and retained roots by generation.
 
 ## Implementation Milestones
 
@@ -758,8 +832,9 @@ catalog, and no public managed-map path bypasses an active fence.
 2. Add `IndexedMap`, `IndexedSnapshot`, and index query handles.
 3. Implement dynamic shadow builds and `ensure_index`.
 4. Implement incremental delta planning and atomic writes.
-5. Add exact, prefix, range, cursors, historical snapshots, and batched record
-   resolution.
+5. Implement all three projection modes and their canonical value codec.
+6. Add exact, prefix, range, cursors, historical snapshots, projected reads,
+   and batched authoritative record resolution.
 
 Exit: arbitrary incremental mutation sequences equal deterministic rebuilds,
 and current/historical queries are snapshot-exact.
@@ -781,25 +856,28 @@ V1 is complete when:
 
 1. Applications can declare runtime non-unique indexes whose records emit zero
    or more arbitrary-byte terms.
-2. Indexes can be added safely after source-map creation and population.
-3. Every successful source write atomically publishes all active index and
+2. Definitions support deterministic `KeysOnly`, bounded `Include`, and
+   bounded `All` projections, with `KeysOnly` as the default.
+3. Indexes can be added safely after source-map creation and population.
+4. Every successful source write atomically publishes all active index and
    catalog changes.
-4. No public managed-map mutation or prune operation can accidentally bypass
+5. No public managed-map mutation or prune operation can accidentally bypass
    the fence.
-5. Every indexed query uses an exact immutable catalog selection.
-6. Historical queries use exact checkpoints or return unavailable.
-7. Incremental roots equal full rebuild roots under property testing.
-8. Startup validation, verification, and repair detect and recover from index
+6. Every indexed query uses an exact immutable catalog selection.
+7. Historical queries use exact checkpoints or return unavailable.
+8. Incremental roots, including projected value bytes, equal full rebuild roots
+   under property testing.
+9. Startup validation, verification, and repair detect and recover from index
    drift without silent query-time mutation.
-9. Definitions can be replaced and indexes logically deactivated without
+10. Definitions can be replaced and indexes logically deactivated without
    invalidating pinned historical snapshots.
-10. `keep_last(n)` never removes an index version referenced by a retained
+11. `keep_last(n)` never removes an index version referenced by a retained
     source checkpoint.
-11. Current indexed snapshots export and import with full structural and
+12. Current indexed snapshots export and import with full structural and
     checkpoint verification.
-12. Crash/reopen and concurrent-writer tests never expose torn source/index
+13. Crash/reopen and concurrent-writer tests never expose torn source/index
     state.
-13. Persisted bytes and roots are locked by conformance fixtures before derive
+14. Persisted bytes and roots are locked by conformance fixtures before derive
     macros, async APIs, or bindings are added.
 
 ## Final Rule
