@@ -1015,7 +1015,8 @@ mod tests {
             .map(|index| format!("!invalid-{index}").into_bytes())
             .find(|key| promotion_level(key, 1, 7) == 0 && key < &root.entries[1].key)
             .unwrap();
-        root.entries[0].key = replacement;
+        root.entries[0].key = replacement.clone();
+        root.entries[0].min_key = replacement;
         let corrupt = publish_replacement_root(&store, &map, root);
 
         assert!(matches!(
@@ -1054,6 +1055,7 @@ mod tests {
             .unwrap();
         let mut root = ProximityNode::decode(&bytes, 1).unwrap();
         root.subtree_count += 1;
+        root.entries[0].child_count += 1;
         let descriptor = publish_root_descriptor(&store, &map, root);
 
         assert!(matches!(

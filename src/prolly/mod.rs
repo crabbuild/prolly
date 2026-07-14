@@ -117,6 +117,7 @@ fn current_unix_time_millis() -> u64 {
 // Core modules - moved from root level
 pub mod boundary;
 pub mod builder;
+pub mod canonical_splice;
 pub mod cid;
 pub mod config;
 pub mod cursor;

@@ -280,6 +280,7 @@ pub use prolly::blob::{
 pub use prolly::blob::{TokioBlockingBlobStore, TokioBlockingBlobStoreError};
 pub use prolly::boundary::{is_boundary, is_boundary_config};
 pub use prolly::builder::{BatchBuilder, SortedBatchBuilder};
+pub use prolly::canonical_splice::{canonical_splice, CanonicalSpliceStats};
 pub use prolly::cid::Cid;
 pub use prolly::config::{Config, ConfigBuilder};
 pub use prolly::crdt::{
