@@ -1349,17 +1349,15 @@ fn localized_internal_diff_frames<S: Store>(
             let range_end = resync
                 .map(|(next_base, _)| base.keys[next_base].as_slice())
                 .or(span_end);
-            let mut local = Vec::new();
-            diff_collected_nodes_range(
+            frames.extend(localized_divergent_range_frames(
                 prolly,
                 base,
                 other,
                 span_end,
                 range_start,
                 range_end,
-                &mut local,
-            )?;
-            frames.push(LocalizedDiffFrame::Emit(local));
+                stats,
+            )?);
             if let Some((next_base, next_other)) = resync {
                 base_idx = next_base;
                 other_idx = next_other;
@@ -1383,6 +1381,74 @@ fn localized_internal_diff_frames<S: Store>(
         other_idx += 1;
     }
     Ok(frames)
+}
+
+fn localized_divergent_range_frames<S: Store>(
+    prolly: &Prolly<S>,
+    base: &Node,
+    other: &Node,
+    span_end: Option<&[u8]>,
+    range_start: &[u8],
+    range_end: Option<&[u8]>,
+    stats: &mut DiffTraversalStats,
+) -> Result<Vec<LocalizedDiffFrame>, Error> {
+    if base.level <= 1 || other.level <= 1 {
+        let mut local = Vec::new();
+        diff_collected_nodes_range(
+            prolly,
+            base,
+            other,
+            span_end,
+            range_start,
+            range_end,
+            &mut local,
+        )?;
+        return Ok(vec![LocalizedDiffFrame::Emit(local)]);
+    }
+
+    let base_frontier = flatten_internal_range(prolly, base, span_end, range_start, range_end)?;
+    let other_frontier = flatten_internal_range(prolly, other, span_end, range_start, range_end)?;
+    localized_internal_diff_frames(prolly, &base_frontier, &other_frontier, range_end, stats)
+}
+
+fn flatten_internal_range<S: Store>(
+    prolly: &Prolly<S>,
+    node: &Node,
+    span_end: Option<&[u8]>,
+    range_start: &[u8],
+    range_end: Option<&[u8]>,
+) -> Result<Node, Error> {
+    let spans = overlapping_child_cids(node, span_end, range_start, range_end)?;
+    let cids = spans.iter().map(|(_, cid)| cid.clone()).collect::<Vec<_>>();
+    let children = load_child_nodes(prolly, &cids)?;
+    let mut flattened = Node {
+        keys: Vec::new(),
+        vals: Vec::new(),
+        child_counts: Vec::new(),
+        leaf: false,
+        level: node.level - 1,
+        format: node.format.clone(),
+    };
+    for child in children {
+        if child.leaf || child.level != flattened.level {
+            return Err(Error::InvalidNode);
+        }
+        ensure_node_value_count(&child)?;
+        flattened.keys.extend(child.keys.iter().cloned());
+        flattened.vals.extend(child.vals.iter().cloned());
+        flattened
+            .child_counts
+            .extend(child.child_counts.iter().copied());
+    }
+    flattened.validate()?;
+
+    let start = first_potentially_overlapping_child_index(&flattened, range_start);
+    let end = range_end.map_or(flattened.len(), |end| lower_bound(&flattened.keys, end));
+    flattened.keys = flattened.keys[start..end].to_vec();
+    flattened.vals = flattened.vals[start..end].to_vec();
+    flattened.child_counts = flattened.child_counts[start..end].to_vec();
+    flattened.validate()?;
+    Ok(flattened)
 }
 
 fn next_shared_child_start(
@@ -5449,33 +5515,51 @@ mod tests {
         let store = Arc::new(CountingStore::default());
         let config = Config::default();
         let prolly = Prolly::new(store.clone(), config.clone());
-        let mut base_root = prolly.new_internal_node(1);
-        let mut other_root = prolly.new_internal_node(1);
+        let mut base_root = prolly.new_internal_node(2);
+        let mut other_root = prolly.new_internal_node(2);
+        let mut blocked_leaf = None;
 
-        for child in 0..512 {
-            let mut leaf = prolly.new_leaf_node();
-            for offset in 0..8 {
-                let idx = child * 8 + offset;
-                leaf.keys.push(format!("k{idx:05}").into_bytes());
-                leaf.vals.push(format!("v{idx:05}").into_bytes());
-            }
-            let cid = prolly.save(&leaf).unwrap();
-            base_root.keys.push(leaf.keys[0].clone());
-            base_root.vals.push(cid.as_bytes().to_vec());
-            base_root.child_counts.push(8);
-
-            if child == 256 {
-                leaf.keys.remove(0);
-                leaf.vals.remove(0);
+        for group in 0..8 {
+            let mut base_parent = prolly.new_internal_node(1);
+            let mut other_parent = prolly.new_internal_node(1);
+            for child in group * 64..(group + 1) * 64 {
+                let mut leaf = prolly.new_leaf_node();
+                for offset in 0..8 {
+                    let idx = child * 8 + offset;
+                    leaf.keys.push(format!("k{idx:05}").into_bytes());
+                    leaf.vals.push(format!("v{idx:05}").into_bytes());
+                }
                 let cid = prolly.save(&leaf).unwrap();
-                other_root.keys.push(leaf.keys[0].clone());
-                other_root.vals.push(cid.as_bytes().to_vec());
-                other_root.child_counts.push(7);
-            } else {
-                other_root.keys.push(leaf.keys[0].clone());
-                other_root.vals.push(cid.as_bytes().to_vec());
-                other_root.child_counts.push(8);
+                if child == 300 {
+                    blocked_leaf = Some(cid.clone());
+                }
+                base_parent.keys.push(leaf.keys[0].clone());
+                base_parent.vals.push(cid.as_bytes().to_vec());
+                base_parent.child_counts.push(8);
+
+                if child == 256 {
+                    leaf.keys.remove(0);
+                    leaf.vals.remove(0);
+                    let cid = prolly.save(&leaf).unwrap();
+                    other_parent.keys.push(leaf.keys[0].clone());
+                    other_parent.vals.push(cid.as_bytes().to_vec());
+                    other_parent.child_counts.push(7);
+                } else {
+                    other_parent.keys.push(leaf.keys[0].clone());
+                    other_parent.vals.push(cid.as_bytes().to_vec());
+                    other_parent.child_counts.push(8);
+                }
             }
+            let base_cid = prolly.save(&base_parent).unwrap();
+            base_root.keys.push(base_parent.keys[0].clone());
+            base_root.vals.push(base_cid.as_bytes().to_vec());
+            base_root.child_counts.push(512);
+            let other_cid = prolly.save(&other_parent).unwrap();
+            other_root.keys.push(other_parent.keys[0].clone());
+            other_root.vals.push(other_cid.as_bytes().to_vec());
+            other_root
+                .child_counts
+                .push(if group == 4 { 511 } else { 512 });
         }
         let base = Tree {
             root: Some(prolly.save(&base_root).unwrap()),
@@ -5488,6 +5572,7 @@ mod tests {
 
         prolly.clear_cache();
         store.reset_counts();
+        store.block_get_key(blocked_leaf.unwrap().as_bytes());
         let diffs = compute_diff(&prolly, &base, &other).unwrap();
 
         assert_eq!(diffs.len(), 1);
@@ -5498,6 +5583,7 @@ mod tests {
             store.max_batch_get_ordered_len.load(Ordering::Relaxed) < 100,
             "clustered boundary drift should not hydrate the full tree in one batch"
         );
+        store.clear_blocked_get_keys();
     }
 
     #[test]
