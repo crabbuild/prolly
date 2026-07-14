@@ -62,3 +62,13 @@ fn operation_counts_and_encoded_records_are_exact() {
         b"value-00000000000000000042-07-payload"
     );
 }
+
+#[test]
+fn csv_rows_match_the_declared_schema() {
+    let row = support::CsvRow::example();
+    let header = support::CsvRow::header();
+    let encoded = row.to_csv();
+    assert_eq!(header.split(',').count(), encoded.split(',').count());
+    assert!(encoded.contains("current,full,1000,1,sorted_stream_build"));
+    assert!(encoded.ends_with(",true,ok"));
+}

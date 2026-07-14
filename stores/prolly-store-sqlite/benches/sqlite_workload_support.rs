@@ -6,6 +6,120 @@ use std::path::PathBuf;
 pub const RANDOM_SEED: u64 = 0x6a09_e667_f3bc_c909;
 pub const READ_OPERATIONS: usize = 1_000_000;
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct CsvRow {
+    pub version: String,
+    pub profile: String,
+    pub records: usize,
+    pub run: usize,
+    pub workload: String,
+    pub operations: usize,
+    pub total_ns: u128,
+    pub ns_per_op: f64,
+    pub ops_per_sec: f64,
+    pub nodes_read: u64,
+    pub nodes_written: u64,
+    pub bytes_read: u64,
+    pub bytes_written: u64,
+    pub cache_hits: u64,
+    pub cache_misses: u64,
+    pub cache_evictions: u64,
+    pub result_entries: usize,
+    pub num_nodes: usize,
+    pub num_leaves: usize,
+    pub num_internal: usize,
+    pub height: usize,
+    pub tree_bytes: usize,
+    pub db_bytes_before: u64,
+    pub db_bytes_after: u64,
+    pub wal_bytes_after: u64,
+    pub shm_bytes_after: u64,
+    pub fixture_bytes_after: u64,
+    pub sqlite_node_count: u64,
+    pub sqlite_node_payload_bytes: u64,
+    pub validated: bool,
+    pub status: String,
+}
+
+impl CsvRow {
+    pub fn header() -> &'static str {
+        "version,profile,records,run,workload,operations,total_ns,ns_per_op,ops_per_sec,nodes_read,nodes_written,bytes_read,bytes_written,cache_hits,cache_misses,cache_evictions,result_entries,num_nodes,num_leaves,num_internal,height,tree_bytes,db_bytes_before,db_bytes_after,wal_bytes_after,shm_bytes_after,fixture_bytes_after,sqlite_node_count,sqlite_node_payload_bytes,validated,status"
+    }
+
+    pub fn to_csv(&self) -> String {
+        format!(
+            "{},{},{},{},{},{},{},{:.3},{:.3},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}",
+            self.version,
+            self.profile,
+            self.records,
+            self.run,
+            self.workload,
+            self.operations,
+            self.total_ns,
+            self.ns_per_op,
+            self.ops_per_sec,
+            self.nodes_read,
+            self.nodes_written,
+            self.bytes_read,
+            self.bytes_written,
+            self.cache_hits,
+            self.cache_misses,
+            self.cache_evictions,
+            self.result_entries,
+            self.num_nodes,
+            self.num_leaves,
+            self.num_internal,
+            self.height,
+            self.tree_bytes,
+            self.db_bytes_before,
+            self.db_bytes_after,
+            self.wal_bytes_after,
+            self.shm_bytes_after,
+            self.fixture_bytes_after,
+            self.sqlite_node_count,
+            self.sqlite_node_payload_bytes,
+            self.validated,
+            self.status.replace(',', ";")
+        )
+    }
+
+    pub fn example() -> Self {
+        Self {
+            version: "current".to_string(),
+            profile: "full".to_string(),
+            records: 1_000,
+            run: 1,
+            workload: "sorted_stream_build".to_string(),
+            operations: 1_000,
+            total_ns: 1_000_000,
+            ns_per_op: 1_000.0,
+            ops_per_sec: 1_000_000.0,
+            nodes_read: 0,
+            nodes_written: 1,
+            bytes_read: 0,
+            bytes_written: 1_024,
+            cache_hits: 0,
+            cache_misses: 0,
+            cache_evictions: 0,
+            result_entries: 1_000,
+            num_nodes: 1,
+            num_leaves: 1,
+            num_internal: 0,
+            height: 1,
+            tree_bytes: 1_024,
+            db_bytes_before: 0,
+            db_bytes_after: 4_096,
+            wal_bytes_after: 0,
+            shm_bytes_after: 0,
+            fixture_bytes_after: 4_096,
+            sqlite_node_count: 1,
+            sqlite_node_payload_bytes: 1_024,
+            validated: true,
+            status: "ok".to_string(),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DurabilityProfile {
     Full,

@@ -29,3 +29,7 @@ unsafe_code = "allow"
 [[bench]]
 name = "sqlite_scale_bench"
 harness = false
+
+[[bench]]
+name = "sqlite_workload_bench"
+harness = false
