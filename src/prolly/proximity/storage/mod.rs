@@ -120,6 +120,7 @@ mod fixture_tests {
             group_size: 2,
             entry_count: 2,
             scales: vec![0.5],
+            max_error: 0.25,
             values: vec![0, 5, 2, 0],
         };
         let sq8_bytes = sq8.encode().unwrap();

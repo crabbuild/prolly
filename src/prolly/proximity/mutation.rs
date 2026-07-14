@@ -3,7 +3,7 @@ use super::super::error::Error;
 use super::super::store::Store;
 use super::builder::{build_hierarchy_at_level, IndexedRecord};
 use super::distance::score;
-use super::storage::overflow::{persist_logical_node, summarize};
+use super::storage::overflow::{persist_empty_leaf, persist_logical_node, summarize};
 use super::storage::vector::ExternalVector;
 use super::storage::{PhysicalNodeKind, ProximityEntry, ProximityNode, VectorRef};
 use super::{ProximityConfig, ProximityMutationStats};
@@ -181,10 +181,7 @@ impl<S: Store> Context<'_, S> {
     fn finish_node(&mut self, old_cid: &Cid, node: ProximityNode) -> Result<(Cid, u64), Error> {
         let count = node.subtree_count;
         let cid = if node.entries.is_empty() {
-            let bytes = node.encode()?;
-            let cid = Cid::from_bytes(&bytes);
-            self.pending.insert(cid.clone(), bytes);
-            cid
+            persist_empty_leaf(self.config, &mut self.pending)?
         } else {
             persist_logical_node(
                 node.kind,

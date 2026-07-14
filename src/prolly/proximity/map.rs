@@ -13,6 +13,7 @@ use super::search::{
     adaptive_should_stop, insert_top_k, AdaptiveContext, FrontierEntry, PreparedFilter,
     SearchCandidate,
 };
+use super::storage::quantized::ScalarQuantized;
 use super::storage::vector::ExternalVector;
 use super::storage::{Descriptor, PhysicalNodeKind, ProximityNode, StoredRecord, VectorRef};
 use super::vector::promotion_level;
@@ -375,9 +376,12 @@ where
     /// Deterministic global best-first search over the authoritative hierarchy.
     pub fn search(&self, request: SearchRequest<'_>) -> Result<SearchResult, Error> {
         request.validate()?;
-        if request.backend == SearchBackend::Hnsw {
+        if matches!(
+            request.backend,
+            SearchBackend::ProductQuantized | SearchBackend::Hnsw
+        ) {
             return Err(Error::InvalidProximitySearch {
-                reason: "HNSW backend requires a validated serving sidecar".to_owned(),
+                reason: "requested backend requires a validated accelerator sidecar".to_owned(),
             });
         }
         let filter = PreparedFilter::new(request.filter.clone(), &self.tree.directory)?;
@@ -386,6 +390,8 @@ where
             request.query,
             self.tree.config.dimensions,
         )?;
+        let use_scalar_quantization =
+            super::accelerator::sq8::enabled(&self.tree.config, request.policy);
         let mut stats = ProximitySearchStats::default();
         let mut frontier = BinaryHeap::new();
         frontier.push(FrontierEntry {
@@ -403,7 +409,8 @@ where
         let mut completion = SearchCompletion::Exact;
 
         while let Some(next) = frontier.peek() {
-            if self.tree.config.metric == DistanceMetric::L2Squared
+            if !use_scalar_quantization
+                && self.tree.config.metric == DistanceMetric::L2Squared
                 && candidates.len() == request.k
                 && next.bound > candidates.last().expect("full top-k").score
             {
@@ -448,7 +455,14 @@ where
                     reason: "cycle or repeated child ownership".to_owned(),
                 });
             }
-            let (node, bytes) = self.load_node(&next.cid)?;
+            let (node, mut bytes) = self.load_node(&next.cid)?;
+            let quantizer = if use_scalar_quantization && node.kind.has_children(node.level) {
+                let (quantizer, quantizer_bytes) = self.load_scalar_quantizer(&node)?;
+                bytes = bytes.saturating_add(quantizer_bytes);
+                Some(quantizer)
+            } else {
+                None
+            };
             if next
                 .expected_level
                 .is_some_and(|expected| node.level != expected)
@@ -473,7 +487,7 @@ where
             levels.insert(node.level);
             stats.levels_visited = levels.len();
 
-            for entry in &node.entries {
+            for (entry_index, entry) in node.entries.iter().enumerate() {
                 if node.kind.has_children(node.level) {
                     if !filter.intersects(&entry.min_key, &entry.max_key) {
                         continue;
@@ -484,25 +498,36 @@ where
                             reason: "internal entry has no child".to_owned(),
                         });
                     };
-                    let representative_score = match score_cache.get(&entry.key) {
-                        Some(score) => *score,
-                        None => {
-                            if distance_budget_exhausted(&request, &stats) {
-                                completion = SearchCompletion::BudgetExhausted;
-                                break;
+                    let representative_score = if let Some(quantizer) = &quantizer {
+                        if distance_budget_exhausted(&request, &stats) {
+                            completion = SearchCompletion::BudgetExhausted;
+                            break;
+                        }
+                        stats.quantized_distance_evaluations += 1;
+                        quantizer.approximate_score(self.tree.config.metric, &query, entry_index)?
+                    } else {
+                        match score_cache.get(&entry.key) {
+                            Some(score) => *score,
+                            None => {
+                                if distance_budget_exhausted(&request, &stats) {
+                                    completion = SearchCompletion::BudgetExhausted;
+                                    break;
+                                }
+                                stats.distance_evaluations += 1;
+                                let value = query_score(
+                                    request.kernel,
+                                    self.tree.config.metric,
+                                    &query,
+                                    entry.vector.inline()?,
+                                );
+                                score_cache.insert(entry.key.clone(), value);
+                                value
                             }
-                            stats.distance_evaluations += 1;
-                            let value = query_score(
-                                request.kernel,
-                                self.tree.config.metric,
-                                &query,
-                                entry.vector.inline()?,
-                            );
-                            score_cache.insert(entry.key.clone(), value);
-                            value
                         }
                     };
-                    let bound = if self.tree.config.metric == DistanceMetric::L2Squared {
+                    let bound = if quantizer.is_none()
+                        && self.tree.config.metric == DistanceMetric::L2Squared
+                    {
                         super::distance::canonical::l2_lower_bound_down(
                             representative_score,
                             entry.covering_radius,
@@ -570,6 +595,9 @@ where
             .map(|candidate| candidate.key.clone())
             .collect();
         let values = self.directory.get_many(&self.tree.directory, &keys)?;
+        if use_scalar_quantization {
+            stats.reranked_candidates = candidates.len();
+        }
         let mut neighbors = Vec::with_capacity(candidates.len());
         for (candidate, stored) in candidates.into_iter().zip(values) {
             let bytes = stored.ok_or_else(|| Error::InvalidProximityObject {
@@ -605,6 +633,7 @@ where
             records: &records,
             seen_nodes: HashSet::new(),
             seen_external_vectors: HashSet::new(),
+            seen_scalar_quantizers: HashSet::new(),
             seen_leaf_keys: HashSet::new(),
             summary: ProximityVerification {
                 record_count: self.tree.count,
@@ -690,8 +719,51 @@ where
         Ok(bytes_read)
     }
 
-    fn collect_records(&self) -> Result<BTreeMap<Vec<u8>, ProximityRecord>, Error> {
+    fn load_scalar_quantizer(
+        &self,
+        node: &ProximityNode,
+    ) -> Result<(ScalarQuantized, usize), Error> {
+        let config = self
+            .tree
+            .config
+            .scalar_quantization
+            .as_ref()
+            .ok_or_else(|| Error::InvalidProximityObject {
+                kind: "quantizer",
+                reason: "quantized search requires descriptor configuration".to_owned(),
+            })?;
+        let cid = node
+            .quantizer
+            .as_ref()
+            .ok_or_else(|| Error::InvalidProximityObject {
+                kind: "quantizer",
+                reason: "configured node has no scalar quantizer".to_owned(),
+            })?;
+        let bytes = load_content(&self.store, cid)?;
+        let quantizer = ScalarQuantized::decode(&bytes)?;
+        if quantizer.dimensions != self.tree.config.dimensions
+            || quantizer.group_size != config.group_size
+        {
+            return Err(Error::InvalidProximityObject {
+                kind: "quantizer",
+                reason: "quantizer configuration disagrees with descriptor".to_owned(),
+            });
+        }
+        if quantizer.entry_count != node.entries.len() as u64 {
+            return Err(Error::InvalidProximityObject {
+                kind: "quantizer",
+                reason: "quantizer entry count disagrees with node".to_owned(),
+            });
+        }
+        Ok((quantizer, bytes.len()))
+    }
+
+    pub(crate) fn collect_records(&self) -> Result<BTreeMap<Vec<u8>, ProximityRecord>, Error> {
         self.collect_records_from(&self.tree.directory)
+    }
+
+    pub(crate) fn store_clone(&self) -> S {
+        self.store.clone()
     }
 
     fn collect_records_from(
@@ -746,6 +818,37 @@ where
             }
         }
         self.resolve_external_vectors(&mut node)?;
+        match (&self.tree.config.scalar_quantization, &node.quantizer) {
+            (None, None) => {}
+            (Some(config), Some(cid)) => {
+                let quantizer_bytes = load_content(&self.store, cid)?;
+                let quantizer = ScalarQuantized::decode(&quantizer_bytes)?;
+                if quantizer.dimensions != self.tree.config.dimensions
+                    || quantizer.group_size != config.group_size
+                {
+                    return Err(Error::InvalidProximityObject {
+                        kind: "quantizer",
+                        reason: "quantizer configuration disagrees with descriptor".to_owned(),
+                    });
+                }
+                let vectors = node
+                    .entries
+                    .iter()
+                    .map(|entry| entry.vector.inline())
+                    .collect::<Result<Vec<_>, _>>()?;
+                quantizer.verify(&vectors)?;
+                state.summary.quantized_node_count += 1;
+                if state.seen_scalar_quantizers.insert(cid.clone()) {
+                    state.summary.scalar_quantizer_count += 1;
+                }
+            }
+            _ => {
+                return Err(Error::InvalidProximityObject {
+                    kind: "quantizer",
+                    reason: "node quantizer presence disagrees with descriptor".to_owned(),
+                })
+            }
+        }
         if expected_level != Some(node.level) {
             return Err(Error::InvalidProximityObject {
                 kind: "node",
@@ -930,6 +1033,7 @@ struct VerificationState<'a> {
     records: &'a BTreeMap<Vec<u8>, ProximityRecord>,
     seen_nodes: HashSet<Cid>,
     seen_external_vectors: HashSet<Cid>,
+    seen_scalar_quantizers: HashSet<Cid>,
     seen_leaf_keys: HashSet<Vec<u8>>,
     summary: ProximityVerification,
 }
@@ -973,7 +1077,12 @@ fn distance_budget_exhausted(request: &SearchRequest<'_>, stats: &ProximitySearc
     request
         .budget
         .max_distance_evaluations
-        .is_some_and(|maximum| stats.distance_evaluations >= maximum)
+        .is_some_and(|maximum| {
+            stats
+                .distance_evaluations
+                .saturating_add(stats.quantized_distance_evaluations)
+                >= maximum
+        })
 }
 
 fn put_missing_nodes<S: Store>(store: &S, nodes: &[(Cid, Vec<u8>)]) -> Result<usize, Error> {
@@ -1311,6 +1420,43 @@ mod tests {
             corrupt.verify(),
             Err(Error::InvalidProximityObject { reason, .. })
                 if reason == "covering-radius summary is not conservative"
+        ));
+    }
+
+    #[test]
+    fn verify_rejects_a_scalar_quantizer_that_disagrees_with_its_node() {
+        let store = Arc::new(MemStore::new());
+        let mut quantized_config = config();
+        quantized_config.scalar_quantization =
+            Some(super::super::ScalarQuantizationConfig { group_size: 1 });
+        let map = ProximityMap::build(
+            store.clone(),
+            quantized_config,
+            (0..64).map(|index| ProximityRecord {
+                key: format!("quantized-{index:03}").into_bytes(),
+                vector: vec![index as f32],
+                value: Vec::new(),
+            }),
+        )
+        .unwrap();
+        let bytes = store
+            .get(map.tree.proximity_root.as_bytes())
+            .unwrap()
+            .unwrap();
+        let mut root = ProximityNode::decode(&bytes, 1).unwrap();
+        let fake_vectors = vec![vec![999.0]; root.entries.len()];
+        let fake_refs: Vec<_> = fake_vectors.iter().map(Vec::as_slice).collect();
+        let fake = ScalarQuantized::build(&fake_refs, 1, 1).unwrap();
+        let fake_bytes = fake.encode().unwrap();
+        let fake_cid = Cid::from_bytes(&fake_bytes);
+        store.put(fake_cid.as_bytes(), &fake_bytes).unwrap();
+        root.quantizer = Some(fake_cid);
+        let corrupt = publish_replacement_root(&store, &map, root);
+
+        assert!(matches!(
+            corrupt.verify(),
+            Err(Error::InvalidProximityObject { kind: "quantizer", reason })
+                if reason.contains("disagree")
         ));
     }
 }

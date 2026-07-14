@@ -2,8 +2,8 @@
 
 use prolly::{
     AsyncIoConfig, AsyncProximityMap, AsyncSearchControl, AsyncStore, BatchOp, CancellationToken,
-    MemStore, MemStoreError, ProximityConfig, ProximityMap, ProximityRecord, SearchCompletion,
-    SearchRequest, Store,
+    MemStore, MemStoreError, ProximityConfig, ProximityMap, ProximityRecord,
+    ScalarQuantizationConfig, SearchCompletion, SearchPolicy, SearchRequest, Store,
 };
 use std::future::Future;
 use std::sync::Arc;
@@ -119,6 +119,49 @@ fn async_completion_permutations_preserve_sync_logical_execution() {
             );
             assert_eq!(actual.stats.committed_bytes, expected.stats.committed_bytes);
         }
+    });
+}
+
+#[test]
+fn async_scalar_quantized_routing_matches_sync_order_and_reranking() {
+    block_on(async {
+        let store = Arc::new(MemStore::new());
+        let mut config = ProximityConfig::new(3);
+        config.hierarchy.log_chunk_size = 2;
+        config.hierarchy.level_hash_seed = 29;
+        config.scalar_quantization = Some(ScalarQuantizationConfig { group_size: 2 });
+        let sync = ProximityMap::build(store.clone(), config, records()).unwrap();
+        let query = [21.25, 4.0, 1.0];
+        let mut request = SearchRequest::exact(&query, 12);
+        request.policy = SearchPolicy::FixedBudget;
+        let expected = sync.search(request.clone()).unwrap();
+        assert!(expected.stats.quantized_distance_evaluations > 0);
+
+        let asynchronous = AsyncProximityMap::load(
+            ReverseCompletionStore(store),
+            sync.tree().descriptor.clone(),
+        )
+        .await
+        .unwrap();
+        let actual = asynchronous
+            .search(request, AsyncSearchControl::default())
+            .await
+            .unwrap();
+        assert_eq!(actual.neighbors, expected.neighbors);
+        assert_eq!(actual.completion, expected.completion);
+        assert_eq!(
+            actual.stats.quantized_distance_evaluations,
+            expected.stats.quantized_distance_evaluations
+        );
+        assert_eq!(
+            actual.stats.distance_evaluations,
+            expected.stats.distance_evaluations
+        );
+        assert_eq!(
+            actual.stats.reranked_candidates,
+            expected.stats.reranked_candidates
+        );
+        assert_eq!(actual.stats.committed_bytes, expected.stats.committed_bytes);
     });
 }
 

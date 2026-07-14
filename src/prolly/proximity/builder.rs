@@ -1,8 +1,8 @@
 use super::super::cid::Cid;
 use super::super::error::Error;
 use super::distance::score;
-use super::storage::overflow::{persist_logical_node, summarize, NodeSummary};
-use super::storage::{PhysicalNodeKind, ProximityEntry, ProximityNode};
+use super::storage::overflow::{persist_empty_leaf, persist_logical_node, summarize, NodeSummary};
+use super::storage::{PhysicalNodeKind, ProximityEntry};
 use super::vector::promotion_level;
 use super::ProximityConfig;
 use rayon::prelude::*;
@@ -50,19 +50,13 @@ fn build_hierarchy_at_level_parallel(
     threads: usize,
 ) -> Result<BuiltHierarchy, Error> {
     if records.is_empty() {
-        let node = ProximityNode {
-            kind: PhysicalNodeKind::Leaf,
-            level: 0,
-            subtree_count: 0,
-            quantizer: None,
-            entries: Vec::new(),
-        };
-        let bytes = node.encode()?;
-        enforce_size(&node, bytes.len(), config)?;
-        let cid = Cid::from_bytes(&bytes);
+        let mut objects = HashMap::new();
+        let root = persist_empty_leaf(config, &mut objects)?;
+        let mut nodes: Vec<_> = objects.into_iter().collect();
+        nodes.sort_by(|(left, _), (right, _)| left.as_bytes().cmp(right.as_bytes()));
         return Ok(BuiltHierarchy {
-            root: cid.clone(),
-            nodes: vec![(cid, bytes)],
+            root,
+            nodes,
             distance_evaluations: 0,
         });
     }
@@ -262,22 +256,5 @@ fn register_route(
         .entry(path[..component].to_vec())
         .or_default()
         .insert(id);
-    Ok(())
-}
-
-fn enforce_size(
-    node: &ProximityNode,
-    encoded_bytes: usize,
-    config: &ProximityConfig,
-) -> Result<(), Error> {
-    let limit = config.overflow.max_page_bytes as usize;
-    if encoded_bytes > limit {
-        return Err(Error::ProximityNodeTooLarge {
-            level: node.level,
-            entries: node.entries.len(),
-            encoded_bytes,
-            limit,
-        });
-    }
     Ok(())
 }

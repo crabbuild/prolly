@@ -1,3 +1,4 @@
+use super::quantized::ScalarQuantized;
 use super::vector::ExternalVector;
 use super::{PhysicalNodeKind, ProximityEntry, ProximityNode, VectorRef};
 use crate::prolly::cid::Cid;
@@ -50,6 +51,27 @@ pub(crate) fn persist_logical_node(
         directory_entries.push(summary.into_entry());
     }
     persist_directory(level, directory_entries, config, objects)
+}
+
+pub(crate) fn persist_empty_leaf(
+    config: &ProximityConfig,
+    objects: &mut HashMap<Cid, Vec<u8>>,
+) -> Result<Cid, Error> {
+    let node = ProximityNode {
+        kind: PhysicalNodeKind::Leaf,
+        level: 0,
+        subtree_count: 0,
+        quantizer: None,
+        entries: Vec::new(),
+    };
+    let (bytes, auxiliary) = encoded(&node, config)?;
+    if bytes.len() > config.overflow.max_page_bytes as usize {
+        return too_large(&node, bytes.len(), config);
+    }
+    let cid = Cid::from_bytes(&bytes);
+    objects.insert(cid.clone(), bytes);
+    objects.extend(auxiliary);
+    Ok(cid)
 }
 
 pub(crate) fn summarize(
@@ -212,7 +234,21 @@ fn persist(
 
 fn encoded(node: &ProximityNode, config: &ProximityConfig) -> Result<EncodedNode, Error> {
     let mut stored = node.clone();
-    let mut vectors = HashMap::new();
+    stored.quantizer = None;
+    let mut auxiliary = HashMap::new();
+    if let Some(quantization) = &config.scalar_quantization {
+        let vectors = node
+            .entries
+            .iter()
+            .map(|entry| entry.vector.inline())
+            .collect::<Result<Vec<_>, _>>()?;
+        let quantized =
+            ScalarQuantized::build(&vectors, config.dimensions, quantization.group_size)?;
+        let bytes = quantized.encode()?;
+        let cid = Cid::from_bytes(&bytes);
+        auxiliary.insert(cid.clone(), bytes);
+        stored.quantizer = Some(cid);
+    }
     for entry in &mut stored.entries {
         let VectorRef::Inline(vector) = &entry.vector else {
             continue;
@@ -224,11 +260,11 @@ fn encoded(node: &ProximityNode, config: &ProximityConfig) -> Result<EncodedNode
             };
             let bytes = external.encode()?;
             let cid = Cid::from_bytes(&bytes);
-            vectors.insert(cid.clone(), bytes);
+            auxiliary.insert(cid.clone(), bytes);
             entry.vector = VectorRef::External(cid);
         }
     }
-    Ok((stored.encode()?, vectors))
+    Ok((stored.encode()?, auxiliary))
 }
 
 fn count(entries: &[ProximityEntry]) -> Result<u64, Error> {

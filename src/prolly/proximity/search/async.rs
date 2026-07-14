@@ -5,13 +5,14 @@ use super::{
 use crate::prolly::cid::Cid;
 use crate::prolly::error::Error;
 use crate::prolly::proximity::distance::{prepare_vector, query_score};
+use crate::prolly::proximity::storage::quantized::ScalarQuantized;
 use crate::prolly::proximity::storage::vector::ExternalVector;
 use crate::prolly::proximity::storage::{
     Descriptor, PhysicalNodeKind, ProximityNode, StoredRecord, VectorRef,
 };
 use crate::prolly::proximity::{
-    DistanceMetric, Neighbor, ProximitySearchStats, ProximityTree, SearchCompletion, SearchPolicy,
-    SearchResult,
+    DistanceMetric, Neighbor, ProximitySearchStats, ProximityTree, SearchBackend, SearchCompletion,
+    SearchPolicy, SearchResult,
 };
 use crate::prolly::store::AsyncStore;
 use crate::prolly::AsyncProlly;
@@ -118,12 +119,22 @@ where
     ) -> Result<SearchResult, Error> {
         request.validate()?;
         control.io.validate()?;
+        if matches!(
+            request.backend,
+            SearchBackend::ProductQuantized | SearchBackend::Hnsw
+        ) {
+            return Err(Error::InvalidProximitySearch {
+                reason: "requested backend requires a validated accelerator sidecar".to_owned(),
+            });
+        }
         let filter = PreparedFilter::new(request.filter.clone(), &self.tree.directory)?;
         let query = prepare_vector(
             self.tree.config.metric,
             request.query,
             self.tree.config.dimensions,
         )?;
+        let use_scalar_quantization =
+            crate::prolly::proximity::accelerator::sq8::enabled(&self.tree.config, request.policy);
         let mut stats = ProximitySearchStats::default();
         let mut frontier = BinaryHeap::new();
         frontier.push(FrontierEntry {
@@ -147,7 +158,8 @@ where
                 completion = stopped;
                 break;
             }
-            if self.tree.config.metric == DistanceMetric::L2Squared
+            if !use_scalar_quantization
+                && self.tree.config.metric == DistanceMetric::L2Squared
                 && candidates.len() == request.k
                 && next.bound > candidates.last().expect("full top-k").score
             {
@@ -243,6 +255,42 @@ where
                 }
                 entry.vector = VectorRef::Inline(external.vector);
             }
+            let quantizer = if use_scalar_quantization && node.kind.has_children(node.level) {
+                let config = self
+                    .tree
+                    .config
+                    .scalar_quantization
+                    .as_ref()
+                    .expect("checked scalar quantization configuration");
+                let cid = node
+                    .quantizer
+                    .as_ref()
+                    .ok_or_else(|| Error::InvalidProximityObject {
+                        kind: "quantizer",
+                        reason: "configured node has no scalar quantizer".to_owned(),
+                    })?;
+                let bytes = load_content(&self.store, cid).await?;
+                stats.physical_bytes_read += bytes.len();
+                committed += bytes.len();
+                let quantizer = ScalarQuantized::decode(&bytes)?;
+                if quantizer.dimensions != self.tree.config.dimensions
+                    || quantizer.group_size != config.group_size
+                {
+                    return Err(Error::InvalidProximityObject {
+                        kind: "quantizer",
+                        reason: "quantizer configuration disagrees with descriptor".to_owned(),
+                    });
+                }
+                if quantizer.entry_count != node.entries.len() as u64 {
+                    return Err(Error::InvalidProximityObject {
+                        kind: "quantizer",
+                        reason: "quantizer entry count disagrees with node".to_owned(),
+                    });
+                }
+                Some(quantizer)
+            } else {
+                None
+            };
             if completion != SearchCompletion::Exact {
                 break;
             }
@@ -270,7 +318,7 @@ where
             stats.levels_visited = levels.len();
             last_fanout = node.entries.len();
 
-            for entry in &node.entries {
+            for (entry_index, entry) in node.entries.iter().enumerate() {
                 if let Some(stopped) = stop_reason(&control) {
                     completion = stopped;
                     break;
@@ -280,25 +328,36 @@ where
                         continue;
                     }
                     let child = entry.child.clone().expect("validated internal child");
-                    let representative_score = match score_cache.get(&entry.key) {
-                        Some(score) => *score,
-                        None => {
-                            if distance_budget_exhausted(&request, &stats) {
-                                completion = SearchCompletion::BudgetExhausted;
-                                break;
+                    let representative_score = if let Some(quantizer) = &quantizer {
+                        if distance_budget_exhausted(&request, &stats) {
+                            completion = SearchCompletion::BudgetExhausted;
+                            break;
+                        }
+                        stats.quantized_distance_evaluations += 1;
+                        quantizer.approximate_score(self.tree.config.metric, &query, entry_index)?
+                    } else {
+                        match score_cache.get(&entry.key) {
+                            Some(score) => *score,
+                            None => {
+                                if distance_budget_exhausted(&request, &stats) {
+                                    completion = SearchCompletion::BudgetExhausted;
+                                    break;
+                                }
+                                stats.distance_evaluations += 1;
+                                let value = query_score(
+                                    request.kernel,
+                                    self.tree.config.metric,
+                                    &query,
+                                    entry.vector.inline()?,
+                                );
+                                score_cache.insert(entry.key.clone(), value);
+                                value
                             }
-                            stats.distance_evaluations += 1;
-                            let value = query_score(
-                                request.kernel,
-                                self.tree.config.metric,
-                                &query,
-                                entry.vector.inline()?,
-                            );
-                            score_cache.insert(entry.key.clone(), value);
-                            value
                         }
                     };
-                    let bound = if self.tree.config.metric == DistanceMetric::L2Squared {
+                    let bound = if quantizer.is_none()
+                        && self.tree.config.metric == DistanceMetric::L2Squared
+                    {
                         crate::prolly::proximity::distance::canonical::l2_lower_bound_down(
                             representative_score,
                             entry.covering_radius,
@@ -361,6 +420,9 @@ where
             }
         }
 
+        if use_scalar_quantization {
+            stats.reranked_candidates = candidates.len();
+        }
         let mut neighbors = Vec::with_capacity(candidates.len());
         for candidate in candidates {
             let bytes = self
@@ -463,7 +525,12 @@ fn distance_budget_exhausted(request: &SearchRequest<'_>, stats: &ProximitySearc
     request
         .budget
         .max_distance_evaluations
-        .is_some_and(|maximum| stats.distance_evaluations >= maximum)
+        .is_some_and(|maximum| {
+            stats
+                .distance_evaluations
+                .saturating_add(stats.quantized_distance_evaluations)
+                >= maximum
+        })
 }
 
 async fn load_content<S>(store: &S, cid: &Cid) -> Result<Vec<u8>, Error>

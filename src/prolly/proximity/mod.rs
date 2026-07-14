@@ -1,5 +1,6 @@
 //! Deterministic, content-addressed approximate nearest-neighbor maps.
 
+mod accelerator;
 mod build;
 mod builder;
 mod cache;
@@ -14,6 +15,10 @@ use super::cid::Cid;
 use super::error::Error;
 use super::tree::Tree;
 
+pub use accelerator::pq::{
+    ProductQuantizationBuildStats, ProductQuantizationConfig, ProductQuantizationQuality,
+    ProductQuantizer,
+};
 pub use build::{BuildParallelism, ProximityBuildStats};
 pub use map::ProximityMap;
 #[cfg(feature = "async-store")]
@@ -214,6 +219,7 @@ pub enum SearchPolicy {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SearchBackend {
     Native,
+    ProductQuantized,
     Hnsw,
     Auto,
 }
@@ -311,6 +317,8 @@ pub struct ProximitySearchStats {
     pub physical_bytes_read: usize,
     pub committed_bytes: usize,
     pub distance_evaluations: usize,
+    pub quantized_distance_evaluations: usize,
+    pub reranked_candidates: usize,
     pub frontier_peak: usize,
 }
 
@@ -345,6 +353,8 @@ pub struct ProximityVerification {
     pub record_count: u64,
     pub proximity_node_count: usize,
     pub external_vector_count: usize,
+    pub quantized_node_count: usize,
+    pub scalar_quantizer_count: usize,
     pub overflow_page_count: usize,
     pub overflow_directory_count: usize,
     pub maximum_level: u8,
