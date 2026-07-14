@@ -1,6 +1,8 @@
 use super::super::error::Error;
 use super::codec::{put_varint, Reader};
-use super::vector::{canonicalize, decode_components, encode_components};
+use super::distance::prepare_vector;
+use super::vector::{decode_components, encode_components};
+use super::DistanceMetric;
 
 const MAGIC: &[u8; 4] = b"PRVR";
 const VERSION: u8 = 1;
@@ -12,9 +14,14 @@ pub(crate) struct StoredRecord {
 }
 
 impl StoredRecord {
-    pub(crate) fn new(vector: &[f32], value: Vec<u8>, dimensions: u32) -> Result<Self, Error> {
+    pub(crate) fn new(
+        vector: &[f32],
+        value: Vec<u8>,
+        metric: DistanceMetric,
+        dimensions: u32,
+    ) -> Result<Self, Error> {
         Ok(Self {
-            vector: canonicalize(vector, dimensions)?,
+            vector: prepare_vector(metric, vector, dimensions)?,
             value,
         })
     }
@@ -72,7 +79,13 @@ mod tests {
 
     #[test]
     fn record_round_trip_is_canonical_and_rejects_trailing_bytes() {
-        let record = StoredRecord::new(&[-0.0, 2.5], b"value".to_vec(), 2).unwrap();
+        let record = StoredRecord::new(
+            &[-0.0, 2.5],
+            b"value".to_vec(),
+            DistanceMetric::L2Squared,
+            2,
+        )
+        .unwrap();
         let bytes = record.encode();
         assert_eq!(StoredRecord::decode(&bytes, 2).unwrap(), record);
         let mut trailing = bytes;
@@ -82,7 +95,13 @@ mod tests {
 
     #[test]
     fn record_matches_checked_in_golden_object() {
-        let record = StoredRecord::new(&[-0.0, 2.5], b"value".to_vec(), 2).unwrap();
+        let record = StoredRecord::new(
+            &[-0.0, 2.5],
+            b"value".to_vec(),
+            DistanceMetric::L2Squared,
+            2,
+        )
+        .unwrap();
         let bytes = record.encode();
         let fixture: serde_json::Value = serde_json::from_str(include_str!(
             "../../../conformance/proximity-fixtures.v1.json"

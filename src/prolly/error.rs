@@ -226,6 +226,8 @@ pub enum Error {
     UnsupportedProximityVersion { found: u8, required: u8 },
     /// A vector is incompatible with the proximity-map configuration.
     InvalidProximityVector { reason: String },
+    /// Cosine distance cannot prepare a vector with zero Euclidean norm.
+    ZeroCosineVector,
     /// A proximity build or mutation contains the same logical key twice.
     DuplicateProximityKey { key: Vec<u8> },
     /// Proximity search options are invalid.
@@ -292,6 +294,7 @@ impl std::fmt::Display for Error {
             Error::InvalidProximityVector { reason } => {
                 write!(f, "invalid proximity vector: {reason}")
             }
+            Error::ZeroCosineVector => write!(f, "cosine proximity vector has zero norm"),
             Error::DuplicateProximityKey { key } => {
                 write!(f, "duplicate proximity key: {key:?}")
             }

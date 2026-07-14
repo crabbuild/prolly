@@ -4,6 +4,7 @@ mod builder;
 mod cache;
 mod codec;
 mod descriptor;
+mod distance;
 mod map;
 mod mutation;
 mod node;

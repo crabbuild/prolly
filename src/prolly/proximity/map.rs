@@ -7,10 +7,11 @@ use super::super::Prolly;
 use super::builder::{build_hierarchy, IndexedRecord};
 use super::cache::{ContentCache, DEFAULT_PROXIMITY_CACHE_NODES};
 use super::descriptor::Descriptor;
+use super::distance::{prepare_vector, score};
 use super::mutation::{mutate_hierarchy, LogicalEdit};
 use super::node::ProximityNode;
 use super::record::StoredRecord;
-use super::vector::{canonicalize, l2_squared, promotion_level};
+use super::vector::promotion_level;
 use super::{
     ExactProximityRecord, Neighbor, ProximityConfig, ProximityMutation, ProximityMutationStats,
     ProximityRecord, ProximitySearchStats, ProximityTree, ProximityVerification, SearchOptions,
@@ -53,7 +54,12 @@ where
         let mut directory_builder = BatchBuilder::new(store.clone(), directory_config.clone());
         let mut indexed = Vec::with_capacity(records.len());
         for record in records {
-            let stored = StoredRecord::new(&record.vector, record.value, config.dimensions)?;
+            let stored = StoredRecord::new(
+                &record.vector,
+                record.value,
+                config.metric,
+                config.dimensions,
+            )?;
             indexed.push(IndexedRecord {
                 key: record.key.clone(),
                 vector: stored.vector.clone(),
@@ -151,7 +157,7 @@ where
     ) -> Result<Self, Error> {
         let mutations = validate_mutations(mutations)?;
         let mut records = self.collect_records()?;
-        apply_mutations(&mut records, &mutations, self.tree.config.dimensions)?;
+        apply_mutations(&mut records, &mutations, &self.tree.config)?;
         Self::build(
             self.store.clone(),
             self.tree.config.clone(),
@@ -173,7 +179,7 @@ where
         }
         let old_records = self.collect_records()?;
         let mut records = old_records.clone();
-        apply_mutations(&mut records, &mutations, self.tree.config.dimensions)?;
+        apply_mutations(&mut records, &mutations, &self.tree.config)?;
         let logical_edits: Vec<_> = mutations
             .iter()
             .filter_map(|mutation| {
@@ -298,7 +304,7 @@ where
     /// Approximate nearest-neighbor search with independent result and beam widths.
     pub fn search(&self, query: &[f32], options: SearchOptions) -> Result<SearchResult, Error> {
         options.validate()?;
-        let query = canonicalize(query, self.tree.config.dimensions)?;
+        let query = prepare_vector(self.tree.config.metric, query, self.tree.config.dimensions)?;
         let mut stats = ProximitySearchStats::default();
         let (root, root_bytes) = self.load_node(&self.tree.proximity_root)?;
         stats.nodes_read = 1;
@@ -311,6 +317,7 @@ where
             &BTreeMap::new(),
             options.beam_width,
             &options,
+            self.tree.config.metric,
             &mut stats,
         );
         let mut level = root.level;
@@ -350,9 +357,15 @@ where
                 }
                 stats.nodes_read += 1;
                 stats.bytes_read += bytes_read;
-                for candidate in
-                    score_entries(&node, &query, &known, usize::MAX, &options, &mut stats)
-                {
+                for candidate in score_entries(
+                    &node,
+                    &query,
+                    &known,
+                    usize::MAX,
+                    &options,
+                    self.tree.config.metric,
+                    &mut stats,
+                ) {
                     next_by_key
                         .entry(candidate.key.clone())
                         .and_modify(|existing| {
@@ -592,10 +605,12 @@ where
 
         if let Some((selected, candidates)) = parent {
             for entry in &node.entries {
-                let selected_distance = l2_squared(&entry.vector, &selected.vector);
+                let selected_distance =
+                    score(self.tree.config.metric, &entry.vector, &selected.vector);
                 for candidate in candidates {
                     state.summary.distance_checks += 1;
-                    let candidate_distance = l2_squared(&entry.vector, &candidate.vector);
+                    let candidate_distance =
+                        score(self.tree.config.metric, &entry.vector, &candidate.vector);
                     let candidate_is_better = candidate_distance
                         .total_cmp(&selected_distance)
                         .then_with(|| candidate.key.cmp(&selected.key))
@@ -709,6 +724,7 @@ fn score_entries(
     known: &BTreeMap<Vec<u8>, f64>,
     limit: usize,
     options: &SearchOptions,
+    metric: super::DistanceMetric,
     stats: &mut ProximitySearchStats,
 ) -> Vec<Candidate> {
     let mut candidates = Vec::with_capacity(node.entries.len().min(limit));
@@ -724,7 +740,7 @@ fn score_entries(
                 break;
             }
             stats.distance_evaluations += 1;
-            l2_squared(query, &entry.vector)
+            score(metric, query, &entry.vector)
         };
         candidates.push(Candidate {
             key: entry.key.clone(),
@@ -802,7 +818,7 @@ fn validate_mutations(
 fn apply_mutations(
     records: &mut BTreeMap<Vec<u8>, ProximityRecord>,
     mutations: &[ProximityMutation],
-    dimensions: u32,
+    config: &ProximityConfig,
 ) -> Result<(), Error> {
     for mutation in mutations {
         match &mutation.value {
@@ -811,7 +827,7 @@ fn apply_mutations(
                     mutation.key.clone(),
                     ProximityRecord {
                         key: mutation.key.clone(),
-                        vector: canonicalize(vector, dimensions)?,
+                        vector: prepare_vector(config.metric, vector, config.dimensions)?,
                         value: value.clone(),
                     },
                 );

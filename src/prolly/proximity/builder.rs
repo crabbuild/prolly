@@ -1,7 +1,8 @@
 use super::super::cid::Cid;
 use super::super::error::Error;
+use super::distance::score;
 use super::node::{ProximityEntry, ProximityNode};
-use super::vector::{l2_squared, promotion_level};
+use super::vector::promotion_level;
 use super::ProximityConfig;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
@@ -84,7 +85,11 @@ pub(crate) fn build_hierarchy_at_level(
             let mut closest: Option<(usize, f64)> = None;
             for &candidate in candidates {
                 distance_evaluations += 1;
-                let distance = l2_squared(&records[id].vector, &records[candidate].vector);
+                let distance = score(
+                    config.metric,
+                    &records[id].vector,
+                    &records[candidate].vector,
+                );
                 if closest.map_or(true, |(best, best_distance)| {
                     distance
                         .total_cmp(&best_distance)

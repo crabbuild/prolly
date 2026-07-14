@@ -2,8 +2,8 @@ use super::super::cid::Cid;
 use super::super::error::Error;
 use super::super::store::Store;
 use super::builder::{build_hierarchy_at_level, IndexedRecord};
+use super::distance::score;
 use super::node::{ProximityEntry, ProximityNode};
-use super::vector::l2_squared;
 use super::{ProximityConfig, ProximityMutationStats};
 use std::collections::{BTreeMap, HashMap, HashSet};
 
@@ -201,7 +201,7 @@ impl<S: Store> Context<'_, S> {
         let mut best: Option<(usize, f64)> = None;
         for (index, entry) in entries.iter().enumerate() {
             self.stats.distance_evaluations += 1;
-            let distance = l2_squared(vector, &entry.vector);
+            let distance = score(self.config.metric, vector, &entry.vector);
             if best.map_or(true, |(best_index, best_distance)| {
                 distance
                     .total_cmp(&best_distance)
