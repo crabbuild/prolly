@@ -5526,7 +5526,8 @@ where
             .await
     }
 
-    async fn reverse_page_bounded(
+    /// Read a bounded async descending page over `[start, end)`.
+    pub async fn reverse_range_page(
         &self,
         tree: &Tree,
         cursor: &range::ReverseCursor,

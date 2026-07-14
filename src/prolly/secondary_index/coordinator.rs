@@ -9,16 +9,16 @@ use super::super::versioned_map::{
     IndexMaintenancePermit, MapSnapshot, MapVersion, MapVersionId, VersionedMap, VersionedMapUpdate,
 };
 use super::super::Prolly;
-use super::definition::{IndexProjection, SecondaryIndexRegistry};
+use super::definition::{IndexProjection, SecondaryIndex, SecondaryIndexRegistry};
 use super::storage::{
     catalog_checkpoint_key, catalog_current_key, catalog_descriptor_key, catalog_format_key,
-    catalog_map_id, control_record_key, control_root_name, index_map_id, physical_index_key,
-    ActiveIndexControl, IndexCheckpoint, IndexControl, IndexValue, IndexedHeadRecord,
-    SecondaryIndexDescriptor, SECONDARY_INDEX_FORMAT_VERSION,
+    catalog_map_id, catalog_retired_key, control_record_key, control_root_name, index_map_id,
+    physical_index_key, ActiveIndexControl, IndexCheckpoint, IndexControl, IndexValue,
+    IndexedHeadRecord, SecondaryIndexDescriptor, SECONDARY_INDEX_FORMAT_VERSION,
 };
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 /// Bounded startup-health details for one active index generation.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -51,6 +51,24 @@ pub struct IndexBuildResult {
     pub entries: usize,
     pub attempts: usize,
     pub activated: bool,
+}
+
+/// Full semantic comparison of one rebuilt index and its selected checkpoint.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct IndexVerification {
+    pub name: Vec<u8>,
+    pub source_version: MapVersionId,
+    pub expected_index_version: MapVersionId,
+    pub actual_index_version: MapVersionId,
+    pub expected_entries: usize,
+    pub actual_entries: usize,
+}
+
+impl IndexVerification {
+    pub fn is_valid(&self) -> bool {
+        self.expected_index_version == self.actual_index_version
+            && self.expected_entries == self.actual_entries
+    }
 }
 
 /// Complete coordinated publication selected by one catalog version.
@@ -181,6 +199,7 @@ where
     pub(crate) prolly: &'a Prolly<S>,
     pub(crate) source_map_id: Vec<u8>,
     pub(crate) registry: SecondaryIndexRegistry,
+    runtime_overrides: RwLock<BTreeMap<Vec<u8>, SecondaryIndex>>,
     metrics: Arc<IndexedMapMetrics>,
 }
 
@@ -207,6 +226,7 @@ where
             prolly,
             source_map_id: source_map_id.as_ref().to_vec(),
             registry,
+            runtime_overrides: RwLock::new(BTreeMap::new()),
             metrics: Arc::new(IndexedMapMetrics::default()),
         };
         indexed.validate_state()?;
@@ -221,6 +241,52 @@ where
     /// Borrow runtime definitions supplied when this handle was opened.
     pub fn registry(&self) -> &SecondaryIndexRegistry {
         &self.registry
+    }
+
+    pub(crate) fn runtime_definition(&self, name: &[u8]) -> Option<SecondaryIndex> {
+        self.runtime_overrides
+            .read()
+            .expect("secondary-index runtime override lock poisoned")
+            .get(name)
+            .cloned()
+            .or_else(|| self.registry.get(name).cloned())
+    }
+
+    pub(crate) fn runtime_definition_for_descriptor(
+        &self,
+        descriptor: &SecondaryIndexDescriptor,
+    ) -> Result<Option<SecondaryIndex>, Error> {
+        let override_definition = self
+            .runtime_overrides
+            .read()
+            .expect("secondary-index runtime override lock poisoned")
+            .get(&descriptor.name)
+            .cloned();
+        for definition in override_definition
+            .into_iter()
+            .chain(self.registry.get(&descriptor.name).cloned())
+        {
+            let runtime = SecondaryIndexDescriptor::from_runtime(&self.source_map_id, &definition)?;
+            if runtime.fingerprint == descriptor.fingerprint {
+                return Ok(Some(definition));
+            }
+        }
+        Ok(None)
+    }
+
+    fn runtime_definitions(&self) -> Vec<SecondaryIndex> {
+        let overrides = self
+            .runtime_overrides
+            .read()
+            .expect("secondary-index runtime override lock poisoned");
+        let mut definitions = self
+            .registry
+            .iter()
+            .filter(|definition| !overrides.contains_key(definition.name()))
+            .cloned()
+            .collect::<Vec<_>>();
+        definitions.extend(overrides.values().cloned());
+        definitions
     }
 
     /// Open the underlying source as a read-only raw map handle.
@@ -397,12 +463,12 @@ where
                     reason: "control, source ownership, or current selection mismatch".to_string(),
                 });
             }
-            let runtime = self.registry.get(&checkpoint.index_name).ok_or_else(|| {
-                Error::IndexRuntimeDefinitionMissing {
+            let runtime = self
+                .runtime_definition(&checkpoint.index_name)
+                .ok_or_else(|| Error::IndexRuntimeDefinitionMissing {
                     name: checkpoint.index_name.clone(),
                     generation: checkpoint.generation,
-                }
-            })?;
+                })?;
             let descriptor_bytes = catalog_snapshot
                 .get(&catalog_descriptor_key(
                     &checkpoint.index_name,
@@ -422,7 +488,7 @@ where
                 });
             }
             let runtime_descriptor =
-                SecondaryIndexDescriptor::from_runtime(&self.source_map_id, runtime)?;
+                SecondaryIndexDescriptor::from_runtime(&self.source_map_id, &runtime)?;
             if runtime_descriptor.fingerprint != descriptor.fingerprint {
                 return Err(Error::IndexDefinitionMismatch {
                     name: checkpoint.index_name.clone(),
@@ -496,9 +562,7 @@ where
     pub fn ensure_index(&self, name: impl AsRef<[u8]>) -> Result<IndexBuildResult, Error> {
         let name = name.as_ref();
         let definition =
-            self.registry
-                .get(name)
-                .cloned()
+            self.runtime_definition(name)
                 .ok_or_else(|| Error::InvalidIndexDefinition {
                     reason: format!("runtime index definition {:?} is not registered", name),
                 })?;
@@ -682,10 +746,498 @@ where
         })
     }
 
+    /// Rebuild and compare one exact retained source/index checkpoint without publishing roots.
+    pub fn verify_index(
+        &self,
+        name: impl AsRef<[u8]>,
+        source_version: &MapVersionId,
+    ) -> Result<IndexVerification, Error> {
+        let name = name.as_ref();
+        let definition =
+            self.runtime_definition(name)
+                .ok_or_else(|| Error::IndexRuntimeDefinitionMissing {
+                    name: name.to_vec(),
+                    generation: 0,
+                })?;
+        let selected = self.snapshot_at(source_version)?;
+        let checkpoint = selected.index(name)?.checkpoint().clone();
+        let (expected_tree, expected_entries) =
+            self.build_index_tree(selected.source().tree(), &definition)?;
+        let expected_index_version = MapVersionId::for_tree(&expected_tree)?;
+        let actual = self
+            .prolly
+            .versioned_map(&checkpoint.index_map_id)
+            .snapshot_at(&checkpoint.index_version)?
+            .ok_or_else(|| Error::IndexCheckpointMismatch {
+                name: name.to_vec(),
+                source_version: source_version.clone(),
+                reason: "checkpointed hidden index version is unavailable".to_string(),
+            })?;
+        let actual_entries = actual.range(&[], None)?.try_fold(0usize, |count, entry| {
+            entry.map(|_| count.saturating_add(1))
+        })?;
+        let verification = IndexVerification {
+            name: name.to_vec(),
+            source_version: source_version.clone(),
+            expected_index_version,
+            actual_index_version: checkpoint.index_version,
+            expected_entries,
+            actual_entries,
+        };
+        self.metrics
+            .verification_outcomes
+            .fetch_add(1, Ordering::Relaxed);
+        Ok(verification)
+    }
+
+    /// Verify every generation currently selected by the catalog at one source version.
+    pub fn verify_all(
+        &self,
+        source_version: &MapVersionId,
+    ) -> Result<Vec<IndexVerification>, Error> {
+        let selected = self.snapshot_at(source_version)?;
+        let names = selected
+            .indexes()
+            .map(|index| index.name().to_vec())
+            .collect::<Vec<_>>();
+        names
+            .into_iter()
+            .map(|name| self.verify_index(name, source_version))
+            .collect()
+    }
+
+    /// Rebuild and atomically correct one selected checkpoint when semantic drift exists.
+    pub fn repair_index(
+        &self,
+        name: impl AsRef<[u8]>,
+        source_version: &MapVersionId,
+    ) -> Result<IndexVerification, Error> {
+        let name = name.as_ref();
+        let definition =
+            self.runtime_definition(name)
+                .ok_or_else(|| Error::IndexRuntimeDefinitionMissing {
+                    name: name.to_vec(),
+                    generation: 0,
+                })?;
+        let selected = self.snapshot_at(source_version)?;
+        let old_checkpoint = selected.index(name)?.checkpoint().clone();
+        let (expected_tree, expected_entries) =
+            self.build_index_tree(selected.source().tree(), &definition)?;
+        let expected_version = MapVersionId::for_tree(&expected_tree)?;
+        let actual_snapshot = self
+            .prolly
+            .versioned_map(&old_checkpoint.index_map_id)
+            .snapshot_at(&old_checkpoint.index_version)?
+            .ok_or_else(|| Error::IndexCheckpointMismatch {
+                name: name.to_vec(),
+                source_version: source_version.clone(),
+                reason: "checkpointed hidden index version is unavailable".to_string(),
+            })?;
+        let actual_entries = actual_snapshot
+            .range(&[], None)?
+            .try_fold(0usize, |count, entry| {
+                entry.map(|_| count.saturating_add(1))
+            })?;
+        if expected_version == old_checkpoint.index_version && expected_entries == actual_entries {
+            return Ok(IndexVerification {
+                name: name.to_vec(),
+                source_version: source_version.clone(),
+                expected_index_version: expected_version.clone(),
+                actual_index_version: expected_version,
+                expected_entries,
+                actual_entries,
+            });
+        }
+
+        let catalog_id = catalog_map_id(&self.source_map_id);
+        let catalog_map = self.prolly.versioned_map(&catalog_id);
+        let catalog_head = catalog_map.head()?.ok_or_else(|| {
+            Error::InvalidVersionedMap("repair requires a catalog head".to_string())
+        })?;
+        let catalog = catalog_map.snapshot_at(&catalog_head.id)?.ok_or_else(|| {
+            Error::InvalidVersionedMap("repair catalog immutable root is missing".to_string())
+        })?;
+        validate_catalog_format(&catalog)?;
+        let mut current = catalog
+            .get(&catalog_current_key())?
+            .ok_or_else(|| {
+                Error::InvalidVersionedMap("repair catalog has no current selection".to_string())
+            })
+            .and_then(|bytes| IndexedHeadRecord::from_bytes(&bytes))?;
+        let repaired_checkpoint = IndexCheckpoint {
+            index_version: expected_version.clone(),
+            ..old_checkpoint.clone()
+        };
+        let mut mutations = vec![Mutation::Upsert {
+            key: catalog_checkpoint_key(source_version, name, old_checkpoint.generation),
+            val: repaired_checkpoint.to_bytes()?,
+        }];
+        let repairs_current = current.source_version == *source_version;
+        if repairs_current {
+            let checkpoint = current
+                .indexes
+                .iter_mut()
+                .find(|checkpoint| checkpoint.index_name == name)
+                .ok_or_else(|| Error::IndexUnavailableAtVersion {
+                    name: name.to_vec(),
+                    source_version: source_version.clone(),
+                })?;
+            if *checkpoint != old_checkpoint {
+                return Err(Error::IndexCheckpointMismatch {
+                    name: name.to_vec(),
+                    source_version: source_version.clone(),
+                    reason: "catalog current checkpoint changed during repair planning".to_string(),
+                });
+            }
+            *checkpoint = repaired_checkpoint.clone();
+            mutations.push(Mutation::Upsert {
+                key: catalog_current_key(),
+                val: current.to_bytes()?,
+            });
+        }
+        let catalog_candidate = self.prolly.batch(catalog.tree(), mutations)?;
+        let control_fingerprint = self
+            .load_control()?
+            .ok_or_else(|| {
+                Error::InvalidVersionedMap("repair requires an active control root".to_string())
+            })?
+            .fingerprint()?;
+        self.prolly.versioned_maps_transaction(|maps| {
+            let index_permit = IndexMaintenancePermit::new(
+                old_checkpoint.index_map_id.clone(),
+                control_fingerprint.clone(),
+            );
+            if repairs_current {
+                let update = maps.publish_tree_index_maintenance(
+                    &index_permit,
+                    Some(&old_checkpoint.index_version),
+                    &expected_tree,
+                )?;
+                require_non_conflict(update, &old_checkpoint.index_map_id)?;
+            } else {
+                maps.publish_version_index_maintenance(&index_permit, &expected_tree)?;
+            }
+            let catalog_permit =
+                IndexMaintenancePermit::new(catalog_id.clone(), control_fingerprint.clone());
+            let update = maps.publish_tree_index_maintenance(
+                &catalog_permit,
+                Some(&catalog_head.id),
+                &catalog_candidate,
+            )?;
+            require_non_conflict(update, &catalog_id)?;
+            Ok(())
+        })?;
+        self.metrics
+            .verification_outcomes
+            .fetch_add(1, Ordering::Relaxed);
+        Ok(IndexVerification {
+            name: name.to_vec(),
+            source_version: source_version.clone(),
+            expected_index_version: expected_version.clone(),
+            actual_index_version: expected_version,
+            expected_entries,
+            actual_entries: expected_entries,
+        })
+    }
+
+    /// Shadow-build and atomically replace one active definition generation.
+    pub fn replace_index(
+        &self,
+        name: impl AsRef<[u8]>,
+        new_definition: SecondaryIndex,
+    ) -> Result<IndexBuildResult, Error> {
+        let name = name.as_ref();
+        if new_definition.name() != name {
+            return Err(Error::InvalidIndexDefinition {
+                reason: "replacement definition name does not match requested index".to_string(),
+            });
+        }
+        let health = self.health()?;
+        let old = health
+            .active_indexes
+            .iter()
+            .find(|active| active.name == name)
+            .ok_or_else(|| Error::IndexUnavailableAtVersion {
+                name: name.to_vec(),
+                source_version: health.source_version.clone().unwrap_or_else(|| {
+                    MapVersionId::for_tree(&self.prolly.create()).expect("empty tree version")
+                }),
+            })?;
+        if new_definition.generation() <= old.generation {
+            return Err(Error::InvalidIndexDefinition {
+                reason: "replacement generation must be strictly greater than active generation"
+                    .to_string(),
+            });
+        }
+        let new_descriptor =
+            SecondaryIndexDescriptor::from_runtime(&self.source_map_id, &new_definition)?;
+        if new_descriptor.fingerprint == old.fingerprint {
+            return Err(Error::InvalidIndexDefinition {
+                reason: "replacement descriptor fingerprint must differ".to_string(),
+            });
+        }
+        let source = self.source().head()?.ok_or_else(|| {
+            Error::InvalidVersionedMap("replacement requires an initialized source".to_string())
+        })?;
+        let (index_tree, entries) = self.build_index_tree(&source.tree, &new_definition)?;
+        let index_version = MapVersionId::for_tree(&index_tree)?;
+        let hidden_map_id = index_map_id(&self.source_map_id, name, &new_descriptor.fingerprint);
+        let hidden_head = self.prolly.versioned_map(&hidden_map_id).head()?;
+        let catalog_id = catalog_map_id(&self.source_map_id);
+        let catalog_map = self.prolly.versioned_map(&catalog_id);
+        let catalog_head = catalog_map.head()?.ok_or_else(|| {
+            Error::InvalidVersionedMap("replacement requires a catalog head".to_string())
+        })?;
+        let catalog = catalog_map.snapshot_at(&catalog_head.id)?.ok_or_else(|| {
+            Error::InvalidVersionedMap("replacement catalog root is missing".to_string())
+        })?;
+        let mut current = catalog
+            .get(&catalog_current_key())?
+            .ok_or_else(|| {
+                Error::InvalidVersionedMap(
+                    "replacement catalog has no current selection".to_string(),
+                )
+            })
+            .and_then(|bytes| IndexedHeadRecord::from_bytes(&bytes))?;
+        if current.source_version != source.id {
+            return Err(Error::TransactionConflict(TransactionConflict::new(
+                self.source().head_name().to_vec(),
+                None,
+                None,
+            )));
+        }
+        let position = current
+            .indexes
+            .iter()
+            .position(|checkpoint| checkpoint.index_name == name)
+            .ok_or_else(|| Error::IndexUnavailableAtVersion {
+                name: name.to_vec(),
+                source_version: source.id.clone(),
+            })?;
+        let old_checkpoint = current.indexes[position].clone();
+        let old_descriptor = catalog
+            .get(&catalog_descriptor_key(name, old_checkpoint.generation))?
+            .ok_or_else(|| Error::IndexCheckpointMismatch {
+                name: name.to_vec(),
+                source_version: source.id.clone(),
+                reason: "active descriptor is missing during replacement".to_string(),
+            })?;
+        let checkpoint = IndexCheckpoint {
+            source_map_id: self.source_map_id.clone(),
+            source_version: source.id.clone(),
+            index_name: name.to_vec(),
+            generation: new_definition.generation(),
+            definition_fingerprint: new_descriptor.fingerprint.clone(),
+            index_map_id: hidden_map_id.clone(),
+            index_version: index_version.clone(),
+        };
+        current.indexes[position] = checkpoint.clone();
+        let catalog_candidate = self.prolly.batch(
+            catalog.tree(),
+            vec![
+                Mutation::Upsert {
+                    key: catalog_descriptor_key(name, new_definition.generation()),
+                    val: new_descriptor.to_bytes()?,
+                },
+                Mutation::Upsert {
+                    key: catalog_checkpoint_key(&source.id, name, new_definition.generation()),
+                    val: checkpoint.to_bytes()?,
+                },
+                Mutation::Upsert {
+                    key: catalog_retired_key(name, old_checkpoint.generation),
+                    val: old_descriptor,
+                },
+                Mutation::Upsert {
+                    key: catalog_current_key(),
+                    val: current.to_bytes()?,
+                },
+            ],
+        )?;
+        let next_control = IndexControl {
+            source_map_id: self.source_map_id.clone(),
+            catalog_map_id: catalog_id.clone(),
+            active: current
+                .indexes
+                .iter()
+                .map(|checkpoint| ActiveIndexControl {
+                    name: checkpoint.index_name.clone(),
+                    fingerprint: checkpoint.definition_fingerprint.clone(),
+                })
+                .collect(),
+        };
+        let control_tree = self.prolly.put(
+            &self.prolly.create(),
+            control_record_key(),
+            next_control.to_bytes()?,
+        )?;
+        let control_fingerprint = self
+            .load_control()?
+            .ok_or_else(|| {
+                Error::InvalidVersionedMap("replacement requires active control".to_string())
+            })?
+            .fingerprint()?;
+        let (published_index, published_catalog) =
+            self.prolly.versioned_maps_transaction(|maps| {
+                let source_permit = IndexMaintenancePermit::new(
+                    self.source_map_id.clone(),
+                    control_fingerprint.clone(),
+                );
+                let source_update = maps.publish_tree_index_maintenance(
+                    &source_permit,
+                    Some(&source.id),
+                    &source.tree,
+                )?;
+                require_non_conflict(source_update, self.source().head_name())?;
+                let index_permit =
+                    IndexMaintenancePermit::new(hidden_map_id.clone(), control_fingerprint.clone());
+                let index_update = maps.publish_tree_index_maintenance(
+                    &index_permit,
+                    hidden_head.as_ref().map(|head| &head.id),
+                    &index_tree,
+                )?;
+                let published_index = require_non_conflict(index_update, &hidden_map_id)?;
+                let catalog_permit =
+                    IndexMaintenancePermit::new(catalog_id.clone(), control_fingerprint.clone());
+                let catalog_update = maps.publish_tree_index_maintenance(
+                    &catalog_permit,
+                    Some(&catalog_head.id),
+                    &catalog_candidate,
+                )?;
+                let published_catalog = require_non_conflict(catalog_update, &catalog_id)?;
+                maps.raw_transaction()
+                    .publish_named_root(&control_root_name(&self.source_map_id), &control_tree)?;
+                Ok((published_index, published_catalog))
+            })?;
+        self.runtime_overrides
+            .write()
+            .expect("secondary-index runtime override lock poisoned")
+            .insert(name.to_vec(), new_definition.clone());
+        Ok(IndexBuildResult {
+            source_version: source.id,
+            index_version: published_index.id,
+            catalog_version: published_catalog.id,
+            generation: new_definition.generation(),
+            entries,
+            attempts: 1,
+            activated: true,
+        })
+    }
+
+    /// Remove one active selection while retaining its descriptors, checkpoints, and roots.
+    pub fn deactivate_index(&self, name: impl AsRef<[u8]>) -> Result<IndexedVersion, Error> {
+        let name = name.as_ref();
+        let health = self.health()?;
+        let source = self.source().head()?.ok_or_else(|| {
+            Error::InvalidVersionedMap("deactivation requires an initialized source".to_string())
+        })?;
+        let catalog_id = catalog_map_id(&self.source_map_id);
+        let catalog_map = self.prolly.versioned_map(&catalog_id);
+        let catalog_head = catalog_map.head()?.ok_or_else(|| {
+            Error::InvalidVersionedMap("deactivation requires a catalog head".to_string())
+        })?;
+        let catalog = catalog_map.snapshot_at(&catalog_head.id)?.ok_or_else(|| {
+            Error::InvalidVersionedMap("deactivation catalog root is missing".to_string())
+        })?;
+        let mut current = catalog
+            .get(&catalog_current_key())?
+            .ok_or_else(|| {
+                Error::InvalidVersionedMap(
+                    "deactivation catalog has no current selection".to_string(),
+                )
+            })
+            .and_then(|bytes| IndexedHeadRecord::from_bytes(&bytes))?;
+        if current.source_version != source.id || health.source_version.as_ref() != Some(&source.id)
+        {
+            return Err(Error::TransactionConflict(TransactionConflict::new(
+                self.source().head_name().to_vec(),
+                None,
+                None,
+            )));
+        }
+        let before = current.indexes.len();
+        current
+            .indexes
+            .retain(|checkpoint| checkpoint.index_name != name);
+        if current.indexes.len() == before {
+            return Err(Error::IndexUnavailableAtVersion {
+                name: name.to_vec(),
+                source_version: source.id.clone(),
+            });
+        }
+        let catalog_candidate = self.prolly.batch(
+            catalog.tree(),
+            vec![Mutation::Upsert {
+                key: catalog_current_key(),
+                val: current.to_bytes()?,
+            }],
+        )?;
+        let control = self.load_control()?.ok_or_else(|| {
+            Error::InvalidVersionedMap("deactivation requires active control".to_string())
+        })?;
+        let control_fingerprint = control.fingerprint()?;
+        let next_control_tree = if current.indexes.is_empty() {
+            None
+        } else {
+            let next = IndexControl {
+                source_map_id: self.source_map_id.clone(),
+                catalog_map_id: catalog_id.clone(),
+                active: current
+                    .indexes
+                    .iter()
+                    .map(|checkpoint| ActiveIndexControl {
+                        name: checkpoint.index_name.clone(),
+                        fingerprint: checkpoint.definition_fingerprint.clone(),
+                    })
+                    .collect(),
+            };
+            Some(self.prolly.put(
+                &self.prolly.create(),
+                control_record_key(),
+                next.to_bytes()?,
+            )?)
+        };
+        let (published_source, published_catalog) =
+            self.prolly.versioned_maps_transaction(|maps| {
+                let source_permit = IndexMaintenancePermit::new(
+                    self.source_map_id.clone(),
+                    control_fingerprint.clone(),
+                );
+                let source_update = maps.publish_tree_index_maintenance(
+                    &source_permit,
+                    Some(&source.id),
+                    &source.tree,
+                )?;
+                let published_source =
+                    require_non_conflict(source_update, self.source().head_name())?;
+                let catalog_permit =
+                    IndexMaintenancePermit::new(catalog_id.clone(), control_fingerprint.clone());
+                let catalog_update = maps.publish_tree_index_maintenance(
+                    &catalog_permit,
+                    Some(&catalog_head.id),
+                    &catalog_candidate,
+                )?;
+                let published_catalog = require_non_conflict(catalog_update, &catalog_id)?;
+                match &next_control_tree {
+                    Some(tree) => maps
+                        .raw_transaction()
+                        .publish_named_root(&control_root_name(&self.source_map_id), tree)?,
+                    None => maps
+                        .raw_transaction()
+                        .delete_named_root(&control_root_name(&self.source_map_id))?,
+                }
+                Ok((published_source, published_catalog))
+            })?;
+        Ok(IndexedVersion {
+            source: published_source,
+            catalog: Some(published_catalog),
+            indexes: current.indexes,
+        })
+    }
+
     /// Apply source mutations while maintaining every active index atomically.
     pub fn apply(&self, mutations: Vec<Mutation>) -> Result<IndexedVersion, Error> {
         let max_retries = self
-            .registry
+            .runtime_definitions()
             .iter()
             .map(|definition| definition.limits().max_write_retries)
             .min()
@@ -862,12 +1414,12 @@ where
         let mut planned_indexes = Vec::with_capacity(current.indexes.len());
         let mut new_checkpoints = Vec::with_capacity(current.indexes.len());
         for checkpoint in &current.indexes {
-            let definition = self.registry.get(&checkpoint.index_name).ok_or_else(|| {
-                Error::IndexRuntimeDefinitionMissing {
+            let definition = self
+                .runtime_definition(&checkpoint.index_name)
+                .ok_or_else(|| Error::IndexRuntimeDefinitionMissing {
                     name: checkpoint.index_name.clone(),
                     generation: checkpoint.generation,
-                }
-            })?;
+                })?;
             let index_version = self
                 .prolly
                 .versioned_map(&checkpoint.index_map_id)
@@ -882,9 +1434,9 @@ where
             for ((primary_key, final_value), old_value) in normalized.iter().zip(old_values.iter())
             {
                 let old_entries =
-                    self.projected_entries(definition, primary_key, old_value.as_deref())?;
+                    self.projected_entries(&definition, primary_key, old_value.as_deref())?;
                 let new_entries =
-                    self.projected_entries(definition, primary_key, final_value.as_deref())?;
+                    self.projected_entries(&definition, primary_key, final_value.as_deref())?;
                 operation.records_extracted = operation
                     .records_extracted
                     .saturating_add(u64::from(old_value.is_some()))

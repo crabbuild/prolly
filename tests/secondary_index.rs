@@ -681,3 +681,213 @@ fn indexed_snapshot_queries_are_exact_projected_paged_and_historical() {
         historical_id.source_version
     );
 }
+
+#[test]
+fn index_lifecycle_verifies_replaces_repairs_and_deactivates_safely() {
+    let prolly = Prolly::new(Arc::new(MemStore::new()), Config::default());
+    let source = prolly.versioned_map(b"users");
+    source.put(b"user-1", b"red").unwrap();
+    source.put(b"user-2", b"blue").unwrap();
+    let registry = SecondaryIndexRegistry::new()
+        .register(
+            SecondaryIndex::non_unique("by-tag", 1, "app.by-tag/v1", |_, value| {
+                Ok(vec![value.to_vec()])
+            })
+            .unwrap(),
+        )
+        .unwrap()
+        .register(
+            SecondaryIndex::non_unique("by-tag-copy", 1, "app.by-tag-copy/v1", |_, value| {
+                Ok(vec![value.to_vec()])
+            })
+            .unwrap(),
+        )
+        .unwrap();
+    let indexed = prolly.indexed_map(b"users", registry).unwrap();
+    indexed.ensure_index(b"by-tag").unwrap();
+    indexed.ensure_index(b"by-tag-copy").unwrap();
+    let old_snapshot = indexed.snapshot().unwrap();
+    let old_id = old_snapshot.id().clone();
+
+    let verified = indexed
+        .verify_index(b"by-tag", &old_id.source_version)
+        .unwrap();
+    assert!(verified.is_valid());
+    assert_eq!(verified.expected_entries, 2);
+    assert_eq!(verified.actual_entries, 2);
+    assert!(indexed
+        .repair_index(b"by-tag", &old_id.source_version)
+        .unwrap()
+        .is_valid());
+
+    let invalid_replacement =
+        SecondaryIndex::non_unique("by-tag", 1, "app.by-tag/same-generation", |_, value| {
+            Ok(vec![value.to_vec()])
+        })
+        .unwrap();
+    assert!(matches!(
+        indexed.replace_index(b"by-tag", invalid_replacement),
+        Err(Error::InvalidIndexDefinition { .. })
+    ));
+
+    let replacement = SecondaryIndex::non_unique("by-tag", 2, "app.by-tag/v2", |_, value| {
+        let mut term = b"v2/".to_vec();
+        term.extend_from_slice(value);
+        Ok(vec![term])
+    })
+    .unwrap();
+    let replaced = indexed.replace_index(b"by-tag", replacement).unwrap();
+    assert_eq!(replaced.generation, 2);
+    assert_eq!(
+        indexed
+            .snapshot()
+            .unwrap()
+            .index(b"by-tag")
+            .unwrap()
+            .primary_keys(b"v2/red")
+            .unwrap(),
+        vec![b"user-1".to_vec()]
+    );
+    assert_eq!(
+        old_snapshot
+            .index(b"by-tag")
+            .unwrap()
+            .primary_keys(b"red")
+            .unwrap(),
+        vec![b"user-1".to_vec()]
+    );
+    assert!(indexed
+        .verify_all(&old_id.source_version)
+        .unwrap()
+        .iter()
+        .all(prolly::IndexVerification::is_valid));
+
+    indexed.deactivate_index(b"by-tag").unwrap();
+    assert_eq!(indexed.health().unwrap().active_indexes.len(), 1);
+    assert!(matches!(
+        source.put(b"user-3", b"green"),
+        Err(Error::IndexesRequireIndexedMap { active_indexes, .. })
+            if active_indexes == vec![b"by-tag-copy".to_vec()]
+    ));
+    indexed.deactivate_index(b"by-tag-copy").unwrap();
+    assert!(indexed.health().unwrap().active_indexes.is_empty());
+    source.put(b"user-3", b"green").unwrap();
+    assert_eq!(
+        indexed
+            .snapshot_by_id(&old_id)
+            .unwrap()
+            .index(b"by-tag")
+            .unwrap()
+            .primary_keys(b"red")
+            .unwrap(),
+        vec![b"user-1".to_vec()]
+    );
+}
+
+#[test]
+fn index_lifecycle_detects_and_repairs_logical_drift() {
+    let prolly = Prolly::new(Arc::new(MemStore::new()), Config::default());
+    prolly
+        .versioned_map(b"users")
+        .put(b"user-1", b"red")
+        .unwrap();
+    let registry = SecondaryIndexRegistry::new()
+        .register(
+            SecondaryIndex::non_unique("by-tag", 1, "app.by-tag/v1", |_, value| {
+                Ok(vec![value.to_vec()])
+            })
+            .unwrap(),
+        )
+        .unwrap();
+    let indexed = prolly.indexed_map(b"users", registry).unwrap();
+    indexed.ensure_index(b"by-tag").unwrap();
+    let snapshot = indexed.snapshot().unwrap();
+    let source_version = snapshot.id().source_version.clone();
+    let checkpoint = snapshot.index(b"by-tag").unwrap().checkpoint().clone();
+
+    let hidden = prolly.versioned_map(&checkpoint.index_map_id);
+    let hidden_snapshot = hidden
+        .snapshot_at(&checkpoint.index_version)
+        .unwrap()
+        .unwrap();
+    let drifted_tree = prolly
+        .put(
+            hidden_snapshot.tree(),
+            prolly::physical_index_key(b"ghost", b"missing-user").unwrap(),
+            Vec::new(),
+        )
+        .unwrap();
+    let drifted_version = prolly::MapVersionId::for_tree(&drifted_tree).unwrap();
+    let mut hidden_version_root = hidden.versions_prefix().to_vec();
+    hidden_version_root.extend_from_slice(drifted_version.as_cid().as_bytes());
+    prolly
+        .publish_named_root(&hidden_version_root, &drifted_tree)
+        .unwrap();
+    prolly
+        .publish_named_root(hidden.head_name(), &drifted_tree)
+        .unwrap();
+
+    let catalog = prolly.versioned_map(prolly::catalog_map_id(b"users"));
+    let catalog_snapshot = catalog.snapshot().unwrap().unwrap();
+    let mut current = prolly::IndexedHeadRecord::from_bytes(
+        &catalog_snapshot
+            .get(&prolly::catalog_current_key())
+            .unwrap()
+            .unwrap(),
+    )
+    .unwrap();
+    current.indexes[0].index_version = drifted_version.clone();
+    let drifted_checkpoint = current.indexes[0].clone();
+    let drifted_catalog_tree = prolly
+        .batch(
+            catalog_snapshot.tree(),
+            vec![
+                Mutation::Upsert {
+                    key: prolly::catalog_checkpoint_key(
+                        &source_version,
+                        b"by-tag",
+                        drifted_checkpoint.generation,
+                    ),
+                    val: drifted_checkpoint.to_bytes().unwrap(),
+                },
+                Mutation::Upsert {
+                    key: prolly::catalog_current_key(),
+                    val: current.to_bytes().unwrap(),
+                },
+            ],
+        )
+        .unwrap();
+    let drifted_catalog_version = prolly::MapVersionId::for_tree(&drifted_catalog_tree).unwrap();
+    let mut catalog_version_root = catalog.versions_prefix().to_vec();
+    catalog_version_root.extend_from_slice(drifted_catalog_version.as_cid().as_bytes());
+    prolly
+        .publish_named_root(&catalog_version_root, &drifted_catalog_tree)
+        .unwrap();
+    prolly
+        .publish_named_root(catalog.head_name(), &drifted_catalog_tree)
+        .unwrap();
+
+    let verification = indexed.verify_index(b"by-tag", &source_version).unwrap();
+    assert!(!verification.is_valid());
+    assert!(matches!(
+        indexed
+            .snapshot()
+            .unwrap()
+            .index(b"by-tag")
+            .unwrap()
+            .records(b"ghost"),
+        Err(Error::IndexCheckpointMismatch { .. })
+    ));
+    assert!(indexed
+        .repair_index(b"by-tag", &source_version)
+        .unwrap()
+        .is_valid());
+    assert!(indexed
+        .snapshot()
+        .unwrap()
+        .index(b"by-tag")
+        .unwrap()
+        .exact(b"ghost")
+        .unwrap()
+        .is_empty());
+}

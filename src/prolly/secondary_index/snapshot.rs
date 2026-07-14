@@ -635,14 +635,14 @@ where
                     reason: "checkpoint fingerprint does not match descriptor".to_string(),
                 });
             }
-            let runtime = self.registry.get(&checkpoint.index_name).ok_or_else(|| {
-                Error::IndexRuntimeDefinitionMissing {
+            let runtime = self
+                .runtime_definition_for_descriptor(&descriptor)?
+                .ok_or_else(|| Error::IndexRuntimeDefinitionMissing {
                     name: checkpoint.index_name.clone(),
                     generation: checkpoint.generation,
-                }
-            })?;
+                })?;
             let runtime_descriptor =
-                SecondaryIndexDescriptor::from_runtime(&self.source_map_id, runtime)?;
+                SecondaryIndexDescriptor::from_runtime(&self.source_map_id, &runtime)?;
             if runtime_descriptor.fingerprint != descriptor.fingerprint {
                 return Err(Error::IndexDefinitionMismatch {
                     name: checkpoint.index_name.clone(),

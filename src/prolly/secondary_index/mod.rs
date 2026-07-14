@@ -9,8 +9,8 @@ mod snapshot;
 mod storage;
 
 pub use coordinator::{
-    ActiveIndexHealth, IndexBuildResult, IndexedMap, IndexedMapEditor, IndexedMapHealth,
-    IndexedMapMetricsSnapshot, IndexedMapUpdate, IndexedVersion,
+    ActiveIndexHealth, IndexBuildResult, IndexVerification, IndexedMap, IndexedMapEditor,
+    IndexedMapHealth, IndexedMapMetricsSnapshot, IndexedMapUpdate, IndexedVersion,
 };
 pub use definition::{
     IndexProjection, SecondaryIndex, SecondaryIndexBuilder, SecondaryIndexEntry,

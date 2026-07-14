@@ -1537,6 +1537,38 @@ where
         })
     }
 
+    /// Publish only an immutable indexed-map version root without moving its head.
+    pub(crate) fn publish_version_index_maintenance(
+        &self,
+        permit: &IndexMaintenancePermit,
+        tree: &Tree,
+    ) -> Result<MapVersion, Error> {
+        let map_id = permit.map_id.as_slice();
+        guard_managed_map_write(self.tx, map_id, MapWriteAuthority::IndexMaintenance(permit))?;
+        let (_, _, mut versions_prefix) = versioned_map_names(map_id);
+        let id = MapVersionId::for_tree(tree)?;
+        versions_prefix.extend_from_slice(id.as_cid().as_bytes());
+        match self.tx.load_named_root(&versions_prefix)? {
+            Some(existing) if existing != *tree => {
+                return Err(Error::InvalidVersionedMap(format!(
+                    "content identifier collision for indexed immutable version {id}"
+                )));
+            }
+            Some(_) => {}
+            None => self.tx.publish_named_root_at_millis(
+                &versions_prefix,
+                tree,
+                self.timestamp_millis,
+            )?,
+        }
+        Ok(MapVersion {
+            id,
+            tree: tree.clone(),
+            created_at_millis: Some(self.timestamp_millis),
+            is_head: false,
+        })
+    }
+
     fn apply_with_authority(
         &self,
         map_id: &[u8],
