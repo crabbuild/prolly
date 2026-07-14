@@ -16,6 +16,8 @@ use super::tree::Tree;
 
 pub use build::{BuildParallelism, ProximityBuildStats};
 pub use map::ProximityMap;
+#[cfg(feature = "async-store")]
+pub use search::{AsyncIoConfig, AsyncProximityMap, AsyncSearchControl, CancellationToken};
 pub use search::{ProximityFilter, SearchRequest};
 
 const MIN_PROXIMITY_NODE_BYTES: u32 = 64;
@@ -295,6 +297,7 @@ pub struct ProximitySearchStats {
     pub levels_visited: usize,
     pub nodes_read: usize,
     pub bytes_read: usize,
+    pub physical_bytes_read: usize,
     pub committed_bytes: usize,
     pub distance_evaluations: usize,
     pub frontier_peak: usize,

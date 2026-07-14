@@ -336,6 +336,10 @@ pub use prolly::proximity::{
     ProximityTree, ProximityVerification, ScalarQuantizationConfig, SearchBackend, SearchBudget,
     SearchCompletion, SearchPolicy, SearchRequest, SearchResult, VectorStorageConfig,
 };
+#[cfg(feature = "async-store")]
+pub use prolly::proximity::{
+    AsyncIoConfig, AsyncProximityMap, AsyncSearchControl, CancellationToken,
+};
 pub use prolly::range::{
     CursorWindow, RangeCursor, RangeIter, RangePage, ReverseCursor, ReversePage,
 };
