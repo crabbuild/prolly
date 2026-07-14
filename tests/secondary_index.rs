@@ -1,7 +1,9 @@
 use prolly::{
-    Error, IndexProjection, SecondaryIndex, SecondaryIndexEntry, SecondaryIndexError,
-    SecondaryIndexRegistry,
+    catalog_map_id, control_record_key, control_root_name, index_map_id, ActiveIndexControl, Cid,
+    Config, Error, IndexControl, IndexProjection, MemStore, Mutation, ParallelConfig, Prolly,
+    SecondaryIndex, SecondaryIndexEntry, SecondaryIndexError, SecondaryIndexRegistry,
 };
+use std::sync::Arc;
 
 #[test]
 fn secondary_index_registry_validates_definitions() {
@@ -71,4 +73,91 @@ fn definitions_validate_projection_contracts() {
         failed.extract(b"user-1", b"bad"),
         Err(Error::IndexExtractionFailed { reason, .. }) if reason == "invalid source value"
     ));
+}
+
+fn install_control(prolly: &Prolly<Arc<MemStore>>, source_map_id: &[u8]) {
+    let control = IndexControl {
+        source_map_id: source_map_id.to_vec(),
+        catalog_map_id: catalog_map_id(source_map_id),
+        active: vec![ActiveIndexControl {
+            name: b"by-status".to_vec(),
+            fingerprint: Cid([7; 32]),
+        }],
+    };
+    let tree = prolly
+        .put(
+            &prolly.create(),
+            control_record_key(),
+            control.to_bytes().unwrap(),
+        )
+        .unwrap();
+    prolly
+        .publish_named_root(&control_root_name(source_map_id), &tree)
+        .unwrap();
+}
+
+fn assert_fenced<T>(result: Result<T, Error>) {
+    assert!(matches!(
+        result,
+        Err(Error::IndexesRequireIndexedMap { map_id, active_indexes })
+            if map_id == b"users" && active_indexes == vec![b"by-status".to_vec()]
+    ));
+}
+
+#[test]
+fn active_control_fences_public_raw_write_routes() {
+    let prolly = Prolly::new(Arc::new(MemStore::new()), Config::default());
+    let users = prolly.versioned_map(b"users");
+    let first = users.put(b"user-1", b"Ada").unwrap();
+    let second = users.put(b"user-2", b"Grace").unwrap();
+    let bundle = users.snapshot().unwrap().unwrap().export().unwrap();
+    let backup = users.backup().unwrap();
+    install_control(&prolly, b"users");
+
+    assert_fenced(users.initialize());
+    assert_fenced(users.put(b"user-3", b"Lin"));
+    assert_fenced(users.apply_if(
+        Some(&second.id),
+        vec![Mutation::Delete {
+            key: b"user-1".to_vec(),
+        }],
+    ));
+    assert_fenced(users.edit(|edit| {
+        edit.put(b"user-3", b"Lin");
+    }));
+    assert_fenced(users.append(vec![Mutation::Upsert {
+        key: b"user-3".to_vec(),
+        val: b"Lin".to_vec(),
+    }]));
+    assert_fenced(users.parallel_apply(
+        vec![Mutation::Upsert {
+            key: b"user-3".to_vec(),
+            val: b"Lin".to_vec(),
+        }],
+        &ParallelConfig::default(),
+    ));
+    assert_fenced(users.rollback_to(&first.id));
+    assert_fenced(
+        users.rebuild_from_iter_if(Some(&second.id), [(b"user-3".to_vec(), b"Lin".to_vec())]),
+    );
+    assert_fenced(users.import_as_head(&bundle));
+    assert_fenced(users.restore_backup(&backup));
+    assert_fenced(users.keep_last(1));
+    assert_fenced(prolly.versioned_maps_transaction(|maps| {
+        maps.put(b"users", b"user-3", b"Lin")?;
+        Ok(())
+    }));
+
+    let hidden_index_id = index_map_id(b"users", b"by-status", &Cid([7; 32]));
+    assert!(matches!(
+        prolly.versioned_map(&hidden_index_id).put(b"term", b"corrupt"),
+        Err(Error::IndexesRequireIndexedMap { map_id, .. }) if map_id == hidden_index_id
+    ));
+    let hidden_catalog_id = catalog_map_id(b"users");
+    assert!(matches!(
+        prolly.versioned_map(&hidden_catalog_id).put(b"current", b"corrupt"),
+        Err(Error::IndexesRequireIndexedMap { map_id, .. }) if map_id == hidden_catalog_id
+    ));
+
+    assert_eq!(users.head().unwrap().unwrap().id, second.id);
 }

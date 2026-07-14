@@ -629,6 +629,10 @@ pub fn control_root_name(source_map_id: impl AsRef<[u8]>) -> Vec<u8> {
     name
 }
 
+pub fn control_record_key() -> Vec<u8> {
+    KeyBuilder::new().push_str("control").finish()
+}
+
 fn append_hex(output: &mut Vec<u8>, bytes: &[u8]) {
     const HEX: &[u8; 16] = b"0123456789abcdef";
     output.reserve(bytes.len().saturating_mul(2));
