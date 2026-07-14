@@ -4,7 +4,9 @@ use super::super::encoding::Encoding;
 use super::super::error::Error;
 use super::super::tree::Tree;
 use super::codec::{put_varint, Reader};
-use super::{DistanceMetric, ProximityConfig};
+use super::{
+    DistanceMetric, HierarchyConfig, OverflowConfig, ProximityConfig, VectorStorageConfig,
+};
 
 const MAGIC: &[u8; 4] = b"PRXI";
 const VERSION: u8 = 1;
@@ -47,9 +49,9 @@ impl Descriptor {
         bytes.push(VECTOR_ENCODING_F32_LE);
         put_varint(u64::from(self.config.dimensions), &mut bytes);
         bytes.push(self.config.metric.id());
-        bytes.push(self.config.log_chunk_size);
-        bytes.extend_from_slice(&self.config.level_hash_seed.to_le_bytes());
-        put_varint(u64::from(self.config.max_node_bytes), &mut bytes);
+        bytes.push(self.config.hierarchy.log_chunk_size);
+        bytes.extend_from_slice(&self.config.hierarchy.level_hash_seed.to_le_bytes());
+        put_varint(u64::from(self.config.overflow.max_page_bytes), &mut bytes);
         put_varint(self.count, &mut bytes);
         match &self.directory.root {
             Some(root) => {
@@ -96,10 +98,10 @@ impl Descriptor {
         let metric = DistanceMetric::from_id(reader.u8()?)?;
         let log_chunk_size = reader.u8()?;
         let level_hash_seed = reader.u64_le()?;
-        let max_node_bytes =
+        let max_page_bytes =
             u32::try_from(reader.varint()?).map_err(|_| Error::InvalidProximityObject {
                 kind: "descriptor",
-                reason: "max_node_bytes exceeds u32".to_owned(),
+                reason: "max_page_bytes exceeds u32".to_owned(),
             })?;
         let count = reader.varint()?;
         let root = match reader.u8()? {
@@ -174,9 +176,20 @@ impl Descriptor {
         let config = ProximityConfig {
             dimensions,
             metric,
-            log_chunk_size,
-            level_hash_seed,
-            max_node_bytes,
+            hierarchy: HierarchyConfig {
+                log_chunk_size,
+                level_hash_seed,
+            },
+            overflow: OverflowConfig {
+                max_page_bytes,
+                target_page_bytes: (64 * 1024).min(max_page_bytes),
+                min_page_bytes: (4 * 1024).min(max_page_bytes),
+                hash_seed: 0,
+            },
+            vector_storage: VectorStorageConfig {
+                inline_threshold_bytes: (64 * 1024).min(max_page_bytes),
+            },
+            scalar_quantization: None,
         };
         config.validate()?;
         Ok(Self {
@@ -209,9 +222,20 @@ mod tests {
             config: ProximityConfig {
                 dimensions: 4,
                 metric: DistanceMetric::L2Squared,
-                log_chunk_size: 8,
-                level_hash_seed: 99,
-                max_node_bytes: 4096,
+                hierarchy: HierarchyConfig {
+                    log_chunk_size: 8,
+                    level_hash_seed: 99,
+                },
+                overflow: OverflowConfig {
+                    min_page_bytes: 4096,
+                    target_page_bytes: 4096,
+                    max_page_bytes: 4096,
+                    hash_seed: 0,
+                },
+                vector_storage: VectorStorageConfig {
+                    inline_threshold_bytes: 4096,
+                },
+                scalar_quantization: None,
             },
             count: 12,
             directory: Tree::new(Config::default()),

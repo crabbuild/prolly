@@ -180,12 +180,12 @@ impl<S: Store> Context<'_, S> {
 
     fn finish_node(&mut self, old_cid: &Cid, node: ProximityNode) -> Result<(Cid, u64), Error> {
         let bytes = node.encode()?;
-        if bytes.len() > self.config.max_node_bytes as usize {
+        if bytes.len() > self.config.overflow.max_page_bytes as usize {
             return Err(Error::ProximityNodeTooLarge {
                 level: node.level,
                 entries: node.entries.len(),
                 encoded_bytes: bytes.len(),
-                limit: self.config.max_node_bytes as usize,
+                limit: self.config.overflow.max_page_bytes as usize,
             });
         }
         let cid = Cid::from_bytes(&bytes);
@@ -260,7 +260,7 @@ impl<S: Store> Context<'_, S> {
                 actual,
             });
         }
-        if bytes.len() > self.config.max_node_bytes as usize {
+        if bytes.len() > self.config.overflow.max_page_bytes as usize {
             return Err(Error::InvalidProximityObject {
                 kind: "node",
                 reason: "node exceeds descriptor max_node_bytes".to_owned(),

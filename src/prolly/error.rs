@@ -222,6 +222,8 @@ pub enum Error {
     InvalidVersionedMap(String),
     /// A proximity-map shape configuration is invalid.
     InvalidProximityConfig { reason: String },
+    /// Persisted proximity bytes use a format version this build does not read.
+    UnsupportedProximityVersion { found: u8, required: u8 },
     /// A vector is incompatible with the proximity-map configuration.
     InvalidProximityVector { reason: String },
     /// A proximity build or mutation contains the same logical key twice.
@@ -283,6 +285,10 @@ impl std::fmt::Display for Error {
             Error::InvalidProximityConfig { reason } => {
                 write!(f, "invalid proximity configuration: {reason}")
             }
+            Error::UnsupportedProximityVersion { found, required } => write!(
+                f,
+                "unsupported proximity format version: found={found} required={required}"
+            ),
             Error::InvalidProximityVector { reason } => {
                 write!(f, "invalid proximity vector: {reason}")
             }

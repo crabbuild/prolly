@@ -48,7 +48,11 @@ pub(crate) fn build_hierarchy_at_level(
     let levels: Vec<u8> = records
         .iter()
         .map(|record| {
-            let level = promotion_level(&record.key, config.log_chunk_size, config.level_hash_seed);
+            let level = promotion_level(
+                &record.key,
+                config.hierarchy.log_chunk_size,
+                config.hierarchy.level_hash_seed,
+            );
             forced_max_level.map_or(level, |maximum| level.min(maximum))
         })
         .collect();
@@ -204,7 +208,7 @@ fn enforce_size(
     encoded_bytes: usize,
     config: &ProximityConfig,
 ) -> Result<(), Error> {
-    let limit = config.max_node_bytes as usize;
+    let limit = config.overflow.max_page_bytes as usize;
     if encoded_bytes > limit {
         return Err(Error::ProximityNodeTooLarge {
             level: node.level,

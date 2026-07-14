@@ -95,7 +95,7 @@ where
         let descriptor_bytes = load_content(&store, &descriptor_cid)?;
         let descriptor = Descriptor::decode(&descriptor_bytes)?;
         let root_bytes = load_content(&store, &descriptor.proximity_root)?;
-        if root_bytes.len() > descriptor.config.max_node_bytes as usize {
+        if root_bytes.len() > descriptor.config.overflow.max_page_bytes as usize {
             return Err(Error::InvalidProximityObject {
                 kind: "node",
                 reason: "root exceeds descriptor max_node_bytes".to_owned(),
@@ -189,8 +189,8 @@ where
                     new,
                     level: promotion_level(
                         &mutation.key,
-                        self.tree.config.log_chunk_size,
-                        self.tree.config.level_hash_seed,
+                        self.tree.config.hierarchy.log_chunk_size,
+                        self.tree.config.hierarchy.level_hash_seed,
                     ),
                 })
             })
@@ -464,7 +464,7 @@ where
             return Ok((node, 0));
         }
         let bytes = load_content(&self.store, cid)?;
-        if bytes.len() > self.tree.config.max_node_bytes as usize {
+        if bytes.len() > self.tree.config.overflow.max_page_bytes as usize {
             return Err(Error::InvalidProximityObject {
                 kind: "node",
                 reason: "node exceeds descriptor max_node_bytes".to_owned(),
@@ -515,7 +515,7 @@ where
                     actual,
                 });
             }
-            if bytes.len() > self.tree.config.max_node_bytes as usize {
+            if bytes.len() > self.tree.config.overflow.max_page_bytes as usize {
                 return Err(Error::InvalidProximityObject {
                     kind: "node",
                     reason: "node exceeds descriptor max_node_bytes".to_owned(),
@@ -574,7 +574,7 @@ where
             });
         }
         let bytes = load_content(&self.store, cid)?;
-        if bytes.len() > self.tree.config.max_node_bytes as usize {
+        if bytes.len() > self.tree.config.overflow.max_page_bytes as usize {
             return Err(Error::InvalidProximityObject {
                 kind: "node",
                 reason: "node exceeds descriptor max_node_bytes".to_owned(),
@@ -613,8 +613,8 @@ where
         for entry in &node.entries {
             if super::vector::promotion_level(
                 &entry.key,
-                self.tree.config.log_chunk_size,
-                self.tree.config.level_hash_seed,
+                self.tree.config.hierarchy.log_chunk_size,
+                self.tree.config.hierarchy.level_hash_seed,
             ) < node.level
             {
                 return Err(Error::InvalidProximityObject {
@@ -853,13 +853,11 @@ mod tests {
     use crate::prolly::store::MemStore;
 
     fn config() -> ProximityConfig {
-        ProximityConfig {
-            dimensions: 1,
-            metric: super::super::DistanceMetric::L2Squared,
-            log_chunk_size: 1,
-            level_hash_seed: 7,
-            max_node_bytes: 256 * 1024,
-        }
+        let mut config = ProximityConfig::new(1);
+        config.hierarchy.log_chunk_size = 1;
+        config.hierarchy.level_hash_seed = 7;
+        config.overflow.max_page_bytes = 256 * 1024;
+        config
     }
 
     fn two_representative_map() -> (Arc<MemStore>, ProximityMap<Arc<MemStore>>) {
@@ -918,7 +916,7 @@ mod tests {
     fn verify_rejects_a_leaf_vector_that_disagrees_with_the_exact_directory() {
         let store = Arc::new(MemStore::new());
         let mut leaf_config = config();
-        leaf_config.log_chunk_size = 63;
+        leaf_config.hierarchy.log_chunk_size = 63;
         let map = ProximityMap::build(
             store.clone(),
             leaf_config,

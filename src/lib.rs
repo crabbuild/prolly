@@ -329,9 +329,11 @@ pub use prolly::proof::{
     RangePageProofVerification, RangeProof, RangeProofVerification,
 };
 pub use prolly::proximity::{
-    DistanceMetric, ExactProximityRecord, Neighbor, ProximityConfig, ProximityMap,
-    ProximityMutation, ProximityMutationStats, ProximityRecord, ProximitySearchStats,
-    ProximityTree, ProximityVerification, SearchOptions, SearchResult,
+    AdaptiveQuality, DistanceMetric, ExactProximityRecord, HierarchyConfig, Neighbor,
+    OverflowConfig, ProximityConfig, ProximityMap, ProximityMutation, ProximityMutationStats,
+    ProximityRecord, ProximitySearchStats, ProximityTree, ProximityVerification,
+    ScalarQuantizationConfig, SearchBackend, SearchBudget, SearchCompletion, SearchOptions,
+    SearchPolicy, SearchResult, VectorStorageConfig,
 };
 pub use prolly::range::{
     CursorWindow, RangeCursor, RangeIter, RangePage, ReverseCursor, ReversePage,

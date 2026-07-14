@@ -7,13 +7,10 @@ use std::sync::Arc;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let store = Arc::new(MemStore::new());
-    let config = ProximityConfig {
-        dimensions: 3,
-        metric: DistanceMetric::L2Squared,
-        log_chunk_size: 8,
-        level_hash_seed: 42,
-        max_node_bytes: 256 * 1024,
-    };
+    let mut config = ProximityConfig::new(3);
+    config.metric = DistanceMetric::L2Squared;
+    config.hierarchy.level_hash_seed = 42;
+    config.overflow.max_page_bytes = 256 * 1024;
     let map = ProximityMap::build(
         store.clone(),
         config,

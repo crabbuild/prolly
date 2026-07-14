@@ -45,13 +45,12 @@ impl Store for RejectDescriptorStore {
 }
 
 fn config() -> ProximityConfig {
-    ProximityConfig {
-        dimensions: 3,
-        metric: DistanceMetric::L2Squared,
-        log_chunk_size: 2,
-        level_hash_seed: 19,
-        max_node_bytes: 256 * 1024,
-    }
+    let mut config = ProximityConfig::new(3);
+    config.metric = DistanceMetric::L2Squared;
+    config.hierarchy.log_chunk_size = 2;
+    config.hierarchy.level_hash_seed = 19;
+    config.overflow.max_page_bytes = 256 * 1024;
+    config
 }
 
 fn records() -> Vec<ProximityRecord> {
@@ -134,7 +133,10 @@ fn proximity_build_rejects_duplicate_keys_non_finite_vectors_and_large_nodes() {
     ));
 
     let mut tiny = config();
-    tiny.max_node_bytes = 64;
+    tiny.overflow.min_page_bytes = 64;
+    tiny.overflow.target_page_bytes = 64;
+    tiny.overflow.max_page_bytes = 64;
+    tiny.vector_storage.inline_threshold_bytes = 64;
     assert!(matches!(
         ProximityMap::build(
             Arc::new(MemStore::new()),

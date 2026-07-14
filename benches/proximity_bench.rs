@@ -20,13 +20,10 @@ fn main() {
 
 fn bench_case(count: usize, dimensions: usize) {
     let store = Arc::new(MemStore::new());
-    let config = ProximityConfig {
-        dimensions: dimensions as u32,
-        metric: DistanceMetric::L2Squared,
-        log_chunk_size: 8,
-        level_hash_seed: 42,
-        max_node_bytes: 64 * 1024 * 1024,
-    };
+    let mut config = ProximityConfig::new(dimensions as u32);
+    config.metric = DistanceMetric::L2Squared;
+    config.hierarchy.level_hash_seed = 42;
+    config.overflow.max_page_bytes = 64 * 1024 * 1024;
     let records = make_records(count, dimensions);
     let build_start = Instant::now();
     let map = ProximityMap::build(store, config, black_box(records.clone())).unwrap();

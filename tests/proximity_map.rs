@@ -4,13 +4,11 @@ use prolly::{
 use std::sync::Arc;
 
 fn config(dimensions: u32) -> ProximityConfig {
-    ProximityConfig {
-        dimensions,
-        metric: DistanceMetric::L2Squared,
-        log_chunk_size: 8,
-        level_hash_seed: 42,
-        max_node_bytes: 256 * 1024,
-    }
+    let mut config = ProximityConfig::new(dimensions);
+    config.metric = DistanceMetric::L2Squared;
+    config.hierarchy.level_hash_seed = 42;
+    config.overflow.max_page_bytes = 256 * 1024;
+    config
 }
 
 #[test]
@@ -65,13 +63,7 @@ fn proximity_search_returns_distance_then_key_ordered_neighbors() {
 
 #[test]
 fn proximity_config_rejects_zero_dimensions() {
-    let config = ProximityConfig {
-        dimensions: 0,
-        metric: DistanceMetric::L2Squared,
-        log_chunk_size: 8,
-        level_hash_seed: 42,
-        max_node_bytes: 256 * 1024,
-    };
+    let config = config(0);
 
     assert!(matches!(
         config.validate(),
@@ -177,7 +169,7 @@ fn proximity_map_loads_from_its_descriptor_cid() {
 fn proximity_verify_checks_a_multilevel_hierarchy() {
     let store = Arc::new(MemStore::new());
     let mut multilevel = config(2);
-    multilevel.log_chunk_size = 1;
+    multilevel.hierarchy.log_chunk_size = 1;
     let records = (0..64).map(|index| ProximityRecord {
         key: format!("key-{index:03}").into_bytes(),
         vector: vec![index as f32, (index % 5) as f32],
@@ -196,7 +188,7 @@ fn proximity_verify_checks_a_multilevel_hierarchy() {
 fn exhaustive_beam_matches_brute_force_on_multilevel_map() {
     let store = Arc::new(MemStore::new());
     let mut multilevel = config(3);
-    multilevel.log_chunk_size = 1;
+    multilevel.hierarchy.log_chunk_size = 1;
     let records: Vec<_> = (0..128)
         .map(|index| ProximityRecord {
             key: format!("key-{index:03}").into_bytes(),
@@ -253,7 +245,7 @@ fn exhaustive_beam_matches_brute_force_on_multilevel_map() {
 fn search_distance_budget_is_deterministic_and_reported() {
     let store = Arc::new(MemStore::new());
     let mut multilevel = config(2);
-    multilevel.log_chunk_size = 1;
+    multilevel.hierarchy.log_chunk_size = 1;
     let map = ProximityMap::build(
         store,
         multilevel,

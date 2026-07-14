@@ -5,13 +5,12 @@ use std::sync::Arc;
 use xxhash_rust::xxh64::xxh64;
 
 fn config() -> ProximityConfig {
-    ProximityConfig {
-        dimensions: 2,
-        metric: DistanceMetric::L2Squared,
-        log_chunk_size: 1,
-        level_hash_seed: 7,
-        max_node_bytes: 256 * 1024,
-    }
+    let mut config = ProximityConfig::new(2);
+    config.metric = DistanceMetric::L2Squared;
+    config.hierarchy.log_chunk_size = 1;
+    config.hierarchy.level_hash_seed = 7;
+    config.overflow.max_page_bytes = 256 * 1024;
+    config
 }
 
 fn records() -> Vec<ProximityRecord> {
