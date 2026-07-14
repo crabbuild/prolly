@@ -47,7 +47,7 @@ impl Default for ProductQuantizationConfig {
 }
 
 impl ProductQuantizationConfig {
-    fn validate(&self, dimensions: u32, records: usize) -> Result<(), Error> {
+    pub(crate) fn validate(&self, dimensions: u32, records: usize) -> Result<(), Error> {
         if self.subquantizers == 0 || self.subquantizers > dimensions {
             return Err(invalid_config("subquantizers must be in 1..=dimensions"));
         }
@@ -319,14 +319,14 @@ where
 }
 
 #[derive(Clone)]
-struct Manifest {
-    source: Cid,
-    dimensions: u32,
-    metric: DistanceMetric,
-    config: ProductQuantizationConfig,
-    code_root: Cid,
-    codebooks: Codebooks,
-    quality: ProductQuantizationQuality,
+pub(crate) struct Manifest {
+    pub(crate) source: Cid,
+    pub(crate) dimensions: u32,
+    pub(crate) metric: DistanceMetric,
+    pub(crate) config: ProductQuantizationConfig,
+    pub(crate) code_root: Cid,
+    pub(crate) codebooks: Codebooks,
+    pub(crate) quality: ProductQuantizationQuality,
 }
 
 impl Manifest {
@@ -360,7 +360,7 @@ impl Manifest {
         Ok(bytes)
     }
 
-    fn decode(bytes: &[u8]) -> Result<Self, Error> {
+    pub(crate) fn decode(bytes: &[u8]) -> Result<Self, Error> {
         let mut reader = Reader::new(bytes, "product quantizer");
         reader.exact(MAGIC)?;
         reader.version()?;

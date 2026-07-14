@@ -1,6 +1,6 @@
 mod build;
 mod search;
-mod storage;
+pub(crate) mod storage;
 
 use crate::prolly::cid::Cid;
 use crate::prolly::error::Error;
@@ -36,7 +36,7 @@ impl Default for HnswConfig {
 }
 
 impl HnswConfig {
-    fn validate(&self) -> Result<(), Error> {
+    pub(crate) fn validate(&self) -> Result<(), Error> {
         if self.max_connections == 0
             || self.ef_construction < u32::from(self.max_connections)
             || self.ef_search == 0

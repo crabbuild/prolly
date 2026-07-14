@@ -64,6 +64,11 @@ impl<T> ContentCache<T> {
             }
         }
     }
+
+    pub(crate) fn clear(&mut self) {
+        self.entries.clear();
+        self.access_log.clear();
+    }
 }
 
 #[cfg(test)]
@@ -83,5 +88,8 @@ mod tests {
         assert!(cache.get(&two).is_none());
         assert!(cache.get(&one).is_some());
         assert!(cache.get(&three).is_some());
+        cache.clear();
+        assert!(cache.get(&one).is_none());
+        assert!(cache.get(&three).is_none());
     }
 }

@@ -120,6 +120,7 @@ pub mod builder;
 pub mod canonical_splice;
 pub mod cid;
 pub mod config;
+pub mod content_graph;
 pub mod cursor;
 pub mod debug;
 pub mod encoding;

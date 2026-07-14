@@ -13,7 +13,7 @@ const MANIFEST_MAGIC: &[u8; 4] = b"HNSW";
 const NODE_MAGIC: &[u8; 4] = b"HNSN";
 
 #[derive(Clone, Debug)]
-pub(super) struct GraphNode {
+pub(crate) struct GraphNode {
     pub level: u8,
     pub neighbors: Vec<Vec<Vec<u8>>>,
 }
@@ -73,15 +73,15 @@ impl GraphNode {
     }
 }
 
-pub(super) struct Manifest {
-    pub source: Cid,
-    pub dimensions: u32,
-    pub metric: DistanceMetric,
-    pub config: HnswConfig,
-    pub graph_root: Cid,
-    pub entry_point: Vec<u8>,
-    pub maximum_level: u8,
-    pub canonical: bool,
+pub(crate) struct Manifest {
+    pub(crate) source: Cid,
+    pub(crate) dimensions: u32,
+    pub(crate) metric: DistanceMetric,
+    pub(crate) config: HnswConfig,
+    pub(crate) graph_root: Cid,
+    pub(crate) entry_point: Vec<u8>,
+    pub(crate) maximum_level: u8,
+    pub(crate) canonical: bool,
 }
 
 impl Manifest {
@@ -101,7 +101,7 @@ impl Manifest {
         Ok(bytes)
     }
 
-    pub fn decode(bytes: &[u8]) -> Result<Self, Error> {
+    pub(crate) fn decode(bytes: &[u8]) -> Result<Self, Error> {
         let mut reader = Reader::new(bytes, "HNSW manifest");
         reader.exact(MANIFEST_MAGIC)?;
         reader.version()?;

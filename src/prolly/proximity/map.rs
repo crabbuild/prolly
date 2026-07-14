@@ -159,6 +159,19 @@ where
         &self.tree
     }
 
+    /// Invalidate process-local decoded proximity objects after an external
+    /// content sweep. This does not mutate or remove persisted content.
+    pub fn clear_content_cache(&self) -> Result<(), Error> {
+        self.node_cache
+            .lock()
+            .map_err(|_| Error::InvalidProximityObject {
+                kind: "cache",
+                reason: "node cache lock poisoned".to_owned(),
+            })?
+            .clear();
+        Ok(())
+    }
+
     /// Exact key lookup through the authoritative ordered directory.
     pub fn get(&self, key: &[u8]) -> Result<Option<ExactProximityRecord>, Error> {
         self.directory

@@ -1,6 +1,6 @@
 //! Deterministic, content-addressed approximate nearest-neighbor maps.
 
-mod accelerator;
+pub(crate) mod accelerator;
 mod build;
 mod builder;
 mod cache;
@@ -8,7 +8,7 @@ mod distance;
 mod map;
 mod mutation;
 mod search;
-mod storage;
+pub(crate) mod storage;
 mod vector;
 
 use super::cid::Cid;
