@@ -96,9 +96,11 @@ where
         MapWriteAuthority::IndexMaintenance(permit) => {
             let actual = control.fingerprint()?;
             if permit.map_id != map_id || permit.control_fingerprint != actual {
-                return Err(Error::InvalidVersionedMap(
-                    "secondary-index maintenance permit does not match active control".to_string(),
-                ));
+                return Err(Error::TransactionConflict(TransactionConflict::new(
+                    control_name,
+                    None,
+                    None,
+                )));
             }
             Ok(Some(control))
         }
@@ -170,9 +172,11 @@ where
         MapWriteAuthority::IndexMaintenance(permit) => {
             let actual = control.fingerprint()?;
             if permit.map_id != map_id || permit.control_fingerprint != actual {
-                return Err(Error::InvalidVersionedMap(
-                    "secondary-index maintenance permit does not match active control".to_string(),
-                ));
+                return Err(Error::TransactionConflict(TransactionConflict::new(
+                    control_name,
+                    None,
+                    None,
+                )));
             }
             Ok(Some(control))
         }

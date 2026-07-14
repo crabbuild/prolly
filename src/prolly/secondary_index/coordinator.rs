@@ -17,6 +17,8 @@ use super::storage::{
     SecondaryIndexDescriptor, SECONDARY_INDEX_FORMAT_VERSION,
 };
 use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 
 /// Bounded startup-health details for one active index generation.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -51,6 +53,126 @@ pub struct IndexBuildResult {
     pub activated: bool,
 }
 
+/// Complete coordinated publication selected by one catalog version.
+#[derive(Clone, Debug, PartialEq)]
+pub struct IndexedVersion {
+    pub source: MapVersion,
+    pub catalog: Option<MapVersion>,
+    pub indexes: Vec<IndexCheckpoint>,
+}
+
+/// Conditional indexed-map write outcome.
+#[derive(Clone, Debug, PartialEq)]
+pub enum IndexedMapUpdate {
+    Applied {
+        previous: Option<MapVersionId>,
+        current: IndexedVersion,
+    },
+    Unchanged {
+        current: Option<IndexedVersion>,
+    },
+    Conflict {
+        current: Option<IndexedVersion>,
+    },
+}
+
+impl IndexedMapUpdate {
+    pub fn is_applied(&self) -> bool {
+        matches!(self, Self::Applied { .. })
+    }
+
+    pub fn is_conflict(&self) -> bool {
+        matches!(self, Self::Conflict { .. })
+    }
+}
+
+/// Last-write-wins mutation collector for [`IndexedMap::edit`].
+#[derive(Clone, Debug, Default)]
+pub struct IndexedMapEditor {
+    mutations: Vec<Mutation>,
+}
+
+/// Cumulative logical work counters for one `IndexedMap` handle.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct IndexedMapMetricsSnapshot {
+    pub normalized_source_mutations: u64,
+    pub records_extracted: u64,
+    pub terms_emitted: u64,
+    pub projected_bytes: u64,
+    pub physical_upserts: u64,
+    pub physical_deletes: u64,
+    pub unchanged_emissions_skipped: u64,
+    pub source_nodes_written: u64,
+    pub index_nodes_written: u64,
+    pub catalog_nodes_written: u64,
+    pub retries: u64,
+    pub build_attempts: u64,
+    pub verification_outcomes: u64,
+    pub retained_roots: u64,
+}
+
+#[derive(Default)]
+struct IndexedMapMetrics {
+    normalized_source_mutations: AtomicU64,
+    records_extracted: AtomicU64,
+    terms_emitted: AtomicU64,
+    projected_bytes: AtomicU64,
+    physical_upserts: AtomicU64,
+    physical_deletes: AtomicU64,
+    unchanged_emissions_skipped: AtomicU64,
+    source_nodes_written: AtomicU64,
+    index_nodes_written: AtomicU64,
+    catalog_nodes_written: AtomicU64,
+    retries: AtomicU64,
+    build_attempts: AtomicU64,
+    verification_outcomes: AtomicU64,
+    retained_roots: AtomicU64,
+}
+
+#[derive(Default)]
+struct OperationMetrics {
+    normalized_source_mutations: u64,
+    records_extracted: u64,
+    terms_emitted: u64,
+    projected_bytes: u64,
+    physical_upserts: u64,
+    physical_deletes: u64,
+    unchanged_emissions_skipped: u64,
+    changed_indexes: u64,
+}
+
+impl IndexedMapEditor {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn put(&mut self, key: impl Into<Vec<u8>>, value: impl Into<Vec<u8>>) -> &mut Self {
+        self.mutations.push(Mutation::Upsert {
+            key: key.into(),
+            val: value.into(),
+        });
+        self
+    }
+
+    pub fn delete(&mut self, key: impl Into<Vec<u8>>) -> &mut Self {
+        self.mutations.push(Mutation::Delete { key: key.into() });
+        self
+    }
+
+    pub fn push(&mut self, mutation: Mutation) -> &mut Self {
+        self.mutations.push(mutation);
+        self
+    }
+
+    pub fn len(&self) -> usize {
+        self.mutations.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.mutations.is_empty()
+    }
+}
+
 /// Strict coordinator for one source map and its active secondary indexes.
 pub struct IndexedMap<'a, S>
 where
@@ -59,6 +181,7 @@ where
     pub(crate) prolly: &'a Prolly<S>,
     pub(crate) source_map_id: Vec<u8>,
     pub(crate) registry: SecondaryIndexRegistry,
+    metrics: Arc<IndexedMapMetrics>,
 }
 
 impl<'a, S> IndexedMap<'a, S>
@@ -84,6 +207,7 @@ where
             prolly,
             source_map_id: source_map_id.as_ref().to_vec(),
             registry,
+            metrics: Arc::new(IndexedMapMetrics::default()),
         };
         indexed.validate_state()?;
         Ok(indexed)
@@ -104,9 +228,73 @@ where
         self.prolly.versioned_map(&self.source_map_id)
     }
 
+    /// Read one source key from the current durable head.
+    pub fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Error> {
+        self.source().get(key)
+    }
+
     /// Re-run bounded structural startup validation and return exact health state.
     pub fn health(&self) -> Result<IndexedMapHealth, Error> {
         self.validate_state()
+    }
+
+    /// Snapshot cumulative logical work counters for this handle.
+    pub fn metrics(&self) -> IndexedMapMetricsSnapshot {
+        IndexedMapMetricsSnapshot {
+            normalized_source_mutations: self
+                .metrics
+                .normalized_source_mutations
+                .load(Ordering::Relaxed),
+            records_extracted: self.metrics.records_extracted.load(Ordering::Relaxed),
+            terms_emitted: self.metrics.terms_emitted.load(Ordering::Relaxed),
+            projected_bytes: self.metrics.projected_bytes.load(Ordering::Relaxed),
+            physical_upserts: self.metrics.physical_upserts.load(Ordering::Relaxed),
+            physical_deletes: self.metrics.physical_deletes.load(Ordering::Relaxed),
+            unchanged_emissions_skipped: self
+                .metrics
+                .unchanged_emissions_skipped
+                .load(Ordering::Relaxed),
+            source_nodes_written: self.metrics.source_nodes_written.load(Ordering::Relaxed),
+            index_nodes_written: self.metrics.index_nodes_written.load(Ordering::Relaxed),
+            catalog_nodes_written: self.metrics.catalog_nodes_written.load(Ordering::Relaxed),
+            retries: self.metrics.retries.load(Ordering::Relaxed),
+            build_attempts: self.metrics.build_attempts.load(Ordering::Relaxed),
+            verification_outcomes: self.metrics.verification_outcomes.load(Ordering::Relaxed),
+            retained_roots: self.metrics.retained_roots.load(Ordering::Relaxed),
+        }
+    }
+
+    fn record_operation_metrics(&self, operation: &OperationMetrics) {
+        self.metrics
+            .normalized_source_mutations
+            .fetch_add(operation.normalized_source_mutations, Ordering::Relaxed);
+        self.metrics
+            .records_extracted
+            .fetch_add(operation.records_extracted, Ordering::Relaxed);
+        self.metrics
+            .terms_emitted
+            .fetch_add(operation.terms_emitted, Ordering::Relaxed);
+        self.metrics
+            .projected_bytes
+            .fetch_add(operation.projected_bytes, Ordering::Relaxed);
+        self.metrics
+            .physical_upserts
+            .fetch_add(operation.physical_upserts, Ordering::Relaxed);
+        self.metrics
+            .physical_deletes
+            .fetch_add(operation.physical_deletes, Ordering::Relaxed);
+        self.metrics
+            .unchanged_emissions_skipped
+            .fetch_add(operation.unchanged_emissions_skipped, Ordering::Relaxed);
+        self.metrics
+            .source_nodes_written
+            .fetch_add(1, Ordering::Relaxed);
+        self.metrics
+            .index_nodes_written
+            .fetch_add(operation.changed_indexes, Ordering::Relaxed);
+        self.metrics
+            .catalog_nodes_written
+            .fetch_add(1, Ordering::Relaxed);
     }
 
     fn validate_state(&self) -> Result<IndexedMapHealth, Error> {
@@ -316,6 +504,7 @@ where
                 })?;
 
         for attempt in 1..=definition.limits().max_build_retries {
+            self.metrics.build_attempts.fetch_add(1, Ordering::Relaxed);
             let health = self.health()?;
             if let Some(active) = health
                 .active_indexes
@@ -491,6 +680,435 @@ where
             name: name.to_vec(),
             attempts: definition.limits().max_build_retries,
         })
+    }
+
+    /// Apply source mutations while maintaining every active index atomically.
+    pub fn apply(&self, mutations: Vec<Mutation>) -> Result<IndexedVersion, Error> {
+        let max_retries = self
+            .registry
+            .iter()
+            .map(|definition| definition.limits().max_write_retries)
+            .min()
+            .unwrap_or(8);
+        let mut last_conflict = None;
+        for _ in 0..max_retries {
+            match self.try_apply_indexed(None, &mutations) {
+                Ok(IndexedMapUpdate::Applied { current, .. }) => return Ok(current),
+                Ok(IndexedMapUpdate::Unchanged {
+                    current: Some(current),
+                }) => return Ok(current),
+                Ok(IndexedMapUpdate::Conflict { .. }) => {
+                    self.metrics.retries.fetch_add(1, Ordering::Relaxed);
+                    continue;
+                }
+                Ok(IndexedMapUpdate::Unchanged { current: None }) => {
+                    return Err(Error::InvalidVersionedMap(
+                        "empty indexed update has no current source".to_string(),
+                    ));
+                }
+                Err(Error::TransactionConflict(conflict)) => {
+                    self.metrics.retries.fetch_add(1, Ordering::Relaxed);
+                    last_conflict = Some(conflict);
+                }
+                Err(error) => return Err(error),
+            }
+        }
+        Err(Error::TransactionConflict(last_conflict.unwrap_or_else(
+            || TransactionConflict::new(self.source().head_name().to_vec(), None, None),
+        )))
+    }
+
+    /// Conditionally apply source mutations when the expected source version is current.
+    pub fn apply_if(
+        &self,
+        expected: Option<&MapVersionId>,
+        mutations: Vec<Mutation>,
+    ) -> Result<IndexedMapUpdate, Error> {
+        self.try_apply_indexed(Some(expected), &mutations)
+    }
+
+    /// Insert or replace one source record and maintain all active indexes.
+    pub fn put(
+        &self,
+        key: impl Into<Vec<u8>>,
+        value: impl Into<Vec<u8>>,
+    ) -> Result<IndexedVersion, Error> {
+        self.apply(vec![Mutation::Upsert {
+            key: key.into(),
+            val: value.into(),
+        }])
+    }
+
+    /// Delete one source record and maintain all active indexes.
+    pub fn delete(&self, key: impl Into<Vec<u8>>) -> Result<IndexedVersion, Error> {
+        self.apply(vec![Mutation::Delete { key: key.into() }])
+    }
+
+    /// Collect several source edits and publish one coordinated version.
+    pub fn edit(&self, edit: impl FnOnce(&mut IndexedMapEditor)) -> Result<IndexedVersion, Error> {
+        let mut editor = IndexedMapEditor::new();
+        edit(&mut editor);
+        self.apply(editor.mutations)
+    }
+
+    fn try_apply_indexed(
+        &self,
+        expected: Option<Option<&MapVersionId>>,
+        mutations: &[Mutation],
+    ) -> Result<IndexedMapUpdate, Error> {
+        let health = self.health()?;
+        if health.active_indexes.is_empty() {
+            let update = match expected {
+                Some(expected) => self.source().apply_if(expected, mutations.to_vec())?,
+                None => {
+                    let previous = self.source().head()?.map(|head| head.id);
+                    let current = self.source().apply(mutations.to_vec())?;
+                    if previous.as_ref() == Some(&current.id) {
+                        VersionedMapUpdate::Unchanged {
+                            current: Some(current),
+                        }
+                    } else {
+                        VersionedMapUpdate::Applied { previous, current }
+                    }
+                }
+            };
+            return Ok(match update {
+                VersionedMapUpdate::Applied { previous, current } => IndexedMapUpdate::Applied {
+                    previous,
+                    current: IndexedVersion {
+                        source: current,
+                        catalog: None,
+                        indexes: Vec::new(),
+                    },
+                },
+                VersionedMapUpdate::Unchanged { current } => IndexedMapUpdate::Unchanged {
+                    current: current.map(|source| IndexedVersion {
+                        source,
+                        catalog: None,
+                        indexes: Vec::new(),
+                    }),
+                },
+                VersionedMapUpdate::Conflict { current } => IndexedMapUpdate::Conflict {
+                    current: current.map(|source| IndexedVersion {
+                        source,
+                        catalog: None,
+                        indexes: Vec::new(),
+                    }),
+                },
+            });
+        }
+
+        let current = self.current_indexed_version()?;
+        if let Some(expected) = expected {
+            if current.as_ref().map(|version| &version.source.id) != expected {
+                return Ok(IndexedMapUpdate::Conflict { current });
+            }
+        }
+        let Some(current) = current else {
+            return Err(Error::InvalidVersionedMap(
+                "active indexes require a current coordinated version".to_string(),
+            ));
+        };
+
+        let mut normalized = BTreeMap::<Vec<u8>, Option<Vec<u8>>>::new();
+        for mutation in mutations {
+            match mutation {
+                Mutation::Upsert { key, val } => {
+                    normalized.insert(key.clone(), Some(val.clone()));
+                }
+                Mutation::Delete { key } => {
+                    normalized.insert(key.clone(), None);
+                }
+            }
+        }
+        let mut operation = OperationMetrics {
+            normalized_source_mutations: normalized.len() as u64,
+            ..OperationMetrics::default()
+        };
+        if normalized.is_empty() {
+            return Ok(IndexedMapUpdate::Unchanged {
+                current: Some(current),
+            });
+        }
+
+        let source_snapshot = self
+            .source()
+            .snapshot_at(&current.source.id)?
+            .ok_or_else(|| {
+                Error::InvalidVersionedMap(
+                    "current indexed source immutable root is missing".to_string(),
+                )
+            })?;
+        let keys = normalized.keys().cloned().collect::<Vec<_>>();
+        let old_values = source_snapshot.get_many(&keys)?;
+        let source_mutations = normalized
+            .iter()
+            .map(|(key, value)| match value {
+                Some(value) => Mutation::Upsert {
+                    key: key.clone(),
+                    val: value.clone(),
+                },
+                None => Mutation::Delete { key: key.clone() },
+            })
+            .collect::<Vec<_>>();
+        let source_candidate = self.prolly.batch(&current.source.tree, source_mutations)?;
+        if source_candidate == current.source.tree {
+            return Ok(IndexedMapUpdate::Unchanged {
+                current: Some(current),
+            });
+        }
+        let source_version = MapVersionId::for_tree(&source_candidate)?;
+
+        let mut planned_indexes = Vec::with_capacity(current.indexes.len());
+        let mut new_checkpoints = Vec::with_capacity(current.indexes.len());
+        for checkpoint in &current.indexes {
+            let definition = self.registry.get(&checkpoint.index_name).ok_or_else(|| {
+                Error::IndexRuntimeDefinitionMissing {
+                    name: checkpoint.index_name.clone(),
+                    generation: checkpoint.generation,
+                }
+            })?;
+            let index_version = self
+                .prolly
+                .versioned_map(&checkpoint.index_map_id)
+                .version(&checkpoint.index_version)?
+                .ok_or_else(|| Error::IndexCheckpointMismatch {
+                    name: checkpoint.index_name.clone(),
+                    source_version: current.source.id.clone(),
+                    reason: "current hidden index root is missing".to_string(),
+                })?;
+            let mut delta = BTreeMap::<Vec<u8>, Mutation>::new();
+            let mut projected_bytes = 0usize;
+            for ((primary_key, final_value), old_value) in normalized.iter().zip(old_values.iter())
+            {
+                let old_entries =
+                    self.projected_entries(definition, primary_key, old_value.as_deref())?;
+                let new_entries =
+                    self.projected_entries(definition, primary_key, final_value.as_deref())?;
+                operation.records_extracted = operation
+                    .records_extracted
+                    .saturating_add(u64::from(old_value.is_some()))
+                    .saturating_add(u64::from(final_value.is_some()));
+                operation.terms_emitted = operation
+                    .terms_emitted
+                    .saturating_add(old_entries.len() as u64)
+                    .saturating_add(new_entries.len() as u64);
+                operation.unchanged_emissions_skipped =
+                    operation.unchanged_emissions_skipped.saturating_add(
+                        old_entries
+                            .iter()
+                            .filter(|(key, value)| new_entries.get(*key) == Some(*value))
+                            .count() as u64,
+                    );
+                for (key, old_projection) in &old_entries {
+                    if new_entries.get(key) != Some(old_projection) {
+                        if !new_entries.contains_key(key) {
+                            operation.physical_deletes =
+                                operation.physical_deletes.saturating_add(1);
+                            delta.insert(key.clone(), Mutation::Delete { key: key.clone() });
+                        }
+                    }
+                }
+                for (key, new_projection) in &new_entries {
+                    if old_entries.get(key) != Some(new_projection) {
+                        projected_bytes = projected_bytes.saturating_add(new_projection.len());
+                        operation.physical_upserts = operation.physical_upserts.saturating_add(1);
+                        operation.projected_bytes = operation
+                            .projected_bytes
+                            .saturating_add(new_projection.len() as u64);
+                        delta.insert(
+                            key.clone(),
+                            Mutation::Upsert {
+                                key: key.clone(),
+                                val: new_projection.clone(),
+                            },
+                        );
+                    }
+                }
+            }
+            if delta.len() > definition.limits().max_derived_mutations_per_transaction {
+                return Err(Error::IndexResourceLimitExceeded {
+                    resource: "derived_mutations_per_transaction",
+                    limit: definition.limits().max_derived_mutations_per_transaction,
+                    actual: delta.len(),
+                });
+            }
+            if projected_bytes > definition.limits().max_projected_bytes_per_transaction {
+                return Err(Error::IndexResourceLimitExceeded {
+                    resource: "projected_bytes_per_transaction",
+                    limit: definition.limits().max_projected_bytes_per_transaction,
+                    actual: projected_bytes,
+                });
+            }
+            let next_tree = if delta.is_empty() {
+                index_version.tree.clone()
+            } else {
+                operation.changed_indexes = operation.changed_indexes.saturating_add(1);
+                self.prolly
+                    .batch(&index_version.tree, delta.into_values().collect())?
+            };
+            let next_version = MapVersionId::for_tree(&next_tree)?;
+            let next_checkpoint = IndexCheckpoint {
+                source_map_id: self.source_map_id.clone(),
+                source_version: source_version.clone(),
+                index_name: checkpoint.index_name.clone(),
+                generation: checkpoint.generation,
+                definition_fingerprint: checkpoint.definition_fingerprint.clone(),
+                index_map_id: checkpoint.index_map_id.clone(),
+                index_version: next_version,
+            };
+            planned_indexes.push((checkpoint.clone(), next_tree));
+            new_checkpoints.push(next_checkpoint);
+        }
+
+        let catalog = current.catalog.as_ref().ok_or_else(|| {
+            Error::InvalidVersionedMap("active indexes require a catalog version".to_string())
+        })?;
+        let mut catalog_mutations = new_checkpoints
+            .iter()
+            .map(|checkpoint| {
+                Ok(Mutation::Upsert {
+                    key: catalog_checkpoint_key(
+                        &source_version,
+                        &checkpoint.index_name,
+                        checkpoint.generation,
+                    ),
+                    val: checkpoint.to_bytes()?,
+                })
+            })
+            .collect::<Result<Vec<_>, Error>>()?;
+        catalog_mutations.push(Mutation::Upsert {
+            key: catalog_current_key(),
+            val: IndexedHeadRecord {
+                source_version: source_version.clone(),
+                indexes: new_checkpoints.clone(),
+            }
+            .to_bytes()?,
+        });
+        let catalog_candidate = self.prolly.batch(&catalog.tree, catalog_mutations)?;
+        let permit_fingerprint = self
+            .load_control()?
+            .ok_or_else(|| {
+                Error::InvalidVersionedMap(
+                    "active catalog selection has no control root".to_string(),
+                )
+            })?
+            .fingerprint()?;
+        let catalog_id = catalog_map_id(&self.source_map_id);
+
+        let publication = self.prolly.versioned_maps_transaction(|maps| {
+            let source_permit =
+                IndexMaintenancePermit::new(self.source_map_id.clone(), permit_fingerprint.clone());
+            let source_update = maps.publish_tree_index_maintenance(
+                &source_permit,
+                Some(&current.source.id),
+                &source_candidate,
+            )?;
+            let source_published = require_non_conflict(source_update, self.source().head_name())?;
+
+            for (checkpoint, next_tree) in &planned_indexes {
+                let permit = IndexMaintenancePermit::new(
+                    checkpoint.index_map_id.clone(),
+                    permit_fingerprint.clone(),
+                );
+                let update = maps.publish_tree_index_maintenance(
+                    &permit,
+                    Some(&checkpoint.index_version),
+                    next_tree,
+                )?;
+                require_non_conflict(update, &checkpoint.index_map_id)?;
+            }
+
+            let catalog_permit =
+                IndexMaintenancePermit::new(catalog_id.clone(), permit_fingerprint.clone());
+            let catalog_update = maps.publish_tree_index_maintenance(
+                &catalog_permit,
+                Some(&catalog.id),
+                &catalog_candidate,
+            )?;
+            let catalog_published = require_non_conflict(catalog_update, &catalog_id)?;
+            Ok((source_published, catalog_published))
+        });
+
+        match publication {
+            Ok((source, catalog)) => {
+                self.record_operation_metrics(&operation);
+                Ok(IndexedMapUpdate::Applied {
+                    previous: Some(current.source.id),
+                    current: IndexedVersion {
+                        source,
+                        catalog: Some(catalog),
+                        indexes: new_checkpoints,
+                    },
+                })
+            }
+            Err(Error::TransactionConflict(_)) => Ok(IndexedMapUpdate::Conflict {
+                current: self.current_indexed_version()?,
+            }),
+            Err(error) => Err(error),
+        }
+    }
+
+    fn projected_entries(
+        &self,
+        definition: &super::definition::SecondaryIndex,
+        primary_key: &[u8],
+        source_value: Option<&[u8]>,
+    ) -> Result<BTreeMap<Vec<u8>, Vec<u8>>, Error> {
+        let Some(source_value) = source_value else {
+            return Ok(BTreeMap::new());
+        };
+        definition
+            .extract(primary_key, source_value)?
+            .into_iter()
+            .map(|entry| {
+                let key = physical_index_key(&entry.term, primary_key)?;
+                let value = match definition.projection() {
+                    IndexProjection::KeysOnly => IndexValue::KeysOnly,
+                    IndexProjection::Include => IndexValue::Included(
+                        entry.projection.expect("Include emissions are validated"),
+                    ),
+                    IndexProjection::All => IndexValue::FullSource(source_value.to_vec()),
+                }
+                .to_bytes()?;
+                Ok((key, value))
+            })
+            .collect()
+    }
+
+    fn current_indexed_version(&self) -> Result<Option<IndexedVersion>, Error> {
+        let source = self.source().head()?;
+        let catalog_map = self
+            .prolly
+            .versioned_map(catalog_map_id(&self.source_map_id));
+        let catalog = catalog_map.head()?;
+        match (source, catalog) {
+            (None, None) => Ok(None),
+            (Some(source), None) => Ok(Some(IndexedVersion {
+                source,
+                catalog: None,
+                indexes: Vec::new(),
+            })),
+            (Some(source), Some(catalog)) => {
+                let snapshot = catalog_map.snapshot_at(&catalog.id)?.ok_or_else(|| {
+                    Error::InvalidVersionedMap("catalog immutable root is missing".to_string())
+                })?;
+                let indexes = snapshot
+                    .get(&catalog_current_key())?
+                    .map(|bytes| IndexedHeadRecord::from_bytes(&bytes))
+                    .transpose()?
+                    .map(|head| head.indexes)
+                    .unwrap_or_default();
+                Ok(Some(IndexedVersion {
+                    source,
+                    catalog: Some(catalog),
+                    indexes,
+                }))
+            }
+            (None, Some(_)) => Err(Error::InvalidVersionedMap(
+                "catalog exists without a source head".to_string(),
+            )),
+        }
     }
 
     fn build_index_tree(

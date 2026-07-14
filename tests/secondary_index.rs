@@ -355,3 +355,189 @@ fn ensure_index_builds_sparse_include_and_all_projections() {
         );
     }
 }
+
+#[test]
+fn indexed_writes_maintain_keys_only_indexes_incrementally() {
+    let prolly = Prolly::new(Arc::new(MemStore::new()), Config::default());
+    let source = prolly.versioned_map(b"users");
+    source.put(b"user-1", b"red").unwrap();
+    source.put(b"user-2", b"blue").unwrap();
+    let registry = SecondaryIndexRegistry::new()
+        .register(
+            SecondaryIndex::non_unique("by-tag", 1, "app.users.by-tag/v1", |_, value| {
+                Ok(vec![value.to_vec()])
+            })
+            .unwrap(),
+        )
+        .unwrap();
+    let indexed = prolly.indexed_map(b"users", registry).unwrap();
+    indexed.ensure_index(b"by-tag").unwrap();
+
+    let changed = indexed
+        .edit(|edit| {
+            edit.put(b"user-1", b"green");
+            edit.put(b"user-1", b"yellow");
+            edit.delete(b"user-2");
+            edit.put(b"user-3", b"red");
+        })
+        .unwrap();
+    assert_eq!(indexed.get(b"user-1").unwrap(), Some(b"yellow".to_vec()));
+    assert_eq!(indexed.get(b"user-2").unwrap(), None);
+    assert_eq!(indexed.get(b"user-3").unwrap(), Some(b"red".to_vec()));
+    let health = indexed.health().unwrap();
+    assert_eq!(health.source_version.as_ref(), Some(&changed.source.id));
+    assert_eq!(
+        health.catalog_version.as_ref(),
+        Some(&changed.catalog.as_ref().unwrap().id)
+    );
+    let active = &health.active_indexes[0];
+    let snapshot = prolly
+        .versioned_map(&active.index_map_id)
+        .snapshot()
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        snapshot
+            .get(&prolly::physical_index_key(b"yellow", b"user-1").unwrap())
+            .unwrap(),
+        Some(Vec::new())
+    );
+    assert_eq!(
+        snapshot
+            .get(&prolly::physical_index_key(b"blue", b"user-2").unwrap())
+            .unwrap(),
+        None
+    );
+    assert_eq!(
+        snapshot
+            .get(&prolly::physical_index_key(b"red", b"user-3").unwrap())
+            .unwrap(),
+        Some(Vec::new())
+    );
+
+    let no_op = indexed.put(b"user-1", b"yellow").unwrap();
+    assert_eq!(no_op.source.id, changed.source.id);
+    assert_eq!(
+        no_op.catalog.as_ref().unwrap().id,
+        changed.catalog.as_ref().unwrap().id
+    );
+}
+
+#[test]
+fn indexed_writes_update_projections_and_abort_extractor_failures() {
+    let prolly = Prolly::new(Arc::new(MemStore::new()), Config::default());
+    let source = prolly.versioned_map(b"users");
+    source.put(b"user-1", b"active|Ada").unwrap();
+    let include = SecondaryIndex::builder("by-status", 1, "app.users.by-status/v1")
+        .projection(IndexProjection::Include)
+        .extract(|_, value| {
+            if value == b"bad" {
+                return Err(SecondaryIndexError::new("bad record"));
+            }
+            let mut parts = value.splitn(2, |byte| *byte == b'|');
+            let term = parts.next().unwrap();
+            let projection = parts.next().unwrap_or_default();
+            Ok(vec![SecondaryIndexEntry::included(term, projection)])
+        })
+        .unwrap();
+    let registry = SecondaryIndexRegistry::new().register(include).unwrap();
+    let indexed = prolly.indexed_map(b"users", registry).unwrap();
+    indexed.ensure_index(b"by-status").unwrap();
+    let before = indexed.health().unwrap();
+
+    let changed = indexed.put(b"user-1", b"active|Ada Lovelace").unwrap();
+    let active = &indexed.health().unwrap().active_indexes[0];
+    let encoded = prolly
+        .versioned_map(&active.index_map_id)
+        .snapshot()
+        .unwrap()
+        .unwrap()
+        .get(&prolly::physical_index_key(b"active", b"user-1").unwrap())
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        prolly::IndexValue::from_bytes(&encoded, 1024).unwrap(),
+        prolly::IndexValue::Included(b"Ada Lovelace".to_vec())
+    );
+    assert_ne!(active.index_version, before.active_indexes[0].index_version);
+
+    let failed_source = changed.source.id.clone();
+    let failed_catalog = changed.catalog.as_ref().unwrap().id.clone();
+    assert!(matches!(
+        indexed.put(b"user-2", b"bad"),
+        Err(Error::IndexExtractionFailed { .. })
+    ));
+    let after_failure = indexed.health().unwrap();
+    assert_eq!(after_failure.source_version, Some(failed_source));
+    assert_eq!(after_failure.catalog_version, Some(failed_catalog));
+
+    let stale = indexed
+        .apply_if(
+            before.source_version.as_ref(),
+            vec![Mutation::Delete {
+                key: b"user-1".to_vec(),
+            }],
+        )
+        .unwrap();
+    assert!(stale.is_conflict());
+
+    let metrics = indexed.metrics();
+    assert!(metrics.normalized_source_mutations >= 1);
+    assert!(metrics.records_extracted >= 1);
+    assert!(metrics.terms_emitted >= 2);
+    assert!(metrics.physical_upserts >= 1);
+    assert!(metrics.projected_bytes >= b"Ada Lovelace".len() as u64);
+}
+
+#[test]
+fn concurrent_indexed_writers_retry_from_fresh_coordinated_heads() {
+    let prolly = Arc::new(Prolly::new(Arc::new(MemStore::new()), Config::default()));
+    let registry = SecondaryIndexRegistry::new()
+        .register(
+            SecondaryIndex::non_unique("by-tag", 1, "app.users.by-tag/v1", |_, value| {
+                Ok(vec![value.to_vec()])
+            })
+            .unwrap(),
+        )
+        .unwrap();
+    prolly
+        .indexed_map(b"users", registry.clone())
+        .unwrap()
+        .ensure_index(b"by-tag")
+        .unwrap();
+
+    std::thread::scope(|scope| {
+        for (key, value) in [
+            (b"user-1".as_slice(), b"red".as_slice()),
+            (b"user-2".as_slice(), b"blue".as_slice()),
+        ] {
+            let prolly = prolly.clone();
+            let registry = registry.clone();
+            scope.spawn(move || {
+                prolly
+                    .indexed_map(b"users", registry)
+                    .unwrap()
+                    .put(key, value)
+                    .unwrap();
+            });
+        }
+    });
+
+    let indexed = prolly.indexed_map(b"users", registry).unwrap();
+    assert_eq!(indexed.get(b"user-1").unwrap(), Some(b"red".to_vec()));
+    assert_eq!(indexed.get(b"user-2").unwrap(), Some(b"blue".to_vec()));
+    let active = indexed.health().unwrap().active_indexes.remove(0);
+    let snapshot = prolly
+        .versioned_map(active.index_map_id)
+        .snapshot()
+        .unwrap()
+        .unwrap();
+    assert!(snapshot
+        .get(&prolly::physical_index_key(b"red", b"user-1").unwrap())
+        .unwrap()
+        .is_some());
+    assert!(snapshot
+        .get(&prolly::physical_index_key(b"blue", b"user-2").unwrap())
+        .unwrap()
+        .is_some());
+}
