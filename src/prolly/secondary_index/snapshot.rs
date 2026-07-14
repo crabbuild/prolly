@@ -222,6 +222,10 @@ impl<'a, S: Store> SecondaryIndexSnapshot<'a, S> {
         &self.checkpoint
     }
 
+    pub fn tree(&self) -> &Tree {
+        self.index.tree()
+    }
+
     pub fn exact(&self, term: &[u8]) -> Result<Vec<SecondaryIndexMatch>, Error> {
         self.collect(LogicalBounds::Exact(term.to_vec()))
     }

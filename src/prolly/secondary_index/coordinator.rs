@@ -549,7 +549,7 @@ where
         })
     }
 
-    fn load_control(&self) -> Result<Option<IndexControl>, Error> {
+    pub(crate) fn load_control(&self) -> Result<Option<IndexControl>, Error> {
         let Some(tree) = self
             .prolly
             .load_named_root(&control_root_name(&self.source_map_id))?
@@ -2016,7 +2016,7 @@ fn sort_version_ids(ids: &mut [MapVersionId]) {
     ids.sort_by(|left, right| left.as_cid().as_bytes().cmp(right.as_cid().as_bytes()));
 }
 
-fn require_non_conflict(
+pub(crate) fn require_non_conflict(
     update: VersionedMapUpdate,
     conflict_name: &[u8],
 ) -> Result<MapVersion, Error> {

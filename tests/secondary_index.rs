@@ -1011,3 +1011,165 @@ fn retention_keeps_retired_generation_referenced_by_a_retained_source() {
         vec![b"user-1".to_vec()]
     );
 }
+
+#[test]
+fn indexed_bundle_is_canonical_verified_atomic_and_projection_complete() {
+    fn registry() -> SecondaryIndexRegistry {
+        SecondaryIndexRegistry::new()
+            .register(
+                SecondaryIndex::non_unique("keys", 1, "bundle.keys/v1", |_, value| {
+                    Ok(vec![value.to_vec()])
+                })
+                .unwrap(),
+            )
+            .unwrap()
+            .register(
+                SecondaryIndex::builder("include", 1, "bundle.include/v1")
+                    .projection(IndexProjection::Include)
+                    .extract(|_, value| {
+                        Ok(vec![SecondaryIndexEntry::included(value, b"projection")])
+                    })
+                    .unwrap(),
+            )
+            .unwrap()
+            .register(
+                SecondaryIndex::builder("all", 1, "bundle.all/v1")
+                    .projection(IndexProjection::All)
+                    .extract_terms(|_, value| Ok(vec![value.to_vec()]))
+                    .unwrap(),
+            )
+            .unwrap()
+    }
+
+    let source_engine = Prolly::new(Arc::new(MemStore::new()), Config::default());
+    source_engine
+        .versioned_map(b"users")
+        .put(b"user-1", b"active")
+        .unwrap();
+    let source = source_engine.indexed_map(b"users", registry()).unwrap();
+    source.ensure_index(b"keys").unwrap();
+    source.ensure_index(b"include").unwrap();
+    source.ensure_index(b"all").unwrap();
+    let bundle = source.export_current().unwrap();
+    let bytes = bundle.to_bytes().unwrap();
+    assert_eq!(bytes, source.export_current().unwrap().to_bytes().unwrap());
+    let decoded = prolly::IndexedSnapshotBundle::from_bytes(&bytes).unwrap();
+    assert!(decoded.verify().unwrap().valid);
+    let mut reordered = decoded.clone();
+    reordered.nodes.reverse();
+    assert_eq!(reordered.to_bytes().unwrap(), bytes);
+    assert_eq!(
+        prolly::IndexedSnapshotBundle::inspect(&bytes)
+            .unwrap()
+            .index_count,
+        3
+    );
+
+    let destination_engine = Prolly::new(Arc::new(MemStore::new()), Config::default());
+    let destination = destination_engine
+        .indexed_map(b"users", registry())
+        .unwrap();
+    destination.import_current(&decoded, None).unwrap();
+    let imported = destination.snapshot().unwrap();
+    assert_eq!(
+        imported
+            .index(b"keys")
+            .unwrap()
+            .primary_keys(b"active")
+            .unwrap(),
+        vec![b"user-1".to_vec()]
+    );
+    assert_eq!(
+        imported
+            .index(b"include")
+            .unwrap()
+            .projected(b"active")
+            .unwrap()[0]
+            .1,
+        Some(b"projection".to_vec())
+    );
+    assert_eq!(
+        imported
+            .index(b"all")
+            .unwrap()
+            .projected(b"active")
+            .unwrap()[0]
+            .1,
+        Some(b"active".to_vec())
+    );
+
+    let mut missing = decoded.clone();
+    missing.nodes.pop();
+    assert!(missing.verify().is_err());
+    let mut duplicate = decoded.clone();
+    duplicate.nodes.push(duplicate.nodes[0].clone());
+    assert!(duplicate.verify().is_err());
+    let mut mismatched = decoded.clone();
+    mismatched.nodes[0].bytes.push(0);
+    assert!(mismatched.verify().is_err());
+    let mut unsupported = decoded.clone();
+    unsupported.format_version += 1;
+    assert!(unsupported.to_bytes().is_err());
+    let mut trailing = bytes.clone();
+    trailing.push(0);
+    assert!(prolly::IndexedSnapshotBundle::from_bytes(&trailing).is_err());
+
+    let stale_engine = Prolly::new(Arc::new(MemStore::new()), Config::default());
+    stale_engine
+        .versioned_map(b"users")
+        .put(b"existing", b"value")
+        .unwrap();
+    let stale = stale_engine.indexed_map(b"users", registry()).unwrap();
+    assert!(matches!(
+        stale.import_current(&decoded, None),
+        Err(Error::TransactionConflict(_))
+    ));
+    assert!(stale_engine
+        .load_named_root(&control_root_name(b"users"))
+        .unwrap()
+        .is_none());
+    assert!(stale_engine
+        .versioned_map(prolly::catalog_map_id(b"users"))
+        .head()
+        .unwrap()
+        .is_none());
+
+    let wrong_source = destination_engine
+        .indexed_map(b"other-users", registry())
+        .unwrap();
+    assert!(matches!(
+        wrong_source.import_current(&decoded, None),
+        Err(Error::InvalidIndexedSnapshotBundle { .. })
+    ));
+
+    let mismatched_engine = Prolly::new(Arc::new(MemStore::new()), Config::default());
+    let mismatched_registry = SecondaryIndexRegistry::new()
+        .register(
+            SecondaryIndex::non_unique("keys", 1, "bundle.keys/other", |_, value| {
+                Ok(vec![value.to_vec()])
+            })
+            .unwrap(),
+        )
+        .unwrap()
+        .register(
+            SecondaryIndex::builder("include", 1, "bundle.include/v1")
+                .projection(IndexProjection::Include)
+                .extract(|_, value| Ok(vec![SecondaryIndexEntry::included(value, b"projection")]))
+                .unwrap(),
+        )
+        .unwrap()
+        .register(
+            SecondaryIndex::builder("all", 1, "bundle.all/v1")
+                .projection(IndexProjection::All)
+                .extract_terms(|_, value| Ok(vec![value.to_vec()]))
+                .unwrap(),
+        )
+        .unwrap();
+    let mismatched = mismatched_engine
+        .indexed_map(b"users", mismatched_registry)
+        .unwrap();
+    assert!(matches!(
+        mismatched.import_current(&decoded, None),
+        Err(Error::IndexDefinitionMismatch { .. })
+    ));
+}

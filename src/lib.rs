@@ -339,11 +339,13 @@ pub use prolly::secondary_index::{
     ActiveIndexControl, ActiveIndexHealth, DecodedPhysicalIndexKey, IndexBuildResult,
     IndexCheckpoint, IndexControl, IndexProjection, IndexValue, IndexVerification,
     IndexedHeadRecord, IndexedMap, IndexedMapEditor, IndexedMapHealth, IndexedMapMetricsSnapshot,
-    IndexedMapUpdate, IndexedRetentionResult, IndexedSnapshot, IndexedSnapshotId, IndexedVersion,
-    SecondaryIndex, SecondaryIndexBuilder, SecondaryIndexCursor, SecondaryIndexDescriptor,
-    SecondaryIndexDirection, SecondaryIndexEntry, SecondaryIndexError, SecondaryIndexExtractor,
-    SecondaryIndexLimits, SecondaryIndexMatch, SecondaryIndexPage, SecondaryIndexRegistry,
-    SecondaryIndexSnapshot, TermBounds, INDEX_PHYSICAL_LAYOUT_VERSION,
+    IndexedMapUpdate, IndexedRetentionResult, IndexedSnapshot, IndexedSnapshotBundle,
+    IndexedSnapshotBundleIndex, IndexedSnapshotBundleSummary, IndexedSnapshotBundleVerification,
+    IndexedSnapshotId, IndexedVersion, SecondaryIndex, SecondaryIndexBuilder, SecondaryIndexCursor,
+    SecondaryIndexDescriptor, SecondaryIndexDirection, SecondaryIndexEntry, SecondaryIndexError,
+    SecondaryIndexExtractor, SecondaryIndexLimits, SecondaryIndexMatch, SecondaryIndexPage,
+    SecondaryIndexRegistry, SecondaryIndexSnapshot, TermBounds,
+    INDEXED_SNAPSHOT_BUNDLE_FORMAT_VERSION, INDEX_PHYSICAL_LAYOUT_VERSION,
     SECONDARY_INDEX_FORMAT_VERSION,
 };
 pub use prolly::snapshot::{

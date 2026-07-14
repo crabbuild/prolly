@@ -3,11 +3,16 @@
 //! The low-level tree remains index-agnostic. This module defines the runtime
 //! contracts used by the `IndexedMap` coordinator and its persisted catalog.
 
+mod bundle;
 mod coordinator;
 mod definition;
 mod snapshot;
 mod storage;
 
+pub use bundle::{
+    IndexedSnapshotBundle, IndexedSnapshotBundleIndex, IndexedSnapshotBundleSummary,
+    IndexedSnapshotBundleVerification, INDEXED_SNAPSHOT_BUNDLE_FORMAT_VERSION,
+};
 pub use coordinator::{
     ActiveIndexHealth, IndexBuildResult, IndexVerification, IndexedMap, IndexedMapEditor,
     IndexedMapHealth, IndexedMapMetricsSnapshot, IndexedMapUpdate, IndexedRetentionResult,

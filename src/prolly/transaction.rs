@@ -883,6 +883,14 @@ where
         self.manager.batch(tree, mutations)
     }
 
+    /// Stage verified content-addressed node bytes for an atomic coordinator import.
+    pub(crate) fn stage_node_bytes(&self, entries: &[(&[u8], &[u8])]) -> Result<(), Error> {
+        self.manager
+            .store()
+            .batch_put(entries)
+            .map_err(|error| Error::Store(Box::new(error)))
+    }
+
     /// Load a named root and add it to the transaction read set.
     pub fn load_named_root(&self, name: &[u8]) -> Result<Option<Tree>, Error> {
         self.manager.load_named_root(name)

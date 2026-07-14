@@ -237,7 +237,7 @@ impl SecondaryIndexDescriptor {
         Ok(descriptor)
     }
 
-    fn validate(&self) -> Result<(), Error> {
+    pub(crate) fn validate(&self) -> Result<(), Error> {
         if self.format_version != SECONDARY_INDEX_FORMAT_VERSION
             || self.physical_layout_version != INDEX_PHYSICAL_LAYOUT_VERSION
             || self.source_map_id.is_empty()

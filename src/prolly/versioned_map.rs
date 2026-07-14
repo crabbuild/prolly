@@ -1434,6 +1434,10 @@ where
         self.tx
     }
 
+    pub(crate) fn stage_index_nodes(&self, entries: &[(&[u8], &[u8])]) -> Result<(), Error> {
+        self.tx.stage_node_bytes(entries)
+    }
+
     /// Load the staged or original head for one map.
     pub fn head(&self, map_id: impl AsRef<[u8]>) -> Result<Option<MapVersion>, Error> {
         let (_, head_name, _) = versioned_map_names(map_id.as_ref());
