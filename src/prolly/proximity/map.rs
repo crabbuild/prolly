@@ -1,7 +1,8 @@
 use super::super::builder::BatchBuilder;
+use super::super::canonical_splice::{canonical_splice, CanonicalSpliceStats};
 use super::super::cid::Cid;
 use super::super::config::Config;
-use super::super::error::Error;
+use super::super::error::{Error, Mutation as TreeMutation};
 use super::super::store::Store;
 use super::super::Prolly;
 use super::builder::{build_hierarchy, IndexedRecord};
@@ -176,36 +177,74 @@ where
                 Default::default(),
             ));
         }
-        let old_records = self.collect_records()?;
-        let mut records = old_records.clone();
-        apply_mutations(&mut records, &mutations, &self.tree.config)?;
-        let logical_edits: Vec<_> = mutations
+        let keys: Vec<_> = mutations
             .iter()
-            .filter_map(|mutation| {
-                let old = old_records
-                    .get(&mutation.key)
-                    .map(|record| record.vector.clone());
-                let new = records
-                    .get(&mutation.key)
-                    .map(|record| record.vector.clone());
-                (old != new).then(|| LogicalEdit {
+            .map(|mutation| mutation.key.clone())
+            .collect();
+        let old_values = self.directory.get_many(&self.tree.directory, &keys)?;
+        let mut logical_edits = Vec::new();
+        let mut directory_mutations = Vec::with_capacity(mutations.len());
+        let mut count = self.tree.count;
+        for (mutation, old_bytes) in mutations.iter().zip(old_values) {
+            let old = old_bytes
+                .as_deref()
+                .map(|bytes| StoredRecord::decode(bytes, self.tree.config.dimensions))
+                .transpose()?;
+            let new = mutation
+                .value
+                .as_ref()
+                .map(|(vector, value)| {
+                    StoredRecord::new(
+                        vector,
+                        value.clone(),
+                        self.tree.config.metric,
+                        self.tree.config.dimensions,
+                    )
+                })
+                .transpose()?;
+            match (&old, &new) {
+                (None, Some(_)) => {
+                    count = count
+                        .checked_add(1)
+                        .ok_or_else(|| Error::InvalidProximityObject {
+                            kind: "mutation",
+                            reason: "record count overflow".to_owned(),
+                        })?
+                }
+                (Some(_), None) => count -= 1,
+                _ => {}
+            }
+            let old_vector = old.as_ref().map(|record| record.vector.clone());
+            let new_vector = new.as_ref().map(|record| record.vector.clone());
+            if old_vector != new_vector {
+                logical_edits.push(LogicalEdit {
                     key: mutation.key.clone(),
-                    old,
-                    new,
+                    old: old_vector,
+                    new: new_vector,
                     level: promotion_level(
                         &mutation.key,
                         self.tree.config.hierarchy.log_chunk_size,
                         self.tree.config.hierarchy.level_hash_seed,
                     ),
-                })
-            })
-            .collect();
-        let directory_tree = build_directory(&self.store, &self.tree.directory.config, &records)?;
+                });
+            }
+            directory_mutations.push(match new {
+                Some(record) => TreeMutation::Upsert {
+                    key: mutation.key.clone(),
+                    val: record.encode(),
+                },
+                None => TreeMutation::Delete {
+                    key: mutation.key.clone(),
+                },
+            });
+        }
+        let (directory_tree, directory_stats) =
+            canonical_splice(&self.directory, &self.tree.directory, directory_mutations)?;
 
         if logical_edits.is_empty() {
             let descriptor = Descriptor {
                 config: self.tree.config.clone(),
-                count: self.tree.count,
+                count,
                 directory: directory_tree.clone(),
                 proximity_root: self.tree.proximity_root.clone(),
             };
@@ -221,7 +260,7 @@ where
                     directory: directory_tree,
                     proximity_root: self.tree.proximity_root.clone(),
                     descriptor: descriptor_cid,
-                    count: self.tree.count,
+                    count,
                     config: self.tree.config.clone(),
                 },
                 node_cache: Mutex::new(ContentCache::new(DEFAULT_PROXIMITY_CACHE_NODES)),
@@ -230,20 +269,27 @@ where
                 map,
                 ProximityMutationStats {
                     nodes_reused: 1,
+                    directory_entries_scanned: directory_stats.entries_scanned,
+                    directory_nodes_read: directory_stats.nodes_read,
+                    directory_nodes_rebuilt: directory_stats.nodes_rebuilt,
+                    directory_nodes_written: directory_stats.nodes_written,
+                    directory_nodes_reused: directory_stats.nodes_reused,
+                    directory_levels_rebuilt: directory_stats.levels_rebuilt,
+                    directory_right_edge_rebuilt: directory_stats.right_edge_rebuilt,
                     ..Default::default()
                 },
             ));
         }
 
         let (old_root, _) = self.load_node(&self.tree.proximity_root)?;
-        let has_overflow = self.hierarchy_has_overflow()?;
         let max_edit_level = logical_edits
             .iter()
             .map(|edit| edit.level)
             .max()
             .unwrap_or(0);
         let (proximity_root, nodes, mut stats) =
-            if old_root.entries.is_empty() || max_edit_level >= old_root.level || has_overflow {
+            if old_root.entries.is_empty() || max_edit_level >= old_root.level {
+                let records = self.collect_records_from(&directory_tree)?;
                 let indexed: Vec<_> = records
                     .values()
                     .map(|record| IndexedRecord {
@@ -272,10 +318,11 @@ where
         let nodes_written = put_missing_nodes(&self.store, &nodes)?;
         stats.nodes_written = nodes_written;
         stats.nodes_reused += pending_count.saturating_sub(nodes_written);
+        apply_directory_stats(&mut stats, directory_stats);
 
         let descriptor = Descriptor {
             config: self.tree.config.clone(),
-            count: records.len() as u64,
+            count,
             directory: directory_tree.clone(),
             proximity_root: proximity_root.clone(),
         };
@@ -292,7 +339,7 @@ where
                     directory: directory_tree,
                     proximity_root,
                     descriptor: descriptor_cid,
-                    count: records.len() as u64,
+                    count,
                     config: self.tree.config.clone(),
                 },
                 node_cache: Mutex::new(ContentCache::new(DEFAULT_PROXIMITY_CACHE_NODES)),
@@ -624,8 +671,15 @@ where
     }
 
     fn collect_records(&self) -> Result<BTreeMap<Vec<u8>, ProximityRecord>, Error> {
+        self.collect_records_from(&self.tree.directory)
+    }
+
+    fn collect_records_from(
+        &self,
+        directory: &super::super::tree::Tree,
+    ) -> Result<BTreeMap<Vec<u8>, ProximityRecord>, Error> {
         let mut records = BTreeMap::new();
-        for entry in self.directory.range(&self.tree.directory, &[], None)? {
+        for entry in self.directory.range(directory, &[], None)? {
             let (key, bytes) = entry?;
             let stored = StoredRecord::decode(&bytes, self.tree.config.dimensions)?;
             records.insert(
@@ -638,26 +692,6 @@ where
             );
         }
         Ok(records)
-    }
-
-    fn hierarchy_has_overflow(&self) -> Result<bool, Error> {
-        let mut pending = vec![self.tree.proximity_root.clone()];
-        let mut seen = HashSet::new();
-        while let Some(cid) = pending.pop() {
-            if !seen.insert(cid.clone()) {
-                continue;
-            }
-            let bytes = load_content(&self.store, &cid)?;
-            let node = ProximityNode::decode(&bytes, self.tree.config.dimensions)?;
-            if matches!(
-                node.kind,
-                PhysicalNodeKind::OverflowPage | PhysicalNodeKind::OverflowDirectory
-            ) {
-                return Ok(true);
-            }
-            pending.extend(node.entries.into_iter().filter_map(|entry| entry.child));
-        }
-        Ok(false)
     }
 
     fn verify_node(
@@ -709,6 +743,12 @@ where
         if node.kind != PhysicalNodeKind::OverflowDirectory {
             if let Some((selected, candidates)) = parent {
                 for entry in &node.entries {
+                    // A promoted representative is deterministically retained in
+                    // its own route even when another representative has an
+                    // equal vector and a lexicographically smaller key.
+                    if entry.key == selected.key {
+                        continue;
+                    }
                     let selected_distance = score(
                         self.tree.config.metric,
                         entry.vector.inline()?,
@@ -1001,6 +1041,16 @@ fn put_missing_nodes<S: Store>(store: &S, nodes: &[(Cid, Vec<u8>)]) -> Result<us
     Ok(missing.len())
 }
 
+fn apply_directory_stats(target: &mut ProximityMutationStats, source: CanonicalSpliceStats) {
+    target.directory_entries_scanned = source.entries_scanned;
+    target.directory_nodes_read = source.nodes_read;
+    target.directory_nodes_rebuilt = source.nodes_rebuilt;
+    target.directory_nodes_written = source.nodes_written;
+    target.directory_nodes_reused = source.nodes_reused;
+    target.directory_levels_rebuilt = source.levels_rebuilt;
+    target.directory_right_edge_rebuilt = source.right_edge_rebuilt;
+}
+
 fn validate_mutations(
     mutations: impl IntoIterator<Item = ProximityMutation>,
 ) -> Result<Vec<ProximityMutation>, Error> {
@@ -1039,29 +1089,6 @@ fn apply_mutations(
         }
     }
     Ok(())
-}
-
-fn build_directory<S>(
-    store: &S,
-    config: &Config,
-    records: &BTreeMap<Vec<u8>, ProximityRecord>,
-) -> Result<super::super::tree::Tree, Error>
-where
-    S: Store + Clone + Send + Sync,
-    S::Error: Send + Sync,
-{
-    let mut builder = BatchBuilder::new(store.clone(), config.clone());
-    for record in records.values() {
-        builder.add(
-            record.key.clone(),
-            StoredRecord {
-                vector: record.vector.clone(),
-                value: record.value.clone(),
-            }
-            .encode(),
-        );
-    }
-    builder.build()
 }
 
 #[cfg(test)]

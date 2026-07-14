@@ -35,7 +35,7 @@ pub(crate) fn mutate_hierarchy<S: Store>(
         pending: HashMap::new(),
         stats: ProximityMutationStats::default(),
     };
-    let (node, _) = context.load_node(root)?;
+    let (node, _) = context.load_logical_node(root)?;
     let (root, _) = context.visit(root, &node, edits)?;
     let mut nodes: Vec<_> = context.pending.into_iter().collect();
     nodes.sort_by(|(left, _), (right, _)| left.as_bytes().cmp(right.as_bytes()));
@@ -128,7 +128,7 @@ impl<S: Store> Context<'_, S> {
                 continue;
             };
             let child_edits: Vec<_> = child_edits.into_values().collect();
-            let (old_child_node, _) = self.load_node(old_child)?;
+            let (old_child_node, _) = self.load_logical_node(old_child)?;
             let (new_child, child_count) = if must_rebuild.contains(&index) {
                 let mut records = BTreeMap::new();
                 self.collect_leaf_records(old_child, &mut records)?;
@@ -261,7 +261,7 @@ impl<S: Store> Context<'_, S> {
         cid: &Cid,
         records: &mut BTreeMap<Vec<u8>, Vec<f32>>,
     ) -> Result<(), Error> {
-        let (node, _) = self.load_node(cid)?;
+        let (node, _) = self.load_logical_node(cid)?;
         if node.level == 0 {
             for entry in node.entries {
                 if records
@@ -340,6 +340,40 @@ impl<S: Store> Context<'_, S> {
             entry.vector = VectorRef::Inline(external.vector);
         }
         Ok((node, bytes.len()))
+    }
+
+    fn load_logical_node(&mut self, cid: &Cid) -> Result<(ProximityNode, usize), Error> {
+        let (node, bytes) = self.load_node(cid)?;
+        if node.kind != PhysicalNodeKind::OverflowDirectory {
+            return Ok((node, bytes));
+        }
+        let level = node.level;
+        let mut entries = Vec::new();
+        for child in node.entries.into_iter().filter_map(|entry| entry.child) {
+            self.collect_logical_entries(&child, level, &mut entries)?;
+        }
+        let subtree_count = entries.iter().try_fold(0u64, |count, entry| {
+            count
+                .checked_add(entry.child_count)
+                .ok_or_else(|| Error::InvalidProximityObject {
+                    kind: "mutation",
+                    reason: "subtree count overflow".to_owned(),
+                })
+        })?;
+        Ok((
+            ProximityNode {
+                kind: if level == 0 {
+                    PhysicalNodeKind::Leaf
+                } else {
+                    PhysicalNodeKind::Route
+                },
+                level,
+                subtree_count,
+                quantizer: None,
+                entries,
+            },
+            bytes,
+        ))
     }
 }
 

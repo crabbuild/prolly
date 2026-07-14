@@ -348,6 +348,13 @@ pub struct SearchResult {
 /// Observable copy-on-write work for one mutation batch.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ProximityMutationStats {
+    pub directory_entries_scanned: usize,
+    pub directory_nodes_read: usize,
+    pub directory_nodes_rebuilt: usize,
+    pub directory_nodes_written: usize,
+    pub directory_nodes_reused: usize,
+    pub directory_levels_rebuilt: usize,
+    pub directory_right_edge_rebuilt: bool,
     pub nodes_read: usize,
     pub nodes_written: usize,
     pub nodes_reused: usize,
