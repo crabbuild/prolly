@@ -177,6 +177,22 @@ pub fn encode_segment(segment: impl AsRef<[u8]>) -> Vec<u8> {
     out
 }
 
+/// Escape a partial segment without appending its terminator.
+///
+/// This is useful for prefix scans over the first segment of a composite key.
+pub fn encode_segment_prefix(segment: impl AsRef<[u8]>) -> Vec<u8> {
+    let segment = segment.as_ref();
+    let mut out = Vec::with_capacity(segment.len());
+    for byte in segment {
+        if *byte == 0 {
+            out.extend_from_slice(&[0x00, 0xff]);
+        } else {
+            out.push(*byte);
+        }
+    }
+    out
+}
+
 /// Decode a composite key built from escaped segments.
 pub fn decode_segments(key: &[u8]) -> Result<Vec<Vec<u8>>, KeyDecodeError> {
     let mut segments = Vec::new();

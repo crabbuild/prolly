@@ -1,5 +1,6 @@
 use prolly::{
-    debug_key, decode_segments, i64_key, prefix_range, Config, KeyBuilder, MemStore, Prolly,
+    debug_key, decode_segments, encode_segment_prefix, i64_key, prefix_range, Config, KeyBuilder,
+    MemStore, Prolly,
 };
 
 #[test]
@@ -87,4 +88,9 @@ fn numeric_and_debug_helpers_are_crate_root_api() {
         vec![b"raw".to_vec(), b"a\0b".to_vec()]
     );
     assert_eq!(debug_key(b"a\n\0"), "\"a\\n\\x00\"");
+}
+
+#[test]
+fn partial_segment_prefix_escapes_without_terminating() {
+    assert_eq!(encode_segment_prefix(b"a\0b"), b"a\0\xffb");
 }

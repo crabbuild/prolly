@@ -304,8 +304,8 @@ pub use prolly::gc::{
     BlobGcPlan, BlobGcReachability, BlobGcSweep, GcPlan, GcReachability, GcSweep,
 };
 pub use prolly::key::{
-    debug_key, decode_segments, encode_segment, i128_key, i64_key, prefix_end, prefix_range,
-    timestamp_millis_key, u128_key, u64_key, KeyBuilder, KeyDecodeError,
+    debug_key, decode_segments, encode_segment, encode_segment_prefix, i128_key, i64_key,
+    prefix_end, prefix_range, timestamp_millis_key, u128_key, u64_key, KeyBuilder, KeyDecodeError,
 };
 #[cfg(feature = "async-store")]
 pub use prolly::manifest::{AsyncManifestStore, AsyncManifestStoreScan};
@@ -332,8 +332,14 @@ pub use prolly::range::{
     CursorWindow, RangeCursor, RangeIter, RangePage, ReverseCursor, ReversePage,
 };
 pub use prolly::secondary_index::{
-    IndexProjection, SecondaryIndex, SecondaryIndexBuilder, SecondaryIndexEntry,
-    SecondaryIndexError, SecondaryIndexExtractor, SecondaryIndexLimits, SecondaryIndexRegistry,
+    catalog_checkpoint_key, catalog_current_key, catalog_descriptor_key, catalog_format_key,
+    catalog_map_id, catalog_retired_key, control_root_name, decode_physical_index_key,
+    descriptor_fingerprint, index_map_id, physical_index_key, term_bounds_exact,
+    term_bounds_prefix, term_bounds_range, ActiveIndexControl, DecodedPhysicalIndexKey,
+    IndexCheckpoint, IndexControl, IndexProjection, IndexValue, IndexedHeadRecord, SecondaryIndex,
+    SecondaryIndexBuilder, SecondaryIndexDescriptor, SecondaryIndexEntry, SecondaryIndexError,
+    SecondaryIndexExtractor, SecondaryIndexLimits, SecondaryIndexRegistry, TermBounds,
+    INDEX_PHYSICAL_LAYOUT_VERSION, SECONDARY_INDEX_FORMAT_VERSION,
 };
 pub use prolly::snapshot::{
     snapshot_id_from_name, snapshot_root_name, SnapshotManager, SnapshotNamespace, SnapshotRoot,

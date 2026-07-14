@@ -105,6 +105,10 @@ impl MapVersionId {
     pub fn into_cid(self) -> Cid {
         self.0
     }
+
+    pub(crate) fn from_cid(cid: Cid) -> Self {
+        Self(cid)
+    }
 }
 
 impl fmt::Display for MapVersionId {
