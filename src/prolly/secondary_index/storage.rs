@@ -736,6 +736,11 @@ pub fn catalog_checkpoint_key(
         .finish()
 }
 
+/// Prefix containing every source-version checkpoint record.
+pub fn catalog_checkpoints_prefix() -> Vec<u8> {
+    KeyBuilder::new().push_str("checkpoints").finish()
+}
+
 pub fn catalog_retired_key(name: &[u8], generation: u64) -> Vec<u8> {
     KeyBuilder::new()
         .push_str("retired")

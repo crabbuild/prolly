@@ -891,3 +891,123 @@ fn index_lifecycle_detects_and_repairs_logical_drift() {
         .unwrap()
         .is_empty());
 }
+
+#[test]
+fn retention_keeps_current_checkpoint_closure_and_only_prunes_root_names() {
+    let prolly = Prolly::new(Arc::new(MemStore::new()), Config::default());
+    let source = prolly.versioned_map(b"users");
+    source.put(b"user-1", b"active|Ada").unwrap();
+    let registry = SecondaryIndexRegistry::new()
+        .register(
+            SecondaryIndex::non_unique("by-status", 1, "app.by-status/v1", |_, value| {
+                Ok(vec![value
+                    .split(|byte| *byte == b'|')
+                    .next()
+                    .unwrap()
+                    .to_vec()])
+            })
+            .unwrap(),
+        )
+        .unwrap();
+    let indexed = prolly.indexed_map(b"users", registry).unwrap();
+    indexed.ensure_index(b"by-status").unwrap();
+    let pinned_old = indexed.snapshot().unwrap();
+    let old_id = pinned_old.id().clone();
+
+    indexed.put(b"user-1", b"active|Ada Lovelace").unwrap();
+    indexed.put(b"user-1", b"disabled|Ada Lovelace").unwrap();
+    let current = indexed.snapshot().unwrap();
+    let current_source_root = current.source().tree().root.clone().unwrap();
+    let current_index_root = current
+        .index(b"by-status")
+        .unwrap()
+        .checkpoint()
+        .index_version
+        .clone();
+
+    assert!(matches!(
+        source.keep_last(0),
+        Err(Error::IndexesRequireIndexedMap { .. })
+    ));
+    let retained = indexed.keep_last(0).unwrap();
+    assert_eq!(retained.retained_source_versions.len(), 1);
+    assert_eq!(
+        retained.retained_source_versions[0],
+        current.id().source_version
+    );
+    assert!(!retained.removed_source_versions.is_empty());
+    assert!(retained
+        .retained_index_versions
+        .contains(&current_index_root));
+    assert!(indexed.snapshot_by_id(&old_id).is_err());
+
+    // Existing in-process snapshots retain their immutable trees until node GC.
+    assert_eq!(
+        pinned_old
+            .index(b"by-status")
+            .unwrap()
+            .primary_keys(b"active")
+            .unwrap(),
+        vec![b"user-1".to_vec()]
+    );
+    let plan = indexed.plan_indexed_gc().unwrap();
+    assert!(plan.reachability.contains(&current_source_root));
+    let current_index_tree = prolly
+        .versioned_map(
+            &indexed
+                .health()
+                .unwrap()
+                .active_indexes
+                .first()
+                .unwrap()
+                .index_map_id,
+        )
+        .snapshot_at(&current_index_root)
+        .unwrap()
+        .unwrap()
+        .tree()
+        .clone();
+    assert!(plan
+        .reachability
+        .contains(current_index_tree.root.as_ref().unwrap()));
+}
+
+#[test]
+fn retention_keeps_retired_generation_referenced_by_a_retained_source() {
+    let prolly = Prolly::new(Arc::new(MemStore::new()), Config::default());
+    prolly
+        .versioned_map(b"users")
+        .put(b"user-1", b"red")
+        .unwrap();
+    let registry = SecondaryIndexRegistry::new()
+        .register(
+            SecondaryIndex::non_unique("by-tag", 1, "retention.by-tag/v1", |_, value| {
+                Ok(vec![value.to_vec()])
+            })
+            .unwrap(),
+        )
+        .unwrap();
+    let indexed = prolly.indexed_map(b"users", registry).unwrap();
+    indexed.ensure_index(b"by-tag").unwrap();
+    let old = indexed.snapshot().unwrap();
+    let old_checkpoint = old.index(b"by-tag").unwrap().checkpoint().clone();
+    let replacement = SecondaryIndex::non_unique("by-tag", 2, "retention.by-tag/v2", |_, value| {
+        let mut term = b"new/".to_vec();
+        term.extend_from_slice(value);
+        Ok(vec![term])
+    })
+    .unwrap();
+    let replacement = indexed.replace_index(b"by-tag", replacement).unwrap();
+
+    let retained = indexed.keep_last(0).unwrap();
+    assert!(retained
+        .retained_index_versions
+        .contains(&old_checkpoint.index_version));
+    assert!(retained
+        .retained_index_versions
+        .contains(&replacement.index_version));
+    assert_eq!(
+        old.index(b"by-tag").unwrap().primary_keys(b"red").unwrap(),
+        vec![b"user-1".to_vec()]
+    );
+}

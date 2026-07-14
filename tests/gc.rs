@@ -2,7 +2,7 @@ mod common;
 
 use std::sync::Arc;
 
-use prolly::{Cid, Config, MemStore, Prolly, Store};
+use prolly::{Cid, Config, MemStore, Prolly, SecondaryIndex, SecondaryIndexRegistry, Store};
 
 #[test]
 fn mark_reachable_deduplicates_roots_and_shared_nodes() {
@@ -96,4 +96,30 @@ fn sweep_gc_deletes_only_unreachable_candidates_and_clears_manager_cache() {
 
     assert_eq!(prolly.get(&updated, b"k").unwrap(), Some(b"new".to_vec()));
     assert!(prolly.get(&base, b"k").is_err());
+}
+
+#[test]
+fn indexed_gc_plan_is_global_and_keeps_unrelated_named_roots() {
+    let prolly = Prolly::new(Arc::new(MemStore::new()), Config::default());
+    let unrelated = prolly
+        .versioned_map(b"unrelated")
+        .put(b"key", b"value")
+        .unwrap();
+    let registry = SecondaryIndexRegistry::new()
+        .register(
+            SecondaryIndex::non_unique("by-value", 1, "gc.by-value/v1", |_, value| {
+                Ok(vec![value.to_vec()])
+            })
+            .unwrap(),
+        )
+        .unwrap();
+    let indexed = prolly.indexed_map(b"users", registry).unwrap();
+    indexed.put(b"user-1", b"active").unwrap();
+    indexed.ensure_index(b"by-value").unwrap();
+    indexed.keep_last(0).unwrap();
+
+    let plan = indexed.plan_indexed_gc().unwrap();
+    assert!(plan
+        .reachability
+        .contains(unrelated.tree.root.as_ref().unwrap()));
 }

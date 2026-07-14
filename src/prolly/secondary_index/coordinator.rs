@@ -1,8 +1,9 @@
 use super::super::builder::SortedBatchBuilder;
 use super::super::cid::Cid;
 use super::super::error::{Error, Mutation};
-use super::super::manifest::ManifestStore;
-use super::super::store::Store;
+use super::super::gc::GcPlan;
+use super::super::manifest::{ManifestStore, ManifestStoreScan, NamedRootRetention};
+use super::super::store::{NodeStoreScan, Store};
 use super::super::transaction::{TransactionConflict, TransactionalStore};
 use super::super::tree::Tree;
 use super::super::versioned_map::{
@@ -11,12 +12,13 @@ use super::super::versioned_map::{
 use super::super::Prolly;
 use super::definition::{IndexProjection, SecondaryIndex, SecondaryIndexRegistry};
 use super::storage::{
-    catalog_checkpoint_key, catalog_current_key, catalog_descriptor_key, catalog_format_key,
-    catalog_map_id, catalog_retired_key, control_record_key, control_root_name, index_map_id,
-    physical_index_key, ActiveIndexControl, IndexCheckpoint, IndexControl, IndexValue,
-    IndexedHeadRecord, SecondaryIndexDescriptor, SECONDARY_INDEX_FORMAT_VERSION,
+    catalog_checkpoint_key, catalog_checkpoints_prefix, catalog_current_key,
+    catalog_descriptor_key, catalog_format_key, catalog_map_id, catalog_retired_key,
+    control_record_key, control_root_name, index_map_id, physical_index_key, ActiveIndexControl,
+    IndexCheckpoint, IndexControl, IndexValue, IndexedHeadRecord, SecondaryIndexDescriptor,
+    SECONDARY_INDEX_FORMAT_VERSION,
 };
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, RwLock};
 
@@ -62,6 +64,18 @@ pub struct IndexVerification {
     pub actual_index_version: MapVersionId,
     pub expected_entries: usize,
     pub actual_entries: usize,
+}
+
+/// Deterministic root-name pruning result for one indexed source namespace.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct IndexedRetentionResult {
+    pub retained_source_versions: Vec<MapVersionId>,
+    pub removed_source_versions: Vec<MapVersionId>,
+    pub retained_index_versions: Vec<MapVersionId>,
+    pub removed_index_versions: Vec<MapVersionId>,
+    pub removed_catalog_versions: Vec<MapVersionId>,
+    pub removed_checkpoint_records: usize,
+    pub removed_named_roots: Vec<Vec<u8>>,
 }
 
 impl IndexVerification {
@@ -1756,6 +1770,250 @@ where
             entry.map(|_| count.saturating_add(1))
         })
     }
+}
+
+impl<S> IndexedMap<'_, S>
+where
+    S: Store + ManifestStore + ManifestStoreScan + TransactionalStore + Clone + Send + Sync,
+{
+    /// Retain the newest source versions and their complete transitive index closure.
+    ///
+    /// `count == 0` still retains the current source. This removes named roots
+    /// and catalog checkpoint records only; content-addressed nodes require a
+    /// separate store-global GC plan/sweep.
+    pub fn keep_last(&self, count: usize) -> Result<IndexedRetentionResult, Error> {
+        let mut last_conflict = None;
+        for _ in 0..8 {
+            match self.keep_last_once(count) {
+                Err(Error::TransactionConflict(conflict)) => last_conflict = Some(conflict),
+                result => return result,
+            }
+        }
+        Err(Error::TransactionConflict(last_conflict.expect(
+            "indexed retention retry exhaustion follows a transaction conflict",
+        )))
+    }
+
+    fn keep_last_once(&self, count: usize) -> Result<IndexedRetentionResult, Error> {
+        let source_map = self.source();
+        let source_head = source_map.head()?.ok_or_else(|| {
+            Error::InvalidVersionedMap("indexed retention requires a source head".to_string())
+        })?;
+        let source_versions = source_map.versions()?;
+        let mut retained_source_ids = source_versions
+            .iter()
+            .take(count)
+            .map(|version| version.id.clone())
+            .collect::<HashSet<_>>();
+        retained_source_ids.insert(source_head.id.clone());
+        let mut retained_source_versions = source_versions
+            .iter()
+            .filter(|version| retained_source_ids.contains(&version.id))
+            .map(|version| version.id.clone())
+            .collect::<Vec<_>>();
+        let mut removed_source_versions = source_versions
+            .iter()
+            .filter(|version| !retained_source_ids.contains(&version.id))
+            .map(|version| version.id.clone())
+            .collect::<Vec<_>>();
+        sort_version_ids(&mut retained_source_versions);
+        sort_version_ids(&mut removed_source_versions);
+
+        let catalog_id = catalog_map_id(&self.source_map_id);
+        let catalog_map = self.prolly.versioned_map(&catalog_id);
+        let catalog_head = catalog_map.head()?.ok_or_else(|| {
+            Error::InvalidVersionedMap("indexed retention requires a catalog head".to_string())
+        })?;
+        let catalog = catalog_map.snapshot_at(&catalog_head.id)?.ok_or_else(|| {
+            Error::InvalidVersionedMap("indexed retention catalog root is missing".to_string())
+        })?;
+        validate_catalog_format(&catalog)?;
+        let current = catalog
+            .get(&catalog_current_key())?
+            .ok_or_else(|| {
+                Error::InvalidVersionedMap(
+                    "indexed retention catalog has no current selection".to_string(),
+                )
+            })
+            .and_then(|bytes| IndexedHeadRecord::from_bytes(&bytes))?;
+        if current.source_version != source_head.id {
+            return Err(Error::TransactionConflict(TransactionConflict::new(
+                source_map.head_name().to_vec(),
+                None,
+                None,
+            )));
+        }
+
+        let checkpoint_entries = catalog
+            .prefix(&catalog_checkpoints_prefix())?
+            .map(|entry| {
+                let (key, value) = entry?;
+                Ok((key, IndexCheckpoint::from_bytes(&value)?))
+            })
+            .collect::<Result<Vec<_>, Error>>()?;
+        let mut catalog_mutations = Vec::new();
+        let mut retained_checkpoints = Vec::new();
+        for (key, checkpoint) in &checkpoint_entries {
+            if retained_source_ids.contains(&checkpoint.source_version) {
+                retained_checkpoints.push(checkpoint.clone());
+            } else {
+                catalog_mutations.push(Mutation::Delete { key: key.clone() });
+            }
+        }
+        for active in &current.indexes {
+            if !retained_checkpoints.iter().any(|checkpoint| {
+                checkpoint.source_version == active.source_version
+                    && checkpoint.index_name == active.index_name
+                    && checkpoint.generation == active.generation
+            }) {
+                return Err(Error::IndexCheckpointMismatch {
+                    name: active.index_name.clone(),
+                    source_version: current.source_version.clone(),
+                    reason: "retention closure is missing a current checkpoint record".to_string(),
+                });
+            }
+        }
+        let catalog_candidate = if catalog_mutations.is_empty() {
+            catalog.tree().clone()
+        } else {
+            self.prolly.batch(catalog.tree(), catalog_mutations)?
+        };
+        let catalog_candidate_id = MapVersionId::for_tree(&catalog_candidate)?;
+
+        let mut referenced_by_map = BTreeMap::<Vec<u8>, HashSet<MapVersionId>>::new();
+        let mut retained_index_set = HashSet::new();
+        let mut all_index_map_ids = BTreeSet::new();
+        for (_, checkpoint) in &checkpoint_entries {
+            all_index_map_ids.insert(checkpoint.index_map_id.clone());
+        }
+        for checkpoint in &retained_checkpoints {
+            retained_index_set.insert(checkpoint.index_version.clone());
+            referenced_by_map
+                .entry(checkpoint.index_map_id.clone())
+                .or_default()
+                .insert(checkpoint.index_version.clone());
+        }
+        let active_index_map_ids = current
+            .indexes
+            .iter()
+            .map(|checkpoint| checkpoint.index_map_id.clone())
+            .collect::<HashSet<_>>();
+
+        let named_roots = self.prolly.list_named_root_manifests()?;
+        let mut roots_to_remove = BTreeSet::<Vec<u8>>::new();
+        for id in &removed_source_versions {
+            let mut name = source_map.versions_prefix().to_vec();
+            name.extend_from_slice(id.as_cid().as_bytes());
+            roots_to_remove.insert(name);
+        }
+
+        let mut removed_catalog_versions = Vec::new();
+        for version in catalog_map.versions()? {
+            if version.id != catalog_candidate_id {
+                let mut name = catalog_map.versions_prefix().to_vec();
+                name.extend_from_slice(version.id.as_cid().as_bytes());
+                roots_to_remove.insert(name);
+                removed_catalog_versions.push(version.id);
+            }
+        }
+        sort_version_ids(&mut removed_catalog_versions);
+
+        let mut removed_index_versions = Vec::new();
+        for map_id in &all_index_map_ids {
+            let map = self.prolly.versioned_map(map_id);
+            let versions_prefix = map.versions_prefix();
+            let referenced = referenced_by_map.get(map_id);
+            for root in named_roots
+                .iter()
+                .filter(|root| root.name.starts_with(versions_prefix))
+            {
+                let suffix = &root.name[versions_prefix.len()..];
+                let bytes: [u8; 32] = suffix.try_into().map_err(|_| {
+                    Error::InvalidVersionedMap(
+                        "hidden index version root has an invalid name".to_string(),
+                    )
+                })?;
+                let version = MapVersionId::from_cid(Cid(bytes));
+                if !referenced.is_some_and(|versions| versions.contains(&version)) {
+                    roots_to_remove.insert(root.name.clone());
+                    removed_index_versions.push(version);
+                }
+            }
+            if !active_index_map_ids.contains(map_id) {
+                roots_to_remove.insert(map.head_name().to_vec());
+            }
+        }
+        removed_index_versions
+            .sort_by(|left, right| left.as_cid().as_bytes().cmp(right.as_cid().as_bytes()));
+        removed_index_versions.dedup();
+        let mut retained_index_versions = retained_index_set.into_iter().collect::<Vec<_>>();
+        sort_version_ids(&mut retained_index_versions);
+
+        let control_fingerprint = self
+            .load_control()?
+            .map(|control| control.fingerprint())
+            .transpose()?
+            .unwrap_or_else(|| Cid::from_bytes(b"inactive-indexed-retention"));
+        let removed_named_roots = roots_to_remove.into_iter().collect::<Vec<_>>();
+        self.prolly.versioned_maps_transaction(|maps| {
+            let source_permit = IndexMaintenancePermit::new(
+                self.source_map_id.clone(),
+                control_fingerprint.clone(),
+            );
+            let source_update = maps.publish_tree_index_maintenance(
+                &source_permit,
+                Some(&source_head.id),
+                &source_head.tree,
+            )?;
+            require_non_conflict(source_update, source_map.head_name())?;
+            let catalog_permit =
+                IndexMaintenancePermit::new(catalog_id.clone(), control_fingerprint.clone());
+            let catalog_update = maps.publish_tree_index_maintenance(
+                &catalog_permit,
+                Some(&catalog_head.id),
+                &catalog_candidate,
+            )?;
+            require_non_conflict(catalog_update, &catalog_id)?;
+            for name in &removed_named_roots {
+                if maps.raw_transaction().load_named_root(name)?.is_some() {
+                    maps.raw_transaction().delete_named_root(name)?;
+                }
+            }
+            Ok(())
+        })?;
+        self.metrics.retained_roots.fetch_add(
+            retained_source_versions
+                .len()
+                .saturating_add(retained_index_versions.len()) as u64,
+            Ordering::Relaxed,
+        );
+        Ok(IndexedRetentionResult {
+            retained_source_versions,
+            removed_source_versions,
+            retained_index_versions,
+            removed_index_versions,
+            removed_catalog_versions,
+            removed_checkpoint_records: checkpoint_entries
+                .len()
+                .saturating_sub(retained_checkpoints.len()),
+            removed_named_roots,
+        })
+    }
+}
+
+impl<S> IndexedMap<'_, S>
+where
+    S: Store + NodeStoreScan + ManifestStore + ManifestStoreScan + TransactionalStore,
+{
+    /// Plan node GC from every remaining named root in the shared store.
+    pub fn plan_indexed_gc(&self) -> Result<GcPlan, Error> {
+        self.prolly
+            .plan_store_gc_for_retention(&NamedRootRetention::all())
+    }
+}
+
+fn sort_version_ids(ids: &mut [MapVersionId]) {
+    ids.sort_by(|left, right| left.as_cid().as_bytes().cmp(right.as_cid().as_bytes()));
 }
 
 fn require_non_conflict(
