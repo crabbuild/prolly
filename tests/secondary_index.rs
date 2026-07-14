@@ -29,6 +29,90 @@ fn secondary_index_registry_validates_definitions() {
 }
 
 #[test]
+fn indexed_rebuild_oracle_matches_100_deterministic_seeds() {
+    fn next(state: &mut u64) -> u64 {
+        *state = state
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        *state
+    }
+
+    fn terms(value: &[u8]) -> Vec<Vec<u8>> {
+        if value.is_empty() || value[0] % 5 == 0 {
+            return Vec::new();
+        }
+        let mut terms = vec![vec![b'a' + value[0] % 7]];
+        if value[1] % 3 == 0 {
+            terms.push(vec![b'A' + value[1] % 5]);
+        }
+        terms
+    }
+
+    for seed in 0..100_u64 {
+        let prolly = Prolly::new(Arc::new(MemStore::new()), Config::default());
+        let source = prolly.versioned_map(b"users");
+        let mut random = seed ^ 0x9e37_79b9_7f4a_7c15;
+
+        for ordinal in 0..32_u8 {
+            source
+                .put(vec![b'u', ordinal], next(&mut random).to_be_bytes())
+                .unwrap();
+        }
+
+        let keys_only = SecondaryIndex::non_unique("keys", 1, "tests.users.keys/v1", |_, value| {
+            Ok(terms(value))
+        })
+        .unwrap();
+        let include = SecondaryIndex::builder("include", 1, "tests.users.include/v1")
+            .projection(IndexProjection::Include)
+            .extract(|_, value| {
+                Ok(terms(value)
+                    .into_iter()
+                    .map(|term| SecondaryIndexEntry::included(term, &value[2..6]))
+                    .collect())
+            })
+            .unwrap();
+        let all = SecondaryIndex::builder("all", 1, "tests.users.all/v1")
+            .projection(IndexProjection::All)
+            .extract_terms(|_, value| Ok(terms(value)))
+            .unwrap();
+        let registry = SecondaryIndexRegistry::new()
+            .register(keys_only)
+            .unwrap()
+            .register(include)
+            .unwrap()
+            .register(all)
+            .unwrap();
+        let indexed = prolly.indexed_map(b"users", registry).unwrap();
+        indexed.ensure_index(b"keys").unwrap();
+        indexed.ensure_index(b"include").unwrap();
+        indexed.ensure_index(b"all").unwrap();
+
+        indexed
+            .edit(|edit| {
+                for _ in 0..24 {
+                    let ordinal = (next(&mut random) % 40) as u8;
+                    let key = vec![b'u', ordinal];
+                    if next(&mut random) % 7 == 0 {
+                        edit.delete(key);
+                    } else {
+                        edit.put(key, next(&mut random).to_be_bytes());
+                    }
+                }
+            })
+            .unwrap();
+
+        let snapshot = indexed.snapshot().unwrap();
+        let verification = indexed.verify_all(&snapshot.id().source_version).unwrap();
+        assert_eq!(verification.len(), 3, "seed {seed}");
+        assert!(
+            verification.iter().all(prolly::IndexVerification::is_valid),
+            "seed {seed}: {verification:?}"
+        );
+    }
+}
+
+#[test]
 fn include_entries_carry_projection_bytes() {
     let entry = SecondaryIndexEntry::included(b"active", b"Ada");
     assert_eq!(entry.term, b"active");

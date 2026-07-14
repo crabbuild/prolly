@@ -59,6 +59,11 @@ reflogs, patches, merge orchestration, sync planning, and repository-level GC.
   content-derived versions, pinned reads, proofs, comparison and merge,
   backup/sync, typed codecs, subscriptions, multi-map transactions, bounded
   history, and scoped GC.
+- A strict `IndexedMap` coordinator for runtime-defined, non-unique secondary
+  indexes with atomic source/index commits, sparse and multi-valued terms,
+  `KeysOnly`/`Include`/`All` projections, exact historical snapshots,
+  lifecycle verification/repair/replacement, coordinated retention, and
+  verified current-snapshot transfer.
 - Store-independent single-key, shared multi-key, complete range, cursor-page,
   and diff-page proofs for a tree root.
 - Tree statistics for inspecting shape, fill factor, fanout, and serialized size.
@@ -119,8 +124,8 @@ More copyable examples live in [`examples/`](examples/):
 - [`batch_build.rs`](examples/batch_build.rs): bulk build plus tree stats.
 - [`diff_merge.rs`](examples/diff_merge.rs): diff and conflict-free three-way merge.
 - [`resolver.rs`](examples/resolver.rs): delete-aware merge resolvers.
-- [`secondary_index.rs`](examples/secondary_index.rs): maintain a per-tenant
-  secondary index incrementally from source-tree diffs.
+- [`secondary_index.rs`](examples/secondary_index.rs): declare, build, query,
+  verify, replace, retain, export, and import strict `IndexedMap` indexes.
 - [`materialized_view.rs`](examples/materialized_view.rs): derive and update a
   materialized view from source diffs, with source/view roots in manifests.
 - [`crdt_merge.rs`](examples/crdt_merge.rs): LWW, multi-value, delete/update,
@@ -2036,6 +2041,13 @@ Run the AI/local-first workload harness:
 
 ```sh
 PROLLY_AI_BENCH_SCALE=10000 cargo bench --bench ai_workloads_bench
+```
+
+Run the strict secondary-index build/update/query/transfer harness:
+
+```sh
+PROLLY_INDEX_BENCH_SCALE=1000 PROLLY_INDEX_BENCH_BATCH=64 \
+  cargo bench --bench secondary_index_bench
 ```
 
 Run the focused SQLite scale harness:

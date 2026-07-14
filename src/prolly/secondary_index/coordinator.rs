@@ -64,6 +64,7 @@ pub struct IndexVerification {
     pub actual_index_version: MapVersionId,
     pub expected_entries: usize,
     pub actual_entries: usize,
+    pub semantic_differences: usize,
 }
 
 /// Deterministic root-name pruning result for one indexed source namespace.
@@ -80,8 +81,12 @@ pub struct IndexedRetentionResult {
 
 impl IndexVerification {
     pub fn is_valid(&self) -> bool {
+        self.expected_entries == self.actual_entries && self.semantic_differences == 0
+    }
+
+    /// Whether the selected tree is structurally identical to a sorted rebuild.
+    pub fn is_canonical(&self) -> bool {
         self.expected_index_version == self.actual_index_version
-            && self.expected_entries == self.actual_entries
     }
 }
 
@@ -790,6 +795,7 @@ where
         let actual_entries = actual.range(&[], None)?.try_fold(0usize, |count, entry| {
             entry.map(|_| count.saturating_add(1))
         })?;
+        let semantic_differences = self.prolly.diff(&expected_tree, actual.tree())?.len();
         let verification = IndexVerification {
             name: name.to_vec(),
             source_version: source_version.clone(),
@@ -797,6 +803,7 @@ where
             actual_index_version: checkpoint.index_version,
             expected_entries,
             actual_entries,
+            semantic_differences,
         };
         self.metrics
             .verification_outcomes
@@ -852,6 +859,10 @@ where
             .try_fold(0usize, |count, entry| {
                 entry.map(|_| count.saturating_add(1))
             })?;
+        let semantic_differences = self
+            .prolly
+            .diff(&expected_tree, actual_snapshot.tree())?
+            .len();
         if expected_version == old_checkpoint.index_version && expected_entries == actual_entries {
             return Ok(IndexVerification {
                 name: name.to_vec(),
@@ -860,6 +871,7 @@ where
                 actual_index_version: expected_version,
                 expected_entries,
                 actual_entries,
+                semantic_differences,
             });
         }
 
@@ -951,6 +963,7 @@ where
             actual_index_version: expected_version,
             expected_entries,
             actual_entries: expected_entries,
+            semantic_differences: 0,
         })
     }
 

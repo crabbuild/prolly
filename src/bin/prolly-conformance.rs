@@ -4,9 +4,11 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use prolly::{
-    debug_key, decode_segments, encode_segment, i128_key, i64_key, is_boundary_config, prefix_end,
-    timestamp_millis_key, u128_key, u64_key, BlobRef, Cid, Config, Diff, Encoding, MemStore, Node,
-    NodeStoreScan, Prolly, RootManifest, Store, ValueRef, VersionedValue,
+    debug_key, decode_segments, encode_segment, i128_key, i64_key, is_boundary_config,
+    physical_index_key, prefix_end, timestamp_millis_key, u128_key, u64_key, ActiveIndexControl,
+    BlobRef, Cid, Config, Diff, Encoding, IndexControl, IndexProjection, MemStore, Node,
+    NodeStoreScan, Prolly, RootManifest, SecondaryIndex, SecondaryIndexEntry,
+    SecondaryIndexRegistry, Store, ValueRef, VersionedValue,
 };
 use serde::Serialize;
 
@@ -33,6 +35,7 @@ struct FixtureDocument {
     value_fixtures: Vec<ValueFixture>,
     blob_fixtures: Vec<BlobFixture>,
     manifest_fixtures: Vec<ManifestFixture>,
+    secondary_index_fixture: SecondaryIndexFixture,
 }
 
 #[derive(Clone, Serialize)]
@@ -204,6 +207,29 @@ struct ManifestFixture {
     bytes: String,
 }
 
+#[derive(Serialize)]
+struct SecondaryIndexFixture {
+    source_map_id: String,
+    source_version: String,
+    source_root: String,
+    catalog_version: String,
+    catalog_root: String,
+    control_bytes: String,
+    indexes: Vec<SecondaryIndexGenerationFixture>,
+}
+
+#[derive(Serialize)]
+struct SecondaryIndexGenerationFixture {
+    name: String,
+    projection: &'static str,
+    descriptor_bytes: String,
+    checkpoint_bytes: String,
+    hidden_map_id: String,
+    physical_key: String,
+    physical_value: String,
+    index_root: String,
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let document = fixture_document()?;
     let json = serde_json::to_string_pretty(&document)?;
@@ -239,6 +265,105 @@ fn fixture_document() -> Result<FixtureDocument, Box<dyn std::error::Error>> {
         value_fixtures: value_fixtures()?,
         blob_fixtures: blob_fixtures(),
         manifest_fixtures: vec![manifest_fixture()?],
+        secondary_index_fixture: secondary_index_fixture()?,
+    })
+}
+
+fn secondary_index_fixture() -> Result<SecondaryIndexFixture, Box<dyn std::error::Error>> {
+    let engine = Prolly::new(Arc::new(MemStore::new()), Config::default());
+    engine
+        .versioned_map(b"fixture-users")
+        .put(b"user-1", b"active|Ada")?;
+    let keys = SecondaryIndex::non_unique("keys", 1, "fixtures.keys/v1", |_, value| {
+        Ok(vec![value
+            .split(|byte| *byte == b'|')
+            .next()
+            .unwrap()
+            .to_vec()])
+    })?;
+    let include = SecondaryIndex::builder("include", 1, "fixtures.include/v1")
+        .projection(IndexProjection::Include)
+        .extract(|_, value| {
+            let mut fields = value.splitn(2, |byte| *byte == b'|');
+            Ok(vec![SecondaryIndexEntry::included(
+                fields.next().unwrap(),
+                fields.next().unwrap_or_default(),
+            )])
+        })?;
+    let all = SecondaryIndex::builder("all", 1, "fixtures.all/v1")
+        .projection(IndexProjection::All)
+        .extract_terms(|_, value| {
+            Ok(vec![value
+                .split(|byte| *byte == b'|')
+                .next()
+                .unwrap()
+                .to_vec()])
+        })?;
+    let registry = SecondaryIndexRegistry::new()
+        .register(keys)?
+        .register(include)?
+        .register(all)?;
+    let indexed = engine.indexed_map(b"fixture-users", registry)?;
+    indexed.ensure_index(b"keys")?;
+    indexed.ensure_index(b"include")?;
+    indexed.ensure_index(b"all")?;
+    let snapshot = indexed.snapshot()?;
+    let control = IndexControl {
+        source_map_id: b"fixture-users".to_vec(),
+        catalog_map_id: prolly::catalog_map_id(b"fixture-users"),
+        active: snapshot
+            .indexes()
+            .map(|index| ActiveIndexControl {
+                name: index.name().to_vec(),
+                fingerprint: index.descriptor().fingerprint.clone(),
+            })
+            .collect(),
+    };
+    let physical_key = physical_index_key(b"active", b"user-1")?;
+    let indexes = snapshot
+        .indexes()
+        .map(|index| {
+            let physical_value = engine
+                .get(index.tree(), &physical_key)?
+                .ok_or_else(|| "fixture index entry is missing".to_string())?;
+            Ok(SecondaryIndexGenerationFixture {
+                name: hex(index.name()),
+                projection: match index.descriptor().projection {
+                    IndexProjection::KeysOnly => "keys_only",
+                    IndexProjection::Include => "include",
+                    IndexProjection::All => "all",
+                },
+                descriptor_bytes: hex(&index.descriptor().to_bytes()?),
+                checkpoint_bytes: hex(&index.checkpoint().to_bytes()?),
+                hidden_map_id: hex(&index.checkpoint().index_map_id),
+                physical_key: hex(&physical_key),
+                physical_value: hex(&physical_value),
+                index_root: cid_hex(index.tree().root.as_ref().ok_or("fixture index is empty")?),
+            })
+        })
+        .collect::<Result<Vec<_>, Box<dyn std::error::Error>>>()?;
+    Ok(SecondaryIndexFixture {
+        source_map_id: hex(b"fixture-users"),
+        source_version: snapshot.id().source_version.to_string(),
+        source_root: cid_hex(
+            snapshot
+                .source()
+                .tree()
+                .root
+                .as_ref()
+                .ok_or("fixture source is empty")?,
+        ),
+        catalog_version: snapshot.id().catalog_version.to_string(),
+        catalog_root: cid_hex(
+            snapshot
+                .catalog()
+                .tree()
+                .root
+                .as_ref()
+                .ok_or("fixture catalog is empty")?,
+        ),
+        control_bytes: hex(&control.to_bytes()?),
+        indexes,
     })
 }
 
