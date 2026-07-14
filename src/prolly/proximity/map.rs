@@ -388,6 +388,14 @@ where
 
     /// Deterministic global best-first search over the authoritative hierarchy.
     pub fn search(&self, request: SearchRequest<'_>) -> Result<SearchResult, Error> {
+        self.search_with_trace(request, None)
+    }
+
+    pub(super) fn search_with_trace(
+        &self,
+        request: SearchRequest<'_>,
+        mut trace: Option<&mut Vec<super::proof::ProximitySearchEvent>>,
+    ) -> Result<SearchResult, Error> {
         request.validate()?;
         if matches!(
             request.backend,
@@ -414,6 +422,12 @@ where
             cid: self.tree.proximity_root.clone(),
             expected_level: None,
         });
+        if let Some(trace) = trace.as_deref_mut() {
+            trace.push(super::proof::ProximitySearchEvent::FrontierPushed {
+                cid: self.tree.proximity_root.clone(),
+                bound_bits: 0.0f64.to_bits(),
+            });
+        }
         let mut candidates = Vec::<SearchCandidate>::new();
         let mut score_cache = BTreeMap::<Vec<u8>, f64>::new();
         let mut visited = HashSet::new();
@@ -462,6 +476,12 @@ where
                 break;
             }
             let next = frontier.pop().expect("peeked frontier");
+            if let Some(trace) = trace.as_deref_mut() {
+                trace.push(super::proof::ProximitySearchEvent::FrontierPopped {
+                    cid: next.cid.clone(),
+                    bound_bits: next.bound.to_bits(),
+                });
+            }
             if !visited.insert(next.cid.clone()) {
                 return Err(Error::InvalidProximityObject {
                     kind: "node",
@@ -469,6 +489,11 @@ where
                 });
             }
             let (node, mut bytes) = self.load_node(&next.cid)?;
+            if let Some(trace) = trace.as_deref_mut() {
+                trace.push(super::proof::ProximitySearchEvent::VisitedObject(
+                    next.cid.clone(),
+                ));
+            }
             let quantizer = if use_scalar_quantization && node.kind.has_children(node.level) {
                 let (quantizer, quantizer_bytes) = self.load_scalar_quantizer(&node)?;
                 bytes = bytes.saturating_add(quantizer_bytes);
@@ -567,6 +592,12 @@ where
                             node.level - 1
                         }),
                     });
+                    if let Some(trace) = trace.as_deref_mut() {
+                        trace.push(super::proof::ProximitySearchEvent::FrontierPushed {
+                            cid: child.clone(),
+                            bound_bits: bound.to_bits(),
+                        });
+                    }
                     stats.frontier_peak = stats.frontier_peak.max(frontier.len());
                 } else if filter.contains(&entry.key) {
                     let leaf_score = match score_cache.get(&entry.key) {
@@ -587,6 +618,12 @@ where
                             value
                         }
                     };
+                    if let Some(trace) = trace.as_deref_mut() {
+                        trace.push(super::proof::ProximitySearchEvent::CandidateScored {
+                            key: entry.key.clone(),
+                            distance_bits: leaf_score.to_bits(),
+                        });
+                    }
                     insert_top_k(
                         &mut candidates,
                         SearchCandidate {
@@ -629,6 +666,9 @@ where
                 value: record.value,
                 distance: candidate.score,
             });
+        }
+        if let Some(trace) = trace {
+            trace.push(super::proof::ProximitySearchEvent::Completed(completion));
         }
         Ok(SearchResult {
             neighbors,
@@ -777,6 +817,14 @@ where
 
     pub(crate) fn store_clone(&self) -> S {
         self.store.clone()
+    }
+
+    pub(super) fn directory_manager(&self) -> &Prolly<S> {
+        &self.directory
+    }
+
+    pub(super) fn load_descriptor_bytes(&self) -> Result<Vec<u8>, Error> {
+        load_content(&self.store, &self.tree.descriptor)
     }
 
     fn collect_records_from(

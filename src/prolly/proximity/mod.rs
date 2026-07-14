@@ -7,6 +7,7 @@ mod cache;
 mod distance;
 mod map;
 mod mutation;
+mod proof;
 mod search;
 pub(crate) mod storage;
 mod vector;
@@ -22,6 +23,11 @@ pub use accelerator::pq::{
 };
 pub use build::{BuildParallelism, ProximityBuildStats};
 pub use map::ProximityMap;
+pub use proof::{
+    ProximityMembershipProof, ProximityMembershipVerification, ProximityProofFilter,
+    ProximitySearchClaim, ProximitySearchEvent, ProximitySearchProof, ProximitySearchRequest,
+    ProximitySearchVerification, ProximityStructuralProof, ProximityStructuralVerification,
+};
 #[cfg(feature = "async-store")]
 pub use search::{AsyncIoConfig, AsyncProximityMap, AsyncSearchControl, CancellationToken};
 pub use search::{ProximityFilter, SearchRequest};
