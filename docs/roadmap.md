@@ -43,6 +43,26 @@ Status: **Shipped**
 - Bounded node cache by node count and serialized bytes
 - Cache inspection, pinning, clearing, hit/miss counters, and eviction counters
 
+### Native proximity indexing
+
+Status: **Shipped**
+
+- Hard-cut primary PRVR/PRXI/PRXN/PRXV/PQS8 codecs; legacy proximity formats rejected
+- Exact ordered directory with canonical localized splice mutation
+- Deterministic nearest-representative PRXN hierarchy with compositional
+  summaries, content-defined overflow, and Dolt-style localized COW
+- L2, cosine, and inner-product metrics with deterministic scalar/SIMD queries
+- Best-first exact/filtered/adaptive search and honest budget completions
+- Byte-identical parallel construction and ordered async execution
+- Full-precision-reranked SQ8/PQ and source-bound deterministic HNSW
+- Typed graph walking, closed replication, CAS manifests, global GC, and cache
+  invalidation
+- Descriptor-bound membership, structural, and replayable search proofs
+
+Future work is optimization without format changes: compressed proof bundles,
+incremental disposable HNSW maintenance, platform-specific prefetch tuning, and
+additional benchmark history across production hardware.
+
 ### Diff, merge, and collaboration
 
 Status: **Shipped**

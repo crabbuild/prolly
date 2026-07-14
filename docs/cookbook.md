@@ -850,6 +850,22 @@ tree = prolly.put(
 - Add diff-based re-embedding for changed chunks
 - Store checksums for blob payload validation
 
+## Native immutable vector indexes
+
+Use `ProximityMap` when the vector index itself must be reproducible from a
+content-addressed descriptor. It stores exact key/vector/value records in an
+ordered directory and uses a deterministic proximity hierarchy for exact L2 or
+honestly approximate filtered search. It includes cosine/inner product,
+localized canonical mutation, async/SIMD execution, overflow/external vectors,
+SQ8/PQ/HNSW, typed replication/GC, and descriptor-bound proofs. See
+[`proximity-map.md`](proximity-map.md) for complete examples.
+
+Choose this path for immutable versions, exact historical replay, duplicate
+vector identities, structural sharing, deterministic accelerators, and
+verifiable execution. Use an external engine when GPU serving, arbitrary metric
+plugins, or continuously mutable graph latency matters more than canonical
+snapshot identity.
+
 ## Vector sidecars
 
 Use this recipe when a vector database scores embeddings while prolly stores reproducible metadata. It maps to [`vector_sidecar.rs`](../examples/vector_sidecar.rs).
@@ -979,7 +995,7 @@ An ordered map gives one primary key order. Applications need alternate access p
 
 ### How prolly helps
 
-Build the secondary index as another tree. Use `diff(source_v1, source_v2)` to update the index incrementally, then compare the result to a full rebuild in tests.
+Build the secondary index as another tree. Use `diff(source_before, source_after)` to update the index incrementally, then compare the result to a full rebuild in tests.
 
 ### Reference design
 
@@ -1012,7 +1028,7 @@ match diff {
 Apply the derived mutations in one batch:
 
 ```rust
-let index_v2 = prolly.batch(&index_v1, mutations)?;
+let index_next = prolly.batch(&index_v1, mutations)?;
 ```
 
 ### Operations

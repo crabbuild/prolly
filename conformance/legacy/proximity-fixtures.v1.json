@@ -1,0 +1,24 @@
+{
+  "format_version": 1,
+  "description": "Legacy-only Rust-native proximity v1 object fixture",
+  "objects": {
+    "record": {
+      "cid": "5120bdbba1fc2baa6633037a49c3a6a19455b2e082109def295032b8600a2bf8",
+      "bytes": "50525652010200000000000020400576616c7565"
+    },
+    "leaf": {
+      "cid": "616314f27a23153db3fafa3f0789fbd93d269fe4f430eb5e7fdd3afaf50ea91e",
+      "bytes": "5052584e01010002020161000000000000803f01620000803f00000000"
+    },
+    "internal": {
+      "cid": "70fe04e18db7db777571272507e3866d9a8f82a636ccacfa1ce7da8509fa92ea",
+      "bytes": "5052584e01000102010161000000000000803f616314f27a23153db3fafa3f0789fbd93d269fe4f430eb5e7fdd3afaf50ea91e"
+    }
+  },
+  "empty": {
+    "descriptor_cid": "0d20cb4a7b55d3e7f1e9920c9d40fa17bdfca49e4ba00641689d07c1613e8a9f",
+    "descriptor_bytes": "50525849010103010213000000000000008080100000048080408001000000000000000000000045e5c59fba73aceb988c06780c0a3d84ba15354a7df2f42e13ca9268d020112400",
+    "root_cid": "45e5c59fba73aceb988c06780c0a3d84ba15354a7df2f42e13ca9268d0201124",
+    "root_bytes": "5052584e0101000000"
+  }
+}

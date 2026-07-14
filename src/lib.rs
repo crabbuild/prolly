@@ -280,8 +280,19 @@ pub use prolly::blob::{
 pub use prolly::blob::{TokioBlockingBlobStore, TokioBlockingBlobStoreError};
 pub use prolly::boundary::{is_boundary, is_boundary_config};
 pub use prolly::builder::{BatchBuilder, SortedBatchBuilder};
+pub use prolly::canonical_splice::{canonical_splice, CanonicalSpliceStats};
 pub use prolly::cid::Cid;
 pub use prolly::config::{Config, ConfigBuilder};
+pub use prolly::content_graph::{
+    compare_and_swap_named_content_root, compare_and_swap_named_content_root_with_limits,
+    content_references, copy_and_publish_content_graph, copy_content_graph,
+    load_named_content_root, load_named_content_root_with_limits, plan_content_gc,
+    put_named_content_root, put_named_content_root_with_limits, sweep_content_gc,
+    sweep_content_gc_with_invalidator, walk_content_graph, ContentGcPlan, ContentGcSweep,
+    ContentGraphCopy, ContentGraphLimits, ContentGraphWalk, ContentManifestUpdate,
+    ContentObjectKind, ContentRootManifest, ContentRootPublication, TypedContentObject,
+    TypedContentRoot,
+};
 pub use prolly::crdt::{
     ConflictFreeMerger, CrdtConfig, CrdtResolution, CustomMergeFn, DefaultConflictFreeMerger,
     DeletePolicy, MergeStrategy, MultiValueSet, TimestampExtractor, TimestampedValue,
@@ -327,6 +338,22 @@ pub use prolly::proof::{
     KeyProofVerification, MultiKeyProof, MultiKeyProofVerification, ProofBundleKind,
     ProofBundleSummary, ProofBundleVerification, ProvedDiffPage, ProvedRangePage, RangePageProof,
     RangePageProofVerification, RangeProof, RangeProofVerification,
+};
+pub use prolly::proximity::{
+    AdaptiveQuality, BuildParallelism, DistanceMetric, ExactProximityRecord, HierarchyConfig,
+    HnswBuildStats, HnswConfig, HnswIndex, Neighbor, OverflowConfig, ProductQuantizationBuildStats,
+    ProductQuantizationConfig, ProductQuantizationQuality, ProductQuantizer, ProximityBuildStats,
+    ProximityConfig, ProximityFilter, ProximityMap, ProximityMembershipProof,
+    ProximityMembershipVerification, ProximityMutation, ProximityMutationStats,
+    ProximityProofFilter, ProximityRecord, ProximitySearchClaim, ProximitySearchEvent,
+    ProximitySearchProof, ProximitySearchRequest, ProximitySearchStats,
+    ProximitySearchVerification, ProximityStructuralProof, ProximityStructuralVerification,
+    ProximityTree, ProximityVerification, QueryKernel, ScalarQuantizationConfig, SearchBackend,
+    SearchBudget, SearchCompletion, SearchPolicy, SearchRequest, SearchResult, VectorStorageConfig,
+};
+#[cfg(feature = "async-store")]
+pub use prolly::proximity::{
+    AsyncIoConfig, AsyncProximityMap, AsyncSearchControl, CancellationToken,
 };
 pub use prolly::range::{
     CursorWindow, RangeCursor, RangeIter, RangePage, ReverseCursor, ReversePage,

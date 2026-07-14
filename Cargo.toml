@@ -23,6 +23,7 @@ include = [
     "/README.md",
     "benches/**",
     "conformance/prolly-fixtures.v1.json",
+    "conformance/proximity-fixtures.json",
     "diagram/**",
     "docs/**",
     "examples/**",
@@ -68,4 +69,8 @@ harness = false
 
 [[bench]]
 name = "store_diff_merge_bench"
+harness = false
+
+[[bench]]
+name = "proximity_bench"
 harness = false
