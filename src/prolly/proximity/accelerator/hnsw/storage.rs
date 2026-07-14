@@ -169,15 +169,13 @@ fn config_fingerprint(config: &HnswConfig) -> Cid {
 }
 
 pub(super) fn graph_config() -> Config {
-    Config {
-        min_chunk_size: 4,
-        max_chunk_size: 1024 * 1024,
-        chunking_factor: 128,
-        hash_seed: 0,
-        encoding: Encoding::Raw,
-        node_cache_max_nodes: None,
-        node_cache_max_bytes: None,
-    }
+    Config::builder()
+        .min_chunk_size(4)
+        .max_chunk_size(1024 * 1024)
+        .chunking_factor(128)
+        .hash_seed(0)
+        .encoding(Encoding::Raw)
+        .build()
 }
 
 pub(super) fn load_content<S: Store>(store: &S, cid: &Cid) -> Result<Vec<u8>, Error> {

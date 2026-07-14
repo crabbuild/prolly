@@ -45,7 +45,7 @@ func viewKey(_ tenant: String, _ status: String) -> Data {
 }
 func buildRevenueView(_ engine: ProllyEngine, _ source: TreeRecord) throws -> TreeRecord {
     var totals: [String: Int] = [:]
-    for entry in try engine.range(tree: source, start: bytes("orders/source/"), end: bytes("orders/source0")) {
+    for entry in try engine.range(tree: source, start: bytes("orders/source/"), rangeEnd: bytes("orders/source0")) {
         let order = decodeOrder(entry.value)
         totals["\(order.tenant)|\(order.status)", default: 0] += order.cents
     }

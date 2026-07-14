@@ -35,6 +35,7 @@ export interface NodeConfigRecord {
   encoding: NodeEncodingRecord
   nodeCacheMaxNodes?: string
   nodeCacheMaxBytes?: string
+  formatBytes?: Buffer
 }
 export interface NodeParallelConfigRecord {
   maxThreads: string

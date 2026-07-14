@@ -3,7 +3,7 @@
 //! The `BatchBuilder` enables efficient bulk loading of data into a Prolly tree
 //! with parallel boundary detection and node creation using rayon.
 
-use super::boundary::is_hash_boundary_config;
+use super::boundary::BoundaryDetector;
 use super::cid::Cid;
 use super::config::Config;
 use super::encoding::INIT_LEVEL;
@@ -15,18 +15,27 @@ use super::tree::Tree;
 use rayon::prelude::*;
 
 const SORTED_BUILDER_NODE_BATCH: usize = 256;
+const PARALLEL_BOUNDARY_HASH_MIN_ENTRIES: usize = 1_024;
 
 #[derive(Debug)]
 struct BuiltNode {
     cid: Cid,
     first_key: Vec<u8>,
+    count: u64,
     bytes: Vec<u8>,
 }
 
+pub(crate) struct DeferredNode {
+    pub(crate) cid: Cid,
+    pub(crate) bytes: Vec<u8>,
+    pub(crate) node: Node,
+}
+
 #[derive(Clone, Debug)]
-struct NodeSummary {
-    cid: Cid,
-    first_key: Vec<u8>,
+pub(crate) struct NodeSummary {
+    pub(crate) cid: Cid,
+    pub(crate) first_key: Vec<u8>,
+    pub(crate) count: u64,
 }
 
 /// Batch builder for parallel tree construction.
@@ -67,9 +76,11 @@ pub struct SortedBatchBuilder<S: Store> {
     store: S,
     config: Config,
     current: Node,
-    last_key: Option<Vec<u8>>,
+    pending_entry: Option<(Vec<u8>, Vec<u8>)>,
     leaf_nodes: Vec<NodeSummary>,
     pending_nodes: Vec<BuiltNode>,
+    detector: BoundaryDetector,
+    encoded_bytes: u64,
 }
 
 impl<S: Store + Clone + Send + Sync> BatchBuilder<S>
@@ -125,6 +136,18 @@ where
 
         // Sort entries by key
         self.entries.sort_by(|a, b| a.0.cmp(&b.0));
+        let mut unique = Vec::with_capacity(self.entries.len());
+        for (key, value) in self.entries {
+            if unique
+                .last()
+                .is_some_and(|(previous, _): &(Vec<u8>, Vec<u8>)| previous == &key)
+            {
+                unique.last_mut().expect("duplicate has a predecessor").1 = value;
+            } else {
+                unique.push((key, value));
+            }
+        }
+        self.entries = unique;
 
         // Parallel chunk building
         let chunks = self.parallel_chunk(&self.entries)?;
@@ -149,14 +172,7 @@ where
             return Ok(vec![]);
         }
 
-        // Precompute the hash predicate in parallel. Min/max rules depend on
-        // the current chunk length, so they are applied in a sequential pass.
-        let hash_boundaries: Vec<bool> = entries
-            .par_iter()
-            .map(|(k, v)| is_hash_boundary_config(&self.config, k, v))
-            .collect();
-
-        let chunk_ranges = chunk_ranges_from_hash_boundaries(&self.config, &hash_boundaries);
+        let chunk_ranges = chunk_ranges_for_entries_parallel(&self.config, INIT_LEVEL, entries)?;
 
         // Create leaf nodes in parallel, then persist them in one batched write.
         let config = &self.config;
@@ -178,6 +194,7 @@ where
                 BuiltNode {
                     cid,
                     first_key,
+                    count: (range.end() - range.start() + 1) as u64,
                     bytes,
                 }
             })
@@ -189,6 +206,7 @@ where
             .map(|node| NodeSummary {
                 cid: node.cid,
                 first_key: node.first_key,
+                count: node.count,
             })
             .collect())
     }
@@ -205,7 +223,10 @@ where
     /// * `Ok(Tree)` - The constructed tree with root
     /// * `Err(Error)` - If storage operations fail
     ///
-    fn build_from_chunks(&self, mut level_nodes: Vec<NodeSummary>) -> Result<Tree, Error> {
+    pub(crate) fn build_from_chunks(
+        &self,
+        mut level_nodes: Vec<NodeSummary>,
+    ) -> Result<Tree, Error> {
         // Handle empty case
         if level_nodes.is_empty() {
             return Ok(Tree {
@@ -236,6 +257,68 @@ where
         })
     }
 
+    /// Build upper levels serially and persist them in one store batch.
+    ///
+    /// Mutation writers generally rebuild only a small internal frontier. For
+    /// that workload, avoiding per-level parallel scheduling and store calls is
+    /// materially cheaper while producing the same canonical root.
+    #[cfg(test)]
+    pub(crate) fn build_from_chunks_serial(
+        &self,
+        level_nodes: Vec<NodeSummary>,
+    ) -> Result<(Tree, usize, usize), Error> {
+        let (tree, pending) = self.build_from_chunks_serial_deferred(level_nodes)?;
+        let written_nodes = pending.len();
+        let written_bytes = pending.iter().map(|node| node.bytes.len()).sum();
+        let entries = pending
+            .iter()
+            .map(|node| (node.cid.as_bytes(), node.bytes.as_slice()))
+            .collect::<Vec<_>>();
+        self.store
+            .batch_put(&entries)
+            .map_err(|error| Error::Store(Box::new(error)))?;
+        Ok((tree, written_nodes, written_bytes))
+    }
+
+    pub(crate) fn build_from_chunks_serial_deferred(
+        &self,
+        mut level_nodes: Vec<NodeSummary>,
+    ) -> Result<(Tree, Vec<DeferredNode>), Error> {
+        if level_nodes.is_empty() {
+            return Ok((
+                Tree {
+                    root: None,
+                    config: self.config.clone(),
+                },
+                Vec::new(),
+            ));
+        }
+        if level_nodes.len() == 1 {
+            return Ok((
+                Tree {
+                    root: Some(level_nodes.remove(0).cid),
+                    config: self.config.clone(),
+                },
+                Vec::new(),
+            ));
+        }
+
+        let mut level = INIT_LEVEL;
+        let mut pending = Vec::<DeferredNode>::new();
+        while level_nodes.len() > 1 {
+            level += 1;
+            level_nodes = self.build_level_serial(level_nodes, level, &mut pending)?;
+        }
+
+        Ok((
+            Tree {
+                root: level_nodes.into_iter().next().map(|node| node.cid),
+                config: self.config.clone(),
+            },
+            pending,
+        ))
+    }
+
     /// Build a single level of internal nodes from child summaries.
     ///
     /// Creates internal nodes that reference the child nodes, using
@@ -257,16 +340,12 @@ where
             return Ok(vec![]);
         }
 
-        // Precompute hash predicate in parallel, then apply size rules using
-        // chunk-local counts so max_chunk_size does not degenerate into
-        // one-child internal nodes after the first full chunk.
-        let hash_boundaries: Vec<bool> = children
-            .par_iter()
-            .map(|child| {
-                is_hash_boundary_config(&self.config, &child.first_key, child.cid.as_bytes())
-            })
-            .collect();
-        let chunk_ranges = chunk_ranges_from_hash_boundaries(&self.config, &hash_boundaries);
+        let internal_entries = children
+            .iter()
+            .map(|child| (child.first_key.clone(), child.cid.as_bytes().to_vec()))
+            .collect::<Vec<_>>();
+        let chunk_ranges =
+            chunk_ranges_for_entries_parallel(&self.config, level, &internal_entries)?;
 
         let config = &self.config;
         let nodes: Vec<BuiltNode> = chunk_ranges
@@ -281,6 +360,7 @@ where
                 for child in children.iter().take(end + 1).skip(start) {
                     node.keys.push(child.first_key.clone());
                     node.vals.push(child.cid.0.to_vec());
+                    node.child_counts.push(child.count);
                 }
 
                 let first_key = node.keys.first().cloned().unwrap_or_default();
@@ -289,6 +369,7 @@ where
                 BuiltNode {
                     cid,
                     first_key,
+                    count: children[start..=end].iter().map(|child| child.count).sum(),
                     bytes,
                 }
             })
@@ -300,8 +381,57 @@ where
             .map(|node| NodeSummary {
                 cid: node.cid,
                 first_key: node.first_key,
+                count: node.count,
             })
             .collect())
+    }
+
+    fn build_level_serial(
+        &self,
+        children: Vec<NodeSummary>,
+        level: u8,
+        pending: &mut Vec<DeferredNode>,
+    ) -> Result<Vec<NodeSummary>, Error> {
+        let internal_entries = children
+            .iter()
+            .map(|child| (child.first_key.clone(), child.cid.as_bytes().to_vec()))
+            .collect::<Vec<_>>();
+        let chunk_ranges = chunk_ranges_for_entries(&self.config, level, &internal_entries)?;
+        let mut summaries = Vec::with_capacity(chunk_ranges.len());
+
+        for range in chunk_ranges {
+            let start = *range.start();
+            let end = *range.end();
+            let mut node = new_builder_node(&self.config, false, level);
+            reserve_node_entries(&mut node, end - start + 1);
+            for child in children.iter().take(end + 1).skip(start) {
+                node.keys.push(child.first_key.clone());
+                node.vals.push(child.cid.0.to_vec());
+                node.child_counts.push(child.count);
+            }
+
+            let first_key = node.keys.first().cloned().unwrap_or_default();
+            let count = children[start..=end].iter().map(|child| child.count).sum();
+            let bytes = node.to_bytes();
+            let cid = Cid::from_bytes(&bytes);
+            summaries.push(NodeSummary {
+                cid: cid.clone(),
+                first_key: first_key.clone(),
+                count,
+            });
+            pending.push(DeferredNode { cid, bytes, node });
+        }
+        Ok(summaries)
+    }
+
+    pub(crate) fn build_level_serial_deferred(
+        &self,
+        children: Vec<NodeSummary>,
+        level: u8,
+    ) -> Result<(Vec<NodeSummary>, Vec<DeferredNode>), Error> {
+        let mut pending = Vec::new();
+        let summaries = self.build_level_serial(children, level, &mut pending)?;
+        Ok((summaries, pending))
     }
 
     fn persist_nodes(&self, nodes: &[BuiltNode]) -> Result<(), Error> {
@@ -316,13 +446,18 @@ where
     /// Create a sorted streaming builder.
     pub fn new(store: S, config: Config) -> Self {
         let current = new_builder_node(&config, true, INIT_LEVEL);
+        let detector = BoundaryDetector::new(config.format.chunking.clone(), INIT_LEVEL.into())
+            .expect("configuration contains a valid persisted chunking policy");
+        let encoded_bytes = node_encoding_overhead(&config);
         Self {
             store,
             config,
             current,
-            last_key: None,
+            pending_entry: None,
             leaf_nodes: Vec::new(),
             pending_nodes: Vec::new(),
+            detector,
+            encoded_bytes,
         }
     }
 
@@ -332,32 +467,64 @@ where
     /// accepted here for parity with [`BatchBuilder`], though callers usually
     /// provide unique keys.
     pub fn add(&mut self, key: Vec<u8>, val: Vec<u8>) -> Result<(), Error> {
-        if let Some(previous) = &self.last_key {
+        if let Some((previous, previous_value)) = &mut self.pending_entry {
             if key < *previous {
                 return Err(Error::UnsortedInput {
                     previous: previous.clone(),
                     next: key,
                 });
             }
+            if key == *previous {
+                *previous_value = val;
+                return Ok(());
+            }
         }
 
-        let is_hash_boundary = is_hash_boundary_config(&self.config, &key, &val);
-        self.last_key = Some(key.clone());
+        self.flush_pending_entry()?;
+        self.pending_entry = Some((key, val));
+        Ok(())
+    }
+
+    fn flush_pending_entry(&mut self) -> Result<(), Error> {
+        let Some((key, val)) = self.pending_entry.take() else {
+            return Ok(());
+        };
+        let hard_max = self.config.format.chunking.hard_max_node_bytes;
+        let mut encoded_entry_bytes = entry_encoded_len(
+            &self.config,
+            self.current.keys.last().map(Vec::as_slice),
+            &key,
+            &val,
+        ) as u64;
+        if !self.current.is_empty()
+            && self.encoded_bytes.saturating_add(encoded_entry_bytes) > hard_max
+        {
+            self.flush_leaf()?;
+            self.detector.reset();
+            encoded_entry_bytes = entry_encoded_len(&self.config, None, &key, &val) as u64;
+        }
+        if self.encoded_bytes.saturating_add(encoded_entry_bytes) > hard_max {
+            return Err(Error::EntryTooLarge {
+                encoded_bytes: self.encoded_bytes.saturating_add(encoded_entry_bytes),
+                limit: hard_max,
+            });
+        }
+        self.encoded_bytes = self.encoded_bytes.saturating_add(encoded_entry_bytes);
+        let is_boundary = self
+            .detector
+            .observe(&key, &val, encoded_entry_bytes as usize)?;
         self.current.keys.push(key);
         self.current.vals.push(val);
 
-        let count = self.current.keys.len();
-        if count >= self.config.min_chunk_size
-            && (count >= self.config.max_chunk_size || is_hash_boundary)
-        {
+        if is_boundary {
             self.flush_leaf()?;
         }
-
         Ok(())
     }
 
     /// Build a tree from the streamed entries.
     pub fn build(mut self) -> Result<Tree, Error> {
+        self.flush_pending_entry()?;
         self.flush_leaf()?;
         self.flush_pending_nodes()?;
         let builder = BatchBuilder::new(self.store.clone(), self.config.clone());
@@ -375,16 +542,20 @@ where
         );
         let first_key = node.keys.first().cloned().unwrap_or_default();
         let bytes = node.to_bytes();
+        debug_assert!(bytes.len() as u64 <= self.config.format.chunking.hard_max_node_bytes);
         let cid = Cid::from_bytes(&bytes);
         self.leaf_nodes.push(NodeSummary {
             cid: cid.clone(),
             first_key: first_key.clone(),
+            count: node.keys.len() as u64,
         });
         self.pending_nodes.push(BuiltNode {
             cid,
             first_key,
+            count: node.keys.len() as u64,
             bytes,
         });
+        self.encoded_bytes = node_encoding_overhead(&self.config);
         if self.pending_nodes.len() >= SORTED_BUILDER_NODE_BATCH {
             self.flush_pending_nodes()?;
         }
@@ -402,12 +573,228 @@ fn new_builder_node(config: &Config, leaf: bool, level: u8) -> Node {
     Node::builder()
         .leaf(leaf)
         .level(level)
-        .min_chunk_size(config.min_chunk_size)
-        .max_chunk_size(config.max_chunk_size)
-        .chunking_factor(config.chunking_factor)
-        .hash_seed(config.hash_seed)
-        .encoding(config.encoding.clone())
+        .tree_format(config.format.clone())
         .build()
+}
+
+pub(crate) fn chunk_ranges_for_entries(
+    config: &Config,
+    level: u8,
+    entries: &[(Vec<u8>, Vec<u8>)],
+) -> Result<Vec<std::ops::RangeInclusive<usize>>, Error> {
+    chunk_ranges_for_entries_impl(config, level, entries, false)
+}
+
+fn chunk_ranges_for_entries_parallel(
+    config: &Config,
+    level: u8,
+    entries: &[(Vec<u8>, Vec<u8>)],
+) -> Result<Vec<std::ops::RangeInclusive<usize>>, Error> {
+    if entries.len() < PARALLEL_BOUNDARY_HASH_MIN_ENTRIES {
+        return chunk_ranges_for_entries_impl(config, level, entries, false);
+    }
+    chunk_ranges_for_entries_impl(config, level, entries, true)
+}
+
+fn chunk_ranges_for_entries_impl(
+    config: &Config,
+    level: u8,
+    entries: &[(Vec<u8>, Vec<u8>)],
+    parallel_hashing: bool,
+) -> Result<Vec<std::ops::RangeInclusive<usize>>, Error> {
+    let mut detector = BoundaryDetector::new(config.format.chunking.clone(), level.into())?;
+    if parallel_hashing && detector.supports_independent_hashing() {
+        let boundaries_and_upper_bytes = entries
+            .par_iter()
+            .map(|(key, value)| {
+                (
+                    detector
+                        .independent_hash_boundary(key, value)
+                        .expect("independent boundary support was checked"),
+                    entry_encoded_len(config, None, key, value) as u64,
+                )
+            })
+            .collect::<Vec<_>>();
+        let max_upper_bytes = boundaries_and_upper_bytes
+            .iter()
+            .map(|(_, bytes)| *bytes)
+            .max()
+            .unwrap_or(0);
+        let spec = &config.format.chunking;
+        let overhead = node_encoding_overhead(config);
+        if overhead.saturating_add(max_upper_bytes.saturating_add(10).saturating_mul(spec.max))
+            < spec.hard_max_node_bytes
+        {
+            return Ok(chunk_ranges_from_independent_counts(
+                spec,
+                &boundaries_and_upper_bytes,
+            ));
+        }
+        let hash_boundaries = boundaries_and_upper_bytes
+            .into_iter()
+            .map(|(boundary, _)| boundary)
+            .collect::<Vec<_>>();
+        return chunk_ranges_from_independent_hashes(config, level, entries, &hash_boundaries);
+    }
+
+    let mut ranges = Vec::new();
+    let mut start = 0;
+    let mut encoded_bytes = node_encoding_overhead(config);
+    let mut previous_key: Option<&[u8]> = None;
+    for (index, (key, value)) in entries.iter().enumerate() {
+        let mut encoded = entry_encoded_len(config, previous_key, key, value) as u64
+            + if level == 0 { 0 } else { 10 };
+        if index > start
+            && encoded_bytes.saturating_add(encoded) > config.format.chunking.hard_max_node_bytes
+        {
+            ranges.push(start..=(index - 1));
+            start = index;
+            detector.reset();
+            encoded_bytes = node_encoding_overhead(config);
+            encoded = entry_encoded_len(config, None, key, value) as u64
+                + if level == 0 { 0 } else { 10 };
+        }
+        if encoded_bytes.saturating_add(encoded) > config.format.chunking.hard_max_node_bytes {
+            return Err(Error::EntryTooLarge {
+                encoded_bytes: encoded_bytes.saturating_add(encoded),
+                limit: config.format.chunking.hard_max_node_bytes,
+            });
+        }
+        encoded_bytes = encoded_bytes.saturating_add(encoded);
+        if detector.observe(key, value, encoded as usize)? {
+            ranges.push(start..=index);
+            start = index + 1;
+            previous_key = None;
+            encoded_bytes = node_encoding_overhead(config);
+        } else {
+            previous_key = Some(key);
+        }
+    }
+    if start < entries.len() {
+        ranges.push(start..=(entries.len() - 1));
+    }
+    Ok(ranges)
+}
+
+fn chunk_ranges_from_independent_counts(
+    spec: &super::format::ChunkingSpec,
+    boundaries_and_upper_bytes: &[(bool, u64)],
+) -> Vec<std::ops::RangeInclusive<usize>> {
+    let mut ranges = Vec::new();
+    let mut start = 0;
+    for (index, (hash_boundary, _)) in boundaries_and_upper_bytes.iter().enumerate() {
+        let count = (index - start + 1) as u64;
+        if count >= spec.max || (count >= spec.min && *hash_boundary) {
+            ranges.push(start..=index);
+            start = index + 1;
+        }
+    }
+    if start < boundaries_and_upper_bytes.len() {
+        ranges.push(start..=(boundaries_and_upper_bytes.len() - 1));
+    }
+    ranges
+}
+
+fn chunk_ranges_from_independent_hashes(
+    config: &Config,
+    level: u8,
+    entries: &[(Vec<u8>, Vec<u8>)],
+    hash_boundaries: &[bool],
+) -> Result<Vec<std::ops::RangeInclusive<usize>>, Error> {
+    debug_assert_eq!(entries.len(), hash_boundaries.len());
+    let spec = &config.format.chunking;
+    let mut ranges = Vec::new();
+    let mut start = 0;
+    let overhead = node_encoding_overhead(config);
+    let mut encoded_bytes = overhead;
+    let mut previous_key: Option<&[u8]> = None;
+
+    for (index, ((key, value), hash_boundary)) in entries.iter().zip(hash_boundaries).enumerate() {
+        let mut entry_bytes = entry_encoded_len(config, previous_key, key, value) as u64
+            + if level == 0 { 0 } else { 10 };
+        if index > start && encoded_bytes.saturating_add(entry_bytes) > spec.hard_max_node_bytes {
+            ranges.push(start..=(index - 1));
+            start = index;
+            encoded_bytes = overhead;
+            entry_bytes = entry_encoded_len(config, None, key, value) as u64
+                + if level == 0 { 0 } else { 10 };
+        }
+        if encoded_bytes.saturating_add(entry_bytes) > spec.hard_max_node_bytes {
+            return Err(Error::EntryTooLarge {
+                encoded_bytes: encoded_bytes.saturating_add(entry_bytes),
+                limit: spec.hard_max_node_bytes,
+            });
+        }
+        encoded_bytes = encoded_bytes.saturating_add(entry_bytes);
+        let count = (index - start + 1) as u64;
+        let boundary = encoded_bytes >= spec.hard_max_node_bytes
+            || count >= spec.max
+            || (count >= spec.min && *hash_boundary);
+        if boundary {
+            ranges.push(start..=index);
+            start = index + 1;
+            encoded_bytes = overhead;
+            previous_key = None;
+        } else {
+            previous_key = Some(key);
+        }
+    }
+    if start < entries.len() {
+        ranges.push(start..=(entries.len() - 1));
+    }
+    Ok(ranges)
+}
+
+pub(crate) fn node_encoding_overhead(config: &Config) -> u64 {
+    let format_bytes = if config.format == super::format::TreeFormat::default() {
+        0
+    } else {
+        config
+            .format
+            .canonical_bytes()
+            .map(|bytes| bytes.len() as u64)
+            .unwrap_or(u64::MAX / 2)
+    };
+    format_bytes.saturating_add(64)
+}
+
+pub(crate) fn entry_encoded_len(
+    config: &Config,
+    previous_key: Option<&[u8]>,
+    key: &[u8],
+    value: &[u8],
+) -> usize {
+    use super::format::NodeLayoutSpec;
+    match config.format.node_layout {
+        NodeLayoutSpec::PrefixCompressed => {
+            let shared = previous_key
+                .map(|previous| {
+                    previous
+                        .iter()
+                        .zip(key)
+                        .take_while(|(left, right)| left == right)
+                        .count()
+                })
+                .unwrap_or(0);
+            varint_len(shared as u64) + varint_len((key.len() - shared) as u64) + key.len() - shared
+                + varint_len(value.len() as u64)
+                + value.len()
+        }
+        NodeLayoutSpec::Plain => {
+            varint_len(key.len() as u64) + key.len() + varint_len(value.len() as u64) + value.len()
+        }
+        NodeLayoutSpec::OffsetTable => key.len() + value.len() + 4 * 10,
+        NodeLayoutSpec::Custom { .. } => key.len() + value.len(),
+    }
+}
+
+fn varint_len(mut value: u64) -> usize {
+    let mut len = 1;
+    while value >= 0x80 {
+        value >>= 7;
+        len += 1;
+    }
+    len
 }
 
 fn reserve_node_entries(node: &mut Node, additional: usize) {
@@ -432,40 +819,11 @@ where
         .map_err(|e| Error::Store(Box::new(e)))
 }
 
-pub(crate) fn chunk_ranges_from_hash_boundaries(
-    config: &Config,
-    hash_boundaries: &[bool],
-) -> Vec<std::ops::RangeInclusive<usize>> {
-    if hash_boundaries.is_empty() {
-        return Vec::new();
-    }
-
-    let mut chunk_ranges = Vec::new();
-    let mut start = 0;
-
-    for (i, is_hash_boundary) in hash_boundaries.iter().enumerate() {
-        let count = i - start + 1;
-        if count < config.min_chunk_size {
-            continue;
-        }
-
-        if count >= config.max_chunk_size || *is_hash_boundary {
-            chunk_ranges.push(start..=i);
-            start = i + 1;
-        }
-    }
-
-    if start < hash_boundaries.len() {
-        chunk_ranges.push(start..=(hash_boundaries.len() - 1));
-    }
-
-    chunk_ranges
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::prolly::store::BatchOp;
+    use crate::MemStore;
     use std::collections::BTreeMap;
     use std::sync::{Arc, Mutex};
 
@@ -655,6 +1013,7 @@ mod tests {
             .map(|idx| NodeSummary {
                 cid: Cid::from_bytes(format!("child-{idx:03}").as_bytes()),
                 first_key: format!("k{idx:03}").into_bytes(),
+                count: 1,
             })
             .collect::<Vec<_>>();
 
@@ -675,6 +1034,37 @@ mod tests {
             assert_eq!(node.keys, expected_keys);
             assert_eq!(node.vals.len(), 4);
         }
+    }
+
+    #[test]
+    fn serial_internal_build_matches_parallel_root() {
+        let config = Config::builder()
+            .min_chunk_size(4)
+            .max_chunk_size(16)
+            .chunking_factor(8)
+            .build();
+        let parallel_store = CountingStore::default();
+        let serial_store = CountingStore::default();
+        let children = (0..257)
+            .map(|idx| NodeSummary {
+                cid: Cid::from_bytes(format!("child-{idx:03}").as_bytes()),
+                first_key: format!("k{idx:03}").into_bytes(),
+                count: 1,
+            })
+            .collect::<Vec<_>>();
+
+        let parallel = BatchBuilder::new(parallel_store, config.clone())
+            .build_from_chunks(children.clone())
+            .unwrap();
+        let (serial, written_nodes, written_bytes) =
+            BatchBuilder::new(serial_store.clone(), config)
+                .build_from_chunks_serial(children)
+                .unwrap();
+
+        assert_eq!(serial.root, parallel.root);
+        assert!(written_nodes > 1);
+        assert!(written_bytes > 0);
+        assert_eq!(serial_store.inner.lock().unwrap().batch_put_calls, 1);
     }
 
     #[test]
@@ -700,6 +1090,43 @@ mod tests {
         let sorted_tree = sorted.build().unwrap();
 
         assert_eq!(batch_tree.root, sorted_tree.root);
+    }
+
+    #[test]
+    fn builders_coalesce_duplicate_keys_with_last_value_winning() {
+        let config = Config::builder()
+            .min_chunk_size(2)
+            .max_chunk_size(8)
+            .chunking_factor(4)
+            .build();
+        let entries = vec![
+            (b"a".to_vec(), b"old".to_vec()),
+            (b"a".to_vec(), b"new".to_vec()),
+            (b"b".to_vec(), b"value".to_vec()),
+        ];
+
+        let batch_store = Arc::new(MemStore::new());
+        let mut batch = BatchBuilder::new(batch_store, config.clone());
+        for (key, value) in entries.clone() {
+            batch.add(key, value);
+        }
+        let batch_tree = batch.build().unwrap();
+
+        let sorted_store = Arc::new(MemStore::new());
+        let mut sorted = SortedBatchBuilder::new(sorted_store, config.clone());
+        for (key, value) in entries {
+            sorted.add(key, value).unwrap();
+        }
+        let sorted_tree = sorted.build().unwrap();
+
+        let unique_store = Arc::new(MemStore::new());
+        let mut unique = BatchBuilder::new(unique_store, config);
+        unique.add(b"a".to_vec(), b"new".to_vec());
+        unique.add(b"b".to_vec(), b"value".to_vec());
+        let unique_tree = unique.build().unwrap();
+
+        assert_eq!(batch_tree.root, unique_tree.root);
+        assert_eq!(sorted_tree.root, unique_tree.root);
     }
 
     #[test]

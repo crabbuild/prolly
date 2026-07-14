@@ -41,7 +41,7 @@ func applyUsers(engine: ProllyEngine, primary: TreeRecord, emailIndex: TreeRecor
 }
 
 func rebuildEmailIndex(engine: ProllyEngine, primary: TreeRecord) throws -> TreeRecord {
-    let entries = try engine.range(tree: primary, start: bytes("user:"), end: bytes("user;"))
+    let entries = try engine.range(tree: primary, start: bytes("user:"), rangeEnd: bytes("user;"))
     let indexEntries = entries.map { entry -> EntryRecord in
         let fields = String(decoding: entry.value, as: UTF8.self).split(separator: "|", omittingEmptySubsequences: false)
         precondition(fields.count == 3)

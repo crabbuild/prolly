@@ -22,7 +22,5 @@ Local adaptation:
 
 - the generated `ffi_lib` line accepts `ENV["PROLLY_BINDINGS_LIBRARY"]` so
   tests can use a locally built Cargo debug library.
-- generated local references to Ruby keyword `end` in methods with `_end`
-  parameters were rewritten to `_end`.
 
 Compiled native libraries are intentionally not checked in.

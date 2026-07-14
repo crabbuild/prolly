@@ -2557,6 +2557,7 @@ where
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 enum UpdateAttempt {
     Applied {
         previous: Option<MapVersionId>,

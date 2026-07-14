@@ -196,6 +196,12 @@ pub enum Error {
     NotFound(Cid),
     /// Invalid node structure
     InvalidNode,
+    /// Persisted tree format parameters are invalid.
+    InvalidFormat(String),
+    /// A node was decoded under a different persisted tree format.
+    FormatMismatch { expected: Cid, actual: Cid },
+    /// One entry cannot fit below the persisted hard byte limit.
+    EntryTooLarge { encoded_bytes: u64, limit: u64 },
     /// Deserialization failed
     Deserialize(String),
     /// Serialization failed
@@ -210,6 +216,12 @@ pub enum Error {
     Conflict(Conflict),
     /// Mutation buffer is full - adding a mutation would exceed the buffer size limit
     BufferFull,
+    /// A savepoint belongs to another write-session generation.
+    InvalidSavepoint,
+    /// A patch does not describe the selected immutable base.
+    PatchBaseMismatch,
+    /// A structural patch is malformed or cannot be safely applied.
+    InvalidStructuralPatch(String),
     /// Sorted bulk loading received keys out of order.
     UnsortedInput { previous: Vec<u8>, next: Vec<u8> },
     /// Canonical splice received more than one mutation for a logical key.
@@ -324,6 +336,19 @@ impl std::fmt::Display for Error {
         match self {
             Error::NotFound(cid) => write!(f, "node not found: {:?}", cid),
             Error::InvalidNode => write!(f, "invalid node structure"),
+            Error::InvalidFormat(message) => write!(f, "invalid tree format: {message}"),
+            Error::FormatMismatch { expected, actual } => write!(
+                f,
+                "tree format mismatch: expected {:?}, got {:?}",
+                expected, actual
+            ),
+            Error::EntryTooLarge {
+                encoded_bytes,
+                limit,
+            } => write!(
+                f,
+                "entry encodes to {encoded_bytes} bytes, exceeding node limit {limit}"
+            ),
             Error::Deserialize(e) => write!(f, "deserialize error: {}", e),
             Error::Serialize(e) => write!(f, "serialize error: {}", e),
             Error::Store(e) => write!(f, "storage error: {}", e),
@@ -336,6 +361,11 @@ impl std::fmt::Display for Error {
             }
             Error::Conflict(c) => write!(f, "merge conflict at key: {:?}", c.key),
             Error::BufferFull => write!(f, "mutation buffer is full"),
+            Error::InvalidSavepoint => write!(f, "invalid or stale write-session savepoint"),
+            Error::PatchBaseMismatch => write!(f, "patch base root or values do not match"),
+            Error::InvalidStructuralPatch(reason) => {
+                write!(f, "invalid structural patch: {reason}")
+            }
             Error::UnsortedInput { previous, next } => write!(
                 f,
                 "sorted input keys are out of order: previous={:?} next={:?}",

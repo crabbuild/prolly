@@ -34,7 +34,7 @@ let tree = try engine.batch(
         upsert("provenance/claim/file-1/claim-1", bytes("Trail uses Rust-backed bindings|chunk=file-1/chunk-1")),
     ]
 )
-let claims = try engine.range(tree: tree, start: bytes("provenance/claim/file-1/"), end: bytes("provenance/claim/file-10"))
+let claims = try engine.range(tree: tree, start: bytes("provenance/claim/file-1/"), rangeEnd: bytes("provenance/claim/file-10"))
 precondition(claims.count == 1)
 precondition(text(claims[0].value)?.contains("Rust-backed") == true)
 

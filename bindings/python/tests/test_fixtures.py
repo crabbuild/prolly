@@ -46,6 +46,24 @@ class FixtureTests(unittest.TestCase):
             self.assertEqual(to_hex(node.to_bytes()), fixture["bytes"])
             self.assertEqual(node.cid().hex(), fixture["cid"])
 
+    def test_default_leaf_and_internal_nodes_use_compact_format_marker(self) -> None:
+        nodes = [
+            Node(keys=(b"alpha", b"alphabet"), vals=(b"one", b"two")),
+            Node(
+                keys=(b"alpha", b"middle"),
+                vals=(bytes([1]) * 32, bytes([2]) * 32),
+                child_counts=(3, 5),
+                leaf=False,
+                level=1,
+            ),
+        ]
+
+        for node in nodes:
+            encoded = node.to_bytes()
+            self.assertEqual(encoded[5], 0)
+            self.assertEqual(Node.from_bytes(encoded), node)
+            self.assertEqual(Node.from_bytes(encoded).to_bytes(), encoded)
+
     def test_boundary_and_key_fixtures_match_rust(self) -> None:
         fixtures = load_fixtures()
         for fixture in fixtures["boundary_fixtures"]:

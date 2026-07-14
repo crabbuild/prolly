@@ -372,6 +372,7 @@ pub(crate) fn sort_named_root_manifests(roots: &mut [NamedRootManifest]) {
 
 /// Result of a named-root compare-and-swap update.
 #[derive(Clone, Debug, PartialEq)]
+#[allow(clippy::large_enum_variant)]
 pub enum ManifestUpdate {
     /// The expected manifest matched and the update was applied.
     Applied,
@@ -404,6 +405,7 @@ impl ManifestUpdate {
 
 /// Result of a named-root compare-and-swap through a [`crate::Prolly`] manager.
 #[derive(Clone, Debug, PartialEq)]
+#[allow(clippy::large_enum_variant)]
 pub enum NamedRootUpdate {
     /// The expected tree matched and the update was applied.
     Applied,

@@ -525,7 +525,7 @@ where
 
     assert_eq!(node.keys.len(), node.vals.len());
     assert!(node.keys.windows(2).all(|pair| pair[0] < pair[1]));
-    assert!(node.len() <= config.max_chunk_size);
+    assert!(node.len() <= config.max_chunk_size());
     if let Some(level) = expected_level {
         assert_eq!(node.level, level);
     }

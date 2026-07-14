@@ -3,7 +3,6 @@ use crate::prolly::cid::Cid;
 use crate::prolly::content_graph::{
     walk_content_graph, ContentGraphLimits, ContentObjectKind, TypedContentObject, TypedContentRoot,
 };
-use crate::prolly::encoding::Encoding;
 use crate::prolly::error::Error;
 use crate::prolly::proximity::distance::{prepare_vector, query_score};
 use crate::prolly::proximity::{
@@ -548,21 +547,11 @@ fn encode_filter(filter: &ProximityProofFilter, bytes: &mut Vec<u8>) {
                 None => bytes.push(0),
             }
             let config = &source_directory.config;
-            put_usize(config.min_chunk_size, bytes);
-            put_usize(config.max_chunk_size, bytes);
-            bytes.extend_from_slice(&config.chunking_factor.to_le_bytes());
-            bytes.extend_from_slice(&config.hash_seed.to_le_bytes());
-            match &config.encoding {
-                Encoding::Raw => bytes.push(0),
-                Encoding::Cbor => bytes.push(1),
-                Encoding::Json => bytes.push(2),
-                Encoding::Custom(name) => {
-                    bytes.push(3);
-                    put_bytes(name.as_bytes(), bytes);
-                }
-            }
-            put_optional_usize(config.node_cache_max_nodes, bytes);
-            put_optional_usize(config.node_cache_max_bytes, bytes);
+            let format = config
+                .format
+                .canonical_bytes()
+                .expect("directory tree format must be valid");
+            put_bytes(&format, bytes);
         }
     }
 }

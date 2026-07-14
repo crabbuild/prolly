@@ -531,31 +531,27 @@ Important node fields:
 
 - `leaf`: whether values are raw data or child CIDs.
 - `level`: `0` for leaves, increasing toward the root.
-- `min_chunk_size`: entries before hash boundaries can split a chunk.
-- `max_chunk_size`: hard upper bound that forces splitting.
-- `chunking_factor`: average-boundary tuning; higher means larger chunks.
-- `hash_seed`: deterministic seed for boundary placement.
-- `encoding`: value encoding metadata (`Raw`, `Cbor`, `Json`, or `Custom`).
+- `child_counts`: logical record counts below each internal child.
+- `format`: persisted chunking, node-layout, and value-encoding identity.
 
-Nodes serialize to a compact deterministic format with the `CRAB` magic header.
-Legacy CBOR node bytes are still readable. Fixed byte fixtures guard both
-compact encoding stability and legacy decode compatibility.
+Nodes serialize to the current self-describing deterministic format with the
+`CRAB` magic header. Earlier experimental node formats are intentionally not
+decoded; this crate currently uses a hard-cutover format policy.
 
 ## Content-Defined Chunking
 
 Prolly trees use content-defined chunk boundaries rather than fixed B-tree split
-points. Boundary placement is stable for the same content and config.
+points. `TreeFormat` lets callers choose entry-count, logical-byte, or
+encoded-byte measurement; key-only or key/value input; and threshold, Weibull,
+or rolling-hash boundaries. Every policy applies minimum, target, maximum, and
+hard encoded-byte bounds. Built-in presets include entry-count/key-value,
+entry-count/key-only, logical-byte/key-only Weibull, and logical-byte rolling
+hash policies.
 
-Boundary rules:
-
-1. If the current chunk is below `min_chunk_size`, do not split.
-2. If the current chunk is at or beyond `max_chunk_size`, force a split.
-3. Otherwise hash `key || value` with xxHash64 and compare the lower 32 bits to
-   `u32::MAX / chunking_factor`.
-
-The default `chunking_factor` is `128`, so the expected boundary probability is
-roughly `1 / 128`. Lower factors produce more, smaller chunks. Higher factors
-produce fewer, larger chunks.
+Key-only policies keep chunk boundaries stable when values change. The
+canonical writer streams from the first affected chunk and reuses the old
+suffix as soon as content-defined boundaries align again, so equivalent logical
+content converges to the same root independently of edit history.
 
 This is the key property that makes prolly trees good for local-first storage
 and versioned maps or database indexes: small edits usually rewrite a local leaf and ancestor
@@ -945,15 +941,14 @@ minor releases may make breaking API changes when they simplify the long-term
 map abstraction or remove accidental internals. The intended stable surface is
 the crate root API documented above.
 
-Compatibility promises for early adopters:
+Current pre-release format policy:
 
 - Tree handles are immutable. Existing `Tree` values remain valid as long as the
   backing store retains all referenced node CIDs.
 - Store keys are content IDs and store values are serialized node bytes. Stores
   must preserve bytes exactly.
-- Node bytes are persisted data. New decoders should continue reading existing
-  `CRAB` compact nodes and legacy CBOR fixture bytes, or the release must call
-  out a migration path.
+- Node bytes are persisted data, but pre-release wire formats may be replaced by
+  an explicit hard cutover. The decoder accepts only the current `CRAB` format.
 - Node serialization is deterministic for a given node payload and encoding
   version. Changing serialization, chunking config, or encoding config can
   change newly produced CIDs and roots.
@@ -1880,16 +1875,15 @@ Resetting metrics does not clear caches.
 ## Configuration
 
 ```rust
-use prolly::{Config, Encoding};
+use prolly::{chunking, Config, Encoding, NodeLayoutSpec};
 
 let config = Config::builder()
-    .min_chunk_size(4)
-    .max_chunk_size(1024)
-    .chunking_factor(128)
-    .hash_seed(42)
+    .chunking(chunking::entry_count_key_hash())
+    .node_layout(NodeLayoutSpec::PrefixCompressed)
     .encoding(Encoding::Raw)
     .node_cache_max_nodes(50_000)
     .node_cache_max_bytes(256 * 1024 * 1024)
+    .read_parallelism(8)
     .build();
 ```
 
@@ -1897,13 +1891,12 @@ Tuning guide:
 
 | Setting | Effect |
 | --- | --- |
-| `min_chunk_size` | Prevents tiny chunks by disabling boundary checks until the chunk is large enough. |
-| `max_chunk_size` | Forces a split and bounds worst-case node size. |
-| `chunking_factor` | Higher values create fewer boundaries and larger average nodes. |
-| `hash_seed` | Changes deterministic boundary placement for the same content. |
-| `encoding` | Records value encoding metadata on nodes. |
+| `chunking` | Selects the persisted measurement, boundary input, hash rule, bounds, seed, and level salting. |
+| `node_layout` | Selects prefix-compressed, plain, or offset-table node bytes. |
+| `encoding` | Records persisted value-encoding metadata. |
 | `node_cache_max_nodes` | Caps decoded nodes retained per manager; omit for unbounded, use `0` to disable. |
 | `node_cache_max_bytes` | Caps retained serialized node weight; combine with node count for predictable memory budgets. |
+| `read_parallelism` | Runtime-only preferred ordered-read concurrency; it does not affect CIDs. |
 
 For durable stores, larger chunks generally reduce node count and I/O, while
 smaller chunks can improve edit locality and diff granularity.

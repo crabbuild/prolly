@@ -430,13 +430,13 @@ impl TreeStats {
             .insert(level, current_max.max(num_entries));
 
         // Calculate fill factor for this node
-        let fill_factor = if node.max_chunk_size > 0 {
+        let fill_factor = if node.max_chunk_size() > 0 {
             if node.leaf {
                 // For leaf nodes, fill factor is based on number of entries (keys)
-                num_entries as f64 / node.max_chunk_size as f64
+                num_entries as f64 / node.max_chunk_size() as f64
             } else {
                 // For internal nodes, fill factor is based on fanout (number of children)
-                node.vals.len() as f64 / node.max_chunk_size as f64
+                node.vals.len() as f64 / node.max_chunk_size() as f64
             }
         } else {
             0.0
@@ -749,11 +749,11 @@ impl TreeStats {
             .insert(level, current_max.max(num_entries));
 
         // Calculate fill factor for this node
-        let fill_factor = if node.max_chunk_size > 0 {
+        let fill_factor = if node.max_chunk_size() > 0 {
             if node.leaf {
-                num_entries as f64 / node.max_chunk_size as f64
+                num_entries as f64 / node.max_chunk_size() as f64
             } else {
-                node.vals.len() as f64 / node.max_chunk_size as f64
+                node.vals.len() as f64 / node.max_chunk_size() as f64
             }
         } else {
             0.0
@@ -830,11 +830,11 @@ impl TreeStats {
         }
 
         // Calculate fill factor for this node
-        let fill_factor = if node.max_chunk_size > 0 {
+        let fill_factor = if node.max_chunk_size() > 0 {
             if node.leaf {
-                num_entries as f64 / node.max_chunk_size as f64
+                num_entries as f64 / node.max_chunk_size() as f64
             } else {
-                node.vals.len() as f64 / node.max_chunk_size as f64
+                node.vals.len() as f64 / node.max_chunk_size() as f64
             }
         } else {
             0.0
@@ -932,21 +932,21 @@ impl TreeStats {
         }
 
         // Update fill factors
-        let old_fill_factor = if old_node.max_chunk_size > 0 {
+        let old_fill_factor = if old_node.max_chunk_size() > 0 {
             if old_node.leaf {
-                old_entries as f64 / old_node.max_chunk_size as f64
+                old_entries as f64 / old_node.max_chunk_size() as f64
             } else {
-                old_node.vals.len() as f64 / old_node.max_chunk_size as f64
+                old_node.vals.len() as f64 / old_node.max_chunk_size() as f64
             }
         } else {
             0.0
         };
 
-        let new_fill_factor = if new_node.max_chunk_size > 0 {
+        let new_fill_factor = if new_node.max_chunk_size() > 0 {
             if new_node.leaf {
-                new_entries as f64 / new_node.max_chunk_size as f64
+                new_entries as f64 / new_node.max_chunk_size() as f64
             } else {
-                new_node.vals.len() as f64 / new_node.max_chunk_size as f64
+                new_node.vals.len() as f64 / new_node.max_chunk_size() as f64
             }
         } else {
             0.0
@@ -1815,24 +1815,24 @@ mod tests {
     }
 
     #[test]
-    fn test_finalize_division_by_zero_handling() {
+    fn test_finalize_handles_minimum_valid_capacity() {
         let mut stats = TreeStats::new();
 
-        // Create a node with max_chunk_size = 0 to test division by zero
+        // Persisted formats reject zero capacity, so exercise the minimum.
         let node = Node::builder()
             .keys(vec![b"key".to_vec()])
             .vals(vec![b"value".to_vec()])
             .leaf(true)
             .level(0)
-            .max_chunk_size(0)
+            .min_chunk_size(1)
+            .max_chunk_size(1)
             .build();
 
         stats.accumulate(&node);
         stats.finalize();
 
-        // Should not panic, fill factors should be 0
-        assert_eq!(stats.avg_fill_factor, 0.0);
-        assert_eq!(stats.avg_leaf_fill_factor, 0.0);
+        assert_eq!(stats.avg_fill_factor, 1.0);
+        assert_eq!(stats.avg_leaf_fill_factor, 1.0);
         assert_eq!(stats.avg_internal_fill_factor, 0.0);
 
         // Other averages should still be calculated correctly

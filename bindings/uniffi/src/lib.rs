@@ -165,6 +165,7 @@ pub struct ConfigRecord {
     pub encoding: EncodingRecord,
     pub node_cache_max_nodes: Option<u64>,
     pub node_cache_max_bytes: Option<u64>,
+    pub format_bytes: Option<Vec<u8>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
@@ -704,6 +705,7 @@ pub struct RangeBoundsRecord {
 pub struct NodeRecord {
     pub keys: Vec<Vec<u8>>,
     pub vals: Vec<Vec<u8>>,
+    pub child_counts: Vec<u64>,
     pub leaf: bool,
     pub level: u8,
     pub min_chunk_size: u64,
@@ -711,6 +713,7 @@ pub struct NodeRecord {
     pub chunking_factor: u32,
     pub hash_seed: u64,
     pub encoding: EncodingRecord,
+    pub format_bytes: Option<Vec<u8>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
@@ -1272,6 +1275,9 @@ impl From<prolly::Error> for ProllyBindingError {
                     conflict.current,
                 ),
             },
+            other => Self::Internal {
+                reason: other.to_string(),
+            },
         }
     }
 }
@@ -1344,6 +1350,12 @@ impl ProllyBlobStore {
 #[derive(uniffi::Object)]
 pub struct MergePolicyRegistry {
     inner: Mutex<CoreMergePolicyRegistry>,
+}
+
+impl Default for MergePolicyRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[uniffi::export]
@@ -2064,12 +2076,12 @@ impl ProllyEngine {
         &self,
         tree: TreeRecord,
         start: Vec<u8>,
-        end: Option<Vec<u8>>,
+        range_end: Option<Vec<u8>>,
     ) -> Result<RangeProofRecord, ProllyBindingError> {
         let tree = tree.try_into()?;
         with_engine!(self, engine, {
             engine
-                .prove_range(&tree, &start, end.as_deref())
+                .prove_range(&tree, &start, range_end.as_deref())
                 .map(RangeProofRecord::from)
                 .map_err(Into::into)
         })
@@ -2093,7 +2105,7 @@ impl ProllyEngine {
         &self,
         tree: TreeRecord,
         cursor: Option<RangeCursorRecord>,
-        end: Option<Vec<u8>>,
+        range_end: Option<Vec<u8>>,
         limit: u64,
     ) -> Result<ProvedRangePageRecord, ProllyBindingError> {
         let tree = tree.try_into()?;
@@ -2103,7 +2115,7 @@ impl ProllyEngine {
         let limit = to_usize(limit, "limit")?;
         with_engine!(self, engine, {
             engine
-                .prove_range_page(&tree, &cursor, end.as_deref(), limit)
+                .prove_range_page(&tree, &cursor, range_end.as_deref(), limit)
                 .map(ProvedRangePageRecord::try_from)?
         })
     }
@@ -2113,7 +2125,7 @@ impl ProllyEngine {
         base: TreeRecord,
         other: TreeRecord,
         cursor: Option<RangeCursorRecord>,
-        end: Option<Vec<u8>>,
+        range_end: Option<Vec<u8>>,
         limit: u64,
     ) -> Result<ProvedDiffPageRecord, ProllyBindingError> {
         let base = base.try_into()?;
@@ -2124,7 +2136,7 @@ impl ProllyEngine {
         let limit = to_usize(limit, "limit")?;
         with_engine!(self, engine, {
             engine
-                .prove_diff_page(&base, &other, &cursor, end.as_deref(), limit)
+                .prove_diff_page(&base, &other, &cursor, range_end.as_deref(), limit)
                 .map(ProvedDiffPageRecord::try_from)?
         })
     }
@@ -2348,11 +2360,11 @@ impl ProllyEngine {
         &self,
         tree: TreeRecord,
         start: Vec<u8>,
-        end: Option<Vec<u8>>,
+        range_end: Option<Vec<u8>>,
     ) -> Result<Vec<EntryRecord>, ProllyBindingError> {
         let tree = tree.try_into()?;
         with_engine!(self, engine, {
-            let iter = engine.range(&tree, &start, end.as_deref())?;
+            let iter = engine.range(&tree, &start, range_end.as_deref())?;
             iter.map(|entry| {
                 entry
                     .map(|(key, value)| EntryRecord { key, value })
@@ -2398,11 +2410,11 @@ impl ProllyEngine {
         &self,
         tree: TreeRecord,
         after_key: Vec<u8>,
-        end: Option<Vec<u8>>,
+        range_end: Option<Vec<u8>>,
     ) -> Result<Vec<EntryRecord>, ProllyBindingError> {
         let tree = tree.try_into()?;
         with_engine!(self, engine, {
-            let iter = engine.range_after(&tree, &after_key, end.as_deref())?;
+            let iter = engine.range_after(&tree, &after_key, range_end.as_deref())?;
             iter.map(|entry| {
                 entry
                     .map(|(key, value)| EntryRecord { key, value })
@@ -2416,14 +2428,14 @@ impl ProllyEngine {
         &self,
         tree: TreeRecord,
         cursor: Option<RangeCursorRecord>,
-        end: Option<Vec<u8>>,
+        range_end: Option<Vec<u8>>,
     ) -> Result<Vec<EntryRecord>, ProllyBindingError> {
         let tree = tree.try_into()?;
         let cursor = cursor
             .map(RangeCursor::from)
             .unwrap_or_else(RangeCursor::start);
         with_engine!(self, engine, {
-            let iter = engine.range_from_cursor(&tree, &cursor, end.as_deref())?;
+            let iter = engine.range_from_cursor(&tree, &cursor, range_end.as_deref())?;
             iter.map(|entry| {
                 entry
                     .map(|(key, value)| EntryRecord { key, value })
@@ -2438,13 +2450,13 @@ impl ProllyEngine {
         base: TreeRecord,
         other: TreeRecord,
         start: Vec<u8>,
-        end: Option<Vec<u8>>,
+        range_end: Option<Vec<u8>>,
     ) -> Result<Vec<DiffRecord>, ProllyBindingError> {
         let base = base.try_into()?;
         let other = other.try_into()?;
         with_engine!(self, engine, {
             engine
-                .range_diff(&base, &other, &start, end.as_deref())?
+                .range_diff(&base, &other, &start, range_end.as_deref())?
                 .into_iter()
                 .map(DiffRecord::try_from)
                 .collect()
@@ -2456,7 +2468,7 @@ impl ProllyEngine {
         base: TreeRecord,
         other: TreeRecord,
         cursor: Option<RangeCursorRecord>,
-        end: Option<Vec<u8>>,
+        range_end: Option<Vec<u8>>,
     ) -> Result<Vec<DiffRecord>, ProllyBindingError> {
         let base = base.try_into()?;
         let other = other.try_into()?;
@@ -2465,7 +2477,7 @@ impl ProllyEngine {
             .unwrap_or_else(RangeCursor::start);
         with_engine!(self, engine, {
             engine
-                .diff_from_cursor(&base, &other, &cursor, end.as_deref())?
+                .diff_from_cursor(&base, &other, &cursor, range_end.as_deref())?
                 .into_iter()
                 .map(DiffRecord::try_from)
                 .collect()
@@ -2476,7 +2488,7 @@ impl ProllyEngine {
         &self,
         tree: TreeRecord,
         cursor: Option<RangeCursorRecord>,
-        end: Option<Vec<u8>>,
+        range_end: Option<Vec<u8>>,
         limit: u64,
     ) -> Result<RangePageRecord, ProllyBindingError> {
         let tree = tree.try_into()?;
@@ -2486,7 +2498,7 @@ impl ProllyEngine {
         let limit = to_usize(limit, "limit")?;
         with_engine!(self, engine, {
             engine
-                .range_page(&tree, &cursor, end.as_deref(), limit)
+                .range_page(&tree, &cursor, range_end.as_deref(), limit)
                 .map(RangePageRecord::try_from)?
         })
     }
@@ -2533,14 +2545,14 @@ impl ProllyEngine {
         &self,
         tree: TreeRecord,
         key: Vec<u8>,
-        end: Option<Vec<u8>>,
+        range_end: Option<Vec<u8>>,
         limit: u64,
     ) -> Result<CursorWindowRecord, ProllyBindingError> {
         let tree = tree.try_into()?;
         let limit = to_usize(limit, "limit")?;
         with_engine!(self, engine, {
             engine
-                .cursor_window(&tree, &key, end.as_deref(), limit)
+                .cursor_window(&tree, &key, range_end.as_deref(), limit)
                 .map(CursorWindowRecord::from)
                 .map_err(Into::into)
         })
@@ -2567,7 +2579,7 @@ impl ProllyEngine {
         base: TreeRecord,
         other: TreeRecord,
         cursor: Option<RangeCursorRecord>,
-        end: Option<Vec<u8>>,
+        range_end: Option<Vec<u8>>,
         limit: u64,
     ) -> Result<DiffPageRecord, ProllyBindingError> {
         let base = base.try_into()?;
@@ -2578,7 +2590,7 @@ impl ProllyEngine {
         let limit = to_usize(limit, "limit")?;
         with_engine!(self, engine, {
             engine
-                .diff_page(&base, &other, &cursor, end.as_deref(), limit)
+                .diff_page(&base, &other, &cursor, range_end.as_deref(), limit)
                 .map(DiffPageRecord::try_from)?
         })
     }
@@ -2750,7 +2762,7 @@ impl ProllyEngine {
         left: TreeRecord,
         right: TreeRecord,
         start: Vec<u8>,
-        end: Option<Vec<u8>>,
+        range_end: Option<Vec<u8>>,
         resolver: Option<String>,
     ) -> Result<TreeRecord, ProllyBindingError> {
         let base = base.try_into()?;
@@ -2759,7 +2771,7 @@ impl ProllyEngine {
         let resolver = resolver_from_name(resolver)?;
         with_engine!(self, engine, {
             engine
-                .merge_range(&base, &left, &right, &start, end.as_deref(), resolver)
+                .merge_range(&base, &left, &right, &start, range_end.as_deref(), resolver)
                 .map(TreeRecord::from)
                 .map_err(Into::into)
         })
@@ -2771,7 +2783,7 @@ impl ProllyEngine {
         left: TreeRecord,
         right: TreeRecord,
         start: Vec<u8>,
-        end: Option<Vec<u8>>,
+        range_end: Option<Vec<u8>>,
         resolver: Arc<dyn MergeResolverCallback>,
     ) -> Result<TreeRecord, ProllyBindingError> {
         let base = base.try_into()?;
@@ -2780,7 +2792,14 @@ impl ProllyEngine {
         let resolver = resolver_from_callback(resolver);
         with_engine!(self, engine, {
             engine
-                .merge_range(&base, &left, &right, &start, end.as_deref(), Some(resolver))
+                .merge_range(
+                    &base,
+                    &left,
+                    &right,
+                    &start,
+                    range_end.as_deref(),
+                    Some(resolver),
+                )
                 .map(TreeRecord::from)
                 .map_err(Into::into)
         })
@@ -2792,7 +2811,7 @@ impl ProllyEngine {
         left: TreeRecord,
         right: TreeRecord,
         start: Vec<u8>,
-        end: Option<Vec<u8>>,
+        range_end: Option<Vec<u8>>,
         policy: Arc<MergePolicyRegistry>,
     ) -> Result<TreeRecord, ProllyBindingError> {
         let base = base.try_into()?;
@@ -2801,7 +2820,14 @@ impl ProllyEngine {
         let resolver = policy.as_resolver()?;
         with_engine!(self, engine, {
             engine
-                .merge_range(&base, &left, &right, &start, end.as_deref(), Some(resolver))
+                .merge_range(
+                    &base,
+                    &left,
+                    &right,
+                    &start,
+                    range_end.as_deref(),
+                    Some(resolver),
+                )
                 .map(TreeRecord::from)
                 .map_err(Into::into)
         })
@@ -3675,7 +3701,7 @@ impl ProllyEngine {
         left: TreeRecord,
         right: TreeRecord,
         start: Vec<u8>,
-        end: Option<Vec<u8>>,
+        range_end: Option<Vec<u8>>,
         resolver: F,
     ) -> Result<TreeRecord, ProllyBindingError>
     where
@@ -3687,7 +3713,14 @@ impl ProllyEngine {
         let resolver = resolver_from_host_callback(resolver);
         with_engine!(self, engine, {
             engine
-                .merge_range(&base, &left, &right, &start, end.as_deref(), Some(resolver))
+                .merge_range(
+                    &base,
+                    &left,
+                    &right,
+                    &start,
+                    range_end.as_deref(),
+                    Some(resolver),
+                )
                 .map(TreeRecord::from)
                 .map_err(Into::into)
         })
@@ -3805,9 +3838,28 @@ pub fn tree_config(
         encoding,
         node_cache_max_nodes,
         node_cache_max_bytes,
+        format_bytes: None,
     };
     Config::try_from(record.clone())?;
     Ok(record)
+}
+
+#[uniffi::export]
+pub fn tree_config_from_format_bytes(
+    format_bytes: Vec<u8>,
+    node_cache_max_nodes: Option<u64>,
+    node_cache_max_bytes: Option<u64>,
+) -> Result<ConfigRecord, ProllyBindingError> {
+    let format = prolly::TreeFormat::from_canonical_bytes(&format_bytes)
+        .map_err(ProllyBindingError::from)?;
+    let mut builder = Config::builder().format(format);
+    if let Some(max_nodes) = node_cache_max_nodes {
+        builder = builder.node_cache_max_nodes(to_usize(max_nodes, "node_cache_max_nodes")?);
+    }
+    if let Some(max_bytes) = node_cache_max_bytes {
+        builder = builder.node_cache_max_bytes(to_usize(max_bytes, "node_cache_max_bytes")?);
+    }
+    Ok(builder.build().into())
 }
 
 #[uniffi::export]
@@ -3908,7 +3960,7 @@ pub fn verify_diff_page_proof(
     proof: DiffPageProofRecord,
 ) -> Result<DiffPageProofVerificationRecord, ProllyBindingError> {
     let proof = DiffPageProof::try_from(proof)?;
-    Ok(prolly::verify_diff_page_proof(&proof).try_into()?)
+    prolly::verify_diff_page_proof(&proof).try_into()
 }
 
 #[uniffi::export]
@@ -4116,11 +4168,11 @@ pub fn multi_key_proof_from_node_bytes(
 pub fn range_proof_from_node_bytes(
     root: Option<Vec<u8>>,
     start: Vec<u8>,
-    end: Option<Vec<u8>>,
+    range_end: Option<Vec<u8>>,
     path_node_bytes: Vec<Vec<u8>>,
 ) -> Result<RangeProofRecord, ProllyBindingError> {
     let root = root.map(cid_from_vec).transpose()?;
-    RangeProof::from_node_bytes(root, start, end, path_node_bytes)
+    RangeProof::from_node_bytes(root, start, range_end, path_node_bytes)
         .map(RangeProofRecord::from)
         .map_err(Into::into)
 }
@@ -4129,11 +4181,11 @@ pub fn range_proof_from_node_bytes(
 pub fn range_page_proof_from_node_bytes(
     root: Option<Vec<u8>>,
     after: Option<Vec<u8>>,
-    end: Option<Vec<u8>>,
+    range_end: Option<Vec<u8>>,
     path_node_bytes: Vec<Vec<u8>>,
 ) -> Result<RangePageProofRecord, ProllyBindingError> {
     let root = root.map(cid_from_vec).transpose()?;
-    RangePageProof::from_node_bytes(root, after, end, path_node_bytes)
+    RangePageProof::from_node_bytes(root, after, range_end, path_node_bytes)
         .map(RangePageProofRecord::from)
         .map_err(Into::into)
 }
@@ -4329,8 +4381,8 @@ pub fn key_from_prefixed_segments(prefix: Vec<u8>, segments: Vec<Vec<u8>>) -> Ve
 }
 
 #[uniffi::export]
-pub fn changed_span(start: Vec<u8>, end: Option<Vec<u8>>) -> ChangedSpanRecord {
-    ChangedSpan::new(start, end).into()
+pub fn changed_span(start: Vec<u8>, range_end: Option<Vec<u8>>) -> ChangedSpanRecord {
+    ChangedSpan::new(start, range_end).into()
 }
 
 #[uniffi::export]
@@ -4703,14 +4755,16 @@ impl TryFrom<EncodingRecord> for Encoding {
 
 impl From<Config> for ConfigRecord {
     fn from(value: Config) -> Self {
+        let format_bytes = value.format.canonical_bytes().ok();
         Self {
-            min_chunk_size: value.min_chunk_size as u64,
-            max_chunk_size: value.max_chunk_size as u64,
-            chunking_factor: value.chunking_factor,
-            hash_seed: value.hash_seed,
-            encoding: value.encoding.into(),
-            node_cache_max_nodes: value.node_cache_max_nodes.map(|value| value as u64),
-            node_cache_max_bytes: value.node_cache_max_bytes.map(|value| value as u64),
+            min_chunk_size: value.min_chunk_size() as u64,
+            max_chunk_size: value.max_chunk_size() as u64,
+            chunking_factor: value.chunking_factor(),
+            hash_seed: value.hash_seed(),
+            encoding: value.encoding().clone().into(),
+            node_cache_max_nodes: value.runtime.node_cache_max_nodes.map(|value| value as u64),
+            node_cache_max_bytes: value.runtime.node_cache_max_bytes.map(|value| value as u64),
+            format_bytes,
         }
     }
 }
@@ -4719,21 +4773,28 @@ impl TryFrom<ConfigRecord> for Config {
     type Error = ProllyBindingError;
 
     fn try_from(value: ConfigRecord) -> Result<Self, Self::Error> {
-        Ok(Self {
-            min_chunk_size: to_usize(value.min_chunk_size, "min_chunk_size")?,
-            max_chunk_size: to_usize(value.max_chunk_size, "max_chunk_size")?,
-            chunking_factor: value.chunking_factor,
-            hash_seed: value.hash_seed,
-            encoding: value.encoding.try_into()?,
-            node_cache_max_nodes: value
-                .node_cache_max_nodes
-                .map(|value| to_usize(value, "node_cache_max_nodes"))
-                .transpose()?,
-            node_cache_max_bytes: value
-                .node_cache_max_bytes
-                .map(|value| to_usize(value, "node_cache_max_bytes"))
-                .transpose()?,
-        })
+        let persisted_format = value
+            .format_bytes
+            .as_deref()
+            .map(prolly::TreeFormat::from_canonical_bytes)
+            .transpose()
+            .map_err(ProllyBindingError::from)?;
+        let mut builder = Config::builder()
+            .min_chunk_size(to_usize(value.min_chunk_size, "min_chunk_size")?)
+            .max_chunk_size(to_usize(value.max_chunk_size, "max_chunk_size")?)
+            .chunking_factor(value.chunking_factor)
+            .hash_seed(value.hash_seed)
+            .encoding(value.encoding.try_into()?);
+        if let Some(format) = persisted_format {
+            builder = builder.format(format);
+        }
+        if let Some(max_nodes) = value.node_cache_max_nodes {
+            builder = builder.node_cache_max_nodes(to_usize(max_nodes, "node_cache_max_nodes")?);
+        }
+        if let Some(max_bytes) = value.node_cache_max_bytes {
+            builder = builder.node_cache_max_bytes(to_usize(max_bytes, "node_cache_max_bytes")?);
+        }
+        Ok(builder.build())
     }
 }
 
@@ -4859,16 +4920,24 @@ impl TryFrom<SnapshotBundleNodeRecord> for CoreSnapshotBundleNode {
 
 impl From<Node> for NodeRecord {
     fn from(value: Node) -> Self {
+        let min_chunk_size = value.min_chunk_size() as u64;
+        let max_chunk_size = value.max_chunk_size() as u64;
+        let chunking_factor = value.chunking_factor();
+        let hash_seed = value.hash_seed();
+        let encoding = value.encoding().clone().into();
+        let format_bytes = value.format.canonical_bytes().ok();
         Self {
             keys: value.keys,
             vals: value.vals,
+            child_counts: value.child_counts,
             leaf: value.leaf,
             level: value.level,
-            min_chunk_size: value.min_chunk_size as u64,
-            max_chunk_size: value.max_chunk_size as u64,
-            chunking_factor: value.chunking_factor,
-            hash_seed: value.hash_seed,
-            encoding: value.encoding.into(),
+            min_chunk_size,
+            max_chunk_size,
+            chunking_factor,
+            hash_seed,
+            encoding,
+            format_bytes,
         }
     }
 }
@@ -4883,17 +4952,29 @@ impl TryFrom<NodeRecord> for Node {
             });
         }
 
-        Ok(Self {
+        let format = if let Some(bytes) = value.format_bytes {
+            prolly::TreeFormat::from_canonical_bytes(&bytes)
+                .map_err(ProllyBindingError::from)?
+        } else {
+            Config::builder()
+                .min_chunk_size(to_usize(value.min_chunk_size, "min_chunk_size")?)
+                .max_chunk_size(to_usize(value.max_chunk_size, "max_chunk_size")?)
+                .chunking_factor(value.chunking_factor)
+                .hash_seed(value.hash_seed)
+                .encoding(value.encoding.try_into()?)
+                .build()
+                .format
+        };
+        let node = Node {
             keys: value.keys,
             vals: value.vals,
+            child_counts: value.child_counts,
             leaf: value.leaf,
             level: value.level,
-            min_chunk_size: to_usize(value.min_chunk_size, "min_chunk_size")?,
-            max_chunk_size: to_usize(value.max_chunk_size, "max_chunk_size")?,
-            chunking_factor: value.chunking_factor,
-            hash_seed: value.hash_seed,
-            encoding: value.encoding.try_into()?,
-        })
+            format,
+        };
+        node.validate().map_err(ProllyBindingError::from)?;
+        Ok(node)
     }
 }
 
@@ -6151,7 +6232,7 @@ impl From<prolly::TransactionUpdate> for TransactionUpdateRecord {
                 conflict: true,
                 nodes_written: 0,
                 roots_written: 0,
-                conflict_detail: Some(conflict.into()),
+                conflict_detail: Some((*conflict).into()),
             },
         }
     }
@@ -6961,10 +7042,12 @@ mod tests {
         }
     }
 
+    type TestHintMap = BTreeMap<(Vec<u8>, Vec<u8>), Vec<u8>>;
+
     #[derive(Default)]
     struct TestHostStore {
         nodes: Mutex<BTreeMap<Vec<u8>, Vec<u8>>>,
-        hints: Mutex<BTreeMap<(Vec<u8>, Vec<u8>), Vec<u8>>>,
+        hints: Mutex<TestHintMap>,
         roots: Mutex<BTreeMap<Vec<u8>, RootManifestRecord>>,
     }
 
@@ -7183,6 +7266,13 @@ mod tests {
         assert_eq!(config.node_cache_max_nodes, Some(16));
         assert_eq!(config.node_cache_max_bytes, Some(4096));
 
+        let mut format = prolly::TreeFormat::default();
+        format.chunking = prolly::chunking::logical_bytes_key_weibull();
+        format.node_layout = prolly::NodeLayoutSpec::Plain;
+        let format_bytes = format.canonical_bytes().unwrap();
+        let configured = tree_config_from_format_bytes(format_bytes, None, None).unwrap();
+        assert_eq!(Config::try_from(configured).unwrap().format, format);
+
         assert_eq!(
             large_value_config(8).unwrap(),
             LargeValueConfig::new(8).into()
@@ -7202,6 +7292,7 @@ mod tests {
         let node = NodeRecord {
             keys: vec![b"a".to_vec()],
             vals: vec![b"1".to_vec()],
+            child_counts: Vec::new(),
             leaf: true,
             level: 0,
             min_chunk_size: 4,
@@ -7212,6 +7303,17 @@ mod tests {
                 kind: EncodingKind::Raw,
                 custom_name: None,
             },
+            format_bytes: Some(
+                Config::builder()
+                    .min_chunk_size(4)
+                    .max_chunk_size(1024)
+                    .chunking_factor(128)
+                    .hash_seed(0)
+                    .build()
+                    .format
+                    .canonical_bytes()
+                    .unwrap(),
+            ),
         };
 
         let bytes = node_to_bytes(node.clone()).unwrap();
@@ -8530,7 +8632,7 @@ mod tests {
         assert_eq!(append_result.stats.input_mutations, 3);
         assert_eq!(append_result.stats.effective_mutations, 2);
         assert!(!append_result.stats.preprocess_input_sorted);
-        assert!(append_result.stats.used_append_fast_path);
+        assert!(append_result.stats.used_coalesced_rebuild);
         assert!(append_result.stats.written_nodes > 0);
         assert_eq!(
             engine.get(appended.clone(), b"d".to_vec()).unwrap(),
@@ -9120,6 +9222,7 @@ mod tests {
             },
             node_cache_max_nodes: None,
             node_cache_max_bytes: None,
+            format_bytes: None,
         }
     }
 

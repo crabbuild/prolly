@@ -449,6 +449,10 @@ def _uniffi_load_indirect():
     This is how we find and load the dynamic library provided by the component.
     For now we just look it up by name.
     """
+    configured_path = os.environ.get("PROLLY_BINDINGS_LIBRARY")
+    if configured_path:
+        return ctypes.cdll.LoadLibrary(configured_path)
+
     if sys.platform == "darwin":
         libname = "lib{}.dylib"
     elif sys.platform.startswith("win"):
@@ -484,7 +488,7 @@ def _uniffi_check_api_checksums(lib):
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_func_blob_ref_validate_bytes() != 54728:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    if lib.uniffi_prolly_bindings_checksum_func_changed_span() != 43900:
+    if lib.uniffi_prolly_bindings_checksum_func_changed_span() != 59655:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_func_changed_span_for_prefix() != 22853:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
@@ -584,7 +588,7 @@ def _uniffi_check_api_checksums(lib):
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_func_range_page_proof_from_bytes() != 59171:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    if lib.uniffi_prolly_bindings_checksum_func_range_page_proof_from_node_bytes() != 3245:
+    if lib.uniffi_prolly_bindings_checksum_func_range_page_proof_from_node_bytes() != 64107:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_func_range_page_proof_path_node_bytes() != 43249:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
@@ -592,7 +596,7 @@ def _uniffi_check_api_checksums(lib):
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_func_range_proof_from_bytes() != 41674:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    if lib.uniffi_prolly_bindings_checksum_func_range_proof_from_node_bytes() != 43455:
+    if lib.uniffi_prolly_bindings_checksum_func_range_proof_from_node_bytes() != 19550:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_func_range_proof_path_node_bytes() != 42991:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
@@ -675,6 +679,8 @@ def _uniffi_check_api_checksums(lib):
     if lib.uniffi_prolly_bindings_checksum_func_tombstone_upsert_mutation() != 25846:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_func_tree_config() != 13018:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_func_tree_config_from_format_bytes() != 40159:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_func_u128_key() != 12112:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
@@ -840,7 +846,7 @@ def _uniffi_check_api_checksums(lib):
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_prollyengine_create() != 15621:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    if lib.uniffi_prolly_bindings_checksum_method_prollyengine_cursor_window() != 31202:
+    if lib.uniffi_prolly_bindings_checksum_method_prollyengine_cursor_window() != 33600:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_prollyengine_debug_compare_trees() != 16233:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
@@ -862,9 +868,9 @@ def _uniffi_check_api_checksums(lib):
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_prollyengine_diff() != 59822:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    if lib.uniffi_prolly_bindings_checksum_method_prollyengine_diff_from_cursor() != 14790:
+    if lib.uniffi_prolly_bindings_checksum_method_prollyengine_diff_from_cursor() != 56175:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    if lib.uniffi_prolly_bindings_checksum_method_prollyengine_diff_page() != 49332:
+    if lib.uniffi_prolly_bindings_checksum_method_prollyengine_diff_page() != 52911:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_prollyengine_export_snapshot() != 39238:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
@@ -924,11 +930,11 @@ def _uniffi_check_api_checksums(lib):
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_prollyengine_merge_prefix_with_resolver() != 52691:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    if lib.uniffi_prolly_bindings_checksum_method_prollyengine_merge_range() != 62183:
+    if lib.uniffi_prolly_bindings_checksum_method_prollyengine_merge_range() != 16455:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    if lib.uniffi_prolly_bindings_checksum_method_prollyengine_merge_range_with_policy() != 37378:
+    if lib.uniffi_prolly_bindings_checksum_method_prollyengine_merge_range_with_policy() != 63569:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    if lib.uniffi_prolly_bindings_checksum_method_prollyengine_merge_range_with_resolver() != 48921:
+    if lib.uniffi_prolly_bindings_checksum_method_prollyengine_merge_range_with_resolver() != 18526:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_prollyengine_merge_with_policy() != 11524:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
@@ -962,7 +968,7 @@ def _uniffi_check_api_checksums(lib):
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_prollyengine_prefix_reverse_page() != 20711:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    if lib.uniffi_prolly_bindings_checksum_method_prollyengine_prove_diff_page() != 18402:
+    if lib.uniffi_prolly_bindings_checksum_method_prollyengine_prove_diff_page() != 3176:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_prollyengine_prove_key() != 4612:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
@@ -970,9 +976,9 @@ def _uniffi_check_api_checksums(lib):
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_prollyengine_prove_prefix() != 32453:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    if lib.uniffi_prolly_bindings_checksum_method_prollyengine_prove_range() != 59564:
+    if lib.uniffi_prolly_bindings_checksum_method_prollyengine_prove_range() != 40694:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    if lib.uniffi_prolly_bindings_checksum_method_prollyengine_prove_range_page() != 43652:
+    if lib.uniffi_prolly_bindings_checksum_method_prollyengine_prove_range_page() != 35557:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_prollyengine_publish_changed_spans_hint() != 57418:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
@@ -990,15 +996,15 @@ def _uniffi_check_api_checksums(lib):
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_prollyengine_put_large_value() != 26504:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    if lib.uniffi_prolly_bindings_checksum_method_prollyengine_range() != 29092:
+    if lib.uniffi_prolly_bindings_checksum_method_prollyengine_range() != 24616:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    if lib.uniffi_prolly_bindings_checksum_method_prollyengine_range_after() != 47062:
+    if lib.uniffi_prolly_bindings_checksum_method_prollyengine_range_after() != 51929:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    if lib.uniffi_prolly_bindings_checksum_method_prollyengine_range_diff() != 59421:
+    if lib.uniffi_prolly_bindings_checksum_method_prollyengine_range_diff() != 65006:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    if lib.uniffi_prolly_bindings_checksum_method_prollyengine_range_from_cursor() != 7151:
+    if lib.uniffi_prolly_bindings_checksum_method_prollyengine_range_from_cursor() != 33634:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    if lib.uniffi_prolly_bindings_checksum_method_prollyengine_range_page() != 26598:
+    if lib.uniffi_prolly_bindings_checksum_method_prollyengine_range_page() != 7048:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_prollyengine_reset_metrics() != 10217:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
@@ -2003,6 +2009,13 @@ _UniffiLib.uniffi_prolly_bindings_fn_func_tree_config.argtypes = (
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UniffiLib.uniffi_prolly_bindings_fn_func_tree_config.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_func_tree_config_from_format_bytes.argtypes = (
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_func_tree_config_from_format_bytes.restype = _UniffiRustBuffer
 _UniffiLib.uniffi_prolly_bindings_fn_func_u128_key.argtypes = (
     _UniffiRustBuffer,
     ctypes.POINTER(_UniffiRustCallStatus),
@@ -3572,6 +3585,9 @@ _UniffiLib.uniffi_prolly_bindings_checksum_func_tombstone_upsert_mutation.restyp
 _UniffiLib.uniffi_prolly_bindings_checksum_func_tree_config.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_func_tree_config.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_func_tree_config_from_format_bytes.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_func_tree_config_from_format_bytes.restype = ctypes.c_uint16
 _UniffiLib.uniffi_prolly_bindings_checksum_func_u128_key.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_func_u128_key.restype = ctypes.c_uint16
@@ -4865,7 +4881,7 @@ class _UniffiFfiConverterTypeEncodingRecord(_UniffiConverterRustBuffer):
 
 @dataclass
 class ConfigRecord:
-    def __init__(self, *, min_chunk_size:int, max_chunk_size:int, chunking_factor:int, hash_seed:int, encoding:EncodingRecord, node_cache_max_nodes:typing.Optional[int], node_cache_max_bytes:typing.Optional[int]):
+    def __init__(self, *, min_chunk_size:int, max_chunk_size:int, chunking_factor:int, hash_seed:int, encoding:EncodingRecord, node_cache_max_nodes:typing.Optional[int], node_cache_max_bytes:typing.Optional[int], format_bytes:typing.Optional[bytes]):
         self.min_chunk_size = min_chunk_size
         self.max_chunk_size = max_chunk_size
         self.chunking_factor = chunking_factor
@@ -4873,12 +4889,13 @@ class ConfigRecord:
         self.encoding = encoding
         self.node_cache_max_nodes = node_cache_max_nodes
         self.node_cache_max_bytes = node_cache_max_bytes
+        self.format_bytes = format_bytes
 
 
 
 
     def __str__(self):
-        return "ConfigRecord(min_chunk_size={}, max_chunk_size={}, chunking_factor={}, hash_seed={}, encoding={}, node_cache_max_nodes={}, node_cache_max_bytes={})".format(self.min_chunk_size, self.max_chunk_size, self.chunking_factor, self.hash_seed, self.encoding, self.node_cache_max_nodes, self.node_cache_max_bytes)
+        return "ConfigRecord(min_chunk_size={}, max_chunk_size={}, chunking_factor={}, hash_seed={}, encoding={}, node_cache_max_nodes={}, node_cache_max_bytes={}, format_bytes={})".format(self.min_chunk_size, self.max_chunk_size, self.chunking_factor, self.hash_seed, self.encoding, self.node_cache_max_nodes, self.node_cache_max_bytes, self.format_bytes)
     def __eq__(self, other):
         if self.min_chunk_size != other.min_chunk_size:
             return False
@@ -4894,6 +4911,8 @@ class ConfigRecord:
             return False
         if self.node_cache_max_bytes != other.node_cache_max_bytes:
             return False
+        if self.format_bytes != other.format_bytes:
+            return False
         return True
 
 class _UniffiFfiConverterTypeConfigRecord(_UniffiConverterRustBuffer):
@@ -4907,6 +4926,7 @@ class _UniffiFfiConverterTypeConfigRecord(_UniffiConverterRustBuffer):
             encoding=_UniffiFfiConverterTypeEncodingRecord.read(buf),
             node_cache_max_nodes=_UniffiFfiConverterOptionalUInt64.read(buf),
             node_cache_max_bytes=_UniffiFfiConverterOptionalUInt64.read(buf),
+            format_bytes=_UniffiFfiConverterOptionalBytes.read(buf),
         )
 
     @staticmethod
@@ -4918,6 +4938,7 @@ class _UniffiFfiConverterTypeConfigRecord(_UniffiConverterRustBuffer):
         _UniffiFfiConverterTypeEncodingRecord.check_lower(value.encoding)
         _UniffiFfiConverterOptionalUInt64.check_lower(value.node_cache_max_nodes)
         _UniffiFfiConverterOptionalUInt64.check_lower(value.node_cache_max_bytes)
+        _UniffiFfiConverterOptionalBytes.check_lower(value.format_bytes)
 
     @staticmethod
     def write(value, buf):
@@ -4928,6 +4949,7 @@ class _UniffiFfiConverterTypeConfigRecord(_UniffiConverterRustBuffer):
         _UniffiFfiConverterTypeEncodingRecord.write(value.encoding, buf)
         _UniffiFfiConverterOptionalUInt64.write(value.node_cache_max_nodes, buf)
         _UniffiFfiConverterOptionalUInt64.write(value.node_cache_max_bytes, buf)
+        _UniffiFfiConverterOptionalBytes.write(value.format_bytes, buf)
 
 @dataclass
 class TreeRecord:
@@ -5908,6 +5930,29 @@ class _UniffiFfiConverterSequenceBytes(_UniffiConverterRustBuffer):
             _UniffiFfiConverterBytes.read(buf) for i in range(count)
         ]
 
+class _UniffiFfiConverterSequenceUInt64(_UniffiConverterRustBuffer):
+    @classmethod
+    def check_lower(cls, value):
+        for item in value:
+            _UniffiFfiConverterUInt64.check_lower(item)
+
+    @classmethod
+    def write(cls, value, buf):
+        items = len(value)
+        buf.write_i32(items)
+        for item in value:
+            _UniffiFfiConverterUInt64.write(item, buf)
+
+    @classmethod
+    def read(cls, buf):
+        count = buf.read_i32()
+        if count < 0:
+            raise InternalError("Unexpected negative sequence length")
+
+        return [
+            _UniffiFfiConverterUInt64.read(buf) for i in range(count)
+        ]
+
 class _UniffiFfiConverterUInt8(_UniffiConverterPrimitiveInt):
     CLASS_NAME = "u8"
     VALUE_MIN = 0
@@ -5923,9 +5968,10 @@ class _UniffiFfiConverterUInt8(_UniffiConverterPrimitiveInt):
 
 @dataclass
 class NodeRecord:
-    def __init__(self, *, keys:typing.List[bytes], vals:typing.List[bytes], leaf:bool, level:int, min_chunk_size:int, max_chunk_size:int, chunking_factor:int, hash_seed:int, encoding:EncodingRecord):
+    def __init__(self, *, keys:typing.List[bytes], vals:typing.List[bytes], child_counts:typing.List[int], leaf:bool, level:int, min_chunk_size:int, max_chunk_size:int, chunking_factor:int, hash_seed:int, encoding:EncodingRecord, format_bytes:typing.Optional[bytes]):
         self.keys = keys
         self.vals = vals
+        self.child_counts = child_counts
         self.leaf = leaf
         self.level = level
         self.min_chunk_size = min_chunk_size
@@ -5933,16 +5979,19 @@ class NodeRecord:
         self.chunking_factor = chunking_factor
         self.hash_seed = hash_seed
         self.encoding = encoding
+        self.format_bytes = format_bytes
 
 
 
 
     def __str__(self):
-        return "NodeRecord(keys={}, vals={}, leaf={}, level={}, min_chunk_size={}, max_chunk_size={}, chunking_factor={}, hash_seed={}, encoding={})".format(self.keys, self.vals, self.leaf, self.level, self.min_chunk_size, self.max_chunk_size, self.chunking_factor, self.hash_seed, self.encoding)
+        return "NodeRecord(keys={}, vals={}, child_counts={}, leaf={}, level={}, min_chunk_size={}, max_chunk_size={}, chunking_factor={}, hash_seed={}, encoding={}, format_bytes={})".format(self.keys, self.vals, self.child_counts, self.leaf, self.level, self.min_chunk_size, self.max_chunk_size, self.chunking_factor, self.hash_seed, self.encoding, self.format_bytes)
     def __eq__(self, other):
         if self.keys != other.keys:
             return False
         if self.vals != other.vals:
+            return False
+        if self.child_counts != other.child_counts:
             return False
         if self.leaf != other.leaf:
             return False
@@ -5958,6 +6007,8 @@ class NodeRecord:
             return False
         if self.encoding != other.encoding:
             return False
+        if self.format_bytes != other.format_bytes:
+            return False
         return True
 
 class _UniffiFfiConverterTypeNodeRecord(_UniffiConverterRustBuffer):
@@ -5966,6 +6017,7 @@ class _UniffiFfiConverterTypeNodeRecord(_UniffiConverterRustBuffer):
         return NodeRecord(
             keys=_UniffiFfiConverterSequenceBytes.read(buf),
             vals=_UniffiFfiConverterSequenceBytes.read(buf),
+            child_counts=_UniffiFfiConverterSequenceUInt64.read(buf),
             leaf=_UniffiFfiConverterBoolean.read(buf),
             level=_UniffiFfiConverterUInt8.read(buf),
             min_chunk_size=_UniffiFfiConverterUInt64.read(buf),
@@ -5973,12 +6025,14 @@ class _UniffiFfiConverterTypeNodeRecord(_UniffiConverterRustBuffer):
             chunking_factor=_UniffiFfiConverterUInt32.read(buf),
             hash_seed=_UniffiFfiConverterUInt64.read(buf),
             encoding=_UniffiFfiConverterTypeEncodingRecord.read(buf),
+            format_bytes=_UniffiFfiConverterOptionalBytes.read(buf),
         )
 
     @staticmethod
     def check_lower(value):
         _UniffiFfiConverterSequenceBytes.check_lower(value.keys)
         _UniffiFfiConverterSequenceBytes.check_lower(value.vals)
+        _UniffiFfiConverterSequenceUInt64.check_lower(value.child_counts)
         _UniffiFfiConverterBoolean.check_lower(value.leaf)
         _UniffiFfiConverterUInt8.check_lower(value.level)
         _UniffiFfiConverterUInt64.check_lower(value.min_chunk_size)
@@ -5986,11 +6040,13 @@ class _UniffiFfiConverterTypeNodeRecord(_UniffiConverterRustBuffer):
         _UniffiFfiConverterUInt32.check_lower(value.chunking_factor)
         _UniffiFfiConverterUInt64.check_lower(value.hash_seed)
         _UniffiFfiConverterTypeEncodingRecord.check_lower(value.encoding)
+        _UniffiFfiConverterOptionalBytes.check_lower(value.format_bytes)
 
     @staticmethod
     def write(value, buf):
         _UniffiFfiConverterSequenceBytes.write(value.keys, buf)
         _UniffiFfiConverterSequenceBytes.write(value.vals, buf)
+        _UniffiFfiConverterSequenceUInt64.write(value.child_counts, buf)
         _UniffiFfiConverterBoolean.write(value.leaf, buf)
         _UniffiFfiConverterUInt8.write(value.level, buf)
         _UniffiFfiConverterUInt64.write(value.min_chunk_size, buf)
@@ -5998,6 +6054,7 @@ class _UniffiFfiConverterTypeNodeRecord(_UniffiConverterRustBuffer):
         _UniffiFfiConverterUInt32.write(value.chunking_factor, buf)
         _UniffiFfiConverterUInt64.write(value.hash_seed, buf)
         _UniffiFfiConverterTypeEncodingRecord.write(value.encoding, buf)
+        _UniffiFfiConverterOptionalBytes.write(value.format_bytes, buf)
 
 class _UniffiFfiConverterSequenceTypeNodeRecord(_UniffiConverterRustBuffer):
     @classmethod
@@ -13453,7 +13510,7 @@ class ProllyEngineProtocol(typing.Protocol):
         raise NotImplementedError
     def create(self, ) -> TreeRecord:
         raise NotImplementedError
-    def cursor_window(self, tree: TreeRecord,key: bytes,end: typing.Optional[bytes],limit: int) -> CursorWindowRecord:
+    def cursor_window(self, tree: TreeRecord,key: bytes,range_end: typing.Optional[bytes],limit: int) -> CursorWindowRecord:
         raise NotImplementedError
     def debug_compare_trees(self, left: TreeRecord,right: TreeRecord) -> TreeDebugComparisonRecord:
         raise NotImplementedError
@@ -13475,9 +13532,9 @@ class ProllyEngineProtocol(typing.Protocol):
         raise NotImplementedError
     def diff(self, base: TreeRecord,other: TreeRecord) -> typing.List[DiffRecord]:
         raise NotImplementedError
-    def diff_from_cursor(self, base: TreeRecord,other: TreeRecord,cursor: typing.Optional[RangeCursorRecord],end: typing.Optional[bytes]) -> typing.List[DiffRecord]:
+    def diff_from_cursor(self, base: TreeRecord,other: TreeRecord,cursor: typing.Optional[RangeCursorRecord],range_end: typing.Optional[bytes]) -> typing.List[DiffRecord]:
         raise NotImplementedError
-    def diff_page(self, base: TreeRecord,other: TreeRecord,cursor: typing.Optional[RangeCursorRecord],end: typing.Optional[bytes],limit: int) -> DiffPageRecord:
+    def diff_page(self, base: TreeRecord,other: TreeRecord,cursor: typing.Optional[RangeCursorRecord],range_end: typing.Optional[bytes],limit: int) -> DiffPageRecord:
         raise NotImplementedError
     def export_snapshot(self, tree: TreeRecord) -> SnapshotBundleRecord:
         raise NotImplementedError
@@ -13537,11 +13594,11 @@ class ProllyEngineProtocol(typing.Protocol):
         raise NotImplementedError
     def merge_prefix_with_resolver(self, base: TreeRecord,left: TreeRecord,right: TreeRecord,prefix: bytes,resolver: MergeResolverCallback) -> TreeRecord:
         raise NotImplementedError
-    def merge_range(self, base: TreeRecord,left: TreeRecord,right: TreeRecord,start: bytes,end: typing.Optional[bytes],resolver: typing.Optional[str]) -> TreeRecord:
+    def merge_range(self, base: TreeRecord,left: TreeRecord,right: TreeRecord,start: bytes,range_end: typing.Optional[bytes],resolver: typing.Optional[str]) -> TreeRecord:
         raise NotImplementedError
-    def merge_range_with_policy(self, base: TreeRecord,left: TreeRecord,right: TreeRecord,start: bytes,end: typing.Optional[bytes],policy: MergePolicyRegistry) -> TreeRecord:
+    def merge_range_with_policy(self, base: TreeRecord,left: TreeRecord,right: TreeRecord,start: bytes,range_end: typing.Optional[bytes],policy: MergePolicyRegistry) -> TreeRecord:
         raise NotImplementedError
-    def merge_range_with_resolver(self, base: TreeRecord,left: TreeRecord,right: TreeRecord,start: bytes,end: typing.Optional[bytes],resolver: MergeResolverCallback) -> TreeRecord:
+    def merge_range_with_resolver(self, base: TreeRecord,left: TreeRecord,right: TreeRecord,start: bytes,range_end: typing.Optional[bytes],resolver: MergeResolverCallback) -> TreeRecord:
         raise NotImplementedError
     def merge_with_policy(self, base: TreeRecord,left: TreeRecord,right: TreeRecord,policy: MergePolicyRegistry) -> TreeRecord:
         raise NotImplementedError
@@ -13575,7 +13632,7 @@ class ProllyEngineProtocol(typing.Protocol):
         raise NotImplementedError
     def prefix_reverse_page(self, tree: TreeRecord,prefix: bytes,cursor: typing.Optional[ReverseCursorRecord],limit: int) -> ReversePageRecord:
         raise NotImplementedError
-    def prove_diff_page(self, base: TreeRecord,other: TreeRecord,cursor: typing.Optional[RangeCursorRecord],end: typing.Optional[bytes],limit: int) -> ProvedDiffPageRecord:
+    def prove_diff_page(self, base: TreeRecord,other: TreeRecord,cursor: typing.Optional[RangeCursorRecord],range_end: typing.Optional[bytes],limit: int) -> ProvedDiffPageRecord:
         raise NotImplementedError
     def prove_key(self, tree: TreeRecord,key: bytes) -> KeyProofRecord:
         raise NotImplementedError
@@ -13583,9 +13640,9 @@ class ProllyEngineProtocol(typing.Protocol):
         raise NotImplementedError
     def prove_prefix(self, tree: TreeRecord,prefix: bytes) -> RangeProofRecord:
         raise NotImplementedError
-    def prove_range(self, tree: TreeRecord,start: bytes,end: typing.Optional[bytes]) -> RangeProofRecord:
+    def prove_range(self, tree: TreeRecord,start: bytes,range_end: typing.Optional[bytes]) -> RangeProofRecord:
         raise NotImplementedError
-    def prove_range_page(self, tree: TreeRecord,cursor: typing.Optional[RangeCursorRecord],end: typing.Optional[bytes],limit: int) -> ProvedRangePageRecord:
+    def prove_range_page(self, tree: TreeRecord,cursor: typing.Optional[RangeCursorRecord],range_end: typing.Optional[bytes],limit: int) -> ProvedRangePageRecord:
         raise NotImplementedError
     def publish_changed_spans_hint(self, base: TreeRecord,changed: TreeRecord,spans: typing.List[ChangedSpanRecord]) -> bool:
         raise NotImplementedError
@@ -13603,15 +13660,15 @@ class ProllyEngineProtocol(typing.Protocol):
         raise NotImplementedError
     def put_large_value(self, blob_store: ProllyBlobStore,tree: TreeRecord,key: bytes,value: bytes,config: LargeValueConfigRecord) -> TreeRecord:
         raise NotImplementedError
-    def range(self, tree: TreeRecord,start: bytes,end: typing.Optional[bytes]) -> typing.List[EntryRecord]:
+    def range(self, tree: TreeRecord,start: bytes,range_end: typing.Optional[bytes]) -> typing.List[EntryRecord]:
         raise NotImplementedError
-    def range_after(self, tree: TreeRecord,after_key: bytes,end: typing.Optional[bytes]) -> typing.List[EntryRecord]:
+    def range_after(self, tree: TreeRecord,after_key: bytes,range_end: typing.Optional[bytes]) -> typing.List[EntryRecord]:
         raise NotImplementedError
-    def range_diff(self, base: TreeRecord,other: TreeRecord,start: bytes,end: typing.Optional[bytes]) -> typing.List[DiffRecord]:
+    def range_diff(self, base: TreeRecord,other: TreeRecord,start: bytes,range_end: typing.Optional[bytes]) -> typing.List[DiffRecord]:
         raise NotImplementedError
-    def range_from_cursor(self, tree: TreeRecord,cursor: typing.Optional[RangeCursorRecord],end: typing.Optional[bytes]) -> typing.List[EntryRecord]:
+    def range_from_cursor(self, tree: TreeRecord,cursor: typing.Optional[RangeCursorRecord],range_end: typing.Optional[bytes]) -> typing.List[EntryRecord]:
         raise NotImplementedError
-    def range_page(self, tree: TreeRecord,cursor: typing.Optional[RangeCursorRecord],end: typing.Optional[bytes],limit: int) -> RangePageRecord:
+    def range_page(self, tree: TreeRecord,cursor: typing.Optional[RangeCursorRecord],range_end: typing.Optional[bytes],limit: int) -> RangePageRecord:
         raise NotImplementedError
     def reset_metrics(self, ) -> None:
         raise NotImplementedError
@@ -14120,20 +14177,20 @@ class ProllyEngine(ProllyEngineProtocol):
             *_uniffi_lowered_args,
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
-    def cursor_window(self, tree: TreeRecord,key: bytes,end: typing.Optional[bytes],limit: int) -> CursorWindowRecord:
+    def cursor_window(self, tree: TreeRecord,key: bytes,range_end: typing.Optional[bytes],limit: int) -> CursorWindowRecord:
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
 
         _UniffiFfiConverterBytes.check_lower(key)
 
-        _UniffiFfiConverterOptionalBytes.check_lower(end)
+        _UniffiFfiConverterOptionalBytes.check_lower(range_end)
 
         _UniffiFfiConverterUInt64.check_lower(limit)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
             _UniffiFfiConverterTypeTreeRecord.lower(tree),
             _UniffiFfiConverterBytes.lower(key),
-            _UniffiFfiConverterOptionalBytes.lower(end),
+            _UniffiFfiConverterOptionalBytes.lower(range_end),
             _UniffiFfiConverterUInt64.lower(limit),
         )
         _uniffi_lift_return = _UniffiFfiConverterTypeCursorWindowRecord.lift
@@ -14312,7 +14369,7 @@ class ProllyEngine(ProllyEngineProtocol):
             *_uniffi_lowered_args,
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
-    def diff_from_cursor(self, base: TreeRecord,other: TreeRecord,cursor: typing.Optional[RangeCursorRecord],end: typing.Optional[bytes]) -> typing.List[DiffRecord]:
+    def diff_from_cursor(self, base: TreeRecord,other: TreeRecord,cursor: typing.Optional[RangeCursorRecord],range_end: typing.Optional[bytes]) -> typing.List[DiffRecord]:
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(base)
 
@@ -14320,13 +14377,13 @@ class ProllyEngine(ProllyEngineProtocol):
 
         _UniffiFfiConverterOptionalTypeRangeCursorRecord.check_lower(cursor)
 
-        _UniffiFfiConverterOptionalBytes.check_lower(end)
+        _UniffiFfiConverterOptionalBytes.check_lower(range_end)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
             _UniffiFfiConverterTypeTreeRecord.lower(base),
             _UniffiFfiConverterTypeTreeRecord.lower(other),
             _UniffiFfiConverterOptionalTypeRangeCursorRecord.lower(cursor),
-            _UniffiFfiConverterOptionalBytes.lower(end),
+            _UniffiFfiConverterOptionalBytes.lower(range_end),
         )
         _uniffi_lift_return = _UniffiFfiConverterSequenceTypeDiffRecord.lift
         _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
@@ -14336,7 +14393,7 @@ class ProllyEngine(ProllyEngineProtocol):
             *_uniffi_lowered_args,
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
-    def diff_page(self, base: TreeRecord,other: TreeRecord,cursor: typing.Optional[RangeCursorRecord],end: typing.Optional[bytes],limit: int) -> DiffPageRecord:
+    def diff_page(self, base: TreeRecord,other: TreeRecord,cursor: typing.Optional[RangeCursorRecord],range_end: typing.Optional[bytes],limit: int) -> DiffPageRecord:
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(base)
 
@@ -14344,7 +14401,7 @@ class ProllyEngine(ProllyEngineProtocol):
 
         _UniffiFfiConverterOptionalTypeRangeCursorRecord.check_lower(cursor)
 
-        _UniffiFfiConverterOptionalBytes.check_lower(end)
+        _UniffiFfiConverterOptionalBytes.check_lower(range_end)
 
         _UniffiFfiConverterUInt64.check_lower(limit)
         _uniffi_lowered_args = (
@@ -14352,7 +14409,7 @@ class ProllyEngine(ProllyEngineProtocol):
             _UniffiFfiConverterTypeTreeRecord.lower(base),
             _UniffiFfiConverterTypeTreeRecord.lower(other),
             _UniffiFfiConverterOptionalTypeRangeCursorRecord.lower(cursor),
-            _UniffiFfiConverterOptionalBytes.lower(end),
+            _UniffiFfiConverterOptionalBytes.lower(range_end),
             _UniffiFfiConverterUInt64.lower(limit),
         )
         _uniffi_lift_return = _UniffiFfiConverterTypeDiffPageRecord.lift
@@ -14891,7 +14948,7 @@ class ProllyEngine(ProllyEngineProtocol):
             *_uniffi_lowered_args,
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
-    def merge_range(self, base: TreeRecord,left: TreeRecord,right: TreeRecord,start: bytes,end: typing.Optional[bytes],resolver: typing.Optional[str]) -> TreeRecord:
+    def merge_range(self, base: TreeRecord,left: TreeRecord,right: TreeRecord,start: bytes,range_end: typing.Optional[bytes],resolver: typing.Optional[str]) -> TreeRecord:
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(base)
 
@@ -14901,7 +14958,7 @@ class ProllyEngine(ProllyEngineProtocol):
 
         _UniffiFfiConverterBytes.check_lower(start)
 
-        _UniffiFfiConverterOptionalBytes.check_lower(end)
+        _UniffiFfiConverterOptionalBytes.check_lower(range_end)
 
         _UniffiFfiConverterOptionalString.check_lower(resolver)
         _uniffi_lowered_args = (
@@ -14910,7 +14967,7 @@ class ProllyEngine(ProllyEngineProtocol):
             _UniffiFfiConverterTypeTreeRecord.lower(left),
             _UniffiFfiConverterTypeTreeRecord.lower(right),
             _UniffiFfiConverterBytes.lower(start),
-            _UniffiFfiConverterOptionalBytes.lower(end),
+            _UniffiFfiConverterOptionalBytes.lower(range_end),
             _UniffiFfiConverterOptionalString.lower(resolver),
         )
         _uniffi_lift_return = _UniffiFfiConverterTypeTreeRecord.lift
@@ -14921,7 +14978,7 @@ class ProllyEngine(ProllyEngineProtocol):
             *_uniffi_lowered_args,
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
-    def merge_range_with_policy(self, base: TreeRecord,left: TreeRecord,right: TreeRecord,start: bytes,end: typing.Optional[bytes],policy: MergePolicyRegistry) -> TreeRecord:
+    def merge_range_with_policy(self, base: TreeRecord,left: TreeRecord,right: TreeRecord,start: bytes,range_end: typing.Optional[bytes],policy: MergePolicyRegistry) -> TreeRecord:
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(base)
 
@@ -14931,7 +14988,7 @@ class ProllyEngine(ProllyEngineProtocol):
 
         _UniffiFfiConverterBytes.check_lower(start)
 
-        _UniffiFfiConverterOptionalBytes.check_lower(end)
+        _UniffiFfiConverterOptionalBytes.check_lower(range_end)
 
         _UniffiFfiConverterTypeMergePolicyRegistry.check_lower(policy)
         _uniffi_lowered_args = (
@@ -14940,7 +14997,7 @@ class ProllyEngine(ProllyEngineProtocol):
             _UniffiFfiConverterTypeTreeRecord.lower(left),
             _UniffiFfiConverterTypeTreeRecord.lower(right),
             _UniffiFfiConverterBytes.lower(start),
-            _UniffiFfiConverterOptionalBytes.lower(end),
+            _UniffiFfiConverterOptionalBytes.lower(range_end),
             _UniffiFfiConverterTypeMergePolicyRegistry.lower(policy),
         )
         _uniffi_lift_return = _UniffiFfiConverterTypeTreeRecord.lift
@@ -14951,7 +15008,7 @@ class ProllyEngine(ProllyEngineProtocol):
             *_uniffi_lowered_args,
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
-    def merge_range_with_resolver(self, base: TreeRecord,left: TreeRecord,right: TreeRecord,start: bytes,end: typing.Optional[bytes],resolver: MergeResolverCallback) -> TreeRecord:
+    def merge_range_with_resolver(self, base: TreeRecord,left: TreeRecord,right: TreeRecord,start: bytes,range_end: typing.Optional[bytes],resolver: MergeResolverCallback) -> TreeRecord:
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(base)
 
@@ -14961,7 +15018,7 @@ class ProllyEngine(ProllyEngineProtocol):
 
         _UniffiFfiConverterBytes.check_lower(start)
 
-        _UniffiFfiConverterOptionalBytes.check_lower(end)
+        _UniffiFfiConverterOptionalBytes.check_lower(range_end)
 
         _UniffiFfiConverterTypeMergeResolverCallback.check_lower(resolver)
         _uniffi_lowered_args = (
@@ -14970,7 +15027,7 @@ class ProllyEngine(ProllyEngineProtocol):
             _UniffiFfiConverterTypeTreeRecord.lower(left),
             _UniffiFfiConverterTypeTreeRecord.lower(right),
             _UniffiFfiConverterBytes.lower(start),
-            _UniffiFfiConverterOptionalBytes.lower(end),
+            _UniffiFfiConverterOptionalBytes.lower(range_end),
             _UniffiFfiConverterTypeMergeResolverCallback.lower(resolver),
         )
         _uniffi_lift_return = _UniffiFfiConverterTypeTreeRecord.lift
@@ -15287,7 +15344,7 @@ class ProllyEngine(ProllyEngineProtocol):
             *_uniffi_lowered_args,
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
-    def prove_diff_page(self, base: TreeRecord,other: TreeRecord,cursor: typing.Optional[RangeCursorRecord],end: typing.Optional[bytes],limit: int) -> ProvedDiffPageRecord:
+    def prove_diff_page(self, base: TreeRecord,other: TreeRecord,cursor: typing.Optional[RangeCursorRecord],range_end: typing.Optional[bytes],limit: int) -> ProvedDiffPageRecord:
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(base)
 
@@ -15295,7 +15352,7 @@ class ProllyEngine(ProllyEngineProtocol):
 
         _UniffiFfiConverterOptionalTypeRangeCursorRecord.check_lower(cursor)
 
-        _UniffiFfiConverterOptionalBytes.check_lower(end)
+        _UniffiFfiConverterOptionalBytes.check_lower(range_end)
 
         _UniffiFfiConverterUInt64.check_lower(limit)
         _uniffi_lowered_args = (
@@ -15303,7 +15360,7 @@ class ProllyEngine(ProllyEngineProtocol):
             _UniffiFfiConverterTypeTreeRecord.lower(base),
             _UniffiFfiConverterTypeTreeRecord.lower(other),
             _UniffiFfiConverterOptionalTypeRangeCursorRecord.lower(cursor),
-            _UniffiFfiConverterOptionalBytes.lower(end),
+            _UniffiFfiConverterOptionalBytes.lower(range_end),
             _UniffiFfiConverterUInt64.lower(limit),
         )
         _uniffi_lift_return = _UniffiFfiConverterTypeProvedDiffPageRecord.lift
@@ -15368,18 +15425,18 @@ class ProllyEngine(ProllyEngineProtocol):
             *_uniffi_lowered_args,
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
-    def prove_range(self, tree: TreeRecord,start: bytes,end: typing.Optional[bytes]) -> RangeProofRecord:
+    def prove_range(self, tree: TreeRecord,start: bytes,range_end: typing.Optional[bytes]) -> RangeProofRecord:
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
 
         _UniffiFfiConverterBytes.check_lower(start)
 
-        _UniffiFfiConverterOptionalBytes.check_lower(end)
+        _UniffiFfiConverterOptionalBytes.check_lower(range_end)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
             _UniffiFfiConverterTypeTreeRecord.lower(tree),
             _UniffiFfiConverterBytes.lower(start),
-            _UniffiFfiConverterOptionalBytes.lower(end),
+            _UniffiFfiConverterOptionalBytes.lower(range_end),
         )
         _uniffi_lift_return = _UniffiFfiConverterTypeRangeProofRecord.lift
         _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
@@ -15389,20 +15446,20 @@ class ProllyEngine(ProllyEngineProtocol):
             *_uniffi_lowered_args,
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
-    def prove_range_page(self, tree: TreeRecord,cursor: typing.Optional[RangeCursorRecord],end: typing.Optional[bytes],limit: int) -> ProvedRangePageRecord:
+    def prove_range_page(self, tree: TreeRecord,cursor: typing.Optional[RangeCursorRecord],range_end: typing.Optional[bytes],limit: int) -> ProvedRangePageRecord:
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
 
         _UniffiFfiConverterOptionalTypeRangeCursorRecord.check_lower(cursor)
 
-        _UniffiFfiConverterOptionalBytes.check_lower(end)
+        _UniffiFfiConverterOptionalBytes.check_lower(range_end)
 
         _UniffiFfiConverterUInt64.check_lower(limit)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
             _UniffiFfiConverterTypeTreeRecord.lower(tree),
             _UniffiFfiConverterOptionalTypeRangeCursorRecord.lower(cursor),
-            _UniffiFfiConverterOptionalBytes.lower(end),
+            _UniffiFfiConverterOptionalBytes.lower(range_end),
             _UniffiFfiConverterUInt64.lower(limit),
         )
         _uniffi_lift_return = _UniffiFfiConverterTypeProvedRangePageRecord.lift
@@ -15584,18 +15641,18 @@ class ProllyEngine(ProllyEngineProtocol):
             *_uniffi_lowered_args,
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
-    def range(self, tree: TreeRecord,start: bytes,end: typing.Optional[bytes]) -> typing.List[EntryRecord]:
+    def range(self, tree: TreeRecord,start: bytes,range_end: typing.Optional[bytes]) -> typing.List[EntryRecord]:
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
 
         _UniffiFfiConverterBytes.check_lower(start)
 
-        _UniffiFfiConverterOptionalBytes.check_lower(end)
+        _UniffiFfiConverterOptionalBytes.check_lower(range_end)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
             _UniffiFfiConverterTypeTreeRecord.lower(tree),
             _UniffiFfiConverterBytes.lower(start),
-            _UniffiFfiConverterOptionalBytes.lower(end),
+            _UniffiFfiConverterOptionalBytes.lower(range_end),
         )
         _uniffi_lift_return = _UniffiFfiConverterSequenceTypeEntryRecord.lift
         _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
@@ -15605,18 +15662,18 @@ class ProllyEngine(ProllyEngineProtocol):
             *_uniffi_lowered_args,
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
-    def range_after(self, tree: TreeRecord,after_key: bytes,end: typing.Optional[bytes]) -> typing.List[EntryRecord]:
+    def range_after(self, tree: TreeRecord,after_key: bytes,range_end: typing.Optional[bytes]) -> typing.List[EntryRecord]:
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
 
         _UniffiFfiConverterBytes.check_lower(after_key)
 
-        _UniffiFfiConverterOptionalBytes.check_lower(end)
+        _UniffiFfiConverterOptionalBytes.check_lower(range_end)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
             _UniffiFfiConverterTypeTreeRecord.lower(tree),
             _UniffiFfiConverterBytes.lower(after_key),
-            _UniffiFfiConverterOptionalBytes.lower(end),
+            _UniffiFfiConverterOptionalBytes.lower(range_end),
         )
         _uniffi_lift_return = _UniffiFfiConverterSequenceTypeEntryRecord.lift
         _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
@@ -15626,7 +15683,7 @@ class ProllyEngine(ProllyEngineProtocol):
             *_uniffi_lowered_args,
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
-    def range_diff(self, base: TreeRecord,other: TreeRecord,start: bytes,end: typing.Optional[bytes]) -> typing.List[DiffRecord]:
+    def range_diff(self, base: TreeRecord,other: TreeRecord,start: bytes,range_end: typing.Optional[bytes]) -> typing.List[DiffRecord]:
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(base)
 
@@ -15634,13 +15691,13 @@ class ProllyEngine(ProllyEngineProtocol):
 
         _UniffiFfiConverterBytes.check_lower(start)
 
-        _UniffiFfiConverterOptionalBytes.check_lower(end)
+        _UniffiFfiConverterOptionalBytes.check_lower(range_end)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
             _UniffiFfiConverterTypeTreeRecord.lower(base),
             _UniffiFfiConverterTypeTreeRecord.lower(other),
             _UniffiFfiConverterBytes.lower(start),
-            _UniffiFfiConverterOptionalBytes.lower(end),
+            _UniffiFfiConverterOptionalBytes.lower(range_end),
         )
         _uniffi_lift_return = _UniffiFfiConverterSequenceTypeDiffRecord.lift
         _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
@@ -15650,18 +15707,18 @@ class ProllyEngine(ProllyEngineProtocol):
             *_uniffi_lowered_args,
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
-    def range_from_cursor(self, tree: TreeRecord,cursor: typing.Optional[RangeCursorRecord],end: typing.Optional[bytes]) -> typing.List[EntryRecord]:
+    def range_from_cursor(self, tree: TreeRecord,cursor: typing.Optional[RangeCursorRecord],range_end: typing.Optional[bytes]) -> typing.List[EntryRecord]:
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
 
         _UniffiFfiConverterOptionalTypeRangeCursorRecord.check_lower(cursor)
 
-        _UniffiFfiConverterOptionalBytes.check_lower(end)
+        _UniffiFfiConverterOptionalBytes.check_lower(range_end)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
             _UniffiFfiConverterTypeTreeRecord.lower(tree),
             _UniffiFfiConverterOptionalTypeRangeCursorRecord.lower(cursor),
-            _UniffiFfiConverterOptionalBytes.lower(end),
+            _UniffiFfiConverterOptionalBytes.lower(range_end),
         )
         _uniffi_lift_return = _UniffiFfiConverterSequenceTypeEntryRecord.lift
         _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
@@ -15671,20 +15728,20 @@ class ProllyEngine(ProllyEngineProtocol):
             *_uniffi_lowered_args,
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
-    def range_page(self, tree: TreeRecord,cursor: typing.Optional[RangeCursorRecord],end: typing.Optional[bytes],limit: int) -> RangePageRecord:
+    def range_page(self, tree: TreeRecord,cursor: typing.Optional[RangeCursorRecord],range_end: typing.Optional[bytes],limit: int) -> RangePageRecord:
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
 
         _UniffiFfiConverterOptionalTypeRangeCursorRecord.check_lower(cursor)
 
-        _UniffiFfiConverterOptionalBytes.check_lower(end)
+        _UniffiFfiConverterOptionalBytes.check_lower(range_end)
 
         _UniffiFfiConverterUInt64.check_lower(limit)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
             _UniffiFfiConverterTypeTreeRecord.lower(tree),
             _UniffiFfiConverterOptionalTypeRangeCursorRecord.lower(cursor),
-            _UniffiFfiConverterOptionalBytes.lower(end),
+            _UniffiFfiConverterOptionalBytes.lower(range_end),
             _UniffiFfiConverterUInt64.lower(limit),
         )
         _uniffi_lift_return = _UniffiFfiConverterTypeRangePageRecord.lift
@@ -16056,14 +16113,14 @@ def blob_ref_validate_bytes(reference: BlobRefRecord,bytes: bytes) -> None:
         *_uniffi_lowered_args,
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
-def changed_span(start: bytes,end: typing.Optional[bytes]) -> ChangedSpanRecord:
+def changed_span(start: bytes,range_end: typing.Optional[bytes]) -> ChangedSpanRecord:
 
     _UniffiFfiConverterBytes.check_lower(start)
 
-    _UniffiFfiConverterOptionalBytes.check_lower(end)
+    _UniffiFfiConverterOptionalBytes.check_lower(range_end)
     _uniffi_lowered_args = (
         _UniffiFfiConverterBytes.lower(start),
-        _UniffiFfiConverterOptionalBytes.lower(end),
+        _UniffiFfiConverterOptionalBytes.lower(range_end),
     )
     _uniffi_lift_return = _UniffiFfiConverterTypeChangedSpanRecord.lift
     _uniffi_error_converter = None
@@ -16762,19 +16819,19 @@ def range_page_proof_from_bytes(bytes: bytes) -> RangePageProofRecord:
         *_uniffi_lowered_args,
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
-def range_page_proof_from_node_bytes(root: typing.Optional[bytes],after: typing.Optional[bytes],end: typing.Optional[bytes],path_node_bytes: typing.List[bytes]) -> RangePageProofRecord:
+def range_page_proof_from_node_bytes(root: typing.Optional[bytes],after: typing.Optional[bytes],range_end: typing.Optional[bytes],path_node_bytes: typing.List[bytes]) -> RangePageProofRecord:
 
     _UniffiFfiConverterOptionalBytes.check_lower(root)
 
     _UniffiFfiConverterOptionalBytes.check_lower(after)
 
-    _UniffiFfiConverterOptionalBytes.check_lower(end)
+    _UniffiFfiConverterOptionalBytes.check_lower(range_end)
 
     _UniffiFfiConverterSequenceBytes.check_lower(path_node_bytes)
     _uniffi_lowered_args = (
         _UniffiFfiConverterOptionalBytes.lower(root),
         _UniffiFfiConverterOptionalBytes.lower(after),
-        _UniffiFfiConverterOptionalBytes.lower(end),
+        _UniffiFfiConverterOptionalBytes.lower(range_end),
         _UniffiFfiConverterSequenceBytes.lower(path_node_bytes),
     )
     _uniffi_lift_return = _UniffiFfiConverterTypeRangePageProofRecord.lift
@@ -16827,19 +16884,19 @@ def range_proof_from_bytes(bytes: bytes) -> RangeProofRecord:
         *_uniffi_lowered_args,
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
-def range_proof_from_node_bytes(root: typing.Optional[bytes],start: bytes,end: typing.Optional[bytes],path_node_bytes: typing.List[bytes]) -> RangeProofRecord:
+def range_proof_from_node_bytes(root: typing.Optional[bytes],start: bytes,range_end: typing.Optional[bytes],path_node_bytes: typing.List[bytes]) -> RangeProofRecord:
 
     _UniffiFfiConverterOptionalBytes.check_lower(root)
 
     _UniffiFfiConverterBytes.check_lower(start)
 
-    _UniffiFfiConverterOptionalBytes.check_lower(end)
+    _UniffiFfiConverterOptionalBytes.check_lower(range_end)
 
     _UniffiFfiConverterSequenceBytes.check_lower(path_node_bytes)
     _uniffi_lowered_args = (
         _UniffiFfiConverterOptionalBytes.lower(root),
         _UniffiFfiConverterBytes.lower(start),
-        _UniffiFfiConverterOptionalBytes.lower(end),
+        _UniffiFfiConverterOptionalBytes.lower(range_end),
         _UniffiFfiConverterSequenceBytes.lower(path_node_bytes),
     )
     _uniffi_lift_return = _UniffiFfiConverterTypeRangeProofRecord.lift
@@ -17457,6 +17514,26 @@ def tree_config(min_chunk_size: int,max_chunk_size: int,chunking_factor: int,has
         *_uniffi_lowered_args,
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
+def tree_config_from_format_bytes(format_bytes: bytes,node_cache_max_nodes: typing.Optional[int],node_cache_max_bytes: typing.Optional[int]) -> ConfigRecord:
+
+    _UniffiFfiConverterBytes.check_lower(format_bytes)
+
+    _UniffiFfiConverterOptionalUInt64.check_lower(node_cache_max_nodes)
+
+    _UniffiFfiConverterOptionalUInt64.check_lower(node_cache_max_bytes)
+    _uniffi_lowered_args = (
+        _UniffiFfiConverterBytes.lower(format_bytes),
+        _UniffiFfiConverterOptionalUInt64.lower(node_cache_max_nodes),
+        _UniffiFfiConverterOptionalUInt64.lower(node_cache_max_bytes),
+    )
+    _uniffi_lift_return = _UniffiFfiConverterTypeConfigRecord.lift
+    _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+    _uniffi_ffi_result = _uniffi_rust_call_with_error(
+        _uniffi_error_converter,
+        _UniffiLib.uniffi_prolly_bindings_fn_func_tree_config_from_format_bytes,
+        *_uniffi_lowered_args,
+    )
+    return _uniffi_lift_return(_uniffi_ffi_result)
 def u128_key(value: str) -> bytes:
 
     _UniffiFfiConverterString.check_lower(value)
@@ -18041,6 +18118,7 @@ __all__ = [
     "tombstone_to_bytes",
     "tombstone_upsert_mutation",
     "tree_config",
+    "tree_config_from_format_bytes",
     "u128_key",
     "u64_key",
     "upsert_mutation",

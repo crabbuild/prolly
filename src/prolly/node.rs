@@ -3,20 +3,12 @@
 use serde::{Deserialize, Serialize};
 
 use super::cid::Cid;
-use super::encoding::{
-    Encoding, DEFAULT_CHUNKING_FACTOR, DEFAULT_HASH_SEED, DEFAULT_MAX_CHUNK_SIZE,
-    DEFAULT_MIN_CHUNK_SIZE, INIT_LEVEL,
-};
+use super::encoding::{Encoding, INIT_LEVEL};
 use super::error::Error;
+use super::format::{BoundaryRule, NodeLayoutSpec, TreeFormat};
 
 const COMPACT_MAGIC: &[u8; 4] = b"CRAB";
-const COMPACT_VERSION: u64 = 1;
-const ENCODING_RAW: u8 = 0;
-const ENCODING_CBOR: u8 = 1;
-const ENCODING_JSON: u8 = 2;
-const ENCODING_CUSTOM: u8 = 3;
-const INTERNAL_VALUE_CID: u8 = 0;
-const INTERNAL_VALUE_BYTES: u8 = 1;
+const COMPACT_VERSION: u64 = 2;
 
 /// A node in the Prolly Tree
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -25,20 +17,14 @@ pub struct Node {
     pub keys: Vec<Vec<u8>>,
     /// Values: raw bytes for leaves, CIDs for internal nodes
     pub vals: Vec<Vec<u8>>,
+    /// Logical entry counts for internal children. Empty for leaf nodes.
+    pub child_counts: Vec<u64>,
     /// Leaf node (true) or internal node (false)
     pub leaf: bool,
     /// Tree level (0 = leaf level)
     pub level: u8,
-    /// Minimum entries before considering boundary
-    pub min_chunk_size: usize,
-    /// Maximum entries in a node
-    pub max_chunk_size: usize,
-    /// Chunking factor (higher = larger nodes)
-    pub chunking_factor: u32,
-    /// Hash seed for boundary detection
-    pub hash_seed: u64,
-    /// Value encoding type
-    pub encoding: Encoding,
+    /// Persisted settings that determine tree shape and node bytes.
+    pub format: TreeFormat,
 }
 
 impl Default for Node {
@@ -46,13 +32,10 @@ impl Default for Node {
         Self {
             keys: Vec::new(),
             vals: Vec::new(),
+            child_counts: Vec::new(),
             leaf: true,
             level: INIT_LEVEL,
-            min_chunk_size: DEFAULT_MIN_CHUNK_SIZE,
-            max_chunk_size: DEFAULT_MAX_CHUNK_SIZE,
-            chunking_factor: DEFAULT_CHUNKING_FACTOR,
-            hash_seed: DEFAULT_HASH_SEED,
-            encoding: Encoding::Raw,
+            format: TreeFormat::default(),
         }
     }
 }
@@ -93,51 +76,83 @@ impl Node {
         self.keys.binary_search_by(|k| k.as_slice().cmp(key))
     }
 
+    /// Minimum size before a content boundary may be selected.
+    pub fn min_chunk_size(&self) -> usize {
+        usize::try_from(self.format.chunking.min).unwrap_or(usize::MAX)
+    }
+
+    /// Maximum soft chunk size.
+    pub fn max_chunk_size(&self) -> usize {
+        usize::try_from(self.format.chunking.max).unwrap_or(usize::MAX)
+    }
+
+    /// Compatibility accessor for threshold-based chunking.
+    pub fn chunking_factor(&self) -> u32 {
+        match self.format.chunking.rule {
+            BoundaryRule::HashThreshold { factor } => factor,
+            _ => u32::try_from(self.format.chunking.target).unwrap_or(u32::MAX),
+        }
+    }
+
+    /// Boundary hash seed.
+    pub fn hash_seed(&self) -> u64 {
+        self.format.chunking.hash_seed
+    }
+
+    /// Value encoding.
+    pub fn encoding(&self) -> &Encoding {
+        &self.format.value_encoding
+    }
+
+    /// Validate structural invariants independent of storage.
+    pub fn validate(&self) -> Result<(), Error> {
+        self.format.validate()?;
+        if self.keys.len() != self.vals.len() || self.keys.windows(2).any(|pair| pair[0] >= pair[1])
+        {
+            return Err(Error::InvalidNode);
+        }
+        if self.leaf {
+            if !self.child_counts.is_empty() {
+                return Err(Error::InvalidNode);
+            }
+        } else if self.child_counts.len() != self.keys.len() || self.child_counts.contains(&0) {
+            return Err(Error::InvalidNode);
+        }
+        Ok(())
+    }
+
     /// Serialize to compact, deterministic bytes.
     pub fn to_bytes(&self) -> Vec<u8> {
+        self.try_to_bytes()
+            .expect("node uses a registered, valid persisted format")
+    }
+
+    /// Serialize to deterministic bytes, returning format errors to the caller.
+    pub fn try_to_bytes(&self) -> Result<Vec<u8>, Error> {
         self.to_compact_bytes()
     }
 
-    /// Return the exact length of the compact serialized form without allocating it.
+    /// Return the exact length of the serialized form.
     pub fn encoded_len(&self) -> usize {
-        let mut len = COMPACT_MAGIC.len()
-            + varint_len(COMPACT_VERSION)
-            + varint_len(if self.leaf { 1 } else { 0 })
-            + varint_len(self.level as u64)
-            + varint_len(self.min_chunk_size as u64)
-            + varint_len(self.max_chunk_size as u64)
-            + varint_len(self.chunking_factor as u64)
-            + varint_len(self.hash_seed)
-            + encoding_len(&self.encoding)
-            + varint_len(self.keys.len() as u64);
-
-        let mut previous_key: &[u8] = &[];
-        for (key, val) in self.keys.iter().zip(&self.vals) {
-            let shared = common_prefix_len(previous_key, key);
-            let suffix = &key[shared..];
-            len += varint_len(shared as u64) + varint_len(suffix.len() as u64) + suffix.len();
-
-            if self.leaf {
-                len += varint_len(val.len() as u64) + val.len();
-            } else if val.len() == 32 {
-                len += 1 + val.len();
-            } else {
-                len += 1 + varint_len(val.len() as u64) + val.len();
-            }
-
-            previous_key = key;
-        }
-
-        len
+        self.try_encoded_len()
+            .expect("node uses a registered, valid persisted format")
     }
 
-    /// Deserialize from compact bytes, falling back to legacy CBOR.
+    /// Deserialize from current node bytes.
     pub fn from_bytes(data: &[u8]) -> Result<Self, Error> {
-        if data.starts_with(COMPACT_MAGIC) {
-            return Self::from_compact_bytes(data);
-        }
+        Self::from_compact_bytes(data)
+    }
 
-        serde_cbor::from_slice(data).map_err(|e| Error::Deserialize(e.to_string()))
+    /// Deserialize and require an exact persisted tree format.
+    pub fn from_bytes_with_format(data: &[u8], expected: &TreeFormat) -> Result<Self, Error> {
+        let node = Self::from_bytes(data)?;
+        if node.format != *expected {
+            return Err(Error::FormatMismatch {
+                expected: expected.digest()?,
+                actual: node.format.digest()?,
+            });
+        }
+        Ok(node)
     }
 
     /// Compute CID of this node
@@ -145,43 +160,153 @@ impl Node {
         Cid::from_bytes(&self.to_bytes())
     }
 
-    fn to_compact_bytes(&self) -> Vec<u8> {
-        let mut out = Vec::with_capacity(self.encoded_len());
+    fn to_compact_bytes(&self) -> Result<Vec<u8>, Error> {
+        let format_bytes = if self.format == TreeFormat::default() {
+            Vec::new()
+        } else {
+            self.format.canonical_bytes()?
+        };
+        // Encoding already visits every key and value. Use a bounded O(1)
+        // capacity estimate here so serialization does not scan the node twice;
+        // `encoded_len()` remains exact for callers that explicitly request it.
+        let estimated_entries = self.keys.len().saturating_mul(48);
+        let estimated_capacity = format_bytes
+            .len()
+            .saturating_add(COMPACT_MAGIC.len())
+            .saturating_add(32)
+            .saturating_add(estimated_entries);
+        let mut out = Vec::with_capacity(estimated_capacity);
         out.extend_from_slice(COMPACT_MAGIC);
         write_varint(COMPACT_VERSION, &mut out);
+        write_varint(format_bytes.len() as u64, &mut out);
+        out.extend_from_slice(&format_bytes);
         write_varint(if self.leaf { 1 } else { 0 }, &mut out);
         write_varint(self.level as u64, &mut out);
-        write_varint(self.min_chunk_size as u64, &mut out);
-        write_varint(self.max_chunk_size as u64, &mut out);
-        write_varint(self.chunking_factor as u64, &mut out);
-        write_varint(self.hash_seed, &mut out);
-        write_encoding(&self.encoding, &mut out);
         write_varint(self.keys.len() as u64, &mut out);
 
-        let mut previous_key: &[u8] = &[];
-        for (key, val) in self.keys.iter().zip(&self.vals) {
-            let shared = common_prefix_len(previous_key, key);
-            let suffix = &key[shared..];
-            write_varint(shared as u64, &mut out);
-            write_varint(suffix.len() as u64, &mut out);
-            out.extend_from_slice(suffix);
-
-            if self.leaf {
-                write_varint(val.len() as u64, &mut out);
-                out.extend_from_slice(val);
-            } else if val.len() == 32 {
-                out.push(INTERNAL_VALUE_CID);
-                out.extend_from_slice(val);
-            } else {
-                out.push(INTERNAL_VALUE_BYTES);
-                write_varint(val.len() as u64, &mut out);
-                out.extend_from_slice(val);
+        match &self.format.node_layout {
+            NodeLayoutSpec::PrefixCompressed => {
+                let mut previous_key: &[u8] = &[];
+                for (index, (key, val)) in self.keys.iter().zip(&self.vals).enumerate() {
+                    let shared = common_prefix_len(previous_key, key);
+                    let suffix = &key[shared..];
+                    write_varint(shared as u64, &mut out);
+                    write_varint(suffix.len() as u64, &mut out);
+                    out.extend_from_slice(suffix);
+                    write_varint(val.len() as u64, &mut out);
+                    out.extend_from_slice(val);
+                    if !self.leaf {
+                        write_varint(*self.child_counts.get(index).unwrap_or(&0), &mut out);
+                    }
+                    previous_key = key;
+                }
             }
-
-            previous_key = key;
+            NodeLayoutSpec::Plain => {
+                for (index, (key, val)) in self.keys.iter().zip(&self.vals).enumerate() {
+                    write_varint(key.len() as u64, &mut out);
+                    out.extend_from_slice(key);
+                    write_varint(val.len() as u64, &mut out);
+                    out.extend_from_slice(val);
+                    if !self.leaf {
+                        write_varint(*self.child_counts.get(index).unwrap_or(&0), &mut out);
+                    }
+                }
+            }
+            NodeLayoutSpec::OffsetTable => {
+                let mut payload = Vec::new();
+                for (index, (key, val)) in self.keys.iter().zip(&self.vals).enumerate() {
+                    write_varint(payload.len() as u64, &mut out);
+                    write_varint(key.len() as u64, &mut out);
+                    payload.extend_from_slice(key);
+                    write_varint(payload.len() as u64, &mut out);
+                    write_varint(val.len() as u64, &mut out);
+                    payload.extend_from_slice(val);
+                    if !self.leaf {
+                        write_varint(*self.child_counts.get(index).unwrap_or(&0), &mut out);
+                    }
+                }
+                write_varint(payload.len() as u64, &mut out);
+                out.extend_from_slice(&payload);
+            }
+            NodeLayoutSpec::Custom { id, .. } => {
+                return Err(Error::InvalidFormat(format!(
+                    "node layout '{id}' has no registered codec"
+                )));
+            }
         }
 
-        out
+        Ok(out)
+    }
+
+    fn try_encoded_len(&self) -> Result<usize, Error> {
+        let format_bytes = if self.format == TreeFormat::default() {
+            Vec::new()
+        } else {
+            self.format.canonical_bytes()?
+        };
+        self.try_encoded_len_with_format(&format_bytes)
+    }
+
+    fn try_encoded_len_with_format(&self, format_bytes: &[u8]) -> Result<usize, Error> {
+        let mut len = COMPACT_MAGIC.len()
+            + varint_len(COMPACT_VERSION)
+            + varint_len(format_bytes.len() as u64)
+            + format_bytes.len()
+            + varint_len(if self.leaf { 1 } else { 0 })
+            + varint_len(self.level as u64)
+            + varint_len(self.keys.len() as u64);
+
+        match &self.format.node_layout {
+            NodeLayoutSpec::PrefixCompressed => {
+                let mut previous_key: &[u8] = &[];
+                for (index, (key, val)) in self.keys.iter().zip(&self.vals).enumerate() {
+                    let shared = common_prefix_len(previous_key, key);
+                    let suffix_len = key.len() - shared;
+                    len += varint_len(shared as u64)
+                        + varint_len(suffix_len as u64)
+                        + suffix_len
+                        + varint_len(val.len() as u64)
+                        + val.len();
+                    if !self.leaf {
+                        len += varint_len(*self.child_counts.get(index).unwrap_or(&0));
+                    }
+                    previous_key = key;
+                }
+            }
+            NodeLayoutSpec::Plain => {
+                for (index, (key, val)) in self.keys.iter().zip(&self.vals).enumerate() {
+                    len += varint_len(key.len() as u64)
+                        + key.len()
+                        + varint_len(val.len() as u64)
+                        + val.len();
+                    if !self.leaf {
+                        len += varint_len(*self.child_counts.get(index).unwrap_or(&0));
+                    }
+                }
+            }
+            NodeLayoutSpec::OffsetTable => {
+                let mut payload_len = 0usize;
+                for (index, (key, val)) in self.keys.iter().zip(&self.vals).enumerate() {
+                    len += varint_len(payload_len as u64)
+                        + varint_len(key.len() as u64)
+                        + varint_len((payload_len + key.len()) as u64)
+                        + varint_len(val.len() as u64);
+                    if !self.leaf {
+                        len += varint_len(*self.child_counts.get(index).unwrap_or(&0));
+                    }
+                    payload_len = payload_len
+                        .saturating_add(key.len())
+                        .saturating_add(val.len());
+                }
+                len += varint_len(payload_len as u64) + payload_len;
+            }
+            NodeLayoutSpec::Custom { id, .. } => {
+                return Err(Error::InvalidFormat(format!(
+                    "node layout '{id}' has no registered codec"
+                )));
+            }
+        }
+        Ok(len)
     }
 
     fn from_compact_bytes(data: &[u8]) -> Result<Self, Error> {
@@ -193,93 +318,113 @@ impl Node {
                 "unsupported compact node version {version}"
             )));
         }
-
+        let format_len = cursor.read_usize("tree format length")?;
+        let format = if format_len == 0 {
+            TreeFormat::default()
+        } else {
+            TreeFormat::from_canonical_bytes(cursor.read_bytes(format_len)?)?
+        };
         let leaf = match cursor.read_varint()? {
             0 => false,
             1 => true,
             other => return Err(compact_error(format!("invalid leaf flag {other}"))),
         };
         let level = cursor.read_u8_varint("level")?;
-        let min_chunk_size = cursor.read_usize("min_chunk_size")?;
-        let max_chunk_size = cursor.read_usize("max_chunk_size")?;
-        let chunking_factor = cursor.read_u32("chunking_factor")?;
-        let hash_seed = cursor.read_varint()?;
-        let encoding = cursor.read_encoding()?;
         let entry_count = cursor.read_usize("entry_count")?;
-
         let mut keys = Vec::with_capacity(entry_count);
         let mut vals = Vec::with_capacity(entry_count);
-        let mut previous_key = Vec::new();
+        let mut child_counts = Vec::with_capacity(if leaf { 0 } else { entry_count });
 
-        for _ in 0..entry_count {
-            let shared = cursor.read_usize("shared key prefix length")?;
-            if shared > previous_key.len() {
-                return Err(compact_error("shared key prefix exceeds previous key"));
-            }
-            let suffix_len = cursor.read_usize("key suffix length")?;
-            let suffix = cursor.read_bytes(suffix_len)?.to_vec();
-            let mut key = previous_key[..shared].to_vec();
-            key.extend_from_slice(&suffix);
-
-            let val = if leaf {
-                let value_len = cursor.read_usize("value length")?;
-                cursor.read_bytes(value_len)?.to_vec()
-            } else {
-                match cursor.read_byte()? {
-                    INTERNAL_VALUE_CID => cursor.read_bytes(32)?.to_vec(),
-                    INTERNAL_VALUE_BYTES => {
-                        let value_len = cursor.read_usize("internal value length")?;
-                        cursor.read_bytes(value_len)?.to_vec()
+        match &format.node_layout {
+            NodeLayoutSpec::PrefixCompressed => {
+                let mut previous_key = Vec::new();
+                for _ in 0..entry_count {
+                    let shared = cursor.read_usize("shared key prefix length")?;
+                    if shared > previous_key.len() {
+                        return Err(compact_error("shared key prefix exceeds previous key"));
                     }
-                    tag => return Err(compact_error(format!("invalid internal value tag {tag}"))),
+                    let suffix_len = cursor.read_usize("key suffix length")?;
+                    let mut key = Vec::with_capacity(shared.saturating_add(suffix_len));
+                    key.extend_from_slice(&previous_key[..shared]);
+                    key.extend_from_slice(cursor.read_bytes(suffix_len)?);
+                    let value_len = cursor.read_usize("value length")?;
+                    let val = cursor.read_bytes(value_len)?.to_vec();
+                    if !leaf {
+                        child_counts.push(cursor.read_varint()?);
+                    }
+                    previous_key.clear();
+                    previous_key.extend_from_slice(&key);
+                    keys.push(key);
+                    vals.push(val);
                 }
-            };
-
-            previous_key = key.clone();
-            keys.push(key);
-            vals.push(val);
+            }
+            NodeLayoutSpec::Plain => {
+                for _ in 0..entry_count {
+                    let key_len = cursor.read_usize("key length")?;
+                    keys.push(cursor.read_bytes(key_len)?.to_vec());
+                    let value_len = cursor.read_usize("value length")?;
+                    vals.push(cursor.read_bytes(value_len)?.to_vec());
+                    if !leaf {
+                        child_counts.push(cursor.read_varint()?);
+                    }
+                }
+            }
+            NodeLayoutSpec::OffsetTable => {
+                let mut offsets = Vec::with_capacity(entry_count);
+                for _ in 0..entry_count {
+                    let key_offset = cursor.read_usize("key offset")?;
+                    let key_len = cursor.read_usize("key length")?;
+                    let value_offset = cursor.read_usize("value offset")?;
+                    let value_len = cursor.read_usize("value length")?;
+                    offsets.push((key_offset, key_len, value_offset, value_len));
+                    if !leaf {
+                        child_counts.push(cursor.read_varint()?);
+                    }
+                }
+                let payload_len = cursor.read_usize("payload length")?;
+                let payload = cursor.read_bytes(payload_len)?;
+                for (key_offset, key_len, value_offset, value_len) in offsets {
+                    keys.push(slice_payload(payload, key_offset, key_len, "key")?.to_vec());
+                    vals.push(slice_payload(payload, value_offset, value_len, "value")?.to_vec());
+                }
+            }
+            NodeLayoutSpec::Custom { id, .. } => {
+                return Err(Error::InvalidFormat(format!(
+                    "node layout '{id}' has no registered codec"
+                )));
+            }
         }
 
         if !cursor.is_done() {
             return Err(compact_error("trailing bytes in compact node"));
         }
-
         Ok(Self {
             keys,
             vals,
+            child_counts,
             leaf,
             level,
-            min_chunk_size,
-            max_chunk_size,
-            chunking_factor,
-            hash_seed,
-            encoding,
+            format,
         })
     }
 }
 
+fn slice_payload<'a>(
+    payload: &'a [u8],
+    offset: usize,
+    len: usize,
+    field: &str,
+) -> Result<&'a [u8], Error> {
+    let end = offset
+        .checked_add(len)
+        .ok_or_else(|| compact_error(format!("{field} offset overflow")))?;
+    payload
+        .get(offset..end)
+        .ok_or_else(|| compact_error(format!("{field} offset outside payload")))
+}
+
 fn compact_error(message: impl Into<String>) -> Error {
     Error::Deserialize(format!("compact node: {}", message.into()))
-}
-
-fn write_encoding(encoding: &Encoding, out: &mut Vec<u8>) {
-    match encoding {
-        Encoding::Raw => out.push(ENCODING_RAW),
-        Encoding::Cbor => out.push(ENCODING_CBOR),
-        Encoding::Json => out.push(ENCODING_JSON),
-        Encoding::Custom(name) => {
-            out.push(ENCODING_CUSTOM);
-            write_varint(name.len() as u64, out);
-            out.extend_from_slice(name.as_bytes());
-        }
-    }
-}
-
-fn encoding_len(encoding: &Encoding) -> usize {
-    match encoding {
-        Encoding::Raw | Encoding::Cbor | Encoding::Json => 1,
-        Encoding::Custom(name) => 1 + varint_len(name.len() as u64) + name.len(),
-    }
 }
 
 fn write_varint(mut value: u64, out: &mut Vec<u8>) {
@@ -293,8 +438,8 @@ fn write_varint(mut value: u64, out: &mut Vec<u8>) {
 fn varint_len(mut value: u64) -> usize {
     let mut len = 1;
     while value >= 0x80 {
-        len += 1;
         value >>= 7;
+        len += 1;
     }
     len
 }
@@ -326,30 +471,9 @@ impl<'a> CompactCursor<'a> {
         Ok(())
     }
 
-    fn read_encoding(&mut self) -> Result<Encoding, Error> {
-        match self.read_byte()? {
-            ENCODING_RAW => Ok(Encoding::Raw),
-            ENCODING_CBOR => Ok(Encoding::Cbor),
-            ENCODING_JSON => Ok(Encoding::Json),
-            ENCODING_CUSTOM => {
-                let len = self.read_usize("custom encoding length")?;
-                let bytes = self.read_bytes(len)?;
-                let name = String::from_utf8(bytes.to_vec())
-                    .map_err(|e| compact_error(format!("custom encoding is not UTF-8: {e}")))?;
-                Ok(Encoding::Custom(name))
-            }
-            tag => Err(compact_error(format!("invalid encoding tag {tag}"))),
-        }
-    }
-
     fn read_u8_varint(&mut self, field: &str) -> Result<u8, Error> {
         let value = self.read_varint()?;
         u8::try_from(value).map_err(|_| compact_error(format!("{field} exceeds u8")))
-    }
-
-    fn read_u32(&mut self, field: &str) -> Result<u32, Error> {
-        let value = self.read_varint()?;
-        u32::try_from(value).map_err(|_| compact_error(format!("{field} exceeds u32")))
     }
 
     fn read_usize(&mut self, field: &str) -> Result<usize, Error> {
@@ -409,13 +533,10 @@ impl<'a> CompactCursor<'a> {
 pub struct NodeBuilder {
     keys: Vec<Vec<u8>>,
     vals: Vec<Vec<u8>>,
+    child_counts: Vec<u64>,
     leaf: bool,
     level: u8,
-    min_chunk_size: usize,
-    max_chunk_size: usize,
-    chunking_factor: u32,
-    hash_seed: u64,
-    encoding: Encoding,
+    format: TreeFormat,
 }
 
 impl NodeBuilder {
@@ -424,13 +545,10 @@ impl NodeBuilder {
         Self {
             leaf: true,
             level: INIT_LEVEL,
-            min_chunk_size: DEFAULT_MIN_CHUNK_SIZE,
-            max_chunk_size: DEFAULT_MAX_CHUNK_SIZE,
-            chunking_factor: DEFAULT_CHUNKING_FACTOR,
-            hash_seed: DEFAULT_HASH_SEED,
-            encoding: Encoding::Raw,
+            format: TreeFormat::default(),
             keys: Vec::new(),
             vals: Vec::new(),
+            child_counts: Vec::new(),
         }
     }
 
@@ -443,6 +561,12 @@ impl NodeBuilder {
     /// Set the values
     pub fn vals(mut self, vals: Vec<Vec<u8>>) -> Self {
         self.vals = vals;
+        self
+    }
+
+    /// Set logical entry counts for internal children.
+    pub fn child_counts(mut self, child_counts: Vec<u64>) -> Self {
+        self.child_counts = child_counts;
         self
     }
 
@@ -460,31 +584,41 @@ impl NodeBuilder {
 
     /// Set the minimum chunk size
     pub fn min_chunk_size(mut self, size: usize) -> Self {
-        self.min_chunk_size = size;
+        self.format.chunking.min = size as u64;
+        self.format.chunking.target = self.format.chunking.target.max(size as u64);
+        self.format.chunking.max = self.format.chunking.max.max(size as u64);
         self
     }
 
     /// Set the maximum chunk size
     pub fn max_chunk_size(mut self, size: usize) -> Self {
-        self.max_chunk_size = size;
+        self.format.chunking.max = size as u64;
+        self.format.chunking.target = self.format.chunking.target.min(size as u64);
+        self.format.chunking.min = self.format.chunking.min.min(size as u64);
         self
     }
 
     /// Set the chunking factor
     pub fn chunking_factor(mut self, factor: u32) -> Self {
-        self.chunking_factor = factor;
+        self.format.chunking.rule = BoundaryRule::HashThreshold { factor };
         self
     }
 
     /// Set the hash seed
     pub fn hash_seed(mut self, seed: u64) -> Self {
-        self.hash_seed = seed;
+        self.format.chunking.hash_seed = seed;
         self
     }
 
     /// Set the encoding type
     pub fn encoding(mut self, encoding: Encoding) -> Self {
-        self.encoding = encoding;
+        self.format.value_encoding = encoding;
+        self
+    }
+
+    /// Set the complete persisted tree format.
+    pub fn tree_format(mut self, format: TreeFormat) -> Self {
+        self.format = format;
         self
     }
 
@@ -493,13 +627,10 @@ impl NodeBuilder {
         Node {
             keys: self.keys,
             vals: self.vals,
+            child_counts: self.child_counts,
             leaf: self.leaf,
             level: self.level,
-            min_chunk_size: self.min_chunk_size,
-            max_chunk_size: self.max_chunk_size,
-            chunking_factor: self.chunking_factor,
-            hash_seed: self.hash_seed,
-            encoding: self.encoding,
+            format: self.format,
         }
     }
 }
@@ -508,149 +639,9 @@ impl NodeBuilder {
 mod tests {
     use super::*;
 
-    const COMPACT_LEAF_FIXTURE_HEX: &str = concat!(
-        "4352414201010010800480022a000300166372617465732f70726f6c6c792f7372632f612e7273",
-        "0776616c75652d611204622e72730776616c75652d621204632e72730776616c75652d63"
-    );
-    const COMPACT_INTERNAL_FIXTURE_HEX: &str = concat!(
-        "4352414201000210800480022a000300166372617465732f70726f6c6c792f7372632f612e7273",
-        "0001000000000000000000000000000000000000000000000000000000000000001204622e7273",
-        "0002000000000000000000000000000000000000000000000000000000000000001204632e7273",
-        "010c6c65676163792d6368696c64"
-    );
-    const COMPACT_CUSTOM_ENCODING_FIXTURE_HEX: &str = concat!(
-        "43524142010100028001402a031d6170706c69636174696f6e2f782d747261696c2d6e6f6465",
-        "2d746573740200016101310001620132"
-    );
-    const LEGACY_CBOR_LEAF_FIXTURE_HEX: &str = concat!(
-        "a9008396186318721861187418651873182f18701872186f186c186c1879182f187318721863182f",
-        "1861182e1872187396186318721861187418651873182f18701872186f186c186c1879182f1873",
-        "18721863182f1862182e1872187396186318721861187418651873182f18701872186f186c186c",
-        "1879182f187318721863182f1863182e1872187301838718761861186c18751865182d1861",
-        "8718761861186c18751865182d18628718761861186c18751865182d186302f503000410051",
-        "902000619010007182a0800"
-    );
-
-    fn fixture_hex(bytes: &[u8]) -> String {
-        bytes.iter().map(|byte| format!("{byte:02x}")).collect()
-    }
-
-    fn bytes_from_hex(hex: &str) -> Vec<u8> {
-        assert_eq!(hex.len() % 2, 0, "hex fixture must have an even length");
-        hex.as_bytes()
-            .chunks_exact(2)
-            .map(|pair| {
-                let digits = std::str::from_utf8(pair).expect("fixture hex is ASCII");
-                u8::from_str_radix(digits, 16).expect("fixture hex is valid")
-            })
-            .collect()
-    }
-
-    fn leaf_fixture_node() -> Node {
-        Node::builder()
-            .keys(vec![
-                b"crates/prolly/src/a.rs".to_vec(),
-                b"crates/prolly/src/b.rs".to_vec(),
-                b"crates/prolly/src/c.rs".to_vec(),
-            ])
-            .vals(vec![
-                b"value-a".to_vec(),
-                b"value-b".to_vec(),
-                b"value-c".to_vec(),
-            ])
-            .leaf(true)
-            .level(0)
-            .min_chunk_size(16)
-            .max_chunk_size(512)
-            .chunking_factor(256)
-            .hash_seed(42)
-            .encoding(Encoding::Raw)
-            .build()
-    }
-
-    fn internal_fixture_node() -> Node {
-        let mut cid_a = [0u8; 32];
-        cid_a[0] = 1;
-        let mut cid_b = [0u8; 32];
-        cid_b[0] = 2;
-        Node::builder()
-            .keys(vec![
-                b"crates/prolly/src/a.rs".to_vec(),
-                b"crates/prolly/src/b.rs".to_vec(),
-                b"crates/prolly/src/c.rs".to_vec(),
-            ])
-            .vals(vec![
-                cid_a.to_vec(),
-                cid_b.to_vec(),
-                b"legacy-child".to_vec(),
-            ])
-            .leaf(false)
-            .level(2)
-            .min_chunk_size(16)
-            .max_chunk_size(512)
-            .chunking_factor(256)
-            .hash_seed(42)
-            .encoding(Encoding::Raw)
-            .build()
-    }
-
-    fn custom_encoding_fixture_node() -> Node {
-        Node::builder()
-            .keys(vec![b"a".to_vec(), b"b".to_vec()])
-            .vals(vec![b"1".to_vec(), b"2".to_vec()])
-            .leaf(true)
-            .level(0)
-            .min_chunk_size(2)
-            .max_chunk_size(128)
-            .chunking_factor(64)
-            .hash_seed(42)
-            .encoding(Encoding::Custom(
-                "application/x-trail-node-test".to_string(),
-            ))
-            .build()
-    }
-
     #[test]
-    fn compact_leaf_serialization_matches_fixture() {
-        let node = leaf_fixture_node();
-        let bytes = node.to_bytes();
-
-        assert_eq!(fixture_hex(&bytes), COMPACT_LEAF_FIXTURE_HEX);
-        assert_eq!(bytes.len(), node.encoded_len());
-        assert_eq!(Node::from_bytes(&bytes).unwrap(), node);
-    }
-
-    #[test]
-    fn compact_internal_serialization_matches_fixture() {
-        let node = internal_fixture_node();
-        let bytes = node.to_bytes();
-
-        assert_eq!(fixture_hex(&bytes), COMPACT_INTERNAL_FIXTURE_HEX);
-        assert_eq!(bytes.len(), node.encoded_len());
-        assert_eq!(Node::from_bytes(&bytes).unwrap(), node);
-    }
-
-    #[test]
-    fn compact_custom_encoding_serialization_matches_fixture() {
-        let node = custom_encoding_fixture_node();
-        let bytes = node.to_bytes();
-
-        assert_eq!(fixture_hex(&bytes), COMPACT_CUSTOM_ENCODING_FIXTURE_HEX);
-        assert_eq!(bytes.len(), node.encoded_len());
-        assert_eq!(Node::from_bytes(&bytes).unwrap(), node);
-    }
-
-    #[test]
-    fn legacy_cbor_leaf_fixture_remains_readable() {
-        let node = leaf_fixture_node();
-        let legacy_bytes = bytes_from_hex(LEGACY_CBOR_LEAF_FIXTURE_HEX);
-
-        assert!(!legacy_bytes.starts_with(COMPACT_MAGIC));
-        assert_eq!(Node::from_bytes(&legacy_bytes).unwrap(), node);
-        assert_eq!(
-            fixture_hex(&serde_cbor::ser::to_vec_packed(&node).unwrap()),
-            LEGACY_CBOR_LEAF_FIXTURE_HEX
-        );
+    fn non_current_node_bytes_are_rejected() {
+        assert!(Node::from_bytes(&serde_cbor::to_vec(&Node::default()).unwrap()).is_err());
     }
 
     #[test]
@@ -685,11 +676,11 @@ mod tests {
         assert_eq!(node.len(), 2);
         assert!(node.leaf);
         assert_eq!(node.level, 0);
-        assert_eq!(node.min_chunk_size, 2);
-        assert_eq!(node.max_chunk_size, 100);
-        assert_eq!(node.chunking_factor, 64);
-        assert_eq!(node.hash_seed, 42);
-        assert_eq!(node.encoding, Encoding::Cbor);
+        assert_eq!(node.min_chunk_size(), 2);
+        assert_eq!(node.max_chunk_size(), 100);
+        assert_eq!(node.chunking_factor(), 64);
+        assert_eq!(node.hash_seed(), 42);
+        assert_eq!(node.encoding(), &Encoding::Cbor);
     }
 
     #[test]
@@ -736,6 +727,20 @@ mod tests {
     }
 
     #[test]
+    fn compact_default_format_uses_the_reserved_short_form() {
+        let node = Node::builder()
+            .keys(vec![b"key".to_vec()])
+            .vals(vec![b"value".to_vec()])
+            .leaf(true)
+            .build();
+
+        let bytes = node.to_bytes();
+
+        assert_eq!(bytes[COMPACT_MAGIC.len() + 1], 0);
+        assert_eq!(Node::from_bytes(&bytes).unwrap(), node);
+    }
+
+    #[test]
     fn compact_internal_serialization_roundtrip() {
         let mut cid_a = [0u8; 32];
         cid_a[0] = 1;
@@ -744,6 +749,7 @@ mod tests {
         let node = Node::builder()
             .keys(vec![b"a".to_vec(), b"b".to_vec(), b"c".to_vec()])
             .vals(vec![cid_a.to_vec(), cid_b.to_vec(), b"fallback".to_vec()])
+            .child_counts(vec![3, 5, 8])
             .leaf(false)
             .level(1)
             .min_chunk_size(2)
@@ -760,7 +766,7 @@ mod tests {
     }
 
     #[test]
-    fn compact_serialization_reads_legacy_cbor_and_reduces_size() {
+    fn compact_serialization_is_deterministic() {
         let node = Node::builder()
             .keys(vec![b"key1".to_vec(), b"key2".to_vec(), b"key3".to_vec()])
             .vals(vec![b"val1".to_vec(), b"val2".to_vec(), b"val3".to_vec()])
@@ -773,14 +779,10 @@ mod tests {
             .encoding(Encoding::Raw)
             .build();
 
-        let legacy_bytes = serde_cbor::to_vec(&node).unwrap();
-        let legacy_packed_bytes = serde_cbor::ser::to_vec_packed(&node).unwrap();
         let compact_bytes = node.to_bytes();
 
-        assert_eq!(Node::from_bytes(&legacy_bytes).unwrap(), node);
-        assert_eq!(Node::from_bytes(&legacy_packed_bytes).unwrap(), node);
         assert_eq!(Node::from_bytes(&compact_bytes).unwrap(), node);
-        assert!(compact_bytes.len() < legacy_bytes.len());
+        assert_eq!(compact_bytes, node.to_bytes());
     }
 
     #[test]

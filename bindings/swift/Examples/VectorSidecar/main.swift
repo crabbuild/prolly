@@ -32,7 +32,7 @@ let tree = try engine.batch(
         upsert("vector-sidecar/corpus/docs/chunk/doc-2/0001", bytes("vec-2|doc-2|parser-v1")),
     ]
 )
-let allowed = Set(try engine.range(tree: tree, start: bytes("vector-sidecar/corpus/docs/chunk/"), end: bytes("vector-sidecar/corpus/docs/chunk0")).map {
+let allowed = Set(try engine.range(tree: tree, start: bytes("vector-sidecar/corpus/docs/chunk/"), rangeEnd: bytes("vector-sidecar/corpus/docs/chunk0")).map {
     text($0.value)!.split(separator: "|", maxSplits: 1).first.map(String.init)!
 })
 let hits = sidecar.keys.sorted().filter { allowed.contains($0) }

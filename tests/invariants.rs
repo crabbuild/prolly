@@ -80,7 +80,7 @@ fn exact_max_chunk_size_is_valid_capacity_for_put_and_batch_build() {
     let batch_root = load_node(&batch_store, batch_tree.root.as_ref().unwrap());
 
     assert!(put_root.leaf);
-    assert_eq!(put_root.len(), config.max_chunk_size);
+    assert_eq!(put_root.len(), config.max_chunk_size());
     assert_eq!(put_root.to_bytes(), batch_root.to_bytes());
     assert_tree_invariants(&put_store, &put_tree, &config);
     assert_tree_invariants(&batch_store, &batch_tree, &config);

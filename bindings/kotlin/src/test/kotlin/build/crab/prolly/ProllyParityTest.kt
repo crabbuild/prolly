@@ -327,7 +327,7 @@ class ProllyParityTest {
             assertEquals(3UL, appendedStats.stats.inputMutations)
             assertEquals(2UL, appendedStats.stats.effectiveMutations)
             assertFalse(appendedStats.stats.preprocessInputSorted)
-            assertTrue(appendedStats.stats.usedAppendFastPath)
+            assertTrue(appendedStats.stats.usedCoalescedRebuild)
             assertTrue(appendedStats.stats.writtenNodes > 0UL)
 
             val firstPage = engine.rangePage(tree, null, null, 1UL)

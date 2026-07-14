@@ -99,13 +99,13 @@ pub fn rebalance<S: Store>(
 
     // Check for splits based on entry count. `max_chunk_size` is an
     // inclusive capacity; split only after the node exceeds it.
-    if node.len() > node.max_chunk_size && node.len() > 1 {
+    if node.len() > node.max_chunk_size() && node.len() > 1 {
         return split_node(prolly, node, ancestors);
     }
 
     // Check if we should merge with siblings
     // This happens when a node is below min_chunk_size and can be merged
-    if !ancestors.is_empty() && node.len() < node.min_chunk_size {
+    if !ancestors.is_empty() && node.len() < node.min_chunk_size() {
         if let Some(merged) = try_merge_with_sibling(prolly, &node, ancestors)? {
             return Ok(merged);
         }
@@ -185,7 +185,7 @@ fn split_node<S: Store>(
     node: Node,
     ancestors: &[(Node, usize)],
 ) -> Result<Cid, Error> {
-    let max_size = node.max_chunk_size;
+    let max_size = node.max_chunk_size();
 
     // Find split point using boundary detection
     // We need to find a split point that ensures both halves fit within max_chunk_size.
@@ -276,7 +276,7 @@ fn split_node<S: Store>(
         parent.vals.push(right_cid.0.to_vec());
 
         // Check if parent needs splitting too
-        if parent.len() > parent.max_chunk_size {
+        if parent.len() > parent.max_chunk_size() {
             return split_node(prolly, parent, &[]);
         }
         return prolly.save(&parent);
@@ -315,7 +315,7 @@ fn split_and_save_oversized<S: Store>(
     node: &Node,
     _ancestors: &[(Node, usize)],
 ) -> Result<Cid, Error> {
-    let max_size = node.max_chunk_size;
+    let max_size = node.max_chunk_size();
 
     // If node is small enough, just save it
     if node.len() <= max_size {
@@ -406,7 +406,7 @@ fn try_merge_with_sibling<S: Store>(
             let new_idx = idx - 1;
 
             // Check if merged node needs splitting (might be too large after merge)
-            if merged.len() > merged.max_chunk_size && merged.len() > 1 {
+            if merged.len() > merged.max_chunk_size() && merged.len() > 1 {
                 // Need to split the merged node - build new ancestors with updated parent position
                 let mut new_ancestors: Vec<(Node, usize)> =
                     ancestors[..ancestors.len() - 1].to_vec();
@@ -447,7 +447,7 @@ fn try_merge_with_sibling<S: Store>(
             new_parent.vals.remove(idx + 1);
 
             // Check if merged node needs splitting (might be too large after merge)
-            if merged.len() > merged.max_chunk_size && merged.len() > 1 {
+            if merged.len() > merged.max_chunk_size() && merged.len() > 1 {
                 // Need to split the merged node - build new ancestors with updated parent position
                 let mut new_ancestors: Vec<(Node, usize)> =
                     ancestors[..ancestors.len() - 1].to_vec();
@@ -552,12 +552,12 @@ pub fn rebalance_with_collector<S: Store>(
     }
 
     // Check for splits based on entry count.
-    if node.len() > node.max_chunk_size && node.len() > 1 {
+    if node.len() > node.max_chunk_size() && node.len() > 1 {
         return split_node_with_collector(prolly, node, ancestors, collector);
     }
 
     // Check if we should merge with siblings
-    if !ancestors.is_empty() && node.len() < node.min_chunk_size {
+    if !ancestors.is_empty() && node.len() < node.min_chunk_size() {
         if let Some(merged_cid) =
             try_merge_with_sibling_collector(prolly, &node, ancestors, collector)?
         {
@@ -640,7 +640,7 @@ fn split_node_with_collector<S: Store>(
     ancestors: &[(Node, usize)],
     collector: &mut BatchWriteCollector,
 ) -> Result<Option<Cid>, Error> {
-    let max_size = node.max_chunk_size;
+    let max_size = node.max_chunk_size();
 
     // Split the node into multiple chunks that are all at or under max_size.
     let chunks = split_into_chunks(prolly, &node, max_size);
@@ -695,7 +695,7 @@ fn split_node_with_collector<S: Store>(
         }
 
         // Check if parent needs splitting too
-        if parent.len() > parent.max_chunk_size {
+        if parent.len() > parent.max_chunk_size() {
             return split_node_with_collector(prolly, parent, &[], collector);
         }
         let root_cid = collector.add(&parent);
@@ -870,7 +870,7 @@ fn try_merge_with_sibling_collector<S: Store>(
             let new_idx = idx - 1;
 
             // Check if merged node needs splitting (might be too large after merge)
-            if merged.len() > merged.max_chunk_size && merged.len() > 1 {
+            if merged.len() > merged.max_chunk_size() && merged.len() > 1 {
                 // Need to split the merged node - build new ancestors with updated parent position
                 let mut new_ancestors: Vec<(Node, usize)> =
                     ancestors[..ancestors.len() - 1].to_vec();
@@ -912,7 +912,7 @@ fn try_merge_with_sibling_collector<S: Store>(
             new_parent.vals.remove(idx + 1);
 
             // Check if merged node needs splitting (might be too large after merge)
-            if merged.len() > merged.max_chunk_size && merged.len() > 1 {
+            if merged.len() > merged.max_chunk_size() && merged.len() > 1 {
                 // Need to split the merged node - build new ancestors with updated parent position
                 let mut new_ancestors: Vec<(Node, usize)> =
                     ancestors[..ancestors.len() - 1].to_vec();
@@ -972,8 +972,8 @@ mod tests {
 
         assert!(merged.leaf);
         assert_eq!(merged.level, left.level);
-        assert_eq!(merged.min_chunk_size, left.min_chunk_size);
-        assert_eq!(merged.max_chunk_size, left.max_chunk_size);
+        assert_eq!(merged.min_chunk_size(), left.min_chunk_size());
+        assert_eq!(merged.max_chunk_size(), left.max_chunk_size());
         assert_eq!(
             merged.keys,
             (0..5)

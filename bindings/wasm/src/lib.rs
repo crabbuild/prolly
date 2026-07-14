@@ -42,27 +42,27 @@ impl WasmConfig {
 
     #[wasm_bindgen(getter, js_name = minChunkSize)]
     pub fn min_chunk_size(&self) -> u32 {
-        self.inner.min_chunk_size as u32
+        self.inner.min_chunk_size() as u32
     }
 
     #[wasm_bindgen(getter, js_name = maxChunkSize)]
     pub fn max_chunk_size(&self) -> u32 {
-        self.inner.max_chunk_size as u32
+        self.inner.max_chunk_size() as u32
     }
 
     #[wasm_bindgen(getter, js_name = chunkingFactor)]
     pub fn chunking_factor(&self) -> u32 {
-        self.inner.chunking_factor
+        self.inner.chunking_factor()
     }
 
     #[wasm_bindgen(getter, js_name = hashSeed)]
     pub fn hash_seed(&self) -> String {
-        self.inner.hash_seed.to_string()
+        self.inner.hash_seed().to_string()
     }
 
     #[wasm_bindgen(getter)]
     pub fn encoding(&self) -> String {
-        match &self.inner.encoding {
+        match self.inner.encoding() {
             Encoding::Raw => "raw".to_string(),
             Encoding::Cbor => "cbor".to_string(),
             Encoding::Json => "json".to_string(),
@@ -1694,22 +1694,26 @@ fn config_from_json(json: &str) -> Result<Config, JsValue> {
     let mut config = Config::default();
 
     if let Some(n) = value.get("min_chunk_size").and_then(Value::as_u64) {
-        config.min_chunk_size = n as usize;
+        config.format.chunking.min = n;
+        config.format.chunking.target = config.format.chunking.target.max(n);
+        config.format.chunking.max = config.format.chunking.max.max(n);
     }
     if let Some(n) = value.get("max_chunk_size").and_then(Value::as_u64) {
-        config.max_chunk_size = n as usize;
+        config.format.chunking.max = n;
+        config.format.chunking.target = config.format.chunking.target.min(n);
+        config.format.chunking.min = config.format.chunking.min.min(n);
     }
     if let Some(n) = value.get("chunking_factor").and_then(Value::as_u64) {
-        config.chunking_factor = n as u32;
+        config.format.chunking.rule = prolly::BoundaryRule::HashThreshold { factor: n as u32 };
     }
     if let Some(n) = value.get("hash_seed").and_then(Value::as_u64) {
-        config.hash_seed = n;
+        config.format.chunking.hash_seed = n;
     }
-    config.node_cache_max_nodes = value
+    config.runtime.node_cache_max_nodes = value
         .get("node_cache_max_nodes")
         .and_then(Value::as_u64)
         .map(|n| n as usize);
-    config.node_cache_max_bytes = value
+    config.runtime.node_cache_max_bytes = value
         .get("node_cache_max_bytes")
         .and_then(Value::as_u64)
         .map(|n| n as usize);
@@ -1719,7 +1723,7 @@ fn config_from_json(json: &str) -> Result<Config, JsValue> {
             .get("kind")
             .and_then(Value::as_str)
             .unwrap_or("raw");
-        config.encoding = match kind {
+        config.format.value_encoding = match kind {
             "raw" | "Raw" => Encoding::Raw,
             "cbor" | "Cbor" => Encoding::Cbor,
             "json" | "Json" => Encoding::Json,
@@ -1861,7 +1865,7 @@ fn transaction_update_to_object(update: prolly::TransactionUpdate) -> Result<Obj
             Reflect::set(
                 &object,
                 &"conflictDetail".into(),
-                &JsValue::from(transaction_conflict_to_object(conflict)?),
+                &JsValue::from(transaction_conflict_to_object(*conflict)?),
             )?;
         }
     }

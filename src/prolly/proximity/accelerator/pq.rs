@@ -710,15 +710,13 @@ fn config_fingerprint(config: &ProductQuantizationConfig) -> Cid {
 fn code_tree_config() -> Config {
     // This is a wire-level PQ constant. Do not inherit future changes to
     // the general ordered-tree defaults when loading an existing sidecar.
-    Config {
-        min_chunk_size: 4,
-        max_chunk_size: 1024 * 1024,
-        chunking_factor: 128,
-        hash_seed: 0,
-        encoding: Encoding::Raw,
-        node_cache_max_nodes: None,
-        node_cache_max_bytes: None,
-    }
+    Config::builder()
+        .min_chunk_size(4)
+        .max_chunk_size(1024 * 1024)
+        .chunking_factor(128)
+        .hash_seed(0)
+        .encoding(Encoding::Raw)
+        .build()
 }
 
 fn load_content<S: Store>(store: &S, cid: &Cid) -> Result<Vec<u8>, Error> {

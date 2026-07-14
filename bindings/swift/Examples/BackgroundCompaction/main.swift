@@ -42,7 +42,7 @@ let compacted = try engine.batch(
 try engine.publishNamedRoot(name: bytes("compaction/run/r7/root/events/current"), tree: compacted)
 
 let plan = try engine.planStoreGc(roots: [events, compacted])
-let remaining = try engine.range(tree: compacted, start: bytes("event/"), end: bytes("event0"))
+let remaining = try engine.range(tree: compacted, start: bytes("event/"), rangeEnd: bytes("event0"))
 
 precondition(remaining.count == 3)
 precondition(plan.reclaimableNodes >= 0)

@@ -2086,7 +2086,7 @@ public protocol ProllyEngineProtocol: AnyObject, Sendable {
 
     func create()  -> TreeRecord
 
-    func cursorWindow(tree: TreeRecord, key: Data, end: Data?, limit: UInt64) throws  -> CursorWindowRecord
+    func cursorWindow(tree: TreeRecord, key: Data, rangeEnd: Data?, limit: UInt64) throws  -> CursorWindowRecord
 
     func debugCompareTrees(left: TreeRecord, right: TreeRecord) throws  -> TreeDebugComparisonRecord
 
@@ -2108,9 +2108,9 @@ public protocol ProllyEngineProtocol: AnyObject, Sendable {
 
     func diff(base: TreeRecord, other: TreeRecord) throws  -> [DiffRecord]
 
-    func diffFromCursor(base: TreeRecord, other: TreeRecord, cursor: RangeCursorRecord?, end: Data?) throws  -> [DiffRecord]
+    func diffFromCursor(base: TreeRecord, other: TreeRecord, cursor: RangeCursorRecord?, rangeEnd: Data?) throws  -> [DiffRecord]
 
-    func diffPage(base: TreeRecord, other: TreeRecord, cursor: RangeCursorRecord?, end: Data?, limit: UInt64) throws  -> DiffPageRecord
+    func diffPage(base: TreeRecord, other: TreeRecord, cursor: RangeCursorRecord?, rangeEnd: Data?, limit: UInt64) throws  -> DiffPageRecord
 
     func exportSnapshot(tree: TreeRecord) throws  -> SnapshotBundleRecord
 
@@ -2170,11 +2170,11 @@ public protocol ProllyEngineProtocol: AnyObject, Sendable {
 
     func mergePrefixWithResolver(base: TreeRecord, left: TreeRecord, right: TreeRecord, prefix: Data, resolver: MergeResolverCallback) throws  -> TreeRecord
 
-    func mergeRange(base: TreeRecord, left: TreeRecord, right: TreeRecord, start: Data, end: Data?, resolver: String?) throws  -> TreeRecord
+    func mergeRange(base: TreeRecord, left: TreeRecord, right: TreeRecord, start: Data, rangeEnd: Data?, resolver: String?) throws  -> TreeRecord
 
-    func mergeRangeWithPolicy(base: TreeRecord, left: TreeRecord, right: TreeRecord, start: Data, end: Data?, policy: MergePolicyRegistry) throws  -> TreeRecord
+    func mergeRangeWithPolicy(base: TreeRecord, left: TreeRecord, right: TreeRecord, start: Data, rangeEnd: Data?, policy: MergePolicyRegistry) throws  -> TreeRecord
 
-    func mergeRangeWithResolver(base: TreeRecord, left: TreeRecord, right: TreeRecord, start: Data, end: Data?, resolver: MergeResolverCallback) throws  -> TreeRecord
+    func mergeRangeWithResolver(base: TreeRecord, left: TreeRecord, right: TreeRecord, start: Data, rangeEnd: Data?, resolver: MergeResolverCallback) throws  -> TreeRecord
 
     func mergeWithPolicy(base: TreeRecord, left: TreeRecord, right: TreeRecord, policy: MergePolicyRegistry) throws  -> TreeRecord
 
@@ -2208,7 +2208,7 @@ public protocol ProllyEngineProtocol: AnyObject, Sendable {
 
     func prefixReversePage(tree: TreeRecord, prefix: Data, cursor: ReverseCursorRecord?, limit: UInt64) throws  -> ReversePageRecord
 
-    func proveDiffPage(base: TreeRecord, other: TreeRecord, cursor: RangeCursorRecord?, end: Data?, limit: UInt64) throws  -> ProvedDiffPageRecord
+    func proveDiffPage(base: TreeRecord, other: TreeRecord, cursor: RangeCursorRecord?, rangeEnd: Data?, limit: UInt64) throws  -> ProvedDiffPageRecord
 
     func proveKey(tree: TreeRecord, key: Data) throws  -> KeyProofRecord
 
@@ -2216,9 +2216,9 @@ public protocol ProllyEngineProtocol: AnyObject, Sendable {
 
     func provePrefix(tree: TreeRecord, prefix: Data) throws  -> RangeProofRecord
 
-    func proveRange(tree: TreeRecord, start: Data, end: Data?) throws  -> RangeProofRecord
+    func proveRange(tree: TreeRecord, start: Data, rangeEnd: Data?) throws  -> RangeProofRecord
 
-    func proveRangePage(tree: TreeRecord, cursor: RangeCursorRecord?, end: Data?, limit: UInt64) throws  -> ProvedRangePageRecord
+    func proveRangePage(tree: TreeRecord, cursor: RangeCursorRecord?, rangeEnd: Data?, limit: UInt64) throws  -> ProvedRangePageRecord
 
     func publishChangedSpansHint(base: TreeRecord, changed: TreeRecord, spans: [ChangedSpanRecord]) throws  -> Bool
 
@@ -2236,15 +2236,15 @@ public protocol ProllyEngineProtocol: AnyObject, Sendable {
 
     func putLargeValue(blobStore: ProllyBlobStore, tree: TreeRecord, key: Data, value: Data, config: LargeValueConfigRecord) throws  -> TreeRecord
 
-    func range(tree: TreeRecord, start: Data, end: Data?) throws  -> [EntryRecord]
+    func range(tree: TreeRecord, start: Data, rangeEnd: Data?) throws  -> [EntryRecord]
 
-    func rangeAfter(tree: TreeRecord, afterKey: Data, end: Data?) throws  -> [EntryRecord]
+    func rangeAfter(tree: TreeRecord, afterKey: Data, rangeEnd: Data?) throws  -> [EntryRecord]
 
-    func rangeDiff(base: TreeRecord, other: TreeRecord, start: Data, end: Data?) throws  -> [DiffRecord]
+    func rangeDiff(base: TreeRecord, other: TreeRecord, start: Data, rangeEnd: Data?) throws  -> [DiffRecord]
 
-    func rangeFromCursor(tree: TreeRecord, cursor: RangeCursorRecord?, end: Data?) throws  -> [EntryRecord]
+    func rangeFromCursor(tree: TreeRecord, cursor: RangeCursorRecord?, rangeEnd: Data?) throws  -> [EntryRecord]
 
-    func rangePage(tree: TreeRecord, cursor: RangeCursorRecord?, end: Data?, limit: UInt64) throws  -> RangePageRecord
+    func rangePage(tree: TreeRecord, cursor: RangeCursorRecord?, rangeEnd: Data?, limit: UInt64) throws  -> RangePageRecord
 
     func resetMetrics()
 
@@ -2572,13 +2572,13 @@ open func create() -> TreeRecord  {
 })
 }
 
-open func cursorWindow(tree: TreeRecord, key: Data, end: Data?, limit: UInt64)throws  -> CursorWindowRecord  {
+open func cursorWindow(tree: TreeRecord, key: Data, rangeEnd: Data?, limit: UInt64)throws  -> CursorWindowRecord  {
     return try  FfiConverterTypeCursorWindowRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_cursor_window(
             self.uniffiCloneHandle(),
         FfiConverterTypeTreeRecord_lower(tree),
         FfiConverterData.lower(key),
-        FfiConverterOptionData.lower(end),
+        FfiConverterOptionData.lower(rangeEnd),
         FfiConverterUInt64.lower(limit),$0
     )
 })
@@ -2678,26 +2678,26 @@ open func diff(base: TreeRecord, other: TreeRecord)throws  -> [DiffRecord]  {
 })
 }
 
-open func diffFromCursor(base: TreeRecord, other: TreeRecord, cursor: RangeCursorRecord?, end: Data?)throws  -> [DiffRecord]  {
+open func diffFromCursor(base: TreeRecord, other: TreeRecord, cursor: RangeCursorRecord?, rangeEnd: Data?)throws  -> [DiffRecord]  {
     return try  FfiConverterSequenceTypeDiffRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_diff_from_cursor(
             self.uniffiCloneHandle(),
         FfiConverterTypeTreeRecord_lower(base),
         FfiConverterTypeTreeRecord_lower(other),
         FfiConverterOptionTypeRangeCursorRecord.lower(cursor),
-        FfiConverterOptionData.lower(end),$0
+        FfiConverterOptionData.lower(rangeEnd),$0
     )
 })
 }
 
-open func diffPage(base: TreeRecord, other: TreeRecord, cursor: RangeCursorRecord?, end: Data?, limit: UInt64)throws  -> DiffPageRecord  {
+open func diffPage(base: TreeRecord, other: TreeRecord, cursor: RangeCursorRecord?, rangeEnd: Data?, limit: UInt64)throws  -> DiffPageRecord  {
     return try  FfiConverterTypeDiffPageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_diff_page(
             self.uniffiCloneHandle(),
         FfiConverterTypeTreeRecord_lower(base),
         FfiConverterTypeTreeRecord_lower(other),
         FfiConverterOptionTypeRangeCursorRecord.lower(cursor),
-        FfiConverterOptionData.lower(end),
+        FfiConverterOptionData.lower(rangeEnd),
         FfiConverterUInt64.lower(limit),$0
     )
 })
@@ -2995,7 +2995,7 @@ open func mergePrefixWithResolver(base: TreeRecord, left: TreeRecord, right: Tre
 })
 }
 
-open func mergeRange(base: TreeRecord, left: TreeRecord, right: TreeRecord, start: Data, end: Data?, resolver: String?)throws  -> TreeRecord  {
+open func mergeRange(base: TreeRecord, left: TreeRecord, right: TreeRecord, start: Data, rangeEnd: Data?, resolver: String?)throws  -> TreeRecord  {
     return try  FfiConverterTypeTreeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_merge_range(
             self.uniffiCloneHandle(),
@@ -3003,13 +3003,13 @@ open func mergeRange(base: TreeRecord, left: TreeRecord, right: TreeRecord, star
         FfiConverterTypeTreeRecord_lower(left),
         FfiConverterTypeTreeRecord_lower(right),
         FfiConverterData.lower(start),
-        FfiConverterOptionData.lower(end),
+        FfiConverterOptionData.lower(rangeEnd),
         FfiConverterOptionString.lower(resolver),$0
     )
 })
 }
 
-open func mergeRangeWithPolicy(base: TreeRecord, left: TreeRecord, right: TreeRecord, start: Data, end: Data?, policy: MergePolicyRegistry)throws  -> TreeRecord  {
+open func mergeRangeWithPolicy(base: TreeRecord, left: TreeRecord, right: TreeRecord, start: Data, rangeEnd: Data?, policy: MergePolicyRegistry)throws  -> TreeRecord  {
     return try  FfiConverterTypeTreeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_merge_range_with_policy(
             self.uniffiCloneHandle(),
@@ -3017,13 +3017,13 @@ open func mergeRangeWithPolicy(base: TreeRecord, left: TreeRecord, right: TreeRe
         FfiConverterTypeTreeRecord_lower(left),
         FfiConverterTypeTreeRecord_lower(right),
         FfiConverterData.lower(start),
-        FfiConverterOptionData.lower(end),
+        FfiConverterOptionData.lower(rangeEnd),
         FfiConverterTypeMergePolicyRegistry_lower(policy),$0
     )
 })
 }
 
-open func mergeRangeWithResolver(base: TreeRecord, left: TreeRecord, right: TreeRecord, start: Data, end: Data?, resolver: MergeResolverCallback)throws  -> TreeRecord  {
+open func mergeRangeWithResolver(base: TreeRecord, left: TreeRecord, right: TreeRecord, start: Data, rangeEnd: Data?, resolver: MergeResolverCallback)throws  -> TreeRecord  {
     return try  FfiConverterTypeTreeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_merge_range_with_resolver(
             self.uniffiCloneHandle(),
@@ -3031,7 +3031,7 @@ open func mergeRangeWithResolver(base: TreeRecord, left: TreeRecord, right: Tree
         FfiConverterTypeTreeRecord_lower(left),
         FfiConverterTypeTreeRecord_lower(right),
         FfiConverterData.lower(start),
-        FfiConverterOptionData.lower(end),
+        FfiConverterOptionData.lower(rangeEnd),
         FfiConverterTypeMergeResolverCallback_lower(resolver),$0
     )
 })
@@ -3203,14 +3203,14 @@ open func prefixReversePage(tree: TreeRecord, prefix: Data, cursor: ReverseCurso
 })
 }
 
-open func proveDiffPage(base: TreeRecord, other: TreeRecord, cursor: RangeCursorRecord?, end: Data?, limit: UInt64)throws  -> ProvedDiffPageRecord  {
+open func proveDiffPage(base: TreeRecord, other: TreeRecord, cursor: RangeCursorRecord?, rangeEnd: Data?, limit: UInt64)throws  -> ProvedDiffPageRecord  {
     return try  FfiConverterTypeProvedDiffPageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_prove_diff_page(
             self.uniffiCloneHandle(),
         FfiConverterTypeTreeRecord_lower(base),
         FfiConverterTypeTreeRecord_lower(other),
         FfiConverterOptionTypeRangeCursorRecord.lower(cursor),
-        FfiConverterOptionData.lower(end),
+        FfiConverterOptionData.lower(rangeEnd),
         FfiConverterUInt64.lower(limit),$0
     )
 })
@@ -3246,24 +3246,24 @@ open func provePrefix(tree: TreeRecord, prefix: Data)throws  -> RangeProofRecord
 })
 }
 
-open func proveRange(tree: TreeRecord, start: Data, end: Data?)throws  -> RangeProofRecord  {
+open func proveRange(tree: TreeRecord, start: Data, rangeEnd: Data?)throws  -> RangeProofRecord  {
     return try  FfiConverterTypeRangeProofRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_prove_range(
             self.uniffiCloneHandle(),
         FfiConverterTypeTreeRecord_lower(tree),
         FfiConverterData.lower(start),
-        FfiConverterOptionData.lower(end),$0
+        FfiConverterOptionData.lower(rangeEnd),$0
     )
 })
 }
 
-open func proveRangePage(tree: TreeRecord, cursor: RangeCursorRecord?, end: Data?, limit: UInt64)throws  -> ProvedRangePageRecord  {
+open func proveRangePage(tree: TreeRecord, cursor: RangeCursorRecord?, rangeEnd: Data?, limit: UInt64)throws  -> ProvedRangePageRecord  {
     return try  FfiConverterTypeProvedRangePageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_prove_range_page(
             self.uniffiCloneHandle(),
         FfiConverterTypeTreeRecord_lower(tree),
         FfiConverterOptionTypeRangeCursorRecord.lower(cursor),
-        FfiConverterOptionData.lower(end),
+        FfiConverterOptionData.lower(rangeEnd),
         FfiConverterUInt64.lower(limit),$0
     )
 })
@@ -3354,58 +3354,58 @@ open func putLargeValue(blobStore: ProllyBlobStore, tree: TreeRecord, key: Data,
 })
 }
 
-open func range(tree: TreeRecord, start: Data, end: Data?)throws  -> [EntryRecord]  {
+open func range(tree: TreeRecord, start: Data, rangeEnd: Data?)throws  -> [EntryRecord]  {
     return try  FfiConverterSequenceTypeEntryRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_range(
             self.uniffiCloneHandle(),
         FfiConverterTypeTreeRecord_lower(tree),
         FfiConverterData.lower(start),
-        FfiConverterOptionData.lower(end),$0
+        FfiConverterOptionData.lower(rangeEnd),$0
     )
 })
 }
 
-open func rangeAfter(tree: TreeRecord, afterKey: Data, end: Data?)throws  -> [EntryRecord]  {
+open func rangeAfter(tree: TreeRecord, afterKey: Data, rangeEnd: Data?)throws  -> [EntryRecord]  {
     return try  FfiConverterSequenceTypeEntryRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_range_after(
             self.uniffiCloneHandle(),
         FfiConverterTypeTreeRecord_lower(tree),
         FfiConverterData.lower(afterKey),
-        FfiConverterOptionData.lower(end),$0
+        FfiConverterOptionData.lower(rangeEnd),$0
     )
 })
 }
 
-open func rangeDiff(base: TreeRecord, other: TreeRecord, start: Data, end: Data?)throws  -> [DiffRecord]  {
+open func rangeDiff(base: TreeRecord, other: TreeRecord, start: Data, rangeEnd: Data?)throws  -> [DiffRecord]  {
     return try  FfiConverterSequenceTypeDiffRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_range_diff(
             self.uniffiCloneHandle(),
         FfiConverterTypeTreeRecord_lower(base),
         FfiConverterTypeTreeRecord_lower(other),
         FfiConverterData.lower(start),
-        FfiConverterOptionData.lower(end),$0
+        FfiConverterOptionData.lower(rangeEnd),$0
     )
 })
 }
 
-open func rangeFromCursor(tree: TreeRecord, cursor: RangeCursorRecord?, end: Data?)throws  -> [EntryRecord]  {
+open func rangeFromCursor(tree: TreeRecord, cursor: RangeCursorRecord?, rangeEnd: Data?)throws  -> [EntryRecord]  {
     return try  FfiConverterSequenceTypeEntryRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_range_from_cursor(
             self.uniffiCloneHandle(),
         FfiConverterTypeTreeRecord_lower(tree),
         FfiConverterOptionTypeRangeCursorRecord.lower(cursor),
-        FfiConverterOptionData.lower(end),$0
+        FfiConverterOptionData.lower(rangeEnd),$0
     )
 })
 }
 
-open func rangePage(tree: TreeRecord, cursor: RangeCursorRecord?, end: Data?, limit: UInt64)throws  -> RangePageRecord  {
+open func rangePage(tree: TreeRecord, cursor: RangeCursorRecord?, rangeEnd: Data?, limit: UInt64)throws  -> RangePageRecord  {
     return try  FfiConverterTypeRangePageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_range_page(
             self.uniffiCloneHandle(),
         FfiConverterTypeTreeRecord_lower(tree),
         FfiConverterOptionTypeRangeCursorRecord.lower(cursor),
-        FfiConverterOptionData.lower(end),
+        FfiConverterOptionData.lower(rangeEnd),
         FfiConverterUInt64.lower(limit),$0
     )
 })
@@ -4638,10 +4638,11 @@ public struct ConfigRecord: Equatable, Hashable {
     public var encoding: EncodingRecord
     public var nodeCacheMaxNodes: UInt64?
     public var nodeCacheMaxBytes: UInt64?
+    public var formatBytes: Data?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(minChunkSize: UInt64, maxChunkSize: UInt64, chunkingFactor: UInt32, hashSeed: UInt64, encoding: EncodingRecord, nodeCacheMaxNodes: UInt64?, nodeCacheMaxBytes: UInt64?) {
+    public init(minChunkSize: UInt64, maxChunkSize: UInt64, chunkingFactor: UInt32, hashSeed: UInt64, encoding: EncodingRecord, nodeCacheMaxNodes: UInt64?, nodeCacheMaxBytes: UInt64?, formatBytes: Data?) {
         self.minChunkSize = minChunkSize
         self.maxChunkSize = maxChunkSize
         self.chunkingFactor = chunkingFactor
@@ -4649,6 +4650,7 @@ public struct ConfigRecord: Equatable, Hashable {
         self.encoding = encoding
         self.nodeCacheMaxNodes = nodeCacheMaxNodes
         self.nodeCacheMaxBytes = nodeCacheMaxBytes
+        self.formatBytes = formatBytes
     }
 
 
@@ -4673,7 +4675,8 @@ public struct FfiConverterTypeConfigRecord: FfiConverterRustBuffer {
                 hashSeed: FfiConverterUInt64.read(from: &buf),
                 encoding: FfiConverterTypeEncodingRecord.read(from: &buf),
                 nodeCacheMaxNodes: FfiConverterOptionUInt64.read(from: &buf),
-                nodeCacheMaxBytes: FfiConverterOptionUInt64.read(from: &buf)
+                nodeCacheMaxBytes: FfiConverterOptionUInt64.read(from: &buf),
+                formatBytes: FfiConverterOptionData.read(from: &buf)
         )
     }
 
@@ -4685,6 +4688,7 @@ public struct FfiConverterTypeConfigRecord: FfiConverterRustBuffer {
         FfiConverterTypeEncodingRecord.write(value.encoding, into: &buf)
         FfiConverterOptionUInt64.write(value.nodeCacheMaxNodes, into: &buf)
         FfiConverterOptionUInt64.write(value.nodeCacheMaxBytes, into: &buf)
+        FfiConverterOptionData.write(value.formatBytes, into: &buf)
     }
 }
 
@@ -7275,6 +7279,7 @@ public func FfiConverterTypeNamedRootUpdateRecord_lower(_ value: NamedRootUpdate
 public struct NodeRecord: Equatable, Hashable {
     public var keys: [Data]
     public var vals: [Data]
+    public var childCounts: [UInt64]
     public var leaf: Bool
     public var level: UInt8
     public var minChunkSize: UInt64
@@ -7282,12 +7287,14 @@ public struct NodeRecord: Equatable, Hashable {
     public var chunkingFactor: UInt32
     public var hashSeed: UInt64
     public var encoding: EncodingRecord
+    public var formatBytes: Data?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(keys: [Data], vals: [Data], leaf: Bool, level: UInt8, minChunkSize: UInt64, maxChunkSize: UInt64, chunkingFactor: UInt32, hashSeed: UInt64, encoding: EncodingRecord) {
+    public init(keys: [Data], vals: [Data], childCounts: [UInt64], leaf: Bool, level: UInt8, minChunkSize: UInt64, maxChunkSize: UInt64, chunkingFactor: UInt32, hashSeed: UInt64, encoding: EncodingRecord, formatBytes: Data?) {
         self.keys = keys
         self.vals = vals
+        self.childCounts = childCounts
         self.leaf = leaf
         self.level = level
         self.minChunkSize = minChunkSize
@@ -7295,6 +7302,7 @@ public struct NodeRecord: Equatable, Hashable {
         self.chunkingFactor = chunkingFactor
         self.hashSeed = hashSeed
         self.encoding = encoding
+        self.formatBytes = formatBytes
     }
 
 
@@ -7315,19 +7323,22 @@ public struct FfiConverterTypeNodeRecord: FfiConverterRustBuffer {
             try NodeRecord(
                 keys: FfiConverterSequenceData.read(from: &buf),
                 vals: FfiConverterSequenceData.read(from: &buf),
+                childCounts: FfiConverterSequenceUInt64.read(from: &buf),
                 leaf: FfiConverterBool.read(from: &buf),
                 level: FfiConverterUInt8.read(from: &buf),
                 minChunkSize: FfiConverterUInt64.read(from: &buf),
                 maxChunkSize: FfiConverterUInt64.read(from: &buf),
                 chunkingFactor: FfiConverterUInt32.read(from: &buf),
                 hashSeed: FfiConverterUInt64.read(from: &buf),
-                encoding: FfiConverterTypeEncodingRecord.read(from: &buf)
+                encoding: FfiConverterTypeEncodingRecord.read(from: &buf),
+                formatBytes: FfiConverterOptionData.read(from: &buf)
         )
     }
 
     public static func write(_ value: NodeRecord, into buf: inout [UInt8]) {
         FfiConverterSequenceData.write(value.keys, into: &buf)
         FfiConverterSequenceData.write(value.vals, into: &buf)
+        FfiConverterSequenceUInt64.write(value.childCounts, into: &buf)
         FfiConverterBool.write(value.leaf, into: &buf)
         FfiConverterUInt8.write(value.level, into: &buf)
         FfiConverterUInt64.write(value.minChunkSize, into: &buf)
@@ -7335,6 +7346,7 @@ public struct FfiConverterTypeNodeRecord: FfiConverterRustBuffer {
         FfiConverterUInt32.write(value.chunkingFactor, into: &buf)
         FfiConverterUInt64.write(value.hashSeed, into: &buf)
         FfiConverterTypeEncodingRecord.write(value.encoding, into: &buf)
+        FfiConverterOptionData.write(value.formatBytes, into: &buf)
     }
 }
 
@@ -12519,6 +12531,31 @@ fileprivate struct FfiConverterOptionTypeMergeTraceStageKind: FfiConverterRustBu
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceUInt64: FfiConverterRustBuffer {
+    typealias SwiftType = [UInt64]
+
+    public static func write(_ value: [UInt64], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterUInt64.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [UInt64] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [UInt64]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterUInt64.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceData: FfiConverterRustBuffer {
     typealias SwiftType = [Data]
 
@@ -13161,11 +13198,11 @@ public func blobRefValidateBytes(reference: BlobRefRecord, bytes: Data)throws   
     )
 }
 }
-public func changedSpan(start: Data, end: Data?) -> ChangedSpanRecord  {
+public func changedSpan(start: Data, rangeEnd: Data?) -> ChangedSpanRecord  {
     return try!  FfiConverterTypeChangedSpanRecord_lift(try! rustCall() {
     uniffi_prolly_bindings_fn_func_changed_span(
         FfiConverterData.lower(start),
-        FfiConverterOptionData.lower(end),$0
+        FfiConverterOptionData.lower(rangeEnd),$0
     )
 })
 }
@@ -13513,12 +13550,12 @@ public func rangePageProofFromBytes(bytes: Data)throws  -> RangePageProofRecord 
     )
 })
 }
-public func rangePageProofFromNodeBytes(root: Data?, after: Data?, end: Data?, pathNodeBytes: [Data])throws  -> RangePageProofRecord  {
+public func rangePageProofFromNodeBytes(root: Data?, after: Data?, rangeEnd: Data?, pathNodeBytes: [Data])throws  -> RangePageProofRecord  {
     return try  FfiConverterTypeRangePageProofRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_func_range_page_proof_from_node_bytes(
         FfiConverterOptionData.lower(root),
         FfiConverterOptionData.lower(after),
-        FfiConverterOptionData.lower(end),
+        FfiConverterOptionData.lower(rangeEnd),
         FfiConverterSequenceData.lower(pathNodeBytes),$0
     )
 })
@@ -13544,12 +13581,12 @@ public func rangeProofFromBytes(bytes: Data)throws  -> RangeProofRecord  {
     )
 })
 }
-public func rangeProofFromNodeBytes(root: Data?, start: Data, end: Data?, pathNodeBytes: [Data])throws  -> RangeProofRecord  {
+public func rangeProofFromNodeBytes(root: Data?, start: Data, rangeEnd: Data?, pathNodeBytes: [Data])throws  -> RangeProofRecord  {
     return try  FfiConverterTypeRangeProofRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_func_range_proof_from_node_bytes(
         FfiConverterOptionData.lower(root),
         FfiConverterData.lower(start),
-        FfiConverterOptionData.lower(end),
+        FfiConverterOptionData.lower(rangeEnd),
         FfiConverterSequenceData.lower(pathNodeBytes),$0
     )
 })
@@ -13852,6 +13889,15 @@ public func treeConfig(minChunkSize: UInt64, maxChunkSize: UInt64, chunkingFacto
     )
 })
 }
+public func treeConfigFromFormatBytes(formatBytes: Data, nodeCacheMaxNodes: UInt64?, nodeCacheMaxBytes: UInt64?)throws  -> ConfigRecord  {
+    return try  FfiConverterTypeConfigRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_func_tree_config_from_format_bytes(
+        FfiConverterData.lower(formatBytes),
+        FfiConverterOptionUInt64.lower(nodeCacheMaxNodes),
+        FfiConverterOptionUInt64.lower(nodeCacheMaxBytes),$0
+    )
+})
+}
 public func u128Key(value: String)throws  -> Data  {
     return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_func_u128_key(
@@ -14049,7 +14095,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_prolly_bindings_checksum_func_blob_ref_validate_bytes() != 54728) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_prolly_bindings_checksum_func_changed_span() != 43900) {
+    if (uniffi_prolly_bindings_checksum_func_changed_span() != 59655) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_func_changed_span_for_prefix() != 22853) {
@@ -14199,7 +14245,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_prolly_bindings_checksum_func_range_page_proof_from_bytes() != 59171) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_prolly_bindings_checksum_func_range_page_proof_from_node_bytes() != 3245) {
+    if (uniffi_prolly_bindings_checksum_func_range_page_proof_from_node_bytes() != 64107) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_func_range_page_proof_path_node_bytes() != 43249) {
@@ -14211,7 +14257,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_prolly_bindings_checksum_func_range_proof_from_bytes() != 41674) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_prolly_bindings_checksum_func_range_proof_from_node_bytes() != 43455) {
+    if (uniffi_prolly_bindings_checksum_func_range_proof_from_node_bytes() != 19550) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_func_range_proof_path_node_bytes() != 42991) {
@@ -14335,6 +14381,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_func_tree_config() != 13018) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_func_tree_config_from_format_bytes() != 40159) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_func_u128_key() != 12112) {
@@ -14559,7 +14608,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_prolly_bindings_checksum_method_prollyengine_create() != 15621) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_prolly_bindings_checksum_method_prollyengine_cursor_window() != 31202) {
+    if (uniffi_prolly_bindings_checksum_method_prollyengine_cursor_window() != 33600) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_prollyengine_debug_compare_trees() != 16233) {
@@ -14592,10 +14641,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_prolly_bindings_checksum_method_prollyengine_diff() != 59822) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_prolly_bindings_checksum_method_prollyengine_diff_from_cursor() != 14790) {
+    if (uniffi_prolly_bindings_checksum_method_prollyengine_diff_from_cursor() != 56175) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_prolly_bindings_checksum_method_prollyengine_diff_page() != 49332) {
+    if (uniffi_prolly_bindings_checksum_method_prollyengine_diff_page() != 52911) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_prollyengine_export_snapshot() != 39238) {
@@ -14685,13 +14734,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_prolly_bindings_checksum_method_prollyengine_merge_prefix_with_resolver() != 52691) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_prolly_bindings_checksum_method_prollyengine_merge_range() != 62183) {
+    if (uniffi_prolly_bindings_checksum_method_prollyengine_merge_range() != 16455) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_prolly_bindings_checksum_method_prollyengine_merge_range_with_policy() != 37378) {
+    if (uniffi_prolly_bindings_checksum_method_prollyengine_merge_range_with_policy() != 63569) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_prolly_bindings_checksum_method_prollyengine_merge_range_with_resolver() != 48921) {
+    if (uniffi_prolly_bindings_checksum_method_prollyengine_merge_range_with_resolver() != 18526) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_prollyengine_merge_with_policy() != 11524) {
@@ -14742,7 +14791,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_prolly_bindings_checksum_method_prollyengine_prefix_reverse_page() != 20711) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_prolly_bindings_checksum_method_prollyengine_prove_diff_page() != 18402) {
+    if (uniffi_prolly_bindings_checksum_method_prollyengine_prove_diff_page() != 3176) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_prollyengine_prove_key() != 4612) {
@@ -14754,10 +14803,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_prolly_bindings_checksum_method_prollyengine_prove_prefix() != 32453) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_prolly_bindings_checksum_method_prollyengine_prove_range() != 59564) {
+    if (uniffi_prolly_bindings_checksum_method_prollyengine_prove_range() != 40694) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_prolly_bindings_checksum_method_prollyengine_prove_range_page() != 43652) {
+    if (uniffi_prolly_bindings_checksum_method_prollyengine_prove_range_page() != 35557) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_prollyengine_publish_changed_spans_hint() != 57418) {
@@ -14784,19 +14833,19 @@ private let initializationResult: InitializationResult = {
     if (uniffi_prolly_bindings_checksum_method_prollyengine_put_large_value() != 26504) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_prolly_bindings_checksum_method_prollyengine_range() != 29092) {
+    if (uniffi_prolly_bindings_checksum_method_prollyengine_range() != 24616) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_prolly_bindings_checksum_method_prollyengine_range_after() != 47062) {
+    if (uniffi_prolly_bindings_checksum_method_prollyengine_range_after() != 51929) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_prolly_bindings_checksum_method_prollyengine_range_diff() != 59421) {
+    if (uniffi_prolly_bindings_checksum_method_prollyengine_range_diff() != 65006) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_prolly_bindings_checksum_method_prollyengine_range_from_cursor() != 7151) {
+    if (uniffi_prolly_bindings_checksum_method_prollyengine_range_from_cursor() != 33634) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_prolly_bindings_checksum_method_prollyengine_range_page() != 26598) {
+    if (uniffi_prolly_bindings_checksum_method_prollyengine_range_page() != 7048) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_prollyengine_reset_metrics() != 10217) {

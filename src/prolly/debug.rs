@@ -112,7 +112,7 @@ pub struct TreeDebugComparison {
 impl TreeDebugNode {
     fn from_node(cid: Cid, node: &super::Node) -> Self {
         let entry_count = node.len();
-        let max_entries = node.max_chunk_size;
+        let max_entries = node.max_chunk_size();
         let fill_factor = if max_entries == 0 {
             0.0
         } else {

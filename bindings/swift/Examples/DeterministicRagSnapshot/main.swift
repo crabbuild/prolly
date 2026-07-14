@@ -42,8 +42,8 @@ try engine.publishNamedRoot(name: bytes("rag/corpus/docs/root/answers"), tree: a
 let indexV2 = try engine.put(tree: indexV1, key: bytes("rag/corpus/docs/chunk/doc-3/0001"), value: bytes("vector:v3|New content"))
 try engine.publishNamedRoot(name: indexRoot, tree: indexV2)
 
-let replayRows = try engine.range(tree: indexV1, start: bytes("rag/corpus/docs/chunk/"), end: bytes("rag/corpus/docs/chunk0")).count
-let currentRows = try engine.range(tree: try engine.loadNamedRoot(name: indexRoot)!, start: bytes("rag/corpus/docs/chunk/"), end: bytes("rag/corpus/docs/chunk0")).count
+let replayRows = try engine.range(tree: indexV1, start: bytes("rag/corpus/docs/chunk/"), rangeEnd: bytes("rag/corpus/docs/chunk0")).count
+let currentRows = try engine.range(tree: try engine.loadNamedRoot(name: indexRoot)!, start: bytes("rag/corpus/docs/chunk/"), rangeEnd: bytes("rag/corpus/docs/chunk0")).count
 precondition(replayRows == 2 && currentRows == 3)
 
 print("deterministic_rag_snapshot: replay kept original index root")
