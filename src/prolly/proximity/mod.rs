@@ -15,6 +15,7 @@ use super::cid::Cid;
 use super::error::Error;
 use super::tree::Tree;
 
+pub use accelerator::hnsw::{HnswBuildStats, HnswConfig, HnswIndex};
 pub use accelerator::pq::{
     ProductQuantizationBuildStats, ProductQuantizationConfig, ProductQuantizationQuality,
     ProductQuantizer,
