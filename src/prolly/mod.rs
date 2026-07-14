@@ -1598,7 +1598,7 @@ impl<S: Store> Prolly<S> {
         start: &[u8],
         limit: usize,
     ) -> Result<range::ReversePage, Error> {
-        self.reverse_page_bounded(tree, cursor, start, None, limit)
+        self.reverse_range_page(tree, cursor, start, None, limit)
     }
 
     /// Read a bounded page over keys that start with `prefix` in descending key
@@ -1615,10 +1615,11 @@ impl<S: Store> Prolly<S> {
         limit: usize,
     ) -> Result<range::ReversePage, Error> {
         let (start, end) = key::prefix_range(prefix);
-        self.reverse_page_bounded(tree, cursor, &start, end.as_deref(), limit)
+        self.reverse_range_page(tree, cursor, &start, end.as_deref(), limit)
     }
 
-    fn reverse_page_bounded(
+    /// Read a bounded descending page over the exact half-open range `[start, end)`.
+    pub fn reverse_range_page(
         &self,
         tree: &Tree,
         cursor: &range::ReverseCursor,
@@ -5507,7 +5508,7 @@ where
         start: &[u8],
         limit: usize,
     ) -> Result<range::AsyncReversePage, Error> {
-        self.reverse_page_bounded(tree, cursor, start, None, limit)
+        self.reverse_range_page(tree, cursor, start, None, limit)
             .await
     }
 
@@ -5521,7 +5522,7 @@ where
         limit: usize,
     ) -> Result<range::AsyncReversePage, Error> {
         let (start, end) = key::prefix_range(prefix);
-        self.reverse_page_bounded(tree, cursor, &start, end.as_deref(), limit)
+        self.reverse_range_page(tree, cursor, &start, end.as_deref(), limit)
             .await
     }
 

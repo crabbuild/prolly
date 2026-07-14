@@ -5,6 +5,7 @@
 
 mod coordinator;
 mod definition;
+mod snapshot;
 mod storage;
 
 pub use coordinator::{
@@ -14,6 +15,10 @@ pub use coordinator::{
 pub use definition::{
     IndexProjection, SecondaryIndex, SecondaryIndexBuilder, SecondaryIndexEntry,
     SecondaryIndexError, SecondaryIndexExtractor, SecondaryIndexLimits, SecondaryIndexRegistry,
+};
+pub use snapshot::{
+    IndexedSnapshot, IndexedSnapshotId, SecondaryIndexCursor, SecondaryIndexDirection,
+    SecondaryIndexMatch, SecondaryIndexPage, SecondaryIndexSnapshot,
 };
 pub use storage::{
     catalog_checkpoint_key, catalog_current_key, catalog_descriptor_key, catalog_format_key,

@@ -1223,7 +1223,7 @@ fn require_non_conflict(
     }
 }
 
-fn validate_catalog_format<S>(snapshot: &MapSnapshot<'_, S>) -> Result<(), Error>
+pub(crate) fn validate_catalog_format<S>(snapshot: &MapSnapshot<'_, S>) -> Result<(), Error>
 where
     S: Store,
 {

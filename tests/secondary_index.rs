@@ -541,3 +541,143 @@ fn concurrent_indexed_writers_retry_from_fresh_coordinated_heads() {
         .unwrap()
         .is_some());
 }
+
+#[test]
+fn indexed_snapshot_queries_are_exact_projected_paged_and_historical() {
+    let prolly = Prolly::new(Arc::new(MemStore::new()), Config::default());
+    let source = prolly.versioned_map(b"users");
+    source.put(b"user-2", b"active|Grace").unwrap();
+    source.put(b"user-1", b"active|Ada").unwrap();
+    source.put(b"user-3", b"archived|Lin").unwrap();
+    source
+        .put(b"user-4", vec![0, 0xff, b'|', b'B', b'y', b't', b'e'])
+        .unwrap();
+
+    let keys = SecondaryIndex::non_unique("by-status", 1, "app.users.by-status/v1", |_, value| {
+        Ok(vec![value
+            .split(|byte| *byte == b'|')
+            .next()
+            .unwrap()
+            .to_vec()])
+    })
+    .unwrap();
+    let include = SecondaryIndex::builder("by-status-name", 1, "app.users.by-status-name/v1")
+        .projection(IndexProjection::Include)
+        .extract(|_, value| {
+            let mut fields = value.splitn(2, |byte| *byte == b'|');
+            Ok(vec![SecondaryIndexEntry::included(
+                fields.next().unwrap(),
+                fields.next().unwrap_or_default(),
+            )])
+        })
+        .unwrap();
+    let all = SecondaryIndex::builder("by-status-all", 1, "app.users.by-status-all/v1")
+        .projection(IndexProjection::All)
+        .extract_terms(|_, value| {
+            Ok(vec![value
+                .split(|byte| *byte == b'|')
+                .next()
+                .unwrap()
+                .to_vec()])
+        })
+        .unwrap();
+    let registry = SecondaryIndexRegistry::new()
+        .register(keys)
+        .unwrap()
+        .register(include)
+        .unwrap()
+        .register(all)
+        .unwrap();
+    let indexed = prolly.indexed_map(b"users", registry).unwrap();
+    indexed.ensure_index(b"by-status").unwrap();
+    indexed.ensure_index(b"by-status-name").unwrap();
+    indexed.ensure_index(b"by-status-all").unwrap();
+
+    let historical = indexed.snapshot().unwrap();
+    let historical_id = historical.id().clone();
+    let by_status = historical.index(b"by-status").unwrap();
+    assert_eq!(
+        by_status.primary_keys(b"active").unwrap(),
+        vec![b"user-1".to_vec(), b"user-2".to_vec()]
+    );
+    assert_eq!(
+        by_status.records(b"active").unwrap(),
+        vec![
+            (b"user-1".to_vec(), b"active|Ada".to_vec()),
+            (b"user-2".to_vec(), b"active|Grace".to_vec()),
+        ]
+    );
+    assert_eq!(
+        historical
+            .index(b"by-status-name")
+            .unwrap()
+            .projected(b"active")
+            .unwrap(),
+        vec![
+            (b"user-1".to_vec(), Some(b"Ada".to_vec())),
+            (b"user-2".to_vec(), Some(b"Grace".to_vec())),
+        ]
+    );
+    assert_eq!(
+        historical
+            .index(b"by-status-all")
+            .unwrap()
+            .projected(b"active")
+            .unwrap()[0]
+            .1,
+        Some(b"active|Ada".to_vec())
+    );
+
+    let first = by_status.exact_page(b"active", None, 1).unwrap();
+    assert_eq!(first.matches[0].primary_key, b"user-1");
+    let encoded_cursor = first.next_cursor.as_ref().unwrap().to_bytes().unwrap();
+    let cursor = prolly::SecondaryIndexCursor::from_bytes(&encoded_cursor).unwrap();
+    let second = by_status.exact_page(b"active", Some(&cursor), 1).unwrap();
+    assert_eq!(second.matches[0].primary_key, b"user-2");
+    assert!(second.next_cursor.is_none());
+    assert!(matches!(
+        by_status.prefix_page(b"act", Some(&cursor), 1),
+        Err(Error::IndexCursorVersionMismatch { .. })
+    ));
+
+    let reverse = by_status.exact_reverse_page(b"active", None, 1).unwrap();
+    assert_eq!(reverse.matches[0].primary_key, b"user-2");
+    let prefix = by_status.prefix(b"arch").unwrap();
+    assert_eq!(prefix[0].term, b"archived");
+    assert_eq!(by_status.prefix(&[0]).unwrap()[0].term, vec![0, 0xff]);
+    assert_eq!(
+        by_status.range(&[0], Some(&[1])).unwrap()[0].primary_key,
+        b"user-4"
+    );
+    let range = by_status.range(b"active", Some(b"archived")).unwrap();
+    assert_eq!(range.len(), 2);
+
+    indexed.put(b"user-1", b"disabled|Ada").unwrap();
+    let current = indexed.snapshot().unwrap();
+    assert!(matches!(
+        current
+            .index(b"by-status")
+            .unwrap()
+            .exact_page(b"active", Some(&cursor), 1),
+        Err(Error::IndexCursorVersionMismatch { .. })
+    ));
+    assert_eq!(
+        indexed
+            .snapshot_by_id(&historical_id)
+            .unwrap()
+            .index(b"by-status")
+            .unwrap()
+            .primary_keys(b"active")
+            .unwrap()
+            .len(),
+        2
+    );
+    assert_eq!(
+        indexed
+            .snapshot_at(&historical_id.source_version)
+            .unwrap()
+            .id()
+            .source_version,
+        historical_id.source_version
+    );
+}
