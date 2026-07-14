@@ -51,9 +51,9 @@ BASELINE_BIN=$(find "$BASELINE_TARGET/release/deps" -type f -perm +111 -name 'sq
 test -n "$CURRENT_BIN"
 test -n "$BASELINE_BIN"
 
-if cp -c /dev/null "$TMP_ROOT/copy-test" 2>/dev/null; then
+if cp -c "$ROOT/Cargo.toml" "$TMP_ROOT/copy-test" 2>/dev/null; then
     COPY_METHOD=clonefile
-elif cp --reflink=auto /dev/null "$TMP_ROOT/copy-test" 2>/dev/null; then
+elif cp --reflink=auto "$ROOT/Cargo.toml" "$TMP_ROOT/copy-test" 2>/dev/null; then
     COPY_METHOD=reflink-auto
 fi
 rm -f "$TMP_ROOT/copy-test"
