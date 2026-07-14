@@ -1,5 +1,5 @@
 use prolly::{
-    MemStore, ProximityConfig, ProximityMap, ProximityMutation, ProximityRecord, SearchOptions,
+    MemStore, ProximityConfig, ProximityMap, ProximityMutation, ProximityRecord, SearchRequest,
 };
 use std::sync::Arc;
 
@@ -37,7 +37,7 @@ fn external_vectors_and_recursive_overflow_are_transparent() {
         input[37].vector
     );
     let result = map
-        .search(&input[37].vector, SearchOptions::new(5))
+        .search(SearchRequest::exact(&input[37].vector, 5))
         .unwrap();
     assert_eq!(result.neighbors[0].key, input[37].key);
 

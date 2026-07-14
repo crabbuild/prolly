@@ -1,6 +1,6 @@
 use prolly::{
     DistanceMetric, MemStore, ProximityConfig, ProximityMap, ProximityMutation, ProximityRecord,
-    SearchOptions,
+    SearchRequest,
 };
 use std::error::Error;
 use std::sync::Arc;
@@ -21,15 +21,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         ],
     )?;
 
-    let result = map.search(
-        &[0.1, 0.9, 0.0],
-        SearchOptions {
-            k: 2,
-            beam_width: 32,
-            max_nodes: None,
-            max_distance_evaluations: None,
-        },
-    )?;
+    let result = map.search(SearchRequest::exact(&[0.1, 0.9, 0.0], 2))?;
     for neighbor in result.neighbors {
         println!(
             "{} distance={} value={}",

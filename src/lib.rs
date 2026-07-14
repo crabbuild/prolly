@@ -331,10 +331,10 @@ pub use prolly::proof::{
 };
 pub use prolly::proximity::{
     AdaptiveQuality, DistanceMetric, ExactProximityRecord, HierarchyConfig, Neighbor,
-    OverflowConfig, ProximityConfig, ProximityMap, ProximityMutation, ProximityMutationStats,
-    ProximityRecord, ProximitySearchStats, ProximityTree, ProximityVerification,
-    ScalarQuantizationConfig, SearchBackend, SearchBudget, SearchCompletion, SearchOptions,
-    SearchPolicy, SearchResult, VectorStorageConfig,
+    OverflowConfig, ProximityConfig, ProximityFilter, ProximityMap, ProximityMutation,
+    ProximityMutationStats, ProximityRecord, ProximitySearchStats, ProximityTree,
+    ProximityVerification, ScalarQuantizationConfig, SearchBackend, SearchBudget, SearchCompletion,
+    SearchPolicy, SearchRequest, SearchResult, VectorStorageConfig,
 };
 pub use prolly::range::{
     CursorWindow, RangeCursor, RangeIter, RangePage, ReverseCursor, ReversePage,

@@ -1,6 +1,6 @@
 use prolly::{
     DistanceMetric, MemStore, ProximityConfig, ProximityMap, ProximityMutation, ProximityRecord,
-    SearchOptions,
+    SearchRequest,
 };
 use std::collections::HashSet;
 use std::hint::black_box;
@@ -32,15 +32,10 @@ fn bench_case(count: usize, dimensions: usize) {
     let query = make_vector(count / 3, dimensions);
     let search_start = Instant::now();
     let result = map
-        .search(
+        .search(SearchRequest::exact(
             black_box(&query),
-            SearchOptions {
-                k: 10.min(count.max(1)),
-                beam_width: 64.min(count.max(10)),
-                max_nodes: None,
-                max_distance_evaluations: None,
-            },
-        )
+            10.min(count.max(1)),
+        ))
         .unwrap();
     let search = search_start.elapsed();
     let exact = brute_force(&records, &query, 10.min(count));

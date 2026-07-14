@@ -5,6 +5,7 @@ mod cache;
 mod distance;
 mod map;
 mod mutation;
+mod search;
 mod storage;
 mod vector;
 
@@ -13,6 +14,7 @@ use super::error::Error;
 use super::tree::Tree;
 
 pub use map::ProximityMap;
+pub use search::{ProximityFilter, SearchRequest};
 
 const MIN_PROXIMITY_NODE_BYTES: u32 = 64;
 
@@ -277,56 +279,12 @@ pub struct ProximityMutation {
     pub value: Option<(Vec<f32>, Vec<u8>)>,
 }
 
-/// Per-query quality and resource controls.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SearchOptions {
-    pub k: usize,
-    pub beam_width: usize,
-    pub max_nodes: Option<usize>,
-    pub max_distance_evaluations: Option<usize>,
-}
-
-impl SearchOptions {
-    pub fn new(k: usize) -> Self {
-        Self {
-            k,
-            beam_width: k.max(32),
-            max_nodes: None,
-            max_distance_evaluations: None,
-        }
-    }
-
-    pub fn validate(&self) -> Result<(), Error> {
-        if self.k == 0 {
-            return Err(Error::InvalidProximitySearch {
-                reason: "k must be greater than zero".to_owned(),
-            });
-        }
-        if self.beam_width < self.k {
-            return Err(Error::InvalidProximitySearch {
-                reason: "beam_width must be at least k".to_owned(),
-            });
-        }
-        if self.max_nodes == Some(0) {
-            return Err(Error::InvalidProximitySearch {
-                reason: "max_nodes must be greater than zero".to_owned(),
-            });
-        }
-        if self.max_distance_evaluations == Some(0) {
-            return Err(Error::InvalidProximitySearch {
-                reason: "max_distance_evaluations must be greater than zero".to_owned(),
-            });
-        }
-        Ok(())
-    }
-}
-
 /// One resolved nearest-neighbor result.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Neighbor {
     pub key: Vec<u8>,
     pub value: Vec<u8>,
-    pub distance: f32,
+    pub distance: f64,
 }
 
 /// Observable resource use for one search.
@@ -335,14 +293,16 @@ pub struct ProximitySearchStats {
     pub levels_visited: usize,
     pub nodes_read: usize,
     pub bytes_read: usize,
+    pub committed_bytes: usize,
     pub distance_evaluations: usize,
-    pub budget_exhausted: bool,
+    pub frontier_peak: usize,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct SearchResult {
     pub neighbors: Vec<Neighbor>,
     pub stats: ProximitySearchStats,
+    pub completion: SearchCompletion,
 }
 
 /// Observable copy-on-write work for one mutation batch.

@@ -1,5 +1,6 @@
 use prolly::{
-    DistanceMetric, Error, MemStore, ProximityConfig, ProximityMap, ProximityRecord, SearchOptions,
+    DistanceMetric, Error, MemStore, ProximityConfig, ProximityFilter, ProximityMap,
+    ProximityRecord, SearchBackend, SearchBudget, SearchCompletion, SearchPolicy, SearchRequest,
 };
 use std::sync::Arc;
 
@@ -37,17 +38,7 @@ fn proximity_search_returns_distance_then_key_ordered_neighbors() {
     )
     .unwrap();
 
-    let result = map
-        .search(
-            &[0.0, 0.0],
-            SearchOptions {
-                k: 2,
-                beam_width: 3,
-                max_nodes: None,
-                max_distance_evaluations: None,
-            },
-        )
-        .unwrap();
+    let result = map.search(SearchRequest::exact(&[0.0, 0.0], 2)).unwrap();
 
     assert_eq!(
         result
@@ -97,7 +88,7 @@ fn empty_map_and_duplicate_vectors_have_unambiguous_semantics() {
     let empty = ProximityMap::build(Arc::new(MemStore::new()), config(2), []).unwrap();
     assert_eq!(empty.get(b"absent").unwrap(), None);
     assert!(empty
-        .search(&[0.0, 0.0], SearchOptions::new(1))
+        .search(SearchRequest::exact(&[0.0, 0.0], 1))
         .unwrap()
         .neighbors
         .is_empty());
@@ -119,17 +110,7 @@ fn empty_map_and_duplicate_vectors_have_unambiguous_semantics() {
         ],
     )
     .unwrap();
-    let result = map
-        .search(
-            &[1.0, 1.0],
-            SearchOptions {
-                k: 2,
-                beam_width: 2,
-                max_nodes: None,
-                max_distance_evaluations: None,
-            },
-        )
-        .unwrap();
+    let result = map.search(SearchRequest::exact(&[1.0, 1.0], 2)).unwrap();
     assert_eq!(
         result
             .neighbors
@@ -199,17 +180,7 @@ fn exhaustive_beam_matches_brute_force_on_multilevel_map() {
     let query = [17.25, 4.5, 2.0];
     let map = ProximityMap::build(store, multilevel, records.clone()).unwrap();
 
-    let result = map
-        .search(
-            &query,
-            SearchOptions {
-                k: 10,
-                beam_width: records.len(),
-                max_nodes: None,
-                max_distance_evaluations: None,
-            },
-        )
-        .unwrap();
+    let result = map.search(SearchRequest::exact(&query, 10)).unwrap();
     let mut expected = records;
     expected.sort_by(|left, right| {
         let distance = |vector: &[f32]| {
@@ -256,16 +227,22 @@ fn search_distance_budget_is_deterministic_and_reported() {
         }),
     )
     .unwrap();
-    let options = SearchOptions {
+    let query = [0.0, 0.0];
+    let request = SearchRequest {
+        query: &query,
         k: 1,
-        beam_width: 8,
-        max_nodes: None,
-        max_distance_evaluations: Some(5),
+        policy: SearchPolicy::FixedBudget,
+        budget: SearchBudget {
+            max_distance_evaluations: Some(5),
+            ..SearchBudget::default()
+        },
+        filter: ProximityFilter::All,
+        backend: SearchBackend::Native,
     };
 
-    let first = map.search(&[0.0, 0.0], options.clone()).unwrap();
-    let second = map.search(&[0.0, 0.0], options).unwrap();
-    assert!(first.stats.budget_exhausted);
+    let first = map.search(request.clone()).unwrap();
+    let second = map.search(request).unwrap();
+    assert_eq!(first.completion, SearchCompletion::BudgetExhausted);
     assert_eq!(first.stats.distance_evaluations, 5);
     assert_eq!(first.neighbors, second.neighbors);
     assert_eq!(first.stats.nodes_read, second.stats.nodes_read);
@@ -273,6 +250,6 @@ fn search_distance_budget_is_deterministic_and_reported() {
         first.stats.distance_evaluations,
         second.stats.distance_evaluations
     );
-    assert_eq!(first.stats.budget_exhausted, second.stats.budget_exhausted);
-    assert!(first.stats.bytes_read > second.stats.bytes_read);
+    assert_eq!(first.completion, second.completion);
+    assert_eq!(first.stats.bytes_read, second.stats.bytes_read);
 }

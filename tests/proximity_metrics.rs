@@ -1,5 +1,5 @@
 use prolly::{
-    DistanceMetric, Error, MemStore, ProximityConfig, ProximityMap, ProximityRecord, SearchOptions,
+    DistanceMetric, Error, MemStore, ProximityConfig, ProximityMap, ProximityRecord, SearchRequest,
 };
 use std::sync::Arc;
 
@@ -24,30 +24,30 @@ fn metric_scores_and_key_ties_are_canonical() {
         DistanceMetric::L2Squared,
         &[(b"b", &[4.0, 6.0]), (b"a", &[-2.0, -2.0])],
     );
-    let result = l2.search(&[1.0, 2.0], SearchOptions::new(2)).unwrap();
+    let result = l2.search(SearchRequest::exact(&[1.0, 2.0], 2)).unwrap();
     assert_eq!(result.neighbors[0].key, b"a");
-    assert_eq!(result.neighbors[0].distance.to_bits(), 25.0f32.to_bits());
-    assert_eq!(result.neighbors[1].distance.to_bits(), 25.0f32.to_bits());
+    assert_eq!(result.neighbors[0].distance.to_bits(), 25.0f64.to_bits());
+    assert_eq!(result.neighbors[1].distance.to_bits(), 25.0f64.to_bits());
     assert_eq!(result.neighbors[1].key, b"b");
 
     let cosine = build(
         DistanceMetric::Cosine,
         &[(b"x", &[1.0, 0.0]), (b"y", &[0.0, 1.0])],
     );
-    let result = cosine.search(&[3.0, 4.0], SearchOptions::new(2)).unwrap();
+    let result = cosine.search(SearchRequest::exact(&[3.0, 4.0], 2)).unwrap();
     assert_eq!(result.neighbors[0].key, b"y");
     assert_eq!(
         result.neighbors[0].distance.to_bits(),
-        0.199_999_99f32.to_bits()
+        (1.0 - f64::from(0.8f32)).to_bits()
     );
 
     let inner = build(
         DistanceMetric::InnerProduct,
         &[(b"positive", &[2.0, 1.0]), (b"negative", &[-1.0, 0.0])],
     );
-    let result = inner.search(&[1.0, 2.0], SearchOptions::new(2)).unwrap();
+    let result = inner.search(SearchRequest::exact(&[1.0, 2.0], 2)).unwrap();
     assert_eq!(result.neighbors[0].key, b"positive");
-    assert_eq!(result.neighbors[0].distance.to_bits(), (-4.0f32).to_bits());
+    assert_eq!(result.neighbors[0].distance.to_bits(), (-4.0f64).to_bits());
 }
 
 #[test]
@@ -73,7 +73,7 @@ fn cosine_preparation_is_persisted_and_rejects_zero_vectors() {
     assert!(matches!(error, Error::ZeroCosineVector));
 
     let error = cosine
-        .search(&[0.0, -0.0], SearchOptions::new(1))
+        .search(SearchRequest::exact(&[0.0, -0.0], 1))
         .expect_err("zero cosine queries must be rejected");
     assert!(matches!(error, Error::ZeroCosineVector));
 }
