@@ -8,7 +8,8 @@ use super::builder::{build_hierarchy, IndexedRecord};
 use super::cache::{ContentCache, DEFAULT_PROXIMITY_CACHE_NODES};
 use super::distance::{prepare_vector, score};
 use super::mutation::{mutate_hierarchy, LogicalEdit};
-use super::storage::{Descriptor, ProximityNode, StoredRecord};
+use super::storage::vector::ExternalVector;
+use super::storage::{Descriptor, PhysicalNodeKind, ProximityNode, StoredRecord, VectorRef};
 use super::vector::promotion_level;
 use super::{
     ExactProximityRecord, Neighbor, ProximityConfig, ProximityMutation, ProximityMutationStats,
@@ -235,13 +236,14 @@ where
         }
 
         let (old_root, _) = self.load_node(&self.tree.proximity_root)?;
+        let has_overflow = self.hierarchy_has_overflow()?;
         let max_edit_level = logical_edits
             .iter()
             .map(|edit| edit.level)
             .max()
             .unwrap_or(0);
         let (proximity_root, nodes, mut stats) =
-            if old_root.entries.is_empty() || max_edit_level >= old_root.level {
+            if old_root.entries.is_empty() || max_edit_level >= old_root.level || has_overflow {
                 let indexed: Vec<_> = records
                     .values()
                     .map(|record| IndexedRecord {
@@ -304,21 +306,35 @@ where
         options.validate()?;
         let query = prepare_vector(self.tree.config.metric, query, self.tree.config.dimensions)?;
         let mut stats = ProximitySearchStats::default();
-        let (root, root_bytes) = self.load_node(&self.tree.proximity_root)?;
-        stats.nodes_read = 1;
-        stats.bytes_read = root_bytes;
+        let (root_nodes, nodes_read, bytes_read) =
+            self.load_logical_nodes(std::slice::from_ref(&self.tree.proximity_root))?;
+        stats.nodes_read = nodes_read;
+        stats.bytes_read = bytes_read;
         stats.levels_visited = 1;
-
-        let mut current = score_entries(
-            &root,
-            &query,
-            &BTreeMap::new(),
-            options.beam_width,
-            &options,
-            self.tree.config.metric,
-            &mut stats,
-        )?;
-        let mut level = root.level;
+        let mut level = root_nodes.first().map_or(0, |node| node.level);
+        let mut current_by_key = BTreeMap::<Vec<u8>, Candidate>::new();
+        for node in root_nodes {
+            if node.level != level {
+                return Err(Error::InvalidProximityObject {
+                    kind: "node",
+                    reason: "overflow pages disagree on logical level".to_owned(),
+                });
+            }
+            for candidate in score_entries(
+                &node,
+                &query,
+                &BTreeMap::new(),
+                usize::MAX,
+                &options,
+                self.tree.config.metric,
+                &mut stats,
+            )? {
+                insert_best(&mut current_by_key, candidate);
+            }
+        }
+        let mut current: Vec<_> = current_by_key.into_values().collect();
+        current.sort_by(candidate_order);
+        current.truncate(options.beam_width);
 
         while level > 0 && !current.is_empty() && !stats.budget_exhausted {
             let mut seen = HashSet::new();
@@ -340,21 +356,21 @@ where
             if child_cids.is_empty() {
                 break;
             }
-            let child_nodes = self.load_nodes_ordered(&child_cids)?;
+            let (child_nodes, nodes_read, bytes_read) = self.load_logical_nodes(&child_cids)?;
+            stats.nodes_read += nodes_read;
+            stats.bytes_read += bytes_read;
             let known: BTreeMap<Vec<u8>, f64> = current
                 .iter()
                 .map(|candidate| (candidate.key.clone(), candidate.distance))
                 .collect();
             let mut next_by_key = BTreeMap::<Vec<u8>, Candidate>::new();
-            for (node, bytes_read) in child_nodes {
+            for node in child_nodes {
                 if node.level + 1 != level {
                     return Err(Error::InvalidProximityObject {
                         kind: "node",
                         reason: "child level does not descend by one".to_owned(),
                     });
                 }
-                stats.nodes_read += 1;
-                stats.bytes_read += bytes_read;
                 for candidate in score_entries(
                     &node,
                     &query,
@@ -364,14 +380,7 @@ where
                     self.tree.config.metric,
                     &mut stats,
                 )? {
-                    next_by_key
-                        .entry(candidate.key.clone())
-                        .and_modify(|existing| {
-                            if candidate_order(&candidate, existing).is_lt() {
-                                *existing = candidate.clone();
-                            }
-                        })
-                        .or_insert(candidate);
+                    insert_best(&mut next_by_key, candidate);
                     if stats.budget_exhausted {
                         break;
                     }
@@ -430,6 +439,7 @@ where
         let mut state = VerificationState {
             records: &records,
             seen_nodes: HashSet::new(),
+            seen_external_vectors: HashSet::new(),
             seen_leaf_keys: HashSet::new(),
             summary: ProximityVerification {
                 record_count: self.tree.count,
@@ -437,13 +447,13 @@ where
                 ..Default::default()
             },
         };
-        let count = self.verify_node(
+        let verified = self.verify_node(
             &self.tree.proximity_root,
             Some(root.level),
             None,
             &mut state,
         )?;
-        if count != self.tree.count || records.len() as u64 != self.tree.count {
+        if verified.count != self.tree.count || records.len() as u64 != self.tree.count {
             return Err(Error::InvalidProximityObject {
                 kind: "descriptor",
                 reason: "logical counts disagree".to_owned(),
@@ -482,7 +492,9 @@ where
             });
         }
         let len = bytes.len();
-        let node = Arc::new(ProximityNode::decode(&bytes, self.tree.config.dimensions)?);
+        let mut node = ProximityNode::decode(&bytes, self.tree.config.dimensions)?;
+        let vector_bytes = self.resolve_external_vectors(&mut node)?;
+        let node = Arc::new(node);
         self.node_cache
             .lock()
             .map_err(|_| Error::InvalidProximityObject {
@@ -490,7 +502,7 @@ where
                 reason: "node cache lock poisoned".to_owned(),
             })?
             .insert(cid.clone(), node.clone(), len);
-        Ok((node, len))
+        Ok((node, len + vector_bytes))
     }
 
     fn load_nodes_ordered(&self, cids: &[Cid]) -> Result<Vec<(Arc<ProximityNode>, usize)>, Error> {
@@ -533,7 +545,9 @@ where
                 });
             }
             let len = bytes.len();
-            let node = Arc::new(ProximityNode::decode(&bytes, self.tree.config.dimensions)?);
+            let mut node = ProximityNode::decode(&bytes, self.tree.config.dimensions)?;
+            let vector_bytes = self.resolve_external_vectors(&mut node)?;
+            let node = Arc::new(node);
             self.node_cache
                 .lock()
                 .map_err(|_| Error::InvalidProximityObject {
@@ -541,7 +555,7 @@ where
                     reason: "node cache lock poisoned".to_owned(),
                 })?
                 .insert(cid, node.clone(), len);
-            results[index] = Some((node, len));
+            results[index] = Some((node, len + vector_bytes));
         }
         results
             .into_iter()
@@ -552,6 +566,61 @@ where
                 })
             })
             .collect()
+    }
+
+    fn load_logical_nodes(
+        &self,
+        roots: &[Cid],
+    ) -> Result<(Vec<Arc<ProximityNode>>, usize, usize), Error> {
+        let mut pending = roots.to_vec();
+        let mut seen = HashSet::new();
+        let mut logical = Vec::new();
+        let mut nodes_read = 0usize;
+        let mut bytes_read = 0usize;
+        while !pending.is_empty() {
+            if pending.iter().any(|cid| !seen.insert(cid.clone())) {
+                return Err(Error::InvalidProximityObject {
+                    kind: "node",
+                    reason: "cycle or repeated overflow ownership".to_owned(),
+                });
+            }
+            let loaded = self.load_nodes_ordered(&pending)?;
+            pending.clear();
+            for (node, bytes) in loaded {
+                nodes_read += 1;
+                bytes_read += bytes;
+                if node.kind == PhysicalNodeKind::OverflowDirectory {
+                    pending.extend(
+                        node.entries
+                            .iter()
+                            .map(|entry| entry.child.clone().expect("validated overflow child")),
+                    );
+                } else {
+                    logical.push(node);
+                }
+            }
+        }
+        Ok((logical, nodes_read, bytes_read))
+    }
+
+    fn resolve_external_vectors(&self, node: &mut ProximityNode) -> Result<usize, Error> {
+        let mut bytes_read = 0usize;
+        for entry in &mut node.entries {
+            let VectorRef::External(cid) = &entry.vector else {
+                continue;
+            };
+            let bytes = load_content(&self.store, cid)?;
+            let external = ExternalVector::decode(&bytes)?;
+            if external.vector.len() != self.tree.config.dimensions as usize {
+                return Err(Error::InvalidProximityObject {
+                    kind: "vector",
+                    reason: "external vector dimension mismatch".to_owned(),
+                });
+            }
+            bytes_read += bytes.len();
+            entry.vector = VectorRef::Inline(external.vector);
+        }
+        Ok(bytes_read)
     }
 
     fn collect_records(&self) -> Result<BTreeMap<Vec<u8>, ProximityRecord>, Error> {
@@ -571,6 +640,26 @@ where
         Ok(records)
     }
 
+    fn hierarchy_has_overflow(&self) -> Result<bool, Error> {
+        let mut pending = vec![self.tree.proximity_root.clone()];
+        let mut seen = HashSet::new();
+        while let Some(cid) = pending.pop() {
+            if !seen.insert(cid.clone()) {
+                continue;
+            }
+            let bytes = load_content(&self.store, &cid)?;
+            let node = ProximityNode::decode(&bytes, self.tree.config.dimensions)?;
+            if matches!(
+                node.kind,
+                PhysicalNodeKind::OverflowPage | PhysicalNodeKind::OverflowDirectory
+            ) {
+                return Ok(true);
+            }
+            pending.extend(node.entries.into_iter().filter_map(|entry| entry.child));
+        }
+        Ok(false)
+    }
+
     fn verify_node(
         &self,
         cid: &Cid,
@@ -580,7 +669,7 @@ where
             &[super::storage::ProximityEntry],
         )>,
         state: &mut VerificationState<'_>,
-    ) -> Result<u64, Error> {
+    ) -> Result<VerifiedSubtree, Error> {
         if !state.seen_nodes.insert(cid.clone()) {
             return Err(Error::InvalidProximityObject {
                 kind: "node",
@@ -594,7 +683,15 @@ where
                 reason: "node exceeds descriptor max_node_bytes".to_owned(),
             });
         }
-        let node = ProximityNode::decode(&bytes, self.tree.config.dimensions)?;
+        let mut node = ProximityNode::decode(&bytes, self.tree.config.dimensions)?;
+        for entry in &node.entries {
+            if let VectorRef::External(vector) = &entry.vector {
+                if state.seen_external_vectors.insert(vector.clone()) {
+                    state.summary.external_vector_count += 1;
+                }
+            }
+        }
+        self.resolve_external_vectors(&mut node)?;
         if expected_level != Some(node.level) {
             return Err(Error::InvalidProximityObject {
                 kind: "node",
@@ -602,51 +699,61 @@ where
             });
         }
         state.summary.proximity_node_count += 1;
+        match node.kind {
+            PhysicalNodeKind::OverflowPage => state.summary.overflow_page_count += 1,
+            PhysicalNodeKind::OverflowDirectory => state.summary.overflow_directory_count += 1,
+            PhysicalNodeKind::Leaf | PhysicalNodeKind::Route => {}
+        }
         state.summary.maximum_node_bytes = state.summary.maximum_node_bytes.max(bytes.len());
 
-        if let Some((selected, candidates)) = parent {
-            for entry in &node.entries {
-                let selected_distance = score(
-                    self.tree.config.metric,
-                    entry.vector.inline()?,
-                    selected.vector.inline()?,
-                );
-                for candidate in candidates {
-                    state.summary.distance_checks += 1;
-                    let candidate_distance = score(
+        if node.kind != PhysicalNodeKind::OverflowDirectory {
+            if let Some((selected, candidates)) = parent {
+                for entry in &node.entries {
+                    let selected_distance = score(
                         self.tree.config.metric,
                         entry.vector.inline()?,
-                        candidate.vector.inline()?,
+                        selected.vector.inline()?,
                     );
-                    let candidate_is_better = candidate_distance
-                        .total_cmp(&selected_distance)
-                        .then_with(|| candidate.key.cmp(&selected.key))
-                        .is_lt();
-                    if candidate_is_better {
-                        return Err(Error::InvalidProximityObject {
-                            kind: "node",
-                            reason: "nearest-representative invariant violated".to_owned(),
-                        });
+                    for candidate in candidates {
+                        state.summary.distance_checks += 1;
+                        let candidate_distance = score(
+                            self.tree.config.metric,
+                            entry.vector.inline()?,
+                            candidate.vector.inline()?,
+                        );
+                        let candidate_is_better = candidate_distance
+                            .total_cmp(&selected_distance)
+                            .then_with(|| candidate.key.cmp(&selected.key))
+                            .is_lt();
+                        if candidate_is_better {
+                            return Err(Error::InvalidProximityObject {
+                                kind: "node",
+                                reason: "nearest-representative invariant violated".to_owned(),
+                            });
+                        }
                     }
                 }
             }
         }
 
-        for entry in &node.entries {
-            if super::vector::promotion_level(
-                &entry.key,
-                self.tree.config.hierarchy.log_chunk_size,
-                self.tree.config.hierarchy.level_hash_seed,
-            ) < node.level
-            {
-                return Err(Error::InvalidProximityObject {
-                    kind: "node",
-                    reason: "entry appears above its deterministic promotion level".to_owned(),
-                });
+        if node.kind != PhysicalNodeKind::OverflowDirectory {
+            for entry in &node.entries {
+                if super::vector::promotion_level(
+                    &entry.key,
+                    self.tree.config.hierarchy.log_chunk_size,
+                    self.tree.config.hierarchy.level_hash_seed,
+                ) < node.level
+                {
+                    return Err(Error::InvalidProximityObject {
+                        kind: "node",
+                        reason: "entry appears above its deterministic promotion level".to_owned(),
+                    });
+                }
             }
         }
 
-        let computed = if node.level == 0 {
+        let verified = if node.kind.is_logical_leaf(node.level) {
+            let mut points = Vec::with_capacity(node.entries.len());
             for entry in &node.entries {
                 if !state.seen_leaf_keys.insert(entry.key.clone()) {
                     return Err(Error::InvalidProximityObject {
@@ -668,10 +775,14 @@ where
                         reason: "leaf vector disagrees with exact directory".to_owned(),
                     });
                 }
+                points.push((entry.key.clone(), entry.vector.inline()?.to_vec()));
             }
-            node.entries.len() as u64
+            VerifiedSubtree::from_points(node.entries.len() as u64, points)
         } else {
             let mut count = 0u64;
+            let mut points = Vec::new();
+            let mut minimum: Option<Vec<u8>> = None;
+            let mut maximum: Option<Vec<u8>> = None;
             for entry in &node.entries {
                 let child = entry
                     .child
@@ -680,35 +791,107 @@ where
                         kind: "node",
                         reason: "internal entry has no child".to_owned(),
                     })?;
-                count = count
-                    .checked_add(self.verify_node(
-                        child,
-                        Some(node.level - 1),
-                        Some((entry, &node.entries)),
-                        state,
-                    )?)
-                    .ok_or_else(|| Error::InvalidProximityObject {
+                let child_verified = self.verify_node(
+                    child,
+                    Some(if node.kind == PhysicalNodeKind::OverflowDirectory {
+                        node.level
+                    } else {
+                        node.level - 1
+                    }),
+                    if node.kind == PhysicalNodeKind::OverflowDirectory {
+                        parent
+                    } else {
+                        Some((entry, &node.entries))
+                    },
+                    state,
+                )?;
+                if child_verified.count != entry.child_count {
+                    return Err(Error::InvalidProximityObject {
+                        kind: "node",
+                        reason: "child count summary mismatch".to_owned(),
+                    });
+                }
+                if child_verified.minimum.as_deref() != Some(entry.min_key.as_slice())
+                    || child_verified.maximum.as_deref() != Some(entry.max_key.as_slice())
+                {
+                    return Err(Error::InvalidProximityObject {
+                        kind: "node",
+                        reason: "child key-bound summary mismatch".to_owned(),
+                    });
+                }
+                for (_, vector) in &child_verified.points {
+                    let required = super::distance::euclidean_radius_up(
+                        score(
+                            super::DistanceMetric::L2Squared,
+                            entry.vector.inline()?,
+                            vector,
+                        ),
+                        0.0,
+                    );
+                    if required > entry.covering_radius {
+                        return Err(Error::InvalidProximityObject {
+                            kind: "node",
+                            reason: "covering-radius summary is not conservative".to_owned(),
+                        });
+                    }
+                }
+                count = count.checked_add(child_verified.count).ok_or_else(|| {
+                    Error::InvalidProximityObject {
                         kind: "node",
                         reason: "subtree count overflow".to_owned(),
-                    })?;
+                    }
+                })?;
+                if minimum.as_ref().map_or(true, |key| entry.min_key < *key) {
+                    minimum = Some(entry.min_key.clone());
+                }
+                if maximum.as_ref().map_or(true, |key| entry.max_key > *key) {
+                    maximum = Some(entry.max_key.clone());
+                }
+                points.extend(child_verified.points);
             }
-            count
+            VerifiedSubtree {
+                count,
+                minimum,
+                maximum,
+                points,
+            }
         };
-        if computed != node.subtree_count {
+        if verified.count != node.subtree_count {
             return Err(Error::InvalidProximityObject {
                 kind: "node",
                 reason: "subtree count mismatch".to_owned(),
             });
         }
-        Ok(computed)
+        Ok(verified)
     }
 }
 
 struct VerificationState<'a> {
     records: &'a BTreeMap<Vec<u8>, ProximityRecord>,
     seen_nodes: HashSet<Cid>,
+    seen_external_vectors: HashSet<Cid>,
     seen_leaf_keys: HashSet<Vec<u8>>,
     summary: ProximityVerification,
+}
+
+struct VerifiedSubtree {
+    count: u64,
+    minimum: Option<Vec<u8>>,
+    maximum: Option<Vec<u8>>,
+    points: Vec<(Vec<u8>, Vec<f32>)>,
+}
+
+impl VerifiedSubtree {
+    fn from_points(count: u64, points: Vec<(Vec<u8>, Vec<f32>)>) -> Self {
+        let minimum = points.iter().map(|(key, _)| key).min().cloned();
+        let maximum = points.iter().map(|(key, _)| key).max().cloned();
+        Self {
+            count,
+            minimum,
+            maximum,
+            points,
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -723,6 +906,17 @@ fn candidate_order(left: &Candidate, right: &Candidate) -> std::cmp::Ordering {
     left.distance
         .total_cmp(&right.distance)
         .then_with(|| left.key.cmp(&right.key))
+}
+
+fn insert_best(candidates: &mut BTreeMap<Vec<u8>, Candidate>, candidate: Candidate) {
+    candidates
+        .entry(candidate.key.clone())
+        .and_modify(|existing| {
+            if candidate_order(&candidate, existing).is_lt() {
+                *existing = candidate.clone();
+            }
+        })
+        .or_insert(candidate);
 }
 
 fn score_entries(
@@ -1062,6 +1256,39 @@ mod tests {
             ProximityMap::load(store, descriptor),
             Err(Error::InvalidProximityObject { reason, .. })
                 if reason == "record count disagrees with proximity root"
+        ));
+    }
+
+    #[test]
+    fn verify_rejects_a_non_conservative_covering_radius() {
+        let store = Arc::new(MemStore::new());
+        let map = ProximityMap::build(
+            store.clone(),
+            config(),
+            (0..128).map(|index| ProximityRecord {
+                key: format!("radius-{index:04}").into_bytes(),
+                vector: vec![index as f32],
+                value: Vec::new(),
+            }),
+        )
+        .unwrap();
+        let bytes = store
+            .get(map.tree.proximity_root.as_bytes())
+            .unwrap()
+            .unwrap();
+        let mut root = ProximityNode::decode(&bytes, 1).unwrap();
+        let entry = root
+            .entries
+            .iter_mut()
+            .find(|entry| entry.covering_radius > 0.0)
+            .expect("test hierarchy has a nontrivial cluster");
+        entry.covering_radius = 0.0;
+        let corrupt = publish_replacement_root(&store, &map, root);
+
+        assert!(matches!(
+            corrupt.verify(),
+            Err(Error::InvalidProximityObject { reason, .. })
+                if reason == "covering-radius summary is not conservative"
         ));
     }
 }

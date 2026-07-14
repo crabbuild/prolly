@@ -29,6 +29,18 @@ impl PhysicalNodeKind {
             _ => Err(reader.invalid("unknown physical node kind")),
         }
     }
+
+    pub(crate) fn has_children(self, level: u8) -> bool {
+        match self {
+            Self::Leaf => false,
+            Self::Route | Self::OverflowDirectory => true,
+            Self::OverflowPage => level > 0,
+        }
+    }
+
+    pub(crate) fn is_logical_leaf(self, level: u8) -> bool {
+        matches!(self, Self::Leaf) || (matches!(self, Self::OverflowPage) && level == 0)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -163,10 +175,10 @@ impl ProximityNode {
                 1 => VectorRef::External(reader.cid()?),
                 _ => return Err(reader.invalid("invalid vector reference tag")),
             };
-            let child = if level == 0 {
-                None
-            } else {
+            let child = if kind.has_children(level) {
                 Some(reader.cid()?)
+            } else {
+                None
             };
             entries.push(ProximityEntry {
                 key,
@@ -222,6 +234,7 @@ impl ProximityNode {
     fn validate(&self, dimensions: Option<u32>) -> Result<(), Error> {
         if (self.kind == PhysicalNodeKind::Leaf && self.level != 0)
             || (self.kind == PhysicalNodeKind::Route && self.level == 0)
+            || (self.kind == PhysicalNodeKind::OverflowDirectory && self.entries.is_empty())
         {
             return Err(invalid("logical level disagrees with physical node kind"));
         }
@@ -231,8 +244,8 @@ impl ProximityNode {
             if previous.is_some_and(|key| key >= entry.key.as_slice()) {
                 return Err(invalid("entry keys must be strictly ascending"));
             }
-            let leaf = self.level == 0;
-            if leaf != entry.child.is_none() {
+            let leaf = self.kind.is_logical_leaf(self.level);
+            if self.kind.has_children(self.level) == entry.child.is_none() {
                 return Err(invalid("physical kind/child mismatch"));
             }
             if let VectorRef::Inline(vector) = &entry.vector {

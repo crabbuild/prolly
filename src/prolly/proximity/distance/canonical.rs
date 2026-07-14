@@ -72,6 +72,9 @@ pub(super) fn reciprocal_sqrt(value: f64) -> f64 {
 pub(crate) fn euclidean_radius_up(distance_squared: f64, child_radius: f64) -> f64 {
     debug_assert!(distance_squared.is_finite() && distance_squared >= 0.0);
     debug_assert!(child_radius.is_finite() && child_radius >= 0.0);
+    if distance_squared == 0.0 {
+        return child_radius;
+    }
     let root_up = next_up(sqrt_down(distance_squared));
     next_up(root_up + child_radius)
 }

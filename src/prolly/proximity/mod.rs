@@ -361,6 +361,9 @@ pub struct ProximityMutationStats {
 pub struct ProximityVerification {
     pub record_count: u64,
     pub proximity_node_count: usize,
+    pub external_vector_count: usize,
+    pub overflow_page_count: usize,
+    pub overflow_directory_count: usize,
     pub maximum_level: u8,
     pub maximum_node_bytes: usize,
     pub distance_checks: usize,

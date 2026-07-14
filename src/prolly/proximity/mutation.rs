@@ -3,7 +3,9 @@ use super::super::error::Error;
 use super::super::store::Store;
 use super::builder::{build_hierarchy_at_level, IndexedRecord};
 use super::distance::score;
-use super::storage::{PhysicalNodeKind, ProximityEntry, ProximityNode};
+use super::storage::overflow::{persist_logical_node, summarize};
+use super::storage::vector::ExternalVector;
+use super::storage::{PhysicalNodeKind, ProximityEntry, ProximityNode, VectorRef};
 use super::{ProximityConfig, ProximityMutationStats};
 use std::collections::{BTreeMap, HashMap, HashSet};
 
@@ -116,14 +118,12 @@ impl<S: Store> Context<'_, S> {
                 })?;
             let Some(child_edits) = grouped.remove(&index) else {
                 entries.push(entry.clone());
-                let (child, _) = self.load_node(old_child)?;
-                subtree_count =
-                    subtree_count
-                        .checked_add(child.subtree_count)
-                        .ok_or_else(|| Error::InvalidProximityObject {
-                            kind: "mutation",
-                            reason: "subtree count overflow".to_owned(),
-                        })?;
+                subtree_count = subtree_count
+                    .checked_add(entry.child_count)
+                    .ok_or_else(|| Error::InvalidProximityObject {
+                        kind: "mutation",
+                        reason: "subtree count overflow".to_owned(),
+                    })?;
                 self.stats.nodes_reused += 1;
                 continue;
             };
@@ -162,15 +162,11 @@ impl<S: Store> Context<'_, S> {
                     reason: "subtree count overflow".to_owned(),
                 }
             })?;
-            entries.push(ProximityEntry {
-                key: entry.key.clone(),
-                vector: entry.vector.clone(),
-                child: Some(new_child),
-                child_count,
-                covering_radius: 0.0,
-                min_key: entry.key.clone(),
-                max_key: entry.key.clone(),
-            });
+            let representative = entry.vector.inline()?.to_vec();
+            let summary =
+                self.summarize_child(new_child, old_child_node.level, &entry.key, &representative)?;
+            debug_assert_eq!(summary.count, child_count);
+            entries.push(summary.into_entry());
         }
         let replacement = ProximityNode {
             kind: PhysicalNodeKind::Route,
@@ -183,22 +179,60 @@ impl<S: Store> Context<'_, S> {
     }
 
     fn finish_node(&mut self, old_cid: &Cid, node: ProximityNode) -> Result<(Cid, u64), Error> {
-        let bytes = node.encode()?;
-        if bytes.len() > self.config.overflow.max_page_bytes as usize {
-            return Err(Error::ProximityNodeTooLarge {
-                level: node.level,
-                entries: node.entries.len(),
-                encoded_bytes: bytes.len(),
-                limit: self.config.overflow.max_page_bytes as usize,
-            });
-        }
-        let cid = Cid::from_bytes(&bytes);
+        let count = node.subtree_count;
+        let cid = if node.entries.is_empty() {
+            let bytes = node.encode()?;
+            let cid = Cid::from_bytes(&bytes);
+            self.pending.insert(cid.clone(), bytes);
+            cid
+        } else {
+            persist_logical_node(
+                node.kind,
+                node.level,
+                node.entries,
+                self.config,
+                &mut self.pending,
+            )?
+            .cid
+        };
         if cid == *old_cid {
             self.stats.nodes_reused += 1;
-        } else {
-            self.pending.insert(cid.clone(), bytes);
         }
-        Ok((cid, node.subtree_count))
+        Ok((cid, count))
+    }
+
+    fn summarize_child(
+        &mut self,
+        cid: Cid,
+        level: u8,
+        representative_key: &[u8],
+        representative_vector: &[f32],
+    ) -> Result<super::storage::overflow::NodeSummary, Error> {
+        let mut entries = Vec::new();
+        self.collect_logical_entries(&cid, level, &mut entries)?;
+        summarize(cid, &entries, representative_key, representative_vector)
+    }
+
+    fn collect_logical_entries(
+        &mut self,
+        cid: &Cid,
+        level: u8,
+        entries: &mut Vec<ProximityEntry>,
+    ) -> Result<(), Error> {
+        let (node, _) = self.load_node(cid)?;
+        if node.kind == PhysicalNodeKind::OverflowDirectory {
+            for child in node.entries.into_iter().filter_map(|entry| entry.child) {
+                self.collect_logical_entries(&child, level, entries)?;
+            }
+        } else if node.level == level {
+            entries.extend(node.entries);
+        } else {
+            return Err(Error::InvalidProximityObject {
+                kind: "mutation",
+                reason: "overflow child has an unexpected logical level".to_owned(),
+            });
+        }
+        Ok(())
     }
 
     fn closest(&mut self, entries: &[ProximityEntry], vector: &[f32]) -> Result<usize, Error> {
@@ -249,17 +283,17 @@ impl<S: Store> Context<'_, S> {
     }
 
     fn load_node(&mut self, cid: &Cid) -> Result<(ProximityNode, usize), Error> {
-        if let Some(bytes) = self.pending.get(cid) {
-            return Ok((
-                ProximityNode::decode(bytes, self.config.dimensions)?,
-                bytes.len(),
-            ));
-        }
-        let bytes = self
-            .store
-            .get(cid.as_bytes())
-            .map_err(|error| Error::Store(Box::new(error)))?
-            .ok_or_else(|| Error::NotFound(cid.clone()))?;
+        let (bytes, stored) = if let Some(bytes) = self.pending.get(cid) {
+            (bytes.clone(), false)
+        } else {
+            (
+                self.store
+                    .get(cid.as_bytes())
+                    .map_err(|error| Error::Store(Box::new(error)))?
+                    .ok_or_else(|| Error::NotFound(cid.clone()))?,
+                true,
+            )
+        };
         let actual = Cid::from_bytes(&bytes);
         if actual != *cid {
             return Err(Error::CidMismatch {
@@ -273,11 +307,39 @@ impl<S: Store> Context<'_, S> {
                 reason: "node exceeds descriptor max_node_bytes".to_owned(),
             });
         }
-        self.stats.nodes_read += 1;
-        Ok((
-            ProximityNode::decode(&bytes, self.config.dimensions)?,
-            bytes.len(),
-        ))
+        if stored {
+            self.stats.nodes_read += 1;
+        }
+        let mut node = ProximityNode::decode(&bytes, self.config.dimensions)?;
+        for entry in &mut node.entries {
+            let VectorRef::External(vector_cid) = &entry.vector else {
+                continue;
+            };
+            let vector_bytes = if let Some(bytes) = self.pending.get(vector_cid) {
+                bytes.clone()
+            } else {
+                self.store
+                    .get(vector_cid.as_bytes())
+                    .map_err(|error| Error::Store(Box::new(error)))?
+                    .ok_or_else(|| Error::NotFound(vector_cid.clone()))?
+            };
+            let actual = Cid::from_bytes(&vector_bytes);
+            if actual != *vector_cid {
+                return Err(Error::CidMismatch {
+                    expected: vector_cid.clone(),
+                    actual,
+                });
+            }
+            let external = ExternalVector::decode(&vector_bytes)?;
+            if external.vector.len() != self.config.dimensions as usize {
+                return Err(Error::InvalidProximityObject {
+                    kind: "vector",
+                    reason: "external vector dimension mismatch".to_owned(),
+                });
+            }
+            entry.vector = VectorRef::Inline(external.vector);
+        }
+        Ok((node, bytes.len()))
     }
 }
 

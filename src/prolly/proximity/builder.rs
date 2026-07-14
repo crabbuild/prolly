@@ -1,7 +1,8 @@
 use super::super::cid::Cid;
 use super::super::error::Error;
 use super::distance::score;
-use super::storage::{PhysicalNodeKind, ProximityEntry, ProximityNode, VectorRef};
+use super::storage::overflow::{persist_logical_node, summarize, NodeSummary};
+use super::storage::{PhysicalNodeKind, ProximityEntry, ProximityNode};
 use super::vector::promotion_level;
 use super::ProximityConfig;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -118,7 +119,7 @@ pub(crate) fn build_hierarchy_at_level(
     }
 
     let mut nodes = HashMap::<Cid, Vec<u8>>::new();
-    let root = build_node(max_level, &[], &route_maps, records, config, &mut nodes)?.0;
+    let root = build_node(max_level, &[], &route_maps, records, config, &mut nodes)?.cid;
     let mut nodes: Vec<_> = nodes.into_iter().collect();
     nodes.sort_by(|(left, _), (right, _)| left.as_bytes().cmp(right.as_bytes()));
     Ok(BuiltHierarchy {
@@ -135,7 +136,7 @@ fn build_node(
     records: &[IndexedRecord],
     config: &ProximityConfig,
     nodes: &mut HashMap<Cid, Vec<u8>>,
-) -> Result<(Cid, u64), Error> {
+) -> Result<NodeSummary, Error> {
     let mut ids: Vec<_> = route_maps[usize::from(level)]
         .get(prefix)
         .ok_or_else(|| Error::InvalidProximityObject {
@@ -146,11 +147,12 @@ fn build_node(
         .copied()
         .collect();
     ids.sort_by(|&left, &right| records[left].key.cmp(&records[right].key));
+    let representative_id = prefix.last().copied().unwrap_or(ids[0]);
 
     let mut entries = Vec::with_capacity(ids.len());
     let mut subtree_count = 0u64;
     for id in ids {
-        let (child, child_count) = if level == 0 {
+        let entry = if level == 0 {
             subtree_count =
                 subtree_count
                     .checked_add(1)
@@ -158,47 +160,34 @@ fn build_node(
                         kind: "builder",
                         reason: "subtree count overflow".to_owned(),
                     })?;
-            (None, 1)
+            ProximityEntry::inline_leaf(records[id].key.clone(), records[id].vector.clone())
         } else {
             let mut child_prefix = prefix.to_vec();
             child_prefix.push(id);
-            let (child, child_count) =
-                build_node(level - 1, &child_prefix, route_maps, records, config, nodes)?;
-            subtree_count = subtree_count.checked_add(child_count).ok_or_else(|| {
+            let child = build_node(level - 1, &child_prefix, route_maps, records, config, nodes)?;
+            subtree_count = subtree_count.checked_add(child.count).ok_or_else(|| {
                 Error::InvalidProximityObject {
                     kind: "builder",
                     reason: "subtree count overflow".to_owned(),
                 }
             })?;
-            (Some(child), child_count)
+            child.into_entry()
         };
-        let key = records[id].key.clone();
-        entries.push(ProximityEntry {
-            min_key: key.clone(),
-            max_key: key.clone(),
-            key,
-            vector: VectorRef::Inline(records[id].vector.clone()),
-            child,
-            child_count,
-            covering_radius: 0.0,
-        });
+        entries.push(entry);
     }
-    let node = ProximityNode {
-        kind: if level == 0 {
-            PhysicalNodeKind::Leaf
-        } else {
-            PhysicalNodeKind::Route
-        },
-        level,
-        subtree_count,
-        quantizer: None,
-        entries,
+    let kind = if level == 0 {
+        PhysicalNodeKind::Leaf
+    } else {
+        PhysicalNodeKind::Route
     };
-    let bytes = node.encode()?;
-    enforce_size(&node, bytes.len(), config)?;
-    let cid = Cid::from_bytes(&bytes);
-    nodes.insert(cid.clone(), bytes);
-    Ok((cid, subtree_count))
+    let logical_entries = entries.clone();
+    let persisted = persist_logical_node(kind, level, entries, config, nodes)?;
+    summarize(
+        persisted.cid,
+        &logical_entries,
+        &records[representative_id].key,
+        &records[representative_id].vector,
+    )
 }
 
 fn register_route(

@@ -1,10 +1,10 @@
 pub(crate) mod codec;
 pub(crate) mod descriptor;
 pub(crate) mod node;
+pub(crate) mod overflow;
 #[allow(dead_code)] // Persisted local quantizers are wired into construction in the SQ8 slice.
 pub(crate) mod quantized;
 pub(crate) mod record;
-#[allow(dead_code)] // External references are selected and resolved in the overflow slice.
 pub(crate) mod vector;
 
 pub(crate) use descriptor::Descriptor;
