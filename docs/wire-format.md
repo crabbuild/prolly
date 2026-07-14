@@ -106,3 +106,39 @@ Non-`PLVB` stored values are interpreted as inline bytes by large-value helpers.
 `RootManifest` is packed CBOR containing version `1`, optional root CID,
 `Config`, and optional Unix millisecond timestamps. Ports that implement named
 roots must decode the conformance manifest fixture and preserve CAS semantics.
+
+## Proximity Objects: Current Format
+
+The current format is a hard cutoff. Legacy proximity objects are rejected with
+`UnsupportedProximityVersion`; no decoder guesses or upgrades legacy bytes.
+Ordered `CRAB` version 1 nodes are unchanged.
+
+All proximity integers use canonical unsigned LEB128 unless explicitly fixed
+width. CIDs are 32 raw SHA-256 bytes. Floating-point words are canonical finite
+little-endian IEEE-754; negative zero becomes positive zero. Every decoder
+rejects truncation, non-canonical lengths, allocation overflow, unknown flags,
+bad ordering/counts/references, unsupported encodings, and trailing bytes.
+
+| Magic | Object | Committed content |
+| --- | --- | --- |
+| `PRVR` | exact record | current format, `f32-le` tag, dimension count, vector, opaque value |
+| `PRXI` | descriptor | metric/normalization, dimensions/count, hierarchy, overflow, vector/SQ8 config, complete ordered tree, PRXN root, radius policy, config fingerprint |
+| `PRXN` | physical hierarchy node | kind/level, subtree summary, optional PQS8 CID, sorted entries, child/key bounds/radii/vector references |
+| `PRXV` | external vector | current vector encoding and components |
+| `PQS8` | local scalar quantizer | dimensions/grouping/count, scales, signed codes, maximum error |
+| `PQPQ` | product-quantization manifest | source PRXI, metric/config, code-tree root, codebooks, quality |
+| `HNSW` | HNSW manifest | source PRXI, metric/config/fingerprint, graph root, entry point, level, canonical flag |
+| `HNSN` | HNSW graph value | level and key-sorted neighbors by layer |
+| `CRMF` | typed content-root manifest | typed CID, optional PRXN dimensions, logical version/time, sorted metadata |
+
+PRXN physical kinds distinguish ordinary leaves/routes from overflow pages and
+recursive overflow directories. Inline/external vectors and quantizer/child
+CIDs use explicit tags. The descriptor commits Euclidean-radius rounding and
+metric normalization policies, preventing a reader from interpreting bounds
+under different math.
+
+Search policies, budgets, async settings, query kernels, and caches are runtime
+only. PQ and HNSW have independent manifests because they are rebuildable
+source-bound accelerators. Frozen exact bytes and CIDs are maintained in
+`conformance/proximity-fixtures.json`; legacy canonical fixtures are
+test-only rejection inputs.

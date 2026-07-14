@@ -401,3 +401,23 @@ A non-Rust implementation should not claim compatibility until it can:
 
 The language port may expose idiomatic APIs, but the storage contract must stay
 byte-compatible where compatibility is promised.
+
+## Proximity Index Contract
+
+Proximity indexing uses a compound immutable handle rather than changing the
+ordered-tree comparator. The directory is the sole authority for key identity,
+absence, values, and vectors. The PRXN hierarchy is derived routing state.
+
+For the same sorted logical records and `ProximityConfig`, bulk build and every
+localized mutation path must produce identical directory, proximity, and
+descriptor CIDs. Runtime thread count, async scheduling, cache state, and
+scalar/SIMD query kernels cannot alter persisted bytes. Exact L2 terminates
+only from a conservative global bound; other policies report an explicit
+honest completion. Result ordering is total and deterministic by `(score,key)`.
+
+The primary proximity codecs reject legacy persistence. Derived PQ and HNSW
+manifests exactly bind the source descriptor, metric, and configuration and
+cannot claim exact completion. Typed replication publishes only closed verified
+graphs, and proofs are checked against a caller-trusted descriptor CID.
+
+The detailed contract is [`proximity-map.md`](proximity-map.md).

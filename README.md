@@ -30,6 +30,8 @@ The full end-user documentation set lives in [`docs/`](docs/), with getting
 started material, guides, cookbook recipes, architecture, design spec,
 implementation notes, roadmap, and language-porting guidance. The canonical
 cookbook is [`docs/cookbook.md`](docs/cookbook.md).
+Native approximate nearest-neighbor indexing is documented in
+[`docs/proximity-map.md`](docs/proximity-map.md).
 
 For application builders who want a Git-like repository layer on top of prolly
 trees, see the proposed [`prolly-vcs` design](docs/prolly-vcs-design.md). It
@@ -67,6 +69,10 @@ reflogs, patches, merge orchestration, sync planning, and repository-level GC.
 - Store-independent single-key, shared multi-key, complete range, cursor-page,
   and diff-page proofs for a tree root.
 - Tree statistics for inspecting shape, fill factor, fanout, and serialized size.
+- A hard-cut deterministic proximity map with exact lookup, filtered
+  best-first search, localized canonical COW, overflow/external vectors,
+  SQ8/PQ/HNSW acceleration, async/SIMD execution, typed replication/GC, and
+  descriptor-bound proofs.
 
 ## Quick start
 
@@ -1406,11 +1412,11 @@ let v1 = users.edit(|edit| {
     edit.put(b"user/2", b"Grace");
 }).unwrap();
 
-let v2 = users.put(b"user/1", b"Ada Lovelace").unwrap();
+let v_next = users.put(b"user/1", b"Ada Lovelace").unwrap();
 assert_eq!(users.get(b"user/1").unwrap(), Some(b"Ada Lovelace".to_vec()));
 assert_eq!(users.get_at(&v1.id, b"user/1").unwrap(), Some(b"Ada".to_vec()));
 
-let changes = users.diff(&v1.id, &v2.id).unwrap();
+let changes = users.diff(&v1.id, &v_next.id).unwrap();
 assert_eq!(changes.len(), 1);
 
 users.rollback_to(&v1.id).unwrap();
@@ -2081,6 +2087,7 @@ current benchmark coverage, and measured SQLite scale results.
 | `streaming.rs` | Streaming differ trait and default implementation. |
 | `stats.rs` | Tree shape and size metrics. |
 | `store/` | Storage trait and backend implementations. |
+| `proximity/` | Exact vector directory, deterministic ANN hierarchy, search, codecs, verification, and localized mutation. |
 
 ## When To Use It
 

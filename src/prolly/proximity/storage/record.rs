@@ -1,0 +1,80 @@
+use super::codec::{put_bytes, put_varint, Reader, FORMAT_VERSION, VECTOR_ENCODING_F32_LE};
+use crate::prolly::error::Error;
+use crate::prolly::proximity::distance::prepare_vector;
+use crate::prolly::proximity::vector::{decode_components, encode_components};
+use crate::prolly::proximity::DistanceMetric;
+
+const MAGIC: &[u8; 4] = b"PRVR";
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct StoredRecord {
+    pub(crate) vector: Vec<f32>,
+    pub(crate) value: Vec<u8>,
+}
+
+impl StoredRecord {
+    pub(crate) fn new(
+        vector: &[f32],
+        value: Vec<u8>,
+        metric: DistanceMetric,
+        dimensions: u32,
+    ) -> Result<Self, Error> {
+        Ok(Self {
+            vector: prepare_vector(metric, vector, dimensions)?,
+            value,
+        })
+    }
+
+    pub(crate) fn encode(&self) -> Vec<u8> {
+        let mut bytes = Vec::with_capacity(9 + self.vector.len() * 4 + self.value.len());
+        bytes.extend_from_slice(MAGIC);
+        bytes.push(FORMAT_VERSION);
+        bytes.push(VECTOR_ENCODING_F32_LE);
+        put_varint(self.vector.len() as u64, &mut bytes);
+        encode_components(&self.vector, &mut bytes);
+        put_bytes(&self.value, &mut bytes);
+        bytes
+    }
+
+    pub(crate) fn decode(bytes: &[u8], dimensions: u32) -> Result<Self, Error> {
+        let mut reader = Reader::new(bytes, "record");
+        reader.exact(MAGIC)?;
+        reader.version()?;
+        if reader.u8()? != VECTOR_ENCODING_F32_LE {
+            return Err(reader.invalid("unsupported vector encoding"));
+        }
+        if reader.varint()? != u64::from(dimensions) {
+            return Err(reader.invalid("dimension mismatch"));
+        }
+        let vector_bytes = usize::try_from(dimensions)
+            .ok()
+            .and_then(|value| value.checked_mul(4))
+            .ok_or_else(|| reader.invalid("vector length overflow"))?;
+        let vector = decode_components(reader.take(vector_bytes)?, dimensions)?;
+        let value = reader.bytes(reader.remaining())?;
+        reader.finish()?;
+        Ok(Self { vector, value })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn record_is_current_format_and_strict() {
+        let record = StoredRecord::new(
+            &[-0.0, 2.5],
+            b"value".to_vec(),
+            DistanceMetric::L2Squared,
+            2,
+        )
+        .unwrap();
+        let bytes = record.encode();
+        assert_eq!(&bytes[..6], b"PRVR\x02\x01");
+        assert_eq!(StoredRecord::decode(&bytes, 2).unwrap(), record);
+        let mut trailing = bytes;
+        trailing.push(0);
+        assert!(StoredRecord::decode(&trailing, 2).is_err());
+    }
+}

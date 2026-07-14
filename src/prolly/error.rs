@@ -212,6 +212,10 @@ pub enum Error {
     BufferFull,
     /// Sorted bulk loading received keys out of order.
     UnsortedInput { previous: Vec<u8>, next: Vec<u8> },
+    /// Canonical splice received more than one mutation for a logical key.
+    DuplicateCanonicalMutation { key: Vec<u8> },
+    /// Canonical splice manager and immutable tree use different shape settings.
+    CanonicalSpliceConfigMismatch,
     /// A GC retention policy referenced named roots that were not present.
     MissingNamedRoots { names: Vec<Vec<u8>> },
     /// A portable snapshot bundle is malformed or not self-contained.
@@ -280,6 +284,33 @@ pub enum Error {
     },
     /// A current indexed-snapshot bundle is malformed or inconsistent.
     InvalidIndexedSnapshotBundle { reason: String },
+    /// A proximity-map shape configuration is invalid.
+    InvalidProximityConfig { reason: String },
+    /// Persisted proximity bytes use a format version this build does not read.
+    UnsupportedProximityVersion { found: u8, required: u8 },
+    /// A vector is incompatible with the proximity-map configuration.
+    InvalidProximityVector { reason: String },
+    /// Cosine distance cannot prepare a vector with zero Euclidean norm.
+    ZeroCosineVector,
+    /// A proximity build or mutation contains the same logical key twice.
+    DuplicateProximityKey { key: Vec<u8> },
+    /// Proximity search options are invalid.
+    InvalidProximitySearch { reason: String },
+    /// A persisted proximity record, node, or descriptor is malformed.
+    InvalidProximityObject { kind: &'static str, reason: String },
+    /// One canonical proximity node exceeds the configured hard byte limit.
+    ProximityNodeTooLarge {
+        level: u8,
+        entries: usize,
+        encoded_bytes: usize,
+        limit: usize,
+    },
+    /// A typed content-graph traversal exceeded a configured resource limit.
+    ContentGraphResourceLimitExceeded {
+        resource: &'static str,
+        limit: usize,
+        actual: usize,
+    },
 }
 
 impl Error {
@@ -310,6 +341,12 @@ impl std::fmt::Display for Error {
                 "sorted input keys are out of order: previous={:?} next={:?}",
                 previous, next
             ),
+            Error::DuplicateCanonicalMutation { key } => {
+                write!(f, "duplicate canonical splice mutation: {key:?}")
+            }
+            Error::CanonicalSpliceConfigMismatch => {
+                write!(f, "canonical splice manager/tree configuration mismatch")
+            }
             Error::MissingNamedRoots { names } => {
                 write!(f, "missing named roots for retention policy: {:?}", names)
             }
@@ -412,6 +449,43 @@ impl std::fmt::Display for Error {
             Error::InvalidIndexedSnapshotBundle { reason } => {
                 write!(f, "invalid indexed snapshot bundle: {reason}")
             }
+            Error::InvalidProximityConfig { reason } => {
+                write!(f, "invalid proximity configuration: {reason}")
+            }
+            Error::UnsupportedProximityVersion { found, required } => write!(
+                f,
+                "unsupported proximity format version: found={found} required={required}"
+            ),
+            Error::InvalidProximityVector { reason } => {
+                write!(f, "invalid proximity vector: {reason}")
+            }
+            Error::ZeroCosineVector => write!(f, "cosine proximity vector has zero norm"),
+            Error::DuplicateProximityKey { key } => {
+                write!(f, "duplicate proximity key: {key:?}")
+            }
+            Error::InvalidProximitySearch { reason } => {
+                write!(f, "invalid proximity search options: {reason}")
+            }
+            Error::InvalidProximityObject { kind, reason } => {
+                write!(f, "invalid proximity {kind}: {reason}")
+            }
+            Error::ProximityNodeTooLarge {
+                level,
+                entries,
+                encoded_bytes,
+                limit,
+            } => write!(
+                f,
+                "proximity node exceeds byte limit: level={level} entries={entries} bytes={encoded_bytes} limit={limit}"
+            ),
+            Error::ContentGraphResourceLimitExceeded {
+                resource,
+                limit,
+                actual,
+            } => write!(
+                f,
+                "content graph resource limit exceeded: resource={resource} limit={limit} actual={actual}"
+            ),
         }
     }
 }

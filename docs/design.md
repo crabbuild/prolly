@@ -354,3 +354,19 @@ Before merging a store, encoding, merge, or tree-shape change:
 - Compile examples and benchmark targets that exercise public APIs.
 - Add README or rustdoc examples for new public behavior.
 - Update this file when the invariant model changes.
+
+## Native Proximity Map
+
+The proximity map is deliberately separate from ordered `Node` routing. One
+descriptor CID commits an authoritative ordered directory and a derived
+hierarchical ANN root. Exact key operations use the directory; approximate
+search uses deterministic hash-promoted vector representatives. PRXN nodes are
+immutable and content-addressed, so localized mutation can reuse untouched
+clusters while producing the same root as a clean build.
+
+See [`proximity-map.md`](proximity-map.md) for the public API, algorithms,
+mutation rules, resource budgets, and operational limitations. See
+[`wire-format.md`](wire-format.md) for the hard-cut object family. This map adds
+canonical directory splicing, all three metrics, overflow/PRXV storage, SQ8,
+deterministic parallel and async execution, source-bound PQ/HNSW, typed content
+replication/GC, and descriptor-bound proofs.
