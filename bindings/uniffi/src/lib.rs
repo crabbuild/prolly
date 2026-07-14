@@ -4953,8 +4953,7 @@ impl TryFrom<NodeRecord> for Node {
         }
 
         let format = if let Some(bytes) = value.format_bytes {
-            prolly::TreeFormat::from_canonical_bytes(&bytes)
-                .map_err(ProllyBindingError::from)?
+            prolly::TreeFormat::from_canonical_bytes(&bytes).map_err(ProllyBindingError::from)?
         } else {
             Config::builder()
                 .min_chunk_size(to_usize(value.min_chunk_size, "min_chunk_size")?)
