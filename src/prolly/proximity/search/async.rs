@@ -4,7 +4,7 @@ use super::{
 };
 use crate::prolly::cid::Cid;
 use crate::prolly::error::Error;
-use crate::prolly::proximity::distance::{prepare_vector, score};
+use crate::prolly::proximity::distance::{prepare_vector, query_score};
 use crate::prolly::proximity::storage::vector::ExternalVector;
 use crate::prolly::proximity::storage::{
     Descriptor, PhysicalNodeKind, ProximityNode, StoredRecord, VectorRef,
@@ -288,8 +288,12 @@ where
                                 break;
                             }
                             stats.distance_evaluations += 1;
-                            let value =
-                                score(self.tree.config.metric, &query, entry.vector.inline()?);
+                            let value = query_score(
+                                request.kernel,
+                                self.tree.config.metric,
+                                &query,
+                                entry.vector.inline()?,
+                            );
                             score_cache.insert(entry.key.clone(), value);
                             value
                         }
@@ -331,8 +335,12 @@ where
                                 break;
                             }
                             stats.distance_evaluations += 1;
-                            let value =
-                                score(self.tree.config.metric, &query, entry.vector.inline()?);
+                            let value = query_score(
+                                request.kernel,
+                                self.tree.config.metric,
+                                &query,
+                                entry.vector.inline()?,
+                            );
                             score_cache.insert(entry.key.clone(), value);
                             value
                         }

@@ -218,6 +218,17 @@ pub enum SearchBackend {
     Auto,
 }
 
+/// Runtime-only deterministic query distance implementation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum QueryKernel {
+    /// Canonical scalar accumulation used by persisted construction and mutation.
+    ScalarDeterministic,
+    /// Runtime-detected fixed-lane products with canonical scalar-order reduction.
+    SimdDeterministic,
+    /// Prefer deterministic SIMD and fall back to the canonical scalar kernel.
+    AutoDeterministic,
+}
+
 /// Honest completion state for a search result.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SearchCompletion {

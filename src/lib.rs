@@ -333,8 +333,8 @@ pub use prolly::proximity::{
     AdaptiveQuality, BuildParallelism, DistanceMetric, ExactProximityRecord, HierarchyConfig,
     Neighbor, OverflowConfig, ProximityBuildStats, ProximityConfig, ProximityFilter, ProximityMap,
     ProximityMutation, ProximityMutationStats, ProximityRecord, ProximitySearchStats,
-    ProximityTree, ProximityVerification, ScalarQuantizationConfig, SearchBackend, SearchBudget,
-    SearchCompletion, SearchPolicy, SearchRequest, SearchResult, VectorStorageConfig,
+    ProximityTree, ProximityVerification, QueryKernel, ScalarQuantizationConfig, SearchBackend,
+    SearchBudget, SearchCompletion, SearchPolicy, SearchRequest, SearchResult, VectorStorageConfig,
 };
 #[cfg(feature = "async-store")]
 pub use prolly::proximity::{

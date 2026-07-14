@@ -5,7 +5,7 @@ mod filter;
 mod policy;
 mod sync;
 
-use super::{SearchBackend, SearchBudget, SearchPolicy};
+use super::{QueryKernel, SearchBackend, SearchBudget, SearchPolicy};
 use crate::prolly::error::Error;
 use crate::prolly::tree::Tree;
 
@@ -43,6 +43,7 @@ pub struct SearchRequest<'a> {
     pub budget: SearchBudget,
     pub filter: ProximityFilter<'a>,
     pub backend: SearchBackend,
+    pub kernel: QueryKernel,
 }
 
 impl<'a> SearchRequest<'a> {
@@ -54,6 +55,7 @@ impl<'a> SearchRequest<'a> {
             budget: SearchBudget::default(),
             filter: ProximityFilter::All,
             backend: SearchBackend::Native,
+            kernel: QueryKernel::AutoDeterministic,
         }
     }
 

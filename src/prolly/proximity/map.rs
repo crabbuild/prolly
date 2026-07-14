@@ -7,7 +7,7 @@ use super::super::store::Store;
 use super::super::Prolly;
 use super::builder::{build_hierarchy, build_hierarchy_parallel, IndexedRecord};
 use super::cache::{ContentCache, DEFAULT_PROXIMITY_CACHE_NODES};
-use super::distance::{prepare_vector, score};
+use super::distance::{prepare_vector, query_score, score};
 use super::mutation::{mutate_hierarchy, LogicalEdit};
 use super::search::{
     adaptive_should_stop, insert_top_k, AdaptiveContext, FrontierEntry, PreparedFilter,
@@ -492,8 +492,12 @@ where
                                 break;
                             }
                             stats.distance_evaluations += 1;
-                            let value =
-                                score(self.tree.config.metric, &query, entry.vector.inline()?);
+                            let value = query_score(
+                                request.kernel,
+                                self.tree.config.metric,
+                                &query,
+                                entry.vector.inline()?,
+                            );
                             score_cache.insert(entry.key.clone(), value);
                             value
                         }
@@ -535,8 +539,12 @@ where
                                 break;
                             }
                             stats.distance_evaluations += 1;
-                            let value =
-                                score(self.tree.config.metric, &query, entry.vector.inline()?);
+                            let value = query_score(
+                                request.kernel,
+                                self.tree.config.metric,
+                                &query,
+                                entry.vector.inline()?,
+                            );
                             score_cache.insert(entry.key.clone(), value);
                             value
                         }
@@ -1052,6 +1060,7 @@ fn apply_mutations(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::prolly::proximity::distance::{query_kernel_calls, reset_query_kernel_calls};
     use crate::prolly::store::MemStore;
 
     fn config() -> ProximityConfig {
@@ -1083,6 +1092,34 @@ mod tests {
         )
         .unwrap();
         (store, map)
+    }
+
+    #[test]
+    fn construction_and_mutation_never_enter_a_query_kernel() {
+        reset_query_kernel_calls();
+        let store = Arc::new(MemStore::new());
+        let map = ProximityMap::build(
+            store,
+            config(),
+            (0..64).map(|index| ProximityRecord {
+                key: format!("key-{index:03}").into_bytes(),
+                vector: vec![index as f32],
+                value: Vec::new(),
+            }),
+        )
+        .unwrap();
+        let (map, _) = map
+            .mutate_batch([ProximityMutation {
+                key: b"key-017".to_vec(),
+                value: Some((vec![17.25], b"updated".to_vec())),
+            }])
+            .unwrap();
+        assert_eq!(query_kernel_calls(), 0);
+
+        let mut request = SearchRequest::exact(&[17.0], 3);
+        request.kernel = super::super::QueryKernel::SimdDeterministic;
+        map.search(request).unwrap();
+        assert!(query_kernel_calls() > 0);
     }
 
     fn publish_root_descriptor(
