@@ -9,7 +9,7 @@ use crate::prolly::tree::Tree;
 
 pub(crate) use engine::{insert_top_k, FrontierEntry, SearchCandidate};
 pub(crate) use filter::PreparedFilter;
-pub(crate) use policy::adaptive_should_stop;
+pub(crate) use policy::{adaptive_should_stop, AdaptiveContext};
 
 /// Canonical structural restriction applied before leaf scoring.
 #[derive(Clone, Debug)]

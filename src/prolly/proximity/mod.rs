@@ -1,5 +1,6 @@
 //! Deterministic, content-addressed approximate nearest-neighbor maps.
 
+mod build;
 mod builder;
 mod cache;
 mod distance;
@@ -13,6 +14,7 @@ use super::cid::Cid;
 use super::error::Error;
 use super::tree::Tree;
 
+pub use build::{BuildParallelism, ProximityBuildStats};
 pub use map::ProximityMap;
 pub use search::{ProximityFilter, SearchRequest};
 

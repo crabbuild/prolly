@@ -5,21 +5,22 @@ use super::super::config::Config;
 use super::super::error::{Error, Mutation as TreeMutation};
 use super::super::store::Store;
 use super::super::Prolly;
-use super::builder::{build_hierarchy, IndexedRecord};
+use super::builder::{build_hierarchy, build_hierarchy_parallel, IndexedRecord};
 use super::cache::{ContentCache, DEFAULT_PROXIMITY_CACHE_NODES};
 use super::distance::{prepare_vector, score};
 use super::mutation::{mutate_hierarchy, LogicalEdit};
 use super::search::{
-    adaptive_should_stop, insert_top_k, FrontierEntry, PreparedFilter, SearchCandidate,
+    adaptive_should_stop, insert_top_k, AdaptiveContext, FrontierEntry, PreparedFilter,
+    SearchCandidate,
 };
 use super::storage::vector::ExternalVector;
 use super::storage::{Descriptor, PhysicalNodeKind, ProximityNode, StoredRecord, VectorRef};
 use super::vector::promotion_level;
 use super::{
-    DistanceMetric, ExactProximityRecord, Neighbor, ProximityConfig, ProximityMutation,
-    ProximityMutationStats, ProximityRecord, ProximitySearchStats, ProximityTree,
-    ProximityVerification, SearchBackend, SearchCompletion, SearchPolicy, SearchRequest,
-    SearchResult,
+    BuildParallelism, DistanceMetric, ExactProximityRecord, Neighbor, ProximityBuildStats,
+    ProximityConfig, ProximityMutation, ProximityMutationStats, ProximityRecord,
+    ProximitySearchStats, ProximityTree, ProximityVerification, SearchBackend, SearchCompletion,
+    SearchPolicy, SearchRequest, SearchResult,
 };
 use std::collections::{BTreeMap, BinaryHeap, HashSet};
 use std::sync::{Arc, Mutex};
@@ -43,6 +44,17 @@ where
         config: ProximityConfig,
         records: impl IntoIterator<Item = ProximityRecord>,
     ) -> Result<Self, Error> {
+        Self::build_with_parallelism(store, config, records, BuildParallelism::default())
+            .map(|(map, _)| map)
+    }
+
+    /// Build with an explicit runtime worker limit and canonical logical stats.
+    pub fn build_with_parallelism(
+        store: S,
+        config: ProximityConfig,
+        records: impl IntoIterator<Item = ProximityRecord>,
+        parallelism: BuildParallelism,
+    ) -> Result<(Self, ProximityBuildStats), Error> {
         config.validate()?;
         let mut records: Vec<_> = records.into_iter().collect();
         records.sort_by(|left, right| left.key.cmp(&right.key));
@@ -71,8 +83,8 @@ where
             directory_builder.add(record.key, stored.encode());
         }
         let directory_tree = directory_builder.build()?;
-        let hierarchy = build_hierarchy(&indexed, &config)?;
-        put_missing_nodes(&store, &hierarchy.nodes)?;
+        let hierarchy = build_hierarchy_parallel(&indexed, &config, parallelism.threads())?;
+        let objects_written = put_missing_nodes(&store, &hierarchy.nodes)?;
 
         let descriptor = Descriptor {
             config: config.clone(),
@@ -86,18 +98,26 @@ where
             .put(descriptor_cid.as_bytes(), &descriptor_bytes)
             .map_err(|error| Error::Store(Box::new(error)))?;
 
-        Ok(Self {
-            directory: Prolly::new(store.clone(), directory_config),
-            store,
-            tree: ProximityTree {
-                directory: directory_tree,
-                proximity_root: hierarchy.root,
-                descriptor: descriptor_cid,
-                count: indexed.len() as u64,
-                config,
+        let stats = ProximityBuildStats {
+            distance_evaluations: hierarchy.distance_evaluations,
+            proximity_objects: hierarchy.nodes.len(),
+            proximity_objects_written: objects_written,
+        };
+        Ok((
+            Self {
+                directory: Prolly::new(store.clone(), directory_config),
+                store,
+                tree: ProximityTree {
+                    directory: directory_tree,
+                    proximity_root: hierarchy.root,
+                    descriptor: descriptor_cid,
+                    count: indexed.len() as u64,
+                    config,
+                },
+                node_cache: Mutex::new(ContentCache::new(DEFAULT_PROXIMITY_CACHE_NODES)),
             },
-            node_cache: Mutex::new(ContentCache::new(DEFAULT_PROXIMITY_CACHE_NODES)),
-        })
+            stats,
+        ))
     }
 
     /// Load and locally validate a persisted proximity descriptor.
@@ -397,14 +417,16 @@ where
                         .count();
                     adaptive_should_stop(
                         quality,
-                        candidates.len(),
-                        request.k,
-                        next.bound,
-                        worst.score,
-                        overlapping,
-                        next.expected_level.unwrap_or(u8::MAX),
-                        last_fanout,
-                        frontier.len(),
+                        AdaptiveContext {
+                            results: candidates.len(),
+                            k: request.k,
+                            frontier_bound: next.bound,
+                            worst_score: worst.score,
+                            overlapping_clusters: overlapping,
+                            logical_level: next.expected_level.unwrap_or(u8::MAX),
+                            last_fanout,
+                            cluster_count: frontier.len(),
+                        },
                     )
                 }) {
                     completion = SearchCompletion::ApproximatePolicySatisfied;
