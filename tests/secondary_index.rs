@@ -161,3 +161,46 @@ fn active_control_fences_public_raw_write_routes() {
 
     assert_eq!(users.head().unwrap().unwrap().id, second.id);
 }
+
+#[test]
+fn indexed_map_open_accepts_an_existing_unindexed_source() {
+    let prolly = Prolly::new(Arc::new(MemStore::new()), Config::default());
+    let source = prolly.versioned_map(b"users");
+    let source_version = source.put(b"user-1", b"Ada").unwrap();
+    let registry = SecondaryIndexRegistry::new()
+        .register(
+            SecondaryIndex::non_unique("by-status", 1, "app.users.by-status/v1", |_, _| {
+                Ok(vec![b"active".to_vec()])
+            })
+            .unwrap(),
+        )
+        .unwrap();
+
+    let indexed = prolly.indexed_map(b"users", registry).unwrap();
+    let health = indexed.health().unwrap();
+    assert_eq!(health.source_map_id, b"users");
+    assert_eq!(health.source_version, Some(source_version.id));
+    assert_eq!(health.catalog_version, None);
+    assert!(health.active_indexes.is_empty());
+    assert!(health.supports_transactions);
+}
+
+#[test]
+fn indexed_map_open_fails_closed_when_control_has_no_catalog() {
+    let prolly = Prolly::new(Arc::new(MemStore::new()), Config::default());
+    prolly.versioned_map(b"users").initialize().unwrap();
+    install_control(&prolly, b"users");
+    let registry = SecondaryIndexRegistry::new()
+        .register(
+            SecondaryIndex::non_unique("by-status", 1, "app.users.by-status/v1", |_, _| {
+                Ok(vec![b"active".to_vec()])
+            })
+            .unwrap(),
+        )
+        .unwrap();
+
+    assert!(matches!(
+        prolly.indexed_map(b"users", registry),
+        Err(Error::InvalidVersionedMap(_))
+    ));
+}

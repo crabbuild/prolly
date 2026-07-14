@@ -3,9 +3,11 @@
 //! The low-level tree remains index-agnostic. This module defines the runtime
 //! contracts used by the `IndexedMap` coordinator and its persisted catalog.
 
+mod coordinator;
 mod definition;
 mod storage;
 
+pub use coordinator::{ActiveIndexHealth, IndexedMap, IndexedMapHealth};
 pub use definition::{
     IndexProjection, SecondaryIndex, SecondaryIndexBuilder, SecondaryIndexEntry,
     SecondaryIndexError, SecondaryIndexExtractor, SecondaryIndexLimits, SecondaryIndexRegistry,
