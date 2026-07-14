@@ -67,9 +67,9 @@ mod fixture_tests {
     }
 
     #[test]
-    fn every_v2_object_matches_the_frozen_fixture() {
+    fn every_object_matches_the_frozen_fixture() {
         let fixture: serde_json::Value = serde_json::from_str(include_str!(
-            "../../../../conformance/proximity-fixtures.v2.json"
+            "../../../../conformance/proximity-fixtures.json"
         ))
         .unwrap();
         let record = StoredRecord::new(

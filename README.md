@@ -64,7 +64,7 @@ reflogs, patches, merge orchestration, sync planning, and repository-level GC.
 - Store-independent single-key, shared multi-key, complete range, cursor-page,
   and diff-page proofs for a tree root.
 - Tree statistics for inspecting shape, fill factor, fanout, and serialized size.
-- A hard-cut v2 deterministic proximity map with exact lookup, filtered
+- A hard-cut deterministic proximity map with exact lookup, filtered
   best-first search, localized canonical COW, overflow/external vectors,
   SQ8/PQ/HNSW acceleration, async/SIMD execution, typed replication/GC, and
   descriptor-bound proofs.
@@ -1404,11 +1404,11 @@ let v1 = users.edit(|edit| {
     edit.put(b"user/2", b"Grace");
 }).unwrap();
 
-let v2 = users.put(b"user/1", b"Ada Lovelace").unwrap();
+let v_next = users.put(b"user/1", b"Ada Lovelace").unwrap();
 assert_eq!(users.get(b"user/1").unwrap(), Some(b"Ada Lovelace".to_vec()));
 assert_eq!(users.get_at(&v1.id, b"user/1").unwrap(), Some(b"Ada".to_vec()));
 
-let changes = users.diff(&v1.id, &v2.id).unwrap();
+let changes = users.diff(&v1.id, &v_next.id).unwrap();
 assert_eq!(changes.len(), 1);
 
 users.rollback_to(&v1.id).unwrap();

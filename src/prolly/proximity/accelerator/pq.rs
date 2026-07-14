@@ -708,7 +708,7 @@ fn config_fingerprint(config: &ProductQuantizationConfig) -> Cid {
 }
 
 fn code_tree_config() -> Config {
-    // This is a wire-level PQ v2 constant. Do not inherit future changes to
+    // This is a wire-level PQ constant. Do not inherit future changes to
     // the general ordered-tree defaults when loading an existing sidecar.
     Config {
         min_chunk_size: 4,

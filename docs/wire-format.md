@@ -107,9 +107,9 @@ Non-`PLVB` stored values are interpreted as inline bytes by large-value helpers.
 `Config`, and optional Unix millisecond timestamps. Ports that implement named
 roots must decode the conformance manifest fixture and preserve CAS semantics.
 
-## Proximity Objects: Version 2
+## Proximity Objects: Current Format
 
-V2 is a hard cutoff. V1 proximity objects are rejected with
+The current format is a hard cutoff. Legacy proximity objects are rejected with
 `UnsupportedProximityVersion`; no decoder guesses or upgrades legacy bytes.
 Ordered `CRAB` version 1 nodes are unchanged.
 
@@ -121,10 +121,10 @@ bad ordering/counts/references, unsupported encodings, and trailing bytes.
 
 | Magic | Object | Committed content |
 | --- | --- | --- |
-| `PRVR` | exact record | v2, `f32-le` tag, dimension count, vector, opaque value |
+| `PRVR` | exact record | current format, `f32-le` tag, dimension count, vector, opaque value |
 | `PRXI` | descriptor | metric/normalization, dimensions/count, hierarchy, overflow, vector/SQ8 config, complete ordered tree, PRXN root, radius policy, config fingerprint |
 | `PRXN` | physical hierarchy node | kind/level, subtree summary, optional PQS8 CID, sorted entries, child/key bounds/radii/vector references |
-| `PRXV` | external vector | v2 vector encoding and components |
+| `PRXV` | external vector | current vector encoding and components |
 | `PQS8` | local scalar quantizer | dimensions/grouping/count, scales, signed codes, maximum error |
 | `PQPQ` | product-quantization manifest | source PRXI, metric/config, code-tree root, codebooks, quality |
 | `HNSW` | HNSW manifest | source PRXI, metric/config/fingerprint, graph root, entry point, level, canonical flag |
@@ -140,5 +140,5 @@ under different math.
 Search policies, budgets, async settings, query kernels, and caches are runtime
 only. PQ and HNSW have independent manifests because they are rebuildable
 source-bound accelerators. Frozen exact bytes and CIDs are maintained in
-`conformance/proximity-fixtures.v2.json`; legacy canonical fixtures are
+`conformance/proximity-fixtures.json`; legacy canonical fixtures are
 test-only rejection inputs.

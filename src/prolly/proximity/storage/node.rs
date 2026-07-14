@@ -306,7 +306,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn leaf_and_route_round_trip_with_v2_summaries() {
+    fn leaf_and_route_round_trip_with_canonical_summaries() {
         let leaf = ProximityNode {
             kind: PhysicalNodeKind::Leaf,
             level: 0,

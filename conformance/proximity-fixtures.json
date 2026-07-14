@@ -1,6 +1,6 @@
 {
   "format_version": 2,
-  "description": "Canonical Rust-native proximity v2 object fixtures",
+  "description": "Canonical Rust-native proximity object fixtures",
   "objects": {
     "record": {
       "cid": "78609d5b335a5cae392df7e8e5ba153f97ae9e785bbcab59b9706c10ac145376",

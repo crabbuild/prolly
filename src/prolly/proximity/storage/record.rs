@@ -62,7 +62,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn record_is_v2_and_strict() {
+    fn record_is_current_format_and_strict() {
         let record = StoredRecord::new(
             &[-0.0, 2.5],
             b"value".to_vec(),

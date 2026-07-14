@@ -68,7 +68,7 @@ pub(super) fn reciprocal_sqrt(value: f64) -> f64 {
 }
 
 /// Conservative Euclidean covering radius, rounded upward.
-#[allow(dead_code)] // Wired into persisted child summaries in the v2 storage slice.
+#[allow(dead_code)] // Wired into persisted child summaries in the proximity storage slice.
 pub(crate) fn euclidean_radius_up(distance_squared: f64, child_radius: f64) -> f64 {
     debug_assert!(distance_squared.is_finite() && distance_squared >= 0.0);
     debug_assert!(child_radius.is_finite() && child_radius >= 0.0);
@@ -80,7 +80,7 @@ pub(crate) fn euclidean_radius_up(distance_squared: f64, child_radius: f64) -> f
 }
 
 /// Conservative squared-L2 lower bound, rounded downward.
-#[allow(dead_code)] // Wired into best-first traversal in the v2 search slice.
+#[allow(dead_code)] // Wired into best-first traversal in the proximity search slice.
 pub(crate) fn l2_lower_bound_down(distance_squared: f64, radius: f64) -> f64 {
     debug_assert!(distance_squared.is_finite() && distance_squared >= 0.0);
     debug_assert!(radius.is_finite() && radius >= 0.0);

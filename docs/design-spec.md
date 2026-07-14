@@ -415,9 +415,9 @@ scalar/SIMD query kernels cannot alter persisted bytes. Exact L2 terminates
 only from a conservative global bound; other policies report an explicit
 honest completion. Result ordering is total and deterministic by `(score,key)`.
 
-V2 proximity codecs reject v1. Derived PQ and HNSW manifests exactly bind the
-source descriptor, metric, and configuration and cannot claim exact
-completion. Typed replication publishes only closed verified graphs, and
-proofs are checked against a caller-trusted descriptor CID.
+The primary proximity codecs reject legacy persistence. Derived PQ and HNSW
+manifests exactly bind the source descriptor, metric, and configuration and
+cannot claim exact completion. Typed replication publishes only closed verified
+graphs, and proofs are checked against a caller-trusted descriptor CID.
 
 The detailed contract is [`proximity-map.md`](proximity-map.md).

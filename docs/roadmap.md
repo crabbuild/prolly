@@ -47,7 +47,7 @@ Status: **Shipped**
 
 Status: **Shipped**
 
-- Hard-cut v2 PRVR/PRXI/PRXN/PRXV/PQS8 codecs; v1 rejected
+- Hard-cut primary PRVR/PRXI/PRXN/PRXV/PQS8 codecs; legacy proximity formats rejected
 - Exact ordered directory with canonical localized splice mutation
 - Deterministic nearest-representative PRXN hierarchy with compositional
   summaries, content-defined overflow, and Dolt-style localized COW

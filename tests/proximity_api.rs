@@ -5,7 +5,7 @@ use prolly::{
 };
 
 #[test]
-fn v2_config_is_explicit_and_validated() {
+fn proximity_config_validation_checks() {
     let config = ProximityConfig {
         dimensions: 3,
         metric: DistanceMetric::Cosine,
@@ -36,7 +36,7 @@ fn v2_config_is_explicit_and_validated() {
 }
 
 #[test]
-fn v2_config_rejects_invalid_limits() {
+fn proximity_config_rejects_invalid_limits() {
     let mut config = ProximityConfig::new(3);
     config.hierarchy.log_chunk_size = 0;
     assert!(config.validate().is_err());

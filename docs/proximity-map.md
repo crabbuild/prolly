@@ -1,4 +1,4 @@
-# Proximity Map V2
+# Proximity Map
 
 `ProximityMap` is a deterministic, content-addressed vector index for finite,
 fixed-dimensional `f32` vectors. It combines an authoritative ordered directory
@@ -6,9 +6,9 @@ with a persistent nearest-representative hierarchy. The design favors immutable
 versions, reproducible builds, structural sharing, verifiable search, and
 Dolt-style localized copy-on-write mutation.
 
-Version 2 is a hard cutoff. V1 proximity objects are rejected and must be
-rebuilt from logical records. Existing ordered `CRAB` nodes and ordered-tree
-APIs are unchanged.
+This proximity map uses the current persisted format. Older proximity objects are
+rejected and must be rebuilt from logical records. Existing ordered `CRAB` nodes
+and ordered-tree APIs are unchanged.
 
 ## Model and persisted objects
 
@@ -268,15 +268,15 @@ wire it to the GC invalidator, after external deletion.
 
 ## Migration and compatibility
 
-- There is no v1 reader, compatibility alias, or in-place migration.
+- There is no legacy reader, compatibility alias, or in-place migration.
 - Export logical `(key, vector, value)` records with the old binary and rebuild
-  a v2 index with the new binary.
+  a current proximity index with the same records.
 - Publish the new descriptor only after `verify` and application checks pass.
 - Existing ordered CRAB trees do not need rewriting unless they are replaced
   by the new proximity directory produced during rebuild.
 
 The hierarchy and localized COW approach are inspired by Dolt's Apache-2.0
-proximity map. This Rust implementation has independent v2 codecs and does not
+proximity map. This Rust implementation has independent codecs and does not
 claim Dolt byte compatibility.
 
 ## Benchmarking
@@ -293,5 +293,5 @@ cargo bench --all-features --bench proximity_bench
 ```
 
 Benchmark rows are machine-specific evidence, not performance guarantees. See
-[`proximity-map-v2-completion-audit.md`](proximity-map-v2-completion-audit.md)
+[`proximity-map-completion-audit.md`](proximity-map-completion-audit.md)
 for the release evidence matrix.

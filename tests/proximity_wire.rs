@@ -168,9 +168,9 @@ fn checked_in_empty_proximity_fixture_matches_canonical_bytes() {
         .unwrap();
     assert_eq!(
         descriptor[4], 2,
-        "descriptor must use the hard-cut v2 format"
+        "descriptor must use the required proximity format"
     );
-    assert_eq!(root[4], 2, "node must use the hard-cut v2 format");
+    assert_eq!(root[4], 2, "node must use the required proximity format");
     let hex = |bytes: &[u8]| {
         bytes
             .iter()
@@ -178,7 +178,7 @@ fn checked_in_empty_proximity_fixture_matches_canonical_bytes() {
             .collect::<String>()
     };
     let fixture: serde_json::Value =
-        serde_json::from_str(include_str!("../conformance/proximity-fixtures.v2.json")).unwrap();
+        serde_json::from_str(include_str!("../conformance/proximity-fixtures.json")).unwrap();
     let empty = &fixture["empty"];
     assert_eq!(
         hex(map.tree().descriptor.as_bytes()),

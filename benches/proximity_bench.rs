@@ -21,7 +21,7 @@ fn main() {
     let dimensions =
         env_list("PROLLY_PROXIMITY_BENCH_DIMENSIONS").unwrap_or_else(|| vec![8, 128, 768, 1_536]);
     let threads = env_list("PROLLY_PROXIMITY_BENCH_THREADS").unwrap_or_else(|| vec![1, 2, 4]);
-    println!("prolly proximity v2 benchmark");
+    println!("prolly proximity benchmark");
     println!("records={records}");
     println!("operation,dimensions,threads,micros,metric_a,metric_b");
     for dimension in dimensions {

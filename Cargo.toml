@@ -23,7 +23,7 @@ include = [
     "/README.md",
     "benches/**",
     "conformance/prolly-fixtures.v1.json",
-    "conformance/proximity-fixtures.v2.json",
+    "conformance/proximity-fixtures.json",
     "diagram/**",
     "docs/**",
     "examples/**",

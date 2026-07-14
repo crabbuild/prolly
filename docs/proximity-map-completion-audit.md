@@ -1,6 +1,6 @@
-# Proximity Map V2 Completion Audit
+# Proximity Map Completion Audit
 
-This audit maps every approved v2 goal to implementation, adversarial tests,
+This audit maps every approved goal to implementation, adversarial tests,
 and a benchmark row. The release is a hard format cutoff: proximity v1 is
 legacy rejection input only; ordered CRAB bytes remain unchanged.
 
@@ -24,7 +24,7 @@ legacy rejection input only; ordered CRAB bytes remain unchanged.
 
 ## Wire and migration evidence
 
-- `conformance/proximity-fixtures.v2.json` freezes exact v2 bytes and CIDs.
+- `conformance/proximity-fixtures.json` freezes exact bytes and CIDs.
 - `tests/proximity_wire.rs` covers malformed objects and explicit v1 rejection.
 - Ordered `CRAB` codecs were not revised by the proximity cutoff.
 - Migration is rebuild-only from logical key/vector/value records; see
@@ -104,7 +104,7 @@ git diff --check
 The focused evidence suites are:
 
 ```sh
-cargo test --test proximity_v2_api --test proximity_metrics --test proximity_wire
+cargo test --test proximity_api --test proximity_metrics --test proximity_wire
 cargo test --test canonical_splice --test proximity_overflow --test proximity_mutation
 cargo test --test proximity_search --test proximity_parallel --test proximity_simd
 cargo test --all-features --test proximity_async
