@@ -129,6 +129,7 @@ pub mod manifest;
 pub mod node;
 pub mod policy;
 pub mod proof;
+pub mod proximity;
 pub mod snapshot;
 pub mod stats;
 pub mod store;

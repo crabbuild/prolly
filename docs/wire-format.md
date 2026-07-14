@@ -106,3 +106,56 @@ Non-`PLVB` stored values are interpreted as inline bytes by large-value helpers.
 `RootManifest` is packed CBOR containing version `1`, optional root CID,
 `Config`, and optional Unix millisecond timestamps. Ports that implement named
 roots must decode the conformance manifest fixture and preserve CAS semantics.
+
+## Proximity Objects: Version 1
+
+Proximity objects occupy the same content-addressed store namespace but use
+independent magic values. All integer varints are canonical unsigned LEB128;
+all CIDs are 32 raw SHA-256 bytes. Decoders reject non-canonical varints,
+overflow, truncation, unknown flags, and trailing bytes.
+
+### `PRVR` exact-directory record
+
+1. ASCII magic `PRVR`
+2. one-byte version `1`
+3. vector dimension count as varint
+4. exactly that many little-endian IEEE-754 `f32` words
+5. opaque value length as varint
+6. opaque value bytes
+
+Negative zero is encoded as positive zero. NaN and infinity are forbidden.
+
+### `PRXN` proximity node
+
+1. ASCII magic `PRXN`
+2. one-byte version `1`
+3. one-byte flags; bit zero means leaf and all other bits are zero
+4. one-byte logical level; leaf status is equivalent to level zero
+5. logical leaf-descendant count as varint
+6. entry count as varint
+7. entries in strict byte-lexicographic key order
+
+Each entry stores key length, key bytes, the descriptor's fixed number of
+canonical `f32` words, and—only for internal nodes—a 32-byte child CID. Values
+are never duplicated in PRXN.
+
+### `PRXI` compound descriptor
+
+1. ASCII magic `PRXI`
+2. one-byte version `1`
+3. one-byte vector encoding `1` for canonical little-endian `f32`
+4. dimensions as varint
+5. one-byte metric `1` for squared L2
+6. one-byte `log_chunk_size`
+7. little-endian `u64` promotion hash seed
+8. maximum encoded PRXN bytes as varint
+9. logical record count as varint
+10. directory-root presence tag and optional 32-byte root CID
+11. complete ordered `Config`: min/max chunk sizes and chunking factor as
+    varints, little-endian hash seed, encoding tag/custom name, and tagged
+    optional node-cache limits
+12. 32-byte proximity root CID
+13. reserved-field count byte, required to be zero in version 1
+
+Search options are not persisted because they affect latency and recall rather
+than content identity.

@@ -30,6 +30,8 @@ The full end-user documentation set lives in [`docs/`](docs/), with getting
 started material, guides, cookbook recipes, architecture, design spec,
 implementation notes, roadmap, and language-porting guidance. The canonical
 cookbook is [`docs/cookbook.md`](docs/cookbook.md).
+Native approximate nearest-neighbor indexing is documented in
+[`docs/proximity-map.md`](docs/proximity-map.md).
 
 For application builders who want a Git-like repository layer on top of prolly
 trees, see the proposed [`prolly-vcs` design](docs/prolly-vcs-design.md). It
@@ -62,6 +64,9 @@ reflogs, patches, merge orchestration, sync planning, and repository-level GC.
 - Store-independent single-key, shared multi-key, complete range, cursor-page,
   and diff-page proofs for a tree root.
 - Tree statistics for inspecting shape, fill factor, fanout, and serialized size.
+- A deterministic, content-addressed proximity map with exact key lookup,
+  persisted ANN beam search, structural verification, and localized
+  copy-on-write proximity mutation.
 
 ## Quick start
 
@@ -2066,6 +2071,7 @@ current benchmark coverage, and measured SQLite scale results.
 | `streaming.rs` | Streaming differ trait and default implementation. |
 | `stats.rs` | Tree shape and size metrics. |
 | `store/` | Storage trait and backend implementations. |
+| `proximity/` | Exact vector directory, deterministic ANN hierarchy, search, codecs, verification, and localized mutation. |
 
 ## When To Use It
 

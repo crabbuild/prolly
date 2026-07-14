@@ -850,6 +850,18 @@ tree = prolly.put(
 - Add diff-based re-embedding for changed chunks
 - Store checksums for blob payload validation
 
+## Native immutable vector indexes
+
+Use `ProximityMap` when the vector index itself must be reproducible from a
+content-addressed descriptor. It stores exact key/vector/value records in an
+ordered directory and uses a deterministic proximity hierarchy for ANN search.
+See [`proximity-map.md`](proximity-map.md) for build, load, search, mutation,
+verification, tuning, and persistence examples.
+
+Choose this path for immutable versions, exact historical replay, duplicate
+vector identities, and structural sharing. Keep a sidecar for HNSW-style online
+graph mutation, quantization, GPU kernels, or specialized metrics.
+
 ## Vector sidecars
 
 Use this recipe when a vector database scores embeddings while prolly stores reproducible metadata. It maps to [`vector_sidecar.rs`](../examples/vector_sidecar.rs).

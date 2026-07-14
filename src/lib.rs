@@ -328,6 +328,11 @@ pub use prolly::proof::{
     ProofBundleSummary, ProofBundleVerification, ProvedDiffPage, ProvedRangePage, RangePageProof,
     RangePageProofVerification, RangeProof, RangeProofVerification,
 };
+pub use prolly::proximity::{
+    DistanceMetric, ExactProximityRecord, Neighbor, ProximityConfig, ProximityMap,
+    ProximityMutation, ProximityMutationStats, ProximityRecord, ProximitySearchStats,
+    ProximityTree, ProximityVerification, SearchOptions, SearchResult,
+};
 pub use prolly::range::{
     CursorWindow, RangeCursor, RangeIter, RangePage, ReverseCursor, ReversePage,
 };

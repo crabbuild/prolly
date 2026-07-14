@@ -220,6 +220,23 @@ pub enum Error {
     TransactionConflict(TransactionConflict),
     /// A built-in versioned-map catalog is missing or internally inconsistent.
     InvalidVersionedMap(String),
+    /// A proximity-map shape configuration is invalid.
+    InvalidProximityConfig { reason: String },
+    /// A vector is incompatible with the proximity-map configuration.
+    InvalidProximityVector { reason: String },
+    /// A proximity build or mutation contains the same logical key twice.
+    DuplicateProximityKey { key: Vec<u8> },
+    /// Proximity search options are invalid.
+    InvalidProximitySearch { reason: String },
+    /// A persisted proximity record, node, or descriptor is malformed.
+    InvalidProximityObject { kind: &'static str, reason: String },
+    /// One canonical proximity node exceeds the configured hard byte limit.
+    ProximityNodeTooLarge {
+        level: u8,
+        entries: usize,
+        encoded_bytes: usize,
+        limit: usize,
+    },
 }
 
 impl std::fmt::Display for Error {
@@ -263,6 +280,30 @@ impl std::fmt::Display for Error {
             Error::InvalidVersionedMap(message) => {
                 write!(f, "invalid versioned map: {message}")
             }
+            Error::InvalidProximityConfig { reason } => {
+                write!(f, "invalid proximity configuration: {reason}")
+            }
+            Error::InvalidProximityVector { reason } => {
+                write!(f, "invalid proximity vector: {reason}")
+            }
+            Error::DuplicateProximityKey { key } => {
+                write!(f, "duplicate proximity key: {key:?}")
+            }
+            Error::InvalidProximitySearch { reason } => {
+                write!(f, "invalid proximity search options: {reason}")
+            }
+            Error::InvalidProximityObject { kind, reason } => {
+                write!(f, "invalid proximity {kind}: {reason}")
+            }
+            Error::ProximityNodeTooLarge {
+                level,
+                entries,
+                encoded_bytes,
+                limit,
+            } => write!(
+                f,
+                "proximity node exceeds byte limit: level={level} entries={entries} bytes={encoded_bytes} limit={limit}"
+            ),
         }
     }
 }

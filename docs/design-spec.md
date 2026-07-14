@@ -401,3 +401,16 @@ A non-Rust implementation should not claim compatibility until it can:
 
 The language port may expose idiomatic APIs, but the storage contract must stay
 byte-compatible where compatibility is promised.
+
+## Proximity Index Contract
+
+Proximity indexing uses a compound immutable handle rather than changing the
+ordered-tree comparator. The directory is the sole authority for key identity,
+absence, values, and vectors. The PRXN hierarchy is derived routing state.
+
+For the same sorted logical records and `ProximityConfig`, bulk build and every
+localized mutation path must produce identical directory, proximity, and
+descriptor CIDs. Search is approximate unless its beam covers every candidate.
+Result ordering is total and deterministic by `(squared L2 distance, key)`.
+
+The detailed contract is [`proximity-map.md`](proximity-map.md).

@@ -69,3 +69,7 @@ harness = false
 [[bench]]
 name = "store_diff_merge_bench"
 harness = false
+
+[[bench]]
+name = "proximity_bench"
+harness = false

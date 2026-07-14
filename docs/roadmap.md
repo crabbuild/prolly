@@ -43,6 +43,27 @@ Status: **Shipped**
 - Bounded node cache by node count and serialized bytes
 - Cache inspection, pinning, clearing, hit/miss counters, and eviction counters
 
+### Native proximity indexing
+
+Status: **Shipped**
+
+- Compound exact-directory plus derived-ANN descriptor
+- Canonical finite `f32` vectors and squared-L2 distance
+- Deterministic key promotion and nearest-representative hierarchy
+- Independent result and beam widths with deterministic resource budgets
+- Exact absent-key and duplicate-vector-safe identity semantics
+- Strict PRVR/PRXN/PRXI versioned codecs
+- Structural verifier and clean-rebuild mutation oracle
+- Dolt-style localized copy-on-write PRXN mutation with root-level rebuild
+  fallback
+- Bounded typed proximity-node cache and batched child reads
+
+The exact ordered directory is currently canonically bulk-rebuilt during a
+proximity mutation because the existing ordered batch writer can preserve a
+different valid physical shape after long edit histories. PRXN mutation remains
+localized. A canonical resynchronizing ordered writer can remove this
+directory-side O(n) fallback without changing proximity bytes.
+
 ### Diff, merge, and collaboration
 
 Status: **Shipped**
