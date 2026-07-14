@@ -3,8 +3,8 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use prolly::{
-    append_batch, BatchBuilder, BatchWriter, BatchWriterConfig, Config, MemStore, Mutation,
-    ParallelConfig, Prolly, Resolution, Resolver, Store, Tree,
+    append_batch, chunking, BatchBuilder, BatchWriter, BatchWriterConfig, BoundaryRule, Config,
+    MemStore, Mutation, NodeLayoutSpec, ParallelConfig, Prolly, Resolution, Resolver, Store, Tree,
 };
 
 const DEFAULT_SCALE: usize = 10_000;
@@ -18,6 +18,37 @@ fn main() {
 
     println!("prolly benchmark scale={scale}");
     println!("name,total_ms,iterations,items,ns_per_item");
+
+    match std::env::var("PROLLY_BENCH_ONLY").as_deref() {
+        Ok("batch-builder") => {
+            bench_batch_builder(scale);
+            return;
+        }
+        Ok("append-chain") => {
+            bench_append_batch_chain(scale);
+            bench_append_batch_chain_cold(scale);
+            return;
+        }
+        Ok("merge-conflict") => {
+            bench_merge_conflict_resolved(scale);
+            return;
+        }
+        Ok("stream-append") => {
+            bench_stream_diff_append_suffix(scale);
+            return;
+        }
+        Ok("batch-regressions") => {
+            bench_batch_mutations_mixed(scale);
+            bench_parallel_batch_mutations(scale);
+            return;
+        }
+        Ok("point-reads-deletes") => {
+            bench_point_get(scale);
+            bench_point_deletes(scale);
+            return;
+        }
+        Ok(_) | Err(_) => {}
+    }
 
     bench_incremental_insert(scale / 5);
     bench_batch_builder(scale);
@@ -83,6 +114,13 @@ fn bench_point_get(items: usize) {
     let data = data_set(items);
     let (_, prolly, tree) = build_tree(&data);
     let gets = items * 20;
+
+    if std::env::var_os("PROLLY_BENCH_DIAG").is_some() {
+        println!(
+            "point_get_tree_stats={}",
+            prolly.collect_stats(&tree).unwrap()
+        );
+    }
 
     measure("point_get_mem", 10, gets, || {
         for i in 0..gets {
@@ -183,6 +221,13 @@ fn bench_batch_mutations_mixed(items: usize) {
     let (_, prolly, base) = build_tree(&data);
     let mutation_count = mutation_count(items);
     let mutations = mixed_mutations(items, mutation_count, "mixed");
+
+    if std::env::var_os("PROLLY_BENCH_DIAG").is_some() {
+        let (_, stats) = prolly
+            .canonical_batch_with_stats(&base, mutations.clone())
+            .unwrap();
+        println!("mixed_batch_stats={stats:?}");
+    }
 
     measure("batch_mutations_mixed_mem", 20, mutation_count, || {
         let tree = prolly.batch(&base, black_box(mutations.clone())).unwrap();
@@ -394,6 +439,13 @@ fn bench_stream_diff_append_suffix(items: usize) {
     )
     .unwrap();
 
+    if std::env::var_os("PROLLY_BENCH_DIAG").is_some() {
+        let page = prolly
+            .structural_diff_page(&base, &other, None, count + 1)
+            .unwrap();
+        println!("stream_append_stats={:?}", page.stats);
+    }
+
     measure("stream_diff_append_suffix_mem", 20, count, || {
         let diffs = prolly
             .stream_diff(&base, &other)
@@ -484,7 +536,11 @@ fn bench_merge_conflict_resolved(items: usize) {
         conflicts += 1;
     }
 
-    measure("merge_conflict_resolved_mem", 10, conflicts, || {
+    let iterations = std::env::var("PROLLY_BENCH_ITERATIONS")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(10);
+    measure("merge_conflict_resolved_mem", iterations, conflicts, || {
         let resolver: Resolver =
             Box::new(|conflict| Resolution::value(conflict.right.clone().expect("right value")));
         let merged = prolly.merge(&base, &left, &right, Some(resolver)).unwrap();
@@ -496,6 +552,10 @@ fn measure<F>(name: &str, iterations: usize, items: usize, mut f: F)
 where
     F: FnMut(),
 {
+    let iterations = std::env::var("PROLLY_BENCH_ITERATIONS")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(iterations);
     f();
 
     let mut total = Duration::ZERO;
@@ -747,10 +807,25 @@ fn key_for_index(i: usize) -> Vec<u8> {
 }
 
 fn bench_config() -> Config {
+    let policy = std::env::var("PROLLY_BENCH_POLICY").unwrap_or_default();
+    let key_value = matches!(policy.as_str(), "legacy-equivalent" | "key-value-plain");
+    let prefix = !matches!(policy.as_str(), "key-value-plain" | "key-only-plain");
+    let mut chunking = if key_value {
+        chunking::entry_count_key_value_hash()
+    } else {
+        chunking::entry_count_key_hash()
+    };
+    chunking.min = 16;
+    chunking.target = 64;
+    chunking.max = 128;
+    chunking.hash_seed = 0xC0DA;
+    chunking.rule = BoundaryRule::HashThreshold { factor: 64 };
     Config::builder()
-        .min_chunk_size(16)
-        .max_chunk_size(128)
-        .chunking_factor(64)
-        .hash_seed(0xC0DA)
+        .chunking(chunking)
+        .node_layout(if prefix {
+            NodeLayoutSpec::PrefixCompressed
+        } else {
+            NodeLayoutSpec::Plain
+        })
         .build()
 }

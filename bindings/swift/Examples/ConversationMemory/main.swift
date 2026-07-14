@@ -35,7 +35,7 @@ try engine.publishNamedRoot(name: main, tree: canonical)
 
 let merged = try engine.merge(base: base, left: try engine.loadNamedRoot(name: main)!, right: try engine.loadNamedRoot(name: attemptName)!, resolver: "prefer_right")
 let update = try engine.compareAndSwapNamedRoot(name: main, expected: canonical, replacement: merged)
-let rows = try engine.range(tree: merged, start: bytes("conversation/c42/memory/"), end: bytes("conversation/c42/memory0"))
+let rows = try engine.range(tree: merged, start: bytes("conversation/c42/memory/"), rangeEnd: bytes("conversation/c42/memory0"))
 
 precondition(update.applied)
 precondition(rows.count == 3)

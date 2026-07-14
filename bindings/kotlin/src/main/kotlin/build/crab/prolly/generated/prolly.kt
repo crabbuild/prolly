@@ -984,6 +984,8 @@ external fun uniffi_prolly_bindings_checksum_func_tombstone_upsert_mutation(
 ): Short
 external fun uniffi_prolly_bindings_checksum_func_tree_config(
 ): Short
+external fun uniffi_prolly_bindings_checksum_func_tree_config_from_format_bytes(
+): Short
 external fun uniffi_prolly_bindings_checksum_func_u128_key(
 ): Short
 external fun uniffi_prolly_bindings_checksum_func_u64_key(
@@ -1525,7 +1527,7 @@ external fun uniffi_prolly_bindings_fn_method_prollyengine_crdt_merge_with_resol
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_prollyengine_create(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
-external fun uniffi_prolly_bindings_fn_method_prollyengine_cursor_window(`ptr`: Long,`tree`: RustBuffer.ByValue,`key`: RustBuffer.ByValue,`end`: RustBuffer.ByValue,`limit`: Long,uniffi_out_err: UniffiRustCallStatus,
+external fun uniffi_prolly_bindings_fn_method_prollyengine_cursor_window(`ptr`: Long,`tree`: RustBuffer.ByValue,`key`: RustBuffer.ByValue,`rangeEnd`: RustBuffer.ByValue,`limit`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_prollyengine_debug_compare_trees(`ptr`: Long,`left`: RustBuffer.ByValue,`right`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
@@ -1547,9 +1549,9 @@ external fun uniffi_prolly_bindings_fn_method_prollyengine_delete_snapshot(`ptr`
 ): Unit
 external fun uniffi_prolly_bindings_fn_method_prollyengine_diff(`ptr`: Long,`base`: RustBuffer.ByValue,`other`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
-external fun uniffi_prolly_bindings_fn_method_prollyengine_diff_from_cursor(`ptr`: Long,`base`: RustBuffer.ByValue,`other`: RustBuffer.ByValue,`cursor`: RustBuffer.ByValue,`end`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+external fun uniffi_prolly_bindings_fn_method_prollyengine_diff_from_cursor(`ptr`: Long,`base`: RustBuffer.ByValue,`other`: RustBuffer.ByValue,`cursor`: RustBuffer.ByValue,`rangeEnd`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
-external fun uniffi_prolly_bindings_fn_method_prollyengine_diff_page(`ptr`: Long,`base`: RustBuffer.ByValue,`other`: RustBuffer.ByValue,`cursor`: RustBuffer.ByValue,`end`: RustBuffer.ByValue,`limit`: Long,uniffi_out_err: UniffiRustCallStatus,
+external fun uniffi_prolly_bindings_fn_method_prollyengine_diff_page(`ptr`: Long,`base`: RustBuffer.ByValue,`other`: RustBuffer.ByValue,`cursor`: RustBuffer.ByValue,`rangeEnd`: RustBuffer.ByValue,`limit`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_prollyengine_export_snapshot(`ptr`: Long,`tree`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
@@ -1609,11 +1611,11 @@ external fun uniffi_prolly_bindings_fn_method_prollyengine_merge_prefix_with_pol
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_prollyengine_merge_prefix_with_resolver(`ptr`: Long,`base`: RustBuffer.ByValue,`left`: RustBuffer.ByValue,`right`: RustBuffer.ByValue,`prefix`: RustBuffer.ByValue,`resolver`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
-external fun uniffi_prolly_bindings_fn_method_prollyengine_merge_range(`ptr`: Long,`base`: RustBuffer.ByValue,`left`: RustBuffer.ByValue,`right`: RustBuffer.ByValue,`start`: RustBuffer.ByValue,`end`: RustBuffer.ByValue,`resolver`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+external fun uniffi_prolly_bindings_fn_method_prollyengine_merge_range(`ptr`: Long,`base`: RustBuffer.ByValue,`left`: RustBuffer.ByValue,`right`: RustBuffer.ByValue,`start`: RustBuffer.ByValue,`rangeEnd`: RustBuffer.ByValue,`resolver`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
-external fun uniffi_prolly_bindings_fn_method_prollyengine_merge_range_with_policy(`ptr`: Long,`base`: RustBuffer.ByValue,`left`: RustBuffer.ByValue,`right`: RustBuffer.ByValue,`start`: RustBuffer.ByValue,`end`: RustBuffer.ByValue,`policy`: Long,uniffi_out_err: UniffiRustCallStatus,
+external fun uniffi_prolly_bindings_fn_method_prollyengine_merge_range_with_policy(`ptr`: Long,`base`: RustBuffer.ByValue,`left`: RustBuffer.ByValue,`right`: RustBuffer.ByValue,`start`: RustBuffer.ByValue,`rangeEnd`: RustBuffer.ByValue,`policy`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
-external fun uniffi_prolly_bindings_fn_method_prollyengine_merge_range_with_resolver(`ptr`: Long,`base`: RustBuffer.ByValue,`left`: RustBuffer.ByValue,`right`: RustBuffer.ByValue,`start`: RustBuffer.ByValue,`end`: RustBuffer.ByValue,`resolver`: Long,uniffi_out_err: UniffiRustCallStatus,
+external fun uniffi_prolly_bindings_fn_method_prollyengine_merge_range_with_resolver(`ptr`: Long,`base`: RustBuffer.ByValue,`left`: RustBuffer.ByValue,`right`: RustBuffer.ByValue,`start`: RustBuffer.ByValue,`rangeEnd`: RustBuffer.ByValue,`resolver`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_prollyengine_merge_with_policy(`ptr`: Long,`base`: RustBuffer.ByValue,`left`: RustBuffer.ByValue,`right`: RustBuffer.ByValue,`policy`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
@@ -1647,7 +1649,7 @@ external fun uniffi_prolly_bindings_fn_method_prollyengine_prefix_page(`ptr`: Lo
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_prollyengine_prefix_reverse_page(`ptr`: Long,`tree`: RustBuffer.ByValue,`prefix`: RustBuffer.ByValue,`cursor`: RustBuffer.ByValue,`limit`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
-external fun uniffi_prolly_bindings_fn_method_prollyengine_prove_diff_page(`ptr`: Long,`base`: RustBuffer.ByValue,`other`: RustBuffer.ByValue,`cursor`: RustBuffer.ByValue,`end`: RustBuffer.ByValue,`limit`: Long,uniffi_out_err: UniffiRustCallStatus,
+external fun uniffi_prolly_bindings_fn_method_prollyengine_prove_diff_page(`ptr`: Long,`base`: RustBuffer.ByValue,`other`: RustBuffer.ByValue,`cursor`: RustBuffer.ByValue,`rangeEnd`: RustBuffer.ByValue,`limit`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_prollyengine_prove_key(`ptr`: Long,`tree`: RustBuffer.ByValue,`key`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
@@ -1655,9 +1657,9 @@ external fun uniffi_prolly_bindings_fn_method_prollyengine_prove_keys(`ptr`: Lon
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_prollyengine_prove_prefix(`ptr`: Long,`tree`: RustBuffer.ByValue,`prefix`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
-external fun uniffi_prolly_bindings_fn_method_prollyengine_prove_range(`ptr`: Long,`tree`: RustBuffer.ByValue,`start`: RustBuffer.ByValue,`end`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+external fun uniffi_prolly_bindings_fn_method_prollyengine_prove_range(`ptr`: Long,`tree`: RustBuffer.ByValue,`start`: RustBuffer.ByValue,`rangeEnd`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
-external fun uniffi_prolly_bindings_fn_method_prollyengine_prove_range_page(`ptr`: Long,`tree`: RustBuffer.ByValue,`cursor`: RustBuffer.ByValue,`end`: RustBuffer.ByValue,`limit`: Long,uniffi_out_err: UniffiRustCallStatus,
+external fun uniffi_prolly_bindings_fn_method_prollyengine_prove_range_page(`ptr`: Long,`tree`: RustBuffer.ByValue,`cursor`: RustBuffer.ByValue,`rangeEnd`: RustBuffer.ByValue,`limit`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_prollyengine_publish_changed_spans_hint(`ptr`: Long,`base`: RustBuffer.ByValue,`changed`: RustBuffer.ByValue,`spans`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): Byte
@@ -1675,15 +1677,15 @@ external fun uniffi_prolly_bindings_fn_method_prollyengine_put(`ptr`: Long,`tree
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_prollyengine_put_large_value(`ptr`: Long,`blobStore`: Long,`tree`: RustBuffer.ByValue,`key`: RustBuffer.ByValue,`value`: RustBuffer.ByValue,`config`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
-external fun uniffi_prolly_bindings_fn_method_prollyengine_range(`ptr`: Long,`tree`: RustBuffer.ByValue,`start`: RustBuffer.ByValue,`end`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+external fun uniffi_prolly_bindings_fn_method_prollyengine_range(`ptr`: Long,`tree`: RustBuffer.ByValue,`start`: RustBuffer.ByValue,`rangeEnd`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
-external fun uniffi_prolly_bindings_fn_method_prollyengine_range_after(`ptr`: Long,`tree`: RustBuffer.ByValue,`afterKey`: RustBuffer.ByValue,`end`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+external fun uniffi_prolly_bindings_fn_method_prollyengine_range_after(`ptr`: Long,`tree`: RustBuffer.ByValue,`afterKey`: RustBuffer.ByValue,`rangeEnd`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
-external fun uniffi_prolly_bindings_fn_method_prollyengine_range_diff(`ptr`: Long,`base`: RustBuffer.ByValue,`other`: RustBuffer.ByValue,`start`: RustBuffer.ByValue,`end`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+external fun uniffi_prolly_bindings_fn_method_prollyengine_range_diff(`ptr`: Long,`base`: RustBuffer.ByValue,`other`: RustBuffer.ByValue,`start`: RustBuffer.ByValue,`rangeEnd`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
-external fun uniffi_prolly_bindings_fn_method_prollyengine_range_from_cursor(`ptr`: Long,`tree`: RustBuffer.ByValue,`cursor`: RustBuffer.ByValue,`end`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+external fun uniffi_prolly_bindings_fn_method_prollyengine_range_from_cursor(`ptr`: Long,`tree`: RustBuffer.ByValue,`cursor`: RustBuffer.ByValue,`rangeEnd`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
-external fun uniffi_prolly_bindings_fn_method_prollyengine_range_page(`ptr`: Long,`tree`: RustBuffer.ByValue,`cursor`: RustBuffer.ByValue,`end`: RustBuffer.ByValue,`limit`: Long,uniffi_out_err: UniffiRustCallStatus,
+external fun uniffi_prolly_bindings_fn_method_prollyengine_range_page(`ptr`: Long,`tree`: RustBuffer.ByValue,`cursor`: RustBuffer.ByValue,`rangeEnd`: RustBuffer.ByValue,`limit`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_prollyengine_reset_metrics(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): Unit
@@ -1743,7 +1745,7 @@ external fun uniffi_prolly_bindings_fn_func_authenticated_proof_envelope_to_byte
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_blob_ref_validate_bytes(`reference`: RustBuffer.ByValue,`bytes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): Unit
-external fun uniffi_prolly_bindings_fn_func_changed_span(`start`: RustBuffer.ByValue,`end`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+external fun uniffi_prolly_bindings_fn_func_changed_span(`start`: RustBuffer.ByValue,`rangeEnd`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_changed_span_for_prefix(`prefix`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
@@ -1843,7 +1845,7 @@ external fun uniffi_prolly_bindings_fn_func_range_cursor_start(uniffi_out_err: U
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_range_page_proof_from_bytes(`bytes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
-external fun uniffi_prolly_bindings_fn_func_range_page_proof_from_node_bytes(`root`: RustBuffer.ByValue,`after`: RustBuffer.ByValue,`end`: RustBuffer.ByValue,`pathNodeBytes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+external fun uniffi_prolly_bindings_fn_func_range_page_proof_from_node_bytes(`root`: RustBuffer.ByValue,`after`: RustBuffer.ByValue,`rangeEnd`: RustBuffer.ByValue,`pathNodeBytes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_range_page_proof_path_node_bytes(`proof`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
@@ -1851,7 +1853,7 @@ external fun uniffi_prolly_bindings_fn_func_range_page_proof_to_bytes(`proof`: R
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_range_proof_from_bytes(`bytes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
-external fun uniffi_prolly_bindings_fn_func_range_proof_from_node_bytes(`root`: RustBuffer.ByValue,`start`: RustBuffer.ByValue,`end`: RustBuffer.ByValue,`pathNodeBytes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+external fun uniffi_prolly_bindings_fn_func_range_proof_from_node_bytes(`root`: RustBuffer.ByValue,`start`: RustBuffer.ByValue,`rangeEnd`: RustBuffer.ByValue,`pathNodeBytes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_range_proof_path_node_bytes(`proof`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
@@ -1934,6 +1936,8 @@ external fun uniffi_prolly_bindings_fn_func_tombstone_to_bytes(`record`: RustBuf
 external fun uniffi_prolly_bindings_fn_func_tombstone_upsert_mutation(`key`: RustBuffer.ByValue,`tombstone`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_tree_config(`minChunkSize`: Long,`maxChunkSize`: Long,`chunkingFactor`: Int,`hashSeed`: Long,`encoding`: RustBuffer.ByValue,`nodeCacheMaxNodes`: RustBuffer.ByValue,`nodeCacheMaxBytes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_func_tree_config_from_format_bytes(`formatBytes`: RustBuffer.ByValue,`nodeCacheMaxNodes`: RustBuffer.ByValue,`nodeCacheMaxBytes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_u128_key(`value`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
@@ -2109,7 +2113,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_prolly_bindings_checksum_func_blob_ref_validate_bytes() != 54728.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_prolly_bindings_checksum_func_changed_span() != 43900.toShort()) {
+    if (lib.uniffi_prolly_bindings_checksum_func_changed_span() != 59655.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_func_changed_span_for_prefix() != 22853.toShort()) {
@@ -2259,7 +2263,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_prolly_bindings_checksum_func_range_page_proof_from_bytes() != 59171.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_prolly_bindings_checksum_func_range_page_proof_from_node_bytes() != 3245.toShort()) {
+    if (lib.uniffi_prolly_bindings_checksum_func_range_page_proof_from_node_bytes() != 64107.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_func_range_page_proof_path_node_bytes() != 43249.toShort()) {
@@ -2271,7 +2275,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_prolly_bindings_checksum_func_range_proof_from_bytes() != 41674.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_prolly_bindings_checksum_func_range_proof_from_node_bytes() != 43455.toShort()) {
+    if (lib.uniffi_prolly_bindings_checksum_func_range_proof_from_node_bytes() != 19550.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_func_range_proof_path_node_bytes() != 42991.toShort()) {
@@ -2395,6 +2399,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_func_tree_config() != 13018.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_func_tree_config_from_format_bytes() != 40159.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_func_u128_key() != 12112.toShort()) {
@@ -2619,7 +2626,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_create() != 15621.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_cursor_window() != 31202.toShort()) {
+    if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_cursor_window() != 33600.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_debug_compare_trees() != 16233.toShort()) {
@@ -2652,10 +2659,10 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_diff() != 59822.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_diff_from_cursor() != 14790.toShort()) {
+    if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_diff_from_cursor() != 56175.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_diff_page() != 49332.toShort()) {
+    if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_diff_page() != 52911.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_export_snapshot() != 39238.toShort()) {
@@ -2745,13 +2752,13 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_merge_prefix_with_resolver() != 52691.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_merge_range() != 62183.toShort()) {
+    if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_merge_range() != 16455.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_merge_range_with_policy() != 37378.toShort()) {
+    if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_merge_range_with_policy() != 63569.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_merge_range_with_resolver() != 48921.toShort()) {
+    if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_merge_range_with_resolver() != 18526.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_merge_with_policy() != 11524.toShort()) {
@@ -2802,7 +2809,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_prefix_reverse_page() != 20711.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_prove_diff_page() != 18402.toShort()) {
+    if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_prove_diff_page() != 3176.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_prove_key() != 4612.toShort()) {
@@ -2814,10 +2821,10 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_prove_prefix() != 32453.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_prove_range() != 59564.toShort()) {
+    if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_prove_range() != 40694.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_prove_range_page() != 43652.toShort()) {
+    if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_prove_range_page() != 35557.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_publish_changed_spans_hint() != 57418.toShort()) {
@@ -2844,19 +2851,19 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_put_large_value() != 26504.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_range() != 29092.toShort()) {
+    if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_range() != 24616.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_range_after() != 47062.toShort()) {
+    if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_range_after() != 51929.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_range_diff() != 59421.toShort()) {
+    if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_range_diff() != 65006.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_range_from_cursor() != 7151.toShort()) {
+    if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_range_from_cursor() != 33634.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_range_page() != 26598.toShort()) {
+    if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_range_page() != 7048.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_reset_metrics() != 10217.toShort()) {
@@ -5547,7 +5554,7 @@ public interface ProllyEngineInterface {
 
     fun `create`(): TreeRecord
 
-    fun `cursorWindow`(`tree`: TreeRecord, `key`: kotlin.ByteArray, `end`: kotlin.ByteArray?, `limit`: kotlin.ULong): CursorWindowRecord
+    fun `cursorWindow`(`tree`: TreeRecord, `key`: kotlin.ByteArray, `rangeEnd`: kotlin.ByteArray?, `limit`: kotlin.ULong): CursorWindowRecord
 
     fun `debugCompareTrees`(`left`: TreeRecord, `right`: TreeRecord): TreeDebugComparisonRecord
 
@@ -5569,9 +5576,9 @@ public interface ProllyEngineInterface {
 
     fun `diff`(`base`: TreeRecord, `other`: TreeRecord): List<DiffRecord>
 
-    fun `diffFromCursor`(`base`: TreeRecord, `other`: TreeRecord, `cursor`: RangeCursorRecord?, `end`: kotlin.ByteArray?): List<DiffRecord>
+    fun `diffFromCursor`(`base`: TreeRecord, `other`: TreeRecord, `cursor`: RangeCursorRecord?, `rangeEnd`: kotlin.ByteArray?): List<DiffRecord>
 
-    fun `diffPage`(`base`: TreeRecord, `other`: TreeRecord, `cursor`: RangeCursorRecord?, `end`: kotlin.ByteArray?, `limit`: kotlin.ULong): DiffPageRecord
+    fun `diffPage`(`base`: TreeRecord, `other`: TreeRecord, `cursor`: RangeCursorRecord?, `rangeEnd`: kotlin.ByteArray?, `limit`: kotlin.ULong): DiffPageRecord
 
     fun `exportSnapshot`(`tree`: TreeRecord): SnapshotBundleRecord
 
@@ -5631,11 +5638,11 @@ public interface ProllyEngineInterface {
 
     fun `mergePrefixWithResolver`(`base`: TreeRecord, `left`: TreeRecord, `right`: TreeRecord, `prefix`: kotlin.ByteArray, `resolver`: MergeResolverCallback): TreeRecord
 
-    fun `mergeRange`(`base`: TreeRecord, `left`: TreeRecord, `right`: TreeRecord, `start`: kotlin.ByteArray, `end`: kotlin.ByteArray?, `resolver`: kotlin.String?): TreeRecord
+    fun `mergeRange`(`base`: TreeRecord, `left`: TreeRecord, `right`: TreeRecord, `start`: kotlin.ByteArray, `rangeEnd`: kotlin.ByteArray?, `resolver`: kotlin.String?): TreeRecord
 
-    fun `mergeRangeWithPolicy`(`base`: TreeRecord, `left`: TreeRecord, `right`: TreeRecord, `start`: kotlin.ByteArray, `end`: kotlin.ByteArray?, `policy`: MergePolicyRegistry): TreeRecord
+    fun `mergeRangeWithPolicy`(`base`: TreeRecord, `left`: TreeRecord, `right`: TreeRecord, `start`: kotlin.ByteArray, `rangeEnd`: kotlin.ByteArray?, `policy`: MergePolicyRegistry): TreeRecord
 
-    fun `mergeRangeWithResolver`(`base`: TreeRecord, `left`: TreeRecord, `right`: TreeRecord, `start`: kotlin.ByteArray, `end`: kotlin.ByteArray?, `resolver`: MergeResolverCallback): TreeRecord
+    fun `mergeRangeWithResolver`(`base`: TreeRecord, `left`: TreeRecord, `right`: TreeRecord, `start`: kotlin.ByteArray, `rangeEnd`: kotlin.ByteArray?, `resolver`: MergeResolverCallback): TreeRecord
 
     fun `mergeWithPolicy`(`base`: TreeRecord, `left`: TreeRecord, `right`: TreeRecord, `policy`: MergePolicyRegistry): TreeRecord
 
@@ -5669,7 +5676,7 @@ public interface ProllyEngineInterface {
 
     fun `prefixReversePage`(`tree`: TreeRecord, `prefix`: kotlin.ByteArray, `cursor`: ReverseCursorRecord?, `limit`: kotlin.ULong): ReversePageRecord
 
-    fun `proveDiffPage`(`base`: TreeRecord, `other`: TreeRecord, `cursor`: RangeCursorRecord?, `end`: kotlin.ByteArray?, `limit`: kotlin.ULong): ProvedDiffPageRecord
+    fun `proveDiffPage`(`base`: TreeRecord, `other`: TreeRecord, `cursor`: RangeCursorRecord?, `rangeEnd`: kotlin.ByteArray?, `limit`: kotlin.ULong): ProvedDiffPageRecord
 
     fun `proveKey`(`tree`: TreeRecord, `key`: kotlin.ByteArray): KeyProofRecord
 
@@ -5677,9 +5684,9 @@ public interface ProllyEngineInterface {
 
     fun `provePrefix`(`tree`: TreeRecord, `prefix`: kotlin.ByteArray): RangeProofRecord
 
-    fun `proveRange`(`tree`: TreeRecord, `start`: kotlin.ByteArray, `end`: kotlin.ByteArray?): RangeProofRecord
+    fun `proveRange`(`tree`: TreeRecord, `start`: kotlin.ByteArray, `rangeEnd`: kotlin.ByteArray?): RangeProofRecord
 
-    fun `proveRangePage`(`tree`: TreeRecord, `cursor`: RangeCursorRecord?, `end`: kotlin.ByteArray?, `limit`: kotlin.ULong): ProvedRangePageRecord
+    fun `proveRangePage`(`tree`: TreeRecord, `cursor`: RangeCursorRecord?, `rangeEnd`: kotlin.ByteArray?, `limit`: kotlin.ULong): ProvedRangePageRecord
 
     fun `publishChangedSpansHint`(`base`: TreeRecord, `changed`: TreeRecord, `spans`: List<ChangedSpanRecord>): kotlin.Boolean
 
@@ -5697,15 +5704,15 @@ public interface ProllyEngineInterface {
 
     fun `putLargeValue`(`blobStore`: ProllyBlobStore, `tree`: TreeRecord, `key`: kotlin.ByteArray, `value`: kotlin.ByteArray, `config`: LargeValueConfigRecord): TreeRecord
 
-    fun `range`(`tree`: TreeRecord, `start`: kotlin.ByteArray, `end`: kotlin.ByteArray?): List<EntryRecord>
+    fun `range`(`tree`: TreeRecord, `start`: kotlin.ByteArray, `rangeEnd`: kotlin.ByteArray?): List<EntryRecord>
 
-    fun `rangeAfter`(`tree`: TreeRecord, `afterKey`: kotlin.ByteArray, `end`: kotlin.ByteArray?): List<EntryRecord>
+    fun `rangeAfter`(`tree`: TreeRecord, `afterKey`: kotlin.ByteArray, `rangeEnd`: kotlin.ByteArray?): List<EntryRecord>
 
-    fun `rangeDiff`(`base`: TreeRecord, `other`: TreeRecord, `start`: kotlin.ByteArray, `end`: kotlin.ByteArray?): List<DiffRecord>
+    fun `rangeDiff`(`base`: TreeRecord, `other`: TreeRecord, `start`: kotlin.ByteArray, `rangeEnd`: kotlin.ByteArray?): List<DiffRecord>
 
-    fun `rangeFromCursor`(`tree`: TreeRecord, `cursor`: RangeCursorRecord?, `end`: kotlin.ByteArray?): List<EntryRecord>
+    fun `rangeFromCursor`(`tree`: TreeRecord, `cursor`: RangeCursorRecord?, `rangeEnd`: kotlin.ByteArray?): List<EntryRecord>
 
-    fun `rangePage`(`tree`: TreeRecord, `cursor`: RangeCursorRecord?, `end`: kotlin.ByteArray?, `limit`: kotlin.ULong): RangePageRecord
+    fun `rangePage`(`tree`: TreeRecord, `cursor`: RangeCursorRecord?, `rangeEnd`: kotlin.ByteArray?, `limit`: kotlin.ULong): RangePageRecord
 
     fun `resetMetrics`()
 
@@ -6110,13 +6117,13 @@ open class ProllyEngine: Disposable, AutoCloseable, ProllyEngineInterface
 
 
 
-    @Throws(ProllyBindingException::class)override fun `cursorWindow`(`tree`: TreeRecord, `key`: kotlin.ByteArray, `end`: kotlin.ByteArray?, `limit`: kotlin.ULong): CursorWindowRecord {
+    @Throws(ProllyBindingException::class)override fun `cursorWindow`(`tree`: TreeRecord, `key`: kotlin.ByteArray, `rangeEnd`: kotlin.ByteArray?, `limit`: kotlin.ULong): CursorWindowRecord {
             return FfiConverterTypeCursorWindowRecord.lift(
     callWithHandle {
     uniffiRustCallWithError(ProllyBindingException) { _status ->
     UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_cursor_window(
         it,
-        FfiConverterTypeTreeRecord.lower(`tree`),FfiConverterByteArray.lower(`key`),FfiConverterOptionalByteArray.lower(`end`),FfiConverterULong.lower(`limit`),_status)
+        FfiConverterTypeTreeRecord.lower(`tree`),FfiConverterByteArray.lower(`key`),FfiConverterOptionalByteArray.lower(`rangeEnd`),FfiConverterULong.lower(`limit`),_status)
 }
     }
     )
@@ -6262,13 +6269,13 @@ open class ProllyEngine: Disposable, AutoCloseable, ProllyEngineInterface
 
 
 
-    @Throws(ProllyBindingException::class)override fun `diffFromCursor`(`base`: TreeRecord, `other`: TreeRecord, `cursor`: RangeCursorRecord?, `end`: kotlin.ByteArray?): List<DiffRecord> {
+    @Throws(ProllyBindingException::class)override fun `diffFromCursor`(`base`: TreeRecord, `other`: TreeRecord, `cursor`: RangeCursorRecord?, `rangeEnd`: kotlin.ByteArray?): List<DiffRecord> {
             return FfiConverterSequenceTypeDiffRecord.lift(
     callWithHandle {
     uniffiRustCallWithError(ProllyBindingException) { _status ->
     UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_diff_from_cursor(
         it,
-        FfiConverterTypeTreeRecord.lower(`base`),FfiConverterTypeTreeRecord.lower(`other`),FfiConverterOptionalTypeRangeCursorRecord.lower(`cursor`),FfiConverterOptionalByteArray.lower(`end`),_status)
+        FfiConverterTypeTreeRecord.lower(`base`),FfiConverterTypeTreeRecord.lower(`other`),FfiConverterOptionalTypeRangeCursorRecord.lower(`cursor`),FfiConverterOptionalByteArray.lower(`rangeEnd`),_status)
 }
     }
     )
@@ -6276,13 +6283,13 @@ open class ProllyEngine: Disposable, AutoCloseable, ProllyEngineInterface
 
 
 
-    @Throws(ProllyBindingException::class)override fun `diffPage`(`base`: TreeRecord, `other`: TreeRecord, `cursor`: RangeCursorRecord?, `end`: kotlin.ByteArray?, `limit`: kotlin.ULong): DiffPageRecord {
+    @Throws(ProllyBindingException::class)override fun `diffPage`(`base`: TreeRecord, `other`: TreeRecord, `cursor`: RangeCursorRecord?, `rangeEnd`: kotlin.ByteArray?, `limit`: kotlin.ULong): DiffPageRecord {
             return FfiConverterTypeDiffPageRecord.lift(
     callWithHandle {
     uniffiRustCallWithError(ProllyBindingException) { _status ->
     UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_diff_page(
         it,
-        FfiConverterTypeTreeRecord.lower(`base`),FfiConverterTypeTreeRecord.lower(`other`),FfiConverterOptionalTypeRangeCursorRecord.lower(`cursor`),FfiConverterOptionalByteArray.lower(`end`),FfiConverterULong.lower(`limit`),_status)
+        FfiConverterTypeTreeRecord.lower(`base`),FfiConverterTypeTreeRecord.lower(`other`),FfiConverterOptionalTypeRangeCursorRecord.lower(`cursor`),FfiConverterOptionalByteArray.lower(`rangeEnd`),FfiConverterULong.lower(`limit`),_status)
 }
     }
     )
@@ -6696,13 +6703,13 @@ open class ProllyEngine: Disposable, AutoCloseable, ProllyEngineInterface
 
 
 
-    @Throws(ProllyBindingException::class)override fun `mergeRange`(`base`: TreeRecord, `left`: TreeRecord, `right`: TreeRecord, `start`: kotlin.ByteArray, `end`: kotlin.ByteArray?, `resolver`: kotlin.String?): TreeRecord {
+    @Throws(ProllyBindingException::class)override fun `mergeRange`(`base`: TreeRecord, `left`: TreeRecord, `right`: TreeRecord, `start`: kotlin.ByteArray, `rangeEnd`: kotlin.ByteArray?, `resolver`: kotlin.String?): TreeRecord {
             return FfiConverterTypeTreeRecord.lift(
     callWithHandle {
     uniffiRustCallWithError(ProllyBindingException) { _status ->
     UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_merge_range(
         it,
-        FfiConverterTypeTreeRecord.lower(`base`),FfiConverterTypeTreeRecord.lower(`left`),FfiConverterTypeTreeRecord.lower(`right`),FfiConverterByteArray.lower(`start`),FfiConverterOptionalByteArray.lower(`end`),FfiConverterOptionalString.lower(`resolver`),_status)
+        FfiConverterTypeTreeRecord.lower(`base`),FfiConverterTypeTreeRecord.lower(`left`),FfiConverterTypeTreeRecord.lower(`right`),FfiConverterByteArray.lower(`start`),FfiConverterOptionalByteArray.lower(`rangeEnd`),FfiConverterOptionalString.lower(`resolver`),_status)
 }
     }
     )
@@ -6710,13 +6717,13 @@ open class ProllyEngine: Disposable, AutoCloseable, ProllyEngineInterface
 
 
 
-    @Throws(ProllyBindingException::class)override fun `mergeRangeWithPolicy`(`base`: TreeRecord, `left`: TreeRecord, `right`: TreeRecord, `start`: kotlin.ByteArray, `end`: kotlin.ByteArray?, `policy`: MergePolicyRegistry): TreeRecord {
+    @Throws(ProllyBindingException::class)override fun `mergeRangeWithPolicy`(`base`: TreeRecord, `left`: TreeRecord, `right`: TreeRecord, `start`: kotlin.ByteArray, `rangeEnd`: kotlin.ByteArray?, `policy`: MergePolicyRegistry): TreeRecord {
             return FfiConverterTypeTreeRecord.lift(
     callWithHandle {
     uniffiRustCallWithError(ProllyBindingException) { _status ->
     UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_merge_range_with_policy(
         it,
-        FfiConverterTypeTreeRecord.lower(`base`),FfiConverterTypeTreeRecord.lower(`left`),FfiConverterTypeTreeRecord.lower(`right`),FfiConverterByteArray.lower(`start`),FfiConverterOptionalByteArray.lower(`end`),FfiConverterTypeMergePolicyRegistry.lower(`policy`),_status)
+        FfiConverterTypeTreeRecord.lower(`base`),FfiConverterTypeTreeRecord.lower(`left`),FfiConverterTypeTreeRecord.lower(`right`),FfiConverterByteArray.lower(`start`),FfiConverterOptionalByteArray.lower(`rangeEnd`),FfiConverterTypeMergePolicyRegistry.lower(`policy`),_status)
 }
     }
     )
@@ -6724,13 +6731,13 @@ open class ProllyEngine: Disposable, AutoCloseable, ProllyEngineInterface
 
 
 
-    @Throws(ProllyBindingException::class)override fun `mergeRangeWithResolver`(`base`: TreeRecord, `left`: TreeRecord, `right`: TreeRecord, `start`: kotlin.ByteArray, `end`: kotlin.ByteArray?, `resolver`: MergeResolverCallback): TreeRecord {
+    @Throws(ProllyBindingException::class)override fun `mergeRangeWithResolver`(`base`: TreeRecord, `left`: TreeRecord, `right`: TreeRecord, `start`: kotlin.ByteArray, `rangeEnd`: kotlin.ByteArray?, `resolver`: MergeResolverCallback): TreeRecord {
             return FfiConverterTypeTreeRecord.lift(
     callWithHandle {
     uniffiRustCallWithError(ProllyBindingException) { _status ->
     UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_merge_range_with_resolver(
         it,
-        FfiConverterTypeTreeRecord.lower(`base`),FfiConverterTypeTreeRecord.lower(`left`),FfiConverterTypeTreeRecord.lower(`right`),FfiConverterByteArray.lower(`start`),FfiConverterOptionalByteArray.lower(`end`),FfiConverterTypeMergeResolverCallback.lower(`resolver`),_status)
+        FfiConverterTypeTreeRecord.lower(`base`),FfiConverterTypeTreeRecord.lower(`left`),FfiConverterTypeTreeRecord.lower(`right`),FfiConverterByteArray.lower(`start`),FfiConverterOptionalByteArray.lower(`rangeEnd`),FfiConverterTypeMergeResolverCallback.lower(`resolver`),_status)
 }
     }
     )
@@ -6961,13 +6968,13 @@ open class ProllyEngine: Disposable, AutoCloseable, ProllyEngineInterface
 
 
 
-    @Throws(ProllyBindingException::class)override fun `proveDiffPage`(`base`: TreeRecord, `other`: TreeRecord, `cursor`: RangeCursorRecord?, `end`: kotlin.ByteArray?, `limit`: kotlin.ULong): ProvedDiffPageRecord {
+    @Throws(ProllyBindingException::class)override fun `proveDiffPage`(`base`: TreeRecord, `other`: TreeRecord, `cursor`: RangeCursorRecord?, `rangeEnd`: kotlin.ByteArray?, `limit`: kotlin.ULong): ProvedDiffPageRecord {
             return FfiConverterTypeProvedDiffPageRecord.lift(
     callWithHandle {
     uniffiRustCallWithError(ProllyBindingException) { _status ->
     UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_prove_diff_page(
         it,
-        FfiConverterTypeTreeRecord.lower(`base`),FfiConverterTypeTreeRecord.lower(`other`),FfiConverterOptionalTypeRangeCursorRecord.lower(`cursor`),FfiConverterOptionalByteArray.lower(`end`),FfiConverterULong.lower(`limit`),_status)
+        FfiConverterTypeTreeRecord.lower(`base`),FfiConverterTypeTreeRecord.lower(`other`),FfiConverterOptionalTypeRangeCursorRecord.lower(`cursor`),FfiConverterOptionalByteArray.lower(`rangeEnd`),FfiConverterULong.lower(`limit`),_status)
 }
     }
     )
@@ -7017,13 +7024,13 @@ open class ProllyEngine: Disposable, AutoCloseable, ProllyEngineInterface
 
 
 
-    @Throws(ProllyBindingException::class)override fun `proveRange`(`tree`: TreeRecord, `start`: kotlin.ByteArray, `end`: kotlin.ByteArray?): RangeProofRecord {
+    @Throws(ProllyBindingException::class)override fun `proveRange`(`tree`: TreeRecord, `start`: kotlin.ByteArray, `rangeEnd`: kotlin.ByteArray?): RangeProofRecord {
             return FfiConverterTypeRangeProofRecord.lift(
     callWithHandle {
     uniffiRustCallWithError(ProllyBindingException) { _status ->
     UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_prove_range(
         it,
-        FfiConverterTypeTreeRecord.lower(`tree`),FfiConverterByteArray.lower(`start`),FfiConverterOptionalByteArray.lower(`end`),_status)
+        FfiConverterTypeTreeRecord.lower(`tree`),FfiConverterByteArray.lower(`start`),FfiConverterOptionalByteArray.lower(`rangeEnd`),_status)
 }
     }
     )
@@ -7031,13 +7038,13 @@ open class ProllyEngine: Disposable, AutoCloseable, ProllyEngineInterface
 
 
 
-    @Throws(ProllyBindingException::class)override fun `proveRangePage`(`tree`: TreeRecord, `cursor`: RangeCursorRecord?, `end`: kotlin.ByteArray?, `limit`: kotlin.ULong): ProvedRangePageRecord {
+    @Throws(ProllyBindingException::class)override fun `proveRangePage`(`tree`: TreeRecord, `cursor`: RangeCursorRecord?, `rangeEnd`: kotlin.ByteArray?, `limit`: kotlin.ULong): ProvedRangePageRecord {
             return FfiConverterTypeProvedRangePageRecord.lift(
     callWithHandle {
     uniffiRustCallWithError(ProllyBindingException) { _status ->
     UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_prove_range_page(
         it,
-        FfiConverterTypeTreeRecord.lower(`tree`),FfiConverterOptionalTypeRangeCursorRecord.lower(`cursor`),FfiConverterOptionalByteArray.lower(`end`),FfiConverterULong.lower(`limit`),_status)
+        FfiConverterTypeTreeRecord.lower(`tree`),FfiConverterOptionalTypeRangeCursorRecord.lower(`cursor`),FfiConverterOptionalByteArray.lower(`rangeEnd`),FfiConverterULong.lower(`limit`),_status)
 }
     }
     )
@@ -7153,13 +7160,13 @@ open class ProllyEngine: Disposable, AutoCloseable, ProllyEngineInterface
 
 
 
-    @Throws(ProllyBindingException::class)override fun `range`(`tree`: TreeRecord, `start`: kotlin.ByteArray, `end`: kotlin.ByteArray?): List<EntryRecord> {
+    @Throws(ProllyBindingException::class)override fun `range`(`tree`: TreeRecord, `start`: kotlin.ByteArray, `rangeEnd`: kotlin.ByteArray?): List<EntryRecord> {
             return FfiConverterSequenceTypeEntryRecord.lift(
     callWithHandle {
     uniffiRustCallWithError(ProllyBindingException) { _status ->
     UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_range(
         it,
-        FfiConverterTypeTreeRecord.lower(`tree`),FfiConverterByteArray.lower(`start`),FfiConverterOptionalByteArray.lower(`end`),_status)
+        FfiConverterTypeTreeRecord.lower(`tree`),FfiConverterByteArray.lower(`start`),FfiConverterOptionalByteArray.lower(`rangeEnd`),_status)
 }
     }
     )
@@ -7167,13 +7174,13 @@ open class ProllyEngine: Disposable, AutoCloseable, ProllyEngineInterface
 
 
 
-    @Throws(ProllyBindingException::class)override fun `rangeAfter`(`tree`: TreeRecord, `afterKey`: kotlin.ByteArray, `end`: kotlin.ByteArray?): List<EntryRecord> {
+    @Throws(ProllyBindingException::class)override fun `rangeAfter`(`tree`: TreeRecord, `afterKey`: kotlin.ByteArray, `rangeEnd`: kotlin.ByteArray?): List<EntryRecord> {
             return FfiConverterSequenceTypeEntryRecord.lift(
     callWithHandle {
     uniffiRustCallWithError(ProllyBindingException) { _status ->
     UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_range_after(
         it,
-        FfiConverterTypeTreeRecord.lower(`tree`),FfiConverterByteArray.lower(`afterKey`),FfiConverterOptionalByteArray.lower(`end`),_status)
+        FfiConverterTypeTreeRecord.lower(`tree`),FfiConverterByteArray.lower(`afterKey`),FfiConverterOptionalByteArray.lower(`rangeEnd`),_status)
 }
     }
     )
@@ -7181,13 +7188,13 @@ open class ProllyEngine: Disposable, AutoCloseable, ProllyEngineInterface
 
 
 
-    @Throws(ProllyBindingException::class)override fun `rangeDiff`(`base`: TreeRecord, `other`: TreeRecord, `start`: kotlin.ByteArray, `end`: kotlin.ByteArray?): List<DiffRecord> {
+    @Throws(ProllyBindingException::class)override fun `rangeDiff`(`base`: TreeRecord, `other`: TreeRecord, `start`: kotlin.ByteArray, `rangeEnd`: kotlin.ByteArray?): List<DiffRecord> {
             return FfiConverterSequenceTypeDiffRecord.lift(
     callWithHandle {
     uniffiRustCallWithError(ProllyBindingException) { _status ->
     UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_range_diff(
         it,
-        FfiConverterTypeTreeRecord.lower(`base`),FfiConverterTypeTreeRecord.lower(`other`),FfiConverterByteArray.lower(`start`),FfiConverterOptionalByteArray.lower(`end`),_status)
+        FfiConverterTypeTreeRecord.lower(`base`),FfiConverterTypeTreeRecord.lower(`other`),FfiConverterByteArray.lower(`start`),FfiConverterOptionalByteArray.lower(`rangeEnd`),_status)
 }
     }
     )
@@ -7195,13 +7202,13 @@ open class ProllyEngine: Disposable, AutoCloseable, ProllyEngineInterface
 
 
 
-    @Throws(ProllyBindingException::class)override fun `rangeFromCursor`(`tree`: TreeRecord, `cursor`: RangeCursorRecord?, `end`: kotlin.ByteArray?): List<EntryRecord> {
+    @Throws(ProllyBindingException::class)override fun `rangeFromCursor`(`tree`: TreeRecord, `cursor`: RangeCursorRecord?, `rangeEnd`: kotlin.ByteArray?): List<EntryRecord> {
             return FfiConverterSequenceTypeEntryRecord.lift(
     callWithHandle {
     uniffiRustCallWithError(ProllyBindingException) { _status ->
     UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_range_from_cursor(
         it,
-        FfiConverterTypeTreeRecord.lower(`tree`),FfiConverterOptionalTypeRangeCursorRecord.lower(`cursor`),FfiConverterOptionalByteArray.lower(`end`),_status)
+        FfiConverterTypeTreeRecord.lower(`tree`),FfiConverterOptionalTypeRangeCursorRecord.lower(`cursor`),FfiConverterOptionalByteArray.lower(`rangeEnd`),_status)
 }
     }
     )
@@ -7209,13 +7216,13 @@ open class ProllyEngine: Disposable, AutoCloseable, ProllyEngineInterface
 
 
 
-    @Throws(ProllyBindingException::class)override fun `rangePage`(`tree`: TreeRecord, `cursor`: RangeCursorRecord?, `end`: kotlin.ByteArray?, `limit`: kotlin.ULong): RangePageRecord {
+    @Throws(ProllyBindingException::class)override fun `rangePage`(`tree`: TreeRecord, `cursor`: RangeCursorRecord?, `rangeEnd`: kotlin.ByteArray?, `limit`: kotlin.ULong): RangePageRecord {
             return FfiConverterTypeRangePageRecord.lift(
     callWithHandle {
     uniffiRustCallWithError(ProllyBindingException) { _status ->
     UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_range_page(
         it,
-        FfiConverterTypeTreeRecord.lower(`tree`),FfiConverterOptionalTypeRangeCursorRecord.lower(`cursor`),FfiConverterOptionalByteArray.lower(`end`),FfiConverterULong.lower(`limit`),_status)
+        FfiConverterTypeTreeRecord.lower(`tree`),FfiConverterOptionalTypeRangeCursorRecord.lower(`cursor`),FfiConverterOptionalByteArray.lower(`rangeEnd`),FfiConverterULong.lower(`limit`),_status)
 }
     }
     )
@@ -8583,6 +8590,8 @@ data class ConfigRecord (
     var `nodeCacheMaxNodes`: kotlin.ULong?
     ,
     var `nodeCacheMaxBytes`: kotlin.ULong?
+    ,
+    var `formatBytes`: kotlin.ByteArray?
 
 ){
 
@@ -8606,6 +8615,7 @@ public object FfiConverterTypeConfigRecord: FfiConverterRustBuffer<ConfigRecord>
             FfiConverterTypeEncodingRecord.read(buf),
             FfiConverterOptionalULong.read(buf),
             FfiConverterOptionalULong.read(buf),
+            FfiConverterOptionalByteArray.read(buf),
         )
     }
 
@@ -8616,7 +8626,8 @@ public object FfiConverterTypeConfigRecord: FfiConverterRustBuffer<ConfigRecord>
             FfiConverterULong.allocationSize(value.`hashSeed`) +
             FfiConverterTypeEncodingRecord.allocationSize(value.`encoding`) +
             FfiConverterOptionalULong.allocationSize(value.`nodeCacheMaxNodes`) +
-            FfiConverterOptionalULong.allocationSize(value.`nodeCacheMaxBytes`)
+            FfiConverterOptionalULong.allocationSize(value.`nodeCacheMaxBytes`) +
+            FfiConverterOptionalByteArray.allocationSize(value.`formatBytes`)
     )
 
     override fun write(value: ConfigRecord, buf: ByteBuffer) {
@@ -8627,6 +8638,7 @@ public object FfiConverterTypeConfigRecord: FfiConverterRustBuffer<ConfigRecord>
             FfiConverterTypeEncodingRecord.write(value.`encoding`, buf)
             FfiConverterOptionalULong.write(value.`nodeCacheMaxNodes`, buf)
             FfiConverterOptionalULong.write(value.`nodeCacheMaxBytes`, buf)
+            FfiConverterOptionalByteArray.write(value.`formatBytes`, buf)
     }
 }
 
@@ -10608,6 +10620,8 @@ data class NodeRecord (
     ,
     var `vals`: List<kotlin.ByteArray>
     ,
+    var `childCounts`: List<kotlin.ULong>
+    ,
     var `leaf`: kotlin.Boolean
     ,
     var `level`: kotlin.UByte
@@ -10621,6 +10635,8 @@ data class NodeRecord (
     var `hashSeed`: kotlin.ULong
     ,
     var `encoding`: EncodingRecord
+    ,
+    var `formatBytes`: kotlin.ByteArray?
 
 ){
 
@@ -10639,6 +10655,7 @@ public object FfiConverterTypeNodeRecord: FfiConverterRustBuffer<NodeRecord> {
         return NodeRecord(
             FfiConverterSequenceByteArray.read(buf),
             FfiConverterSequenceByteArray.read(buf),
+            FfiConverterSequenceULong.read(buf),
             FfiConverterBoolean.read(buf),
             FfiConverterUByte.read(buf),
             FfiConverterULong.read(buf),
@@ -10646,24 +10663,28 @@ public object FfiConverterTypeNodeRecord: FfiConverterRustBuffer<NodeRecord> {
             FfiConverterUInt.read(buf),
             FfiConverterULong.read(buf),
             FfiConverterTypeEncodingRecord.read(buf),
+            FfiConverterOptionalByteArray.read(buf),
         )
     }
 
     override fun allocationSize(value: NodeRecord) = (
             FfiConverterSequenceByteArray.allocationSize(value.`keys`) +
             FfiConverterSequenceByteArray.allocationSize(value.`vals`) +
+            FfiConverterSequenceULong.allocationSize(value.`childCounts`) +
             FfiConverterBoolean.allocationSize(value.`leaf`) +
             FfiConverterUByte.allocationSize(value.`level`) +
             FfiConverterULong.allocationSize(value.`minChunkSize`) +
             FfiConverterULong.allocationSize(value.`maxChunkSize`) +
             FfiConverterUInt.allocationSize(value.`chunkingFactor`) +
             FfiConverterULong.allocationSize(value.`hashSeed`) +
-            FfiConverterTypeEncodingRecord.allocationSize(value.`encoding`)
+            FfiConverterTypeEncodingRecord.allocationSize(value.`encoding`) +
+            FfiConverterOptionalByteArray.allocationSize(value.`formatBytes`)
     )
 
     override fun write(value: NodeRecord, buf: ByteBuffer) {
             FfiConverterSequenceByteArray.write(value.`keys`, buf)
             FfiConverterSequenceByteArray.write(value.`vals`, buf)
+            FfiConverterSequenceULong.write(value.`childCounts`, buf)
             FfiConverterBoolean.write(value.`leaf`, buf)
             FfiConverterUByte.write(value.`level`, buf)
             FfiConverterULong.write(value.`minChunkSize`, buf)
@@ -10671,6 +10692,7 @@ public object FfiConverterTypeNodeRecord: FfiConverterRustBuffer<NodeRecord> {
             FfiConverterUInt.write(value.`chunkingFactor`, buf)
             FfiConverterULong.write(value.`hashSeed`, buf)
             FfiConverterTypeEncodingRecord.write(value.`encoding`, buf)
+            FfiConverterOptionalByteArray.write(value.`formatBytes`, buf)
     }
 }
 
@@ -14749,6 +14771,34 @@ public object FfiConverterOptionalTypeMergeTraceStageKind: FfiConverterRustBuffe
 /**
  * @suppress
  */
+public object FfiConverterSequenceULong: FfiConverterRustBuffer<List<kotlin.ULong>> {
+    override fun read(buf: ByteBuffer): List<kotlin.ULong> {
+        val len = buf.getInt()
+        return List<kotlin.ULong>(len) {
+            FfiConverterULong.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<kotlin.ULong>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterULong.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<kotlin.ULong>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterULong.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterSequenceByteArray: FfiConverterRustBuffer<List<kotlin.ByteArray>> {
     override fun read(buf: ByteBuffer): List<kotlin.ByteArray> {
         val len = buf.getInt()
@@ -15473,12 +15523,12 @@ public object FfiConverterSequenceOptionalByteArray: FfiConverterRustBuffer<List
 }
 
 
- fun `changedSpan`(`start`: kotlin.ByteArray, `end`: kotlin.ByteArray?): ChangedSpanRecord {
+ fun `changedSpan`(`start`: kotlin.ByteArray, `rangeEnd`: kotlin.ByteArray?): ChangedSpanRecord {
             return FfiConverterTypeChangedSpanRecord.lift(
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_prolly_bindings_fn_func_changed_span(
 
-        FfiConverterByteArray.lower(`start`),FfiConverterOptionalByteArray.lower(`end`),_status)
+        FfiConverterByteArray.lower(`start`),FfiConverterOptionalByteArray.lower(`rangeEnd`),_status)
 }
     )
     }
@@ -15995,12 +16045,12 @@ public object FfiConverterSequenceOptionalByteArray: FfiConverterRustBuffer<List
     }
 
 
-    @Throws(ProllyBindingException::class) fun `rangePageProofFromNodeBytes`(`root`: kotlin.ByteArray?, `after`: kotlin.ByteArray?, `end`: kotlin.ByteArray?, `pathNodeBytes`: List<kotlin.ByteArray>): RangePageProofRecord {
+    @Throws(ProllyBindingException::class) fun `rangePageProofFromNodeBytes`(`root`: kotlin.ByteArray?, `after`: kotlin.ByteArray?, `rangeEnd`: kotlin.ByteArray?, `pathNodeBytes`: List<kotlin.ByteArray>): RangePageProofRecord {
             return FfiConverterTypeRangePageProofRecord.lift(
     uniffiRustCallWithError(ProllyBindingException) { _status ->
     UniffiLib.uniffi_prolly_bindings_fn_func_range_page_proof_from_node_bytes(
 
-        FfiConverterOptionalByteArray.lower(`root`),FfiConverterOptionalByteArray.lower(`after`),FfiConverterOptionalByteArray.lower(`end`),FfiConverterSequenceByteArray.lower(`pathNodeBytes`),_status)
+        FfiConverterOptionalByteArray.lower(`root`),FfiConverterOptionalByteArray.lower(`after`),FfiConverterOptionalByteArray.lower(`rangeEnd`),FfiConverterSequenceByteArray.lower(`pathNodeBytes`),_status)
 }
     )
     }
@@ -16039,12 +16089,12 @@ public object FfiConverterSequenceOptionalByteArray: FfiConverterRustBuffer<List
     }
 
 
-    @Throws(ProllyBindingException::class) fun `rangeProofFromNodeBytes`(`root`: kotlin.ByteArray?, `start`: kotlin.ByteArray, `end`: kotlin.ByteArray?, `pathNodeBytes`: List<kotlin.ByteArray>): RangeProofRecord {
+    @Throws(ProllyBindingException::class) fun `rangeProofFromNodeBytes`(`root`: kotlin.ByteArray?, `start`: kotlin.ByteArray, `rangeEnd`: kotlin.ByteArray?, `pathNodeBytes`: List<kotlin.ByteArray>): RangeProofRecord {
             return FfiConverterTypeRangeProofRecord.lift(
     uniffiRustCallWithError(ProllyBindingException) { _status ->
     UniffiLib.uniffi_prolly_bindings_fn_func_range_proof_from_node_bytes(
 
-        FfiConverterOptionalByteArray.lower(`root`),FfiConverterByteArray.lower(`start`),FfiConverterOptionalByteArray.lower(`end`),FfiConverterSequenceByteArray.lower(`pathNodeBytes`),_status)
+        FfiConverterOptionalByteArray.lower(`root`),FfiConverterByteArray.lower(`start`),FfiConverterOptionalByteArray.lower(`rangeEnd`),FfiConverterSequenceByteArray.lower(`pathNodeBytes`),_status)
 }
     )
     }
@@ -16475,6 +16525,17 @@ public object FfiConverterSequenceOptionalByteArray: FfiConverterRustBuffer<List
     UniffiLib.uniffi_prolly_bindings_fn_func_tree_config(
 
         FfiConverterULong.lower(`minChunkSize`),FfiConverterULong.lower(`maxChunkSize`),FfiConverterUInt.lower(`chunkingFactor`),FfiConverterULong.lower(`hashSeed`),FfiConverterTypeEncodingRecord.lower(`encoding`),FfiConverterOptionalULong.lower(`nodeCacheMaxNodes`),FfiConverterOptionalULong.lower(`nodeCacheMaxBytes`),_status)
+}
+    )
+    }
+
+
+    @Throws(ProllyBindingException::class) fun `treeConfigFromFormatBytes`(`formatBytes`: kotlin.ByteArray, `nodeCacheMaxNodes`: kotlin.ULong?, `nodeCacheMaxBytes`: kotlin.ULong?): ConfigRecord {
+            return FfiConverterTypeConfigRecord.lift(
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_func_tree_config_from_format_bytes(
+
+        FfiConverterByteArray.lower(`formatBytes`),FfiConverterOptionalULong.lower(`nodeCacheMaxNodes`),FfiConverterOptionalULong.lower(`nodeCacheMaxBytes`),_status)
 }
     )
     }

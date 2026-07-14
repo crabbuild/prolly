@@ -51,7 +51,7 @@ fn batch_with_stats_reports_tree_work() {
 }
 
 #[test]
-fn append_batch_with_stats_reports_fast_path() {
+fn append_batch_with_stats_reports_canonical_path() {
     let prolly = test_prolly();
     let tree = prolly
         .batch(
@@ -89,7 +89,8 @@ fn append_batch_with_stats_reports_fast_path() {
     assert_eq!(result.stats.input_mutations, 2);
     assert_eq!(result.stats.effective_mutations, 2);
     assert!(result.stats.preprocess_input_sorted);
-    assert!(result.stats.used_append_fast_path);
+    assert!(!result.stats.used_append_fast_path);
+    assert!(result.stats.used_coalesced_rebuild);
     assert!(result.stats.written_nodes > 0);
 }
 

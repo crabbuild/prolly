@@ -113,7 +113,7 @@ let rangeMerged = try engine.mergeRange(
     left: left,
     right: right,
     start: bytes("doc:body"),
-    end: bytes("doc:body0"),
+    rangeEnd: bytes("doc:body0"),
     resolver: "prefer_left"
 )
 let rangeMergedBody = try engine.get(tree: rangeMerged, key: bytes("doc:body"))

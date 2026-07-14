@@ -22,10 +22,10 @@ let loadedMany = try engine.getMany(tree: tree, keys: [bytes("acct:3"), bytes("m
 precondition(text(loadedAccount) == "Grace")
 precondition(loadedMany.map(text) == ["Linus", nil])
 
-let range = try engine.range(tree: tree, start: bytes("acct:"), end: bytes("acct;"))
+let range = try engine.range(tree: tree, start: bytes("acct:"), rangeEnd: bytes("acct;"))
 precondition(range.map { text($0.value) } == ["Ada", "Grace", "Linus"])
 
-let firstPage = try engine.rangePage(tree: tree, cursor: nil, end: nil, limit: 2)
+let firstPage = try engine.rangePage(tree: tree, cursor: nil, rangeEnd: nil, limit: 2)
 precondition(firstPage.entries.count == 2)
 precondition(firstPage.nextCursor != nil)
 

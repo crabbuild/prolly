@@ -34,7 +34,7 @@ let tree = try engine.batch(
     ]
 )
 try engine.publishNamedRoot(name: root, tree: tree)
-let page = try engine.rangePage(tree: try engine.loadNamedRoot(name: root)!, cursor: nil, end: nil, limit: 2)
+let page = try engine.rangePage(tree: try engine.loadNamedRoot(name: root)!, cursor: nil, rangeEnd: nil, limit: 2)
 
 precondition(page.entries.count == 2)
 precondition(page.nextCursor != nil)

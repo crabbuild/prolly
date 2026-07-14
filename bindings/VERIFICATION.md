@@ -37,7 +37,7 @@ tree behavior.
 | Python | `bindings/python/tests/test_uniffi_binding.py`, `test_fixtures.py` | `PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" PYTHONPATH=bindings/python python3 -m unittest discover -s bindings/python/tests` |
 | Go | `bindings/go/prolly_test.go` | `(cd bindings/go && go test ./...)` |
 | Node/TypeScript | `bindings/node/test/*.test.ts` | `npm --prefix bindings/node run build:native && npm --prefix bindings/node test` |
-| Browser WASM | `bindings/wasm/test/wasm.test.ts` | `cargo check --manifest-path bindings/wasm/Cargo.toml --target wasm32-unknown-unknown --target-dir target && npm --prefix bindings/wasm test` |
+| Browser WASM | `bindings/wasm/test/wasm.test.ts` | `cargo check --manifest-path bindings/wasm/Cargo.toml --target wasm32-unknown-unknown --target-dir target && npm --prefix bindings/wasm run build:wasm && npm --prefix bindings/wasm test` |
 | Kotlin/JVM | `bindings/kotlin/src/test/kotlin/build/crab/prolly/*.kt` | `mvn -f bindings/kotlin/pom.xml test` |
 | Java | `bindings/java/src/test/java/build/crab/prolly/*.java` | `mvn -f bindings/pom.xml -pl java -am test` |
 | JVM aggregate | Kotlin and Java modules together | `mvn -f bindings/pom.xml test` |

@@ -12,15 +12,6 @@ use prolly::{
 };
 use serde::Serialize;
 
-const LEGACY_CBOR_LEAF_FIXTURE_HEX: &str = concat!(
-    "a9008396186318721861187418651873182f18701872186f186c186c1879182f187318721863182f",
-    "1861182e1872187396186318721861187418651873182f18701872186f186c186c1879182f1873",
-    "18721863182f1862182e1872187396186318721861187418651873182f18701872186f186c186c",
-    "1879182f187318721863182f1863182e1872187301838718761861186c18751865182d1861",
-    "8718761861186c18751865182d18628718761861186c18751865182d186302f503000410051",
-    "902000619010007182a0800"
-);
-
 #[derive(Serialize)]
 struct FixtureDocument {
     schema: &'static str,
@@ -66,6 +57,7 @@ struct NodeShape {
     encoding: EncodingFixture,
     keys: Vec<String>,
     vals: Vec<String>,
+    child_counts: Vec<u64>,
 }
 
 #[derive(Serialize)]
@@ -74,7 +66,6 @@ struct NodeFixture {
     node: NodeShape,
     bytes: String,
     cid: String,
-    legacy_cbor_bytes: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -373,13 +364,9 @@ fn node_fixtures() -> Vec<NodeFixture> {
     let custom = custom_encoding_fixture_node();
 
     vec![
-        node_fixture(
-            "compact_leaf",
-            leaf,
-            Some(LEGACY_CBOR_LEAF_FIXTURE_HEX.to_string()),
-        ),
-        node_fixture("compact_internal", internal, None),
-        node_fixture("compact_custom_encoding", custom, None),
+        node_fixture("compact_leaf", leaf),
+        node_fixture("compact_internal", internal),
+        node_fixture("compact_custom_encoding", custom),
     ]
 }
 
@@ -410,17 +397,16 @@ fn internal_fixture_node() -> Node {
     cid_a[0] = 1;
     let mut cid_b = [0u8; 32];
     cid_b[0] = 2;
+    let mut cid_c = [0u8; 32];
+    cid_c[0] = 3;
     Node::builder()
         .keys(vec![
             b"crates/prolly/src/a.rs".to_vec(),
             b"crates/prolly/src/b.rs".to_vec(),
             b"crates/prolly/src/c.rs".to_vec(),
         ])
-        .vals(vec![
-            cid_a.to_vec(),
-            cid_b.to_vec(),
-            b"legacy-child".to_vec(),
-        ])
+        .vals(vec![cid_a.to_vec(), cid_b.to_vec(), cid_c.to_vec()])
+        .child_counts(vec![3, 5, 8])
         .leaf(false)
         .level(2)
         .min_chunk_size(16)
@@ -447,14 +433,13 @@ fn custom_encoding_fixture_node() -> Node {
         .build()
 }
 
-fn node_fixture(name: &'static str, node: Node, legacy_cbor_bytes: Option<String>) -> NodeFixture {
+fn node_fixture(name: &'static str, node: Node) -> NodeFixture {
     let bytes = node.to_bytes();
     NodeFixture {
         name,
         node: node_shape(&node),
         cid: hex(node.cid().as_bytes()),
         bytes: hex(&bytes),
-        legacy_cbor_bytes,
     }
 }
 
@@ -502,7 +487,7 @@ fn find_boundary_case(config: &Config, expected: bool) -> (Vec<u8>, Vec<u8>) {
     for idx in 0..100_000u32 {
         let key = format!("k{idx:05}").into_bytes();
         let value = format!("v{idx:05}").into_bytes();
-        if is_boundary_config(config, config.min_chunk_size, &key, &value) == expected {
+        if is_boundary_config(config, config.min_chunk_size(), &key, &value) == expected {
             return (key, value);
         }
     }
@@ -861,25 +846,26 @@ fn node_shape(node: &Node) -> NodeShape {
     NodeShape {
         leaf: node.leaf,
         level: node.level,
-        min_chunk_size: node.min_chunk_size,
-        max_chunk_size: node.max_chunk_size,
-        chunking_factor: node.chunking_factor,
-        hash_seed: node.hash_seed,
-        encoding: encoding_fixture(&node.encoding),
+        min_chunk_size: node.min_chunk_size(),
+        max_chunk_size: node.max_chunk_size(),
+        chunking_factor: node.chunking_factor(),
+        hash_seed: node.hash_seed(),
+        encoding: encoding_fixture(node.encoding()),
         keys: node.keys.iter().map(|key| hex(key)).collect(),
         vals: node.vals.iter().map(|value| hex(value)).collect(),
+        child_counts: node.child_counts.clone(),
     }
 }
 
 fn config_fixture(config: &Config) -> ConfigFixture {
     ConfigFixture {
-        min_chunk_size: config.min_chunk_size,
-        max_chunk_size: config.max_chunk_size,
-        chunking_factor: config.chunking_factor,
-        hash_seed: config.hash_seed,
-        encoding: encoding_fixture(&config.encoding),
-        node_cache_max_nodes: config.node_cache_max_nodes,
-        node_cache_max_bytes: config.node_cache_max_bytes,
+        min_chunk_size: config.min_chunk_size(),
+        max_chunk_size: config.max_chunk_size(),
+        chunking_factor: config.chunking_factor(),
+        hash_seed: config.hash_seed(),
+        encoding: encoding_fixture(config.encoding()),
+        node_cache_max_nodes: config.runtime.node_cache_max_nodes,
+        node_cache_max_bytes: config.runtime.node_cache_max_bytes,
     }
 }
 

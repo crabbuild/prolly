@@ -18,9 +18,7 @@ fn checked_in_conformance_fixtures_are_decodable() {
         assert_eq!(hex(node.cid().as_bytes()), fixture["cid"].as_str().unwrap());
         assert_eq!(hex(&node.to_bytes()), fixture["bytes"].as_str().unwrap());
 
-        if let Some(legacy) = fixture["legacy_cbor_bytes"].as_str() {
-            assert_eq!(Node::from_bytes(&from_hex(legacy)).unwrap(), node);
-        }
+        node.validate().unwrap();
     }
 
     for fixture in fixtures["boundary_fixtures"].as_array().unwrap() {

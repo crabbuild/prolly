@@ -173,6 +173,9 @@ export class ProllyNode {
   hashSeed: bigint;
   encoding: EncodingKind;
   customEncodingName?: string;
+  childCounts: bigint[];
+  layout: "prefix" | "plain" | "offset";
+  private formatBytes: Uint8Array;
 
   constructor(options: {
     keys: Uint8Array[];
@@ -185,6 +188,9 @@ export class ProllyNode {
     hashSeed?: bigint;
     encoding?: EncodingKind;
     customEncodingName?: string;
+    childCounts?: bigint[];
+    layout?: "prefix" | "plain" | "offset";
+    formatBytes?: Uint8Array;
   }) {
     this.keys = options.keys.map((key) => Uint8Array.from(key));
     this.vals = options.vals.map((value) => Uint8Array.from(value));
@@ -196,6 +202,13 @@ export class ProllyNode {
     this.hashSeed = options.hashSeed ?? 0n;
     this.encoding = options.encoding ?? "raw";
     this.customEncodingName = options.customEncodingName;
+    this.childCounts = (options.childCounts ?? []).map(BigInt);
+    this.layout = options.layout ?? "prefix";
+    this.formatBytes = options.formatBytes !== undefined
+      ? Uint8Array.from(options.formatBytes)
+      : isDefaultTreeFormat(this)
+        ? new Uint8Array()
+        : buildTreeFormat(this);
   }
 
   static fromBytes(data: Uint8Array): ProllyNode {
@@ -204,42 +217,56 @@ export class ProllyNode {
     }
     const cursor = new Cursor(data, 4);
     const version = cursor.readVarintNumber();
-    if (version !== 1) throw new Error(`unsupported compact node version ${version}`);
+    if (version !== 2) throw new Error(`unsupported compact node version ${version}`);
+    const formatBytes = cursor.readBytes(cursor.readVarintNumber());
+    const format = formatBytes.length === 0 ? defaultTreeFormat() : parseTreeFormat(formatBytes);
     const leafFlag = cursor.readVarintNumber();
     if (leafFlag !== 0 && leafFlag !== 1) throw new Error(`invalid leaf flag ${leafFlag}`);
     const leaf = leafFlag === 1;
     const level = cursor.readVarintNumber();
-    const minChunkSize = cursor.readVarintNumber();
-    const maxChunkSize = cursor.readVarintNumber();
-    const chunkingFactor = cursor.readVarintNumber();
-    const hashSeed = cursor.readVarintBigint();
-    const encoding = cursor.readEncoding();
     const entryCount = cursor.readVarintNumber();
     const keys: Uint8Array[] = [];
     const vals: Uint8Array[] = [];
-    let previous = new Uint8Array();
+    const childCounts: bigint[] = [];
 
-    for (let entry = 0; entry < entryCount; entry++) {
-      const shared = cursor.readVarintNumber();
-      if (shared > previous.length) throw new Error("shared key prefix exceeds previous key");
-      const suffix = cursor.readBytes(cursor.readVarintNumber());
-      const key = concatBytes([previous.slice(0, shared), suffix]);
-      let value: Uint8Array;
-      if (leaf) {
-        value = cursor.readBytes(cursor.readVarintNumber());
-      } else {
-        const tag = cursor.readByte();
-        if (tag === 0) {
-          value = cursor.readBytes(32);
-        } else if (tag === 1) {
-          value = cursor.readBytes(cursor.readVarintNumber());
-        } else {
-          throw new Error(`invalid internal value tag ${tag}`);
-        }
+    if (format.layout === "prefix") {
+      let previous = new Uint8Array();
+      for (let entry = 0; entry < entryCount; entry++) {
+        const shared = cursor.readVarintNumber();
+        if (shared > previous.length) throw new Error("shared key prefix exceeds previous key");
+        const suffix = cursor.readBytes(cursor.readVarintNumber());
+        const key = concatBytes([previous.slice(0, shared), suffix]);
+        const value = cursor.readBytes(cursor.readVarintNumber());
+        if (!leaf) childCounts.push(cursor.readVarintBigint());
+        keys.push(key);
+        vals.push(value);
+        previous = key;
       }
-      keys.push(key);
-      vals.push(value);
-      previous = key;
+    } else if (format.layout === "plain") {
+      for (let entry = 0; entry < entryCount; entry++) {
+        keys.push(cursor.readBytes(cursor.readVarintNumber()));
+        vals.push(cursor.readBytes(cursor.readVarintNumber()));
+        if (!leaf) childCounts.push(cursor.readVarintBigint());
+      }
+    } else {
+      const offsets: [number, number, number, number][] = [];
+      for (let entry = 0; entry < entryCount; entry++) {
+        offsets.push([
+          cursor.readVarintNumber(),
+          cursor.readVarintNumber(),
+          cursor.readVarintNumber(),
+          cursor.readVarintNumber(),
+        ]);
+        if (!leaf) childCounts.push(cursor.readVarintBigint());
+      }
+      const payload = cursor.readBytes(cursor.readVarintNumber());
+      for (const [keyOffset, keyLength, valueOffset, valueLength] of offsets) {
+        if (keyOffset + keyLength > payload.length || valueOffset + valueLength > payload.length) {
+          throw new Error("offset outside node payload");
+        }
+        keys.push(payload.slice(keyOffset, keyOffset + keyLength));
+        vals.push(payload.slice(valueOffset, valueOffset + valueLength));
+      }
     }
     if (!cursor.done()) throw new Error("trailing bytes in compact node");
 
@@ -248,47 +275,66 @@ export class ProllyNode {
       vals,
       leaf,
       level,
-      minChunkSize,
-      maxChunkSize,
-      chunkingFactor,
-      hashSeed,
-      encoding: encoding.kind,
-      customEncodingName: encoding.customName,
+      minChunkSize: format.minChunkSize,
+      maxChunkSize: format.maxChunkSize,
+      chunkingFactor: format.chunkingFactor,
+      hashSeed: format.hashSeed,
+      encoding: format.encoding.kind,
+      customEncodingName: format.encoding.customName,
+      childCounts,
+      layout: format.layout,
+      formatBytes,
     });
   }
 
   toBytes(): Uint8Array {
     const out: number[] = [...new TextEncoder().encode("CRAB")];
-    writeVarint(out, 1);
+    writeVarint(out, 2);
+    writeVarint(out, this.formatBytes.length);
+    pushBytes(out, this.formatBytes);
     writeVarint(out, this.leaf ? 1 : 0);
     writeVarint(out, this.level);
-    writeVarint(out, this.minChunkSize);
-    writeVarint(out, this.maxChunkSize);
-    writeVarint(out, this.chunkingFactor);
-    writeVarint(out, this.hashSeed);
-    writeEncoding(out, this.encoding, this.customEncodingName);
     writeVarint(out, this.keys.length);
-    let previous = new Uint8Array();
-    for (let index = 0; index < this.keys.length; index++) {
-      const key = this.keys[index];
-      const value = this.vals[index];
-      const shared = commonPrefixLen(previous, key);
-      const suffix = key.slice(shared);
-      writeVarint(out, shared);
-      writeVarint(out, suffix.length);
-      pushBytes(out, suffix);
-      if (this.leaf) {
+    if (this.layout === "prefix") {
+      let previous = new Uint8Array();
+      for (let index = 0; index < this.keys.length; index++) {
+        const key = this.keys[index];
+        const value = this.vals[index];
+        const shared = commonPrefixLen(previous, key);
+        const suffix = key.slice(shared);
+        writeVarint(out, shared);
+        writeVarint(out, suffix.length);
+        pushBytes(out, suffix);
         writeVarint(out, value.length);
         pushBytes(out, value);
-      } else if (value.length === 32) {
-        out.push(0);
-        pushBytes(out, value);
-      } else {
-        out.push(1);
-        writeVarint(out, value.length);
-        pushBytes(out, value);
+        if (!this.leaf) writeVarint(out, this.childCounts[index] ?? 0n);
+        previous = key;
       }
-      previous = key;
+    } else if (this.layout === "plain") {
+      for (let index = 0; index < this.keys.length; index++) {
+        const key = this.keys[index];
+        const value = this.vals[index];
+        writeVarint(out, key.length);
+        pushBytes(out, key);
+        writeVarint(out, value.length);
+        pushBytes(out, value);
+        if (!this.leaf) writeVarint(out, this.childCounts[index] ?? 0n);
+      }
+    } else {
+      const payload: number[] = [];
+      for (let index = 0; index < this.keys.length; index++) {
+        const key = this.keys[index];
+        const value = this.vals[index];
+        writeVarint(out, payload.length);
+        writeVarint(out, key.length);
+        pushBytes(payload, key);
+        writeVarint(out, payload.length);
+        writeVarint(out, value.length);
+        pushBytes(payload, value);
+        if (!this.leaf) writeVarint(out, this.childCounts[index] ?? 0n);
+      }
+      writeVarint(out, payload.length);
+      out.push(...payload);
     }
     return Uint8Array.from(out);
   }
@@ -689,6 +735,146 @@ export function compareBytes(left: Uint8Array, right: Uint8Array): number {
     if (left[i] !== right[i]) return left[i] - right[i];
   }
   return left.length - right.length;
+}
+
+type ParsedTreeFormat = {
+  minChunkSize: number;
+  maxChunkSize: number;
+  chunkingFactor: number;
+  hashSeed: bigint;
+  layout: "prefix" | "plain" | "offset";
+  encoding: { kind: EncodingKind; customName?: string };
+};
+
+function parseTreeFormat(bytes: Uint8Array): ParsedTreeFormat {
+  const cursor = new Cursor(bytes);
+  if (new TextDecoder().decode(cursor.readBytes(4)) !== "CRFT" || cursor.readByte() !== 1) {
+    throw new Error("unsupported tree format");
+  }
+  cursor.readByte(); // measure
+  cursor.readByte(); // boundary input
+  cursor.readByte(); // hash
+  const rule = cursor.readByte();
+  let factor: bigint;
+  if (rule === 2) factor = readFixedBigint(cursor, 2);
+  else if (rule === 0 || rule === 1) factor = readFixedBigint(cursor, 4);
+  else throw new Error(`invalid boundary rule ${rule}`);
+  const min = readFixedBigint(cursor, 8);
+  const target = readFixedBigint(cursor, 8);
+  const max = readFixedBigint(cursor, 8);
+  const hashSeed = readFixedBigint(cursor, 8);
+  cursor.readByte(); // level salt
+  readFixedBigint(cursor, 8); // hard byte cap
+  const layoutTag = cursor.readByte();
+  let layout: ParsedTreeFormat["layout"];
+  if (layoutTag === 0) layout = "prefix";
+  else if (layoutTag === 1) layout = "plain";
+  else if (layoutTag === 2) layout = "offset";
+  else if (layoutTag === 3) {
+    cursor.readBytes(fixedLength(cursor));
+    cursor.readBytes(fixedLength(cursor));
+    throw new Error("custom node layouts require the native binding");
+  } else throw new Error(`invalid node layout ${layoutTag}`);
+  const encodingTag = cursor.readByte();
+  let encoding: ParsedTreeFormat["encoding"];
+  if (encodingTag === 0) encoding = { kind: "raw" };
+  else if (encodingTag === 1) encoding = { kind: "cbor" };
+  else if (encodingTag === 2) encoding = { kind: "json" };
+  else if (encodingTag === 3) {
+    encoding = {
+      kind: "custom",
+      customName: new TextDecoder().decode(cursor.readBytes(fixedLength(cursor))),
+    };
+  } else throw new Error(`invalid value encoding ${encodingTag}`);
+  if (!cursor.done()) throw new Error("trailing tree format bytes");
+  return {
+    minChunkSize: safeNumber(min),
+    maxChunkSize: safeNumber(max),
+    chunkingFactor: safeNumber(rule === 0 ? factor : target),
+    hashSeed,
+    layout,
+    encoding,
+  };
+}
+
+function buildTreeFormat(node: {
+  minChunkSize: number;
+  maxChunkSize: number;
+  chunkingFactor: number;
+  hashSeed: bigint;
+  encoding: EncodingKind;
+  customEncodingName?: string;
+  layout: "prefix" | "plain" | "offset";
+}): Uint8Array {
+  const out: number[] = [...new TextEncoder().encode("CRFT"), 1, 0, 0, 0, 0];
+  pushU32be(out, node.chunkingFactor);
+  pushU64be(out, BigInt(node.minChunkSize));
+  const target = Math.min(node.maxChunkSize, Math.max(node.minChunkSize, node.chunkingFactor));
+  pushU64be(out, BigInt(target));
+  pushU64be(out, BigInt(node.maxChunkSize));
+  pushU64be(out, node.hashSeed);
+  out.push(1);
+  pushU64be(out, 16n * 1024n * 1024n);
+  out.push(node.layout === "prefix" ? 0 : node.layout === "plain" ? 1 : 2);
+  out.push(encodingTag(node.encoding));
+  if (node.encoding === "custom") {
+    const name = new TextEncoder().encode(node.customEncodingName ?? "");
+    pushU64be(out, BigInt(name.length));
+    pushBytes(out, name);
+  }
+  return Uint8Array.from(out);
+}
+
+function defaultTreeFormat(): ParsedTreeFormat {
+  return {
+    minChunkSize: 4,
+    maxChunkSize: 1024 * 1024,
+    chunkingFactor: 128,
+    hashSeed: 0n,
+    layout: "prefix",
+    encoding: { kind: "raw" },
+  };
+}
+
+function isDefaultTreeFormat(node: {
+  minChunkSize: number;
+  maxChunkSize: number;
+  chunkingFactor: number;
+  hashSeed: bigint;
+  encoding: EncodingKind;
+  customEncodingName?: string;
+  layout: "prefix" | "plain" | "offset";
+}): boolean {
+  return node.minChunkSize === 4
+    && node.maxChunkSize === 1024 * 1024
+    && node.chunkingFactor === 128
+    && node.hashSeed === 0n
+    && node.encoding === "raw"
+    && node.customEncodingName === undefined
+    && node.layout === "prefix";
+}
+
+function readFixedBigint(cursor: Cursor, length: number): bigint {
+  let value = 0n;
+  for (const byte of cursor.readBytes(length)) value = (value << 8n) | BigInt(byte);
+  return value;
+}
+
+function fixedLength(cursor: Cursor): number {
+  return safeNumber(readFixedBigint(cursor, 8));
+}
+
+function safeNumber(value: bigint): number {
+  if (value > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error("integer exceeds safe range");
+  return Number(value);
+}
+
+function pushU32be(out: number[], value: number): void {
+  for (let shift = 24; shift >= 0; shift -= 8) out.push((value >>> shift) & 0xff);
+}
+
+function pushU64be(out: number[], value: bigint): void {
+  for (let shift = 56n; shift >= 0n; shift -= 8n) out.push(Number((value >> shift) & 0xffn));
 }
 
 class Cursor {

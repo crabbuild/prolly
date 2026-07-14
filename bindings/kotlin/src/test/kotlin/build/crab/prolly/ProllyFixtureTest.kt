@@ -244,6 +244,7 @@ class ProllyFixtureTest {
             ),
             if (node["node_cache_max_nodes"].isNull) null else node["node_cache_max_nodes"].asText().toULong(),
             if (node["node_cache_max_bytes"].isNull) null else node["node_cache_max_bytes"].asText().toULong(),
+            null,
         )
     }
 

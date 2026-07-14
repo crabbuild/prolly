@@ -1,9 +1,9 @@
 package prolly
 
 /*
-#cgo darwin LDFLAGS: -L${SRCDIR}/../../target/debug -L${SRCDIR}/../../../target/debug -Wl,-rpath,${SRCDIR}/../../target/debug -Wl,-rpath,${SRCDIR}/../../../target/debug -lprolly_bindings
-#cgo linux LDFLAGS: -L${SRCDIR}/../../target/debug -L${SRCDIR}/../../../target/debug -Wl,-rpath,${SRCDIR}/../../target/debug -Wl,-rpath,${SRCDIR}/../../../target/debug -lprolly_bindings
-#cgo windows LDFLAGS: -L${SRCDIR}/../../target/debug -L${SRCDIR}/../../../target/debug -lprolly_bindings
+#cgo darwin LDFLAGS: -L${SRCDIR}/../../target/debug -Wl,-rpath,${SRCDIR}/../../target/debug -lprolly_bindings
+#cgo linux LDFLAGS: -L${SRCDIR}/../../target/debug -Wl,-rpath,${SRCDIR}/../../target/debug -lprolly_bindings
+#cgo windows LDFLAGS: -L${SRCDIR}/../../target/debug -lprolly_bindings
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -428,6 +428,7 @@ type ConfigOptions struct {
 	CustomEncoding    string
 	NodeCacheMaxNodes *uint64
 	NodeCacheMaxBytes *uint64
+	FormatBytes       []byte
 }
 
 type Encoding struct {
@@ -1494,6 +1495,7 @@ func NewConfig(options ConfigOptions) (Config, error) {
 		optionalString(options.CustomEncoding),
 		options.NodeCacheMaxNodes,
 		options.NodeCacheMaxBytes,
+		options.FormatBytes,
 	)
 }
 
@@ -1534,6 +1536,7 @@ func TreeConfig(
 		encoding.CustomName,
 		nodeCacheMaxNodes,
 		nodeCacheMaxBytes,
+		nil,
 	)
 }
 
@@ -1558,6 +1561,7 @@ func encodeConfigRecord(
 	customEncodingName *string,
 	nodeCacheMaxNodes *uint64,
 	nodeCacheMaxBytes *uint64,
+	formatBytes []byte,
 ) (Config, error) {
 	if encodingKindName == "" {
 		encodingKindName = "raw"
@@ -1576,6 +1580,7 @@ func encodeConfigRecord(
 	encodeOptionalString(&out, customEncodingName)
 	encodeOptionalU64(&out, nodeCacheMaxNodes)
 	encodeOptionalU64(&out, nodeCacheMaxBytes)
+	encodeOptionalByteArrayInto(&out, formatBytes)
 	return Config{raw: out.Bytes()}, nil
 }
 
@@ -10117,6 +10122,9 @@ func (d *byteDecoder) readNodeRecordRaw() ([]byte, error) {
 	if err := d.readByteArraySequenceRaw(); err != nil {
 		return nil, err
 	}
+	if err := d.readUint64SequenceRaw(); err != nil {
+		return nil, err
+	}
 	if _, err := d.readBool(); err != nil {
 		return nil, err
 	}
@@ -10138,7 +10146,26 @@ func (d *byteDecoder) readNodeRecordRaw() ([]byte, error) {
 	if err := d.readEncodingRecordRaw(); err != nil {
 		return nil, err
 	}
+	if _, _, err := d.readOptionalByteArray(); err != nil {
+		return nil, err
+	}
 	return append([]byte(nil), d.data[start:d.pos]...), nil
+}
+
+func (d *byteDecoder) readUint64SequenceRaw() error {
+	count, err := d.readInt32()
+	if err != nil {
+		return err
+	}
+	if count < 0 {
+		return fmt.Errorf("negative uint64 sequence count %d", count)
+	}
+	for i := int32(0); i < count; i++ {
+		if _, err := d.readUint64(); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (d *byteDecoder) readByteArraySequenceRaw() error {
@@ -10187,7 +10214,11 @@ func (d *byteDecoder) readConfigRecordRaw() error {
 	if err := d.readOptionalUint64Raw(); err != nil {
 		return err
 	}
-	return d.readOptionalUint64Raw()
+	if err := d.readOptionalUint64Raw(); err != nil {
+		return err
+	}
+	_, _, err := d.readOptionalByteArray()
+	return err
 }
 
 func (d *byteDecoder) readNamedRoots() ([]NamedRoot, error) {

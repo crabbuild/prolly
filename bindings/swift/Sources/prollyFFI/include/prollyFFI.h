@@ -777,7 +777,7 @@ RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_create(uint64_t ptr, Ru
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_PROLLYENGINE_CURSOR_WINDOW
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_PROLLYENGINE_CURSOR_WINDOW
-RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_cursor_window(uint64_t ptr, RustBuffer tree, RustBuffer key, RustBuffer end, uint64_t limit, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_cursor_window(uint64_t ptr, RustBuffer tree, RustBuffer key, RustBuffer range_end, uint64_t limit, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_PROLLYENGINE_DEBUG_COMPARE_TREES
@@ -832,12 +832,12 @@ RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_diff(uint64_t ptr, Rust
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_PROLLYENGINE_DIFF_FROM_CURSOR
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_PROLLYENGINE_DIFF_FROM_CURSOR
-RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_diff_from_cursor(uint64_t ptr, RustBuffer base, RustBuffer other, RustBuffer cursor, RustBuffer end, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_diff_from_cursor(uint64_t ptr, RustBuffer base, RustBuffer other, RustBuffer cursor, RustBuffer range_end, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_PROLLYENGINE_DIFF_PAGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_PROLLYENGINE_DIFF_PAGE
-RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_diff_page(uint64_t ptr, RustBuffer base, RustBuffer other, RustBuffer cursor, RustBuffer end, uint64_t limit, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_diff_page(uint64_t ptr, RustBuffer base, RustBuffer other, RustBuffer cursor, RustBuffer range_end, uint64_t limit, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_PROLLYENGINE_EXPORT_SNAPSHOT
@@ -987,17 +987,17 @@ RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_merge_prefix_with_resol
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_PROLLYENGINE_MERGE_RANGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_PROLLYENGINE_MERGE_RANGE
-RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_merge_range(uint64_t ptr, RustBuffer base, RustBuffer left, RustBuffer right, RustBuffer start, RustBuffer end, RustBuffer resolver, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_merge_range(uint64_t ptr, RustBuffer base, RustBuffer left, RustBuffer right, RustBuffer start, RustBuffer range_end, RustBuffer resolver, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_PROLLYENGINE_MERGE_RANGE_WITH_POLICY
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_PROLLYENGINE_MERGE_RANGE_WITH_POLICY
-RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_merge_range_with_policy(uint64_t ptr, RustBuffer base, RustBuffer left, RustBuffer right, RustBuffer start, RustBuffer end, uint64_t policy, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_merge_range_with_policy(uint64_t ptr, RustBuffer base, RustBuffer left, RustBuffer right, RustBuffer start, RustBuffer range_end, uint64_t policy, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_PROLLYENGINE_MERGE_RANGE_WITH_RESOLVER
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_PROLLYENGINE_MERGE_RANGE_WITH_RESOLVER
-RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_merge_range_with_resolver(uint64_t ptr, RustBuffer base, RustBuffer left, RustBuffer right, RustBuffer start, RustBuffer end, uint64_t resolver, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_merge_range_with_resolver(uint64_t ptr, RustBuffer base, RustBuffer left, RustBuffer right, RustBuffer start, RustBuffer range_end, uint64_t resolver, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_PROLLYENGINE_MERGE_WITH_POLICY
@@ -1082,7 +1082,7 @@ RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_prefix_reverse_page(uin
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_PROLLYENGINE_PROVE_DIFF_PAGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_PROLLYENGINE_PROVE_DIFF_PAGE
-RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_prove_diff_page(uint64_t ptr, RustBuffer base, RustBuffer other, RustBuffer cursor, RustBuffer end, uint64_t limit, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_prove_diff_page(uint64_t ptr, RustBuffer base, RustBuffer other, RustBuffer cursor, RustBuffer range_end, uint64_t limit, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_PROLLYENGINE_PROVE_KEY
@@ -1102,12 +1102,12 @@ RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_prove_prefix(uint64_t p
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_PROLLYENGINE_PROVE_RANGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_PROLLYENGINE_PROVE_RANGE
-RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_prove_range(uint64_t ptr, RustBuffer tree, RustBuffer start, RustBuffer end, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_prove_range(uint64_t ptr, RustBuffer tree, RustBuffer start, RustBuffer range_end, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_PROLLYENGINE_PROVE_RANGE_PAGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_PROLLYENGINE_PROVE_RANGE_PAGE
-RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_prove_range_page(uint64_t ptr, RustBuffer tree, RustBuffer cursor, RustBuffer end, uint64_t limit, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_prove_range_page(uint64_t ptr, RustBuffer tree, RustBuffer cursor, RustBuffer range_end, uint64_t limit, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_PROLLYENGINE_PUBLISH_CHANGED_SPANS_HINT
@@ -1152,27 +1152,27 @@ RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_put_large_value(uint64_
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_PROLLYENGINE_RANGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_PROLLYENGINE_RANGE
-RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_range(uint64_t ptr, RustBuffer tree, RustBuffer start, RustBuffer end, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_range(uint64_t ptr, RustBuffer tree, RustBuffer start, RustBuffer range_end, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_PROLLYENGINE_RANGE_AFTER
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_PROLLYENGINE_RANGE_AFTER
-RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_range_after(uint64_t ptr, RustBuffer tree, RustBuffer after_key, RustBuffer end, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_range_after(uint64_t ptr, RustBuffer tree, RustBuffer after_key, RustBuffer range_end, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_PROLLYENGINE_RANGE_DIFF
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_PROLLYENGINE_RANGE_DIFF
-RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_range_diff(uint64_t ptr, RustBuffer base, RustBuffer other, RustBuffer start, RustBuffer end, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_range_diff(uint64_t ptr, RustBuffer base, RustBuffer other, RustBuffer start, RustBuffer range_end, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_PROLLYENGINE_RANGE_FROM_CURSOR
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_PROLLYENGINE_RANGE_FROM_CURSOR
-RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_range_from_cursor(uint64_t ptr, RustBuffer tree, RustBuffer cursor, RustBuffer end, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_range_from_cursor(uint64_t ptr, RustBuffer tree, RustBuffer cursor, RustBuffer range_end, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_PROLLYENGINE_RANGE_PAGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_PROLLYENGINE_RANGE_PAGE
-RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_range_page(uint64_t ptr, RustBuffer tree, RustBuffer cursor, RustBuffer end, uint64_t limit, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_range_page(uint64_t ptr, RustBuffer tree, RustBuffer cursor, RustBuffer range_end, uint64_t limit, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_PROLLYENGINE_RESET_METRICS
@@ -1322,7 +1322,7 @@ void uniffi_prolly_bindings_fn_func_blob_ref_validate_bytes(RustBuffer reference
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_CHANGED_SPAN
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_CHANGED_SPAN
-RustBuffer uniffi_prolly_bindings_fn_func_changed_span(RustBuffer start, RustBuffer end, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_prolly_bindings_fn_func_changed_span(RustBuffer start, RustBuffer range_end, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_CHANGED_SPAN_FOR_PREFIX
@@ -1581,7 +1581,7 @@ RustBuffer uniffi_prolly_bindings_fn_func_range_page_proof_from_bytes(RustBuffer
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_RANGE_PAGE_PROOF_FROM_NODE_BYTES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_RANGE_PAGE_PROOF_FROM_NODE_BYTES
-RustBuffer uniffi_prolly_bindings_fn_func_range_page_proof_from_node_bytes(RustBuffer root, RustBuffer after, RustBuffer end, RustBuffer path_node_bytes, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_prolly_bindings_fn_func_range_page_proof_from_node_bytes(RustBuffer root, RustBuffer after, RustBuffer range_end, RustBuffer path_node_bytes, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_RANGE_PAGE_PROOF_PATH_NODE_BYTES
@@ -1601,7 +1601,7 @@ RustBuffer uniffi_prolly_bindings_fn_func_range_proof_from_bytes(RustBuffer byte
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_RANGE_PROOF_FROM_NODE_BYTES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_RANGE_PROOF_FROM_NODE_BYTES
-RustBuffer uniffi_prolly_bindings_fn_func_range_proof_from_node_bytes(RustBuffer root, RustBuffer start, RustBuffer end, RustBuffer path_node_bytes, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_prolly_bindings_fn_func_range_proof_from_node_bytes(RustBuffer root, RustBuffer start, RustBuffer range_end, RustBuffer path_node_bytes, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_RANGE_PROOF_PATH_NODE_BYTES
@@ -1814,6 +1814,11 @@ RustBuffer uniffi_prolly_bindings_fn_func_tombstone_upsert_mutation(RustBuffer k
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_TREE_CONFIG
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_TREE_CONFIG
 RustBuffer uniffi_prolly_bindings_fn_func_tree_config(uint64_t min_chunk_size, uint64_t max_chunk_size, uint32_t chunking_factor, uint64_t hash_seed, RustBuffer encoding, RustBuffer node_cache_max_nodes, RustBuffer node_cache_max_bytes, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_TREE_CONFIG_FROM_FORMAT_BYTES
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_TREE_CONFIG_FROM_FORMAT_BYTES
+RustBuffer uniffi_prolly_bindings_fn_func_tree_config_from_format_bytes(RustBuffer format_bytes, RustBuffer node_cache_max_nodes, RustBuffer node_cache_max_bytes, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_U128_KEY
@@ -2782,6 +2787,12 @@ uint16_t uniffi_prolly_bindings_checksum_func_tombstone_upsert_mutation(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_TREE_CONFIG
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_TREE_CONFIG
 uint16_t uniffi_prolly_bindings_checksum_func_tree_config(void
+
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_TREE_CONFIG_FROM_FORMAT_BYTES
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_TREE_CONFIG_FROM_FORMAT_BYTES
+uint16_t uniffi_prolly_bindings_checksum_func_tree_config_from_format_bytes(void
 
 );
 #endif

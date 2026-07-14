@@ -393,7 +393,7 @@ test("native batch, getMany, pages, and diff pages use Rust engine", { skip: nat
   assert.equal(appendedStats.stats.inputMutations, "3");
   assert.equal(appendedStats.stats.effectiveMutations, "2");
   assert.equal(appendedStats.stats.preprocessInputSorted, false);
-  assert.equal(appendedStats.stats.usedAppendFastPath, true);
+  assert.equal(appendedStats.stats.usedCoalescedRebuild, true);
   assert.notEqual(appendedStats.stats.writtenNodes, "0");
 
   const firstPage = engine.rangePage(tree, null, null, "1");

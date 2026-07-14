@@ -417,6 +417,7 @@ end
     RustBuffer.check_lower_TypeEncodingRecord(v.encoding)
     RustBuffer.check_lower_Optionalu64(v.node_cache_max_nodes)
     RustBuffer.check_lower_Optionalu64(v.node_cache_max_bytes)
+    RustBuffer.check_lower_Optionalbytes(v.format_bytes)
   end
 
   def self.alloc_from_TypeConfigRecord(v)
@@ -1352,6 +1353,7 @@ end
   def self.check_lower_TypeNodeRecord(v)
     RustBuffer.check_lower_Sequencebytes(v.keys)
     RustBuffer.check_lower_Sequencebytes(v.vals)
+    RustBuffer.check_lower_Sequenceu64(v.child_counts)
 
 
 
@@ -1359,6 +1361,7 @@ end
 
 
     RustBuffer.check_lower_TypeEncodingRecord(v.encoding)
+    RustBuffer.check_lower_Optionalbytes(v.format_bytes)
   end
 
   def self.alloc_from_TypeNodeRecord(v)
@@ -3283,6 +3286,27 @@ end
     end
   end
 
+  # The Sequence<T> type for u64.
+
+  def self.check_lower_Sequenceu64(v)
+    v.each do |item|
+
+    end
+  end
+
+  def self.alloc_from_Sequenceu64(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_Sequenceu64(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoSequenceu64
+    consumeWithStream do |stream|
+      return stream.readSequenceu64
+    end
+  end
+
   # The Sequence<T> type for bytes.
 
   def self.check_lower_Sequencebytes(v)
@@ -4111,7 +4135,8 @@ class RustBufferStream
       hash_seed: readU64,
       encoding: readTypeEncodingRecord,
       node_cache_max_nodes: readOptionalu64,
-      node_cache_max_bytes: readOptionalu64
+      node_cache_max_bytes: readOptionalu64,
+      format_bytes: readOptionalbytes
     )
   end
 
@@ -4574,13 +4599,15 @@ class RustBufferStream
     NodeRecord.new(
       keys: readSequencebytes,
       vals: readSequencebytes,
+      child_counts: readSequenceu64,
       leaf: readBool,
       level: readU8,
       min_chunk_size: readU64,
       max_chunk_size: readU64,
       chunking_factor: readU32,
       hash_seed: readU64,
-      encoding: readTypeEncodingRecord
+      encoding: readTypeEncodingRecord,
+      format_bytes: readOptionalbytes
     )
   end
 
@@ -5952,6 +5979,22 @@ class RustBufferStream
     end
   end
 
+  # The Sequence<T> type for u64.
+
+  def readSequenceu64
+    count = unpack_from 4, 'l>'
+
+    raise InternalError, 'Unexpected negative sequence length' if count.negative?
+
+    items = []
+
+    count.times do
+      items.append readU64
+    end
+
+    items
+  end
+
   # The Sequence<T> type for bytes.
 
   def readSequencebytes
@@ -6627,6 +6670,7 @@ class RustBufferBuilder
     self.write_TypeEncodingRecord(v.encoding)
     self.write_Optionalu64(v.node_cache_max_nodes)
     self.write_Optionalu64(v.node_cache_max_bytes)
+    self.write_Optionalbytes(v.format_bytes)
   end
 
   # The Record type ConflictPageRecord.
@@ -7003,6 +7047,7 @@ class RustBufferBuilder
   def write_TypeNodeRecord(v)
     self.write_Sequencebytes(v.keys)
     self.write_Sequencebytes(v.vals)
+    self.write_Sequenceu64(v.child_counts)
     self.write_Bool(v.leaf)
     self.write_U8(v.level)
     self.write_U64(v.min_chunk_size)
@@ -7010,6 +7055,7 @@ class RustBufferBuilder
     self.write_U32(v.chunking_factor)
     self.write_U64(v.hash_seed)
     self.write_TypeEncodingRecord(v.encoding)
+    self.write_Optionalbytes(v.format_bytes)
   end
 
   # The Record type ParallelConfigRecord.
@@ -7867,6 +7913,16 @@ class RustBufferBuilder
     end
   end
 
+  # The Sequence<T> type for u64.
+
+  def write_Sequenceu64(items)
+    pack_into(4, 'l>', items.size)
+
+    items.each do |item|
+      self.write_U64(item)
+    end
+  end
+
   # The Sequence<T> type for bytes.
 
   def write_Sequencebytes(items)
@@ -8380,7 +8436,7 @@ module UniFFILib
   extend FFI::Library
 
 
-  ffi_lib 'prolly_bindings'
+  ffi_lib ENV.fetch('PROLLY_BINDINGS_LIBRARY', 'prolly_bindings')
 
 
   attach_function :uniffi_prolly_bindings_fn_clone_crdtresolvercallback,
@@ -9220,6 +9276,9 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_fn_func_tree_config,
     [:uint64, :uint64, :uint32, :uint64, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_func_tree_config_from_format_bytes,
+    [RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_func_u128_key,
     [RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
@@ -9596,6 +9655,9 @@ module UniFFILib
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_func_tree_config,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_func_tree_config_from_format_bytes,
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_func_u128_key,
@@ -10809,9 +10871,9 @@ end
 
   # Record type ConfigRecord
 class ConfigRecord
-  attr_reader :min_chunk_size, :max_chunk_size, :chunking_factor, :hash_seed, :encoding, :node_cache_max_nodes, :node_cache_max_bytes
+  attr_reader :min_chunk_size, :max_chunk_size, :chunking_factor, :hash_seed, :encoding, :node_cache_max_nodes, :node_cache_max_bytes, :format_bytes
 
-  def initialize(min_chunk_size:, max_chunk_size:, chunking_factor:, hash_seed:, encoding:, node_cache_max_nodes:, node_cache_max_bytes:)
+  def initialize(min_chunk_size:, max_chunk_size:, chunking_factor:, hash_seed:, encoding:, node_cache_max_nodes:, node_cache_max_bytes:, format_bytes:)
     @min_chunk_size = min_chunk_size
     @max_chunk_size = max_chunk_size
     @chunking_factor = chunking_factor
@@ -10819,6 +10881,7 @@ class ConfigRecord
     @encoding = encoding
     @node_cache_max_nodes = node_cache_max_nodes
     @node_cache_max_bytes = node_cache_max_bytes
+    @format_bytes = format_bytes
   end
 
   def ==(other)
@@ -10841,6 +10904,9 @@ class ConfigRecord
       return false
     end
     if @node_cache_max_bytes != other.node_cache_max_bytes
+      return false
+    end
+    if @format_bytes != other.format_bytes
       return false
     end
 
@@ -12032,11 +12098,12 @@ end
 
   # Record type NodeRecord
 class NodeRecord
-  attr_reader :keys, :vals, :leaf, :level, :min_chunk_size, :max_chunk_size, :chunking_factor, :hash_seed, :encoding
+  attr_reader :keys, :vals, :child_counts, :leaf, :level, :min_chunk_size, :max_chunk_size, :chunking_factor, :hash_seed, :encoding, :format_bytes
 
-  def initialize(keys:, vals:, leaf:, level:, min_chunk_size:, max_chunk_size:, chunking_factor:, hash_seed:, encoding:)
+  def initialize(keys:, vals:, child_counts:, leaf:, level:, min_chunk_size:, max_chunk_size:, chunking_factor:, hash_seed:, encoding:, format_bytes:)
     @keys = keys
     @vals = vals
+    @child_counts = child_counts
     @leaf = leaf
     @level = level
     @min_chunk_size = min_chunk_size
@@ -12044,6 +12111,7 @@ class NodeRecord
     @chunking_factor = chunking_factor
     @hash_seed = hash_seed
     @encoding = encoding
+    @format_bytes = format_bytes
   end
 
   def ==(other)
@@ -12051,6 +12119,9 @@ class NodeRecord
       return false
     end
     if @vals != other.vals
+      return false
+    end
+    if @child_counts != other.child_counts
       return false
     end
     if @leaf != other.leaf
@@ -12072,6 +12143,9 @@ class NodeRecord
       return false
     end
     if @encoding != other.encoding
+      return false
+    end
+    if @format_bytes != other.format_bytes
       return false
     end
 
@@ -13650,14 +13724,14 @@ end
 
 
 
-def self.changed_span(start, _end)
+def self.changed_span(start, range_end)
     start = Prolly::uniffi_bytes(start)
 
 
-    end = (end ? Prolly::uniffi_bytes(end) : nil)
-    RustBuffer.check_lower_Optionalbytes(end)
+    range_end = (range_end ? Prolly::uniffi_bytes(range_end) : nil)
+    RustBuffer.check_lower_Optionalbytes(range_end)
 
-  result = Prolly.rust_call(:uniffi_prolly_bindings_fn_func_changed_span,RustBuffer.allocFromBytes(start),RustBuffer.alloc_from_Optionalbytes(end))
+  result = Prolly.rust_call(:uniffi_prolly_bindings_fn_func_changed_span,RustBuffer.allocFromBytes(start),RustBuffer.alloc_from_Optionalbytes(range_end))
   return result.consumeIntoTypeChangedSpanRecord
 end
 
@@ -14256,20 +14330,20 @@ end
 
 
 
-def self.range_page_proof_from_node_bytes(root, after, _end, path_node_bytes)
+def self.range_page_proof_from_node_bytes(root, after, range_end, path_node_bytes)
     root = (root ? Prolly::uniffi_bytes(root) : nil)
     RustBuffer.check_lower_Optionalbytes(root)
 
     after = (after ? Prolly::uniffi_bytes(after) : nil)
     RustBuffer.check_lower_Optionalbytes(after)
 
-    end = (end ? Prolly::uniffi_bytes(end) : nil)
-    RustBuffer.check_lower_Optionalbytes(end)
+    range_end = (range_end ? Prolly::uniffi_bytes(range_end) : nil)
+    RustBuffer.check_lower_Optionalbytes(range_end)
 
     path_node_bytes = path_node_bytes.map { |v| Prolly::uniffi_bytes(v) }
     RustBuffer.check_lower_Sequencebytes(path_node_bytes)
 
-  result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_func_range_page_proof_from_node_bytes,RustBuffer.alloc_from_Optionalbytes(root),RustBuffer.alloc_from_Optionalbytes(after),RustBuffer.alloc_from_Optionalbytes(end),RustBuffer.alloc_from_Sequencebytes(path_node_bytes))
+  result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_func_range_page_proof_from_node_bytes,RustBuffer.alloc_from_Optionalbytes(root),RustBuffer.alloc_from_Optionalbytes(after),RustBuffer.alloc_from_Optionalbytes(range_end),RustBuffer.alloc_from_Sequencebytes(path_node_bytes))
   return result.consumeIntoTypeRangePageProofRecord
 end
 
@@ -14313,20 +14387,20 @@ end
 
 
 
-def self.range_proof_from_node_bytes(root, start, _end, path_node_bytes)
+def self.range_proof_from_node_bytes(root, start, range_end, path_node_bytes)
     root = (root ? Prolly::uniffi_bytes(root) : nil)
     RustBuffer.check_lower_Optionalbytes(root)
 
     start = Prolly::uniffi_bytes(start)
 
 
-    end = (end ? Prolly::uniffi_bytes(end) : nil)
-    RustBuffer.check_lower_Optionalbytes(end)
+    range_end = (range_end ? Prolly::uniffi_bytes(range_end) : nil)
+    RustBuffer.check_lower_Optionalbytes(range_end)
 
     path_node_bytes = path_node_bytes.map { |v| Prolly::uniffi_bytes(v) }
     RustBuffer.check_lower_Sequencebytes(path_node_bytes)
 
-  result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_func_range_proof_from_node_bytes,RustBuffer.alloc_from_Optionalbytes(root),RustBuffer.allocFromBytes(start),RustBuffer.alloc_from_Optionalbytes(end),RustBuffer.alloc_from_Sequencebytes(path_node_bytes))
+  result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_func_range_proof_from_node_bytes,RustBuffer.alloc_from_Optionalbytes(root),RustBuffer.allocFromBytes(start),RustBuffer.alloc_from_Optionalbytes(range_end),RustBuffer.alloc_from_Sequencebytes(path_node_bytes))
   return result.consumeIntoTypeRangeProofRecord
 end
 
@@ -14852,6 +14926,24 @@ def self.tree_config(min_chunk_size, max_chunk_size, chunking_factor, hash_seed,
     RustBuffer.check_lower_Optionalu64(node_cache_max_bytes)
 
   result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_func_tree_config,min_chunk_size,max_chunk_size,chunking_factor,hash_seed,RustBuffer.alloc_from_TypeEncodingRecord(encoding),RustBuffer.alloc_from_Optionalu64(node_cache_max_nodes),RustBuffer.alloc_from_Optionalu64(node_cache_max_bytes))
+  return result.consumeIntoTypeConfigRecord
+end
+
+
+
+
+
+def self.tree_config_from_format_bytes(format_bytes, node_cache_max_nodes, node_cache_max_bytes)
+    format_bytes = Prolly::uniffi_bytes(format_bytes)
+
+
+    node_cache_max_nodes = (node_cache_max_nodes ? Prolly::uniffi_in_range(node_cache_max_nodes, "u64", 0, 2**64) : nil)
+    RustBuffer.check_lower_Optionalu64(node_cache_max_nodes)
+
+    node_cache_max_bytes = (node_cache_max_bytes ? Prolly::uniffi_in_range(node_cache_max_bytes, "u64", 0, 2**64) : nil)
+    RustBuffer.check_lower_Optionalu64(node_cache_max_bytes)
+
+  result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_func_tree_config_from_format_bytes,RustBuffer.allocFromBytes(format_bytes),RustBuffer.alloc_from_Optionalu64(node_cache_max_nodes),RustBuffer.alloc_from_Optionalu64(node_cache_max_bytes))
   return result.consumeIntoTypeConfigRecord
 end
 
@@ -15878,16 +15970,16 @@ end
     result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_prollyengine_create,uniffi_clone_handle(),)
     return result.consumeIntoTypeTreeRecord
   end
-  def cursor_window(tree, key, _end, limit)
+  def cursor_window(tree, key, range_end, limit)
         tree = tree
         RustBuffer.check_lower_TypeTreeRecord(tree)
         key = Prolly::uniffi_bytes(key)
 
-        end = (end ? Prolly::uniffi_bytes(end) : nil)
-        RustBuffer.check_lower_Optionalbytes(end)
+        range_end = (range_end ? Prolly::uniffi_bytes(range_end) : nil)
+        RustBuffer.check_lower_Optionalbytes(range_end)
         limit = Prolly::uniffi_in_range(limit, "u64", 0, 2**64)
 
-    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_cursor_window,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.allocFromBytes(key),RustBuffer.alloc_from_Optionalbytes(end),limit)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_cursor_window,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.allocFromBytes(key),RustBuffer.alloc_from_Optionalbytes(range_end),limit)
     return result.consumeIntoTypeCursorWindowRecord
   end
   def debug_compare_trees(left, right)
@@ -15962,30 +16054,30 @@ end
     result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_diff,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(base),RustBuffer.alloc_from_TypeTreeRecord(other))
     return result.consumeIntoSequenceTypeDiffRecord
   end
-  def diff_from_cursor(base, other, cursor, _end)
+  def diff_from_cursor(base, other, cursor, range_end)
         base = base
         RustBuffer.check_lower_TypeTreeRecord(base)
         other = other
         RustBuffer.check_lower_TypeTreeRecord(other)
         cursor = (cursor ? cursor : nil)
         RustBuffer.check_lower_OptionalTypeRangeCursorRecord(cursor)
-        end = (end ? Prolly::uniffi_bytes(end) : nil)
-        RustBuffer.check_lower_Optionalbytes(end)
-    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_diff_from_cursor,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(base),RustBuffer.alloc_from_TypeTreeRecord(other),RustBuffer.alloc_from_OptionalTypeRangeCursorRecord(cursor),RustBuffer.alloc_from_Optionalbytes(end))
+        range_end = (range_end ? Prolly::uniffi_bytes(range_end) : nil)
+        RustBuffer.check_lower_Optionalbytes(range_end)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_diff_from_cursor,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(base),RustBuffer.alloc_from_TypeTreeRecord(other),RustBuffer.alloc_from_OptionalTypeRangeCursorRecord(cursor),RustBuffer.alloc_from_Optionalbytes(range_end))
     return result.consumeIntoSequenceTypeDiffRecord
   end
-  def diff_page(base, other, cursor, _end, limit)
+  def diff_page(base, other, cursor, range_end, limit)
         base = base
         RustBuffer.check_lower_TypeTreeRecord(base)
         other = other
         RustBuffer.check_lower_TypeTreeRecord(other)
         cursor = (cursor ? cursor : nil)
         RustBuffer.check_lower_OptionalTypeRangeCursorRecord(cursor)
-        end = (end ? Prolly::uniffi_bytes(end) : nil)
-        RustBuffer.check_lower_Optionalbytes(end)
+        range_end = (range_end ? Prolly::uniffi_bytes(range_end) : nil)
+        RustBuffer.check_lower_Optionalbytes(range_end)
         limit = Prolly::uniffi_in_range(limit, "u64", 0, 2**64)
 
-    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_diff_page,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(base),RustBuffer.alloc_from_TypeTreeRecord(other),RustBuffer.alloc_from_OptionalTypeRangeCursorRecord(cursor),RustBuffer.alloc_from_Optionalbytes(end),limit)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_diff_page,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(base),RustBuffer.alloc_from_TypeTreeRecord(other),RustBuffer.alloc_from_OptionalTypeRangeCursorRecord(cursor),RustBuffer.alloc_from_Optionalbytes(range_end),limit)
     return result.consumeIntoTypeDiffPageRecord
   end
   def export_snapshot(tree)
@@ -16224,7 +16316,7 @@ end
     result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_merge_prefix_with_resolver,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(base),RustBuffer.alloc_from_TypeTreeRecord(left),RustBuffer.alloc_from_TypeTreeRecord(right),RustBuffer.allocFromBytes(prefix),(MergeResolverCallback.uniffi_lower resolver))
     return result.consumeIntoTypeTreeRecord
   end
-  def merge_range(base, left, right, start, _end, resolver)
+  def merge_range(base, left, right, start, range_end, resolver)
         base = base
         RustBuffer.check_lower_TypeTreeRecord(base)
         left = left
@@ -16233,14 +16325,14 @@ end
         RustBuffer.check_lower_TypeTreeRecord(right)
         start = Prolly::uniffi_bytes(start)
 
-        end = (end ? Prolly::uniffi_bytes(end) : nil)
-        RustBuffer.check_lower_Optionalbytes(end)
+        range_end = (range_end ? Prolly::uniffi_bytes(range_end) : nil)
+        RustBuffer.check_lower_Optionalbytes(range_end)
         resolver = (resolver ? Prolly::uniffi_utf8(resolver) : nil)
         RustBuffer.check_lower_Optionalstring(resolver)
-    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_merge_range,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(base),RustBuffer.alloc_from_TypeTreeRecord(left),RustBuffer.alloc_from_TypeTreeRecord(right),RustBuffer.allocFromBytes(start),RustBuffer.alloc_from_Optionalbytes(end),RustBuffer.alloc_from_Optionalstring(resolver))
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_merge_range,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(base),RustBuffer.alloc_from_TypeTreeRecord(left),RustBuffer.alloc_from_TypeTreeRecord(right),RustBuffer.allocFromBytes(start),RustBuffer.alloc_from_Optionalbytes(range_end),RustBuffer.alloc_from_Optionalstring(resolver))
     return result.consumeIntoTypeTreeRecord
   end
-  def merge_range_with_policy(base, left, right, start, _end, policy)
+  def merge_range_with_policy(base, left, right, start, range_end, policy)
         base = base
         RustBuffer.check_lower_TypeTreeRecord(base)
         left = left
@@ -16249,14 +16341,14 @@ end
         RustBuffer.check_lower_TypeTreeRecord(right)
         start = Prolly::uniffi_bytes(start)
 
-        end = (end ? Prolly::uniffi_bytes(end) : nil)
-        RustBuffer.check_lower_Optionalbytes(end)
+        range_end = (range_end ? Prolly::uniffi_bytes(range_end) : nil)
+        RustBuffer.check_lower_Optionalbytes(range_end)
         policy = policy
         (MergePolicyRegistry.uniffi_check_lower policy)
-    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_merge_range_with_policy,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(base),RustBuffer.alloc_from_TypeTreeRecord(left),RustBuffer.alloc_from_TypeTreeRecord(right),RustBuffer.allocFromBytes(start),RustBuffer.alloc_from_Optionalbytes(end),(MergePolicyRegistry.uniffi_lower policy))
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_merge_range_with_policy,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(base),RustBuffer.alloc_from_TypeTreeRecord(left),RustBuffer.alloc_from_TypeTreeRecord(right),RustBuffer.allocFromBytes(start),RustBuffer.alloc_from_Optionalbytes(range_end),(MergePolicyRegistry.uniffi_lower policy))
     return result.consumeIntoTypeTreeRecord
   end
-  def merge_range_with_resolver(base, left, right, start, _end, resolver)
+  def merge_range_with_resolver(base, left, right, start, range_end, resolver)
         base = base
         RustBuffer.check_lower_TypeTreeRecord(base)
         left = left
@@ -16265,11 +16357,11 @@ end
         RustBuffer.check_lower_TypeTreeRecord(right)
         start = Prolly::uniffi_bytes(start)
 
-        end = (end ? Prolly::uniffi_bytes(end) : nil)
-        RustBuffer.check_lower_Optionalbytes(end)
+        range_end = (range_end ? Prolly::uniffi_bytes(range_end) : nil)
+        RustBuffer.check_lower_Optionalbytes(range_end)
         resolver = resolver
         (MergeResolverCallback.uniffi_check_lower resolver)
-    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_merge_range_with_resolver,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(base),RustBuffer.alloc_from_TypeTreeRecord(left),RustBuffer.alloc_from_TypeTreeRecord(right),RustBuffer.allocFromBytes(start),RustBuffer.alloc_from_Optionalbytes(end),(MergeResolverCallback.uniffi_lower resolver))
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_merge_range_with_resolver,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(base),RustBuffer.alloc_from_TypeTreeRecord(left),RustBuffer.alloc_from_TypeTreeRecord(right),RustBuffer.allocFromBytes(start),RustBuffer.alloc_from_Optionalbytes(range_end),(MergeResolverCallback.uniffi_lower resolver))
     return result.consumeIntoTypeTreeRecord
   end
   def merge_with_policy(base, left, right, policy)
@@ -16412,18 +16504,18 @@ end
     result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_prefix_reverse_page,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.allocFromBytes(prefix),RustBuffer.alloc_from_OptionalTypeReverseCursorRecord(cursor),limit)
     return result.consumeIntoTypeReversePageRecord
   end
-  def prove_diff_page(base, other, cursor, _end, limit)
+  def prove_diff_page(base, other, cursor, range_end, limit)
         base = base
         RustBuffer.check_lower_TypeTreeRecord(base)
         other = other
         RustBuffer.check_lower_TypeTreeRecord(other)
         cursor = (cursor ? cursor : nil)
         RustBuffer.check_lower_OptionalTypeRangeCursorRecord(cursor)
-        end = (end ? Prolly::uniffi_bytes(end) : nil)
-        RustBuffer.check_lower_Optionalbytes(end)
+        range_end = (range_end ? Prolly::uniffi_bytes(range_end) : nil)
+        RustBuffer.check_lower_Optionalbytes(range_end)
         limit = Prolly::uniffi_in_range(limit, "u64", 0, 2**64)
 
-    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_prove_diff_page,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(base),RustBuffer.alloc_from_TypeTreeRecord(other),RustBuffer.alloc_from_OptionalTypeRangeCursorRecord(cursor),RustBuffer.alloc_from_Optionalbytes(end),limit)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_prove_diff_page,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(base),RustBuffer.alloc_from_TypeTreeRecord(other),RustBuffer.alloc_from_OptionalTypeRangeCursorRecord(cursor),RustBuffer.alloc_from_Optionalbytes(range_end),limit)
     return result.consumeIntoTypeProvedDiffPageRecord
   end
   def prove_key(tree, key)
@@ -16450,26 +16542,26 @@ end
     result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_prove_prefix,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.allocFromBytes(prefix))
     return result.consumeIntoTypeRangeProofRecord
   end
-  def prove_range(tree, start, _end)
+  def prove_range(tree, start, range_end)
         tree = tree
         RustBuffer.check_lower_TypeTreeRecord(tree)
         start = Prolly::uniffi_bytes(start)
 
-        end = (end ? Prolly::uniffi_bytes(end) : nil)
-        RustBuffer.check_lower_Optionalbytes(end)
-    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_prove_range,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.allocFromBytes(start),RustBuffer.alloc_from_Optionalbytes(end))
+        range_end = (range_end ? Prolly::uniffi_bytes(range_end) : nil)
+        RustBuffer.check_lower_Optionalbytes(range_end)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_prove_range,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.allocFromBytes(start),RustBuffer.alloc_from_Optionalbytes(range_end))
     return result.consumeIntoTypeRangeProofRecord
   end
-  def prove_range_page(tree, cursor, _end, limit)
+  def prove_range_page(tree, cursor, range_end, limit)
         tree = tree
         RustBuffer.check_lower_TypeTreeRecord(tree)
         cursor = (cursor ? cursor : nil)
         RustBuffer.check_lower_OptionalTypeRangeCursorRecord(cursor)
-        end = (end ? Prolly::uniffi_bytes(end) : nil)
-        RustBuffer.check_lower_Optionalbytes(end)
+        range_end = (range_end ? Prolly::uniffi_bytes(range_end) : nil)
+        RustBuffer.check_lower_Optionalbytes(range_end)
         limit = Prolly::uniffi_in_range(limit, "u64", 0, 2**64)
 
-    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_prove_range_page,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.alloc_from_OptionalTypeRangeCursorRecord(cursor),RustBuffer.alloc_from_Optionalbytes(end),limit)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_prove_range_page,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.alloc_from_OptionalTypeRangeCursorRecord(cursor),RustBuffer.alloc_from_Optionalbytes(range_end),limit)
     return result.consumeIntoTypeProvedRangePageRecord
   end
   def publish_changed_spans_hint(base, changed, spans)
@@ -16554,58 +16646,58 @@ end
     result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_put_large_value,uniffi_clone_handle(),(ProllyBlobStore.uniffi_lower blob_store),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.allocFromBytes(key),RustBuffer.allocFromBytes(value),RustBuffer.alloc_from_TypeLargeValueConfigRecord(config))
     return result.consumeIntoTypeTreeRecord
   end
-  def range(tree, start, _end)
+  def range(tree, start, range_end)
         tree = tree
         RustBuffer.check_lower_TypeTreeRecord(tree)
         start = Prolly::uniffi_bytes(start)
 
-        end = (end ? Prolly::uniffi_bytes(end) : nil)
-        RustBuffer.check_lower_Optionalbytes(end)
-    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_range,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.allocFromBytes(start),RustBuffer.alloc_from_Optionalbytes(end))
+        range_end = (range_end ? Prolly::uniffi_bytes(range_end) : nil)
+        RustBuffer.check_lower_Optionalbytes(range_end)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_range,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.allocFromBytes(start),RustBuffer.alloc_from_Optionalbytes(range_end))
     return result.consumeIntoSequenceTypeEntryRecord
   end
-  def range_after(tree, after_key, _end)
+  def range_after(tree, after_key, range_end)
         tree = tree
         RustBuffer.check_lower_TypeTreeRecord(tree)
         after_key = Prolly::uniffi_bytes(after_key)
 
-        end = (end ? Prolly::uniffi_bytes(end) : nil)
-        RustBuffer.check_lower_Optionalbytes(end)
-    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_range_after,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.allocFromBytes(after_key),RustBuffer.alloc_from_Optionalbytes(end))
+        range_end = (range_end ? Prolly::uniffi_bytes(range_end) : nil)
+        RustBuffer.check_lower_Optionalbytes(range_end)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_range_after,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.allocFromBytes(after_key),RustBuffer.alloc_from_Optionalbytes(range_end))
     return result.consumeIntoSequenceTypeEntryRecord
   end
-  def range_diff(base, other, start, _end)
+  def range_diff(base, other, start, range_end)
         base = base
         RustBuffer.check_lower_TypeTreeRecord(base)
         other = other
         RustBuffer.check_lower_TypeTreeRecord(other)
         start = Prolly::uniffi_bytes(start)
 
-        end = (end ? Prolly::uniffi_bytes(end) : nil)
-        RustBuffer.check_lower_Optionalbytes(end)
-    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_range_diff,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(base),RustBuffer.alloc_from_TypeTreeRecord(other),RustBuffer.allocFromBytes(start),RustBuffer.alloc_from_Optionalbytes(end))
+        range_end = (range_end ? Prolly::uniffi_bytes(range_end) : nil)
+        RustBuffer.check_lower_Optionalbytes(range_end)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_range_diff,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(base),RustBuffer.alloc_from_TypeTreeRecord(other),RustBuffer.allocFromBytes(start),RustBuffer.alloc_from_Optionalbytes(range_end))
     return result.consumeIntoSequenceTypeDiffRecord
   end
-  def range_from_cursor(tree, cursor, _end)
+  def range_from_cursor(tree, cursor, range_end)
         tree = tree
         RustBuffer.check_lower_TypeTreeRecord(tree)
         cursor = (cursor ? cursor : nil)
         RustBuffer.check_lower_OptionalTypeRangeCursorRecord(cursor)
-        end = (end ? Prolly::uniffi_bytes(end) : nil)
-        RustBuffer.check_lower_Optionalbytes(end)
-    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_range_from_cursor,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.alloc_from_OptionalTypeRangeCursorRecord(cursor),RustBuffer.alloc_from_Optionalbytes(end))
+        range_end = (range_end ? Prolly::uniffi_bytes(range_end) : nil)
+        RustBuffer.check_lower_Optionalbytes(range_end)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_range_from_cursor,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.alloc_from_OptionalTypeRangeCursorRecord(cursor),RustBuffer.alloc_from_Optionalbytes(range_end))
     return result.consumeIntoSequenceTypeEntryRecord
   end
-  def range_page(tree, cursor, _end, limit)
+  def range_page(tree, cursor, range_end, limit)
         tree = tree
         RustBuffer.check_lower_TypeTreeRecord(tree)
         cursor = (cursor ? cursor : nil)
         RustBuffer.check_lower_OptionalTypeRangeCursorRecord(cursor)
-        end = (end ? Prolly::uniffi_bytes(end) : nil)
-        RustBuffer.check_lower_Optionalbytes(end)
+        range_end = (range_end ? Prolly::uniffi_bytes(range_end) : nil)
+        RustBuffer.check_lower_Optionalbytes(range_end)
         limit = Prolly::uniffi_in_range(limit, "u64", 0, 2**64)
 
-    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_range_page,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.alloc_from_OptionalTypeRangeCursorRecord(cursor),RustBuffer.alloc_from_Optionalbytes(end),limit)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_range_page,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.alloc_from_OptionalTypeRangeCursorRecord(cursor),RustBuffer.alloc_from_Optionalbytes(range_end),limit)
     return result.consumeIntoTypeRangePageRecord
   end
   def reset_metrics()
@@ -16842,4 +16934,3 @@ end
 end
 
 end
-

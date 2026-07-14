@@ -167,6 +167,7 @@ pub struct NodeConfigRecord {
     pub encoding: NodeEncodingRecord,
     pub node_cache_max_nodes: Option<String>,
     pub node_cache_max_bytes: Option<String>,
+    pub format_bytes: Option<Buffer>,
 }
 
 #[napi(object)]
@@ -3527,6 +3528,7 @@ impl From<ConfigRecord> for NodeConfigRecord {
             encoding: config.encoding.into(),
             node_cache_max_nodes: config.node_cache_max_nodes.map(|value| value.to_string()),
             node_cache_max_bytes: config.node_cache_max_bytes.map(|value| value.to_string()),
+            format_bytes: config.format_bytes.map(Buffer::from),
         }
     }
 }
@@ -3551,6 +3553,7 @@ impl TryFrom<NodeConfigRecord> for ConfigRecord {
                 .as_deref()
                 .map(parse_u64)
                 .transpose()?,
+            format_bytes: value.format_bytes.map(|bytes| bytes.to_vec()),
         })
     }
 }
@@ -5960,6 +5963,7 @@ impl TryFrom<FixtureConfig> for ConfigRecord {
             },
             node_cache_max_nodes: value.node_cache_max_nodes,
             node_cache_max_bytes: value.node_cache_max_bytes,
+            format_bytes: None,
         })
     }
 }

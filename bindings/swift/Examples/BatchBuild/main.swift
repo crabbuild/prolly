@@ -28,7 +28,7 @@ let entries = (1...64).reversed().map { index in
     EntryRecord(key: bytes(String(format: "event/%04d", index)), value: bytes("payload-\(index)"))
 }
 let tree = try engine.buildFromEntries(entries: entries)
-let rows = try engine.range(tree: tree, start: bytes("event/"), end: bytes("event0"))
+let rows = try engine.range(tree: tree, start: bytes("event/"), rangeEnd: bytes("event0"))
 let stats = try engine.collectStatsJson(tree: tree).json
 
 precondition(rows.count == 64)

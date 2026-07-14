@@ -51,6 +51,29 @@ test("node fixtures decode, encode, and hash", () => {
   }
 });
 
+test("default leaf and internal nodes use and decode the compact format marker", () => {
+  const nodes = [
+    new ProllyNode({
+      keys: [Buffer.from("alpha"), Buffer.from("alphabet")],
+      vals: [Buffer.from("one"), Buffer.from("two")],
+    }),
+    new ProllyNode({
+      keys: [Buffer.from("alpha"), Buffer.from("middle")],
+      vals: [Buffer.alloc(32, 1), Buffer.alloc(32, 2)],
+      childCounts: [3n, 5n],
+      leaf: false,
+      level: 1,
+    }),
+  ];
+
+  for (const node of nodes) {
+    const encoded = node.toBytes();
+    assert.equal(encoded[5], 0, "default nodes must use the zero-length format marker");
+    assert.deepEqual(ProllyNode.fromBytes(encoded), node);
+    assert.deepEqual(ProllyNode.fromBytes(encoded).toBytes(), encoded);
+  }
+});
+
 test("boundary and key fixtures match Rust", () => {
   const loaded = fixtures();
   assert.equal(encodingRaw().kind, "raw");

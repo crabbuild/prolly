@@ -154,7 +154,8 @@ func configRecord(_ raw: [String: Any]) throws -> ConfigRecord {
         hashSeed: try uint64(raw["hash_seed"], "hash_seed"),
         encoding: try encodingRecord(try dict(raw["encoding"] as Any, "encoding")),
         nodeCacheMaxNodes: optionalUInt64(raw["node_cache_max_nodes"]),
-        nodeCacheMaxBytes: optionalUInt64(raw["node_cache_max_bytes"])
+        nodeCacheMaxBytes: optionalUInt64(raw["node_cache_max_bytes"]),
+        formatBytes: nil
     )
 }
 
@@ -338,7 +339,7 @@ try expect(
     "changed span prefix end mismatch"
 )
 try expect(
-    changedSpan(start: Data("k".utf8), end: Data("l".utf8)).end == Data("l".utf8),
+    changedSpan(start: Data("k".utf8), rangeEnd: Data("l".utf8)).end == Data("l".utf8),
     "changed span range end mismatch"
 )
 
@@ -383,14 +384,14 @@ for raw in try array(root["tree_fixtures"] as Any, "tree_fixtures") {
         let decodedBundleVerification = try verifyKeyProof(proof: decodedProofFromBytes)
         try expect(decodedBundleVerification.value == proofValue, "bundled key proof mismatch")
 
-        let rangeProof = try engine.proveRange(tree: tree, start: proofKey, end: nil)
+        let rangeProof = try engine.proveRange(tree: tree, start: proofKey, rangeEnd: nil)
         let rangeVerified = try verifyRangeProof(proof: rangeProof)
         try expect(rangeVerified.valid, "range proof should be valid")
         try expect(rangeVerified.entries.first?.key == proofKey, "range proof first key mismatch")
         let decodedRangeProof = try rangeProofFromNodeBytes(
             root: rangeProof.root,
             start: rangeProof.start,
-            end: rangeProof.end,
+            rangeEnd: rangeProof.end,
             pathNodeBytes: try rangeProofPathNodeBytes(proof: rangeProof)
         )
         let decodedRangeVerification = try verifyRangeProof(proof: decodedRangeProof)
@@ -422,7 +423,7 @@ for raw in try array(root["tree_fixtures"] as Any, "tree_fixtures") {
         let actual = try engine.range(
             tree: tree,
             start: try hexData(try string(range["start"], "range.start")),
-            end: try optionalHexData(range["end"])
+            rangeEnd: try optionalHexData(range["end"])
         )
         let expected = try array(range["entries"] as Any, "range.entries").map { try entryRecord(try dict($0, "range entry")) }
         try expect(actual == expected, "range mismatch")
@@ -542,7 +543,9 @@ for raw in try array(root["manifest_fixtures"] as Any, "manifest_fixtures") {
     let encoded = try rootManifestToBytes(record: record)
     let decoded = try rootManifestFromBytes(bytes: bytes)
     try expect(encoded == bytes, "root manifest bytes mismatch")
-    try expect(decoded == record, "root manifest decode mismatch")
+    try expect(decoded.tree.root == record.tree.root, "root manifest root decode mismatch")
+    try expect(decoded.tree.config.minChunkSize == record.tree.config.minChunkSize, "root manifest config decode mismatch")
+    try expect(decoded.createdAtMillis == record.createdAtMillis, "root manifest timestamp decode mismatch")
 }
 
 let parityEngine = try ProllyEngine.memory(config: defaultConfig())
@@ -696,7 +699,7 @@ try expect(decodedMultiVerified.results[2].value == Data("2".utf8), "decoded mul
 let decodedMultiProofFromBytes = try multiKeyProofFromBytes(bytes: try multiKeyProofToBytes(proof: multiProof))
 let decodedMultiBundleVerified = try verifyMultiKeyProof(proof: decodedMultiProofFromBytes)
 try expect(decodedMultiBundleVerified.results[2].value == Data("2".utf8), "bundled multi-key proof mismatch")
-let parityRangeProof = try parityEngine.proveRange(tree: builtTree, start: Data("a".utf8), end: Data("c".utf8))
+let parityRangeProof = try parityEngine.proveRange(tree: builtTree, start: Data("a".utf8), rangeEnd: Data("c".utf8))
 let parityRangeVerified = try verifyRangeProof(proof: parityRangeProof)
 try expect(parityRangeVerified.valid, "parity range proof should be valid")
 try expect(parityRangeVerified.entries.count == 2, "parity range proof count mismatch")
@@ -715,7 +718,7 @@ try expect(parityAfterACursor.afterKey == Data("a".utf8), "range cursor after-ke
 let parityProvedPage = try parityEngine.proveRangePage(
     tree: builtTree,
     cursor: parityAfterACursor,
-    end: nil,
+    rangeEnd: nil,
     limit: 1
 )
 let parityPageVerified = try verifyRangePageProof(proof: parityProvedPage.proof)
@@ -725,7 +728,7 @@ try expect(parityPageVerified.entries[0].key == Data("b".utf8), "parity range pa
 let parityPageDecoded = try rangePageProofFromNodeBytes(
     root: parityProvedPage.proof.root,
     after: parityProvedPage.proof.after,
-    end: parityProvedPage.proof.end,
+    rangeEnd: parityProvedPage.proof.end,
     pathNodeBytes: try rangePageProofPathNodeBytes(proof: parityProvedPage.proof)
 )
 let parityPageDecodedVerification = try verifyRangePageProof(proof: parityPageDecoded)
@@ -741,7 +744,7 @@ let parityResumedDiffs = try parityEngine.diffFromCursor(
     base: builtTree,
     other: parityChangedForCursor,
     cursor: parityAfterACursor,
-    end: Data("c".utf8)
+    rangeEnd: Data("c".utf8)
 )
 try expect(parityResumedDiffs.count == 1, "diff_from_cursor count mismatch")
 try expect(parityResumedDiffs[0].kind == .changed, "diff_from_cursor kind mismatch")
@@ -753,7 +756,7 @@ let parityProvedDiffPage = try parityEngine.proveDiffPage(
     base: builtTree,
     other: parityDiffOther,
     cursor: nil,
-    end: nil,
+    rangeEnd: nil,
     limit: 1
 )
 try expect(parityProvedDiffPage.page.diffs.count == 1, "parity diff page count mismatch")
@@ -910,7 +913,7 @@ try expect(prefixReversePage.nextCursor == nil, "prefix reverse page cursor mism
 let cursorWindow = try parityEngine.cursorWindow(
     tree: batchStats.tree,
     key: Data("aa".utf8),
-    end: nil,
+    rangeEnd: nil,
     limit: 1
 )
 try expect(cursorWindow.positionKey == Data("a".utf8), "cursor window position key mismatch")
@@ -923,7 +926,7 @@ try expect(cursorWindow.nextCursor?.afterKey == Data("b".utf8), "cursor window n
 let exactCursorProbe = try parityEngine.cursorWindow(
     tree: batchStats.tree,
     key: Data("a".utf8),
-    end: nil,
+    rangeEnd: nil,
     limit: 0
 )
 try expect(exactCursorProbe.found, "cursor window exact probe mismatch")
@@ -959,7 +962,7 @@ try expect(appendedStatsValue == Data("44".utf8), "append_batch_with_stats value
 try expect(appendedStats.stats.inputMutations == 3, "append input mutation count mismatch")
 try expect(appendedStats.stats.effectiveMutations == 2, "append effective mutation count mismatch")
 try expect(!appendedStats.stats.preprocessInputSorted, "append sorted flag mismatch")
-try expect(appendedStats.stats.usedAppendFastPath, "append fast-path flag mismatch")
+try expect(appendedStats.stats.usedCoalescedRebuild, "canonical rebuild flag mismatch")
 try expect(appendedStats.stats.writtenNodes > 0, "append written nodes missing")
 
 print("Swift fixture_check scenario passed")

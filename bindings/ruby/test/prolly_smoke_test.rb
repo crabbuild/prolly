@@ -10,7 +10,7 @@ def assert_equal(expected, actual)
   raise "expected #{expected.inspect}, got #{actual.inspect}"
 end
 
-def assert(condition, message)
+def assert(condition, message = 'assertion failed')
   raise message unless condition
 end
 
@@ -57,7 +57,8 @@ def config_from_fixture(fixture)
       custom_name: fixture.fetch('encoding')['custom_name']
     ),
     node_cache_max_nodes: fixture['node_cache_max_nodes'],
-    node_cache_max_bytes: fixture['node_cache_max_bytes']
+    node_cache_max_bytes: fixture['node_cache_max_bytes'],
+    format_bytes: nil
   )
 end
 
@@ -757,7 +758,7 @@ assert_equal '44'.b, parity_engine.get(appended_stats.tree, 'd'.b)
 assert_equal 3, appended_stats.stats.input_mutations
 assert_equal 2, appended_stats.stats.effective_mutations
 assert_equal false, appended_stats.stats.preprocess_input_sorted
-assert_equal true, appended_stats.stats.used_append_fast_path
+assert_equal true, appended_stats.stats.used_coalesced_rebuild
 assert appended_stats.stats.written_nodes.positive?, 'expected append stats to include written nodes'
 
 first_page = parity_engine.range_page(batched, nil, nil, 1)

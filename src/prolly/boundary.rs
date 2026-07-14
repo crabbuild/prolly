@@ -3,11 +3,231 @@
 //! Determines where nodes should split based on content hashing.
 //! Uses xxHash64 for fast, deterministic boundary detection.
 
+use std::collections::VecDeque;
 use std::hash::Hasher;
 use xxhash_rust::xxh64::Xxh64;
 
 use super::config::Config;
+use super::error::Error;
+use super::format::{BoundaryInput, BoundaryRule, ChunkMeasure, ChunkingSpec};
 use super::node::Node;
+
+const LEVEL_SALT: u64 = 0x9e37_79b9_7f4a_7c15;
+
+/// Resettable boundary state for one ordered tree level.
+pub struct BoundaryDetector {
+    spec: ChunkingSpec,
+    seed: u64,
+    entries: u64,
+    logical_bytes: u64,
+    encoded_bytes: u64,
+    previous_measure: u64,
+    rolling_window: VecDeque<u8>,
+    rolling_hash: u64,
+}
+
+impl BoundaryDetector {
+    /// Create a detector for a persisted policy and tree level.
+    pub fn new(spec: ChunkingSpec, level: u16) -> Result<Self, Error> {
+        spec.validate()?;
+        let seed = if spec.level_salt {
+            spec.hash_seed ^ u64::from(level).wrapping_mul(LEVEL_SALT)
+        } else {
+            spec.hash_seed
+        };
+        Ok(Self {
+            spec,
+            seed,
+            entries: 0,
+            logical_bytes: 0,
+            encoded_bytes: 0,
+            previous_measure: 0,
+            rolling_window: VecDeque::new(),
+            rolling_hash: 0,
+        })
+    }
+
+    /// Observe one ordered entry and return whether the chunk ends after it.
+    pub fn observe(
+        &mut self,
+        key: &[u8],
+        value: &[u8],
+        encoded_entry_bytes: usize,
+    ) -> Result<bool, Error> {
+        let encoded_entry_bytes = encoded_entry_bytes as u64;
+        if self.entries == 0 && encoded_entry_bytes > self.spec.hard_max_node_bytes {
+            return Err(Error::EntryTooLarge {
+                encoded_bytes: encoded_entry_bytes,
+                limit: self.spec.hard_max_node_bytes,
+            });
+        }
+
+        self.previous_measure = self.measure();
+        self.entries = self.entries.saturating_add(1);
+        self.logical_bytes = self
+            .logical_bytes
+            .saturating_add(key.len() as u64)
+            .saturating_add(value.len() as u64);
+        self.encoded_bytes = self.encoded_bytes.saturating_add(encoded_entry_bytes);
+
+        let input_hash = hash_entry(self.seed, &self.spec.input, key, value);
+        if matches!(self.spec.rule, BoundaryRule::RollingBuzHash { .. }) {
+            self.observe_rolling(key, value);
+        }
+
+        let measure = self.measure();
+        let boundary = if self.encoded_bytes >= self.spec.hard_max_node_bytes
+            || measure >= self.spec.max
+        {
+            true
+        } else if measure < self.spec.min {
+            false
+        } else {
+            match self.spec.rule {
+                BoundaryRule::HashThreshold { factor } => (input_hash as u32) <= u32::MAX / factor,
+                BoundaryRule::Weibull { shape } => weibull_boundary(
+                    input_hash,
+                    self.previous_measure,
+                    measure,
+                    self.spec.target,
+                    shape,
+                ),
+                BoundaryRule::RollingBuzHash { .. } => {
+                    self.rolling_hash <= u64::MAX / self.spec.target.max(1)
+                }
+            }
+        };
+        if boundary {
+            self.reset();
+        }
+        Ok(boundary)
+    }
+
+    /// Reset state at the beginning of a new chunk.
+    pub fn reset(&mut self) {
+        self.entries = 0;
+        self.logical_bytes = 0;
+        self.encoded_bytes = 0;
+        self.previous_measure = 0;
+        self.rolling_window.clear();
+        self.rolling_hash = 0;
+    }
+
+    pub(crate) fn supports_independent_hashing(&self) -> bool {
+        self.spec.measure == ChunkMeasure::EntryCount
+            && matches!(self.spec.rule, BoundaryRule::HashThreshold { .. })
+    }
+
+    pub(crate) fn independent_hash_boundary(&self, key: &[u8], value: &[u8]) -> Option<bool> {
+        let BoundaryRule::HashThreshold { factor } = self.spec.rule else {
+            return None;
+        };
+        if self.spec.measure != ChunkMeasure::EntryCount {
+            return None;
+        }
+        Some((hash_entry(self.seed, &self.spec.input, key, value) as u32) <= u32::MAX / factor)
+    }
+
+    fn measure(&self) -> u64 {
+        match self.spec.measure {
+            ChunkMeasure::EntryCount => self.entries,
+            ChunkMeasure::LogicalBytes => self.logical_bytes,
+            ChunkMeasure::EncodedBytes => self.encoded_bytes,
+        }
+    }
+
+    fn observe_rolling(&mut self, key: &[u8], value: &[u8]) {
+        let window = match self.spec.rule {
+            BoundaryRule::RollingBuzHash { window } => usize::from(window),
+            _ => return,
+        };
+        rolling_feed_len(self, key.len() as u64, window);
+        for byte in key {
+            self.roll_byte(*byte, window);
+        }
+        if self.spec.input == BoundaryInput::KeyValue {
+            rolling_feed_len(self, value.len() as u64, window);
+            for byte in value {
+                self.roll_byte(*byte, window);
+            }
+        }
+    }
+
+    fn roll_byte(&mut self, byte: u8, window: usize) {
+        self.rolling_hash = self.rolling_hash.rotate_left(1) ^ byte_hash(self.seed, byte);
+        self.rolling_window.push_back(byte);
+        if self.rolling_window.len() > window {
+            if let Some(old) = self.rolling_window.pop_front() {
+                self.rolling_hash ^= byte_hash(self.seed, old).rotate_left((window % 64) as u32);
+            }
+        }
+    }
+}
+
+fn rolling_feed_len(detector: &mut BoundaryDetector, len: u64, window: usize) {
+    for byte in len.to_be_bytes() {
+        detector.roll_byte(byte, window);
+    }
+}
+
+fn byte_hash(seed: u64, byte: u8) -> u64 {
+    let mut hasher = Xxh64::new(seed ^ 0xa076_1d64_78bd_642f);
+    hasher.write_u8(byte);
+    hasher.finish()
+}
+
+fn hash_entry(seed: u64, input: &BoundaryInput, key: &[u8], value: &[u8]) -> u64 {
+    let mut hasher = Xxh64::new(seed);
+    hasher.write(&(key.len() as u64).to_be_bytes());
+    hasher.write(key);
+    if *input == BoundaryInput::KeyValue {
+        hasher.write(&(value.len() as u64).to_be_bytes());
+        hasher.write(value);
+    }
+    hasher.finish()
+}
+
+pub(crate) fn entry_count_boundary(
+    spec: &ChunkingSpec,
+    level: u16,
+    count: usize,
+    key: &[u8],
+) -> Result<bool, Error> {
+    spec.validate()?;
+    let BoundaryRule::HashThreshold { factor } = spec.rule else {
+        return Err(Error::InvalidFormat(
+            "entry-count boundary probe requires a hash-threshold rule".to_string(),
+        ));
+    };
+    if spec.measure != ChunkMeasure::EntryCount || spec.input != BoundaryInput::Key {
+        return Err(Error::InvalidFormat(
+            "entry-count boundary probe requires key-only entry-count chunking".to_string(),
+        ));
+    }
+    let count = count as u64;
+    if count >= spec.max {
+        return Ok(true);
+    }
+    if count < spec.min {
+        return Ok(false);
+    }
+    let seed = if spec.level_salt {
+        spec.hash_seed ^ u64::from(level).wrapping_mul(LEVEL_SALT)
+    } else {
+        spec.hash_seed
+    };
+    Ok((hash_entry(seed, &spec.input, key, &[]) as u32) <= u32::MAX / factor)
+}
+
+fn weibull_boundary(hash: u64, previous: u64, current: u64, target: u64, shape: u32) -> bool {
+    let scale = target.max(1) as f64;
+    let shape = shape as f64;
+    let before = (previous as f64 / scale).powf(shape);
+    let after = (current as f64 / scale).powf(shape);
+    let probability = 1.0 - (-(after - before).max(0.0)).exp();
+    let sample = hash as f64 / u64::MAX as f64;
+    sample <= probability
+}
 
 /// Check if entry at index creates a chunk boundary in a node.
 ///
@@ -30,18 +250,18 @@ pub fn is_boundary(node: &Node, idx: usize) -> bool {
     let count = node.keys.len();
 
     // Below min size: never split
-    if count < node.min_chunk_size {
+    if count < node.min_chunk_size() {
         return false;
     }
 
     // At or above max size: always split
-    if count >= node.max_chunk_size {
+    if count >= node.max_chunk_size() {
         return true;
     }
 
     is_hash_boundary(
-        node.hash_seed,
-        node.chunking_factor,
+        node.hash_seed(),
+        node.chunking_factor(),
         &node.keys[idx],
         &node.vals[idx],
     )
@@ -63,12 +283,12 @@ pub fn is_boundary(node: &Node, idx: usize) -> bool {
 /// `true` if a boundary should be created after this entry
 pub fn is_boundary_config(config: &Config, count: usize, key: &[u8], val: &[u8]) -> bool {
     // Below min size: never split
-    if count < config.min_chunk_size {
+    if count < config.min_chunk_size() {
         return false;
     }
 
     // At or above max size: always split
-    if count >= config.max_chunk_size {
+    if count >= config.max_chunk_size() {
         return true;
     }
 
@@ -80,7 +300,7 @@ pub fn is_boundary_config(config: &Config, count: usize, key: &[u8], val: &[u8])
 /// Bulk builders can precompute this part in parallel, then apply the min/max
 /// checks using the current chunk-local entry count.
 pub(crate) fn is_hash_boundary_config(config: &Config, key: &[u8], val: &[u8]) -> bool {
-    is_hash_boundary(config.hash_seed, config.chunking_factor, key, val)
+    is_hash_boundary(config.hash_seed(), config.chunking_factor(), key, val)
 }
 
 fn is_hash_boundary(hash_seed: u64, chunking_factor: u32, key: &[u8], val: &[u8]) -> bool {
@@ -246,6 +466,27 @@ mod tests {
                 idx, node_result, config_result
             );
         }
+    }
+
+    #[test]
+    fn entry_count_threshold_exposes_parallel_hash_predicate() {
+        let spec = ChunkingSpec {
+            min: 1,
+            max: 128,
+            ..ChunkingSpec::default()
+        };
+        let mut detector = BoundaryDetector::new(spec, 0).unwrap();
+
+        let independent = detector
+            .independent_hash_boundary(b"parallel-key", b"ignored-value")
+            .expect("entry-count threshold hashing is independent");
+
+        assert_eq!(
+            detector
+                .observe(b"parallel-key", b"ignored-value", 32)
+                .unwrap(),
+            independent
+        );
     }
 
     #[test]

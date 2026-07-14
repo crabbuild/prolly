@@ -271,13 +271,13 @@ fn validate_pointer(pointer: &RootManifest) -> Result<(), Error> {
 }
 
 fn pointer_config() -> Config {
-    Config {
-        min_chunk_size: 1,
-        max_chunk_size: 1,
-        chunking_factor: 1,
-        hash_seed: 0,
-        encoding: Encoding::Custom(ENCODING_NAME.to_owned()),
-        node_cache_max_nodes: Some(0),
-        node_cache_max_bytes: Some(0),
-    }
+    Config::builder()
+        .min_chunk_size(1)
+        .max_chunk_size(1)
+        .chunking_factor(1)
+        .hash_seed(0)
+        .encoding(Encoding::Custom(ENCODING_NAME.to_owned()))
+        .node_cache_max_nodes(0)
+        .node_cache_max_bytes(0)
+        .build()
 }

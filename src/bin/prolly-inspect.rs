@@ -60,9 +60,9 @@ fn roots(prolly: &FileProlly, args: &[String]) -> CliResult<()> {
             format_optional_cid(root.manifest.root.as_ref()),
             format_optional_u64(root.manifest.created_at_millis),
             format_optional_u64(root.manifest.updated_at_millis),
-            root.manifest.config.min_chunk_size,
-            root.manifest.config.max_chunk_size,
-            root.manifest.config.chunking_factor
+            root.manifest.config.min_chunk_size(),
+            root.manifest.config.max_chunk_size(),
+            root.manifest.config.chunking_factor()
         );
     }
     Ok(())

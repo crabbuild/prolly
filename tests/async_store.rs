@@ -18,8 +18,8 @@ use prolly::{
     AsyncProlly, BatchBuilder, BatchOp, BlobRef, BlobStore, Cid, Config, CrdtConfig,
     CrdtResolution, DeletePolicy, Diff, Error, IndexControl, LargeValueConfig, MemBlobStore,
     MemBlobStoreError, MemStore, MemStoreError, MultiValueSet, Mutation, NamedRootRetention,
-    NamedRootUpdate, Prolly, RangeCursor, Resolution, ReverseCursor, Store, SyncBlobStoreAsAsync,
-    SyncStoreAsAsync, TimestampedValue, ValueRef,
+    NamedRootUpdate, NodeLayoutSpec, Prolly, RangeCursor, Resolution, ReverseCursor, Store,
+    SyncBlobStoreAsAsync, SyncStoreAsAsync, TimestampedValue, ValueRef,
 };
 #[cfg(feature = "tokio")]
 use prolly::{AsyncStore, TokioBlockingBlobStore, TokioBlockingStore};
@@ -829,7 +829,7 @@ fn async_batch_flushes_rebuilt_tree_once_and_matches_batch_semantics() {
 }
 
 #[test]
-fn async_batch_routes_sparse_single_leaf_update_without_full_rebuild() {
+fn async_batch_sparse_update_matches_the_sync_canonical_root() {
     let store = Arc::new(CountingBatchStore::default());
     let config = Config::builder()
         .min_chunk_size(2)
@@ -838,7 +838,7 @@ fn async_batch_routes_sparse_single_leaf_update_without_full_rebuild() {
         .hash_seed(149)
         .build();
     let sync_prolly = Prolly::new(store.clone(), config.clone());
-    let async_prolly = AsyncProlly::new(SyncStoreAsAsync::new(store.clone()), config);
+    let async_prolly = AsyncProlly::new(SyncStoreAsAsync::new(store.clone()), config.clone());
     let mut tree = sync_prolly.create();
 
     for idx in 0..128 {
@@ -850,26 +850,26 @@ fn async_batch_routes_sparse_single_leaf_update_without_full_rebuild() {
             )
             .unwrap();
     }
-    let original_nodes = sync_prolly.collect_stats(&tree).unwrap().num_nodes;
-
     store.reset_read_counts();
     store.reset_write_counts();
     async_prolly.clear_cache();
     async_prolly.reset_metrics();
 
-    let updated = block_on(async_prolly.batch(
-        &tree,
-        vec![
-            Mutation::Delete {
-                key: b"missing".to_vec(),
-            },
-            Mutation::Upsert {
-                key: b"k042".to_vec(),
-                val: b"updated".to_vec(),
-            },
-        ],
-    ))
-    .unwrap();
+    let mutations = vec![
+        Mutation::Delete {
+            key: b"missing".to_vec(),
+        },
+        Mutation::Upsert {
+            key: b"k042".to_vec(),
+            val: b"updated".to_vec(),
+        },
+    ];
+    let expected_root = sync_prolly.batch(&tree, mutations.clone()).unwrap().root;
+    store.reset_read_counts();
+    store.reset_write_counts();
+    async_prolly.clear_cache();
+    async_prolly.reset_metrics();
+    let updated = block_on(async_prolly.batch(&tree, mutations)).unwrap();
 
     assert_eq!(
         block_on(async_prolly.get(&updated, b"k042")).unwrap(),
@@ -889,14 +889,121 @@ fn async_batch_routes_sparse_single_leaf_update_without_full_rebuild() {
     );
     assert_eq!(store.batch_put_calls.load(Ordering::Relaxed), 1);
     assert_eq!(store.put_calls.load(Ordering::Relaxed), 0);
-    assert!(
-        store.batch_get_ordered_unique_calls.load(Ordering::Relaxed) > 0,
-        "async batch should hydrate mutation routes through ordered async reads"
-    );
-    assert!(
-        store.max_batch_put_len.load(Ordering::Relaxed) < original_nodes,
-        "sparse async batch should rewrite the touched path, not the whole tree"
-    );
+    assert_eq!(updated.root, expected_root);
+}
+
+#[test]
+fn async_batch_matches_nondefault_canonical_policy_and_layout() {
+    let store = Arc::new(MemStore::new());
+    let mut chunking = prolly::chunking::logical_bytes_key_weibull();
+    chunking.min = 64;
+    chunking.target = 128;
+    chunking.max = 256;
+    let config = Config::builder()
+        .chunking(chunking)
+        .node_layout(NodeLayoutSpec::Plain)
+        .build();
+    let sync_prolly = Prolly::new(store.clone(), config.clone());
+    let async_prolly = AsyncProlly::new(SyncStoreAsAsync::new(store), config);
+    let base_mutations = (0..240)
+        .rev()
+        .map(|index| Mutation::Upsert {
+            key: format!("key-{index:04}").into_bytes(),
+            val: format!("value-{index:04}").into_bytes(),
+        })
+        .collect::<Vec<_>>();
+    let base = sync_prolly
+        .batch(&sync_prolly.create(), base_mutations)
+        .unwrap();
+    let mutations = vec![
+        Mutation::Delete {
+            key: b"key-0030".to_vec(),
+        },
+        Mutation::Upsert {
+            key: b"key-0120".to_vec(),
+            val: b"changed".to_vec(),
+        },
+        Mutation::Upsert {
+            key: b"key-new".to_vec(),
+            val: b"inserted".to_vec(),
+        },
+    ];
+
+    let expected = sync_prolly.batch(&base, mutations.clone()).unwrap();
+    let actual = block_on(async_prolly.batch(&base, mutations)).unwrap();
+
+    assert_eq!(actual.root, expected.root);
+}
+
+#[test]
+fn async_append_fast_path_matches_bulk_roots_across_policies() {
+    for (mut chunking, layout) in [
+        (
+            prolly::chunking::entry_count_key_hash(),
+            NodeLayoutSpec::PrefixCompressed,
+        ),
+        (
+            prolly::chunking::logical_bytes_key_weibull(),
+            NodeLayoutSpec::Plain,
+        ),
+        (
+            prolly::chunking::logical_bytes_rolling_hash(),
+            NodeLayoutSpec::PrefixCompressed,
+        ),
+    ] {
+        if chunking.measure == prolly::ChunkMeasure::LogicalBytes {
+            chunking.min = 128;
+            chunking.target = 256;
+            chunking.max = 512;
+        }
+        let config = Config::builder()
+            .chunking(chunking)
+            .node_layout(layout)
+            .build();
+        let store = Arc::new(MemStore::new());
+        let async_prolly = AsyncProlly::new(SyncStoreAsAsync::new(store.clone()), config.clone());
+        let all = (0..320)
+            .map(|index| {
+                (
+                    format!("key-{index:04}").into_bytes(),
+                    format!("value-{index:04}").into_bytes(),
+                )
+            })
+            .collect::<Vec<_>>();
+        let base = block_on(
+            async_prolly.batch(
+                &async_prolly.create(),
+                all[..180]
+                    .iter()
+                    .map(|(key, val)| Mutation::Upsert {
+                        key: key.clone(),
+                        val: val.clone(),
+                    })
+                    .collect(),
+            ),
+        )
+        .unwrap();
+        let appended = block_on(
+            async_prolly.batch(
+                &base,
+                all[180..]
+                    .iter()
+                    .rev()
+                    .map(|(key, val)| Mutation::Upsert {
+                        key: key.clone(),
+                        val: val.clone(),
+                    })
+                    .collect(),
+            ),
+        )
+        .unwrap();
+
+        let mut bulk = BatchBuilder::new(store, config);
+        for (key, value) in &all {
+            bulk.add(key.clone(), value.clone());
+        }
+        assert_eq!(appended.root, bulk.build().unwrap().root);
+    }
 }
 
 #[test]

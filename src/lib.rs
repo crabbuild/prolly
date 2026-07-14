@@ -278,11 +278,13 @@ pub use prolly::blob::{
 };
 #[cfg(feature = "tokio")]
 pub use prolly::blob::{TokioBlockingBlobStore, TokioBlockingBlobStoreError};
-pub use prolly::boundary::{is_boundary, is_boundary_config};
+pub use prolly::boundary::{is_boundary, is_boundary_config, BoundaryDetector};
 pub use prolly::builder::{BatchBuilder, SortedBatchBuilder};
+pub use prolly::canonical::CanonicalWriteStats;
 pub use prolly::canonical_splice::{canonical_splice, CanonicalSpliceStats};
+pub use prolly::chunking;
 pub use prolly::cid::Cid;
-pub use prolly::config::{Config, ConfigBuilder};
+pub use prolly::config::{Config, ConfigBuilder, RuntimeConfig};
 pub use prolly::content_graph::{
     compare_and_swap_named_content_root, compare_and_swap_named_content_root_with_limits,
     content_references, copy_and_publish_content_graph, copy_content_graph,
@@ -311,6 +313,10 @@ pub use prolly::diff::{
 };
 pub use prolly::encoding::Encoding;
 pub use prolly::error::{resolver, Conflict, Diff, Error, Mutation, Resolution, Resolver};
+pub use prolly::format::{
+    BoundaryInput, BoundaryRule, ChunkMeasure, ChunkingSpec, HashAlgorithm, NodeLayoutSpec,
+    TreeFormat,
+};
 pub use prolly::gc::{
     BlobGcPlan, BlobGcReachability, BlobGcSweep, GcPlan, GcReachability, GcSweep,
 };
@@ -326,6 +332,7 @@ pub use prolly::manifest::{
 };
 pub use prolly::node::{Node, NodeBuilder};
 pub use prolly::parallel::{DefaultParallelRebalancer, ParallelConfig, ParallelRebalancer};
+pub use prolly::patch::{LogicalPatch, StructuralEdit, StructuralPatch};
 pub use prolly::policy::{
     MergePolicyFn, MergePolicyRegistry, MergePolicyRule, MergePolicyRuleLabel,
 };
@@ -429,6 +436,7 @@ pub use prolly::versioned_map::{
     VersionedMapEditor, VersionedMapUpdate, VersionedMapsTransaction,
     DEFAULT_VERSIONED_MAP_RETRIES, VERSIONED_MAP_ROOT_PREFIX,
 };
+pub use prolly::write_session::{PendingValue, Savepoint, WriteSession};
 #[cfg(feature = "async-store")]
 pub use prolly::AsyncProlly;
 

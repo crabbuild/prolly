@@ -44,6 +44,7 @@ impl RootCondition {
 
 /// A named-root write staged by a transaction.
 #[derive(Clone, Debug, PartialEq)]
+#[allow(clippy::large_enum_variant)]
 pub enum RootWrite {
     /// Insert or replace a named root manifest.
     Put {

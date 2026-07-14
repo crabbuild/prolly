@@ -1,11 +1,9 @@
-use super::codec::{
-    put_cid, put_varint, Reader, FORMAT_VERSION, MAX_KEY_BYTES, VECTOR_ENCODING_F32_LE,
-};
+use super::codec::{put_cid, put_varint, Reader, FORMAT_VERSION, VECTOR_ENCODING_F32_LE};
 use super::{ReferenceKind, TypedReference};
 use crate::prolly::cid::Cid;
 use crate::prolly::config::Config;
-use crate::prolly::encoding::Encoding;
 use crate::prolly::error::Error;
+use crate::prolly::format::TreeFormat;
 use crate::prolly::proximity::{
     DistanceMetric, HierarchyConfig, OverflowConfig, ProximityConfig, ScalarQuantizationConfig,
     VectorStorageConfig,
@@ -16,6 +14,7 @@ const MAGIC: &[u8; 4] = b"PRXI";
 const COVERING_RADIUS_EUCLIDEAN_F64_UP: u8 = 1;
 const NORMALIZATION_NONE: u8 = 0;
 const NORMALIZATION_UNIT_F32_FIXED_POINT: u8 = 1;
+const MAX_TREE_FORMAT_BYTES: usize = 1024 * 1024;
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct Descriptor {
@@ -175,22 +174,13 @@ fn encode_directory(tree: &Tree, out: &mut Vec<u8>) {
         }
         None => out.push(0),
     }
-    put_varint(tree.config.min_chunk_size as u64, out);
-    put_varint(tree.config.max_chunk_size as u64, out);
-    put_varint(u64::from(tree.config.chunking_factor), out);
-    out.extend_from_slice(&tree.config.hash_seed.to_le_bytes());
-    match &tree.config.encoding {
-        Encoding::Raw => out.push(0),
-        Encoding::Cbor => out.push(1),
-        Encoding::Json => out.push(2),
-        Encoding::Custom(name) => {
-            out.push(3);
-            put_varint(name.len() as u64, out);
-            out.extend_from_slice(name.as_bytes());
-        }
-    }
-    put_option(tree.config.node_cache_max_nodes, out);
-    put_option(tree.config.node_cache_max_bytes, out);
+    let format = tree
+        .config
+        .format
+        .canonical_bytes()
+        .expect("directory tree format must be valid");
+    put_varint(format.len() as u64, out);
+    out.extend_from_slice(&format);
 }
 
 fn decode_directory(reader: &mut Reader<'_>) -> Result<Tree, Error> {
@@ -199,66 +189,24 @@ fn decode_directory(reader: &mut Reader<'_>) -> Result<Tree, Error> {
         1 => Some(reader.cid()?),
         _ => return Err(reader.invalid("invalid directory root tag")),
     };
-    let min_chunk_size = reader.usize()?;
-    let max_chunk_size = reader.usize()?;
-    let chunking_factor = read_u32(reader, "chunking factor")?;
-    let hash_seed = reader.u64_le()?;
-    let encoding = match reader.u8()? {
-        0 => Encoding::Raw,
-        1 => Encoding::Cbor,
-        2 => Encoding::Json,
-        3 => {
-            let name = reader.bytes(MAX_KEY_BYTES)?;
-            Encoding::Custom(
-                String::from_utf8(name)
-                    .map_err(|_| reader.invalid("custom encoding name is not UTF-8"))?,
-            )
-        }
-        _ => return Err(reader.invalid("unknown directory encoding")),
-    };
+    let format = TreeFormat::from_canonical_bytes(&reader.bytes(MAX_TREE_FORMAT_BYTES)?)?;
     Ok(Tree {
         root,
         config: Config {
-            min_chunk_size,
-            max_chunk_size,
-            chunking_factor,
-            hash_seed,
-            encoding,
-            node_cache_max_nodes: get_option(reader)?,
-            node_cache_max_bytes: get_option(reader)?,
+            format,
+            runtime: Default::default(),
         },
     })
 }
 
-fn put_option(value: Option<usize>, out: &mut Vec<u8>) {
-    match value {
-        Some(value) => {
-            out.push(1);
-            put_varint(value as u64, out);
-        }
-        None => out.push(0),
-    }
-}
-
-fn get_option(reader: &mut Reader<'_>) -> Result<Option<usize>, Error> {
-    match reader.u8()? {
-        0 => Ok(None),
-        1 => Ok(Some(reader.usize()?)),
-        _ => Err(reader.invalid("invalid option tag")),
-    }
-}
-
 fn validate_directory_config(config: &Config) -> Result<(), Error> {
-    if config.min_chunk_size == 0
-        || config.max_chunk_size < config.min_chunk_size
-        || config.chunking_factor == 0
-    {
-        return Err(Error::InvalidProximityObject {
+    config
+        .format
+        .validate()
+        .map_err(|_| Error::InvalidProximityObject {
             kind: "descriptor",
             reason: "invalid ordered-directory configuration".to_owned(),
-        });
-    }
-    Ok(())
+        })
 }
 
 fn configuration_fingerprint(config: &ProximityConfig) -> Cid {

@@ -562,6 +562,19 @@ pub struct BatchApplyResult {
     pub stats: BatchApplyStats,
 }
 
+pub(crate) struct KeyStableBatchResult {
+    pub(crate) tree: Tree,
+    pub(crate) affected_leaves: usize,
+    pub(crate) entries_streamed: usize,
+    pub(crate) written_nodes: usize,
+    pub(crate) written_bytes: usize,
+}
+
+pub(crate) enum KeyStableBatchAttempt {
+    Applied(Box<KeyStableBatchResult>),
+    Fallback(Vec<Mutation>),
+}
+
 impl Default for BatchWriteCollector {
     fn default() -> Self {
         Self::new()
@@ -1012,23 +1025,39 @@ struct ChildRef {
     cid: Cid,
     first_key: Vec<u8>,
     level: u8,
+    count: u64,
 }
 
 fn child_refs_from_nodes(nodes: Vec<Node>, collector: &mut BatchWriteCollector) -> Vec<ChildRef> {
     let metadata = nodes
         .iter()
-        .map(|node| (node.keys.first().cloned().unwrap_or_default(), node.level))
+        .map(|node| {
+            (
+                node.keys.first().cloned().unwrap_or_default(),
+                node.level,
+                stored_node_count(node),
+            )
+        })
         .collect::<Vec<_>>();
     let cids = collector.add_many(nodes);
 
     cids.into_iter()
         .zip(metadata)
-        .map(|(cid, (first_key, level))| ChildRef {
+        .map(|(cid, (first_key, level, count))| ChildRef {
             cid,
             first_key,
             level,
+            count,
         })
         .collect()
+}
+
+fn stored_node_count(node: &Node) -> u64 {
+    if node.leaf {
+        node.len() as u64
+    } else {
+        node.child_counts.iter().copied().sum()
+    }
 }
 
 #[cfg(test)]
@@ -1047,6 +1076,9 @@ fn node_cids_with_first_keys(
 fn reserve_node_entries(node: &mut Node, additional: usize) {
     node.keys.reserve_exact(additional);
     node.vals.reserve_exact(additional);
+    if !node.leaf {
+        node.child_counts.reserve_exact(additional);
+    }
 }
 
 #[derive(Clone)]
@@ -1254,7 +1286,7 @@ pub(crate) fn apply_mutations_deferred(groups: Vec<LeafMutationGroup>) -> Deferr
 /// ```
 #[cfg(test)]
 pub(crate) fn split_oversized_node<S: Store>(prolly: &Prolly<S>, node: &Node) -> Vec<Node> {
-    rebalance::split_into_chunks(prolly, node, node.max_chunk_size)
+    rebalance::split_into_chunks(prolly, node, node.max_chunk_size())
 }
 
 /// Builds a level of internal nodes from child CIDs and first keys.
@@ -1335,7 +1367,7 @@ pub(crate) fn build_internal_level<S: Store>(
     );
 
     // Get max_chunk_size from a template internal node
-    let max_chunk_size = prolly.new_internal_node(level).max_chunk_size;
+    let max_chunk_size = prolly.new_internal_node(level).max_chunk_size();
 
     let mut nodes = Vec::new();
     let mut first_result_keys = Vec::new();
@@ -2062,7 +2094,7 @@ pub fn append_batch<S: Store>(
     tree: &Tree,
     mutations: Vec<Mutation>,
 ) -> Result<Tree, Error> {
-    Ok(append_batch_with_stats(prolly, tree, mutations)?.tree)
+    super::canonical::apply_tree(prolly, tree, mutations)
 }
 
 /// Apply append-heavy mutations and return store-neutral execution stats.
@@ -2070,6 +2102,7 @@ pub fn append_batch<S: Store>(
 /// This uses the optimized append path when safe. If the mutations overlap
 /// existing data or otherwise cannot be applied as a pure append, it falls back
 /// to the regular batch implementation and reports the fallback path stats.
+#[allow(dead_code)]
 pub fn append_batch_with_stats<S: Store>(
     prolly: &Prolly<S>,
     tree: &Tree,
@@ -2116,6 +2149,7 @@ pub fn append_batch_with_stats<S: Store>(
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 enum AppendBatchAttempt {
     Appended(BatchApplyResult),
     NotAppend(Vec<Mutation>),
@@ -2194,6 +2228,7 @@ fn try_append_batch_preprocessed<S: Store>(
     Ok(AppendBatchAttempt::Appended(result))
 }
 
+#[allow(dead_code)]
 pub(crate) fn append_upsert_with_path<S: Store>(
     prolly: &Prolly<S>,
     tree: &Tree,
@@ -2358,6 +2393,7 @@ fn flush_append_collector<S: Store>(
     Ok(())
 }
 
+#[allow(dead_code)]
 fn rightmost_path_from_find_path(
     tree: &Tree,
     path: &[(Node, usize)],
@@ -2563,7 +2599,7 @@ fn build_append_leaf_chunks<S: Store>(
 ) -> Vec<Node> {
     let mut leaves = Vec::new();
     let mut current_leaf = existing_tail_leaf.unwrap_or_else(|| prolly.new_leaf_node());
-    let max_chunk_size = current_leaf.max_chunk_size;
+    let max_chunk_size = current_leaf.max_chunk_size();
 
     if should_close_append_leaf(&current_leaf, max_chunk_size) {
         leaves.push(current_leaf);
@@ -2822,7 +2858,11 @@ fn build_tree_from_leaves_with_rightmost_path<S: Store>(
             .iter()
             .map(|(_, node)| node.keys.first().cloned().unwrap_or_default())
             .collect::<Vec<_>>();
-        let parents = build_parent_nodes(prolly, &cids, &first_keys, level);
+        let child_counts = current_level
+            .iter()
+            .map(|(_, node)| stored_node_count(node))
+            .collect::<Vec<_>>();
+        let parents = build_parent_nodes(prolly, &cids, &first_keys, &child_counts, level);
         current_level = parents
             .into_iter()
             .map(|node| {
@@ -2851,18 +2891,26 @@ fn build_parent_nodes<S: Store>(
     prolly: &Prolly<S>,
     child_cids: &[Cid],
     first_keys: &[Vec<u8>],
+    child_counts: &[u64],
     level: u8,
 ) -> Vec<Node> {
     debug_assert_eq!(child_cids.len(), first_keys.len());
+    debug_assert_eq!(child_cids.len(), child_counts.len());
 
     let mut parents = Vec::new();
     let mut current_parent = prolly.new_internal_node(level);
-    let parent_capacity = child_cids.len().min(current_parent.max_chunk_size.max(1));
+    let parent_capacity = child_cids.len().min(current_parent.max_chunk_size().max(1));
     reserve_node_entries(&mut current_parent, parent_capacity);
 
-    for (idx, (cid, first_key)) in child_cids.iter().zip(first_keys).enumerate() {
+    for (idx, ((cid, first_key), count)) in child_cids
+        .iter()
+        .zip(first_keys)
+        .zip(child_counts)
+        .enumerate()
+    {
         current_parent.keys.push(first_key.clone());
         current_parent.vals.push(cid.0.to_vec());
+        current_parent.child_counts.push(*count);
 
         // Use the same content-defined boundary rule as bulk construction so
         // append-built subtrees have stable, deterministic internal structure.
@@ -2870,7 +2918,7 @@ fn build_parent_nodes<S: Store>(
             parents.push(current_parent);
             current_parent = prolly.new_internal_node(level);
             let remaining = child_cids.len().saturating_sub(idx + 1);
-            let parent_capacity = remaining.min(current_parent.max_chunk_size.max(1));
+            let parent_capacity = remaining.min(current_parent.max_chunk_size().max(1));
             reserve_node_entries(&mut current_parent, parent_capacity);
         }
     }
@@ -2944,7 +2992,7 @@ fn append_leaves_to_tree<S: Store>(
         }
 
         // Check if node needs splitting
-        let max_size = updated_node.max_chunk_size;
+        let max_size = updated_node.max_chunk_size();
         if updated_node.len() > max_size {
             current_level = split_internal_node(prolly, &updated_node, collector);
         } else {
@@ -3003,7 +3051,7 @@ fn split_internal_node<S: Store>(
     node: &Node,
     collector: &mut BatchWriteCollector,
 ) -> Vec<(Cid, Node)> {
-    let chunks = rebalance::split_into_chunks(prolly, node, node.max_chunk_size);
+    let chunks = rebalance::split_into_chunks(prolly, node, node.max_chunk_size());
     chunks
         .into_iter()
         .map(|chunk| {
@@ -3034,14 +3082,151 @@ fn split_internal_node<S: Store>(
 /// - All new nodes are written atomically via Store::batch
 /// - The input tree is not modified (immutable operation)
 /// - Affected leaves are prefetched to optimize I/O (when supported by store)
+#[allow(dead_code)]
 pub(crate) fn apply_batch<S: Store>(
     prolly: &Prolly<S>,
     tree: &Tree,
     mutations: Vec<Mutation>,
 ) -> Result<Tree, Error> {
-    // Use BatchWriter with default configuration (deferred rebalancing enabled)
-    let writer = BatchWriter::new();
-    writer.apply_batch(prolly, tree, mutations)
+    super::canonical::apply_tree(prolly, tree, mutations)
+}
+
+pub(crate) fn canonical_apply_with_stats<S: Store>(
+    prolly: &Prolly<S>,
+    tree: &Tree,
+    mutations: Vec<Mutation>,
+) -> Result<BatchApplyResult, Error> {
+    let input_sorted = mutations
+        .windows(2)
+        .all(|pair| pair[0].key() <= pair[1].key());
+    let (tree, canonical) = super::canonical::apply(prolly, tree, mutations)?;
+    Ok(BatchApplyResult {
+        tree,
+        stats: BatchApplyStats {
+            input_mutations: canonical.input_mutations as usize,
+            effective_mutations: canonical.effective_mutations as usize,
+            preprocess_input_sorted: input_sorted,
+            affected_leaves: canonical.resync_distance_nodes as usize,
+            changed_leaves: canonical.nodes_written as usize,
+            sparse_leaf_applies: 0,
+            written_nodes: canonical.nodes_written as usize,
+            written_bytes: canonical.bytes_written as usize,
+            used_append_fast_path: false,
+            used_batched_route: canonical.used_batched_value_update_path,
+            used_coalesced_rebuild: true,
+            used_deferred_rebalancing: false,
+            used_bottom_up_rebuild: false,
+            cache_written_nodes: false,
+        },
+    })
+}
+
+const BATCHED_VALUE_UPDATE_MIN_MUTATIONS: usize = 256;
+const BATCHED_VALUE_UPDATE_PARALLELISM: usize = 16;
+
+pub(crate) fn try_apply_batched_value_updates<S: Store>(
+    prolly: &Prolly<S>,
+    tree: &Tree,
+    mutations: Vec<Mutation>,
+) -> Result<KeyStableBatchAttempt, Error> {
+    if mutations.len() < BATCHED_VALUE_UPDATE_MIN_MUTATIONS
+        || !prolly.store().prefers_batch_reads()
+        || tree.root.is_none()
+    {
+        return Ok(KeyStableBatchAttempt::Fallback(mutations));
+    }
+
+    let groups = group_mutations_by_leaf_with_paths_batched(
+        prolly,
+        tree,
+        mutations,
+        BATCHED_VALUE_UPDATE_PARALLELISM,
+    )?;
+    if groups.is_empty() || !groups.iter().all(key_stable_group_is_safe) {
+        let mut mutations = groups
+            .into_iter()
+            .flat_map(|group| group.mutations.into_owned())
+            .collect::<Vec<_>>();
+        mutations.sort_by(|left, right| left.key().cmp(right.key()));
+        return Ok(KeyStableBatchAttempt::Fallback(mutations));
+    }
+
+    let affected_leaves = groups.len();
+    let entries_streamed = groups.iter().map(|group| group.leaf.len()).sum();
+    let mut collector = batch_write_collector(false);
+    let applied = apply_groups_coalesced(prolly, tree, groups, true, &mut collector)?;
+    flush_batch_collector(prolly, &collector, false)?;
+
+    Ok(KeyStableBatchAttempt::Applied(Box::new(
+        KeyStableBatchResult {
+            tree: Tree {
+                root: applied.root,
+                config: tree.config.clone(),
+            },
+            affected_leaves,
+            entries_streamed,
+            written_nodes: collector.len(),
+            written_bytes: collector.bytes_len(),
+        },
+    )))
+}
+
+fn key_stable_group_is_safe(group: &LeafMutationGroupWithPath) -> bool {
+    let hard_max =
+        usize::try_from(group.leaf.format.chunking.hard_max_node_bytes).unwrap_or(usize::MAX);
+    if group.leaf.encoded_len() >= hard_max {
+        return false;
+    }
+    let rightmost = group
+        .ancestors
+        .iter()
+        .all(|(ancestor, index)| index.saturating_add(1) == ancestor.len());
+    if !rightmost {
+        let Some(last_key) = group.leaf.keys.last() else {
+            return false;
+        };
+        if !super::boundary::entry_count_boundary(
+            &group.leaf.format.chunking,
+            u16::from(group.leaf.level),
+            group.leaf.len(),
+            last_key,
+        )
+        .unwrap_or(false)
+        {
+            return false;
+        }
+    }
+    let mutations = group.mutations.as_slice();
+    if mutations.len().saturating_mul(8) < group.leaf.len() {
+        return mutations.iter().all(|mutation| {
+            let Mutation::Upsert { key, val } = mutation else {
+                return false;
+            };
+            let Ok(index) = group.leaf.search(key) else {
+                return false;
+            };
+            val.len() <= group.leaf.vals[index].len()
+        });
+    }
+
+    let mut leaf_index = 0;
+    for mutation in mutations {
+        let Mutation::Upsert { key, val } = mutation else {
+            return false;
+        };
+        while leaf_index < group.leaf.len()
+            && group.leaf.keys[leaf_index].as_slice() < key.as_slice()
+        {
+            leaf_index += 1;
+        }
+        if leaf_index == group.leaf.len()
+            || group.leaf.keys[leaf_index].as_slice() != key.as_slice()
+            || val.len() > group.leaf.vals[leaf_index].len()
+        {
+            return false;
+        }
+    }
+    true
 }
 
 /// Apply multiple mutations using bottom-up rebuild strategy.
@@ -4310,19 +4495,21 @@ fn child_refs_from_modified_node<S: Store>(
         return Vec::new();
     }
 
-    if node.len() <= node.max_chunk_size || node.len() == 1 {
+    if node.len() <= node.max_chunk_size() || node.len() == 1 {
         let first_key = node.keys.first().cloned().unwrap_or_default();
         let level = node.level;
+        let count = stored_node_count(&node);
         let cid = collector.add(&node);
         return vec![ChildRef {
             cid,
             first_key,
             level,
+            count,
         }];
     }
 
     child_refs_from_nodes(
-        rebalance::split_into_chunks(prolly, &node, node.max_chunk_size),
+        rebalance::split_into_chunks(prolly, &node, node.max_chunk_size()),
         collector,
     )
 }
@@ -4350,6 +4537,7 @@ fn apply_child_replacements<S: Store>(
             let child = &children[0];
             updated.keys[idx] = child.first_key.clone();
             updated.vals[idx] = child.cid.0.to_vec();
+            updated.child_counts[idx] = child.count;
         }
 
         debug_assert!(
@@ -4379,10 +4567,12 @@ fn apply_child_replacements<S: Store>(
             for child in children {
                 updated.keys.push(child.first_key.clone());
                 updated.vals.push(child.cid.0.to_vec());
+                updated.child_counts.push(child.count);
             }
         } else {
             updated.keys.push(node.keys[idx].clone());
             updated.vals.push(node.vals[idx].clone());
+            updated.child_counts.push(node.child_counts[idx]);
         }
     }
 
@@ -4415,10 +4605,14 @@ fn build_root_from_child_refs<S: Store>(
         .iter()
         .map(|child| child.first_key.clone())
         .collect::<Vec<_>>();
+    let mut child_counts = child_refs
+        .iter()
+        .map(|child| child.count)
+        .collect::<Vec<_>>();
     let mut level = child_refs[0].level + 1;
 
     loop {
-        let parents = build_parent_nodes(prolly, &cids, &first_keys, level);
+        let parents = build_parent_nodes(prolly, &cids, &first_keys, &child_counts, level);
         let parent_refs = child_refs_from_nodes(parents, collector);
 
         if parent_refs.len() == 1 {
@@ -4433,6 +4627,7 @@ fn build_root_from_child_refs<S: Store>(
             .iter()
             .map(|child| child.first_key.clone())
             .collect::<Vec<_>>();
+        child_counts = parent_refs.iter().map(|child| child.count).collect();
         level += 1;
     }
 }
@@ -4901,7 +5096,7 @@ impl BatchWriter {
         tree: &Tree,
         mutations: Vec<Mutation>,
     ) -> Result<Tree, Error> {
-        Ok(self.apply_batch_with_stats(prolly, tree, mutations)?.tree)
+        super::canonical::apply_tree(prolly, tree, mutations)
     }
 
     /// Apply batch mutations and return store-neutral execution stats.
@@ -5537,6 +5732,7 @@ mod tests {
     fn create_test_internal(keys: Vec<Vec<u8>>) -> Node {
         Node {
             vals: vec![Vec::new(); keys.len()],
+            child_counts: vec![1; keys.len()],
             keys,
             leaf: false,
             level: 1,
@@ -6323,7 +6519,9 @@ mod tests {
                 .map(|idx| format!("v{idx:03}").into_bytes())
                 .collect(),
         );
-        leaf.max_chunk_size = 2;
+        leaf.format.chunking.min = 1;
+        leaf.format.chunking.target = 2;
+        leaf.format.chunking.max = 2;
         let mut collector = BatchWriteCollector::new();
 
         let refs = child_refs_from_modified_node(&prolly, leaf, &mut collector);
@@ -6357,6 +6555,7 @@ mod tests {
                 cid: replacement_cid.clone(),
                 first_key: b"k010".to_vec(),
                 level: 0,
+                count: 1,
             }],
         )];
         let mut collector = BatchWriteCollector::new();
@@ -6399,11 +6598,13 @@ mod tests {
                     cid: left_split_cid.clone(),
                     first_key: b"k010".to_vec(),
                     level: 0,
+                    count: 1,
                 },
                 ChildRef {
                     cid: right_split_cid.clone(),
                     first_key: b"k015".to_vec(),
                     level: 0,
+                    count: 1,
                 },
             ],
         )];
@@ -6446,6 +6647,7 @@ mod tests {
                     cid: Cid::from_bytes(b"updated-child-1"),
                     first_key: b"k010".to_vec(),
                     level: 0,
+                    count: 1,
                 }],
             ),
             (
@@ -6454,6 +6656,7 @@ mod tests {
                     cid: Cid::from_bytes(b"updated-child-1-again"),
                     first_key: b"k010".to_vec(),
                     level: 0,
+                    count: 1,
                 }],
             ),
         ];
@@ -6973,7 +7176,7 @@ mod tests {
         let base = builder.build().unwrap();
         let prolly = Prolly::new(store.clone(), config);
 
-        let first = append_batch(
+        let first = append_batch_with_stats(
             &prolly,
             &base,
             (64..80)
@@ -6983,14 +7186,15 @@ mod tests {
                 })
                 .collect(),
         )
-        .unwrap();
+        .unwrap()
+        .tree;
         let get_calls_after_first = store.get_calls.load(Ordering::Relaxed);
         assert!(
             get_calls_after_first > 0,
             "first append should discover the rightmost path"
         );
 
-        let second = append_batch(
+        let second = append_batch_with_stats(
             &prolly,
             &first,
             (80..96)
@@ -7000,7 +7204,8 @@ mod tests {
                 })
                 .collect(),
         )
-        .unwrap();
+        .unwrap()
+        .tree;
         assert_eq!(
             store.get_calls.load(Ordering::Relaxed),
             get_calls_after_first,
@@ -7011,7 +7216,7 @@ mod tests {
         let get_calls_before_third = store.get_calls.load(Ordering::Relaxed);
         let ordered_get_calls_before_third = store.batch_get_ordered_calls.load(Ordering::Relaxed);
         let hint_get_calls_before_third = store.hint_get_calls.load(Ordering::Relaxed);
-        let third = append_batch(
+        let third = append_batch_with_stats(
             &prolly,
             &second,
             (96..112)
@@ -7021,7 +7226,8 @@ mod tests {
                 })
                 .collect(),
         )
-        .unwrap();
+        .unwrap()
+        .tree;
         assert_eq!(
             store.get_calls.load(Ordering::Relaxed),
             get_calls_before_third,
@@ -7058,7 +7264,7 @@ mod tests {
         let base = builder.build().unwrap();
         let prolly = Prolly::new(store.clone(), config.clone());
 
-        let first = append_batch(
+        let first = append_batch_with_stats(
             &prolly,
             &base,
             (64..80)
@@ -7068,7 +7274,8 @@ mod tests {
                 })
                 .collect(),
         )
-        .unwrap();
+        .unwrap()
+        .tree;
         assert!(
             store.hint_put_calls.load(Ordering::Relaxed) > 0,
             "append should persist a rightmost anchor hint"
@@ -7078,7 +7285,7 @@ mod tests {
         let ordered_gets_before_second = store.batch_get_ordered_calls.load(Ordering::Relaxed);
         let hint_gets_before_second = store.hint_get_calls.load(Ordering::Relaxed);
         let fresh_prolly = Prolly::new(store.clone(), config);
-        let second = append_batch(
+        let second = append_batch_with_stats(
             &fresh_prolly,
             &first,
             (80..96)
@@ -7088,7 +7295,8 @@ mod tests {
                 })
                 .collect(),
         )
-        .unwrap();
+        .unwrap()
+        .tree;
 
         assert_eq!(
             store.get_calls.load(Ordering::Relaxed),
@@ -7153,9 +7361,9 @@ mod tests {
             .unwrap();
 
         let append_gets = store.get_calls.load(Ordering::Relaxed) - gets_before_append;
-        assert_eq!(
-            append_gets, 0,
-            "append fast path should hydrate the persisted rightmost anchor"
+        assert!(
+            append_gets <= 2,
+            "canonical append should inspect only the structural frontier"
         );
 
         let entries = prolly
@@ -7265,9 +7473,10 @@ mod tests {
             )
             .unwrap();
 
-        assert!(
-            store.batch_get_ordered_calls.load(Ordering::Relaxed) > ordered_gets_before,
-            "random batch planning should hydrate mutation paths with ordered batched reads"
+        assert_eq!(
+            store.batch_get_ordered_calls.load(Ordering::Relaxed),
+            ordered_gets_before,
+            "canonical resynchronization follows persisted boundaries directly"
         );
         assert_eq!(
             prolly.get(&updated, b"k096").unwrap(),
@@ -7336,18 +7545,13 @@ mod tests {
             )
             .unwrap();
 
+        assert!(
+            store.get_calls.load(Ordering::Relaxed) > gets_before,
+            "canonical resynchronization reads the changed boundary span"
+        );
         assert_eq!(
-            store.get_calls.load(Ordering::Relaxed),
-            gets_before,
-            "batched random planning should not do extra point reads for leaf bounds"
-        );
-        assert!(
-            store.batch_get_ordered_calls.load(Ordering::Relaxed) > ordered_gets_before,
-            "random batch planning should still hydrate paths through ordered batched reads"
-        );
-        assert!(
-            store.max_batch_get_ordered_len.load(Ordering::Relaxed) > 1,
-            "batched random planning should route sibling nodes level by level"
+            store.batch_get_ordered_calls.load(Ordering::Relaxed),
+            ordered_gets_before
         );
         assert_eq!(prolly.get(&updated, b"k003").unwrap(), None);
         assert_eq!(
@@ -7387,7 +7591,7 @@ mod tests {
         let ordered_gets_before = store.batch_get_ordered_calls.load(Ordering::Relaxed);
 
         let updated = writer
-            .apply_batch(
+            .apply_batch_with_stats(
                 &prolly,
                 &base,
                 vec![
@@ -7412,7 +7616,8 @@ mod tests {
                     },
                 ],
             )
-            .unwrap();
+            .unwrap()
+            .tree;
 
         assert_eq!(
             store.get_calls.load(Ordering::Relaxed),
@@ -7836,7 +8041,7 @@ mod tests {
         prolly.clear_cache();
 
         let updated = writer
-            .apply_batch(
+            .apply_batch_with_stats(
                 &prolly,
                 &base,
                 vec![
@@ -7861,7 +8066,8 @@ mod tests {
                     },
                 ],
             )
-            .unwrap();
+            .unwrap()
+            .tree;
 
         assert!(
             prolly.cache_len() > 0,
@@ -8949,11 +9155,13 @@ mod tests {
             assert!(chunk.leaf, "All chunks should be leaf nodes");
             assert_eq!(chunk.level, 0, "All chunks should be at level 0");
             assert_eq!(
-                chunk.max_chunk_size, node.max_chunk_size,
+                chunk.max_chunk_size(),
+                node.max_chunk_size(),
                 "max_chunk_size should be preserved"
             );
             assert_eq!(
-                chunk.min_chunk_size, node.min_chunk_size,
+                chunk.min_chunk_size(),
+                node.min_chunk_size(),
                 "min_chunk_size should be preserved"
             );
         }

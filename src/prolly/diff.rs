@@ -3261,9 +3261,27 @@ fn try_structural_merge_traced<S: Store>(
     collector.cache_nodes(prolly)?;
 
     Ok(Some(Tree {
-        root: Some(root),
+        root: Some(root.cid),
         config: base.config.clone(),
     }))
+}
+
+struct StructuralMergeResult {
+    cid: Cid,
+    count: Option<u64>,
+}
+
+impl StructuralMergeResult {
+    fn reused(cid: Cid) -> Self {
+        Self { cid, count: None }
+    }
+
+    fn rewritten(cid: Cid, count: u64) -> Self {
+        Self {
+            cid,
+            count: Some(count),
+        }
+    }
 }
 
 fn try_structural_merge_cids<S: Store>(
@@ -3274,18 +3292,18 @@ fn try_structural_merge_cids<S: Store>(
     resolver: Option<&dyn Fn(&Conflict) -> Resolution>,
     collector: &mut BatchWriteCollector,
     recorder: &mut MergeTraceRecorder<'_>,
-) -> Result<Option<Cid>, Error> {
+) -> Result<Option<StructuralMergeResult>, Error> {
     if left_cid == right_cid {
         recorder.record_reuse(left_cid, MergeReuseReason::BranchesEqual);
-        return Ok(Some(left_cid.clone()));
+        return Ok(Some(StructuralMergeResult::reused(left_cid.clone())));
     }
     if left_cid == base_cid {
         recorder.record_reuse(right_cid, MergeReuseReason::LeftUnchanged);
-        return Ok(Some(right_cid.clone()));
+        return Ok(Some(StructuralMergeResult::reused(right_cid.clone())));
     }
     if right_cid == base_cid {
         recorder.record_reuse(left_cid, MergeReuseReason::RightUnchanged);
-        return Ok(Some(left_cid.clone()));
+        return Ok(Some(StructuralMergeResult::reused(left_cid.clone())));
     }
 
     let nodes =
@@ -3329,7 +3347,7 @@ fn try_structural_merge_internal<S: Store>(
     resolver: Option<&dyn Fn(&Conflict) -> Resolution>,
     collector: &mut BatchWriteCollector,
     recorder: &mut MergeTraceRecorder<'_>,
-) -> Result<Option<Cid>, Error> {
+) -> Result<Option<StructuralMergeResult>, Error> {
     ensure_node_value_count(base)?;
     ensure_node_value_count(left)?;
     ensure_node_value_count(right)?;
@@ -3339,6 +3357,7 @@ fn try_structural_merge_internal<S: Store>(
     }
 
     let mut merged_vals = Vec::with_capacity(base.len());
+    let mut merged_counts = Vec::with_capacity(base.len());
     let mut differs_from_base = false;
     prefetch_structural_merge_frontier(prolly, base, left, right);
 
@@ -3360,31 +3379,55 @@ fn try_structural_merge_internal<S: Store>(
             return Ok(None);
         };
 
-        if merged_child != base_child {
+        if merged_child.cid != base_child {
             differs_from_base = true;
         }
-        merged_vals.push(merged_child.0.to_vec());
+        let merged_count = if merged_child.cid == base_child {
+            structural_child_count(prolly, base, idx, &base_child)?
+        } else if merged_child.cid == left_child {
+            structural_child_count(prolly, left, idx, &left_child)?
+        } else if merged_child.cid == right_child {
+            structural_child_count(prolly, right, idx, &right_child)?
+        } else {
+            merged_child.count.ok_or(Error::InvalidNode)?
+        };
+        merged_vals.push(merged_child.cid.0.to_vec());
+        merged_counts.push(merged_count);
     }
 
     if !differs_from_base {
         recorder.record_reuse(base_cid, MergeReuseReason::UnchangedAfterMerge);
-        return Ok(Some(base_cid.clone()));
+        return Ok(Some(StructuralMergeResult::reused(base_cid.clone())));
     }
     if merged_vals == left.vals {
         recorder.record_reuse(left_cid, MergeReuseReason::MatchesLeft);
-        return Ok(Some(left_cid.clone()));
+        return Ok(Some(StructuralMergeResult::reused(left_cid.clone())));
     }
     if merged_vals == right.vals {
         recorder.record_reuse(right_cid, MergeReuseReason::MatchesRight);
-        return Ok(Some(right_cid.clone()));
+        return Ok(Some(StructuralMergeResult::reused(right_cid.clone())));
     }
 
     let mut merged = prolly.new_node_like(base);
     merged.keys = base.keys.clone();
     merged.vals = merged_vals;
+    merged.child_counts = merged_counts;
+    let count = merged.child_counts.iter().copied().sum();
     let cid = collector.add(&merged);
     recorder.record_rewrite(&cid, &merged);
-    Ok(Some(cid))
+    Ok(Some(StructuralMergeResult::rewritten(cid, count)))
+}
+
+fn structural_child_count<S: Store>(
+    prolly: &Prolly<S>,
+    node: &Node,
+    index: usize,
+    child_cid: &Cid,
+) -> Result<u64, Error> {
+    match node.child_counts.get(index).copied() {
+        Some(count) if count > 0 => Ok(count),
+        _ => prolly.subtree_count(child_cid),
+    }
 }
 
 fn prefetch_structural_merge_frontier<S: Store>(
@@ -3434,25 +3477,29 @@ fn try_structural_merge_leaf<S: Store>(
     resolver: Option<&dyn Fn(&Conflict) -> Resolution>,
     collector: &mut BatchWriteCollector,
     recorder: &mut MergeTraceRecorder<'_>,
-) -> Result<Option<Cid>, Error> {
+) -> Result<Option<StructuralMergeResult>, Error> {
+    use std::borrow::Cow;
+
     ensure_node_value_count(base)?;
     ensure_node_value_count(left)?;
     ensure_node_value_count(right)?;
 
-    let mut merged_keys = Vec::with_capacity(base.len());
-    let mut merged_vals = Vec::with_capacity(base.len());
+    let mut selected_vals = Vec::with_capacity(base.len());
     let mut deleted_any = false;
+    let mut matches_base = true;
+    let mut matches_left = true;
+    let mut matches_right = true;
 
     for idx in 0..base.len() {
         let base_val = node_value(base, idx)?;
         let left_val = node_value(left, idx)?;
         let right_val = node_value(right, idx)?;
-        let merged_val = if left_val == right_val {
-            Some(left_val.clone())
+        let selected: Option<Cow<'_, [u8]>> = if left_val == right_val {
+            Some(Cow::Borrowed(left_val.as_slice()))
         } else if left_val == base_val {
-            Some(right_val.clone())
+            Some(Cow::Borrowed(right_val.as_slice()))
         } else if right_val == base_val {
-            Some(left_val.clone())
+            Some(Cow::Borrowed(left_val.as_slice()))
         } else {
             let conflict = Conflict {
                 key: base.keys[idx].clone(),
@@ -3464,7 +3511,7 @@ fn try_structural_merge_leaf<S: Store>(
                 let resolution = resolve(&conflict);
                 recorder.record_resolver(MergeTraceStage::Structural, &conflict, &resolution);
                 match resolution {
-                    Resolution::Value(value) => Some(value),
+                    Resolution::Value(value) => Some(Cow::Owned(value)),
                     Resolution::Delete => {
                         deleted_any = true;
                         None
@@ -3476,48 +3523,74 @@ fn try_structural_merge_leaf<S: Store>(
             }
         };
 
-        if let Some(merged_val) = merged_val {
-            merged_keys.push(base.keys[idx].clone());
-            merged_vals.push(merged_val);
-        }
+        let selected_bytes = selected.as_deref();
+        matches_base &= selected_bytes == Some(base_val.as_slice());
+        matches_left &= selected_bytes == Some(left_val.as_slice());
+        matches_right &= selected_bytes == Some(right_val.as_slice());
+        selected_vals.push(selected);
+    }
+
+    if !deleted_any && matches_base {
+        recorder.record_reuse(base_cid, MergeReuseReason::UnchangedAfterMerge);
+        return Ok(Some(StructuralMergeResult::reused(base_cid.clone())));
+    }
+    if !deleted_any && matches_left {
+        recorder.record_reuse(left_cid, MergeReuseReason::MatchesLeft);
+        return Ok(Some(StructuralMergeResult::reused(left_cid.clone())));
+    }
+    if !deleted_any && matches_right {
+        recorder.record_reuse(right_cid, MergeReuseReason::MatchesRight);
+        return Ok(Some(StructuralMergeResult::reused(right_cid.clone())));
     }
 
     if deleted_any {
-        if merged_keys.is_empty()
-            || merged_keys.len() < base.min_chunk_size
-            || merged_keys.first() != base.keys.first()
+        let retained = selected_vals.iter().filter(|value| value.is_some()).count();
+        if retained == 0
+            || retained < base.min_chunk_size()
+            || selected_vals
+                .first()
+                .and_then(|value| value.as_ref())
+                .is_none()
         {
             recorder.record_fallback(MergeFallbackReason::DeleteResolution);
             return Ok(None);
         }
 
         let mut merged = prolly.new_node_like(base);
-        merged.keys = merged_keys;
-        merged.vals = merged_vals;
+        merged.keys = base
+            .keys
+            .iter()
+            .zip(&selected_vals)
+            .filter_map(|(key, value)| value.as_ref().map(|_| key.clone()))
+            .collect();
+        merged.vals = selected_vals
+            .into_iter()
+            .filter_map(|value| value.map(Cow::into_owned))
+            .collect();
         let cid = collector.add(&merged);
         recorder.record_rewrite(&cid, &merged);
-        return Ok(Some(cid));
-    }
-
-    if merged_vals == base.vals {
-        recorder.record_reuse(base_cid, MergeReuseReason::UnchangedAfterMerge);
-        return Ok(Some(base_cid.clone()));
-    }
-    if merged_vals == left.vals {
-        recorder.record_reuse(left_cid, MergeReuseReason::MatchesLeft);
-        return Ok(Some(left_cid.clone()));
-    }
-    if merged_vals == right.vals {
-        recorder.record_reuse(right_cid, MergeReuseReason::MatchesRight);
-        return Ok(Some(right_cid.clone()));
+        return Ok(Some(StructuralMergeResult::rewritten(
+            cid,
+            merged.keys.len() as u64,
+        )));
     }
 
     let mut merged = prolly.new_node_like(base);
     merged.keys = base.keys.clone();
-    merged.vals = merged_vals;
+    merged.vals = selected_vals
+        .into_iter()
+        .map(|value| {
+            value
+                .expect("non-delete structural merge value")
+                .into_owned()
+        })
+        .collect();
     let cid = collector.add(&merged);
     recorder.record_rewrite(&cid, &merged);
-    Ok(Some(cid))
+    Ok(Some(StructuralMergeResult::rewritten(
+        cid,
+        merged.keys.len() as u64,
+    )))
 }
 
 pub(crate) fn try_append_only_diff<S: Store>(
@@ -4923,6 +4996,7 @@ mod tests {
             base_left_leaf_cid.0.to_vec(),
             base_right_leaf_cid.0.to_vec(),
         ];
+        base_root.child_counts = vec![1, 1];
         let base_root_cid = prolly.save(&base_root).unwrap();
 
         let mut left_leaf = prolly.new_leaf_node();
@@ -4933,6 +5007,7 @@ mod tests {
         let mut left_root = prolly.new_internal_node(1);
         left_root.keys = base_root.keys.clone();
         left_root.vals = vec![left_leaf_cid.0.to_vec(), base_right_leaf_cid.0.to_vec()];
+        left_root.child_counts = vec![1, 1];
         let left_root_cid = prolly.save(&left_root).unwrap();
 
         let mut right_leaf = prolly.new_leaf_node();
@@ -4943,6 +5018,7 @@ mod tests {
         let mut right_root = prolly.new_internal_node(1);
         right_root.keys = base_root.keys.clone();
         right_root.vals = vec![base_left_leaf_cid.0.to_vec(), right_leaf_cid.0.to_vec()];
+        right_root.child_counts = vec![1, 1];
         let right_root_cid = prolly.save(&right_root).unwrap();
 
         let base = Tree {
@@ -4999,6 +5075,7 @@ mod tests {
             base_left_leaf_cid.0.to_vec(),
             base_right_leaf_cid.0.to_vec(),
         ];
+        base_root.child_counts = vec![1, 1];
         let base_root_cid = prolly.save(&base_root).unwrap();
 
         let mut left_leaf = prolly.new_leaf_node();
@@ -5009,6 +5086,7 @@ mod tests {
         let mut left_root = prolly.new_internal_node(1);
         left_root.keys = base_root.keys.clone();
         left_root.vals = vec![left_leaf_cid.0.to_vec(), base_right_leaf_cid.0.to_vec()];
+        left_root.child_counts = vec![1, 1];
         let left_root_cid = prolly.save(&left_root).unwrap();
 
         let mut right_leaf = prolly.new_leaf_node();
@@ -5019,6 +5097,7 @@ mod tests {
         let mut right_root = prolly.new_internal_node(1);
         right_root.keys = base_root.keys.clone();
         right_root.vals = vec![base_left_leaf_cid.0.to_vec(), right_leaf_cid.0.to_vec()];
+        right_root.child_counts = vec![1, 1];
         let right_root_cid = prolly.save(&right_root).unwrap();
 
         let base = Tree {
@@ -5046,6 +5125,91 @@ mod tests {
             "the merged root should come from cache; only the reused leaf may need a store read"
         );
         store.clear_blocked_get_keys();
+    }
+
+    #[test]
+    fn structural_merge_preserves_internal_child_counts() {
+        let store = Arc::new(CountingStore::default());
+        let config = Config::builder()
+            .min_chunk_size(2)
+            .max_chunk_size(4)
+            .chunking_factor(u32::MAX)
+            .build();
+        let mut builder = BatchBuilder::new(store.clone(), config.clone());
+        for idx in 0..32 {
+            builder.add(
+                format!("k{idx:03}").into_bytes(),
+                format!("base-{idx:03}").into_bytes(),
+            );
+        }
+        let base = builder.build().unwrap();
+        let prolly = Prolly::new(store, config);
+        let left = prolly
+            .put(&base, b"k012".to_vec(), b"left".to_vec())
+            .unwrap();
+        let right = prolly
+            .put(&base, b"k012".to_vec(), b"right".to_vec())
+            .unwrap();
+        let resolver: Resolver = Box::new(|_| Resolution::value(b"merged".to_vec()));
+
+        let merged = merge_trees(&prolly, &base, &left, &right, Some(resolver)).unwrap();
+        let root = prolly.load(merged.root.as_ref().unwrap()).unwrap();
+
+        root.validate().unwrap();
+        assert_eq!(prolly.len(&merged).unwrap(), 32);
+        assert_eq!(prolly.rank(&merged, b"k012").unwrap(), 12);
+        assert_eq!(
+            prolly.select(&merged, 12).unwrap(),
+            Some((b"k012".to_vec(), b"merged".to_vec()))
+        );
+    }
+
+    #[test]
+    fn public_stream_diff_append_suffix_avoids_full_tree_fallback() {
+        let store = Arc::new(CountingStore::default());
+        let config = Config::builder()
+            .min_chunk_size(16)
+            .max_chunk_size(128)
+            .chunking_factor(64)
+            .build();
+        let mut builder = BatchBuilder::new(store.clone(), config.clone());
+        for idx in 0..10_000 {
+            builder.add(
+                format!("k{idx:05}").into_bytes(),
+                format!("v{idx:05}").into_bytes(),
+            );
+        }
+        let base = builder.build().unwrap();
+        let prolly = Prolly::new(store.clone(), config);
+        let other = prolly
+            .append_batch(
+                &base,
+                (10_000..11_000)
+                    .map(|idx| Mutation::Upsert {
+                        key: format!("k{idx:05}").into_bytes(),
+                        val: format!("v{idx:05}").into_bytes(),
+                    })
+                    .collect(),
+            )
+            .unwrap();
+
+        prolly.clear_cache();
+        store.reset_counts();
+        let diffs = prolly
+            .stream_diff(&base, &other)
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+
+        assert_eq!(diffs.len(), 1_000);
+        assert!(
+            store.get_calls.load(Ordering::Relaxed) < 32,
+            "append streaming should visit only the changed right edge"
+        );
+        assert!(
+            store.max_batch_get_ordered_len.load(Ordering::Relaxed) <= 4,
+            "append streaming should not hydrate the unchanged tree in one fallback batch"
+        );
     }
 
     #[test]

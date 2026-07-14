@@ -268,9 +268,9 @@ fn main() {
     println!("changes={changes}");
     let config = bench_config();
     println!("build_batch={build_batch}");
-    println!("min_chunk_size={}", config.min_chunk_size);
-    println!("max_chunk_size={}", config.max_chunk_size);
-    println!("chunking_factor={}", config.chunking_factor);
+    println!("min_chunk_size={}", config.min_chunk_size());
+    println!("max_chunk_size={}", config.max_chunk_size());
+    println!("chunking_factor={}", config.chunking_factor());
     println!(
         "operation,base_records,items,total_ms,items_per_sec,result_count,store_get_calls,store_get_bytes,store_batch_get_calls,store_batch_get_keys,store_batch_get_bytes,store_batch_get_ordered_calls,store_batch_get_ordered_keys,store_batch_get_ordered_bytes,store_hint_get_calls,store_hint_get_bytes,store_write_batches,store_write_entries,store_write_bytes,batch_input_mutations,batch_effective_mutations,batch_preprocess_input_sorted,batch_affected_leaves,batch_changed_leaves,batch_sparse_leaf_applies,batch_written_nodes,batch_written_bytes,batch_used_append_fast_path,batch_used_batched_route,batch_used_coalesced_rebuild,batch_used_deferred_rebalancing,batch_used_bottom_up_rebuild,batch_cache_written_nodes,verified,status"
     );

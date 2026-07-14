@@ -36,7 +36,7 @@ var tree = try engine.putLargeValue(
 )
 tree = try engine.put(tree: tree, key: metadataKey, value: bytes("doc-1|chunk-0001|0|384|vector-0001"))
 
-let metadata = try engine.range(tree: tree, start: bytes("doc-index/corpus/parser/"), end: bytes("doc-index/corpus/parser0"))
+let metadata = try engine.range(tree: tree, start: bytes("doc-index/corpus/parser/"), rangeEnd: bytes("doc-index/corpus/parser0"))
 let loadedText = try engine.getLargeValue(blobStore: blobStore, tree: tree, key: textKey)
 precondition(metadata.count == 1)
 precondition(text(loadedText)?.hasPrefix("Trail stores") == true)

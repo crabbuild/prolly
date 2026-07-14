@@ -78,3 +78,7 @@ harness = false
 [[bench]]
 name = "proximity_bench"
 harness = false
+
+[[bench]]
+name = "scale_workloads"
+harness = false

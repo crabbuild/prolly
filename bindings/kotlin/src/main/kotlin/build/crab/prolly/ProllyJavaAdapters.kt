@@ -20,6 +20,7 @@ object ProllyJavaAdapters {
             EncodingRecord(encodingKind(encodingKind), customEncodingName),
             nodeCacheMaxNodes?.toULong(),
             nodeCacheMaxBytes?.toULong(),
+            null,
         )
 
     @JvmStatic

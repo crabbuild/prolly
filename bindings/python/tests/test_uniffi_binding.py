@@ -311,7 +311,7 @@ class UniFfiBindingTests(unittest.TestCase):
         self.assertEqual(appended.stats.input_mutations, 3)
         self.assertEqual(appended.stats.effective_mutations, 2)
         self.assertFalse(appended.stats.preprocess_input_sorted)
-        self.assertTrue(appended.stats.used_append_fast_path)
+        self.assertTrue(appended.stats.used_coalesced_rebuild)
         self.assertGreater(appended.stats.written_nodes, 0)
 
     def test_custom_store_callbacks_drive_engine(self) -> None:
@@ -935,6 +935,7 @@ class UniFfiBindingTests(unittest.TestCase):
         node = prolly.NodeRecord(
             keys=[b"a"],
             vals=[b"1"],
+            child_counts=[],
             leaf=True,
             level=0,
             min_chunk_size=4,
@@ -942,11 +943,14 @@ class UniFfiBindingTests(unittest.TestCase):
             chunking_factor=128,
             hash_seed=0,
             encoding=encoding,
+            format_bytes=None,
         )
 
         node_bytes = prolly.node_to_bytes(node)
         decoded = prolly.node_from_bytes(node_bytes)
-        self.assertEqual(decoded, node)
+        self.assertEqual(decoded.keys, node.keys)
+        self.assertEqual(decoded.vals, node.vals)
+        self.assertIsNotNone(decoded.format_bytes)
         self.assertEqual(prolly.node_cid(decoded), prolly.cid_from_bytes(node_bytes))
 
         value = prolly.VersionedValueRecord(

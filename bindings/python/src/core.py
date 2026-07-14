@@ -77,6 +77,7 @@ class Config:
 class Node:
     keys: tuple[bytes, ...]
     vals: tuple[bytes, ...]
+    child_counts: tuple[int, ...] = ()
     leaf: bool = True
     level: int = 0
     min_chunk_size: int = 4
@@ -85,6 +86,8 @@ class Node:
     hash_seed: int = 0
     encoding: str = "raw"
     custom_encoding_name: str | None = None
+    layout: str = "prefix"
+    format_bytes: bytes | None = None
 
     @classmethod
     def from_bytes(cls, data: bytes) -> "Node":
@@ -92,42 +95,51 @@ class Node:
             raise ValueError("legacy CBOR node decoding is not implemented in the Python port")
         cursor = _Cursor(data, 4)
         version = cursor.read_varint()
-        if version != 1:
+        if version != 2:
             raise ValueError(f"unsupported compact node version {version}")
+        format_bytes = cursor.read_bytes(cursor.read_varint())
+        tree_format = _default_tree_format() if not format_bytes else _parse_tree_format(format_bytes)
         leaf_flag = cursor.read_varint()
         if leaf_flag not in (0, 1):
             raise ValueError(f"invalid leaf flag {leaf_flag}")
         leaf = leaf_flag == 1
         level = cursor.read_varint()
-        min_chunk_size = cursor.read_varint()
-        max_chunk_size = cursor.read_varint()
-        chunking_factor = cursor.read_varint()
-        hash_seed = cursor.read_varint()
-        encoding, custom_name = cursor.read_encoding()
         entry_count = cursor.read_varint()
 
         keys: list[bytes] = []
         vals: list[bytes] = []
-        previous = b""
-        for _ in range(entry_count):
-            shared = cursor.read_varint()
-            if shared > len(previous):
-                raise ValueError("shared key prefix exceeds previous key")
-            suffix_len = cursor.read_varint()
-            key = previous[:shared] + cursor.read_bytes(suffix_len)
-            if leaf:
+        child_counts: list[int] = []
+        if tree_format["layout"] == "prefix":
+            previous = b""
+            for _ in range(entry_count):
+                shared = cursor.read_varint()
+                if shared > len(previous):
+                    raise ValueError("shared key prefix exceeds previous key")
+                key = previous[:shared] + cursor.read_bytes(cursor.read_varint())
                 value = cursor.read_bytes(cursor.read_varint())
-            else:
-                tag = cursor.read_byte()
-                if tag == 0:
-                    value = cursor.read_bytes(32)
-                elif tag == 1:
-                    value = cursor.read_bytes(cursor.read_varint())
-                else:
-                    raise ValueError(f"invalid internal value tag {tag}")
-            keys.append(key)
-            vals.append(value)
-            previous = key
+                if not leaf:
+                    child_counts.append(cursor.read_varint())
+                keys.append(key)
+                vals.append(value)
+                previous = key
+        elif tree_format["layout"] == "plain":
+            for _ in range(entry_count):
+                keys.append(cursor.read_bytes(cursor.read_varint()))
+                vals.append(cursor.read_bytes(cursor.read_varint()))
+                if not leaf:
+                    child_counts.append(cursor.read_varint())
+        else:
+            offsets: list[tuple[int, int, int, int]] = []
+            for _ in range(entry_count):
+                offsets.append(tuple(cursor.read_varint() for _ in range(4)))
+                if not leaf:
+                    child_counts.append(cursor.read_varint())
+            payload = cursor.read_bytes(cursor.read_varint())
+            for key_offset, key_length, value_offset, value_length in offsets:
+                if key_offset + key_length > len(payload) or value_offset + value_length > len(payload):
+                    raise ValueError("offset outside node payload")
+                keys.append(payload[key_offset:key_offset + key_length])
+                vals.append(payload[value_offset:value_offset + value_length])
 
         if not cursor.done:
             raise ValueError("trailing bytes in compact node")
@@ -135,14 +147,17 @@ class Node:
         return cls(
             keys=tuple(keys),
             vals=tuple(vals),
+            child_counts=tuple(child_counts),
             leaf=leaf,
             level=level,
-            min_chunk_size=min_chunk_size,
-            max_chunk_size=max_chunk_size,
-            chunking_factor=chunking_factor,
-            hash_seed=hash_seed,
-            encoding=encoding,
-            custom_encoding_name=custom_name,
+            min_chunk_size=tree_format["min_chunk_size"],
+            max_chunk_size=tree_format["max_chunk_size"],
+            chunking_factor=tree_format["chunking_factor"],
+            hash_seed=tree_format["hash_seed"],
+            encoding=tree_format["encoding"],
+            custom_encoding_name=tree_format["custom_name"],
+            layout=tree_format["layout"],
+            format_bytes=format_bytes or None,
         )
 
     @classmethod
@@ -151,33 +166,52 @@ class Node:
 
     def to_bytes(self) -> bytes:
         out = bytearray(b"CRAB")
-        _write_varint(out, 1)
+        _write_varint(out, 2)
+        if self.format_bytes is not None:
+            format_bytes = self.format_bytes
+        elif _is_default_tree_format(self):
+            format_bytes = b""
+        else:
+            format_bytes = _build_tree_format(self)
+        _write_varint(out, len(format_bytes))
+        out.extend(format_bytes)
         _write_varint(out, 1 if self.leaf else 0)
         _write_varint(out, self.level)
-        _write_varint(out, self.min_chunk_size)
-        _write_varint(out, self.max_chunk_size)
-        _write_varint(out, self.chunking_factor)
-        _write_varint(out, self.hash_seed)
-        _write_encoding(out, self.encoding, self.custom_encoding_name)
         _write_varint(out, len(self.keys))
-        previous = b""
-        for key, value in zip(self.keys, self.vals, strict=True):
-            shared = _common_prefix_len(previous, key)
-            suffix = key[shared:]
-            _write_varint(out, shared)
-            _write_varint(out, len(suffix))
-            out.extend(suffix)
-            if self.leaf:
+        if self.layout == "prefix":
+            previous = b""
+            for index, (key, value) in enumerate(zip(self.keys, self.vals, strict=True)):
+                shared = _common_prefix_len(previous, key)
+                suffix = key[shared:]
+                _write_varint(out, shared)
+                _write_varint(out, len(suffix))
+                out.extend(suffix)
                 _write_varint(out, len(value))
                 out.extend(value)
-            elif len(value) == 32:
-                out.append(0)
-                out.extend(value)
-            else:
-                out.append(1)
+                if not self.leaf:
+                    _write_varint(out, self.child_counts[index])
+                previous = key
+        elif self.layout == "plain":
+            for index, (key, value) in enumerate(zip(self.keys, self.vals, strict=True)):
+                _write_varint(out, len(key))
+                out.extend(key)
                 _write_varint(out, len(value))
                 out.extend(value)
-            previous = key
+                if not self.leaf:
+                    _write_varint(out, self.child_counts[index])
+        else:
+            payload = bytearray()
+            for index, (key, value) in enumerate(zip(self.keys, self.vals, strict=True)):
+                _write_varint(out, len(payload))
+                _write_varint(out, len(key))
+                payload.extend(key)
+                _write_varint(out, len(payload))
+                _write_varint(out, len(value))
+                payload.extend(value)
+                if not self.leaf:
+                    _write_varint(out, self.child_counts[index])
+            _write_varint(out, len(payload))
+            out.extend(payload)
         return bytes(out)
 
     def cid(self) -> Cid:
@@ -702,6 +736,109 @@ def decode_segments(key: bytes) -> list[bytes]:
     if current:
         raise ValueError(f"encoded key ended unexpectedly at byte offset {len(key)}")
     return segments
+
+
+def _parse_tree_format(data: bytes) -> dict:
+    cursor = _Cursor(data)
+    if cursor.read_bytes(4) != b"CRFT" or cursor.read_byte() != 1:
+        raise ValueError("unsupported tree format")
+    cursor.read_byte()  # measure
+    cursor.read_byte()  # boundary input
+    cursor.read_byte()  # hash
+    rule = cursor.read_byte()
+    if rule == 2:
+        factor = int.from_bytes(cursor.read_bytes(2), "big")
+    elif rule in (0, 1):
+        factor = int.from_bytes(cursor.read_bytes(4), "big")
+    else:
+        raise ValueError(f"invalid boundary rule {rule}")
+    minimum = int.from_bytes(cursor.read_bytes(8), "big")
+    target = int.from_bytes(cursor.read_bytes(8), "big")
+    maximum = int.from_bytes(cursor.read_bytes(8), "big")
+    hash_seed = int.from_bytes(cursor.read_bytes(8), "big")
+    cursor.read_byte()  # level salt
+    cursor.read_bytes(8)  # hard byte cap
+    layout_tag = cursor.read_byte()
+    if layout_tag == 0:
+        layout = "prefix"
+    elif layout_tag == 1:
+        layout = "plain"
+    elif layout_tag == 2:
+        layout = "offset"
+    elif layout_tag == 3:
+        cursor.read_bytes(int.from_bytes(cursor.read_bytes(8), "big"))
+        cursor.read_bytes(int.from_bytes(cursor.read_bytes(8), "big"))
+        raise ValueError("custom node layouts require the native binding")
+    else:
+        raise ValueError(f"invalid node layout {layout_tag}")
+    encoding_tag = cursor.read_byte()
+    custom_name = None
+    if encoding_tag == 0:
+        encoding = "raw"
+    elif encoding_tag == 1:
+        encoding = "cbor"
+    elif encoding_tag == 2:
+        encoding = "json"
+    elif encoding_tag == 3:
+        encoding = "custom"
+        custom_name = cursor.read_bytes(int.from_bytes(cursor.read_bytes(8), "big")).decode()
+    else:
+        raise ValueError(f"invalid value encoding {encoding_tag}")
+    if not cursor.done:
+        raise ValueError("trailing tree format bytes")
+    return {
+        "min_chunk_size": minimum,
+        "max_chunk_size": maximum,
+        "chunking_factor": factor if rule == 0 else target,
+        "hash_seed": hash_seed,
+        "layout": layout,
+        "encoding": encoding,
+        "custom_name": custom_name,
+    }
+
+
+def _build_tree_format(node: Node) -> bytes:
+    out = bytearray(b"CRFT")
+    out.extend((1, 0, 0, 0, 0))
+    out.extend(node.chunking_factor.to_bytes(4, "big"))
+    out.extend(node.min_chunk_size.to_bytes(8, "big"))
+    target = min(node.max_chunk_size, max(node.min_chunk_size, node.chunking_factor))
+    out.extend(target.to_bytes(8, "big"))
+    out.extend(node.max_chunk_size.to_bytes(8, "big"))
+    out.extend(node.hash_seed.to_bytes(8, "big"))
+    out.append(1)
+    out.extend((16 * 1024 * 1024).to_bytes(8, "big"))
+    out.append({"prefix": 0, "plain": 1, "offset": 2}[node.layout])
+    out.append(_encoding_tag(node.encoding))
+    if node.encoding == "custom":
+        name = (node.custom_encoding_name or "").encode()
+        out.extend(len(name).to_bytes(8, "big"))
+        out.extend(name)
+    return bytes(out)
+
+
+def _default_tree_format() -> dict:
+    return {
+        "min_chunk_size": 4,
+        "max_chunk_size": 1024 * 1024,
+        "chunking_factor": 128,
+        "hash_seed": 0,
+        "layout": "prefix",
+        "encoding": "raw",
+        "custom_name": None,
+    }
+
+
+def _is_default_tree_format(node: Node) -> bool:
+    return (
+        node.min_chunk_size == 4
+        and node.max_chunk_size == 1024 * 1024
+        and node.chunking_factor == 128
+        and node.hash_seed == 0
+        and node.encoding == "raw"
+        and node.custom_encoding_name is None
+        and node.layout == "prefix"
+    )
 
 
 class _Cursor:
