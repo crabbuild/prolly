@@ -17,11 +17,7 @@ fn generated_sets_are_deterministic_unique_and_bounded() {
 
     let clustered = support::clustered_indexes(100_000, 1_000);
     assert_eq!(clustered.len(), 1_000);
-    assert!(
-        clustered
-            .windows(2)
-            .all(|pair| pair[1] == pair[0] + 1)
-    );
+    assert!(clustered.windows(2).all(|pair| pair[1] == pair[0] + 1));
 
     let right_edge = support::right_edge_indexes(100_000, 10_000);
     assert_eq!(right_edge.first(), Some(&90_000));
@@ -102,9 +98,42 @@ fn mutation_workloads_have_exact_indexes_and_cardinality() {
         Workload::RandomBatchDeletes,
         Workload::ClusteredBatchDeletes,
     ] {
-        assert_eq!(
-            support::expected_result_entries(workload, 1_000, 100),
-            900
-        );
+        assert_eq!(support::expected_result_entries(workload, 1_000, 100), 900);
     }
+}
+
+#[test]
+fn merge_branch_sets_match_disjoint_and_conflict_semantics() {
+    use std::collections::BTreeSet;
+    use support::Workload;
+
+    for workload in [
+        Workload::AppendDisjointSparseMerge,
+        Workload::RandomDisjointSparseMerge,
+        Workload::ClusteredDisjointSparseMerge,
+    ] {
+        let (left, right) = support::merge_branch_indexes(workload, 10_000, 50);
+        assert_eq!(left.len(), 50);
+        assert_eq!(right.len(), 50);
+        let left_set = left.into_iter().collect::<BTreeSet<_>>();
+        let right_set = right.into_iter().collect::<BTreeSet<_>>();
+        assert!(left_set.is_disjoint(&right_set));
+    }
+
+    for workload in [
+        Workload::RandomConflictResolvedMerge,
+        Workload::ClusteredConflictResolvedMerge,
+    ] {
+        let (left, right) = support::merge_branch_indexes(workload, 10_000, 50);
+        assert_eq!(left, right);
+    }
+
+    assert_eq!(
+        support::expected_merge_entries(Workload::AppendDisjointSparseMerge, 10_000, 50),
+        10_100
+    );
+    assert_eq!(
+        support::expected_merge_entries(Workload::RandomConflictResolvedMerge, 10_000, 50),
+        10_000
+    );
 }

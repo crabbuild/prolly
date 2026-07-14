@@ -6,16 +6,16 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use prolly::{
-    BatchBuilder, Config, ManifestStore, Mutation, Prolly, ProllyMetricsSnapshot, RootManifest,
-    SortedBatchBuilder, Tree, TreeStats,
+    BatchBuilder, Config, Diff, ManifestStore, Mutation, Prolly, ProllyMetricsSnapshot, Resolution,
+    RootManifest, SortedBatchBuilder, Tree, TreeStats,
 };
 use prolly_store_sqlite::{SqliteStore, SqliteStoreConfig};
 use rusqlite::Connection;
 
 use sqlite_workload_support::{
-    clustered_indexes, expected_result_entries, key, mutation_indexes, random_indexes,
-    right_edge_indexes, sample_count, shuffled_ids, value, BenchArgs, CsvRow, DurabilityProfile,
-    Workload, RANDOM_SEED, READ_OPERATIONS,
+    clustered_indexes, expected_merge_entries, expected_result_entries, key, merge_branch_indexes,
+    merge_count, mutation_indexes, random_indexes, right_edge_indexes, sample_count, shuffled_ids,
+    value, BenchArgs, CsvRow, DurabilityProfile, Workload, RANDOM_SEED, READ_OPERATIONS,
 };
 
 const BASE_ROOT_NAME: &[u8] = b"sqlite-workload-base";
@@ -44,11 +44,290 @@ fn run() -> Result<(), String> {
         | Workload::ClusteredBatchUpdates
         | Workload::RandomBatchDeletes
         | Workload::ClusteredBatchDeletes => run_mutations(&args)?,
-        workload => return Err(format!("workload {} is not implemented", workload.as_str())),
+        Workload::IdenticalDiff
+        | Workload::AppendSparseDiff
+        | Workload::RandomSparseDiff
+        | Workload::ClusteredSparseDiff
+        | Workload::RandomDeleteDiff
+        | Workload::ClusteredDeleteDiff => run_diff(&args)?,
+        Workload::AppendDisjointSparseMerge
+        | Workload::RandomDisjointSparseMerge
+        | Workload::ClusteredDisjointSparseMerge
+        | Workload::RandomConflictResolvedMerge
+        | Workload::ClusteredConflictResolvedMerge => run_merge(&args)?,
     };
     println!("{}", CsvRow::header());
     println!("{}", row.to_csv());
     Ok(())
+}
+
+fn run_diff(args: &BenchArgs) -> Result<CsvRow, String> {
+    let db_before = sqlite_files(&args.db_path).total;
+    let (store, base) = open_base(args)?;
+    let preparation = Prolly::new(store.clone(), base.config.clone());
+    let count = sample_count(args.records);
+    let (changed, ids, expected_kind, generation) = match args.workload {
+        Workload::IdenticalDiff => (base.clone(), Vec::new(), DiffKind::Changed, 0),
+        Workload::AppendSparseDiff => {
+            let ids = (args.records..args.records + count).collect::<Vec<_>>();
+            let changed = apply_upserts(&preparation, &base, &ids, 1, true)?;
+            (changed, ids, DiffKind::Added, 1)
+        }
+        Workload::RandomSparseDiff => {
+            let ids = random_indexes(args.records, count, RANDOM_SEED);
+            let changed = apply_upserts(&preparation, &base, &ids, 1, false)?;
+            (changed, ids, DiffKind::Changed, 1)
+        }
+        Workload::ClusteredSparseDiff => {
+            let ids = clustered_indexes(args.records, count);
+            let changed = apply_upserts(&preparation, &base, &ids, 2, false)?;
+            (changed, ids, DiffKind::Changed, 2)
+        }
+        Workload::RandomDeleteDiff => {
+            let ids = random_indexes(args.records, count, RANDOM_SEED);
+            let changed = apply_deletes(&preparation, &base, &ids)?;
+            (changed, ids, DiffKind::Removed, 0)
+        }
+        Workload::ClusteredDeleteDiff => {
+            let ids = clustered_indexes(args.records, count);
+            let changed = apply_deletes(&preparation, &base, &ids)?;
+            (changed, ids, DiffKind::Removed, 0)
+        }
+        _ => return Err("diff runner received a non-diff workload".to_string()),
+    };
+    drop(preparation);
+    drop(store);
+
+    let timed_store = Arc::new(open_store(&args.db_path, args.profile)?);
+    let manager = Prolly::new(timed_store, base.config.clone());
+    manager.reset_metrics();
+    let started = Instant::now();
+    let diffs = manager
+        .diff(&base, &changed)
+        .map_err(|err| err.to_string())?;
+    let total_ns = started.elapsed().as_nanos();
+    let metrics = manager.metrics();
+    validate_diffs(&diffs, &ids, expected_kind, generation)?;
+    let stats = manager
+        .collect_stats(&changed)
+        .map_err(|err| err.to_string())?;
+    make_row(args, ids.len().max(1), total_ns, metrics, &stats, db_before)
+}
+
+#[derive(Clone, Copy)]
+enum DiffKind {
+    Added,
+    Changed,
+    Removed,
+}
+
+fn validate_diffs(
+    diffs: &[Diff],
+    ids: &[usize],
+    expected_kind: DiffKind,
+    generation: u8,
+) -> Result<(), String> {
+    if diffs.len() != ids.len() {
+        return Err(format!(
+            "diff cardinality mismatch: expected {}, observed {}",
+            ids.len(),
+            diffs.len()
+        ));
+    }
+    for (diff, id) in diffs.iter().zip(ids) {
+        let expected_key = key(*id);
+        let valid = match (expected_kind, diff) {
+            (DiffKind::Added, Diff::Added { key, val }) => {
+                key == &expected_key && val == &value(*id, generation)
+            }
+            (DiffKind::Changed, Diff::Changed { key, old, new }) => {
+                key == &expected_key && old == &value(*id, 0) && new == &value(*id, generation)
+            }
+            (DiffKind::Removed, Diff::Removed { key, val }) => {
+                key == &expected_key && val == &value(*id, 0)
+            }
+            _ => false,
+        };
+        if !valid {
+            return Err(format!("diff validation failed for record {id}"));
+        }
+    }
+    Ok(())
+}
+
+fn run_merge(args: &BenchArgs) -> Result<CsvRow, String> {
+    let db_before = sqlite_files(&args.db_path).total;
+    let (store, base) = open_base(args)?;
+    let preparation = Prolly::new(store.clone(), base.config.clone());
+    let count = merge_count(args.records);
+    let (left_ids, right_ids) = merge_branch_indexes(args.workload, args.records, count);
+    let append = matches!(args.workload, Workload::AppendDisjointSparseMerge);
+    let left = apply_upserts(&preparation, &base, &left_ids, 1, append)?;
+    let right = apply_upserts(&preparation, &base, &right_ids, 2, append)?;
+    drop(preparation);
+    drop(store);
+
+    let conflicts = matches!(
+        args.workload,
+        Workload::RandomConflictResolvedMerge | Workload::ClusteredConflictResolvedMerge
+    );
+    let resolver = conflicts.then(|| {
+        Box::new(|conflict: &prolly::Conflict| match &conflict.right {
+            Some(right) => Resolution::value(right.clone()),
+            None => Resolution::delete(),
+        }) as prolly::Resolver
+    });
+    let timed_store = Arc::new(open_store(&args.db_path, args.profile)?);
+    let manager = Prolly::new(timed_store.clone(), base.config.clone());
+    manager.reset_metrics();
+    let started = Instant::now();
+    let merged = manager
+        .merge(&base, &left, &right, resolver)
+        .map_err(|err| err.to_string())?;
+    let total_ns = started.elapsed().as_nanos();
+    let metrics = manager.metrics();
+    validate_merge_result(
+        &manager,
+        &merged,
+        &left_ids,
+        &right_ids,
+        conflicts,
+        expected_merge_entries(args.workload, args.records, count),
+    )?;
+    timed_store
+        .put_root(RESULT_ROOT_NAME, &RootManifest::from_tree(&merged))
+        .map_err(|err| err.to_string())?;
+    let stats = manager
+        .collect_stats(&merged)
+        .map_err(|err| err.to_string())?;
+    drop(manager);
+    drop(timed_store);
+    verify_reopened_merge(
+        args,
+        &left_ids,
+        &right_ids,
+        conflicts,
+        stats.total_key_value_pairs,
+    )?;
+    let operations = if conflicts {
+        left_ids.len()
+    } else {
+        left_ids.len() + right_ids.len()
+    };
+    make_row(
+        args,
+        operations.max(1),
+        total_ns,
+        metrics,
+        &stats,
+        db_before,
+    )
+}
+
+fn apply_upserts(
+    manager: &Prolly<Arc<SqliteStore>>,
+    base: &Tree,
+    ids: &[usize],
+    generation: u8,
+    append: bool,
+) -> Result<Tree, String> {
+    let mutations = ids
+        .iter()
+        .map(|id| Mutation::Upsert {
+            key: key(*id),
+            val: value(*id, generation),
+        })
+        .collect::<Vec<_>>();
+    if append {
+        manager
+            .append_batch(base, mutations)
+            .map_err(|err| err.to_string())
+    } else {
+        manager
+            .batch(base, mutations)
+            .map_err(|err| err.to_string())
+    }
+}
+
+fn apply_deletes(
+    manager: &Prolly<Arc<SqliteStore>>,
+    base: &Tree,
+    ids: &[usize],
+) -> Result<Tree, String> {
+    manager
+        .batch(
+            base,
+            ids.iter()
+                .map(|id| Mutation::Delete { key: key(*id) })
+                .collect(),
+        )
+        .map_err(|err| err.to_string())
+}
+
+fn validate_merge_result(
+    manager: &Prolly<Arc<SqliteStore>>,
+    merged: &Tree,
+    left_ids: &[usize],
+    right_ids: &[usize],
+    conflicts: bool,
+    expected_entries: usize,
+) -> Result<(), String> {
+    if !conflicts {
+        validate_values(manager, merged, left_ids, 1, "left merge")?;
+    }
+    validate_values(manager, merged, right_ids, 2, "right merge")?;
+    let stats = manager
+        .collect_stats(merged)
+        .map_err(|err| err.to_string())?;
+    if stats.total_key_value_pairs != expected_entries {
+        return Err(format!(
+            "merge cardinality mismatch: expected {expected_entries}, observed {}",
+            stats.total_key_value_pairs
+        ));
+    }
+    Ok(())
+}
+
+fn validate_values(
+    manager: &Prolly<Arc<SqliteStore>>,
+    tree: &Tree,
+    ids: &[usize],
+    generation: u8,
+    context: &str,
+) -> Result<(), String> {
+    for id in ids {
+        let observed = manager
+            .get(tree, &key(*id))
+            .map_err(|err| err.to_string())?;
+        if observed != Some(value(*id, generation)) {
+            return Err(format!("{context} validation failed for record {id}"));
+        }
+    }
+    Ok(())
+}
+
+fn verify_reopened_merge(
+    args: &BenchArgs,
+    left_ids: &[usize],
+    right_ids: &[usize],
+    conflicts: bool,
+    expected_entries: usize,
+) -> Result<(), String> {
+    let store = Arc::new(open_store(&args.db_path, args.profile)?);
+    let tree = store
+        .get_root(RESULT_ROOT_NAME)
+        .map_err(|err| err.to_string())?
+        .ok_or_else(|| "workload database is missing the named merge root".to_string())?
+        .to_tree();
+    let manager = Prolly::new(store, tree.config.clone());
+    validate_merge_result(
+        &manager,
+        &tree,
+        left_ids,
+        right_ids,
+        conflicts,
+        expected_entries,
+    )
 }
 
 fn run_reads(args: &BenchArgs) -> Result<CsvRow, String> {
@@ -81,15 +360,10 @@ fn run_reads(args: &BenchArgs) -> Result<CsvRow, String> {
     execute_reads(&manager, &tree, &sample_ids, READ_OPERATIONS)?;
     let total_ns = started.elapsed().as_nanos();
     let metrics = manager.metrics();
-    let stats = manager.collect_stats(&tree).map_err(|err| err.to_string())?;
-    make_row(
-        args,
-        READ_OPERATIONS,
-        total_ns,
-        metrics,
-        &stats,
-        db_before,
-    )
+    let stats = manager
+        .collect_stats(&tree)
+        .map_err(|err| err.to_string())?;
+    make_row(args, READ_OPERATIONS, total_ns, metrics, &stats, db_before)
 }
 
 fn execute_reads(
@@ -107,7 +381,9 @@ fn execute_reads(
             .ok_or_else(|| format!("read workload did not find record {id}"))?;
         let expected = value(id, 0);
         if observed != expected {
-            return Err(format!("read workload returned the wrong value for record {id}"));
+            return Err(format!(
+                "read workload returned the wrong value for record {id}"
+            ));
         }
         observed_bytes = observed_bytes.wrapping_add(observed.len());
         black_box(&observed);
@@ -238,10 +514,14 @@ fn verify_reopened_result(
             Some(value(*id, generation))
         };
         if observed != expected {
-            return Err(format!("reopened mutation validation failed for record {id}"));
+            return Err(format!(
+                "reopened mutation validation failed for record {id}"
+            ));
         }
     }
-    let stats = manager.collect_stats(&tree).map_err(|err| err.to_string())?;
+    let stats = manager
+        .collect_stats(&tree)
+        .map_err(|err| err.to_string())?;
     if stats.total_key_value_pairs != expected_entries {
         return Err("reopened mutation tree has the wrong cardinality".to_string());
     }
@@ -304,7 +584,9 @@ fn finalize_build_row(
     db_before: u64,
 ) -> Result<CsvRow, String> {
     let manager = Prolly::new(store.clone(), tree.config.clone());
-    let stats = manager.collect_stats(&tree).map_err(|err| err.to_string())?;
+    let stats = manager
+        .collect_stats(&tree)
+        .map_err(|err| err.to_string())?;
     if stats.total_key_value_pairs != args.records {
         return Err(format!(
             "build cardinality mismatch: expected {}, observed {}",
@@ -392,7 +674,9 @@ fn verify_reopened_tree(
     let tree = manifest.to_tree();
     let manager = Prolly::new(store, tree.config.clone());
     for id in [0, records / 2, records - 1] {
-        let observed = manager.get(&tree, &key(id)).map_err(|err| err.to_string())?;
+        let observed = manager
+            .get(&tree, &key(id))
+            .map_err(|err| err.to_string())?;
         if observed.as_deref() != Some(value(id, 0).as_slice()) {
             return Err(format!("reopen verification failed for record {id}"));
         }

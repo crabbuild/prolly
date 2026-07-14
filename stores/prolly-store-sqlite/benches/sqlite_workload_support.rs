@@ -333,6 +333,45 @@ pub fn expected_result_entries(workload: Workload, records: usize, count: usize)
     }
 }
 
+pub fn merge_branch_indexes(
+    workload: Workload,
+    records: usize,
+    count: usize,
+) -> (Vec<usize>, Vec<usize>) {
+    match workload {
+        Workload::AppendDisjointSparseMerge => (
+            (records..records + count).collect(),
+            (records + count..records + count.saturating_mul(2)).collect(),
+        ),
+        Workload::RandomDisjointSparseMerge => {
+            let combined = random_indexes(records, count.saturating_mul(2), RANDOM_SEED);
+            let split = combined.len() / 2;
+            (combined[..split].to_vec(), combined[split..].to_vec())
+        }
+        Workload::ClusteredDisjointSparseMerge => {
+            let combined = clustered_indexes(records, count.saturating_mul(2));
+            let split = combined.len() / 2;
+            (combined[..split].to_vec(), combined[split..].to_vec())
+        }
+        Workload::RandomConflictResolvedMerge => {
+            let indexes = random_indexes(records, count, RANDOM_SEED);
+            (indexes.clone(), indexes)
+        }
+        Workload::ClusteredConflictResolvedMerge => {
+            let indexes = clustered_indexes(records, count);
+            (indexes.clone(), indexes)
+        }
+        _ => (Vec::new(), Vec::new()),
+    }
+}
+
+pub fn expected_merge_entries(workload: Workload, records: usize, count: usize) -> usize {
+    match workload {
+        Workload::AppendDisjointSparseMerge => records.saturating_add(count.saturating_mul(2)),
+        _ => records,
+    }
+}
+
 pub fn shuffled_ids(records: usize, seed: u64) -> Vec<usize> {
     let mut ids = (0..records).collect::<Vec<_>>();
     let mut state = seed;
