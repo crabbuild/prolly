@@ -103,6 +103,18 @@ test("async native wrapper preserves core tree behavior", { skip: native === nul
   assert.deepEqual(prefixReversePage.entries.map((entry) => text(entry.key)), ["a"]);
 });
 
+test("async native deleteRange delegates with half-open bounds", { skip: native === null }, async () => {
+  assert.ok(native);
+  const engine = await AsyncProllyEngine.fromNative(native.NativeProllyEngine.memory());
+  let tree = await engine.create();
+  for (const key of ["a", "b", "c", "d", "e", "f"]) tree = await engine.put(tree, bytes(key), bytes(key));
+
+  const deleted = await engine.deleteRange(tree, bytes("b"), bytes("e"));
+  assert.deepEqual((await engine.range(deleted, Buffer.alloc(0), null)).map((entry) => text(entry.key)), ["a", "e", "f"]);
+  const withStats = await engine.deleteRangeWithStats(tree, bytes("b"), bytes("e"));
+  assert.deepEqual((await engine.range(withStats.tree, Buffer.alloc(0), null)).map((entry) => text(entry.key)), ["a", "e", "f"]);
+});
+
 test("async native wrapper covers advanced engine and blob APIs", { skip: native === null }, async () => {
   assert.ok(native);
   const engine = await AsyncProllyEngine.fromNative(native.NativeProllyEngine.memory());

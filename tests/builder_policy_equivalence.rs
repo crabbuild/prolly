@@ -74,7 +74,7 @@ fn batched_value_updates_match_full_rebuild_for_every_built_in_layout() {
         }
         let base = base.build().unwrap();
         let (updated, stats) = manager
-            .canonical_batch_with_stats(
+            .batch_with_write_stats(
                 &base,
                 changed
                     .iter()

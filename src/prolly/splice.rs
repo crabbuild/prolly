@@ -1,14 +1,14 @@
-//! Public compatibility surface for localized canonical mutation.
+//! Public surface for localized tree mutation.
 
-use super::canonical;
 use super::error::{Error, Mutation};
 use super::store::Store;
 use super::tree::Tree;
+use super::write;
 use super::Prolly;
 
-/// Observable logical and physical work performed by [`canonical_splice`].
+/// Observable logical and physical work performed by [`splice`].
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct CanonicalSpliceStats {
+pub struct SpliceStats {
     pub entries_scanned: usize,
     pub nodes_read: usize,
     pub nodes_rebuilt: usize,
@@ -19,25 +19,25 @@ pub struct CanonicalSpliceStats {
     pub root_changed: bool,
 }
 
-/// Apply logical mutations through the canonical localized writer.
-pub fn canonical_splice<S>(
+/// Apply logical mutations through the localized writer.
+pub fn splice<S>(
     prolly: &Prolly<S>,
     tree: &Tree,
     mutations: Vec<Mutation>,
-) -> Result<(Tree, CanonicalSpliceStats), Error>
+) -> Result<(Tree, SpliceStats), Error>
 where
     S: Store,
     S::Error: Send + Sync,
 {
     if tree.config != *prolly.config() {
-        return Err(Error::CanonicalSpliceConfigMismatch);
+        return Err(Error::SpliceConfigMismatch);
     }
     let old_root = tree.root.clone();
-    let (tree, stats) = canonical::apply(prolly, tree, mutations)?;
+    let (tree, stats) = write::apply(prolly, tree, mutations)?;
     let nodes_written = stats.nodes_written as usize;
     Ok((
         tree.clone(),
-        CanonicalSpliceStats {
+        SpliceStats {
             entries_scanned: stats.entries_streamed as usize,
             nodes_read: stats.nodes_read as usize,
             nodes_rebuilt: nodes_written,

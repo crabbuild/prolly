@@ -9,7 +9,7 @@ async wrappers.
 
 | Group | Behavior verified |
 | --- | --- |
-| Core tree | `create`, `get`, `get_many`, `put`, `delete`, `batch`, batch stats, bulk build, sorted bulk build, append batch, parallel batch stats |
+| Core tree | `create`, `get`, `get_many`, `put`, `delete`, raw-byte half-open `delete_range(start, end)`, write stats, `batch`, batch stats, bulk build, sorted bulk build, append batch, parallel batch stats |
 | Range/page | `range`, `prefix`, `prefix_page`, `range_after`, ordered boundary helpers, cursor resumption, cursor windows, range pages, reverse and prefix-reverse pages, diff pages |
 | Wire/helpers | compact `CRAB` nodes, CIDs, config, boundary decisions, key helpers, value/blob envelopes, root manifests |
 | Diff/merge | eager diff, range diff, conflict pages, built-in resolvers, merge explanations, range/prefix merge |
@@ -43,6 +43,37 @@ tree behavior.
 | JVM aggregate | Kotlin and Java modules together | `mvn -f bindings/pom.xml test` |
 | Ruby | `bindings/ruby/test/prolly_smoke_test.rb` | `PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" BUNDLE_GEMFILE=bindings/ruby/Gemfile BUNDLE_PATH=/tmp/prolly-ruby-bundle bundle exec ruby -Ibindings/ruby/lib bindings/ruby/test/prolly_smoke_test.rb` |
 | Swift | `bindings/swift/Examples/FixtureCheck`, cookbook executable targets | `DYLD_LIBRARY_PATH="$PWD/target/debug" swift run --package-path bindings/swift prolly-fixture-check` |
+
+## Generated Binding Regeneration
+
+When the UniFFI facade changes, build it once, then regenerate the checked-in
+glue with the provenance-pinned tools. The Python and Ruby generated files keep
+their documented `PROLLY_BINDINGS_LIBRARY` local-load adaptations after the
+generator runs.
+
+```sh
+cargo build --manifest-path bindings/uniffi/Cargo.toml --target-dir target
+(cd bindings/python && VIRTUAL_ENV=/tmp/prolly-uniffi-venv PATH=/tmp/prolly-uniffi-venv/bin:$PATH maturin develop)
+VIRTUAL_ENV=/tmp/prolly-uniffi-venv PATH=/tmp/prolly-uniffi-venv/bin:$PATH \
+  uniffi-bindgen generate target/debug/libprolly_bindings.dylib --language kotlin \
+  --out-dir bindings/kotlin/src/main/kotlin/build/crab/prolly/generated --config bindings/uniffi/uniffi.toml
+VIRTUAL_ENV=/tmp/prolly-uniffi-venv PATH=/tmp/prolly-uniffi-venv/bin:$PATH \
+  uniffi-bindgen generate target/debug/libprolly_bindings.dylib --language ruby \
+  --out-dir bindings/ruby/lib/prolly/generated --config bindings/uniffi/uniffi.toml
+VIRTUAL_ENV=/tmp/prolly-uniffi-venv PATH=/tmp/prolly-uniffi-venv/bin:$PATH \
+  uniffi-bindgen generate target/debug/libprolly_bindings.dylib --language swift \
+  --out-dir bindings/swift/Sources/Prolly --config bindings/uniffi/uniffi.toml
+npm --prefix bindings/node install
+npm --prefix bindings/node run build:native
+npm --prefix bindings/wasm run build:wasm
+```
+
+The Kotlin generator may place `prolly.kt` under a redundant
+`generated/build/crab/prolly/` directory; retain the checked-in flat
+`generated/prolly.kt` location. Move the Swift generator's `prollyFFI.h` into
+`bindings/swift/Sources/prollyFFI/include/`, where the Swift package's FFI
+target exposes it. Do not check in Node `.node` binaries, WASM `pkg/`, Cargo
+locks created only for a binding crate, or other local build artifacts.
 
 ## Runnable Cookbook Scenarios
 

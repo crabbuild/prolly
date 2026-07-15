@@ -864,6 +864,10 @@ def _uniffi_check_api_checksums(lib):
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_prollyengine_delete_named_root() != 24437:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_prollyengine_delete_range() != 41608:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_prollyengine_delete_range_with_stats() != 26465:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_prollyengine_delete_snapshot() != 45711:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_prollyengine_diff() != 59822:
@@ -2578,6 +2582,22 @@ _UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_delete_named_root.argty
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_delete_named_root.restype = None
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_delete_range.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_delete_range.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_delete_range_with_stats.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_delete_range_with_stats.restype = _UniffiRustBuffer
 _UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_delete_snapshot.argtypes = (
     ctypes.c_uint64,
     _UniffiRustBuffer,
@@ -3861,6 +3881,12 @@ _UniffiLib.uniffi_prolly_bindings_checksum_method_prollyengine_delete.restype = 
 _UniffiLib.uniffi_prolly_bindings_checksum_method_prollyengine_delete_named_root.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_prollyengine_delete_named_root.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollyengine_delete_range.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollyengine_delete_range.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollyengine_delete_range_with_stats.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollyengine_delete_range_with_stats.restype = ctypes.c_uint16
 _UniffiLib.uniffi_prolly_bindings_checksum_method_prollyengine_delete_snapshot.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_prollyengine_delete_snapshot.restype = ctypes.c_uint16
@@ -5393,6 +5419,138 @@ class _UniffiFfiConverterTypeCacheStatsRecord(_UniffiConverterRustBuffer):
         _UniffiFfiConverterUInt64.write(value.cached_bytes, buf)
         _UniffiFfiConverterUInt64.write(value.pinned_nodes, buf)
         _UniffiFfiConverterUInt64.write(value.pinned_bytes, buf)
+
+@dataclass
+class WriteStatsRecord:
+    def __init__(self, *, input_mutations:int, effective_mutations:int, entries_streamed:int, nodes_read:int, nodes_written:int, nodes_reused:int, bytes_read:int, bytes_written:int, resync_distance_entries:int, resync_distance_nodes:int, used_key_stable_fast_path:bool, used_batched_value_update_path:bool):
+        self.input_mutations = input_mutations
+        self.effective_mutations = effective_mutations
+        self.entries_streamed = entries_streamed
+        self.nodes_read = nodes_read
+        self.nodes_written = nodes_written
+        self.nodes_reused = nodes_reused
+        self.bytes_read = bytes_read
+        self.bytes_written = bytes_written
+        self.resync_distance_entries = resync_distance_entries
+        self.resync_distance_nodes = resync_distance_nodes
+        self.used_key_stable_fast_path = used_key_stable_fast_path
+        self.used_batched_value_update_path = used_batched_value_update_path
+
+
+
+
+    def __str__(self):
+        return "WriteStatsRecord(input_mutations={}, effective_mutations={}, entries_streamed={}, nodes_read={}, nodes_written={}, nodes_reused={}, bytes_read={}, bytes_written={}, resync_distance_entries={}, resync_distance_nodes={}, used_key_stable_fast_path={}, used_batched_value_update_path={})".format(self.input_mutations, self.effective_mutations, self.entries_streamed, self.nodes_read, self.nodes_written, self.nodes_reused, self.bytes_read, self.bytes_written, self.resync_distance_entries, self.resync_distance_nodes, self.used_key_stable_fast_path, self.used_batched_value_update_path)
+    def __eq__(self, other):
+        if self.input_mutations != other.input_mutations:
+            return False
+        if self.effective_mutations != other.effective_mutations:
+            return False
+        if self.entries_streamed != other.entries_streamed:
+            return False
+        if self.nodes_read != other.nodes_read:
+            return False
+        if self.nodes_written != other.nodes_written:
+            return False
+        if self.nodes_reused != other.nodes_reused:
+            return False
+        if self.bytes_read != other.bytes_read:
+            return False
+        if self.bytes_written != other.bytes_written:
+            return False
+        if self.resync_distance_entries != other.resync_distance_entries:
+            return False
+        if self.resync_distance_nodes != other.resync_distance_nodes:
+            return False
+        if self.used_key_stable_fast_path != other.used_key_stable_fast_path:
+            return False
+        if self.used_batched_value_update_path != other.used_batched_value_update_path:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeWriteStatsRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return WriteStatsRecord(
+            input_mutations=_UniffiFfiConverterUInt64.read(buf),
+            effective_mutations=_UniffiFfiConverterUInt64.read(buf),
+            entries_streamed=_UniffiFfiConverterUInt64.read(buf),
+            nodes_read=_UniffiFfiConverterUInt64.read(buf),
+            nodes_written=_UniffiFfiConverterUInt64.read(buf),
+            nodes_reused=_UniffiFfiConverterUInt64.read(buf),
+            bytes_read=_UniffiFfiConverterUInt64.read(buf),
+            bytes_written=_UniffiFfiConverterUInt64.read(buf),
+            resync_distance_entries=_UniffiFfiConverterUInt64.read(buf),
+            resync_distance_nodes=_UniffiFfiConverterUInt64.read(buf),
+            used_key_stable_fast_path=_UniffiFfiConverterBoolean.read(buf),
+            used_batched_value_update_path=_UniffiFfiConverterBoolean.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterUInt64.check_lower(value.input_mutations)
+        _UniffiFfiConverterUInt64.check_lower(value.effective_mutations)
+        _UniffiFfiConverterUInt64.check_lower(value.entries_streamed)
+        _UniffiFfiConverterUInt64.check_lower(value.nodes_read)
+        _UniffiFfiConverterUInt64.check_lower(value.nodes_written)
+        _UniffiFfiConverterUInt64.check_lower(value.nodes_reused)
+        _UniffiFfiConverterUInt64.check_lower(value.bytes_read)
+        _UniffiFfiConverterUInt64.check_lower(value.bytes_written)
+        _UniffiFfiConverterUInt64.check_lower(value.resync_distance_entries)
+        _UniffiFfiConverterUInt64.check_lower(value.resync_distance_nodes)
+        _UniffiFfiConverterBoolean.check_lower(value.used_key_stable_fast_path)
+        _UniffiFfiConverterBoolean.check_lower(value.used_batched_value_update_path)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterUInt64.write(value.input_mutations, buf)
+        _UniffiFfiConverterUInt64.write(value.effective_mutations, buf)
+        _UniffiFfiConverterUInt64.write(value.entries_streamed, buf)
+        _UniffiFfiConverterUInt64.write(value.nodes_read, buf)
+        _UniffiFfiConverterUInt64.write(value.nodes_written, buf)
+        _UniffiFfiConverterUInt64.write(value.nodes_reused, buf)
+        _UniffiFfiConverterUInt64.write(value.bytes_read, buf)
+        _UniffiFfiConverterUInt64.write(value.bytes_written, buf)
+        _UniffiFfiConverterUInt64.write(value.resync_distance_entries, buf)
+        _UniffiFfiConverterUInt64.write(value.resync_distance_nodes, buf)
+        _UniffiFfiConverterBoolean.write(value.used_key_stable_fast_path, buf)
+        _UniffiFfiConverterBoolean.write(value.used_batched_value_update_path, buf)
+
+@dataclass
+class WriteResultRecord:
+    def __init__(self, *, tree:TreeRecord, stats:WriteStatsRecord):
+        self.tree = tree
+        self.stats = stats
+
+
+
+
+    def __str__(self):
+        return "WriteResultRecord(tree={}, stats={})".format(self.tree, self.stats)
+    def __eq__(self, other):
+        if self.tree != other.tree:
+            return False
+        if self.stats != other.stats:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeWriteResultRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return WriteResultRecord(
+            tree=_UniffiFfiConverterTypeTreeRecord.read(buf),
+            stats=_UniffiFfiConverterTypeWriteStatsRecord.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterTypeTreeRecord.check_lower(value.tree)
+        _UniffiFfiConverterTypeWriteStatsRecord.check_lower(value.stats)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterTypeTreeRecord.write(value.tree, buf)
+        _UniffiFfiConverterTypeWriteStatsRecord.write(value.stats, buf)
 
 @dataclass
 class ChangedSpanRecord:
@@ -13528,6 +13686,16 @@ class ProllyEngineProtocol(typing.Protocol):
         raise NotImplementedError
     def delete_named_root(self, name: bytes) -> None:
         raise NotImplementedError
+    def delete_range(self, tree: TreeRecord,start: bytes,range_end: bytes) -> TreeRecord:
+        """
+        Delete every raw-byte key in the half-open range `[start, end)`.
+"""
+        raise NotImplementedError
+    def delete_range_with_stats(self, tree: TreeRecord,start: bytes,range_end: bytes) -> WriteResultRecord:
+        """
+        Delete every raw-byte key in `[start, end)` and return write statistics.
+"""
+        raise NotImplementedError
     def delete_snapshot(self, namespace: SnapshotNamespaceRecord,id: bytes) -> None:
         raise NotImplementedError
     def diff(self, base: TreeRecord,other: TreeRecord) -> typing.List[DiffRecord]:
@@ -14330,6 +14498,54 @@ class ProllyEngine(ProllyEngineProtocol):
         _uniffi_ffi_result = _uniffi_rust_call_with_error(
             _uniffi_error_converter,
             _UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_delete_named_root,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def delete_range(self, tree: TreeRecord,start: bytes,range_end: bytes) -> TreeRecord:
+        """
+        Delete every raw-byte key in the half-open range `[start, end)`.
+"""
+
+        _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
+
+        _UniffiFfiConverterBytes.check_lower(start)
+
+        _UniffiFfiConverterBytes.check_lower(range_end)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeTreeRecord.lower(tree),
+            _UniffiFfiConverterBytes.lower(start),
+            _UniffiFfiConverterBytes.lower(range_end),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeTreeRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_delete_range,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def delete_range_with_stats(self, tree: TreeRecord,start: bytes,range_end: bytes) -> WriteResultRecord:
+        """
+        Delete every raw-byte key in `[start, end)` and return write statistics.
+"""
+
+        _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
+
+        _UniffiFfiConverterBytes.check_lower(start)
+
+        _UniffiFfiConverterBytes.check_lower(range_end)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeTreeRecord.lower(tree),
+            _UniffiFfiConverterBytes.lower(start),
+            _UniffiFfiConverterBytes.lower(range_end),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeWriteResultRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_delete_range_with_stats,
             *_uniffi_lowered_args,
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
@@ -17933,6 +18149,8 @@ __all__ = [
     "BlobGcPlanRecord",
     "BlobGcSweepRecord",
     "CacheStatsRecord",
+    "WriteStatsRecord",
+    "WriteResultRecord",
     "ChangedSpanRecord",
     "ChangedSpanHintRecord",
     "ConflictRecord",

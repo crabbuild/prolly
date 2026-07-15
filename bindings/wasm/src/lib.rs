@@ -7,6 +7,7 @@ use prolly::{
     MemStore, MultiKeyProof, Mutation, Node, OwnedProllyTransaction, ParallelConfig, Prolly,
     RangeCursor, RangePageProof, RangeProof, Resolver, ReverseCursor, SnapshotBundle,
     SnapshotBundleNode, SnapshotNamespace, StructuralDiffCursor, StructuralDiffMarker, Tree,
+    WriteStats,
 };
 use serde_json::Value;
 use wasm_bindgen::prelude::*;
@@ -528,6 +529,32 @@ impl WasmProllyEngine {
             .delete(&tree.inner, &key.to_vec())
             .map(|inner| WasmTree { inner })
             .map_err(js_error)
+    }
+
+    #[wasm_bindgen(js_name = deleteRange)]
+    pub fn delete_range(
+        &self,
+        tree: &WasmTree,
+        start: Uint8Array,
+        end: Uint8Array,
+    ) -> Result<WasmTree, JsValue> {
+        self.inner
+            .delete_range(&tree.inner, &start.to_vec(), &end.to_vec())
+            .map(|inner| WasmTree { inner })
+            .map_err(js_error)
+    }
+
+    #[wasm_bindgen(js_name = deleteRangeWithStats)]
+    pub fn delete_range_with_stats(
+        &self,
+        tree: &WasmTree,
+        start: Uint8Array,
+        end: Uint8Array,
+    ) -> Result<Object, JsValue> {
+        self.inner
+            .delete_range_with_stats(&tree.inner, &start.to_vec(), &end.to_vec())
+            .map_err(js_error)
+            .and_then(write_result_to_object)
     }
 
     #[wasm_bindgen(js_name = loadNamedRoot)]
@@ -3230,6 +3257,43 @@ fn batch_apply_result_to_object(result: BatchApplyResult) -> Result<Object, JsVa
     Ok(object)
 }
 
+fn write_result_to_object(result: (Tree, WriteStats)) -> Result<Object, JsValue> {
+    let object = Object::new();
+    let tree: JsValue = WasmTree { inner: result.0 }.into();
+    Reflect::set(&object, &"tree".into(), &tree)?;
+    Reflect::set(&object, &"stats".into(), &write_stats_to_object(result.1)?)?;
+    Ok(object)
+}
+
+fn write_stats_to_object(stats: WriteStats) -> Result<JsValue, JsValue> {
+    let object = Object::new();
+    for (key, value) in [
+        ("inputMutations", stats.input_mutations),
+        ("effectiveMutations", stats.effective_mutations),
+        ("entriesStreamed", stats.entries_streamed),
+        ("nodesRead", stats.nodes_read),
+        ("nodesWritten", stats.nodes_written),
+        ("nodesReused", stats.nodes_reused),
+        ("bytesRead", stats.bytes_read),
+        ("bytesWritten", stats.bytes_written),
+        ("resyncDistanceEntries", stats.resync_distance_entries),
+        ("resyncDistanceNodes", stats.resync_distance_nodes),
+    ] {
+        Reflect::set(&object, &key.into(), &JsValue::from_f64(value as f64))?;
+    }
+    Reflect::set(
+        &object,
+        &"usedKeyStableFastPath".into(),
+        &JsValue::from_bool(stats.used_key_stable_fast_path),
+    )?;
+    Reflect::set(
+        &object,
+        &"usedBatchedValueUpdatePath".into(),
+        &JsValue::from_bool(stats.used_batched_value_update_path),
+    )?;
+    Ok(object.into())
+}
+
 fn batch_apply_stats_to_object(stats: BatchApplyStats) -> Result<JsValue, JsValue> {
     let object = Object::new();
     Reflect::set(
@@ -3508,4 +3572,21 @@ fn uint8_array(value: JsValue, message: &str) -> Result<Uint8Array, JsValue> {
     value
         .dyn_into::<Uint8Array>()
         .map_err(|_| JsValue::from_str(message))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn wasm_engine_exposes_delete_range_methods() {
+        let _: fn(
+            &WasmProllyEngine,
+            &WasmTree,
+            Uint8Array,
+            Uint8Array,
+        ) -> Result<WasmTree, JsValue> = WasmProllyEngine::delete_range;
+        let _: fn(&WasmProllyEngine, &WasmTree, Uint8Array, Uint8Array) -> Result<Object, JsValue> =
+            WasmProllyEngine::delete_range_with_stats;
+    }
 }

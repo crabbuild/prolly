@@ -366,6 +366,56 @@ end
     end
   end
 
+  # The Record type WriteResultRecord.
+
+  def self.check_lower_TypeWriteResultRecord(v)
+    RustBuffer.check_lower_TypeTreeRecord(v.tree)
+    RustBuffer.check_lower_TypeWriteStatsRecord(v.stats)
+  end
+
+  def self.alloc_from_TypeWriteResultRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeWriteResultRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeWriteResultRecord
+    consumeWithStream do |stream|
+      return stream.readTypeWriteResultRecord
+    end
+  end
+
+  # The Record type WriteStatsRecord.
+
+  def self.check_lower_TypeWriteStatsRecord(v)
+
+
+
+
+
+
+
+
+
+
+
+
+  end
+
+  def self.alloc_from_TypeWriteStatsRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeWriteStatsRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeWriteStatsRecord
+    consumeWithStream do |stream|
+      return stream.readTypeWriteStatsRecord
+    end
+  end
+
   # The Record type ChangedSpanHintRecord.
 
   def self.check_lower_TypeChangedSpanHintRecord(v)
@@ -4106,6 +4156,34 @@ class RustBufferStream
     )
   end
 
+  # The Record type WriteResultRecord.
+
+  def readTypeWriteResultRecord
+    WriteResultRecord.new(
+      tree: readTypeTreeRecord,
+      stats: readTypeWriteStatsRecord
+    )
+  end
+
+  # The Record type WriteStatsRecord.
+
+  def readTypeWriteStatsRecord
+    WriteStatsRecord.new(
+      input_mutations: readU64,
+      effective_mutations: readU64,
+      entries_streamed: readU64,
+      nodes_read: readU64,
+      nodes_written: readU64,
+      nodes_reused: readU64,
+      bytes_read: readU64,
+      bytes_written: readU64,
+      resync_distance_entries: readU64,
+      resync_distance_nodes: readU64,
+      used_key_stable_fast_path: readBool,
+      used_batched_value_update_path: readBool
+    )
+  end
+
   # The Record type ChangedSpanHintRecord.
 
   def readTypeChangedSpanHintRecord
@@ -6645,6 +6723,30 @@ class RustBufferBuilder
     self.write_U64(v.pinned_bytes)
   end
 
+  # The Record type WriteResultRecord.
+
+  def write_TypeWriteResultRecord(v)
+    self.write_TypeTreeRecord(v.tree)
+    self.write_TypeWriteStatsRecord(v.stats)
+  end
+
+  # The Record type WriteStatsRecord.
+
+  def write_TypeWriteStatsRecord(v)
+    self.write_U64(v.input_mutations)
+    self.write_U64(v.effective_mutations)
+    self.write_U64(v.entries_streamed)
+    self.write_U64(v.nodes_read)
+    self.write_U64(v.nodes_written)
+    self.write_U64(v.nodes_reused)
+    self.write_U64(v.bytes_read)
+    self.write_U64(v.bytes_written)
+    self.write_U64(v.resync_distance_entries)
+    self.write_U64(v.resync_distance_nodes)
+    self.write_Bool(v.used_key_stable_fast_path)
+    self.write_Bool(v.used_batched_value_update_path)
+  end
+
   # The Record type ChangedSpanHintRecord.
 
   def write_TypeChangedSpanHintRecord(v)
@@ -8688,6 +8790,12 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_fn_method_prollyengine_delete_named_root,
     [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
     :void
+  attach_function :uniffi_prolly_bindings_fn_method_prollyengine_delete_range,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_prollyengine_delete_range_with_stats,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_method_prollyengine_delete_snapshot,
     [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
     :void
@@ -9909,6 +10017,12 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_delete_named_root,
     [RustCallStatus.by_ref],
     :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_delete_range,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_delete_range_with_stats,
+    [RustCallStatus.by_ref],
+    :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_delete_snapshot,
     [RustCallStatus.by_ref],
     :uint16
@@ -10816,6 +10930,88 @@ class CacheStatsRecord
       return false
     end
     if @pinned_bytes != other.pinned_bytes
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type WriteResultRecord
+class WriteResultRecord
+  attr_reader :tree, :stats
+
+  def initialize(tree:, stats:)
+    @tree = tree
+    @stats = stats
+  end
+
+  def ==(other)
+    if @tree != other.tree
+      return false
+    end
+    if @stats != other.stats
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type WriteStatsRecord
+class WriteStatsRecord
+  attr_reader :input_mutations, :effective_mutations, :entries_streamed, :nodes_read, :nodes_written, :nodes_reused, :bytes_read, :bytes_written, :resync_distance_entries, :resync_distance_nodes, :used_key_stable_fast_path, :used_batched_value_update_path
+
+  def initialize(input_mutations:, effective_mutations:, entries_streamed:, nodes_read:, nodes_written:, nodes_reused:, bytes_read:, bytes_written:, resync_distance_entries:, resync_distance_nodes:, used_key_stable_fast_path:, used_batched_value_update_path:)
+    @input_mutations = input_mutations
+    @effective_mutations = effective_mutations
+    @entries_streamed = entries_streamed
+    @nodes_read = nodes_read
+    @nodes_written = nodes_written
+    @nodes_reused = nodes_reused
+    @bytes_read = bytes_read
+    @bytes_written = bytes_written
+    @resync_distance_entries = resync_distance_entries
+    @resync_distance_nodes = resync_distance_nodes
+    @used_key_stable_fast_path = used_key_stable_fast_path
+    @used_batched_value_update_path = used_batched_value_update_path
+  end
+
+  def ==(other)
+    if @input_mutations != other.input_mutations
+      return false
+    end
+    if @effective_mutations != other.effective_mutations
+      return false
+    end
+    if @entries_streamed != other.entries_streamed
+      return false
+    end
+    if @nodes_read != other.nodes_read
+      return false
+    end
+    if @nodes_written != other.nodes_written
+      return false
+    end
+    if @nodes_reused != other.nodes_reused
+      return false
+    end
+    if @bytes_read != other.bytes_read
+      return false
+    end
+    if @bytes_written != other.bytes_written
+      return false
+    end
+    if @resync_distance_entries != other.resync_distance_entries
+      return false
+    end
+    if @resync_distance_nodes != other.resync_distance_nodes
+      return false
+    end
+    if @used_key_stable_fast_path != other.used_key_stable_fast_path
+      return false
+    end
+    if @used_batched_value_update_path != other.used_batched_value_update_path
       return false
     end
 
@@ -16038,6 +16234,26 @@ end
       Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_delete_named_root,uniffi_clone_handle(),RustBuffer.allocFromBytes(name))
   end
 
+  def delete_range(tree, start, range_end)
+        tree = tree
+        RustBuffer.check_lower_TypeTreeRecord(tree)
+        start = Prolly::uniffi_bytes(start)
+
+        range_end = Prolly::uniffi_bytes(range_end)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_delete_range,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.allocFromBytes(start),RustBuffer.allocFromBytes(range_end))
+    return result.consumeIntoTypeTreeRecord
+  end
+  def delete_range_with_stats(tree, start, range_end)
+        tree = tree
+        RustBuffer.check_lower_TypeTreeRecord(tree)
+        start = Prolly::uniffi_bytes(start)
+
+        range_end = Prolly::uniffi_bytes(range_end)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_delete_range_with_stats,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.allocFromBytes(start),RustBuffer.allocFromBytes(range_end))
+    return result.consumeIntoTypeWriteResultRecord
+  end
   def delete_snapshot(namespace, id)
         namespace = namespace
         RustBuffer.check_lower_TypeSnapshotNamespaceRecord(namespace)

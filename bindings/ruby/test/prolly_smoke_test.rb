@@ -207,6 +207,13 @@ assert_equal 1, entries.length
 assert_equal 'a'.b, entries.first.key
 assert_equal '1'.b, entries.first.value
 
+range_delete_tree = engine.create
+%w[a b c d e f].each { |key| range_delete_tree = engine.put(range_delete_tree, key.b, key.b) }
+deleted_range = engine.delete_range(range_delete_tree, 'b'.b, 'e'.b)
+assert_equal %w[a e f].map(&:b), engine.range(deleted_range, ''.b, nil).map(&:key)
+deleted_range_with_stats = engine.delete_range_with_stats(range_delete_tree, 'b'.b, 'e'.b)
+assert_equal %w[a e f].map(&:b), engine.range(deleted_range_with_stats.tree, ''.b, nil).map(&:key)
+
 proof = engine.prove_key(tree, 'a'.b)
 verified_proof = Prolly.verify_key_proof(proof)
 assert_equal true, verified_proof.valid

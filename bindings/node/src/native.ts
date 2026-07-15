@@ -64,6 +64,26 @@ export interface NativeBatchApplyResultRecord {
   stats: NativeBatchApplyStatsRecord;
 }
 
+export interface NativeWriteStatsRecord {
+  inputMutations: string;
+  effectiveMutations: string;
+  entriesStreamed: string;
+  nodesRead: string;
+  nodesWritten: string;
+  nodesReused: string;
+  bytesRead: string;
+  bytesWritten: string;
+  resyncDistanceEntries: string;
+  resyncDistanceNodes: string;
+  usedKeyStableFastPath: boolean;
+  usedBatchedValueUpdatePath: boolean;
+}
+
+export interface NativeWriteResultRecord {
+  tree: NativeTreeRecord;
+  stats: NativeWriteStatsRecord;
+}
+
 export interface NativeRangeCursorRecord {
   afterKey?: Uint8Array | null;
 }
@@ -842,6 +862,12 @@ export interface NativeProllyEngine {
   beginTransaction(): NativeProllyTransaction;
   put(tree: NativeTreeRecord, key: Uint8Array, value: Uint8Array): NativeTreeRecord;
   delete(tree: NativeTreeRecord, key: Uint8Array): NativeTreeRecord;
+  deleteRange(tree: NativeTreeRecord, start: Uint8Array, rangeEnd: Uint8Array): NativeTreeRecord;
+  deleteRangeWithStats(
+    tree: NativeTreeRecord,
+    start: Uint8Array,
+    rangeEnd: Uint8Array,
+  ): NativeWriteResultRecord;
   get(tree: NativeTreeRecord, key: Uint8Array): Uint8Array | null;
   getValueRef(tree: NativeTreeRecord, key: Uint8Array): NativeValueRefRecord | null;
   getLargeValue(blobStore: NativeProllyBlobStore, tree: NativeTreeRecord, key: Uint8Array): Uint8Array | null;

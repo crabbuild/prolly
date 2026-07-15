@@ -38,6 +38,26 @@ export interface WasmBatchApplyResultRecord {
   stats: WasmBatchApplyStatsRecord;
 }
 
+export interface WasmWriteStatsRecord {
+  inputMutations: number;
+  effectiveMutations: number;
+  entriesStreamed: number;
+  nodesRead: number;
+  nodesWritten: number;
+  nodesReused: number;
+  bytesRead: number;
+  bytesWritten: number;
+  resyncDistanceEntries: number;
+  resyncDistanceNodes: number;
+  usedKeyStableFastPath: boolean;
+  usedBatchedValueUpdatePath: boolean;
+}
+
+export interface WasmWriteResultRecord {
+  tree: unknown;
+  stats: WasmWriteStatsRecord;
+}
+
 export interface WasmSnapshotBundleNodeRecord {
   cid: Uint8Array;
   bytes: Uint8Array;
@@ -488,6 +508,8 @@ export interface WasmProllyEngineInstance
     | "beginTransaction"
     | "firstEntry"
     | "lastEntry"
+    | "deleteRange"
+    | "deleteRangeWithStats"
     | "loadNamedRoot"
     | "compareAndSwapNamedRoot"
     | "lowerBound"
@@ -500,6 +522,12 @@ export interface WasmProllyEngineInstance
   beginTransaction(): WasmTransactionInstance;
   firstEntry(tree: WasmTree): WasmOptionalEntryRecord;
   lastEntry(tree: WasmTree): WasmOptionalEntryRecord;
+  deleteRange(tree: WasmTree, start: Uint8Array, rangeEnd: Uint8Array): WasmTree;
+  deleteRangeWithStats(
+    tree: WasmTree,
+    start: Uint8Array,
+    rangeEnd: Uint8Array,
+  ): WasmWriteResultRecord;
   loadNamedRoot(name: Uint8Array): WasmTree | null;
   compareAndSwapNamedRoot(
     name: Uint8Array,

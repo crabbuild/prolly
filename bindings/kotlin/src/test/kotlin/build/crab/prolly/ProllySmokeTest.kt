@@ -25,6 +25,22 @@ class ProllySmokeTest {
     }
 
     @Test
+    fun memoryEngineDeleteRangeUsesHalfOpenBounds() {
+        ProllyNative.useLocalDebugLibrary()
+
+        ProllyEngine.memory(defaultConfig()).use { engine ->
+            var tree = engine.create()
+            for (key in listOf("a", "b", "c", "d", "e", "f")) {
+                tree = engine.put(tree, key.toByteArray(), key.toByteArray())
+            }
+            val deleted = engine.deleteRange(tree, "b".toByteArray(), "e".toByteArray())
+            assertEquals(listOf("a", "e", "f"), engine.range(deleted, ByteArray(0), null).map { it.key.decodeToString() })
+            val withStats = engine.deleteRangeWithStats(tree, "b".toByteArray(), "e".toByteArray())
+            assertEquals(listOf("a", "e", "f"), engine.range(withStats.tree, ByteArray(0), null).map { it.key.decodeToString() })
+        }
+    }
+
+    @Test
     fun memoryTransactionCommitsRollsBackAndConflicts() {
         ProllyNative.useLocalDebugLibrary()
 

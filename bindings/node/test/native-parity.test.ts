@@ -505,6 +505,18 @@ test("native batch, getMany, pages, and diff pages use Rust engine", { skip: nat
   assert.equal(secondConflictPage.nextCursor == null, true);
 });
 
+test("native deleteRange uses half-open raw-byte bounds", { skip: native === null }, () => {
+  assert.ok(native);
+  const engine = native.NativeProllyEngine.memory();
+  let tree = engine.create();
+  for (const key of ["a", "b", "c", "d", "e", "f"]) tree = engine.put(tree, bytes(key), bytes(key));
+
+  const deleted = engine.deleteRange(tree, bytes("b"), bytes("e"));
+  assert.deepEqual(engine.range(deleted, Buffer.alloc(0), null).map((entry) => text(entry.key)), ["a", "e", "f"]);
+  const withStats = engine.deleteRangeWithStats(tree, bytes("b"), bytes("e"));
+  assert.deepEqual(engine.range(withStats.tree, Buffer.alloc(0), null).map((entry) => text(entry.key)), ["a", "e", "f"]);
+});
+
 test("native merge and named-root CAS use Rust engine", { skip: native === null }, () => {
   assert.ok(native);
   const engine = native.NativeProllyEngine.memory();

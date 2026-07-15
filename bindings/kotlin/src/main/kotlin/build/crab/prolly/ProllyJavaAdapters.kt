@@ -725,6 +725,62 @@ object ProllyJavaAdapters {
         record.stats
 
     @JvmStatic
+    fun writeResultTree(record: WriteResultRecord): TreeRecord =
+        record.tree
+
+    @JvmStatic
+    fun writeResultStats(record: WriteResultRecord): WriteStatsRecord =
+        record.stats
+
+    @JvmStatic
+    fun writeStatsInputMutations(record: WriteStatsRecord): Long =
+        record.inputMutations.toLong()
+
+    @JvmStatic
+    fun writeStatsEffectiveMutations(record: WriteStatsRecord): Long =
+        record.effectiveMutations.toLong()
+
+    @JvmStatic
+    fun writeStatsEntriesStreamed(record: WriteStatsRecord): Long =
+        record.entriesStreamed.toLong()
+
+    @JvmStatic
+    fun writeStatsNodesRead(record: WriteStatsRecord): Long =
+        record.nodesRead.toLong()
+
+    @JvmStatic
+    fun writeStatsNodesWritten(record: WriteStatsRecord): Long =
+        record.nodesWritten.toLong()
+
+    @JvmStatic
+    fun writeStatsNodesReused(record: WriteStatsRecord): Long =
+        record.nodesReused.toLong()
+
+    @JvmStatic
+    fun writeStatsBytesRead(record: WriteStatsRecord): Long =
+        record.bytesRead.toLong()
+
+    @JvmStatic
+    fun writeStatsBytesWritten(record: WriteStatsRecord): Long =
+        record.bytesWritten.toLong()
+
+    @JvmStatic
+    fun writeStatsResyncDistanceEntries(record: WriteStatsRecord): Long =
+        record.resyncDistanceEntries.toLong()
+
+    @JvmStatic
+    fun writeStatsResyncDistanceNodes(record: WriteStatsRecord): Long =
+        record.resyncDistanceNodes.toLong()
+
+    @JvmStatic
+    fun writeStatsUsedKeyStableFastPath(record: WriteStatsRecord): Boolean =
+        record.usedKeyStableFastPath
+
+    @JvmStatic
+    fun writeStatsUsedBatchedValueUpdatePath(record: WriteStatsRecord): Boolean =
+        record.usedBatchedValueUpdatePath
+
+    @JvmStatic
     fun batchStatsInputMutations(record: BatchApplyStatsRecord): Long =
         record.inputMutations.toLong()
 

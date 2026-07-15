@@ -1,6 +1,7 @@
 import {
   loadNative,
   type NativeBatchApplyResultRecord,
+  type NativeWriteResultRecord,
   type NativeBlobGcPlanRecord,
   type NativeBlobGcReachabilityRecord,
   type NativeBlobGcSweepRecord,
@@ -259,6 +260,18 @@ export class AsyncProllyEngine {
 
   provePrefix(tree: NativeTreeRecord, prefix: Uint8Array): Promise<NativeRangeProofRecord> {
     return defer(() => this.inner.provePrefix(tree, prefix));
+  }
+
+  deleteRange(tree: NativeTreeRecord, start: Uint8Array, rangeEnd: Uint8Array): Promise<NativeTreeRecord> {
+    return defer(() => this.inner.deleteRange(tree, start, rangeEnd));
+  }
+
+  deleteRangeWithStats(
+    tree: NativeTreeRecord,
+    start: Uint8Array,
+    rangeEnd: Uint8Array,
+  ): Promise<NativeWriteResultRecord> {
+    return defer(() => this.inner.deleteRangeWithStats(tree, start, rangeEnd));
   }
 
   proveRangePage(

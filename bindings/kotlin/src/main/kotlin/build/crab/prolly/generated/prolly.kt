@@ -1152,6 +1152,10 @@ external fun uniffi_prolly_bindings_checksum_method_prollyengine_delete(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_prollyengine_delete_named_root(
 ): Short
+external fun uniffi_prolly_bindings_checksum_method_prollyengine_delete_range(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_prollyengine_delete_range_with_stats(
+): Short
 external fun uniffi_prolly_bindings_checksum_method_prollyengine_delete_snapshot(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_prollyengine_diff(
@@ -1545,6 +1549,10 @@ external fun uniffi_prolly_bindings_fn_method_prollyengine_delete(`ptr`: Long,`t
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_prollyengine_delete_named_root(`ptr`: Long,`name`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): Unit
+external fun uniffi_prolly_bindings_fn_method_prollyengine_delete_range(`ptr`: Long,`tree`: RustBuffer.ByValue,`start`: RustBuffer.ByValue,`rangeEnd`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_prollyengine_delete_range_with_stats(`ptr`: Long,`tree`: RustBuffer.ByValue,`start`: RustBuffer.ByValue,`rangeEnd`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_prollyengine_delete_snapshot(`ptr`: Long,`namespace`: RustBuffer.ByValue,`id`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): Unit
 external fun uniffi_prolly_bindings_fn_method_prollyengine_diff(`ptr`: Long,`base`: RustBuffer.ByValue,`other`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -2651,6 +2659,12 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_delete_named_root() != 24437.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_delete_range() != 41608.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_delete_range_with_stats() != 26465.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_delete_snapshot() != 45711.toShort()) {
@@ -5572,6 +5586,16 @@ public interface ProllyEngineInterface {
 
     fun `deleteNamedRoot`(`name`: kotlin.ByteArray)
 
+    /**
+     * Delete every raw-byte key in the half-open range `[start, end)`.
+     */
+    fun `deleteRange`(`tree`: TreeRecord, `start`: kotlin.ByteArray, `rangeEnd`: kotlin.ByteArray): TreeRecord
+
+    /**
+     * Delete every raw-byte key in `[start, end)` and return write statistics.
+     */
+    fun `deleteRangeWithStats`(`tree`: TreeRecord, `start`: kotlin.ByteArray, `rangeEnd`: kotlin.ByteArray): WriteResultRecord
+
     fun `deleteSnapshot`(`namespace`: SnapshotNamespaceRecord, `id`: kotlin.ByteArray)
 
     fun `diff`(`base`: TreeRecord, `other`: TreeRecord): List<DiffRecord>
@@ -6239,6 +6263,40 @@ open class ProllyEngine: Disposable, AutoCloseable, ProllyEngineInterface
 }
     }
 
+
+
+
+    /**
+     * Delete every raw-byte key in the half-open range `[start, end)`.
+     */
+    @Throws(ProllyBindingException::class)override fun `deleteRange`(`tree`: TreeRecord, `start`: kotlin.ByteArray, `rangeEnd`: kotlin.ByteArray): TreeRecord {
+            return FfiConverterTypeTreeRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_delete_range(
+        it,
+        FfiConverterTypeTreeRecord.lower(`tree`),FfiConverterByteArray.lower(`start`),FfiConverterByteArray.lower(`rangeEnd`),_status)
+}
+    }
+    )
+    }
+
+
+
+    /**
+     * Delete every raw-byte key in `[start, end)` and return write statistics.
+     */
+    @Throws(ProllyBindingException::class)override fun `deleteRangeWithStats`(`tree`: TreeRecord, `start`: kotlin.ByteArray, `rangeEnd`: kotlin.ByteArray): WriteResultRecord {
+            return FfiConverterTypeWriteResultRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_delete_range_with_stats(
+        it,
+        FfiConverterTypeTreeRecord.lower(`tree`),FfiConverterByteArray.lower(`start`),FfiConverterByteArray.lower(`rangeEnd`),_status)
+}
+    }
+    )
+    }
 
 
 
@@ -8490,6 +8548,132 @@ public object FfiConverterTypeCacheStatsRecord: FfiConverterRustBuffer<CacheStat
             FfiConverterULong.write(value.`cachedBytes`, buf)
             FfiConverterULong.write(value.`pinnedNodes`, buf)
             FfiConverterULong.write(value.`pinnedBytes`, buf)
+    }
+}
+
+
+
+data class WriteResultRecord (
+    var `tree`: TreeRecord
+    ,
+    var `stats`: WriteStatsRecord
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeWriteResultRecord: FfiConverterRustBuffer<WriteResultRecord> {
+    override fun read(buf: ByteBuffer): WriteResultRecord {
+        return WriteResultRecord(
+            FfiConverterTypeTreeRecord.read(buf),
+            FfiConverterTypeWriteStatsRecord.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: WriteResultRecord) = (
+            FfiConverterTypeTreeRecord.allocationSize(value.`tree`) +
+            FfiConverterTypeWriteStatsRecord.allocationSize(value.`stats`)
+    )
+
+    override fun write(value: WriteResultRecord, buf: ByteBuffer) {
+            FfiConverterTypeTreeRecord.write(value.`tree`, buf)
+            FfiConverterTypeWriteStatsRecord.write(value.`stats`, buf)
+    }
+}
+
+
+
+data class WriteStatsRecord (
+    var `inputMutations`: kotlin.ULong
+    ,
+    var `effectiveMutations`: kotlin.ULong
+    ,
+    var `entriesStreamed`: kotlin.ULong
+    ,
+    var `nodesRead`: kotlin.ULong
+    ,
+    var `nodesWritten`: kotlin.ULong
+    ,
+    var `nodesReused`: kotlin.ULong
+    ,
+    var `bytesRead`: kotlin.ULong
+    ,
+    var `bytesWritten`: kotlin.ULong
+    ,
+    var `resyncDistanceEntries`: kotlin.ULong
+    ,
+    var `resyncDistanceNodes`: kotlin.ULong
+    ,
+    var `usedKeyStableFastPath`: kotlin.Boolean
+    ,
+    var `usedBatchedValueUpdatePath`: kotlin.Boolean
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeWriteStatsRecord: FfiConverterRustBuffer<WriteStatsRecord> {
+    override fun read(buf: ByteBuffer): WriteStatsRecord {
+        return WriteStatsRecord(
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterBoolean.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: WriteStatsRecord) = (
+            FfiConverterULong.allocationSize(value.`inputMutations`) +
+            FfiConverterULong.allocationSize(value.`effectiveMutations`) +
+            FfiConverterULong.allocationSize(value.`entriesStreamed`) +
+            FfiConverterULong.allocationSize(value.`nodesRead`) +
+            FfiConverterULong.allocationSize(value.`nodesWritten`) +
+            FfiConverterULong.allocationSize(value.`nodesReused`) +
+            FfiConverterULong.allocationSize(value.`bytesRead`) +
+            FfiConverterULong.allocationSize(value.`bytesWritten`) +
+            FfiConverterULong.allocationSize(value.`resyncDistanceEntries`) +
+            FfiConverterULong.allocationSize(value.`resyncDistanceNodes`) +
+            FfiConverterBoolean.allocationSize(value.`usedKeyStableFastPath`) +
+            FfiConverterBoolean.allocationSize(value.`usedBatchedValueUpdatePath`)
+    )
+
+    override fun write(value: WriteStatsRecord, buf: ByteBuffer) {
+            FfiConverterULong.write(value.`inputMutations`, buf)
+            FfiConverterULong.write(value.`effectiveMutations`, buf)
+            FfiConverterULong.write(value.`entriesStreamed`, buf)
+            FfiConverterULong.write(value.`nodesRead`, buf)
+            FfiConverterULong.write(value.`nodesWritten`, buf)
+            FfiConverterULong.write(value.`nodesReused`, buf)
+            FfiConverterULong.write(value.`bytesRead`, buf)
+            FfiConverterULong.write(value.`bytesWritten`, buf)
+            FfiConverterULong.write(value.`resyncDistanceEntries`, buf)
+            FfiConverterULong.write(value.`resyncDistanceNodes`, buf)
+            FfiConverterBoolean.write(value.`usedKeyStableFastPath`, buf)
+            FfiConverterBoolean.write(value.`usedBatchedValueUpdatePath`, buf)
     }
 }
 

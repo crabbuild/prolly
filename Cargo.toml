@@ -4,7 +4,7 @@ description = "Content-addressed versioned map storage primitives."
 readme = "README.md"
 edition = "2021"
 rust-version = "1.81"
-version = "0.2.3"
+version = "0.3.0"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/crabbuild/prolly"
 homepage = "https://github.com/crabbuild/prolly"
@@ -25,7 +25,7 @@ include = [
     "conformance/prolly-fixtures.v1.json",
     "conformance/proximity-fixtures.json",
     "diagram/**",
-    "docs/**",
+    "docs/**/*.md",
     "examples/**",
     "src/**",
     "tests/**",

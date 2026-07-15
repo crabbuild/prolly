@@ -369,6 +369,48 @@ func TestMemoryEngineCrudAndRange(t *testing.T) {
 	}
 }
 
+func TestMemoryEngineDeleteRangeUsesHalfOpenBounds(t *testing.T) {
+	engine, err := OpenMemory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer engine.Close()
+
+	tree, err := engine.Create()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"a", "b", "c", "d", "e", "f"} {
+		tree, err = engine.Put(tree, []byte(key), []byte(key))
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	deleted, err := engine.DeleteRange(tree, []byte("b"), []byte("e"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries, err := engine.Range(deleted, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := []string{string(entries[0].Key), string(entries[1].Key), string(entries[2].Key)}; !reflect.DeepEqual(got, []string{"a", "e", "f"}) {
+		t.Fatalf("range delete keys = %v, want [a e f]", got)
+	}
+	withStats, err := engine.DeleteRangeWithStats(tree, []byte("b"), []byte("e"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries, err = engine.Range(withStats.Tree, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := []string{string(entries[0].Key), string(entries[1].Key), string(entries[2].Key)}; !reflect.DeepEqual(got, []string{"a", "e", "f"}) {
+		t.Fatalf("range delete with stats keys = %v, want [a e f]", got)
+	}
+}
+
 func TestMemoryEngineTransactionCommitsNamedRoots(t *testing.T) {
 	engine, err := OpenMemory()
 	if err != nil {

@@ -119,7 +119,8 @@ use prolly_bindings::{
     TombstoneRecord as BindingTombstoneRecord,
     TransactionConflictRecord as BindingTransactionConflictRecord,
     TransactionUpdateRecord as BindingTransactionUpdateRecord, TreeRecord, ValueRefKind,
-    ValueRefRecord as BindingValueRefRecord,
+    ValueRefRecord as BindingValueRefRecord, WriteResultRecord as BindingWriteResultRecord,
+    WriteStatsRecord as BindingWriteStatsRecord,
 };
 use serde::Deserialize;
 use std::sync::{Arc, Mutex};
@@ -231,6 +232,28 @@ pub struct NodeBatchApplyStatsRecord {
 pub struct NodeBatchApplyResultRecord {
     pub tree: NodeTreeRecord,
     pub stats: NodeBatchApplyStatsRecord,
+}
+
+#[napi(object)]
+pub struct NodeWriteStatsRecord {
+    pub input_mutations: String,
+    pub effective_mutations: String,
+    pub entries_streamed: String,
+    pub nodes_read: String,
+    pub nodes_written: String,
+    pub nodes_reused: String,
+    pub bytes_read: String,
+    pub bytes_written: String,
+    pub resync_distance_entries: String,
+    pub resync_distance_nodes: String,
+    pub used_key_stable_fast_path: bool,
+    pub used_batched_value_update_path: bool,
+}
+
+#[napi(object)]
+pub struct NodeWriteResultRecord {
+    pub tree: NodeTreeRecord,
+    pub stats: NodeWriteStatsRecord,
 }
 
 #[napi(object)]
@@ -1742,6 +1765,40 @@ impl NativeProllyEngine {
             )
             .map_err(to_napi_error)?;
         Ok(tree.into())
+    }
+
+    #[napi(js_name = "deleteRange")]
+    pub fn delete_range(
+        &self,
+        tree: NodeTreeRecord,
+        start: Buffer,
+        range_end: Buffer,
+    ) -> Result<NodeTreeRecord> {
+        self.inner
+            .delete_range(
+                tree.into_tree(self.config.clone()),
+                start.to_vec(),
+                range_end.to_vec(),
+            )
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "deleteRangeWithStats")]
+    pub fn delete_range_with_stats(
+        &self,
+        tree: NodeTreeRecord,
+        start: Buffer,
+        range_end: Buffer,
+    ) -> Result<NodeWriteResultRecord> {
+        self.inner
+            .delete_range_with_stats(
+                tree.into_tree(self.config.clone()),
+                start.to_vec(),
+                range_end.to_vec(),
+            )
+            .map(Into::into)
+            .map_err(to_napi_error)
     }
 
     #[napi]
@@ -3601,6 +3658,34 @@ impl From<BindingBatchApplyStatsRecord> for NodeBatchApplyStatsRecord {
 
 impl From<BindingBatchApplyResultRecord> for NodeBatchApplyResultRecord {
     fn from(result: BindingBatchApplyResultRecord) -> Self {
+        Self {
+            tree: result.tree.into(),
+            stats: result.stats.into(),
+        }
+    }
+}
+
+impl From<BindingWriteStatsRecord> for NodeWriteStatsRecord {
+    fn from(stats: BindingWriteStatsRecord) -> Self {
+        Self {
+            input_mutations: stats.input_mutations.to_string(),
+            effective_mutations: stats.effective_mutations.to_string(),
+            entries_streamed: stats.entries_streamed.to_string(),
+            nodes_read: stats.nodes_read.to_string(),
+            nodes_written: stats.nodes_written.to_string(),
+            nodes_reused: stats.nodes_reused.to_string(),
+            bytes_read: stats.bytes_read.to_string(),
+            bytes_written: stats.bytes_written.to_string(),
+            resync_distance_entries: stats.resync_distance_entries.to_string(),
+            resync_distance_nodes: stats.resync_distance_nodes.to_string(),
+            used_key_stable_fast_path: stats.used_key_stable_fast_path,
+            used_batched_value_update_path: stats.used_batched_value_update_path,
+        }
+    }
+}
+
+impl From<BindingWriteResultRecord> for NodeWriteResultRecord {
+    fn from(result: BindingWriteResultRecord) -> Self {
         Self {
             tree: result.tree.into(),
             stats: result.stats.into(),
