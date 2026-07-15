@@ -37,5 +37,9 @@ name = "slatedb_ops_bench"
 harness = false
 
 [[bench]]
+name = "slatedb_derived_scale_bench"
+harness = false
+
+[[bench]]
 name = "slatedb_workload_bench"
 harness = false
