@@ -243,8 +243,7 @@ Open `Arc<SqliteStore>` with `busy_timeout_ms: 5_000`, WAL enabled, and `synchro
 
 ```rust
 ContentRootManifest {
-    root: TypedContentRoot::proximity_descriptor(map.tree().descriptor.clone())
-        .with_dimensions(1_536),
+    root: TypedContentRoot::proximity_descriptor(map.tree().descriptor.clone()),
     logical_version: 1,
     created_at_millis: 0,
     metadata: BTreeMap::from([
@@ -255,7 +254,7 @@ ContentRootManifest {
 }
 ```
 
-On reopen, require `ContentObjectKind::ProximityDescriptor`, root dimensions `Some(1536)`, logical version `1`, and exact metadata values before calling `ProximityMap::load` and `verify`.
+On reopen, require `ContentObjectKind::ProximityDescriptor`, no root-level PRXN dimension context, logical version `1`, and exact metadata values including `dimensions=1536` before calling `ProximityMap::load` and `verify`.
 
 - [ ] **Step 4: Implement the CLI and human-readable output**
 

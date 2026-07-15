@@ -153,6 +153,12 @@ More copyable examples live in [`examples/`](examples/):
 - [`filesystem_snapshot.rs`](examples/filesystem_snapshot.rs): Git-like
   filesystem snapshots with file blobs and named roots.
 
+Adapter-specific examples include
+[`semantic_rag.rs`](stores/prolly-store-sqlite/examples/semantic_rag.rs), a
+fully offline 1,536-dimensional `ProximityMap` that persists its corpus and
+named descriptor in SQLite, reopens it across process runs, and emits ranked
+RAG citations plus an LLM-ready context block.
+
 ## Key helpers
 
 Keys are raw bytes and sort lexicographically. For application-level schemas,
@@ -992,7 +998,8 @@ Built-in stores:
 
 Optional adapter crates:
 
-- `prolly-store-sqlite`: persistent SQLite backend.
+- `prolly-store-sqlite`: persistent SQLite backend, including a
+  [durable semantic RAG example](stores/prolly-store-sqlite/examples/semantic_rag.rs).
 - `prolly-store-rocksdb`: embedded RocksDB backend.
 - `prolly-store-pglite`: PGlite/Node sidecar backend.
 - `prolly-store-slatedb`: object-store-backed SlateDB backend.

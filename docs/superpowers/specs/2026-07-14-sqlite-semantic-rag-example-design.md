@@ -77,6 +77,11 @@ If the named root is absent, the example:
 5. stores corpus version, embedding identifier, and dimensions in manifest
    metadata.
 
+The typed descriptor root itself carries no PRXN dimension context. The content
+graph decoder obtains dimensions from PRXI and attaches them only to PRXN-family
+descendants; the manifest's explicit `dimensions` metadata enforces the
+application-level embedding contract.
+
 If the root exists, the example:
 
 1. loads the manifest;
