@@ -33,8 +33,8 @@ pub(crate) fn apply<S: Store>(
             });
         }
     }
-    if let Some(result) = try_localized_height_two(manager, tree, start, end)? {
-        return Ok(result);
+    if let Some((tree, stats)) = try_localized_height_two(manager, tree, start, end)? {
+        return Ok((tree, with_read_stats_since(manager, reads_before, stats)));
     }
 
     if manager
@@ -88,6 +88,8 @@ pub(crate) fn try_localized_height_two<S: Store>(
     let Some(root_cid) = &tree.root else {
         return Ok(None);
     };
+    let metrics_before = manager.metrics();
+    let reads_before = (metrics_before.nodes_read, metrics_before.bytes_read);
     let mut stats = CanonicalWriteStats::default();
     let root = manager.load_arc(root_cid)?;
     stats.nodes_read += 1;
@@ -201,7 +203,10 @@ pub(crate) fn try_localized_height_two<S: Store>(
     }
 
     if !saw_deleted {
-        return Ok(Some((tree.clone(), stats)));
+        return Ok(Some((
+            tree.clone(),
+            with_read_stats_since(manager, reads_before, stats),
+        )));
     }
     if resynced_at.is_none() && window_end < root.len() {
         return Ok(None);
@@ -250,6 +255,34 @@ pub(crate) fn try_localized_height_two<S: Store>(
         return Ok(None);
     }
 
+    let (new_root, rebuilt_root) = if updated_root.len() == 1 {
+        (child_cid(&updated_root.vals[0])?, None)
+    } else {
+        let candidate_children = updated_root
+            .keys
+            .iter()
+            .zip(&updated_root.vals)
+            .zip(&updated_root.child_counts)
+            .map(|((key, value), count)| {
+                Ok(NodeSummary {
+                    cid: child_cid(value)?,
+                    first_key: key.clone(),
+                    count: *count,
+                })
+            })
+            .collect::<Result<Vec<_>, Error>>()?;
+        let (root_summaries, mut root_nodes) =
+            builder.build_level_serial_deferred(candidate_children, 2)?;
+        if root_summaries.len() != 1 || root_nodes.len() != 1 {
+            return Ok(None);
+        }
+        let rebuilt_root = root_nodes.pop().ok_or(Error::InvalidNode)?;
+        if root_summaries[0].cid != rebuilt_root.cid || rebuilt_root.node != updated_root {
+            return Ok(None);
+        }
+        (rebuilt_root.cid.clone(), Some(rebuilt_root))
+    };
+
     let old_leaf_cids = old_leaves
         .iter()
         .map(|summary| summary.cid.clone())
@@ -270,16 +303,11 @@ pub(crate) fn try_localized_height_two<S: Store>(
         }
     }
 
-    let new_root = if updated_root.len() == 1 {
-        child_cid(&updated_root.vals[0])?
-    } else {
-        let bytes = updated_root.to_bytes();
-        let cid = Cid::from_bytes(&bytes);
-        if cid != *root_cid && written_cids.insert(cid.clone()) {
-            writes.push((cid.clone(), bytes, updated_root));
+    if let Some(root) = rebuilt_root {
+        if root.cid != *root_cid && written_cids.insert(root.cid.clone()) {
+            writes.push((root.cid, root.bytes, root.node));
         }
-        cid
-    };
+    }
     if !writes.is_empty() {
         let entries = writes
             .iter()
@@ -306,7 +334,7 @@ pub(crate) fn try_localized_height_two<S: Store>(
             root: Some(new_root),
             config: tree.config.clone(),
         },
-        stats,
+        with_read_stats_since(manager, reads_before, stats),
     )))
 }
 
@@ -331,6 +359,17 @@ fn read_stats_since<S: Store>(
         bytes_read: metrics.bytes_read.saturating_sub(bytes_before),
         ..CanonicalWriteStats::default()
     }
+}
+
+fn with_read_stats_since<S: Store>(
+    manager: &Prolly<S>,
+    reads_before: (u64, u64),
+    mut stats: CanonicalWriteStats,
+) -> CanonicalWriteStats {
+    let actual_reads = read_stats_since(manager, reads_before);
+    stats.nodes_read = actual_reads.nodes_read;
+    stats.bytes_read = actual_reads.bytes_read;
+    stats
 }
 
 #[cfg(test)]

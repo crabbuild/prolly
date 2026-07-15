@@ -401,3 +401,86 @@ fn range_delete_does_not_publish_when_batch_put_fails() {
         "the failed operation must not publish a result root or rewritten nodes"
     );
 }
+
+#[test]
+fn value_sensitive_height_two_root_promotion_falls_back_to_the_canonical_rebuild() {
+    let mut policy = chunking::entry_count_key_value_hash();
+    policy.min = 1;
+    policy.target = 2;
+    policy.max = 4;
+    policy.hash_seed = 184;
+    let config = Config::builder()
+        .chunking(policy)
+        .node_layout(NodeLayoutSpec::Plain)
+        .build();
+    let store = Arc::new(MemStore::new());
+    let manager = Prolly::new(store.clone(), config.clone());
+    let mut base_builder = BatchBuilder::new(store.clone(), config.clone());
+    for index in 0..24 {
+        base_builder.add(key(index), value(index));
+    }
+    let base = base_builder.build().unwrap();
+    let base_root = Node::from_bytes(
+        &store
+            .get(base.root.as_ref().unwrap().as_bytes())
+            .unwrap()
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(base_root.level, 2, "regression must start height two");
+
+    let expected_store = Arc::new(MemStore::new());
+    let mut expected_builder = BatchBuilder::new(expected_store.clone(), config);
+    for index in 0..24 {
+        if !(8..14).contains(&index) {
+            expected_builder.add(key(index), value(index));
+        }
+    }
+    let expected = expected_builder.build().unwrap();
+    let expected_root = Node::from_bytes(
+        &expected_store
+            .get(expected.root.as_ref().unwrap().as_bytes())
+            .unwrap()
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        expected_root.level, 3,
+        "the clean oracle must promote when the root boundary observes changed internal CIDs"
+    );
+
+    manager.clear_cache();
+    manager.reset_metrics();
+    let deleted = manager.delete_range(&base, &key(8), &key(14)).unwrap();
+
+    assert_eq!(deleted.root, expected.root);
+    assert!(
+        manager.metrics().store_batch_get_calls >= 1,
+        "the valid height-2 tree must reach localized internal-window routing before falling back"
+    );
+}
+
+#[test]
+fn localized_range_stats_match_warm_cache_metric_deltas() {
+    let config = fixed_small_chunk_config(NodeLayoutSpec::Plain);
+    let store = Arc::new(MemStore::new());
+    let manager = Prolly::new(store.clone(), config.clone());
+    let mut builder = BatchBuilder::new(store, config);
+    for index in 0..40 {
+        builder.add(key(index), value(index));
+    }
+    let base = builder.build().unwrap();
+
+    manager.clear_cache();
+    let first = manager.delete_range(&base, &key(10), &key(30)).unwrap();
+    assert_ne!(first.root, base.root);
+
+    manager.reset_metrics();
+    let (_, stats) = manager
+        .delete_range_with_stats(&base, &key(10), &key(30))
+        .unwrap();
+    let metrics = manager.metrics();
+
+    assert_eq!(stats.nodes_read, metrics.nodes_read, "{stats:?}");
+    assert_eq!(stats.bytes_read, metrics.bytes_read, "{stats:?}");
+}
