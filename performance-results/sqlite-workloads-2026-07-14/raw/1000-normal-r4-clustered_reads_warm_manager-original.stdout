@@ -1,0 +1,2 @@
+version,profile,records,run,workload,operations,total_ns,ns_per_op,ops_per_sec,nodes_read,nodes_written,bytes_read,bytes_written,cache_hits,cache_misses,cache_evictions,result_entries,num_nodes,num_leaves,num_internal,height,tree_bytes,db_bytes_before,db_bytes_after,wal_bytes_after,shm_bytes_after,fixture_bytes_after,sqlite_node_count,sqlite_node_payload_bytes,validated,status
+original,normal,1000,4,clustered_reads_warm_manager,1000000,553533000,553.533,1806577.024,0,0,0,0,2000000,0,0,1000,5,4,1,1,41461,57344,57344,0,32768,90112,5,41461,true,ok

@@ -1,0 +1,2 @@
+version,profile,records,run,workload,operations,total_ns,ns_per_op,ops_per_sec,nodes_read,nodes_written,bytes_read,bytes_written,cache_hits,cache_misses,cache_evictions,result_entries,num_nodes,num_leaves,num_internal,height,tree_bytes,db_bytes_before,db_bytes_after,wal_bytes_after,shm_bytes_after,fixture_bytes_after,sqlite_node_count,sqlite_node_payload_bytes,validated,status
+original,full,1000000,4,shuffled_batch_build,1000000,786070709,786.071,1272150.188,0,0,0,0,0,0,0,1000000,3650,3637,13,2,41399217,0,46571520,0,0,46571520,3650,41399217,true,ok
