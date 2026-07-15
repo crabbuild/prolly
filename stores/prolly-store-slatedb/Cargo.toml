@@ -18,7 +18,7 @@ path = "src/lib.rs"
 
 [dependencies]
 futures-util = "0.3"
-prolly = { package = "prolly-map", path = "../..", version = "0.2.0" }
+prolly = { package = "prolly-map", path = "../..", version = "0.3.0" }
 slatedb = "0.14.0"
 tokio = { version = "1.45", features = ["rt-multi-thread", "time"] }
 
