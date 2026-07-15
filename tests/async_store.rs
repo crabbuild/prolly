@@ -1341,6 +1341,39 @@ fn async_delete_range_empty_and_reversed_ranges_are_noops() {
 }
 
 #[test]
+fn async_delete_range_nonempty_disjoint_range_is_a_noop() {
+    block_on(async {
+        let store = Arc::new(MemStore::new());
+        let async_prolly = AsyncProlly::new(SyncStoreAsAsync::new(store), Config::default());
+        let tree = async_prolly.create();
+        let tree = async_prolly
+            .batch(
+                &tree,
+                [b"a", b"b", b"c"]
+                    .into_iter()
+                    .map(|key| Mutation::Upsert {
+                        key: key.to_vec(),
+                        val: key.to_vec(),
+                    })
+                    .collect(),
+            )
+            .await
+            .unwrap();
+
+        let (unchanged, stats) = async_prolly
+            .delete_range_with_stats(&tree, b"d", b"e")
+            .await
+            .unwrap();
+
+        assert_eq!(unchanged.root, tree.root);
+        assert_eq!(stats.input_mutations, 0);
+        assert_eq!(stats.effective_mutations, 0);
+        assert_eq!(stats.nodes_written, 0);
+        assert_eq!(stats.bytes_written, 0);
+    });
+}
+
+#[test]
 fn async_delete_range_with_stats_reports_effective_mutations_and_metric_deltas() {
     block_on(async {
         let store = Arc::new(MemStore::new());
