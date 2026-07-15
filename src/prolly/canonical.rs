@@ -30,10 +30,10 @@ pub struct CanonicalWriteStats {
     pub used_batched_value_update_path: bool,
 }
 
-struct EmittedLeaf {
-    summary: NodeSummary,
-    bytes: Vec<u8>,
-    node: Node,
+pub(crate) struct EmittedLeaf {
+    pub(crate) summary: NodeSummary,
+    pub(crate) bytes: Vec<u8>,
+    pub(crate) node: Node,
 }
 
 struct EmittedInternal {
@@ -42,16 +42,16 @@ struct EmittedInternal {
     node: Node,
 }
 
-struct LeafEmitter<'a> {
+pub(crate) struct LeafEmitter<'a> {
     config: &'a super::config::Config,
     detector: BoundaryDetector,
     current: Node,
-    emitted: Vec<EmittedLeaf>,
+    pub(crate) emitted: Vec<EmittedLeaf>,
     encoded_bytes: u64,
 }
 
 impl<'a> LeafEmitter<'a> {
-    fn new(config: &'a super::config::Config) -> Result<Self, Error> {
+    pub(crate) fn new(config: &'a super::config::Config) -> Result<Self, Error> {
         Ok(Self {
             config,
             detector: BoundaryDetector::new(config.format.chunking.clone(), 0)?,
@@ -65,7 +65,7 @@ impl<'a> LeafEmitter<'a> {
         })
     }
 
-    fn push(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<(), Error> {
+    pub(crate) fn push(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<(), Error> {
         let hard_max = self.config.format.chunking.hard_max_node_bytes;
         let mut encoded = entry_encoded_len(
             self.config,
@@ -94,7 +94,7 @@ impl<'a> LeafEmitter<'a> {
         Ok(())
     }
 
-    fn flush(&mut self) {
+    pub(crate) fn flush(&mut self) {
         if self.current.is_empty() {
             return;
         }
@@ -120,7 +120,7 @@ impl<'a> LeafEmitter<'a> {
         self.encoded_bytes = node_encoding_overhead(self.config);
     }
 
-    fn is_aligned_with(&self, old: &NodeSummary) -> bool {
+    pub(crate) fn is_aligned_with(&self, old: &NodeSummary) -> bool {
         self.current.is_empty()
             && self
                 .emitted
@@ -191,6 +191,11 @@ fn apply_impl<S: Store>(
         };
     if let Some(result) =
         try_direct_single_delete(manager, tree, &mutations, &mut stats, measure_read_bytes)?
+    {
+        return Ok(result);
+    }
+    if let Some(result) =
+        try_localized_height_two_deletes(manager, tree, &mutations, &mut stats, measure_read_bytes)?
     {
         return Ok(result);
     }
@@ -397,6 +402,287 @@ fn apply_impl<S: Store>(
         let _ = manager.load_arc(root)?;
     }
     Ok((written, stats))
+}
+
+fn try_localized_height_two_deletes<S: Store>(
+    manager: &Prolly<S>,
+    tree: &Tree,
+    mutations: &[(Vec<u8>, Option<Vec<u8>>)],
+    stats: &mut CanonicalWriteStats,
+    measure_read_bytes: bool,
+) -> Result<Option<(Tree, CanonicalWriteStats)>, Error> {
+    if mutations.len() < 2
+        || mutations.iter().any(|(_, value)| value.is_some())
+        || matches!(
+            tree.config.format.node_layout,
+            NodeLayoutSpec::Custom { .. }
+        )
+    {
+        return Ok(None);
+    }
+    let Some(root_cid) = &tree.root else {
+        return Ok(None);
+    };
+    let root = manager.load_arc(root_cid)?;
+    stats.nodes_read += 1;
+    if measure_read_bytes {
+        stats.bytes_read += root.encoded_len() as u64;
+    }
+    if root.leaf
+        || root.level != 2
+        || root.keys.is_empty()
+        || root.keys.len() != root.vals.len()
+        || root.child_counts.len() != root.len()
+    {
+        return Ok(None);
+    }
+
+    let first_key = &mutations[0].0;
+    let last_key = &mutations[mutations.len() - 1].0;
+    let first_child = root
+        .keys
+        .partition_point(|separator| separator.as_slice() <= first_key.as_slice())
+        .saturating_sub(1);
+    let last_child = root
+        .keys
+        .partition_point(|separator| separator.as_slice() <= last_key.as_slice())
+        .saturating_sub(1);
+    let window_start = first_child.saturating_sub(1);
+    let window_end = last_child.saturating_add(3).min(root.len());
+    if window_start >= window_end {
+        return Ok(None);
+    }
+
+    let window_cids = root.vals[window_start..window_end]
+        .iter()
+        .map(|value| child_cid(value))
+        .collect::<Result<Vec<_>, _>>()?;
+    let window_nodes = if window_cids.len() > 1 {
+        manager.load_many_ordered(&window_cids)?
+    } else {
+        window_cids
+            .iter()
+            .map(|cid| manager.load_arc(cid))
+            .collect::<Result<Vec<_>, _>>()?
+    };
+    let mut old_leaves = Vec::new();
+    for node in &window_nodes {
+        stats.nodes_read += 1;
+        if measure_read_bytes {
+            stats.bytes_read += node.encoded_len() as u64;
+        }
+        if node.leaf
+            || node.level != 1
+            || node.format != tree.config.format
+            || node.keys.len() != node.vals.len()
+            || node.child_counts.len() != node.len()
+            || node.child_counts.contains(&0)
+        {
+            return Ok(None);
+        }
+        for index in 0..node.len() {
+            old_leaves.push(NodeSummary {
+                cid: child_cid(&node.vals[index])?,
+                first_key: node.keys[index].clone(),
+                count: node.child_counts[index],
+            });
+        }
+    }
+    if old_leaves.is_empty() {
+        return Ok(None);
+    }
+
+    let replay_start = old_leaves
+        .partition_point(|leaf| leaf.first_key.as_slice() <= first_key.as_slice())
+        .saturating_sub(2);
+    {
+        let last_mutation_leaf = old_leaves
+            .partition_point(|leaf| leaf.first_key.as_slice() <= last_key.as_slice())
+            .saturating_sub(1);
+        let prefetch_end = last_mutation_leaf.saturating_add(2).min(old_leaves.len());
+        if prefetch_end.saturating_sub(replay_start) > 1 {
+            let leaf_cids = old_leaves[replay_start..prefetch_end]
+                .iter()
+                .map(|leaf| leaf.cid.clone())
+                .collect::<Vec<_>>();
+            let _ = manager.load_many_ordered(&leaf_cids)?;
+        }
+    }
+    let mut mutation_index = 0usize;
+    let mut emitter = LeafEmitter::new(&tree.config)?;
+    let mut resynced_at = None;
+    for leaf_index in replay_start..old_leaves.len() {
+        let leaf = manager.load_arc(&old_leaves[leaf_index].cid)?;
+        stats.nodes_read += 1;
+        if measure_read_bytes {
+            stats.bytes_read += leaf.encoded_len() as u64;
+        }
+        if !leaf.leaf || leaf.keys.len() != leaf.vals.len() {
+            return Err(Error::InvalidNode);
+        }
+
+        for (key, value) in leaf.keys.iter().cloned().zip(leaf.vals.iter().cloned()) {
+            while mutation_index < mutations.len() && mutations[mutation_index].0 < key {
+                mutation_index += 1;
+            }
+            if mutation_index < mutations.len() && mutations[mutation_index].0 == key {
+                mutation_index += 1;
+            } else {
+                emitter.push(key, value)?;
+                stats.entries_streamed += 1;
+            }
+        }
+
+        let next_first = old_leaves.get(leaf_index + 1).map(|leaf| &leaf.first_key);
+        while mutation_index < mutations.len()
+            && next_first
+                .map(|next| mutations[mutation_index].0 < *next)
+                .unwrap_or(true)
+        {
+            mutation_index += 1;
+        }
+
+        stats.resync_distance_nodes += 1;
+        if mutation_index > 0 && emitter.is_aligned_with(&old_leaves[leaf_index]) {
+            resynced_at = Some(leaf_index);
+            break;
+        }
+    }
+    if mutation_index != mutations.len() {
+        return Ok(None);
+    }
+    if resynced_at.is_none() && window_end < root.len() {
+        return Ok(None);
+    }
+    emitter.flush();
+
+    let old_cursor = resynced_at.map_or(old_leaves.len(), |index| index + 1);
+    let mut leaf_summaries = Vec::with_capacity(old_leaves.len());
+    leaf_summaries.extend_from_slice(&old_leaves[..replay_start]);
+    leaf_summaries.extend(emitter.emitted.iter().map(|leaf| leaf.summary.clone()));
+    leaf_summaries.extend_from_slice(&old_leaves[old_cursor..]);
+    stats.nodes_reused += replay_start.saturating_add(old_leaves.len() - old_cursor) as u64;
+    stats.resync_distance_entries = stats.entries_streamed;
+
+    let builder = BatchBuilder::new(manager.store(), tree.config.clone());
+    let (replacement_summaries, internal_nodes) =
+        builder.build_level_serial_deferred(leaf_summaries, 1)?;
+    if window_end < root.len()
+        && replacement_summaries.last().map(|summary| &summary.cid) != window_cids.last()
+    {
+        return Ok(None);
+    }
+    if replacement_summaries.is_empty() {
+        return Ok(None);
+    }
+
+    let mut updated_root = (*root).clone();
+    updated_root.keys.splice(
+        window_start..window_end,
+        replacement_summaries
+            .iter()
+            .map(|summary| summary.first_key.clone()),
+    );
+    updated_root.vals.splice(
+        window_start..window_end,
+        replacement_summaries
+            .iter()
+            .map(|summary| summary.cid.0.to_vec()),
+    );
+    updated_root.child_counts.splice(
+        window_start..window_end,
+        replacement_summaries.iter().map(|summary| summary.count),
+    );
+    if updated_root.keys.windows(2).any(|pair| pair[0] >= pair[1])
+        || updated_root.len() > updated_root.max_chunk_size()
+        || updated_root.encoded_len() as u64 > tree.config.format.chunking.hard_max_node_bytes
+    {
+        return Ok(None);
+    }
+
+    let rebuilt_root = if updated_root.len() == 1 {
+        None
+    } else {
+        let candidate_children = updated_root
+            .keys
+            .iter()
+            .zip(&updated_root.vals)
+            .zip(&updated_root.child_counts)
+            .map(|((key, value), count)| {
+                Ok(NodeSummary {
+                    cid: child_cid(value)?,
+                    first_key: key.clone(),
+                    count: *count,
+                })
+            })
+            .collect::<Result<Vec<_>, Error>>()?;
+        let (root_summaries, mut root_nodes) =
+            builder.build_level_serial_deferred(candidate_children, 2)?;
+        if root_summaries.len() != 1 || root_nodes.len() != 1 {
+            return Ok(None);
+        }
+        let rebuilt_root = root_nodes.pop().ok_or(Error::InvalidNode)?;
+        if root_summaries[0].cid != rebuilt_root.cid || rebuilt_root.node != updated_root {
+            return Ok(None);
+        }
+        Some(rebuilt_root)
+    };
+
+    let old_leaf_cids = old_leaves
+        .iter()
+        .map(|summary| summary.cid.clone())
+        .collect::<HashSet<_>>();
+    let old_internal_cids = window_cids.iter().cloned().collect::<HashSet<_>>();
+    let mut writes = Vec::<(Cid, Vec<u8>, Node)>::new();
+    for leaf in emitter.emitted {
+        if !old_leaf_cids.contains(&leaf.summary.cid) {
+            writes.push((leaf.summary.cid, leaf.bytes, leaf.node));
+        }
+    }
+    for node in internal_nodes {
+        if !old_internal_cids.contains(&node.cid) {
+            writes.push((node.cid, node.bytes, node.node));
+        }
+    }
+
+    let root = if updated_root.len() == 1 {
+        child_cid(&updated_root.vals[0])?
+    } else {
+        let rebuilt_root = rebuilt_root.ok_or(Error::InvalidNode)?;
+        let cid = rebuilt_root.cid.clone();
+        if cid != *root_cid {
+            writes.push((cid.clone(), rebuilt_root.bytes, rebuilt_root.node));
+        }
+        cid
+    };
+    if !writes.is_empty() {
+        let entries = writes
+            .iter()
+            .map(|(cid, bytes, _)| (cid.as_bytes(), bytes.as_slice()))
+            .collect::<Vec<_>>();
+        manager
+            .store()
+            .batch_put(&entries)
+            .map_err(|error| Error::Store(Box::new(error)))?;
+        let bytes_written = entries.iter().map(|(_, bytes)| bytes.len()).sum::<usize>();
+        manager.record_batch_write_metrics(entries.len(), bytes_written);
+        stats.nodes_written += entries.len() as u64;
+        stats.bytes_written += bytes_written as u64;
+        if entries.len() <= LOCAL_WRITE_CACHE_LIMIT {
+            drop(entries);
+            for (cid, _, node) in writes {
+                manager.cache_node(cid, node);
+            }
+        }
+    }
+
+    Ok(Some((
+        Tree {
+            root: Some(root),
+            config: tree.config.clone(),
+        },
+        *stats,
+    )))
 }
 
 fn try_append<S: Store>(

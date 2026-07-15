@@ -32,6 +32,21 @@ class ProllySmokeTest {
     }
 
     @Test
+    void memoryEngineDeleteRangeUsesHalfOpenBounds() throws Exception {
+        Prolly.useLocalDebugLibrary();
+        try (Prolly prolly = Prolly.memory()) {
+            TreeRecord tree = prolly.create();
+            for (String key : List.of("a", "b", "c", "d", "e", "f")) {
+                tree = prolly.put(tree, key.getBytes(), key.getBytes());
+            }
+            TreeRecord deleted = prolly.deleteRange(tree, "b".getBytes(), "e".getBytes());
+            assertEquals(List.of("a", "e", "f"), prolly.range(deleted, new byte[0], Optional.empty()).stream().map(entry -> new String(entry.key())).toList());
+            CanonicalWriteResult withStats = prolly.deleteRangeWithStats(tree, "b".getBytes(), "e".getBytes());
+            assertEquals(List.of("a", "e", "f"), prolly.range(withStats.tree(), new byte[0], Optional.empty()).stream().map(entry -> new String(entry.key())).toList());
+        }
+    }
+
+    @Test
     void memoryTransactionCommitsRollsBackAndConflicts() throws Exception {
         Prolly.useLocalDebugLibrary();
 

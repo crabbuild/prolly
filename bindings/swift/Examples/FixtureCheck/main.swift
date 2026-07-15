@@ -555,6 +555,20 @@ let builtTree = try parityEngine.buildFromSortedEntries(entries: [
     EntryRecord(key: Data("b".utf8), value: Data("2".utf8)),
     EntryRecord(key: Data("c".utf8), value: Data("3".utf8)),
 ])
+let rangeDeleteTree = try parityEngine.buildFromSortedEntries(entries: [
+    EntryRecord(key: Data("a".utf8), value: Data("a".utf8)),
+    EntryRecord(key: Data("b".utf8), value: Data("b".utf8)),
+    EntryRecord(key: Data("c".utf8), value: Data("c".utf8)),
+    EntryRecord(key: Data("d".utf8), value: Data("d".utf8)),
+    EntryRecord(key: Data("e".utf8), value: Data("e".utf8)),
+    EntryRecord(key: Data("f".utf8), value: Data("f".utf8)),
+])
+let deletedRange = try parityEngine.deleteRange(tree: rangeDeleteTree, start: Data("b".utf8), rangeEnd: Data("e".utf8))
+let deletedRangeEntries = try parityEngine.range(tree: deletedRange, start: Data(), rangeEnd: nil)
+try expect(deletedRangeEntries.map(\.key) == [Data("a".utf8), Data("e".utf8), Data("f".utf8)], "range deletion should use [start, end)")
+let deletedRangeWithStats = try parityEngine.deleteRangeWithStats(tree: rangeDeleteTree, start: Data("b".utf8), rangeEnd: Data("e".utf8))
+let deletedRangeWithStatsEntries = try parityEngine.range(tree: deletedRangeWithStats.tree, start: Data(), rangeEnd: nil)
+try expect(deletedRangeWithStatsEntries.map(\.key) == [Data("a".utf8), Data("e".utf8), Data("f".utf8)], "range deletion stats should use [start, end)")
 let parityStats = try parityEngine.collectStats(tree: builtTree)
 try expect(parityStats.totalKeyValuePairs == 3, "typed stats total key/value count mismatch")
 try expect(parityStats.nodesPerLevel.contains { $0.level == 0 && $0.value > 0 }, "typed stats level count mismatch")

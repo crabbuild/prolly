@@ -1189,12 +1189,7 @@ pub fn compute_diff<S: Store>(
         return Ok(diffs);
     }
 
-    let mut diffs = Vec::new();
-    for diff in stream_diff(prolly, base, other) {
-        diffs.push(diff?);
-    }
-
-    Ok(diffs)
+    compute_localized_diff(prolly, base, other).map(|(diffs, _)| diffs)
 }
 
 fn compute_diff_with_stats<S: Store>(
@@ -1202,12 +1197,315 @@ fn compute_diff_with_stats<S: Store>(
     base: &Tree,
     other: &Tree,
 ) -> Result<(Vec<Diff>, DiffTraversalStats), Error> {
-    let mut iter = stream_diff(prolly, base, other);
+    compute_localized_diff(prolly, base, other)
+}
+
+enum LocalizedDiffFrame {
+    Structural(DiffFrame),
+    Emit(Vec<Diff>),
+}
+
+fn compute_localized_diff<S: Store>(
+    prolly: &Prolly<S>,
+    base: &Tree,
+    other: &Tree,
+) -> Result<(Vec<Diff>, DiffTraversalStats), Error> {
+    let mut stack = initial_diff_stack(base, other)
+        .into_iter()
+        .map(LocalizedDiffFrame::Structural)
+        .collect::<Vec<_>>();
     let mut diffs = Vec::new();
-    for diff in iter.by_ref() {
-        diffs.push(diff?);
+    let mut stats = DiffTraversalStats::default();
+
+    while let Some(frame) = stack.pop() {
+        match frame {
+            LocalizedDiffFrame::Emit(mut local) => diffs.append(&mut local),
+            LocalizedDiffFrame::Structural(DiffFrame::Compare {
+                base_cid,
+                other_cid,
+                span_end,
+            }) => {
+                if base_cid == other_cid {
+                    stats.reused_subtrees += 1;
+                    continue;
+                }
+                stats.compared_nodes += 1;
+                let nodes = prolly.load_many_ordered(&[base_cid, other_cid])?;
+                let base_node = nodes[0].clone();
+                let other_node = nodes[1].clone();
+                match (base_node.leaf, other_node.leaf) {
+                    (true, true) => diff_leaf_nodes(&base_node, &other_node, &mut diffs)?,
+                    (false, false) if base_node.level == other_node.level => {
+                        let frames = localized_internal_diff_frames(
+                            prolly,
+                            &base_node,
+                            &other_node,
+                            span_end.as_deref(),
+                            &mut stats,
+                        )?;
+                        prefetch_localized_frame_roots(prolly, &frames)?;
+                        stack.extend(frames.into_iter().rev());
+                    }
+                    _ => {
+                        stats.collected_fallbacks += 1;
+                        diff_collected_nodes(prolly, &base_node, &other_node, &mut diffs)?;
+                    }
+                }
+            }
+            LocalizedDiffFrame::Structural(DiffFrame::Added { cid }) => {
+                stats.added_subtrees += 1;
+                let node = prolly.load_arc(&cid)?;
+                if node.leaf {
+                    ensure_node_value_count(&node)?;
+                    for idx in 0..node.len() {
+                        diffs.push(Diff::Added {
+                            key: node.keys[idx].clone(),
+                            val: node_value(&node, idx)?.clone(),
+                        });
+                    }
+                } else {
+                    let frames = child_diff_frames(&node, DiffFrameKind::Added)?
+                        .into_iter()
+                        .map(LocalizedDiffFrame::Structural)
+                        .collect::<Vec<_>>();
+                    prefetch_localized_frame_roots(prolly, &frames)?;
+                    stack.extend(frames.into_iter().rev());
+                }
+            }
+            LocalizedDiffFrame::Structural(DiffFrame::Removed { cid }) => {
+                stats.removed_subtrees += 1;
+                let node = prolly.load_arc(&cid)?;
+                if node.leaf {
+                    ensure_node_value_count(&node)?;
+                    for idx in 0..node.len() {
+                        diffs.push(Diff::Removed {
+                            key: node.keys[idx].clone(),
+                            val: node_value(&node, idx)?.clone(),
+                        });
+                    }
+                } else {
+                    let frames = child_diff_frames(&node, DiffFrameKind::Removed)?
+                        .into_iter()
+                        .map(LocalizedDiffFrame::Structural)
+                        .collect::<Vec<_>>();
+                    prefetch_localized_frame_roots(prolly, &frames)?;
+                    stack.extend(frames.into_iter().rev());
+                }
+            }
+        }
     }
-    Ok((diffs, iter.stats))
+
+    stats.emitted_diffs = diffs.len();
+    Ok((diffs, stats))
+}
+
+fn localized_internal_diff_frames<S: Store>(
+    prolly: &Prolly<S>,
+    base: &Node,
+    other: &Node,
+    span_end: Option<&[u8]>,
+    stats: &mut DiffTraversalStats,
+) -> Result<Vec<LocalizedDiffFrame>, Error> {
+    ensure_node_value_count(base)?;
+    ensure_node_value_count(other)?;
+    let mut frames = Vec::with_capacity(base.len().max(other.len()));
+    let mut base_idx = 0;
+    let mut other_idx = 0;
+
+    while base_idx < base.len() && other_idx < other.len() {
+        let base_start = base.keys[base_idx].as_slice();
+        let other_start = other.keys[other_idx].as_slice();
+        let base_end = child_span_end(base, base_idx, span_end);
+        let other_end = child_span_end(other, other_idx, span_end);
+
+        if base_start == other_start && base_end == other_end {
+            let base_cid = child_cid_validated(base, base_idx)?;
+            let other_cid = child_cid_validated(other, other_idx)?;
+            if base_cid == other_cid {
+                stats.reused_subtrees += 1;
+            } else {
+                frames.push(LocalizedDiffFrame::Structural(DiffFrame::Compare {
+                    base_cid,
+                    other_cid,
+                    span_end: base_end.map(<[u8]>::to_vec),
+                }));
+            }
+            base_idx += 1;
+            other_idx += 1;
+        } else if span_ends_before_or_at(base_end, other_start) {
+            frames.push(LocalizedDiffFrame::Structural(DiffFrame::Removed {
+                cid: child_cid_validated(base, base_idx)?,
+            }));
+            base_idx += 1;
+        } else if span_ends_before_or_at(other_end, base_start) {
+            frames.push(LocalizedDiffFrame::Structural(DiffFrame::Added {
+                cid: child_cid_validated(other, other_idx)?,
+            }));
+            other_idx += 1;
+        } else {
+            stats.collected_fallbacks += 1;
+            let range_start = base_start.min(other_start);
+            let resync = next_shared_child_start(base, base_idx, other, other_idx);
+            let range_end = resync
+                .map(|(next_base, _)| base.keys[next_base].as_slice())
+                .or(span_end);
+            frames.extend(localized_divergent_range_frames(
+                prolly,
+                base,
+                other,
+                span_end,
+                range_start,
+                range_end,
+                stats,
+            )?);
+            if let Some((next_base, next_other)) = resync {
+                base_idx = next_base;
+                other_idx = next_other;
+            } else {
+                base_idx = base.len();
+                other_idx = other.len();
+            }
+        }
+    }
+
+    while base_idx < base.len() {
+        frames.push(LocalizedDiffFrame::Structural(DiffFrame::Removed {
+            cid: child_cid_validated(base, base_idx)?,
+        }));
+        base_idx += 1;
+    }
+    while other_idx < other.len() {
+        frames.push(LocalizedDiffFrame::Structural(DiffFrame::Added {
+            cid: child_cid_validated(other, other_idx)?,
+        }));
+        other_idx += 1;
+    }
+    Ok(frames)
+}
+
+fn localized_divergent_range_frames<S: Store>(
+    prolly: &Prolly<S>,
+    base: &Node,
+    other: &Node,
+    span_end: Option<&[u8]>,
+    range_start: &[u8],
+    range_end: Option<&[u8]>,
+    stats: &mut DiffTraversalStats,
+) -> Result<Vec<LocalizedDiffFrame>, Error> {
+    if base.level <= 1 || other.level <= 1 {
+        let mut local = Vec::new();
+        diff_collected_nodes_range(
+            prolly,
+            base,
+            other,
+            span_end,
+            range_start,
+            range_end,
+            &mut local,
+        )?;
+        return Ok(vec![LocalizedDiffFrame::Emit(local)]);
+    }
+
+    let base_frontier = flatten_internal_range(prolly, base, span_end, range_start, range_end)?;
+    let other_frontier = flatten_internal_range(prolly, other, span_end, range_start, range_end)?;
+    localized_internal_diff_frames(prolly, &base_frontier, &other_frontier, range_end, stats)
+}
+
+fn flatten_internal_range<S: Store>(
+    prolly: &Prolly<S>,
+    node: &Node,
+    span_end: Option<&[u8]>,
+    range_start: &[u8],
+    range_end: Option<&[u8]>,
+) -> Result<Node, Error> {
+    let spans = overlapping_child_cids(node, span_end, range_start, range_end)?;
+    let cids = spans.iter().map(|(_, cid)| cid.clone()).collect::<Vec<_>>();
+    let children = load_child_nodes(prolly, &cids)?;
+    let mut flattened = Node {
+        keys: Vec::new(),
+        vals: Vec::new(),
+        child_counts: Vec::new(),
+        leaf: false,
+        level: node.level - 1,
+        format: node.format.clone(),
+    };
+    for child in children {
+        if child.leaf || child.level != flattened.level {
+            return Err(Error::InvalidNode);
+        }
+        ensure_node_value_count(&child)?;
+        flattened.keys.extend(child.keys.iter().cloned());
+        flattened.vals.extend(child.vals.iter().cloned());
+        flattened
+            .child_counts
+            .extend(child.child_counts.iter().copied());
+    }
+    flattened.validate()?;
+
+    let start = first_potentially_overlapping_child_index(&flattened, range_start);
+    let end = range_end.map_or(flattened.len(), |end| lower_bound(&flattened.keys, end));
+    flattened.keys = flattened.keys[start..end].to_vec();
+    flattened.vals = flattened.vals[start..end].to_vec();
+    flattened.child_counts = flattened.child_counts[start..end].to_vec();
+    flattened.validate()?;
+    Ok(flattened)
+}
+
+fn next_shared_child_start(
+    base: &Node,
+    base_idx: usize,
+    other: &Node,
+    other_idx: usize,
+) -> Option<(usize, usize)> {
+    let mut left = base_idx + 1;
+    let mut right = other_idx + 1;
+    while left < base.len() && right < other.len() {
+        match base.keys[left].cmp(&other.keys[right]) {
+            std::cmp::Ordering::Less => left += 1,
+            std::cmp::Ordering::Greater => right += 1,
+            std::cmp::Ordering::Equal => return Some((left, right)),
+        }
+    }
+    None
+}
+
+fn prefetch_localized_frame_roots<S: Store>(
+    prolly: &Prolly<S>,
+    frames: &[LocalizedDiffFrame],
+) -> Result<(), Error> {
+    if frames.len() <= 1 || !prolly.store().prefers_batch_reads() {
+        return Ok(());
+    }
+    let mut seen = HashSet::with_capacity(frames.len().saturating_mul(2));
+    let mut cids = Vec::with_capacity(frames.len().saturating_mul(2));
+    for frame in frames {
+        match frame {
+            LocalizedDiffFrame::Structural(DiffFrame::Compare {
+                base_cid,
+                other_cid,
+                ..
+            }) => {
+                if seen.insert(base_cid.clone()) {
+                    cids.push(base_cid.clone());
+                }
+                if seen.insert(other_cid.clone()) {
+                    cids.push(other_cid.clone());
+                }
+            }
+            LocalizedDiffFrame::Structural(DiffFrame::Added { cid })
+            | LocalizedDiffFrame::Structural(DiffFrame::Removed { cid }) => {
+                if seen.insert(cid.clone()) {
+                    cids.push(cid.clone());
+                }
+            }
+            LocalizedDiffFrame::Emit(_) => {}
+        }
+    }
+    if !cids.is_empty() {
+        let _ =
+            prolly.load_many_ordered_with_parallelism(&cids, DIFF_FRAME_PREFETCH_PARALLELISM)?;
+    }
+    Ok(())
 }
 
 /// Compute the difference between two trees within the half-open key range
@@ -5210,6 +5508,82 @@ mod tests {
             store.max_batch_get_ordered_len.load(Ordering::Relaxed) <= 4,
             "append streaming should not hydrate the unchanged tree in one fallback batch"
         );
+    }
+
+    #[test]
+    fn eager_diff_localizes_clustered_boundary_drift() {
+        let store = Arc::new(CountingStore::default());
+        let config = Config::default();
+        let prolly = Prolly::new(store.clone(), config.clone());
+        let mut base_root = prolly.new_internal_node(2);
+        let mut other_root = prolly.new_internal_node(2);
+        let mut blocked_leaf = None;
+
+        for group in 0..8 {
+            let mut base_parent = prolly.new_internal_node(1);
+            let mut other_parent = prolly.new_internal_node(1);
+            for child in group * 64..(group + 1) * 64 {
+                let mut leaf = prolly.new_leaf_node();
+                for offset in 0..8 {
+                    let idx = child * 8 + offset;
+                    leaf.keys.push(format!("k{idx:05}").into_bytes());
+                    leaf.vals.push(format!("v{idx:05}").into_bytes());
+                }
+                let cid = prolly.save(&leaf).unwrap();
+                if child == 300 {
+                    blocked_leaf = Some(cid.clone());
+                }
+                base_parent.keys.push(leaf.keys[0].clone());
+                base_parent.vals.push(cid.as_bytes().to_vec());
+                base_parent.child_counts.push(8);
+
+                if child == 256 {
+                    leaf.keys.remove(0);
+                    leaf.vals.remove(0);
+                    let cid = prolly.save(&leaf).unwrap();
+                    other_parent.keys.push(leaf.keys[0].clone());
+                    other_parent.vals.push(cid.as_bytes().to_vec());
+                    other_parent.child_counts.push(7);
+                } else {
+                    other_parent.keys.push(leaf.keys[0].clone());
+                    other_parent.vals.push(cid.as_bytes().to_vec());
+                    other_parent.child_counts.push(8);
+                }
+            }
+            let base_cid = prolly.save(&base_parent).unwrap();
+            base_root.keys.push(base_parent.keys[0].clone());
+            base_root.vals.push(base_cid.as_bytes().to_vec());
+            base_root.child_counts.push(512);
+            let other_cid = prolly.save(&other_parent).unwrap();
+            other_root.keys.push(other_parent.keys[0].clone());
+            other_root.vals.push(other_cid.as_bytes().to_vec());
+            other_root
+                .child_counts
+                .push(if group == 4 { 511 } else { 512 });
+        }
+        let base = Tree {
+            root: Some(prolly.save(&base_root).unwrap()),
+            config: config.clone(),
+        };
+        let other = Tree {
+            root: Some(prolly.save(&other_root).unwrap()),
+            config,
+        };
+
+        prolly.clear_cache();
+        store.reset_counts();
+        store.block_get_key(blocked_leaf.unwrap().as_bytes());
+        let diffs = compute_diff(&prolly, &base, &other).unwrap();
+
+        assert_eq!(diffs.len(), 1);
+        assert!(diffs
+            .iter()
+            .all(|diff| matches!(diff, Diff::Removed { .. })));
+        assert!(
+            store.max_batch_get_ordered_len.load(Ordering::Relaxed) < 100,
+            "clustered boundary drift should not hydrate the full tree in one batch"
+        );
+        store.clear_blocked_get_keys();
     }
 
     #[test]

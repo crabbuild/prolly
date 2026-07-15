@@ -86,6 +86,24 @@ export interface NodeBatchApplyResultRecord {
   tree: NodeTreeRecord
   stats: NodeBatchApplyStatsRecord
 }
+export interface NodeCanonicalWriteStatsRecord {
+  inputMutations: string
+  effectiveMutations: string
+  entriesStreamed: string
+  nodesRead: string
+  nodesWritten: string
+  nodesReused: string
+  bytesRead: string
+  bytesWritten: string
+  resyncDistanceEntries: string
+  resyncDistanceNodes: string
+  usedKeyStableFastPath: boolean
+  usedBatchedValueUpdatePath: boolean
+}
+export interface NodeCanonicalWriteResultRecord {
+  tree: NodeTreeRecord
+  stats: NodeCanonicalWriteStatsRecord
+}
 export interface NodeHostStoreEmptyRequest {
   
 }
@@ -724,6 +742,8 @@ export declare class NativeProllyEngine {
   create(): NodeTreeRecord
   beginTransaction(): NativeProllyTransaction
   put(tree: NodeTreeRecord, key: Buffer, value: Buffer): NodeTreeRecord
+  deleteRange(tree: NodeTreeRecord, start: Buffer, rangeEnd: Buffer): NodeTreeRecord
+  deleteRangeWithStats(tree: NodeTreeRecord, start: Buffer, rangeEnd: Buffer): NodeCanonicalWriteResultRecord
   delete(tree: NodeTreeRecord, key: Buffer): NodeTreeRecord
   get(tree: NodeTreeRecord, key: Buffer): Buffer | null
   getValueRef(tree: NodeTreeRecord, key: Buffer): NodeValueRefRecord | null

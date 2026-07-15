@@ -1,8 +1,48 @@
 use prolly::{
-    BatchBuilder, BoundaryInput, BoundaryRule, ChunkMeasure, Config, HashAlgorithm, MemStore,
-    Mutation, Node, Prolly, Store, Tree,
+    BatchBuilder, BatchOp, BoundaryInput, BoundaryRule, ChunkMeasure, Config, HashAlgorithm,
+    MemStore, MemStoreError, Mutation, Node, Prolly, Store, Tree,
 };
 use std::sync::Arc;
+
+struct BatchReadMemStore {
+    inner: Arc<MemStore>,
+}
+
+impl BatchReadMemStore {
+    fn new() -> Self {
+        Self {
+            inner: Arc::new(MemStore::new()),
+        }
+    }
+}
+
+impl Store for BatchReadMemStore {
+    type Error = MemStoreError;
+
+    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
+        self.inner.get(key)
+    }
+
+    fn put(&self, key: &[u8], value: &[u8]) -> Result<(), Self::Error> {
+        self.inner.put(key, value)
+    }
+
+    fn delete(&self, key: &[u8]) -> Result<(), Self::Error> {
+        self.inner.delete(key)
+    }
+
+    fn batch(&self, ops: &[BatchOp<'_>]) -> Result<(), Self::Error> {
+        self.inner.batch(ops)
+    }
+
+    fn batch_get_ordered(&self, keys: &[&[u8]]) -> Result<Vec<Option<Vec<u8>>>, Self::Error> {
+        keys.iter().map(|key| self.inner.get(key)).collect()
+    }
+
+    fn prefers_batch_reads(&self) -> bool {
+        true
+    }
+}
 
 const SCATTERED_RECORDS: usize = 100_000;
 const SCATTERED_UPDATES: usize = 1_000;
@@ -318,6 +358,65 @@ fn batched_value_update_path_rejects_structural_and_growing_edits() {
         manager.get(&deleted, b"key-000000000000019999").unwrap(),
         None
     );
+}
+
+#[test]
+fn clustered_batch_delete_batches_internal_frontier_reads() {
+    const RECORDS: usize = 200_000;
+    const DELETES: usize = 2_000;
+    let store = Arc::new(BatchReadMemStore::new());
+    let manager = Prolly::new(store.clone(), Config::default());
+    let mut builder = BatchBuilder::new(store.clone(), Config::default());
+    for index in 0..RECORDS {
+        builder.add(
+            format!("key-{index:020}").into_bytes(),
+            format!("value-{index:020}-00").into_bytes(),
+        );
+    }
+    let base = builder.build().unwrap();
+    let delete_start = (RECORDS - DELETES) / 2;
+
+    manager.clear_cache();
+    manager.reset_metrics();
+    let (deleted, stats) = manager
+        .canonical_batch_with_stats(
+            &base,
+            (delete_start..delete_start + DELETES)
+                .map(|index| Mutation::Delete {
+                    key: format!("key-{index:020}").into_bytes(),
+                })
+                .collect(),
+        )
+        .unwrap();
+    let metrics = manager.metrics();
+
+    assert!(
+        metrics.store_batch_get_calls > 0,
+        "internal frontiers should use ordered batch reads: metrics={metrics:?}, stats={stats:?}"
+    );
+    assert!(
+        metrics.store_batch_get_calls >= 2,
+        "the affected leaf window should also use an ordered batch read: metrics={metrics:?}, stats={stats:?}"
+    );
+    assert!(
+        metrics.store_get_calls <= stats.resync_distance_nodes + 2,
+        "point reads should be limited to local leaf replay and root checks: metrics={metrics:?}, stats={stats:?}"
+    );
+    assert!(
+        stats.nodes_read <= stats.resync_distance_nodes + 8,
+        "clustered deletes should not hydrate the full internal frontier: metrics={metrics:?}, stats={stats:?}"
+    );
+
+    let mut rebuilt = BatchBuilder::new(store, Config::default());
+    for index in 0..RECORDS {
+        if !(delete_start..delete_start + DELETES).contains(&index) {
+            rebuilt.add(
+                format!("key-{index:020}").into_bytes(),
+                format!("value-{index:020}-00").into_bytes(),
+            );
+        }
+    }
+    assert_eq!(deleted.root, rebuilt.build().unwrap().root);
 }
 
 #[test]

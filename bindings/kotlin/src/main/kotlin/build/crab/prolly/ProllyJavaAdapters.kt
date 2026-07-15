@@ -725,6 +725,62 @@ object ProllyJavaAdapters {
         record.stats
 
     @JvmStatic
+    fun canonicalWriteResultTree(record: CanonicalWriteResultRecord): TreeRecord =
+        record.tree
+
+    @JvmStatic
+    fun canonicalWriteResultStats(record: CanonicalWriteResultRecord): CanonicalWriteStatsRecord =
+        record.stats
+
+    @JvmStatic
+    fun canonicalWriteStatsInputMutations(record: CanonicalWriteStatsRecord): Long =
+        record.inputMutations.toLong()
+
+    @JvmStatic
+    fun canonicalWriteStatsEffectiveMutations(record: CanonicalWriteStatsRecord): Long =
+        record.effectiveMutations.toLong()
+
+    @JvmStatic
+    fun canonicalWriteStatsEntriesStreamed(record: CanonicalWriteStatsRecord): Long =
+        record.entriesStreamed.toLong()
+
+    @JvmStatic
+    fun canonicalWriteStatsNodesRead(record: CanonicalWriteStatsRecord): Long =
+        record.nodesRead.toLong()
+
+    @JvmStatic
+    fun canonicalWriteStatsNodesWritten(record: CanonicalWriteStatsRecord): Long =
+        record.nodesWritten.toLong()
+
+    @JvmStatic
+    fun canonicalWriteStatsNodesReused(record: CanonicalWriteStatsRecord): Long =
+        record.nodesReused.toLong()
+
+    @JvmStatic
+    fun canonicalWriteStatsBytesRead(record: CanonicalWriteStatsRecord): Long =
+        record.bytesRead.toLong()
+
+    @JvmStatic
+    fun canonicalWriteStatsBytesWritten(record: CanonicalWriteStatsRecord): Long =
+        record.bytesWritten.toLong()
+
+    @JvmStatic
+    fun canonicalWriteStatsResyncDistanceEntries(record: CanonicalWriteStatsRecord): Long =
+        record.resyncDistanceEntries.toLong()
+
+    @JvmStatic
+    fun canonicalWriteStatsResyncDistanceNodes(record: CanonicalWriteStatsRecord): Long =
+        record.resyncDistanceNodes.toLong()
+
+    @JvmStatic
+    fun canonicalWriteStatsUsedKeyStableFastPath(record: CanonicalWriteStatsRecord): Boolean =
+        record.usedKeyStableFastPath
+
+    @JvmStatic
+    fun canonicalWriteStatsUsedBatchedValueUpdatePath(record: CanonicalWriteStatsRecord): Boolean =
+        record.usedBatchedValueUpdatePath
+
+    @JvmStatic
     fun batchStatsInputMutations(record: BatchApplyStatsRecord): Long =
         record.inputMutations.toLong()
 

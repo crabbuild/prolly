@@ -124,6 +124,7 @@ fn current_unix_time_millis() -> u64 {
 pub mod boundary;
 pub mod builder;
 pub mod canonical;
+pub(crate) mod canonical_range_delete;
 pub mod canonical_splice;
 pub mod chunking;
 pub mod cid;
@@ -1528,6 +1529,21 @@ impl<S: Store> Prolly<S> {
     /// If the key doesn't exist, returns the original tree unchanged.
     pub fn delete(&self, tree: &Tree, key: &[u8]) -> Result<Tree, Error> {
         canonical::apply_tree(self, tree, vec![Mutation::Delete { key: key.to_vec() }])
+    }
+
+    /// Delete all keys in the half-open range `[start, end)`.
+    pub fn delete_range(&self, tree: &Tree, start: &[u8], end: &[u8]) -> Result<Tree, Error> {
+        canonical_range_delete::apply_tree(self, tree, start, end)
+    }
+
+    /// Delete all keys in the half-open range `[start, end)` and return write statistics.
+    pub fn delete_range_with_stats(
+        &self,
+        tree: &Tree,
+        start: &[u8],
+        end: &[u8],
+    ) -> Result<(Tree, canonical::CanonicalWriteStats), Error> {
+        canonical_range_delete::apply(self, tree, start, end)
     }
 
     /// Iterate over a range of key-value pairs.
@@ -4558,6 +4574,60 @@ where
     pub async fn delete(&self, tree: &Tree, key: &[u8]) -> Result<Tree, Error> {
         self.batch(tree, vec![Mutation::Delete { key: key.to_vec() }])
             .await
+    }
+
+    /// Delete all existing keys in the half-open range `[start, end)`.
+    ///
+    /// The range is first collected through the async iterator, then applied
+    /// as one async batch so the resulting node writes remain atomic.
+    pub async fn delete_range(&self, tree: &Tree, start: &[u8], end: &[u8]) -> Result<Tree, Error> {
+        Ok(self.delete_range_with_stats(tree, start, end).await?.0)
+    }
+
+    /// Delete all existing keys in `[start, end)` and return manager-observed write statistics.
+    pub async fn delete_range_with_stats(
+        &self,
+        tree: &Tree,
+        start: &[u8],
+        end: &[u8],
+    ) -> Result<(Tree, canonical::CanonicalWriteStats), Error> {
+        if start >= end || tree.root.is_none() {
+            return Ok((tree.clone(), canonical::CanonicalWriteStats::default()));
+        }
+
+        let metrics_before = self.metrics();
+        let mutations = self
+            .range(tree, start, Some(end))
+            .await?
+            .collect()
+            .await?
+            .into_iter()
+            .map(|(key, _)| Mutation::Delete { key })
+            .collect::<Vec<_>>();
+        let mutation_count = mutations.len() as u64;
+        let updated = self.batch(tree, mutations).await?;
+        let metrics_after = self.metrics();
+
+        Ok((
+            updated,
+            canonical::CanonicalWriteStats {
+                input_mutations: mutation_count,
+                effective_mutations: mutation_count,
+                nodes_read: metrics_after
+                    .nodes_read
+                    .saturating_sub(metrics_before.nodes_read),
+                nodes_written: metrics_after
+                    .nodes_written
+                    .saturating_sub(metrics_before.nodes_written),
+                bytes_read: metrics_after
+                    .bytes_read
+                    .saturating_sub(metrics_before.bytes_read),
+                bytes_written: metrics_after
+                    .bytes_written
+                    .saturating_sub(metrics_before.bytes_written),
+                ..canonical::CanonicalWriteStats::default()
+            },
+        ))
     }
 
     /// Apply multiple mutations using one async batch write.

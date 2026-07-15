@@ -18,7 +18,7 @@ path = "src/lib.rs"
 
 [dependencies]
 hex = "0.4"
-prolly = { package = "prolly-map", path = "../..", version = "0.2.0" }
+prolly = { package = "prolly-map", path = "../..", version = "0.3.0" }
 serde_json = "1.0"
 
 [dev-dependencies]
