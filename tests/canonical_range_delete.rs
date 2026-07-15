@@ -508,7 +508,7 @@ fn localized_point_deletes_fall_back_when_the_canonical_root_promotes() {
     );
 
     let (actual, _) = manager
-        .canonical_batch_with_stats(
+        .batch_with_write_stats(
             &base,
             (8..14)
                 .map(|index| Mutation::Delete { key: key(index) })

@@ -725,59 +725,59 @@ object ProllyJavaAdapters {
         record.stats
 
     @JvmStatic
-    fun canonicalWriteResultTree(record: CanonicalWriteResultRecord): TreeRecord =
+    fun writeResultTree(record: WriteResultRecord): TreeRecord =
         record.tree
 
     @JvmStatic
-    fun canonicalWriteResultStats(record: CanonicalWriteResultRecord): WriteStatsRecord =
+    fun writeResultStats(record: WriteResultRecord): WriteStatsRecord =
         record.stats
 
     @JvmStatic
-    fun canonicalWriteStatsInputMutations(record: WriteStatsRecord): Long =
+    fun writeStatsInputMutations(record: WriteStatsRecord): Long =
         record.inputMutations.toLong()
 
     @JvmStatic
-    fun canonicalWriteStatsEffectiveMutations(record: WriteStatsRecord): Long =
+    fun writeStatsEffectiveMutations(record: WriteStatsRecord): Long =
         record.effectiveMutations.toLong()
 
     @JvmStatic
-    fun canonicalWriteStatsEntriesStreamed(record: WriteStatsRecord): Long =
+    fun writeStatsEntriesStreamed(record: WriteStatsRecord): Long =
         record.entriesStreamed.toLong()
 
     @JvmStatic
-    fun canonicalWriteStatsNodesRead(record: WriteStatsRecord): Long =
+    fun writeStatsNodesRead(record: WriteStatsRecord): Long =
         record.nodesRead.toLong()
 
     @JvmStatic
-    fun canonicalWriteStatsNodesWritten(record: WriteStatsRecord): Long =
+    fun writeStatsNodesWritten(record: WriteStatsRecord): Long =
         record.nodesWritten.toLong()
 
     @JvmStatic
-    fun canonicalWriteStatsNodesReused(record: WriteStatsRecord): Long =
+    fun writeStatsNodesReused(record: WriteStatsRecord): Long =
         record.nodesReused.toLong()
 
     @JvmStatic
-    fun canonicalWriteStatsBytesRead(record: WriteStatsRecord): Long =
+    fun writeStatsBytesRead(record: WriteStatsRecord): Long =
         record.bytesRead.toLong()
 
     @JvmStatic
-    fun canonicalWriteStatsBytesWritten(record: WriteStatsRecord): Long =
+    fun writeStatsBytesWritten(record: WriteStatsRecord): Long =
         record.bytesWritten.toLong()
 
     @JvmStatic
-    fun canonicalWriteStatsResyncDistanceEntries(record: WriteStatsRecord): Long =
+    fun writeStatsResyncDistanceEntries(record: WriteStatsRecord): Long =
         record.resyncDistanceEntries.toLong()
 
     @JvmStatic
-    fun canonicalWriteStatsResyncDistanceNodes(record: WriteStatsRecord): Long =
+    fun writeStatsResyncDistanceNodes(record: WriteStatsRecord): Long =
         record.resyncDistanceNodes.toLong()
 
     @JvmStatic
-    fun canonicalWriteStatsUsedKeyStableFastPath(record: WriteStatsRecord): Boolean =
+    fun writeStatsUsedKeyStableFastPath(record: WriteStatsRecord): Boolean =
         record.usedKeyStableFastPath
 
     @JvmStatic
-    fun canonicalWriteStatsUsedBatchedValueUpdatePath(record: WriteStatsRecord): Boolean =
+    fun writeStatsUsedBatchedValueUpdatePath(record: WriteStatsRecord): Boolean =
         record.usedBatchedValueUpdatePath
 
     @JvmStatic

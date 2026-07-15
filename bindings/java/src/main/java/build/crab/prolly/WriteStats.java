@@ -1,6 +1,6 @@
 package build.crab.prolly;
 
-public final class CanonicalWriteStats {
+public final class WriteStats {
     private final long inputMutations;
     private final long effectiveMutations;
     private final long entriesStreamed;
@@ -14,19 +14,19 @@ public final class CanonicalWriteStats {
     private final boolean usedKeyStableFastPath;
     private final boolean usedBatchedValueUpdatePath;
 
-    CanonicalWriteStats(WriteStatsRecord record) {
-        this.inputMutations = ProllyJavaAdapters.canonicalWriteStatsInputMutations(record);
-        this.effectiveMutations = ProllyJavaAdapters.canonicalWriteStatsEffectiveMutations(record);
-        this.entriesStreamed = ProllyJavaAdapters.canonicalWriteStatsEntriesStreamed(record);
-        this.nodesRead = ProllyJavaAdapters.canonicalWriteStatsNodesRead(record);
-        this.nodesWritten = ProllyJavaAdapters.canonicalWriteStatsNodesWritten(record);
-        this.nodesReused = ProllyJavaAdapters.canonicalWriteStatsNodesReused(record);
-        this.bytesRead = ProllyJavaAdapters.canonicalWriteStatsBytesRead(record);
-        this.bytesWritten = ProllyJavaAdapters.canonicalWriteStatsBytesWritten(record);
-        this.resyncDistanceEntries = ProllyJavaAdapters.canonicalWriteStatsResyncDistanceEntries(record);
-        this.resyncDistanceNodes = ProllyJavaAdapters.canonicalWriteStatsResyncDistanceNodes(record);
-        this.usedKeyStableFastPath = ProllyJavaAdapters.canonicalWriteStatsUsedKeyStableFastPath(record);
-        this.usedBatchedValueUpdatePath = ProllyJavaAdapters.canonicalWriteStatsUsedBatchedValueUpdatePath(record);
+    WriteStats(WriteStatsRecord record) {
+        this.inputMutations = ProllyJavaAdapters.writeStatsInputMutations(record);
+        this.effectiveMutations = ProllyJavaAdapters.writeStatsEffectiveMutations(record);
+        this.entriesStreamed = ProllyJavaAdapters.writeStatsEntriesStreamed(record);
+        this.nodesRead = ProllyJavaAdapters.writeStatsNodesRead(record);
+        this.nodesWritten = ProllyJavaAdapters.writeStatsNodesWritten(record);
+        this.nodesReused = ProllyJavaAdapters.writeStatsNodesReused(record);
+        this.bytesRead = ProllyJavaAdapters.writeStatsBytesRead(record);
+        this.bytesWritten = ProllyJavaAdapters.writeStatsBytesWritten(record);
+        this.resyncDistanceEntries = ProllyJavaAdapters.writeStatsResyncDistanceEntries(record);
+        this.resyncDistanceNodes = ProllyJavaAdapters.writeStatsResyncDistanceNodes(record);
+        this.usedKeyStableFastPath = ProllyJavaAdapters.writeStatsUsedKeyStableFastPath(record);
+        this.usedBatchedValueUpdatePath = ProllyJavaAdapters.writeStatsUsedBatchedValueUpdatePath(record);
     }
 
     public long inputMutations() { return inputMutations; }

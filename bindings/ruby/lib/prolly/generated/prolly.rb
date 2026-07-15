@@ -366,23 +366,23 @@ end
     end
   end
 
-  # The Record type CanonicalWriteResultRecord.
+  # The Record type WriteResultRecord.
 
-  def self.check_lower_TypeCanonicalWriteResultRecord(v)
+  def self.check_lower_TypeWriteResultRecord(v)
     RustBuffer.check_lower_TypeTreeRecord(v.tree)
     RustBuffer.check_lower_TypeWriteStatsRecord(v.stats)
   end
 
-  def self.alloc_from_TypeCanonicalWriteResultRecord(v)
+  def self.alloc_from_TypeWriteResultRecord(v)
     RustBuffer.allocWithBuilder do |builder|
-      builder.write_TypeCanonicalWriteResultRecord(v)
+      builder.write_TypeWriteResultRecord(v)
       return builder.finalize
     end
   end
 
-  def consumeIntoTypeCanonicalWriteResultRecord
+  def consumeIntoTypeWriteResultRecord
     consumeWithStream do |stream|
-      return stream.readTypeCanonicalWriteResultRecord
+      return stream.readTypeWriteResultRecord
     end
   end
 
@@ -4156,10 +4156,10 @@ class RustBufferStream
     )
   end
 
-  # The Record type CanonicalWriteResultRecord.
+  # The Record type WriteResultRecord.
 
-  def readTypeCanonicalWriteResultRecord
-    CanonicalWriteResultRecord.new(
+  def readTypeWriteResultRecord
+    WriteResultRecord.new(
       tree: readTypeTreeRecord,
       stats: readTypeWriteStatsRecord
     )
@@ -6723,9 +6723,9 @@ class RustBufferBuilder
     self.write_U64(v.pinned_bytes)
   end
 
-  # The Record type CanonicalWriteResultRecord.
+  # The Record type WriteResultRecord.
 
-  def write_TypeCanonicalWriteResultRecord(v)
+  def write_TypeWriteResultRecord(v)
     self.write_TypeTreeRecord(v.tree)
     self.write_TypeWriteStatsRecord(v.stats)
   end
@@ -10937,8 +10937,8 @@ class CacheStatsRecord
   end
 end
 
-  # Record type CanonicalWriteResultRecord
-class CanonicalWriteResultRecord
+  # Record type WriteResultRecord
+class WriteResultRecord
   attr_reader :tree, :stats
 
   def initialize(tree:, stats:)
@@ -16252,7 +16252,7 @@ end
         range_end = Prolly::uniffi_bytes(range_end)
 
     result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_delete_range_with_stats,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.allocFromBytes(start),RustBuffer.allocFromBytes(range_end))
-    return result.consumeIntoTypeCanonicalWriteResultRecord
+    return result.consumeIntoTypeWriteResultRecord
   end
   def delete_snapshot(namespace, id)
         namespace = namespace

@@ -224,7 +224,7 @@ fn bench_batch_mutations_mixed(items: usize) {
 
     if std::env::var_os("PROLLY_BENCH_DIAG").is_some() {
         let (_, stats) = prolly
-            .canonical_batch_with_stats(&base, mutations.clone())
+            .batch_with_write_stats(&base, mutations.clone())
             .unwrap();
         println!("mixed_batch_stats={stats:?}");
     }

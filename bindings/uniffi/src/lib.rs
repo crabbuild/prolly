@@ -5,11 +5,11 @@ use prolly::{
     self, is_boundary_config as core_is_boundary_config, AuthenticatedProofBundleVerification,
     AuthenticatedProofEnvelope, AuthenticatedProofEnvelopeVerification, BatchApplyResult,
     BatchApplyStats, BatchOp, BlobGcPlan, BlobGcReachability, BlobGcSweep, BlobRef, BlobStore,
-    BlobStoreScan, CanonicalWriteStats, ChangedSpan, ChangedSpanHint, Cid, Config, Conflict,
-    CrdtConfig, CursorWindow, DeletePolicy, Diff, DiffPageProof, DiffPageProofVerification,
-    DiffTraversalStats, Encoding, FileBlobStore, FileNodeStore, GcPlan, GcReachability, GcSweep,
-    KeyBuilder, KeyProof, KeyProofVerification, LargeValueConfig, ManifestStore, ManifestStoreScan,
-    ManifestUpdate, MemBlobStore, MemStore, MergeFallbackReason, MergeFastPath, MergePolicyFn,
+    BlobStoreScan, ChangedSpan, ChangedSpanHint, Cid, Config, Conflict, CrdtConfig, CursorWindow,
+    DeletePolicy, Diff, DiffPageProof, DiffPageProofVerification, DiffTraversalStats, Encoding,
+    FileBlobStore, FileNodeStore, GcPlan, GcReachability, GcSweep, KeyBuilder, KeyProof,
+    KeyProofVerification, LargeValueConfig, ManifestStore, ManifestStoreScan, ManifestUpdate,
+    MemBlobStore, MemStore, MergeFallbackReason, MergeFastPath, MergePolicyFn,
     MergePolicyRegistry as CoreMergePolicyRegistry, MergeResolutionKind as CoreMergeResolutionKind,
     MergeReuseReason, MergeTrace, MergeTraceEvent, MergeTraceStage, MissingNodeCopy,
     MissingNodePlan, MultiKeyProof, MultiKeyProofVerification, MultiValueSet, Mutation,
@@ -24,6 +24,7 @@ use prolly::{
     StructuralDiffMarker, StructuralDiffPage, TimestampedValue, Tombstone, Tree,
     TreeDebugComparedNode, TreeDebugComparison, TreeDebugComparisonLevel, TreeDebugLevel,
     TreeDebugNode, TreeDebugNodeStatus, TreeDebugView, TreeStats, ValueRef, VersionedValue,
+    WriteStats,
 };
 #[cfg(feature = "sqlite")]
 use prolly_store_sqlite::SqliteStore;
@@ -273,7 +274,7 @@ pub struct WriteStatsRecord {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
-pub struct CanonicalWriteResultRecord {
+pub struct WriteResultRecord {
     pub tree: TreeRecord,
     pub stats: WriteStatsRecord,
 }
@@ -2250,18 +2251,18 @@ impl ProllyEngine {
         })
     }
 
-    /// Delete every raw-byte key in `[start, end)` and return canonical write statistics.
+    /// Delete every raw-byte key in `[start, end)` and return write statistics.
     pub fn delete_range_with_stats(
         &self,
         tree: TreeRecord,
         start: Vec<u8>,
         range_end: Vec<u8>,
-    ) -> Result<CanonicalWriteResultRecord, ProllyBindingError> {
+    ) -> Result<WriteResultRecord, ProllyBindingError> {
         let tree = tree.try_into()?;
         with_engine!(self, engine, {
             engine
                 .delete_range_with_stats(&tree, &start, &range_end)
-                .map(CanonicalWriteResultRecord::from)
+                .map(WriteResultRecord::from)
                 .map_err(Into::into)
         })
     }
@@ -5429,8 +5430,8 @@ impl From<BatchApplyResult> for BatchApplyResultRecord {
     }
 }
 
-impl From<CanonicalWriteStats> for WriteStatsRecord {
-    fn from(value: CanonicalWriteStats) -> Self {
+impl From<WriteStats> for WriteStatsRecord {
+    fn from(value: WriteStats) -> Self {
         Self {
             input_mutations: value.input_mutations,
             effective_mutations: value.effective_mutations,
@@ -5448,8 +5449,8 @@ impl From<CanonicalWriteStats> for WriteStatsRecord {
     }
 }
 
-impl From<(Tree, CanonicalWriteStats)> for CanonicalWriteResultRecord {
-    fn from((tree, stats): (Tree, CanonicalWriteStats)) -> Self {
+impl From<(Tree, WriteStats)> for WriteResultRecord {
+    fn from((tree, stats): (Tree, WriteStats)) -> Self {
         Self {
             tree: tree.into(),
             stats: stats.into(),

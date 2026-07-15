@@ -100,7 +100,7 @@ export interface NodeWriteStatsRecord {
   usedKeyStableFastPath: boolean
   usedBatchedValueUpdatePath: boolean
 }
-export interface NodeCanonicalWriteResultRecord {
+export interface NodeWriteResultRecord {
   tree: NodeTreeRecord
   stats: NodeWriteStatsRecord
 }
@@ -743,7 +743,7 @@ export declare class NativeProllyEngine {
   beginTransaction(): NativeProllyTransaction
   put(tree: NodeTreeRecord, key: Buffer, value: Buffer): NodeTreeRecord
   deleteRange(tree: NodeTreeRecord, start: Buffer, rangeEnd: Buffer): NodeTreeRecord
-  deleteRangeWithStats(tree: NodeTreeRecord, start: Buffer, rangeEnd: Buffer): NodeCanonicalWriteResultRecord
+  deleteRangeWithStats(tree: NodeTreeRecord, start: Buffer, rangeEnd: Buffer): NodeWriteResultRecord
   delete(tree: NodeTreeRecord, key: Buffer): NodeTreeRecord
   get(tree: NodeTreeRecord, key: Buffer): Buffer | null
   getValueRef(tree: NodeTreeRecord, key: Buffer): NodeValueRefRecord | null

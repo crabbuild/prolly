@@ -7,12 +7,12 @@ use std::sync::{
 };
 
 use super::builder::{BatchBuilder, NodeSummary, SortedBatchBuilder};
-use super::canonical::{CanonicalWriteStats, LeafEmitter};
 use super::cid::Cid;
 use super::error::Error;
 use super::format::NodeLayoutSpec;
 use super::node::Node;
 use super::store::{BatchOp, Store};
+use super::write::{LeafEmitter, WriteStats};
 use super::{Prolly, Tree};
 
 const LOCAL_WRITE_CACHE_LIMIT: usize = 8;
@@ -85,9 +85,9 @@ pub(crate) fn apply<S: Store>(
     tree: &Tree,
     start: &[u8],
     end: &[u8],
-) -> Result<(Tree, CanonicalWriteStats), Error> {
+) -> Result<(Tree, WriteStats), Error> {
     if start >= end || tree.root.is_none() {
-        return Ok((tree.clone(), CanonicalWriteStats::default()));
+        return Ok((tree.clone(), WriteStats::default()));
     }
     let metrics_before = manager.metrics();
     if let Some(root) = &tree.root {
@@ -144,10 +144,10 @@ pub(crate) fn apply<S: Store>(
         with_metric_stats_since(
             manager,
             metrics_before,
-            CanonicalWriteStats {
+            WriteStats {
                 input_mutations: deleted_entries,
                 effective_mutations: deleted_entries,
-                ..CanonicalWriteStats::default()
+                ..WriteStats::default()
             },
         ),
     ))
@@ -170,7 +170,7 @@ pub(crate) fn try_localized_height_two<S: Store>(
     tree: &Tree,
     start: &[u8],
     end: &[u8],
-) -> Result<Option<(Tree, CanonicalWriteStats)>, Error> {
+) -> Result<Option<(Tree, WriteStats)>, Error> {
     if matches!(
         tree.config.format.node_layout,
         NodeLayoutSpec::Custom { .. }
@@ -181,7 +181,7 @@ pub(crate) fn try_localized_height_two<S: Store>(
         return Ok(None);
     };
     let metrics_before = manager.metrics();
-    let mut stats = CanonicalWriteStats::default();
+    let mut stats = WriteStats::default();
     let root = manager.load_arc(root_cid)?;
     stats.nodes_read += 1;
     stats.bytes_read += root.encoded_len() as u64;
@@ -445,9 +445,9 @@ fn child_cid(bytes: &[u8]) -> Result<Cid, Error> {
 fn metric_stats_since<S: Store>(
     manager: &Prolly<S>,
     metrics_before: super::ProllyMetricsSnapshot,
-) -> CanonicalWriteStats {
+) -> WriteStats {
     let metrics = manager.metrics();
-    CanonicalWriteStats {
+    WriteStats {
         nodes_read: metrics.nodes_read.saturating_sub(metrics_before.nodes_read),
         bytes_read: metrics.bytes_read.saturating_sub(metrics_before.bytes_read),
         nodes_written: metrics
@@ -456,15 +456,15 @@ fn metric_stats_since<S: Store>(
         bytes_written: metrics
             .bytes_written
             .saturating_sub(metrics_before.bytes_written),
-        ..CanonicalWriteStats::default()
+        ..WriteStats::default()
     }
 }
 
 fn with_metric_stats_since<S: Store>(
     manager: &Prolly<S>,
     metrics_before: super::ProllyMetricsSnapshot,
-    mut stats: CanonicalWriteStats,
-) -> CanonicalWriteStats {
+    mut stats: WriteStats,
+) -> WriteStats {
     let actual_metrics = metric_stats_since(manager, metrics_before);
     stats.nodes_read = actual_metrics.nodes_read;
     stats.bytes_read = actual_metrics.bytes_read;

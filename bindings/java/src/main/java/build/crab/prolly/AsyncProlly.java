@@ -175,7 +175,7 @@ public final class AsyncProlly implements AutoCloseable {
         return supply(() -> inner.deleteRange(tree, start, rangeEnd));
     }
 
-    public CompletableFuture<CanonicalWriteResult> deleteRangeWithStats(
+    public CompletableFuture<WriteResult> deleteRangeWithStats(
             TreeRecord tree,
             byte[] start,
             byte[] rangeEnd) {

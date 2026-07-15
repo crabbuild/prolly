@@ -2094,7 +2094,7 @@ pub fn append_batch<S: Store>(
     tree: &Tree,
     mutations: Vec<Mutation>,
 ) -> Result<Tree, Error> {
-    super::canonical::apply_tree(prolly, tree, mutations)
+    super::write::apply_tree(prolly, tree, mutations)
 }
 
 /// Apply append-heavy mutations and return store-neutral execution stats.
@@ -3088,10 +3088,10 @@ pub(crate) fn apply_batch<S: Store>(
     tree: &Tree,
     mutations: Vec<Mutation>,
 ) -> Result<Tree, Error> {
-    super::canonical::apply_tree(prolly, tree, mutations)
+    super::write::apply_tree(prolly, tree, mutations)
 }
 
-pub(crate) fn canonical_apply_with_stats<S: Store>(
+pub(crate) fn apply_with_stats<S: Store>(
     prolly: &Prolly<S>,
     tree: &Tree,
     mutations: Vec<Mutation>,
@@ -3099,20 +3099,20 @@ pub(crate) fn canonical_apply_with_stats<S: Store>(
     let input_sorted = mutations
         .windows(2)
         .all(|pair| pair[0].key() <= pair[1].key());
-    let (tree, canonical) = super::canonical::apply(prolly, tree, mutations)?;
+    let (tree, write_stats) = super::write::apply(prolly, tree, mutations)?;
     Ok(BatchApplyResult {
         tree,
         stats: BatchApplyStats {
-            input_mutations: canonical.input_mutations as usize,
-            effective_mutations: canonical.effective_mutations as usize,
+            input_mutations: write_stats.input_mutations as usize,
+            effective_mutations: write_stats.effective_mutations as usize,
             preprocess_input_sorted: input_sorted,
-            affected_leaves: canonical.resync_distance_nodes as usize,
-            changed_leaves: canonical.nodes_written as usize,
+            affected_leaves: write_stats.resync_distance_nodes as usize,
+            changed_leaves: write_stats.nodes_written as usize,
             sparse_leaf_applies: 0,
-            written_nodes: canonical.nodes_written as usize,
-            written_bytes: canonical.bytes_written as usize,
+            written_nodes: write_stats.nodes_written as usize,
+            written_bytes: write_stats.bytes_written as usize,
             used_append_fast_path: false,
-            used_batched_route: canonical.used_batched_value_update_path,
+            used_batched_route: write_stats.used_batched_value_update_path,
             used_coalesced_rebuild: true,
             used_deferred_rebalancing: false,
             used_bottom_up_rebuild: false,
@@ -5096,7 +5096,7 @@ impl BatchWriter {
         tree: &Tree,
         mutations: Vec<Mutation>,
     ) -> Result<Tree, Error> {
-        super::canonical::apply_tree(prolly, tree, mutations)
+        super::write::apply_tree(prolly, tree, mutations)
     }
 
     /// Apply batch mutations and return store-neutral execution stats.

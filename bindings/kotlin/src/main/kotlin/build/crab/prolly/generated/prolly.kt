@@ -5592,9 +5592,9 @@ public interface ProllyEngineInterface {
     fun `deleteRange`(`tree`: TreeRecord, `start`: kotlin.ByteArray, `rangeEnd`: kotlin.ByteArray): TreeRecord
 
     /**
-     * Delete every raw-byte key in `[start, end)` and return canonical write statistics.
+     * Delete every raw-byte key in `[start, end)` and return write statistics.
      */
-    fun `deleteRangeWithStats`(`tree`: TreeRecord, `start`: kotlin.ByteArray, `rangeEnd`: kotlin.ByteArray): CanonicalWriteResultRecord
+    fun `deleteRangeWithStats`(`tree`: TreeRecord, `start`: kotlin.ByteArray, `rangeEnd`: kotlin.ByteArray): WriteResultRecord
 
     fun `deleteSnapshot`(`namespace`: SnapshotNamespaceRecord, `id`: kotlin.ByteArray)
 
@@ -6284,10 +6284,10 @@ open class ProllyEngine: Disposable, AutoCloseable, ProllyEngineInterface
 
 
     /**
-     * Delete every raw-byte key in `[start, end)` and return canonical write statistics.
+     * Delete every raw-byte key in `[start, end)` and return write statistics.
      */
-    @Throws(ProllyBindingException::class)override fun `deleteRangeWithStats`(`tree`: TreeRecord, `start`: kotlin.ByteArray, `rangeEnd`: kotlin.ByteArray): CanonicalWriteResultRecord {
-            return FfiConverterTypeCanonicalWriteResultRecord.lift(
+    @Throws(ProllyBindingException::class)override fun `deleteRangeWithStats`(`tree`: TreeRecord, `start`: kotlin.ByteArray, `rangeEnd`: kotlin.ByteArray): WriteResultRecord {
+            return FfiConverterTypeWriteResultRecord.lift(
     callWithHandle {
     uniffiRustCallWithError(ProllyBindingException) { _status ->
     UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_delete_range_with_stats(
@@ -8553,7 +8553,7 @@ public object FfiConverterTypeCacheStatsRecord: FfiConverterRustBuffer<CacheStat
 
 
 
-data class CanonicalWriteResultRecord (
+data class WriteResultRecord (
     var `tree`: TreeRecord
     ,
     var `stats`: WriteStatsRecord
@@ -8570,20 +8570,20 @@ data class CanonicalWriteResultRecord (
 /**
  * @suppress
  */
-public object FfiConverterTypeCanonicalWriteResultRecord: FfiConverterRustBuffer<CanonicalWriteResultRecord> {
-    override fun read(buf: ByteBuffer): CanonicalWriteResultRecord {
-        return CanonicalWriteResultRecord(
+public object FfiConverterTypeWriteResultRecord: FfiConverterRustBuffer<WriteResultRecord> {
+    override fun read(buf: ByteBuffer): WriteResultRecord {
+        return WriteResultRecord(
             FfiConverterTypeTreeRecord.read(buf),
             FfiConverterTypeWriteStatsRecord.read(buf),
         )
     }
 
-    override fun allocationSize(value: CanonicalWriteResultRecord) = (
+    override fun allocationSize(value: WriteResultRecord) = (
             FfiConverterTypeTreeRecord.allocationSize(value.`tree`) +
             FfiConverterTypeWriteStatsRecord.allocationSize(value.`stats`)
     )
 
-    override fun write(value: CanonicalWriteResultRecord, buf: ByteBuffer) {
+    override fun write(value: WriteResultRecord, buf: ByteBuffer) {
             FfiConverterTypeTreeRecord.write(value.`tree`, buf)
             FfiConverterTypeWriteStatsRecord.write(value.`stats`, buf)
     }

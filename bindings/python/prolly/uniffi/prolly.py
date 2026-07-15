@@ -5517,7 +5517,7 @@ class _UniffiFfiConverterTypeWriteStatsRecord(_UniffiConverterRustBuffer):
         _UniffiFfiConverterBoolean.write(value.used_batched_value_update_path, buf)
 
 @dataclass
-class CanonicalWriteResultRecord:
+class WriteResultRecord:
     def __init__(self, *, tree:TreeRecord, stats:WriteStatsRecord):
         self.tree = tree
         self.stats = stats
@@ -5526,7 +5526,7 @@ class CanonicalWriteResultRecord:
 
 
     def __str__(self):
-        return "CanonicalWriteResultRecord(tree={}, stats={})".format(self.tree, self.stats)
+        return "WriteResultRecord(tree={}, stats={})".format(self.tree, self.stats)
     def __eq__(self, other):
         if self.tree != other.tree:
             return False
@@ -5534,10 +5534,10 @@ class CanonicalWriteResultRecord:
             return False
         return True
 
-class _UniffiFfiConverterTypeCanonicalWriteResultRecord(_UniffiConverterRustBuffer):
+class _UniffiFfiConverterTypeWriteResultRecord(_UniffiConverterRustBuffer):
     @staticmethod
     def read(buf):
-        return CanonicalWriteResultRecord(
+        return WriteResultRecord(
             tree=_UniffiFfiConverterTypeTreeRecord.read(buf),
             stats=_UniffiFfiConverterTypeWriteStatsRecord.read(buf),
         )
@@ -13691,9 +13691,9 @@ class ProllyEngineProtocol(typing.Protocol):
         Delete every raw-byte key in the half-open range `[start, end)`.
 """
         raise NotImplementedError
-    def delete_range_with_stats(self, tree: TreeRecord,start: bytes,range_end: bytes) -> CanonicalWriteResultRecord:
+    def delete_range_with_stats(self, tree: TreeRecord,start: bytes,range_end: bytes) -> WriteResultRecord:
         """
-        Delete every raw-byte key in `[start, end)` and return canonical write statistics.
+        Delete every raw-byte key in `[start, end)` and return write statistics.
 """
         raise NotImplementedError
     def delete_snapshot(self, namespace: SnapshotNamespaceRecord,id: bytes) -> None:
@@ -14525,9 +14525,9 @@ class ProllyEngine(ProllyEngineProtocol):
             *_uniffi_lowered_args,
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
-    def delete_range_with_stats(self, tree: TreeRecord,start: bytes,range_end: bytes) -> CanonicalWriteResultRecord:
+    def delete_range_with_stats(self, tree: TreeRecord,start: bytes,range_end: bytes) -> WriteResultRecord:
         """
-        Delete every raw-byte key in `[start, end)` and return canonical write statistics.
+        Delete every raw-byte key in `[start, end)` and return write statistics.
 """
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
@@ -14541,7 +14541,7 @@ class ProllyEngine(ProllyEngineProtocol):
             _UniffiFfiConverterBytes.lower(start),
             _UniffiFfiConverterBytes.lower(range_end),
         )
-        _uniffi_lift_return = _UniffiFfiConverterTypeCanonicalWriteResultRecord.lift
+        _uniffi_lift_return = _UniffiFfiConverterTypeWriteResultRecord.lift
         _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
         _uniffi_ffi_result = _uniffi_rust_call_with_error(
             _uniffi_error_converter,
@@ -18150,7 +18150,7 @@ __all__ = [
     "BlobGcSweepRecord",
     "CacheStatsRecord",
     "WriteStatsRecord",
-    "CanonicalWriteResultRecord",
+    "WriteResultRecord",
     "ChangedSpanRecord",
     "ChangedSpanHintRecord",
     "ConflictRecord",

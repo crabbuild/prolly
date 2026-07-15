@@ -23,7 +23,7 @@ class AsyncProllyTest {
             }
             TreeRecord deleted = prolly.deleteRange(tree, bytes("b"), bytes("e")).get(5, TimeUnit.SECONDS);
             assertEquals(List.of("a", "e", "f"), prolly.range(deleted, new byte[0], Optional.empty()).get(5, TimeUnit.SECONDS).stream().map(entry -> new String(entry.key())).toList());
-            CanonicalWriteResult withStats = prolly.deleteRangeWithStats(tree, bytes("b"), bytes("e")).get(5, TimeUnit.SECONDS);
+            WriteResult withStats = prolly.deleteRangeWithStats(tree, bytes("b"), bytes("e")).get(5, TimeUnit.SECONDS);
             assertEquals(List.of("a", "e", "f"), prolly.range(withStats.tree(), new byte[0], Optional.empty()).get(5, TimeUnit.SECONDS).stream().map(entry -> new String(entry.key())).toList());
         }
     }

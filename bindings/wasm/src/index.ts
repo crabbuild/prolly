@@ -53,7 +53,7 @@ export interface WasmWriteStatsRecord {
   usedBatchedValueUpdatePath: boolean;
 }
 
-export interface WasmCanonicalWriteResultRecord {
+export interface WasmWriteResultRecord {
   tree: unknown;
   stats: WasmWriteStatsRecord;
 }
@@ -527,7 +527,7 @@ export interface WasmProllyEngineInstance
     tree: WasmTree,
     start: Uint8Array,
     rangeEnd: Uint8Array,
-  ): WasmCanonicalWriteResultRecord;
+  ): WasmWriteResultRecord;
   loadNamedRoot(name: Uint8Array): WasmTree | null;
   compareAndSwapNamedRoot(
     name: Uint8Array,

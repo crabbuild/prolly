@@ -280,8 +280,6 @@ pub use prolly::blob::{
 pub use prolly::blob::{TokioBlockingBlobStore, TokioBlockingBlobStoreError};
 pub use prolly::boundary::{is_boundary, is_boundary_config, BoundaryDetector};
 pub use prolly::builder::{BatchBuilder, SortedBatchBuilder};
-pub use prolly::canonical::CanonicalWriteStats;
-pub use prolly::canonical_splice::{canonical_splice, CanonicalSpliceStats};
 pub use prolly::chunking;
 pub use prolly::cid::Cid;
 pub use prolly::config::{Config, ConfigBuilder, RuntimeConfig};
@@ -386,7 +384,9 @@ pub use prolly::snapshot::{
     snapshot_id_from_name, snapshot_root_name, SnapshotManager, SnapshotNamespace, SnapshotRoot,
     SnapshotSelection, SNAPSHOT_BRANCH_PREFIX, SNAPSHOT_CHECKPOINT_PREFIX, SNAPSHOT_TAG_PREFIX,
 };
+pub use prolly::splice::{splice, SpliceStats};
 pub use prolly::streaming::{DefaultStreamingDiffer, StreamingDiffer};
+pub use prolly::write::WriteStats;
 pub use prolly::{ChangedSpan, ChangedSpanHint, KeyValue, Prolly, ProllyMetricsSnapshot};
 
 #[cfg(feature = "async-store")]

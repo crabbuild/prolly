@@ -1,7 +1,7 @@
 import {
   loadNative,
   type NativeBatchApplyResultRecord,
-  type NativeCanonicalWriteResultRecord,
+  type NativeWriteResultRecord,
   type NativeBlobGcPlanRecord,
   type NativeBlobGcReachabilityRecord,
   type NativeBlobGcSweepRecord,
@@ -270,7 +270,7 @@ export class AsyncProllyEngine {
     tree: NativeTreeRecord,
     start: Uint8Array,
     rangeEnd: Uint8Array,
-  ): Promise<NativeCanonicalWriteResultRecord> {
+  ): Promise<NativeWriteResultRecord> {
     return defer(() => this.inner.deleteRangeWithStats(tree, start, rangeEnd));
   }
 

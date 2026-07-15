@@ -123,8 +123,6 @@ fn current_unix_time_millis() -> u64 {
 // Core modules - moved from root level
 pub mod boundary;
 pub mod builder;
-pub mod canonical;
-pub mod canonical_splice;
 pub mod chunking;
 pub mod cid;
 pub mod config;
@@ -144,6 +142,7 @@ pub mod proof;
 pub mod proximity;
 pub(crate) mod range_delete;
 pub mod snapshot;
+pub mod splice;
 pub mod stats;
 pub mod store;
 pub mod sync;
@@ -152,6 +151,7 @@ pub mod transaction;
 pub mod tree;
 pub mod value;
 pub mod versioned_map;
+pub mod write;
 pub mod write_session;
 
 // Public submodules - each handles a specific concern
@@ -1487,7 +1487,7 @@ impl<S: Store> Prolly<S> {
     /// # Idempotence
     /// If the key already exists with the same value, returns the original tree unchanged.
     pub fn put(&self, tree: &Tree, key: Vec<u8>, val: Vec<u8>) -> Result<Tree, Error> {
-        canonical::apply_tree(self, tree, vec![Mutation::Upsert { key, val }])
+        write::apply_tree(self, tree, vec![Mutation::Upsert { key, val }])
     }
 
     /// Insert or update a value, offloading large payloads to a blob store.
@@ -1528,7 +1528,7 @@ impl<S: Store> Prolly<S> {
     /// # Idempotence
     /// If the key doesn't exist, returns the original tree unchanged.
     pub fn delete(&self, tree: &Tree, key: &[u8]) -> Result<Tree, Error> {
-        canonical::apply_tree(self, tree, vec![Mutation::Delete { key: key.to_vec() }])
+        write::apply_tree(self, tree, vec![Mutation::Delete { key: key.to_vec() }])
     }
 
     /// Delete all keys in the half-open range `[start, end)`.
@@ -1542,7 +1542,7 @@ impl<S: Store> Prolly<S> {
         tree: &Tree,
         start: &[u8],
         end: &[u8],
-    ) -> Result<(Tree, canonical::CanonicalWriteStats), Error> {
+    ) -> Result<(Tree, write::WriteStats), Error> {
         range_delete::apply(self, tree, start, end)
     }
 
@@ -4203,16 +4203,16 @@ impl<S: Store> Prolly<S> {
     /// let new_tree = prolly.batch(&tree, mutations).unwrap();
     /// ```
     pub fn batch(&self, tree: &Tree, mutations: Vec<Mutation>) -> Result<Tree, Error> {
-        canonical::apply_tree(self, tree, mutations)
+        write::apply_tree(self, tree, mutations)
     }
 
-    /// Apply mutations through the canonical writer and return its work counters.
-    pub fn canonical_batch_with_stats(
+    /// Apply mutations and return tree-write work counters.
+    pub fn batch_with_write_stats(
         &self,
         tree: &Tree,
         mutations: Vec<Mutation>,
-    ) -> Result<(Tree, canonical::CanonicalWriteStats), Error> {
-        canonical::apply(self, tree, mutations)
+    ) -> Result<(Tree, write::WriteStats), Error> {
+        write::apply(self, tree, mutations)
     }
 
     /// Apply batch mutations and return store-neutral execution stats.
@@ -4224,7 +4224,7 @@ impl<S: Store> Prolly<S> {
         tree: &Tree,
         mutations: Vec<Mutation>,
     ) -> Result<batch::BatchApplyResult, Error> {
-        batch::canonical_apply_with_stats(self, tree, mutations)
+        batch::apply_with_stats(self, tree, mutations)
     }
 
     /// Apply append-heavy mutations using the optimized append path when safe.
@@ -4233,7 +4233,7 @@ impl<S: Store> Prolly<S> {
     /// append, this falls back to the regular batch implementation for
     /// correctness.
     pub fn append_batch(&self, tree: &Tree, mutations: Vec<Mutation>) -> Result<Tree, Error> {
-        canonical::apply_tree(self, tree, mutations)
+        write::apply_tree(self, tree, mutations)
     }
 
     /// Apply append-heavy mutations and return store-neutral execution stats.
@@ -4245,7 +4245,7 @@ impl<S: Store> Prolly<S> {
         tree: &Tree,
         mutations: Vec<Mutation>,
     ) -> Result<batch::BatchApplyResult, Error> {
-        batch::canonical_apply_with_stats(self, tree, mutations)
+        batch::apply_with_stats(self, tree, mutations)
     }
 
     /// Merge two trees using CRDT semantics for automatic conflict resolution.
@@ -4361,7 +4361,7 @@ impl<S: Store> Prolly<S> {
         mutations: Vec<Mutation>,
         _config: &parallel::ParallelConfig,
     ) -> Result<Tree, Error> {
-        canonical::apply_tree(self, tree, mutations)
+        write::apply_tree(self, tree, mutations)
     }
 
     /// Apply batch mutations with [`parallel::ParallelConfig`] and return execution stats.
@@ -4590,9 +4590,9 @@ where
         tree: &Tree,
         start: &[u8],
         end: &[u8],
-    ) -> Result<(Tree, canonical::CanonicalWriteStats), Error> {
+    ) -> Result<(Tree, write::WriteStats), Error> {
         if start >= end || tree.root.is_none() {
-            return Ok((tree.clone(), canonical::CanonicalWriteStats::default()));
+            return Ok((tree.clone(), write::WriteStats::default()));
         }
 
         let metrics_before = self.metrics();
@@ -4610,7 +4610,7 @@ where
 
         Ok((
             updated,
-            canonical::CanonicalWriteStats {
+            write::WriteStats {
                 input_mutations: mutation_count,
                 effective_mutations: mutation_count,
                 nodes_read: metrics_after
@@ -4625,7 +4625,7 @@ where
                 bytes_written: metrics_after
                     .bytes_written
                     .saturating_sub(metrics_before.bytes_written),
-                ..canonical::CanonicalWriteStats::default()
+                ..write::WriteStats::default()
             },
         ))
     }
@@ -4646,7 +4646,7 @@ where
         if let Some(appended) = self.try_append_batch(tree, &mutations).await? {
             return Ok(appended);
         }
-        self.rebuild_canonical(tree, mutations).await
+        self.rebuild_tree(tree, mutations).await
     }
 
     async fn validate_tree_format(&self, tree: &Tree) -> Result<(), Error> {
@@ -4659,11 +4659,7 @@ where
         Ok(())
     }
 
-    async fn rebuild_canonical(
-        &self,
-        tree: &Tree,
-        mutations: Vec<Mutation>,
-    ) -> Result<Tree, Error> {
+    async fn rebuild_tree(&self, tree: &Tree, mutations: Vec<Mutation>) -> Result<Tree, Error> {
         if let Some(root) = &tree.root {
             let root_node = self.load_arc(root).await?;
             if root_node.format != tree.config.format {

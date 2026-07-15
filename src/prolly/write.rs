@@ -1,4 +1,4 @@
-//! Canonical mutation stream and resynchronizing tree writer.
+//! Deterministic mutation stream and resynchronizing tree writer.
 
 use std::collections::HashSet;
 
@@ -13,9 +13,9 @@ use super::{Prolly, Tree};
 
 const LOCAL_WRITE_CACHE_LIMIT: usize = 8;
 
-/// Store-neutral work performed by a canonical write.
+/// Store-neutral work performed by a tree write.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct CanonicalWriteStats {
+pub struct WriteStats {
     pub input_mutations: u64,
     pub effective_mutations: u64,
     pub entries_streamed: u64,
@@ -130,12 +130,12 @@ impl<'a> LeafEmitter<'a> {
     }
 }
 
-/// Apply last-write-wins mutations and emit the unique canonical tree.
+/// Apply last-write-wins mutations and emit the unique deterministic tree.
 pub(crate) fn apply<S: Store>(
     manager: &Prolly<S>,
     tree: &Tree,
     mutations: Vec<Mutation>,
-) -> Result<(Tree, CanonicalWriteStats), Error> {
+) -> Result<(Tree, WriteStats), Error> {
     apply_impl(manager, tree, mutations, true)
 }
 
@@ -152,10 +152,10 @@ fn apply_impl<S: Store>(
     tree: &Tree,
     mutations: Vec<Mutation>,
     measure_read_bytes: bool,
-) -> Result<(Tree, CanonicalWriteStats), Error> {
-    let mut stats = CanonicalWriteStats {
+) -> Result<(Tree, WriteStats), Error> {
+    let mut stats = WriteStats {
         input_mutations: mutations.len() as u64,
-        ..CanonicalWriteStats::default()
+        ..WriteStats::default()
     };
     if mutations.is_empty() {
         return Ok((tree.clone(), stats));
@@ -408,9 +408,9 @@ fn try_localized_height_two_deletes<S: Store>(
     manager: &Prolly<S>,
     tree: &Tree,
     mutations: &[(Vec<u8>, Option<Vec<u8>>)],
-    stats: &mut CanonicalWriteStats,
+    stats: &mut WriteStats,
     measure_read_bytes: bool,
-) -> Result<Option<(Tree, CanonicalWriteStats)>, Error> {
+) -> Result<Option<(Tree, WriteStats)>, Error> {
     if mutations.len() < 2
         || mutations.iter().any(|(_, value)| value.is_some())
         || matches!(
@@ -689,9 +689,9 @@ fn try_append<S: Store>(
     manager: &Prolly<S>,
     tree: &Tree,
     mutations: &mut Vec<(Vec<u8>, Option<Vec<u8>>)>,
-    stats: &mut CanonicalWriteStats,
+    stats: &mut WriteStats,
     measure_read_bytes: bool,
-) -> Result<Option<(Tree, CanonicalWriteStats)>, Error> {
+) -> Result<Option<(Tree, WriteStats)>, Error> {
     if mutations.iter().any(|(_, value)| value.is_none()) {
         return Ok(None);
     }
@@ -853,7 +853,7 @@ fn internal_child_summaries(node: &Node) -> Result<Vec<NodeSummary>, Error> {
 }
 
 enum DirectValueUpdateAttempt {
-    Applied(Box<(Tree, CanonicalWriteStats)>),
+    Applied(Box<(Tree, WriteStats)>),
     Fallback(Vec<(Vec<u8>, Option<Vec<u8>>)>),
 }
 
@@ -861,7 +861,7 @@ fn try_direct_value_updates<S: Store>(
     manager: &Prolly<S>,
     tree: &Tree,
     mutations: Vec<(Vec<u8>, Option<Vec<u8>>)>,
-    stats: &mut CanonicalWriteStats,
+    stats: &mut WriteStats,
     measure_read_bytes: bool,
 ) -> Result<DirectValueUpdateAttempt, Error> {
     let chunking = &tree.config.format.chunking;
@@ -983,9 +983,9 @@ fn try_direct_single_delete<S: Store>(
     manager: &Prolly<S>,
     tree: &Tree,
     mutations: &[(Vec<u8>, Option<Vec<u8>>)],
-    stats: &mut CanonicalWriteStats,
+    stats: &mut WriteStats,
     measure_read_bytes: bool,
-) -> Result<Option<(Tree, CanonicalWriteStats)>, Error> {
+) -> Result<Option<(Tree, WriteStats)>, Error> {
     let chunking = &tree.config.format.chunking;
     if mutations.len() != 1
         || mutations[0].1.is_some()
@@ -1066,7 +1066,7 @@ fn rewrite_single_delete_subtree<S: Store>(
     config: &super::config::Config,
     leaves: &mut Vec<EmittedLeaf>,
     internals: &mut Vec<EmittedInternal>,
-    stats: &mut CanonicalWriteStats,
+    stats: &mut WriteStats,
     measure_read_bytes: bool,
 ) -> Result<DirectDelete, Error> {
     let node = manager.load_arc(cid)?;
@@ -1175,7 +1175,7 @@ fn rewrite_single_delete_subtree<S: Store>(
 struct DirectRewriteContext<'a> {
     leaves: &'a mut Vec<EmittedLeaf>,
     internals: &'a mut Vec<EmittedInternal>,
-    stats: &'a mut CanonicalWriteStats,
+    stats: &'a mut WriteStats,
     measure_read_bytes: bool,
 }
 
@@ -1449,8 +1449,8 @@ fn build_empty_base<S: Store>(
     manager: &Prolly<S>,
     tree: &Tree,
     mutations: Vec<(Vec<u8>, Option<Vec<u8>>)>,
-    mut stats: CanonicalWriteStats,
-) -> Result<(Tree, CanonicalWriteStats), Error> {
+    mut stats: WriteStats,
+) -> Result<(Tree, WriteStats), Error> {
     let mut writer = super::builder::SortedBatchBuilder::new(manager.store(), tree.config.clone());
     for (key, value) in mutations {
         if let Some(value) = value {
@@ -1472,7 +1472,7 @@ fn build_empty_base<S: Store>(
 fn collect_leaf_summaries<S: Store>(
     manager: &Prolly<S>,
     tree: &Tree,
-    stats: &mut CanonicalWriteStats,
+    stats: &mut WriteStats,
     measure_read_bytes: bool,
 ) -> Result<(Vec<NodeSummary>, HashSet<Cid>), Error> {
     let Some(root) = &tree.root else {
@@ -1496,7 +1496,7 @@ fn collect_from_node<S: Store>(
     manager: &Prolly<S>,
     cid: &Cid,
     expected_format: &super::format::TreeFormat,
-    stats: &mut CanonicalWriteStats,
+    stats: &mut WriteStats,
     leaves: &mut Vec<NodeSummary>,
     internals: &mut HashSet<Cid>,
     measure_read_bytes: bool,
