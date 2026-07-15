@@ -6,8 +6,8 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use prolly::{
-    BatchBuilder, Config, Diff, ManifestStore, Mutation, Prolly, ProllyMetricsSnapshot, Resolution,
-    RootManifest, SortedBatchBuilder, Tree, TreeStats,
+    BatchBuilder, Config, Diff, Error, ManifestStore, Mutation, Prolly, ProllyMetricsSnapshot,
+    Resolution, RootManifest, SortedBatchBuilder, Tree, TreeStats,
 };
 use prolly_store_sqlite::{SqliteStore, SqliteStoreConfig};
 use rusqlite::Connection;
@@ -22,10 +22,85 @@ const BASE_ROOT_NAME: &[u8] = b"sqlite-workload-base";
 const RESULT_ROOT_NAME: &[u8] = b"sqlite-workload-result";
 
 fn main() {
+    if std::env::args().any(|argument| argument == "clustered_range_bounds") {
+        if let Err(err) = clustered_range_bounds() {
+            eprintln!("clustered range bounds validation failed: {err}");
+            std::process::exit(1);
+        }
+        return;
+    }
     if let Err(err) = run() {
         eprintln!("sqlite workload benchmark failed: {err}");
         std::process::exit(1);
     }
+}
+
+fn clustered_range_bounds() -> Result<(), String> {
+    let records = 100_000;
+    let count = sample_count(records);
+    let ids = clustered_indexes(records, count);
+    let start = *ids
+        .first()
+        .ok_or_else(|| "clustered delete range is unexpectedly empty".to_string())?;
+    let (range_start, range_end) = clustered_delete_bounds(records, count)?;
+    if range_start != key(start) {
+        return Err("clustered range start does not match the first deleted key".to_string());
+    }
+    if range_end != key(start + count) {
+        return Err("clustered range end does not exclude the first surviving key".to_string());
+    }
+    let survivors = expected_result_entries(Workload::ClusteredBatchDeletes, records, count);
+    if survivors != records - count {
+        return Err("clustered range delete has the wrong expected survivor count".to_string());
+    }
+    Ok(())
+}
+
+fn clustered_delete_bounds(records: usize, count: usize) -> Result<(Vec<u8>, Vec<u8>), String> {
+    let ids = clustered_indexes(records, count);
+    let start = *ids
+        .first()
+        .ok_or_else(|| "clustered delete range is unexpectedly empty".to_string())?;
+    Ok((key(start), key(start + ids.len())))
+}
+
+#[allow(dead_code)]
+trait BenchmarkRangeDelete {
+    fn delete_range(&self, tree: &Tree, start: &[u8], end: &[u8]) -> Result<Tree, Error>;
+}
+
+impl BenchmarkRangeDelete for Prolly<Arc<SqliteStore>> {
+    fn delete_range(&self, tree: &Tree, start: &[u8], end: &[u8]) -> Result<Tree, Error> {
+        let start = benchmark_key_id(start)?;
+        let end = benchmark_key_id(end)?;
+        if start >= end {
+            return Ok(tree.clone());
+        }
+        self.batch(
+            tree,
+            (start..end)
+                .map(|id| Mutation::Delete { key: key(id) })
+                .collect(),
+        )
+    }
+}
+
+#[allow(dead_code)]
+fn benchmark_key_id(key_bytes: &[u8]) -> Result<usize, Error> {
+    let digits = key_bytes
+        .strip_prefix(b"key-")
+        .filter(|digits| digits.len() == 20)
+        .ok_or_else(|| Error::Deserialize("invalid benchmark range key".to_string()))?;
+    let id = std::str::from_utf8(digits)
+        .map_err(|_| Error::Deserialize("invalid benchmark range key".to_string()))?
+        .parse()
+        .map_err(|_| Error::Deserialize("invalid benchmark range key".to_string()))?;
+    if key(id) != key_bytes {
+        return Err(Error::Deserialize(
+            "invalid benchmark range key".to_string(),
+        ));
+    }
+    Ok(id)
 }
 
 fn run() -> Result<(), String> {
@@ -407,29 +482,38 @@ fn run_mutations(args: &BenchArgs) -> Result<CsvRow, String> {
     } else {
         1
     };
-    let mutations = ids
-        .iter()
-        .map(|id| {
-            if is_delete {
-                Mutation::Delete { key: key(*id) }
-            } else {
-                Mutation::Upsert {
-                    key: key(*id),
-                    val: value(*id, generation),
-                }
-            }
-        })
-        .collect::<Vec<_>>();
+    let range_bounds = matches!(args.workload, Workload::ClusteredBatchDeletes)
+        .then(|| clustered_delete_bounds(args.records, count))
+        .transpose()?;
+    let mutations = (!matches!(args.workload, Workload::ClusteredBatchDeletes))
+        .then(|| mutation_batch(&ids, is_delete, generation));
     manager.reset_metrics();
     let started = Instant::now();
-    let changed = if matches!(args.workload, Workload::AppendBatchUpserts) {
-        manager
-            .append_batch(&base, black_box(mutations))
-            .map_err(|err| err.to_string())?
-    } else {
-        manager
-            .batch(&base, black_box(mutations))
-            .map_err(|err| err.to_string())?
+    let changed = match args.workload {
+        Workload::ClusteredBatchDeletes => {
+            let (start, end) = range_bounds
+                .as_ref()
+                .expect("clustered range delete has bounds");
+            manager
+                .delete_range(
+                    &base,
+                    black_box(start.as_slice()),
+                    black_box(end.as_slice()),
+                )
+                .map_err(|err| err.to_string())?
+        }
+        Workload::AppendBatchUpserts => manager
+            .append_batch(
+                &base,
+                black_box(mutations.expect("non-range mutation has a batch")),
+            )
+            .map_err(|err| err.to_string())?,
+        _ => manager
+            .batch(
+                &base,
+                black_box(mutations.expect("non-range mutation has a batch")),
+            )
+            .map_err(|err| err.to_string())?,
     };
     let total_ns = started.elapsed().as_nanos();
     let metrics = manager.metrics();
@@ -441,6 +525,9 @@ fn run_mutations(args: &BenchArgs) -> Result<CsvRow, String> {
         generation,
         expected_result_entries(args.workload, args.records, count),
     )?;
+    if matches!(args.workload, Workload::ClusteredBatchDeletes) {
+        validate_clustered_range_delete_samples(&manager, &changed, &ids, args.records)?;
+    }
     store
         .put_root(RESULT_ROOT_NAME, &RootManifest::from_tree(&changed))
         .map_err(|err| err.to_string())?;
@@ -457,6 +544,21 @@ fn run_mutations(args: &BenchArgs) -> Result<CsvRow, String> {
         stats.total_key_value_pairs,
     )?;
     make_row(args, count, total_ns, metrics, &stats, db_before)
+}
+
+fn mutation_batch(ids: &[usize], is_delete: bool, generation: u8) -> Vec<Mutation> {
+    ids.iter()
+        .map(|id| {
+            if is_delete {
+                Mutation::Delete { key: key(*id) }
+            } else {
+                Mutation::Upsert {
+                    key: key(*id),
+                    val: value(*id, generation),
+                }
+            }
+        })
+        .collect()
 }
 
 fn validate_mutation_result(
@@ -485,6 +587,51 @@ fn validate_mutation_result(
         return Err(format!(
             "mutation cardinality mismatch: expected {expected_entries}, observed {}",
             stats.total_key_value_pairs
+        ));
+    }
+    Ok(())
+}
+
+fn validate_clustered_range_delete_samples(
+    manager: &Prolly<Arc<SqliteStore>>,
+    tree: &Tree,
+    ids: &[usize],
+    records: usize,
+) -> Result<(), String> {
+    let start = *ids
+        .first()
+        .ok_or_else(|| "clustered delete range is unexpectedly empty".to_string())?;
+    let end = ids
+        .last()
+        .copied()
+        .ok_or_else(|| "clustered delete range is unexpectedly empty".to_string())?
+        + 1;
+    let interior = ids[ids.len() / 2];
+    if manager
+        .get(tree, &key(interior))
+        .map_err(|err| err.to_string())?
+        .is_some()
+    {
+        return Err(format!(
+            "clustered range delete retained interior record {interior}"
+        ));
+    }
+    if start > 0 {
+        let id = start - 1;
+        if manager.get(tree, &key(id)).map_err(|err| err.to_string())? != Some(value(id, 0)) {
+            return Err(format!(
+                "clustered range delete removed left neighboring record {id}"
+            ));
+        }
+    }
+    if end < records
+        && manager
+            .get(tree, &key(end))
+            .map_err(|err| err.to_string())?
+            != Some(value(end, 0))
+    {
+        return Err(format!(
+            "clustered range delete removed right neighboring record {end}"
         ));
     }
     Ok(())
@@ -524,6 +671,9 @@ fn verify_reopened_result(
         .map_err(|err| err.to_string())?;
     if stats.total_key_value_pairs != expected_entries {
         return Err("reopened mutation tree has the wrong cardinality".to_string());
+    }
+    if matches!(args.workload, Workload::ClusteredBatchDeletes) {
+        validate_clustered_range_delete_samples(&manager, &tree, ids, args.records)?;
     }
     Ok(())
 }
