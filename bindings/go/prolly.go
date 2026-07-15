@@ -314,6 +314,8 @@ extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_crdt_merge(uint6
 	extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_debug_tree_json(uint64_t ptr, RustBuffer tree, RustCallStatus *out_err);
 	extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_debug_tree_text(uint64_t ptr, RustBuffer tree, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_delete(uint64_t ptr, RustBuffer tree, RustBuffer key, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_delete_range(uint64_t ptr, RustBuffer tree, RustBuffer start, RustBuffer range_end, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_delete_range_with_stats(uint64_t ptr, RustBuffer tree, RustBuffer start, RustBuffer range_end, RustCallStatus *out_err);
 extern void uniffi_prolly_bindings_fn_method_prollyengine_delete_named_root(uint64_t ptr, RustBuffer name, RustCallStatus *out_err);
 extern void uniffi_prolly_bindings_fn_method_prollyengine_delete_snapshot(uint64_t ptr, RustBuffer namespace, RustBuffer id, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_diff(uint64_t ptr, RustBuffer base, RustBuffer other, RustCallStatus *out_err);
@@ -517,6 +519,26 @@ type BatchApplyStats struct {
 type BatchApplyResult struct {
 	Tree  Tree
 	Stats BatchApplyStats
+}
+
+type CanonicalWriteStats struct {
+	InputMutations             uint64
+	EffectiveMutations         uint64
+	EntriesStreamed            uint64
+	NodesRead                  uint64
+	NodesWritten               uint64
+	NodesReused                uint64
+	BytesRead                  uint64
+	BytesWritten               uint64
+	ResyncDistanceEntries      uint64
+	ResyncDistanceNodes        uint64
+	UsedKeyStableFastPath      bool
+	UsedBatchedValueUpdatePath bool
+}
+
+type CanonicalWriteResult struct {
+	Tree  Tree
+	Stats CanonicalWriteStats
 }
 
 type RangeCursor struct {
@@ -2144,6 +2166,62 @@ func (e *Engine) Delete(tree Tree, key []byte) (Tree, error) {
 	}
 	defer freeRustBuffer(buf)
 	return Tree{raw: copyRustBuffer(buf)}, nil
+}
+
+// DeleteRange removes the raw-byte half-open key range [start, rangeEnd).
+func (e *Engine) DeleteRange(tree Tree, start []byte, rangeEnd []byte) (Tree, error) {
+	handle, err := e.cloneHandle()
+	if err != nil {
+		return Tree{}, err
+	}
+	treeBuf, err := rustBufferFromBytes(tree.raw)
+	if err != nil {
+		return Tree{}, err
+	}
+	startBuf, err := rustBufferFromBytes(encodeByteArray(start))
+	if err != nil {
+		return Tree{}, err
+	}
+	rangeEndBuf, err := rustBufferFromBytes(encodeByteArray(rangeEnd))
+	if err != nil {
+		return Tree{}, err
+	}
+
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_prollyengine_delete_range(handle, treeBuf, startBuf, rangeEndBuf, &status)
+	if err := statusError(&status); err != nil {
+		return Tree{}, err
+	}
+	defer freeRustBuffer(buf)
+	return Tree{raw: copyRustBuffer(buf)}, nil
+}
+
+// DeleteRangeWithStats removes [start, rangeEnd) and returns canonical-write statistics.
+func (e *Engine) DeleteRangeWithStats(tree Tree, start []byte, rangeEnd []byte) (CanonicalWriteResult, error) {
+	handle, err := e.cloneHandle()
+	if err != nil {
+		return CanonicalWriteResult{}, err
+	}
+	treeBuf, err := rustBufferFromBytes(tree.raw)
+	if err != nil {
+		return CanonicalWriteResult{}, err
+	}
+	startBuf, err := rustBufferFromBytes(encodeByteArray(start))
+	if err != nil {
+		return CanonicalWriteResult{}, err
+	}
+	rangeEndBuf, err := rustBufferFromBytes(encodeByteArray(rangeEnd))
+	if err != nil {
+		return CanonicalWriteResult{}, err
+	}
+
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_prollyengine_delete_range_with_stats(handle, treeBuf, startBuf, rangeEndBuf, &status)
+	if err := statusError(&status); err != nil {
+		return CanonicalWriteResult{}, err
+	}
+	defer freeRustBuffer(buf)
+	return decodeCanonicalWriteResult(copyRustBuffer(buf))
 }
 
 func (e *Engine) Get(tree Tree, key []byte) ([]byte, bool, error) {
@@ -7058,6 +7136,19 @@ func decodeBatchApplyResult(data []byte) (BatchApplyResult, error) {
 	return BatchApplyResult{Tree: tree, Stats: stats}, decoder.done()
 }
 
+func decodeCanonicalWriteResult(data []byte) (CanonicalWriteResult, error) {
+	decoder := byteDecoder{data: data}
+	tree, err := decoder.readTree()
+	if err != nil {
+		return CanonicalWriteResult{}, err
+	}
+	stats, err := decoder.readCanonicalWriteStats()
+	if err != nil {
+		return CanonicalWriteResult{}, err
+	}
+	return CanonicalWriteResult{Tree: tree, Stats: stats}, decoder.done()
+}
+
 func decodeRangePage(data []byte) (RangePage, error) {
 	decoder := byteDecoder{data: data}
 	page, err := decoder.readRangePage()
@@ -8964,6 +9055,71 @@ func (d *byteDecoder) readBatchApplyStats() (BatchApplyStats, error) {
 		UsedDeferredRebalancing: usedDeferredRebalancing,
 		UsedBottomUpRebuild:     usedBottomUpRebuild,
 		CacheWrittenNodes:       cacheWrittenNodes,
+	}, nil
+}
+
+func (d *byteDecoder) readCanonicalWriteStats() (CanonicalWriteStats, error) {
+	inputMutations, err := d.readUint64()
+	if err != nil {
+		return CanonicalWriteStats{}, err
+	}
+	effectiveMutations, err := d.readUint64()
+	if err != nil {
+		return CanonicalWriteStats{}, err
+	}
+	entriesStreamed, err := d.readUint64()
+	if err != nil {
+		return CanonicalWriteStats{}, err
+	}
+	nodesRead, err := d.readUint64()
+	if err != nil {
+		return CanonicalWriteStats{}, err
+	}
+	nodesWritten, err := d.readUint64()
+	if err != nil {
+		return CanonicalWriteStats{}, err
+	}
+	nodesReused, err := d.readUint64()
+	if err != nil {
+		return CanonicalWriteStats{}, err
+	}
+	bytesRead, err := d.readUint64()
+	if err != nil {
+		return CanonicalWriteStats{}, err
+	}
+	bytesWritten, err := d.readUint64()
+	if err != nil {
+		return CanonicalWriteStats{}, err
+	}
+	resyncDistanceEntries, err := d.readUint64()
+	if err != nil {
+		return CanonicalWriteStats{}, err
+	}
+	resyncDistanceNodes, err := d.readUint64()
+	if err != nil {
+		return CanonicalWriteStats{}, err
+	}
+	usedKeyStableFastPath, err := d.readBool()
+	if err != nil {
+		return CanonicalWriteStats{}, err
+	}
+	usedBatchedValueUpdatePath, err := d.readBool()
+	if err != nil {
+		return CanonicalWriteStats{}, err
+	}
+	return CanonicalWriteStats{
+		InputMutations:             inputMutations,
+		EffectiveMutations:         effectiveMutations,
+		EntriesStreamed:            entriesStreamed,
+		NodesRead:                  nodesRead,
+		NodesWritten:               nodesWritten,
+		NodesReused:                nodesReused,
+		BytesRead:                  bytesRead,
+		BytesWritten:               bytesWritten,
+		ResyncDistanceEntries:      resyncDistanceEntries,
+		ResyncDistanceNodes:        resyncDistanceNodes,
+		UsedKeyStableFastPath:      usedKeyStableFastPath,
+		UsedBatchedValueUpdatePath: usedBatchedValueUpdatePath,
 	}, nil
 }
 

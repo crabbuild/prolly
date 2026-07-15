@@ -66,6 +66,30 @@ test("wasm package declares browser memory-scope API", () => {
   assert.match(source, /WasmSnapshotNamespaceKind/);
 });
 
+test("wasm deleteRange uses raw-byte half-open bounds", { skip: !generatedPresent }, () => {
+  assert.ifError(runtimeError);
+  assert.ok(wasm);
+  const engine = wasm.WasmProllyEngine.memory();
+  let tree = engine.create();
+  for (const key of ["a", "b", "c", "d", "e", "f"]) {
+    tree = engine.put(tree, utf8(key), utf8(key));
+  }
+
+  const deleted = engine.deleteRange(tree, utf8("b"), utf8("e"));
+  assert.deepEqual(deleted && engine.range(deleted, utf8(""), null).map((entry: any) => toHex(entry.key)), [
+    "61",
+    "65",
+    "66",
+  ]);
+
+  const withStats = engine.deleteRangeWithStats(tree, utf8("b"), utf8("e"));
+  assert.deepEqual(engine.range(withStats.tree, utf8(""), null).map((entry: any) => toHex(entry.key)), [
+    "61",
+    "65",
+    "66",
+  ]);
+});
+
 test("wasm fixtures decode, build, and query through Rust memory engine", { skip: !generatedPresent }, () => {
   assert.ifError(runtimeError);
   assert.ok(wasm);

@@ -1,0 +1,18 @@
+        9.96 real         8.04 user         2.87 sys
+          1870217216  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+              125116  page reclaims
+                   1  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+               33873  voluntary context switches
+               10077  involuntary context switches
+        101869794493  instructions retired
+         34166062468  cycles elapsed
+          1738917568  peak memory footprint

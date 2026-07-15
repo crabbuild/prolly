@@ -39,6 +39,19 @@ class UniFfiBindingTests(unittest.TestCase):
         self.assertEqual(len(diffs), 1)
         self.assertEqual(diffs[0].key, b"a")
 
+    def test_delete_range_uses_half_open_raw_byte_bounds(self) -> None:
+        engine = prolly.ProllyEngine.memory(prolly.default_config())
+        tree = engine.create()
+        for key in b"abcdef":
+            tree = engine.put(tree, bytes([key]), bytes([key]))
+
+        deleted = engine.delete_range(tree, b"b", b"e")
+        self.assertEqual([entry.key for entry in engine.range(deleted, b"", None)], [b"a", b"e", b"f"])
+        self.assertEqual(
+            [entry.key for entry in engine.range(engine.delete_range_with_stats(tree, b"b", b"e").tree, b"", None)],
+            [b"a", b"e", b"f"],
+        )
+
     def test_memory_transaction_commits_rolls_back_and_conflicts(self) -> None:
         engine = prolly.ProllyEngine.memory(prolly.default_config())
         source_name = b"tickets/source/current"

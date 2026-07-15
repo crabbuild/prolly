@@ -1249,6 +1249,189 @@ fn async_delete_last_key_returns_empty_tree() {
 }
 
 #[test]
+fn async_delete_range_matches_sync_range_delete_root_and_entries() {
+    block_on(async {
+        let store = Arc::new(MemStore::new());
+        let config = Config::default();
+        let sync_prolly = Prolly::new(store.clone(), config.clone());
+        let async_prolly = AsyncProlly::new(SyncStoreAsAsync::new(store), config);
+        let tree = async_prolly.create();
+        let tree = async_prolly
+            .batch(
+                &tree,
+                [b"a", b"b", b"c", b"d", b"e", b"f"]
+                    .into_iter()
+                    .map(|key| Mutation::Upsert {
+                        key: key.to_vec(),
+                        val: key.to_vec(),
+                    })
+                    .collect(),
+            )
+            .await
+            .unwrap();
+
+        let expected = sync_prolly.delete_range(&tree, b"b", b"e").unwrap();
+        let actual = async_prolly.delete_range(&tree, b"b", b"e").await.unwrap();
+
+        assert_eq!(actual.root, expected.root);
+        assert_eq!(
+            async_prolly
+                .range(&actual, &[], None)
+                .await
+                .unwrap()
+                .collect()
+                .await
+                .unwrap(),
+            vec![
+                (b"a".to_vec(), b"a".to_vec()),
+                (b"e".to_vec(), b"e".to_vec()),
+                (b"f".to_vec(), b"f".to_vec()),
+            ]
+        );
+    });
+}
+
+#[test]
+fn async_delete_range_empty_and_reversed_ranges_are_noops() {
+    block_on(async {
+        let store = Arc::new(MemStore::new());
+        let async_prolly = AsyncProlly::new(SyncStoreAsAsync::new(store), Config::default());
+        let empty = async_prolly.create();
+
+        assert_eq!(
+            async_prolly
+                .delete_range(&empty, b"a", b"b")
+                .await
+                .unwrap()
+                .root,
+            empty.root
+        );
+
+        let tree = async_prolly
+            .batch(
+                &empty,
+                [b"a", b"b", b"c"]
+                    .into_iter()
+                    .map(|key| Mutation::Upsert {
+                        key: key.to_vec(),
+                        val: key.to_vec(),
+                    })
+                    .collect(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            async_prolly
+                .delete_range(&tree, b"b", b"b")
+                .await
+                .unwrap()
+                .root,
+            tree.root
+        );
+        assert_eq!(
+            async_prolly
+                .delete_range(&tree, b"c", b"b")
+                .await
+                .unwrap()
+                .root,
+            tree.root
+        );
+    });
+}
+
+#[test]
+fn async_delete_range_nonempty_disjoint_range_is_a_noop() {
+    block_on(async {
+        let store = Arc::new(MemStore::new());
+        let async_prolly = AsyncProlly::new(SyncStoreAsAsync::new(store), Config::default());
+        let tree = async_prolly.create();
+        let tree = async_prolly
+            .batch(
+                &tree,
+                [b"a", b"b", b"c"]
+                    .into_iter()
+                    .map(|key| Mutation::Upsert {
+                        key: key.to_vec(),
+                        val: key.to_vec(),
+                    })
+                    .collect(),
+            )
+            .await
+            .unwrap();
+
+        let (unchanged, stats) = async_prolly
+            .delete_range_with_stats(&tree, b"d", b"e")
+            .await
+            .unwrap();
+
+        assert_eq!(unchanged.root, tree.root);
+        assert_eq!(stats.input_mutations, 0);
+        assert_eq!(stats.effective_mutations, 0);
+        assert_eq!(stats.nodes_written, 0);
+        assert_eq!(stats.bytes_written, 0);
+    });
+}
+
+#[test]
+fn async_delete_range_with_stats_reports_effective_mutations_and_metric_deltas() {
+    block_on(async {
+        let store = Arc::new(MemStore::new());
+        let async_prolly = AsyncProlly::new(SyncStoreAsAsync::new(store), Config::default());
+        let tree = async_prolly.create();
+        let tree = async_prolly
+            .batch(
+                &tree,
+                [b"a", b"b", b"c", b"d", b"e", b"f"]
+                    .into_iter()
+                    .map(|key| Mutation::Upsert {
+                        key: key.to_vec(),
+                        val: key.to_vec(),
+                    })
+                    .collect(),
+            )
+            .await
+            .unwrap();
+
+        async_prolly.clear_cache();
+        async_prolly.reset_metrics();
+        let before = async_prolly.metrics();
+        let (actual, stats) = async_prolly
+            .delete_range_with_stats(&tree, b"b", b"e")
+            .await
+            .unwrap();
+        let after = async_prolly.metrics();
+
+        assert_eq!(stats.input_mutations, 3);
+        assert_eq!(stats.effective_mutations, 3);
+        assert_eq!(stats.nodes_read, after.nodes_read - before.nodes_read);
+        assert_eq!(stats.bytes_read, after.bytes_read - before.bytes_read);
+        assert_eq!(
+            stats.nodes_written,
+            after.nodes_written - before.nodes_written
+        );
+        assert_eq!(
+            stats.bytes_written,
+            after.bytes_written - before.bytes_written
+        );
+        assert_eq!(
+            async_prolly
+                .range(&actual, &[], None)
+                .await
+                .unwrap()
+                .collect()
+                .await
+                .unwrap(),
+            vec![
+                (b"a".to_vec(), b"a".to_vec()),
+                (b"e".to_vec(), b"e".to_vec()),
+                (b"f".to_vec(), b"f".to_vec()),
+            ]
+        );
+    });
+}
+
+#[test]
 fn async_manager_metrics_track_cache_reads_writes_and_reset() {
     let store = Arc::new(MemStore::new());
     let async_prolly = AsyncProlly::new(SyncStoreAsAsync::new(store), Config::default());
