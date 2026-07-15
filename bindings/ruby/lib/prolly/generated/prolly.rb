@@ -370,7 +370,7 @@ end
 
   def self.check_lower_TypeCanonicalWriteResultRecord(v)
     RustBuffer.check_lower_TypeTreeRecord(v.tree)
-    RustBuffer.check_lower_TypeCanonicalWriteStatsRecord(v.stats)
+    RustBuffer.check_lower_TypeWriteStatsRecord(v.stats)
   end
 
   def self.alloc_from_TypeCanonicalWriteResultRecord(v)
@@ -386,9 +386,9 @@ end
     end
   end
 
-  # The Record type CanonicalWriteStatsRecord.
+  # The Record type WriteStatsRecord.
 
-  def self.check_lower_TypeCanonicalWriteStatsRecord(v)
+  def self.check_lower_TypeWriteStatsRecord(v)
 
 
 
@@ -403,16 +403,16 @@ end
 
   end
 
-  def self.alloc_from_TypeCanonicalWriteStatsRecord(v)
+  def self.alloc_from_TypeWriteStatsRecord(v)
     RustBuffer.allocWithBuilder do |builder|
-      builder.write_TypeCanonicalWriteStatsRecord(v)
+      builder.write_TypeWriteStatsRecord(v)
       return builder.finalize
     end
   end
 
-  def consumeIntoTypeCanonicalWriteStatsRecord
+  def consumeIntoTypeWriteStatsRecord
     consumeWithStream do |stream|
-      return stream.readTypeCanonicalWriteStatsRecord
+      return stream.readTypeWriteStatsRecord
     end
   end
 
@@ -4161,14 +4161,14 @@ class RustBufferStream
   def readTypeCanonicalWriteResultRecord
     CanonicalWriteResultRecord.new(
       tree: readTypeTreeRecord,
-      stats: readTypeCanonicalWriteStatsRecord
+      stats: readTypeWriteStatsRecord
     )
   end
 
-  # The Record type CanonicalWriteStatsRecord.
+  # The Record type WriteStatsRecord.
 
-  def readTypeCanonicalWriteStatsRecord
-    CanonicalWriteStatsRecord.new(
+  def readTypeWriteStatsRecord
+    WriteStatsRecord.new(
       input_mutations: readU64,
       effective_mutations: readU64,
       entries_streamed: readU64,
@@ -6727,12 +6727,12 @@ class RustBufferBuilder
 
   def write_TypeCanonicalWriteResultRecord(v)
     self.write_TypeTreeRecord(v.tree)
-    self.write_TypeCanonicalWriteStatsRecord(v.stats)
+    self.write_TypeWriteStatsRecord(v.stats)
   end
 
-  # The Record type CanonicalWriteStatsRecord.
+  # The Record type WriteStatsRecord.
 
-  def write_TypeCanonicalWriteStatsRecord(v)
+  def write_TypeWriteStatsRecord(v)
     self.write_U64(v.input_mutations)
     self.write_U64(v.effective_mutations)
     self.write_U64(v.entries_streamed)
@@ -10958,8 +10958,8 @@ class CanonicalWriteResultRecord
   end
 end
 
-  # Record type CanonicalWriteStatsRecord
-class CanonicalWriteStatsRecord
+  # Record type WriteStatsRecord
+class WriteStatsRecord
   attr_reader :input_mutations, :effective_mutations, :entries_streamed, :nodes_read, :nodes_written, :nodes_reused, :bytes_read, :bytes_written, :resync_distance_entries, :resync_distance_nodes, :used_key_stable_fast_path, :used_batched_value_update_path
 
   def initialize(input_mutations:, effective_mutations:, entries_streamed:, nodes_read:, nodes_written:, nodes_reused:, bytes_read:, bytes_written:, resync_distance_entries:, resync_distance_nodes:, used_key_stable_fast_path:, used_batched_value_update_path:)

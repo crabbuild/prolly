@@ -8556,7 +8556,7 @@ public object FfiConverterTypeCacheStatsRecord: FfiConverterRustBuffer<CacheStat
 data class CanonicalWriteResultRecord (
     var `tree`: TreeRecord
     ,
-    var `stats`: CanonicalWriteStatsRecord
+    var `stats`: WriteStatsRecord
 
 ){
 
@@ -8574,24 +8574,24 @@ public object FfiConverterTypeCanonicalWriteResultRecord: FfiConverterRustBuffer
     override fun read(buf: ByteBuffer): CanonicalWriteResultRecord {
         return CanonicalWriteResultRecord(
             FfiConverterTypeTreeRecord.read(buf),
-            FfiConverterTypeCanonicalWriteStatsRecord.read(buf),
+            FfiConverterTypeWriteStatsRecord.read(buf),
         )
     }
 
     override fun allocationSize(value: CanonicalWriteResultRecord) = (
             FfiConverterTypeTreeRecord.allocationSize(value.`tree`) +
-            FfiConverterTypeCanonicalWriteStatsRecord.allocationSize(value.`stats`)
+            FfiConverterTypeWriteStatsRecord.allocationSize(value.`stats`)
     )
 
     override fun write(value: CanonicalWriteResultRecord, buf: ByteBuffer) {
             FfiConverterTypeTreeRecord.write(value.`tree`, buf)
-            FfiConverterTypeCanonicalWriteStatsRecord.write(value.`stats`, buf)
+            FfiConverterTypeWriteStatsRecord.write(value.`stats`, buf)
     }
 }
 
 
 
-data class CanonicalWriteStatsRecord (
+data class WriteStatsRecord (
     var `inputMutations`: kotlin.ULong
     ,
     var `effectiveMutations`: kotlin.ULong
@@ -8628,9 +8628,9 @@ data class CanonicalWriteStatsRecord (
 /**
  * @suppress
  */
-public object FfiConverterTypeCanonicalWriteStatsRecord: FfiConverterRustBuffer<CanonicalWriteStatsRecord> {
-    override fun read(buf: ByteBuffer): CanonicalWriteStatsRecord {
-        return CanonicalWriteStatsRecord(
+public object FfiConverterTypeWriteStatsRecord: FfiConverterRustBuffer<WriteStatsRecord> {
+    override fun read(buf: ByteBuffer): WriteStatsRecord {
+        return WriteStatsRecord(
             FfiConverterULong.read(buf),
             FfiConverterULong.read(buf),
             FfiConverterULong.read(buf),
@@ -8646,7 +8646,7 @@ public object FfiConverterTypeCanonicalWriteStatsRecord: FfiConverterRustBuffer<
         )
     }
 
-    override fun allocationSize(value: CanonicalWriteStatsRecord) = (
+    override fun allocationSize(value: WriteStatsRecord) = (
             FfiConverterULong.allocationSize(value.`inputMutations`) +
             FfiConverterULong.allocationSize(value.`effectiveMutations`) +
             FfiConverterULong.allocationSize(value.`entriesStreamed`) +
@@ -8661,7 +8661,7 @@ public object FfiConverterTypeCanonicalWriteStatsRecord: FfiConverterRustBuffer<
             FfiConverterBoolean.allocationSize(value.`usedBatchedValueUpdatePath`)
     )
 
-    override fun write(value: CanonicalWriteStatsRecord, buf: ByteBuffer) {
+    override fun write(value: WriteStatsRecord, buf: ByteBuffer) {
             FfiConverterULong.write(value.`inputMutations`, buf)
             FfiConverterULong.write(value.`effectiveMutations`, buf)
             FfiConverterULong.write(value.`entriesStreamed`, buf)

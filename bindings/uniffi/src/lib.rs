@@ -257,7 +257,7 @@ pub struct BatchApplyResultRecord {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
-pub struct CanonicalWriteStatsRecord {
+pub struct WriteStatsRecord {
     pub input_mutations: u64,
     pub effective_mutations: u64,
     pub entries_streamed: u64,
@@ -275,7 +275,7 @@ pub struct CanonicalWriteStatsRecord {
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
 pub struct CanonicalWriteResultRecord {
     pub tree: TreeRecord,
-    pub stats: CanonicalWriteStatsRecord,
+    pub stats: WriteStatsRecord,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
@@ -5429,7 +5429,7 @@ impl From<BatchApplyResult> for BatchApplyResultRecord {
     }
 }
 
-impl From<CanonicalWriteStats> for CanonicalWriteStatsRecord {
+impl From<CanonicalWriteStats> for WriteStatsRecord {
     fn from(value: CanonicalWriteStats) -> Self {
         Self {
             input_mutations: value.input_mutations,

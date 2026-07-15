@@ -4558,11 +4558,11 @@ public func FfiConverterTypeCacheStatsRecord_lower(_ value: CacheStatsRecord) ->
 
 public struct CanonicalWriteResultRecord: Equatable, Hashable {
     public var tree: TreeRecord
-    public var stats: CanonicalWriteStatsRecord
+    public var stats: WriteStatsRecord
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(tree: TreeRecord, stats: CanonicalWriteStatsRecord) {
+    public init(tree: TreeRecord, stats: WriteStatsRecord) {
         self.tree = tree
         self.stats = stats
     }
@@ -4584,13 +4584,13 @@ public struct FfiConverterTypeCanonicalWriteResultRecord: FfiConverterRustBuffer
         return
             try CanonicalWriteResultRecord(
                 tree: FfiConverterTypeTreeRecord.read(from: &buf),
-                stats: FfiConverterTypeCanonicalWriteStatsRecord.read(from: &buf)
+                stats: FfiConverterTypeWriteStatsRecord.read(from: &buf)
         )
     }
 
     public static func write(_ value: CanonicalWriteResultRecord, into buf: inout [UInt8]) {
         FfiConverterTypeTreeRecord.write(value.tree, into: &buf)
-        FfiConverterTypeCanonicalWriteStatsRecord.write(value.stats, into: &buf)
+        FfiConverterTypeWriteStatsRecord.write(value.stats, into: &buf)
     }
 }
 
@@ -4610,7 +4610,7 @@ public func FfiConverterTypeCanonicalWriteResultRecord_lower(_ value: CanonicalW
 }
 
 
-public struct CanonicalWriteStatsRecord: Equatable, Hashable {
+public struct WriteStatsRecord: Equatable, Hashable {
     public var inputMutations: UInt64
     public var effectiveMutations: UInt64
     public var entriesStreamed: UInt64
@@ -4647,16 +4647,16 @@ public struct CanonicalWriteStatsRecord: Equatable, Hashable {
 }
 
 #if compiler(>=6)
-extension CanonicalWriteStatsRecord: Sendable {}
+extension WriteStatsRecord: Sendable {}
 #endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public struct FfiConverterTypeCanonicalWriteStatsRecord: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CanonicalWriteStatsRecord {
+public struct FfiConverterTypeWriteStatsRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WriteStatsRecord {
         return
-            try CanonicalWriteStatsRecord(
+            try WriteStatsRecord(
                 inputMutations: FfiConverterUInt64.read(from: &buf),
                 effectiveMutations: FfiConverterUInt64.read(from: &buf),
                 entriesStreamed: FfiConverterUInt64.read(from: &buf),
@@ -4672,7 +4672,7 @@ public struct FfiConverterTypeCanonicalWriteStatsRecord: FfiConverterRustBuffer 
         )
     }
 
-    public static func write(_ value: CanonicalWriteStatsRecord, into buf: inout [UInt8]) {
+    public static func write(_ value: WriteStatsRecord, into buf: inout [UInt8]) {
         FfiConverterUInt64.write(value.inputMutations, into: &buf)
         FfiConverterUInt64.write(value.effectiveMutations, into: &buf)
         FfiConverterUInt64.write(value.entriesStreamed, into: &buf)
@@ -4692,15 +4692,15 @@ public struct FfiConverterTypeCanonicalWriteStatsRecord: FfiConverterRustBuffer 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeCanonicalWriteStatsRecord_lift(_ buf: RustBuffer) throws -> CanonicalWriteStatsRecord {
-    return try FfiConverterTypeCanonicalWriteStatsRecord.lift(buf)
+public func FfiConverterTypeWriteStatsRecord_lift(_ buf: RustBuffer) throws -> WriteStatsRecord {
+    return try FfiConverterTypeWriteStatsRecord.lift(buf)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeCanonicalWriteStatsRecord_lower(_ value: CanonicalWriteStatsRecord) -> RustBuffer {
-    return FfiConverterTypeCanonicalWriteStatsRecord.lower(value)
+public func FfiConverterTypeWriteStatsRecord_lower(_ value: WriteStatsRecord) -> RustBuffer {
+    return FfiConverterTypeWriteStatsRecord.lower(value)
 }
 
 

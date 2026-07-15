@@ -14,7 +14,7 @@ public final class CanonicalWriteStats {
     private final boolean usedKeyStableFastPath;
     private final boolean usedBatchedValueUpdatePath;
 
-    CanonicalWriteStats(CanonicalWriteStatsRecord record) {
+    CanonicalWriteStats(WriteStatsRecord record) {
         this.inputMutations = ProllyJavaAdapters.canonicalWriteStatsInputMutations(record);
         this.effectiveMutations = ProllyJavaAdapters.canonicalWriteStatsEffectiveMutations(record);
         this.entriesStreamed = ProllyJavaAdapters.canonicalWriteStatsEntriesStreamed(record);

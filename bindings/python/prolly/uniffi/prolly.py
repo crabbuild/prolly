@@ -5421,7 +5421,7 @@ class _UniffiFfiConverterTypeCacheStatsRecord(_UniffiConverterRustBuffer):
         _UniffiFfiConverterUInt64.write(value.pinned_bytes, buf)
 
 @dataclass
-class CanonicalWriteStatsRecord:
+class WriteStatsRecord:
     def __init__(self, *, input_mutations:int, effective_mutations:int, entries_streamed:int, nodes_read:int, nodes_written:int, nodes_reused:int, bytes_read:int, bytes_written:int, resync_distance_entries:int, resync_distance_nodes:int, used_key_stable_fast_path:bool, used_batched_value_update_path:bool):
         self.input_mutations = input_mutations
         self.effective_mutations = effective_mutations
@@ -5440,7 +5440,7 @@ class CanonicalWriteStatsRecord:
 
 
     def __str__(self):
-        return "CanonicalWriteStatsRecord(input_mutations={}, effective_mutations={}, entries_streamed={}, nodes_read={}, nodes_written={}, nodes_reused={}, bytes_read={}, bytes_written={}, resync_distance_entries={}, resync_distance_nodes={}, used_key_stable_fast_path={}, used_batched_value_update_path={})".format(self.input_mutations, self.effective_mutations, self.entries_streamed, self.nodes_read, self.nodes_written, self.nodes_reused, self.bytes_read, self.bytes_written, self.resync_distance_entries, self.resync_distance_nodes, self.used_key_stable_fast_path, self.used_batched_value_update_path)
+        return "WriteStatsRecord(input_mutations={}, effective_mutations={}, entries_streamed={}, nodes_read={}, nodes_written={}, nodes_reused={}, bytes_read={}, bytes_written={}, resync_distance_entries={}, resync_distance_nodes={}, used_key_stable_fast_path={}, used_batched_value_update_path={})".format(self.input_mutations, self.effective_mutations, self.entries_streamed, self.nodes_read, self.nodes_written, self.nodes_reused, self.bytes_read, self.bytes_written, self.resync_distance_entries, self.resync_distance_nodes, self.used_key_stable_fast_path, self.used_batched_value_update_path)
     def __eq__(self, other):
         if self.input_mutations != other.input_mutations:
             return False
@@ -5468,10 +5468,10 @@ class CanonicalWriteStatsRecord:
             return False
         return True
 
-class _UniffiFfiConverterTypeCanonicalWriteStatsRecord(_UniffiConverterRustBuffer):
+class _UniffiFfiConverterTypeWriteStatsRecord(_UniffiConverterRustBuffer):
     @staticmethod
     def read(buf):
-        return CanonicalWriteStatsRecord(
+        return WriteStatsRecord(
             input_mutations=_UniffiFfiConverterUInt64.read(buf),
             effective_mutations=_UniffiFfiConverterUInt64.read(buf),
             entries_streamed=_UniffiFfiConverterUInt64.read(buf),
@@ -5518,7 +5518,7 @@ class _UniffiFfiConverterTypeCanonicalWriteStatsRecord(_UniffiConverterRustBuffe
 
 @dataclass
 class CanonicalWriteResultRecord:
-    def __init__(self, *, tree:TreeRecord, stats:CanonicalWriteStatsRecord):
+    def __init__(self, *, tree:TreeRecord, stats:WriteStatsRecord):
         self.tree = tree
         self.stats = stats
 
@@ -5539,18 +5539,18 @@ class _UniffiFfiConverterTypeCanonicalWriteResultRecord(_UniffiConverterRustBuff
     def read(buf):
         return CanonicalWriteResultRecord(
             tree=_UniffiFfiConverterTypeTreeRecord.read(buf),
-            stats=_UniffiFfiConverterTypeCanonicalWriteStatsRecord.read(buf),
+            stats=_UniffiFfiConverterTypeWriteStatsRecord.read(buf),
         )
 
     @staticmethod
     def check_lower(value):
         _UniffiFfiConverterTypeTreeRecord.check_lower(value.tree)
-        _UniffiFfiConverterTypeCanonicalWriteStatsRecord.check_lower(value.stats)
+        _UniffiFfiConverterTypeWriteStatsRecord.check_lower(value.stats)
 
     @staticmethod
     def write(value, buf):
         _UniffiFfiConverterTypeTreeRecord.write(value.tree, buf)
-        _UniffiFfiConverterTypeCanonicalWriteStatsRecord.write(value.stats, buf)
+        _UniffiFfiConverterTypeWriteStatsRecord.write(value.stats, buf)
 
 @dataclass
 class ChangedSpanRecord:
@@ -18149,7 +18149,7 @@ __all__ = [
     "BlobGcPlanRecord",
     "BlobGcSweepRecord",
     "CacheStatsRecord",
-    "CanonicalWriteStatsRecord",
+    "WriteStatsRecord",
     "CanonicalWriteResultRecord",
     "ChangedSpanRecord",
     "ChangedSpanHintRecord",

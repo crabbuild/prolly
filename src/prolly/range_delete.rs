@@ -1,4 +1,4 @@
-//! Canonical half-open range deletion.
+//! Half-open range deletion.
 
 use std::collections::HashSet;
 use std::sync::{

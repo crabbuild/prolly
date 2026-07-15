@@ -64,7 +64,7 @@ export interface NativeBatchApplyResultRecord {
   stats: NativeBatchApplyStatsRecord;
 }
 
-export interface NativeCanonicalWriteStatsRecord {
+export interface NativeWriteStatsRecord {
   inputMutations: string;
   effectiveMutations: string;
   entriesStreamed: string;
@@ -81,7 +81,7 @@ export interface NativeCanonicalWriteStatsRecord {
 
 export interface NativeCanonicalWriteResultRecord {
   tree: NativeTreeRecord;
-  stats: NativeCanonicalWriteStatsRecord;
+  stats: NativeWriteStatsRecord;
 }
 
 export interface NativeRangeCursorRecord {

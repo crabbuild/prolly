@@ -47,7 +47,6 @@ use prolly_bindings::{
     BlobGcSweepRecord as BindingBlobGcSweepRecord, BlobRefRecord as BindingBlobRefRecord,
     CacheStatsRecord as BindingCacheStatsRecord,
     CanonicalWriteResultRecord as BindingCanonicalWriteResultRecord,
-    CanonicalWriteStatsRecord as BindingCanonicalWriteStatsRecord,
     ChangedSpanHintRecord as BindingChangedSpanHintRecord,
     ChangedSpanRecord as BindingChangedSpanRecord, ConfigRecord,
     ConflictPageRecord as BindingConflictPageRecord, ConflictRecord as BindingConflictRecord,
@@ -121,7 +120,7 @@ use prolly_bindings::{
     TombstoneRecord as BindingTombstoneRecord,
     TransactionConflictRecord as BindingTransactionConflictRecord,
     TransactionUpdateRecord as BindingTransactionUpdateRecord, TreeRecord, ValueRefKind,
-    ValueRefRecord as BindingValueRefRecord,
+    ValueRefRecord as BindingValueRefRecord, WriteStatsRecord as BindingWriteStatsRecord,
 };
 use serde::Deserialize;
 use std::sync::{Arc, Mutex};
@@ -236,7 +235,7 @@ pub struct NodeBatchApplyResultRecord {
 }
 
 #[napi(object)]
-pub struct NodeCanonicalWriteStatsRecord {
+pub struct NodeWriteStatsRecord {
     pub input_mutations: String,
     pub effective_mutations: String,
     pub entries_streamed: String,
@@ -254,7 +253,7 @@ pub struct NodeCanonicalWriteStatsRecord {
 #[napi(object)]
 pub struct NodeCanonicalWriteResultRecord {
     pub tree: NodeTreeRecord,
-    pub stats: NodeCanonicalWriteStatsRecord,
+    pub stats: NodeWriteStatsRecord,
 }
 
 #[napi(object)]
@@ -3666,8 +3665,8 @@ impl From<BindingBatchApplyResultRecord> for NodeBatchApplyResultRecord {
     }
 }
 
-impl From<BindingCanonicalWriteStatsRecord> for NodeCanonicalWriteStatsRecord {
-    fn from(stats: BindingCanonicalWriteStatsRecord) -> Self {
+impl From<BindingWriteStatsRecord> for NodeWriteStatsRecord {
+    fn from(stats: BindingWriteStatsRecord) -> Self {
         Self {
             input_mutations: stats.input_mutations.to_string(),
             effective_mutations: stats.effective_mutations.to_string(),

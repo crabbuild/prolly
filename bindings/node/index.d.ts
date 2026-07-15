@@ -86,7 +86,7 @@ export interface NodeBatchApplyResultRecord {
   tree: NodeTreeRecord
   stats: NodeBatchApplyStatsRecord
 }
-export interface NodeCanonicalWriteStatsRecord {
+export interface NodeWriteStatsRecord {
   inputMutations: string
   effectiveMutations: string
   entriesStreamed: string
@@ -102,7 +102,7 @@ export interface NodeCanonicalWriteStatsRecord {
 }
 export interface NodeCanonicalWriteResultRecord {
   tree: NodeTreeRecord
-  stats: NodeCanonicalWriteStatsRecord
+  stats: NodeWriteStatsRecord
 }
 export interface NodeHostStoreEmptyRequest {
   

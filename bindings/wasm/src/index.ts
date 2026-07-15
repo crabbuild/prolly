@@ -38,7 +38,7 @@ export interface WasmBatchApplyResultRecord {
   stats: WasmBatchApplyStatsRecord;
 }
 
-export interface WasmCanonicalWriteStatsRecord {
+export interface WasmWriteStatsRecord {
   inputMutations: number;
   effectiveMutations: number;
   entriesStreamed: number;
@@ -55,7 +55,7 @@ export interface WasmCanonicalWriteStatsRecord {
 
 export interface WasmCanonicalWriteResultRecord {
   tree: unknown;
-  stats: WasmCanonicalWriteStatsRecord;
+  stats: WasmWriteStatsRecord;
 }
 
 export interface WasmSnapshotBundleNodeRecord {
