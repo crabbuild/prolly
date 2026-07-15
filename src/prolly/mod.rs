@@ -124,6 +124,7 @@ fn current_unix_time_millis() -> u64 {
 pub mod boundary;
 pub mod builder;
 pub mod canonical;
+pub(crate) mod canonical_range_delete;
 pub mod canonical_splice;
 pub mod chunking;
 pub mod cid;
@@ -1528,6 +1529,21 @@ impl<S: Store> Prolly<S> {
     /// If the key doesn't exist, returns the original tree unchanged.
     pub fn delete(&self, tree: &Tree, key: &[u8]) -> Result<Tree, Error> {
         canonical::apply_tree(self, tree, vec![Mutation::Delete { key: key.to_vec() }])
+    }
+
+    /// Delete all keys in the half-open range `[start, end)`.
+    pub fn delete_range(&self, tree: &Tree, start: &[u8], end: &[u8]) -> Result<Tree, Error> {
+        canonical_range_delete::apply_tree(self, tree, start, end)
+    }
+
+    /// Delete all keys in the half-open range `[start, end)` and return write statistics.
+    pub fn delete_range_with_stats(
+        &self,
+        tree: &Tree,
+        start: &[u8],
+        end: &[u8],
+    ) -> Result<(Tree, canonical::CanonicalWriteStats), Error> {
+        canonical_range_delete::apply(self, tree, start, end)
     }
 
     /// Iterate over a range of key-value pairs.
