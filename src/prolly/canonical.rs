@@ -30,10 +30,10 @@ pub struct CanonicalWriteStats {
     pub used_batched_value_update_path: bool,
 }
 
-struct EmittedLeaf {
-    summary: NodeSummary,
-    bytes: Vec<u8>,
-    node: Node,
+pub(crate) struct EmittedLeaf {
+    pub(crate) summary: NodeSummary,
+    pub(crate) bytes: Vec<u8>,
+    pub(crate) node: Node,
 }
 
 struct EmittedInternal {
@@ -42,16 +42,16 @@ struct EmittedInternal {
     node: Node,
 }
 
-struct LeafEmitter<'a> {
+pub(crate) struct LeafEmitter<'a> {
     config: &'a super::config::Config,
     detector: BoundaryDetector,
     current: Node,
-    emitted: Vec<EmittedLeaf>,
+    pub(crate) emitted: Vec<EmittedLeaf>,
     encoded_bytes: u64,
 }
 
 impl<'a> LeafEmitter<'a> {
-    fn new(config: &'a super::config::Config) -> Result<Self, Error> {
+    pub(crate) fn new(config: &'a super::config::Config) -> Result<Self, Error> {
         Ok(Self {
             config,
             detector: BoundaryDetector::new(config.format.chunking.clone(), 0)?,
@@ -65,7 +65,7 @@ impl<'a> LeafEmitter<'a> {
         })
     }
 
-    fn push(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<(), Error> {
+    pub(crate) fn push(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<(), Error> {
         let hard_max = self.config.format.chunking.hard_max_node_bytes;
         let mut encoded = entry_encoded_len(
             self.config,
@@ -94,7 +94,7 @@ impl<'a> LeafEmitter<'a> {
         Ok(())
     }
 
-    fn flush(&mut self) {
+    pub(crate) fn flush(&mut self) {
         if self.current.is_empty() {
             return;
         }
@@ -120,7 +120,7 @@ impl<'a> LeafEmitter<'a> {
         self.encoded_bytes = node_encoding_overhead(self.config);
     }
 
-    fn is_aligned_with(&self, old: &NodeSummary) -> bool {
+    pub(crate) fn is_aligned_with(&self, old: &NodeSummary) -> bool {
         self.current.is_empty()
             && self
                 .emitted
