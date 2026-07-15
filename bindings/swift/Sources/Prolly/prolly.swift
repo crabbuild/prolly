@@ -2104,6 +2104,16 @@ public protocol ProllyEngineProtocol: AnyObject, Sendable {
 
     func deleteNamedRoot(name: Data) throws
 
+    /**
+     * Delete every raw-byte key in the half-open range `[start, end)`.
+     */
+    func deleteRange(tree: TreeRecord, start: Data, rangeEnd: Data) throws  -> TreeRecord
+
+    /**
+     * Delete every raw-byte key in `[start, end)` and return canonical write statistics.
+     */
+    func deleteRangeWithStats(tree: TreeRecord, start: Data, rangeEnd: Data) throws  -> CanonicalWriteResultRecord
+
     func deleteSnapshot(namespace: SnapshotNamespaceRecord, id: Data) throws
 
     func diff(base: TreeRecord, other: TreeRecord) throws  -> [DiffRecord]
@@ -2657,6 +2667,34 @@ open func deleteNamedRoot(name: Data)throws   {try rustCallWithError(FfiConverte
         FfiConverterData.lower(name),$0
     )
 }
+}
+
+    /**
+     * Delete every raw-byte key in the half-open range `[start, end)`.
+     */
+open func deleteRange(tree: TreeRecord, start: Data, rangeEnd: Data)throws  -> TreeRecord  {
+    return try  FfiConverterTypeTreeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_prollyengine_delete_range(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeTreeRecord_lower(tree),
+        FfiConverterData.lower(start),
+        FfiConverterData.lower(rangeEnd),$0
+    )
+})
+}
+
+    /**
+     * Delete every raw-byte key in `[start, end)` and return canonical write statistics.
+     */
+open func deleteRangeWithStats(tree: TreeRecord, start: Data, rangeEnd: Data)throws  -> CanonicalWriteResultRecord  {
+    return try  FfiConverterTypeCanonicalWriteResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_prollyengine_delete_range_with_stats(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeTreeRecord_lower(tree),
+        FfiConverterData.lower(start),
+        FfiConverterData.lower(rangeEnd),$0
+    )
+})
 }
 
 open func deleteSnapshot(namespace: SnapshotNamespaceRecord, id: Data)throws   {try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
@@ -4515,6 +4553,154 @@ public func FfiConverterTypeCacheStatsRecord_lift(_ buf: RustBuffer) throws -> C
 #endif
 public func FfiConverterTypeCacheStatsRecord_lower(_ value: CacheStatsRecord) -> RustBuffer {
     return FfiConverterTypeCacheStatsRecord.lower(value)
+}
+
+
+public struct CanonicalWriteResultRecord: Equatable, Hashable {
+    public var tree: TreeRecord
+    public var stats: CanonicalWriteStatsRecord
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(tree: TreeRecord, stats: CanonicalWriteStatsRecord) {
+        self.tree = tree
+        self.stats = stats
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension CanonicalWriteResultRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCanonicalWriteResultRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CanonicalWriteResultRecord {
+        return
+            try CanonicalWriteResultRecord(
+                tree: FfiConverterTypeTreeRecord.read(from: &buf),
+                stats: FfiConverterTypeCanonicalWriteStatsRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CanonicalWriteResultRecord, into buf: inout [UInt8]) {
+        FfiConverterTypeTreeRecord.write(value.tree, into: &buf)
+        FfiConverterTypeCanonicalWriteStatsRecord.write(value.stats, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCanonicalWriteResultRecord_lift(_ buf: RustBuffer) throws -> CanonicalWriteResultRecord {
+    return try FfiConverterTypeCanonicalWriteResultRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCanonicalWriteResultRecord_lower(_ value: CanonicalWriteResultRecord) -> RustBuffer {
+    return FfiConverterTypeCanonicalWriteResultRecord.lower(value)
+}
+
+
+public struct CanonicalWriteStatsRecord: Equatable, Hashable {
+    public var inputMutations: UInt64
+    public var effectiveMutations: UInt64
+    public var entriesStreamed: UInt64
+    public var nodesRead: UInt64
+    public var nodesWritten: UInt64
+    public var nodesReused: UInt64
+    public var bytesRead: UInt64
+    public var bytesWritten: UInt64
+    public var resyncDistanceEntries: UInt64
+    public var resyncDistanceNodes: UInt64
+    public var usedKeyStableFastPath: Bool
+    public var usedBatchedValueUpdatePath: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(inputMutations: UInt64, effectiveMutations: UInt64, entriesStreamed: UInt64, nodesRead: UInt64, nodesWritten: UInt64, nodesReused: UInt64, bytesRead: UInt64, bytesWritten: UInt64, resyncDistanceEntries: UInt64, resyncDistanceNodes: UInt64, usedKeyStableFastPath: Bool, usedBatchedValueUpdatePath: Bool) {
+        self.inputMutations = inputMutations
+        self.effectiveMutations = effectiveMutations
+        self.entriesStreamed = entriesStreamed
+        self.nodesRead = nodesRead
+        self.nodesWritten = nodesWritten
+        self.nodesReused = nodesReused
+        self.bytesRead = bytesRead
+        self.bytesWritten = bytesWritten
+        self.resyncDistanceEntries = resyncDistanceEntries
+        self.resyncDistanceNodes = resyncDistanceNodes
+        self.usedKeyStableFastPath = usedKeyStableFastPath
+        self.usedBatchedValueUpdatePath = usedBatchedValueUpdatePath
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension CanonicalWriteStatsRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCanonicalWriteStatsRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CanonicalWriteStatsRecord {
+        return
+            try CanonicalWriteStatsRecord(
+                inputMutations: FfiConverterUInt64.read(from: &buf),
+                effectiveMutations: FfiConverterUInt64.read(from: &buf),
+                entriesStreamed: FfiConverterUInt64.read(from: &buf),
+                nodesRead: FfiConverterUInt64.read(from: &buf),
+                nodesWritten: FfiConverterUInt64.read(from: &buf),
+                nodesReused: FfiConverterUInt64.read(from: &buf),
+                bytesRead: FfiConverterUInt64.read(from: &buf),
+                bytesWritten: FfiConverterUInt64.read(from: &buf),
+                resyncDistanceEntries: FfiConverterUInt64.read(from: &buf),
+                resyncDistanceNodes: FfiConverterUInt64.read(from: &buf),
+                usedKeyStableFastPath: FfiConverterBool.read(from: &buf),
+                usedBatchedValueUpdatePath: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CanonicalWriteStatsRecord, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.inputMutations, into: &buf)
+        FfiConverterUInt64.write(value.effectiveMutations, into: &buf)
+        FfiConverterUInt64.write(value.entriesStreamed, into: &buf)
+        FfiConverterUInt64.write(value.nodesRead, into: &buf)
+        FfiConverterUInt64.write(value.nodesWritten, into: &buf)
+        FfiConverterUInt64.write(value.nodesReused, into: &buf)
+        FfiConverterUInt64.write(value.bytesRead, into: &buf)
+        FfiConverterUInt64.write(value.bytesWritten, into: &buf)
+        FfiConverterUInt64.write(value.resyncDistanceEntries, into: &buf)
+        FfiConverterUInt64.write(value.resyncDistanceNodes, into: &buf)
+        FfiConverterBool.write(value.usedKeyStableFastPath, into: &buf)
+        FfiConverterBool.write(value.usedBatchedValueUpdatePath, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCanonicalWriteStatsRecord_lift(_ buf: RustBuffer) throws -> CanonicalWriteStatsRecord {
+    return try FfiConverterTypeCanonicalWriteStatsRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCanonicalWriteStatsRecord_lower(_ value: CanonicalWriteStatsRecord) -> RustBuffer {
+    return FfiConverterTypeCanonicalWriteStatsRecord.lower(value)
 }
 
 
@@ -14633,6 +14819,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_prollyengine_delete_named_root() != 24437) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_prollyengine_delete_range() != 41608) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_prollyengine_delete_range_with_stats() != 26465) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_prollyengine_delete_snapshot() != 45711) {

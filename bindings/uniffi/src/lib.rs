@@ -6,6 +6,7 @@ use prolly::{
     AuthenticatedProofEnvelope, AuthenticatedProofEnvelopeVerification, BatchApplyResult,
     BatchApplyStats, BatchOp, BlobGcPlan, BlobGcReachability, BlobGcSweep, BlobRef, BlobStore,
     BlobStoreScan, ChangedSpan, ChangedSpanHint, Cid, Config, Conflict, CrdtConfig, CursorWindow,
+    CanonicalWriteStats,
     DeletePolicy, Diff, DiffPageProof, DiffPageProofVerification, DiffTraversalStats, Encoding,
     FileBlobStore, FileNodeStore, GcPlan, GcReachability, GcSweep, KeyBuilder, KeyProof,
     KeyProofVerification, LargeValueConfig, ManifestStore, ManifestStoreScan, ManifestUpdate,
@@ -254,6 +255,28 @@ pub struct BatchApplyStatsRecord {
 pub struct BatchApplyResultRecord {
     pub tree: TreeRecord,
     pub stats: BatchApplyStatsRecord,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct CanonicalWriteStatsRecord {
+    pub input_mutations: u64,
+    pub effective_mutations: u64,
+    pub entries_streamed: u64,
+    pub nodes_read: u64,
+    pub nodes_written: u64,
+    pub nodes_reused: u64,
+    pub bytes_read: u64,
+    pub bytes_written: u64,
+    pub resync_distance_entries: u64,
+    pub resync_distance_nodes: u64,
+    pub used_key_stable_fast_path: bool,
+    pub used_batched_value_update_path: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct CanonicalWriteResultRecord {
+    pub tree: TreeRecord,
+    pub stats: CanonicalWriteStatsRecord,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
@@ -2208,6 +2231,38 @@ impl ProllyEngine {
             engine
                 .delete(&tree, &key)
                 .map(TreeRecord::from)
+                .map_err(Into::into)
+        })
+    }
+
+    /// Delete every raw-byte key in the half-open range `[start, end)`.
+    pub fn delete_range(
+        &self,
+        tree: TreeRecord,
+        start: Vec<u8>,
+        range_end: Vec<u8>,
+    ) -> Result<TreeRecord, ProllyBindingError> {
+        let tree = tree.try_into()?;
+        with_engine!(self, engine, {
+            engine
+                .delete_range(&tree, &start, &range_end)
+                .map(TreeRecord::from)
+                .map_err(Into::into)
+        })
+    }
+
+    /// Delete every raw-byte key in `[start, end)` and return canonical write statistics.
+    pub fn delete_range_with_stats(
+        &self,
+        tree: TreeRecord,
+        start: Vec<u8>,
+        range_end: Vec<u8>,
+    ) -> Result<CanonicalWriteResultRecord, ProllyBindingError> {
+        let tree = tree.try_into()?;
+        with_engine!(self, engine, {
+            engine
+                .delete_range_with_stats(&tree, &start, &range_end)
+                .map(CanonicalWriteResultRecord::from)
                 .map_err(Into::into)
         })
     }
@@ -5376,6 +5431,34 @@ impl From<BatchApplyResult> for BatchApplyResultRecord {
     }
 }
 
+impl From<CanonicalWriteStats> for CanonicalWriteStatsRecord {
+    fn from(value: CanonicalWriteStats) -> Self {
+        Self {
+            input_mutations: value.input_mutations,
+            effective_mutations: value.effective_mutations,
+            entries_streamed: value.entries_streamed,
+            nodes_read: value.nodes_read,
+            nodes_written: value.nodes_written,
+            nodes_reused: value.nodes_reused,
+            bytes_read: value.bytes_read,
+            bytes_written: value.bytes_written,
+            resync_distance_entries: value.resync_distance_entries,
+            resync_distance_nodes: value.resync_distance_nodes,
+            used_key_stable_fast_path: value.used_key_stable_fast_path,
+            used_batched_value_update_path: value.used_batched_value_update_path,
+        }
+    }
+}
+
+impl From<(Tree, CanonicalWriteStats)> for CanonicalWriteResultRecord {
+    fn from((tree, stats): (Tree, CanonicalWriteStats)) -> Self {
+        Self {
+            tree: tree.into(),
+            stats: stats.into(),
+        }
+    }
+}
+
 fn level_u64_records(
     values: std::collections::BTreeMap<u8, usize>,
 ) -> Vec<TreeStatsLevelU64Record> {
@@ -7229,6 +7312,45 @@ mod tests {
 
         let other = engine.delete(tree.clone(), b"a".to_vec()).unwrap();
         assert_eq!(engine.diff(tree, other).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn memory_engine_delete_range_is_half_open() {
+        let engine = ProllyEngine::memory(default_config()).unwrap();
+        let tree = engine
+            .build_from_sorted_entries(
+                [b"a", b"b", b"c", b"d", b"e", b"f"]
+                    .into_iter()
+                    .map(|key| entry(key, key))
+                    .collect(),
+            )
+            .unwrap();
+
+        let deleted = engine
+            .delete_range(tree.clone(), b"b".to_vec(), b"e".to_vec())
+            .unwrap();
+        assert_eq!(
+            engine
+                .range(deleted, Vec::new(), None)
+                .unwrap()
+                .into_iter()
+                .map(|entry| entry.key)
+                .collect::<Vec<_>>(),
+            vec![b"a".to_vec(), b"e".to_vec(), b"f".to_vec()]
+        );
+
+        let with_stats = engine
+            .delete_range_with_stats(tree, b"b".to_vec(), b"e".to_vec())
+            .unwrap();
+        assert_eq!(
+            engine
+                .range(with_stats.tree, Vec::new(), None)
+                .unwrap()
+                .into_iter()
+                .map(|entry| entry.key)
+                .collect::<Vec<_>>(),
+            vec![b"a".to_vec(), b"e".to_vec(), b"f".to_vec()]
+        );
     }
 
     #[test]

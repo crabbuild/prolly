@@ -557,6 +557,23 @@ class ProllyParityTest {
     }
 
     @Test
+    fun suspendWrapperDelegatesDeleteRange() {
+        ProllyNative.useLocalDebugLibrary()
+        runSuspend {
+            AsyncProllyEngine.memory().use { engine ->
+                var tree = engine.create()
+                for (key in listOf("a", "b", "c", "d", "e", "f")) {
+                    tree = engine.put(tree, key.bytes(), key.bytes())
+                }
+                val deleted = engine.deleteRange(tree, "b".bytes(), "e".bytes())
+                assertEquals(listOf("a", "e", "f"), engine.range(deleted, ByteArray(0), null).map { it.key.decodeToString() })
+                val withStats = engine.deleteRangeWithStats(tree, "b".bytes(), "e".bytes())
+                assertEquals(listOf("a", "e", "f"), engine.range(withStats.tree, ByteArray(0), null).map { it.key.decodeToString() })
+            }
+        }
+    }
+
+    @Test
     fun suspendWrapperCoversAdvancedApis() {
         ProllyNative.useLocalDebugLibrary()
 

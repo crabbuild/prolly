@@ -48,6 +48,15 @@ class AsyncProllyEngine private constructor(
 
     suspend fun delete(tree: TreeRecord, key: ByteArray): TreeRecord = engine.delete(tree, key)
 
+    suspend fun deleteRange(tree: TreeRecord, start: ByteArray, rangeEnd: ByteArray): TreeRecord =
+        engine.deleteRange(tree, start, rangeEnd)
+
+    suspend fun deleteRangeWithStats(
+        tree: TreeRecord,
+        start: ByteArray,
+        rangeEnd: ByteArray,
+    ): CanonicalWriteResultRecord = engine.deleteRangeWithStats(tree, start, rangeEnd)
+
     suspend fun batch(tree: TreeRecord, mutations: List<MutationRecord>): TreeRecord = engine.batch(tree, mutations)
 
     suspend fun batchWithStats(tree: TreeRecord, mutations: List<MutationRecord>): BatchApplyResultRecord =

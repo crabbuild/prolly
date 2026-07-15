@@ -820,6 +820,17 @@ public final class Prolly implements AutoCloseable {
         return engine.delete(tree, key.clone());
     }
 
+    public TreeRecord deleteRange(TreeRecord tree, byte[] start, byte[] rangeEnd) throws ProllyBindingException {
+        return engine.deleteRange(tree, start.clone(), rangeEnd.clone());
+    }
+
+    public CanonicalWriteResult deleteRangeWithStats(
+            TreeRecord tree,
+            byte[] start,
+            byte[] rangeEnd) throws ProllyBindingException {
+        return new CanonicalWriteResult(engine.deleteRangeWithStats(tree, start.clone(), rangeEnd.clone()));
+    }
+
     public TreeRecord batch(TreeRecord tree, List<MutationRecord> mutations) throws ProllyBindingException {
         return engine.batch(tree, cloneMutations(mutations));
     }
