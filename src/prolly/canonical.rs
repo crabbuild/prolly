@@ -600,6 +600,34 @@ fn try_localized_height_two_deletes<S: Store>(
         return Ok(None);
     }
 
+    let rebuilt_root = if updated_root.len() == 1 {
+        None
+    } else {
+        let candidate_children = updated_root
+            .keys
+            .iter()
+            .zip(&updated_root.vals)
+            .zip(&updated_root.child_counts)
+            .map(|((key, value), count)| {
+                Ok(NodeSummary {
+                    cid: child_cid(value)?,
+                    first_key: key.clone(),
+                    count: *count,
+                })
+            })
+            .collect::<Result<Vec<_>, Error>>()?;
+        let (root_summaries, mut root_nodes) =
+            builder.build_level_serial_deferred(candidate_children, 2)?;
+        if root_summaries.len() != 1 || root_nodes.len() != 1 {
+            return Ok(None);
+        }
+        let rebuilt_root = root_nodes.pop().ok_or(Error::InvalidNode)?;
+        if root_summaries[0].cid != rebuilt_root.cid || rebuilt_root.node != updated_root {
+            return Ok(None);
+        }
+        Some(rebuilt_root)
+    };
+
     let old_leaf_cids = old_leaves
         .iter()
         .map(|summary| summary.cid.clone())
@@ -620,10 +648,10 @@ fn try_localized_height_two_deletes<S: Store>(
     let root = if updated_root.len() == 1 {
         child_cid(&updated_root.vals[0])?
     } else {
-        let bytes = updated_root.to_bytes();
-        let cid = Cid::from_bytes(&bytes);
+        let rebuilt_root = rebuilt_root.ok_or(Error::InvalidNode)?;
+        let cid = rebuilt_root.cid.clone();
         if cid != *root_cid {
-            writes.push((cid.clone(), bytes, updated_root));
+            writes.push((cid.clone(), rebuilt_root.bytes, rebuilt_root.node));
         }
         cid
     };

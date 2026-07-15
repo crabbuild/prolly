@@ -1,6 +1,10 @@
 //! Canonical half-open range deletion.
 
 use std::collections::HashSet;
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    Arc,
+};
 
 use super::builder::{BatchBuilder, NodeSummary, SortedBatchBuilder};
 use super::canonical::{CanonicalWriteStats, LeafEmitter};
@@ -8,10 +12,73 @@ use super::cid::Cid;
 use super::error::Error;
 use super::format::NodeLayoutSpec;
 use super::node::Node;
-use super::store::Store;
+use super::store::{BatchOp, Store};
 use super::{Prolly, Tree};
 
 const LOCAL_WRITE_CACHE_LIMIT: usize = 8;
+
+#[derive(Default)]
+struct StreamingWriteCounter {
+    nodes: AtomicUsize,
+    bytes: AtomicUsize,
+}
+
+impl StreamingWriteCounter {
+    fn record(&self, entries: &[(&[u8], &[u8])]) {
+        self.nodes.fetch_add(entries.len(), Ordering::Relaxed);
+        self.bytes.fetch_add(
+            entries.iter().map(|(_, bytes)| bytes.len()).sum::<usize>(),
+            Ordering::Relaxed,
+        );
+    }
+
+    fn snapshot(&self) -> (usize, usize) {
+        (
+            self.nodes.load(Ordering::Relaxed),
+            self.bytes.load(Ordering::Relaxed),
+        )
+    }
+}
+
+struct CountingStore<'a, S> {
+    inner: &'a S,
+    writes: Arc<StreamingWriteCounter>,
+}
+
+impl<S> Clone for CountingStore<'_, S> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner,
+            writes: Arc::clone(&self.writes),
+        }
+    }
+}
+
+impl<S: Store> Store for CountingStore<'_, S> {
+    type Error = S::Error;
+
+    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
+        self.inner.get(key)
+    }
+
+    fn put(&self, key: &[u8], value: &[u8]) -> Result<(), Self::Error> {
+        self.inner.put(key, value)
+    }
+
+    fn delete(&self, key: &[u8]) -> Result<(), Self::Error> {
+        self.inner.delete(key)
+    }
+
+    fn batch(&self, operations: &[BatchOp<'_>]) -> Result<(), Self::Error> {
+        self.inner.batch(operations)
+    }
+
+    fn batch_put(&self, entries: &[(&[u8], &[u8])]) -> Result<(), Self::Error> {
+        self.inner.batch_put(entries)?;
+        self.writes.record(entries);
+        Ok(())
+    }
+}
 
 pub(crate) fn apply<S: Store>(
     manager: &Prolly<S>,
@@ -23,7 +90,6 @@ pub(crate) fn apply<S: Store>(
         return Ok((tree.clone(), CanonicalWriteStats::default()));
     }
     let metrics_before = manager.metrics();
-    let reads_before = (metrics_before.nodes_read, metrics_before.bytes_read);
     if let Some(root) = &tree.root {
         let node = manager.load_arc(root)?;
         if node.format != tree.config.format {
@@ -34,7 +100,10 @@ pub(crate) fn apply<S: Store>(
         }
     }
     if let Some((tree, stats)) = try_localized_height_two(manager, tree, start, end)? {
-        return Ok((tree, with_read_stats_since(manager, reads_before, stats)));
+        return Ok((
+            tree,
+            with_metric_stats_since(manager, metrics_before, stats),
+        ));
     }
 
     if manager
@@ -43,22 +112,45 @@ pub(crate) fn apply<S: Store>(
         .transpose()?
         .is_none()
     {
-        return Ok((tree.clone(), read_stats_since(manager, reads_before)));
+        return Ok((tree.clone(), metric_stats_since(manager, metrics_before)));
     }
 
-    let mut saw_deleted = false;
-    let mut builder = SortedBatchBuilder::new(manager.store(), tree.config.clone());
+    let writes = Arc::new(StreamingWriteCounter::default());
+    let mut builder = SortedBatchBuilder::new(
+        CountingStore {
+            inner: manager.store(),
+            writes: Arc::clone(&writes),
+        },
+        tree.config.clone(),
+    );
+    let mut deleted_entries = 0u64;
     for entry in manager.range(tree, &[], None)? {
         let (key, value) = entry?;
         if key.as_slice() >= start && key.as_slice() < end {
-            saw_deleted = true;
+            deleted_entries += 1;
         } else {
             builder.add(key, value)?;
         }
     }
-    debug_assert!(saw_deleted, "the existence probe found a key in the range");
+    debug_assert!(
+        deleted_entries > 0,
+        "the existence probe found a key in the range"
+    );
     let written = builder.build()?;
-    Ok((written, read_stats_since(manager, reads_before)))
+    let (nodes_written, bytes_written) = writes.snapshot();
+    manager.record_batch_write_metrics(nodes_written, bytes_written);
+    Ok((
+        written,
+        with_metric_stats_since(
+            manager,
+            metrics_before,
+            CanonicalWriteStats {
+                input_mutations: deleted_entries,
+                effective_mutations: deleted_entries,
+                ..CanonicalWriteStats::default()
+            },
+        ),
+    ))
 }
 
 pub(crate) fn apply_tree<S: Store>(
@@ -89,7 +181,6 @@ pub(crate) fn try_localized_height_two<S: Store>(
         return Ok(None);
     };
     let metrics_before = manager.metrics();
-    let reads_before = (metrics_before.nodes_read, metrics_before.bytes_read);
     let mut stats = CanonicalWriteStats::default();
     let root = manager.load_arc(root_cid)?;
     stats.nodes_read += 1;
@@ -157,7 +248,7 @@ pub(crate) fn try_localized_height_two<S: Store>(
         // A hard-cap split can move into the preceding leaf after deletion.
         .saturating_sub(2);
     let mut emitter = LeafEmitter::new(&tree.config)?;
-    let mut saw_deleted = false;
+    let mut deleted_entries = 0u64;
     let mut resynced_at = None;
 
     for index in replay_start..old_leaves.len() {
@@ -170,7 +261,7 @@ pub(crate) fn try_localized_height_two<S: Store>(
         if wholly_covered {
             // `next_first` is required above, so this intentionally never
             // treats the global rightmost leaf as elidable.
-            saw_deleted = true;
+            deleted_entries = deleted_entries.saturating_add(summary.count);
             continue;
         }
         debug_assert!(wholly_before || !wholly_covered);
@@ -188,7 +279,7 @@ pub(crate) fn try_localized_height_two<S: Store>(
 
         for (key, value) in leaf.keys.iter().cloned().zip(leaf.vals.iter().cloned()) {
             if key.as_slice() >= start && key.as_slice() < end {
-                saw_deleted = true;
+                deleted_entries += 1;
             } else {
                 emitter.push(key, value)?;
                 stats.entries_streamed += 1;
@@ -196,16 +287,16 @@ pub(crate) fn try_localized_height_two<S: Store>(
         }
 
         stats.resync_distance_nodes += 1;
-        if saw_deleted && emitter.is_aligned_with(summary) {
+        if deleted_entries > 0 && emitter.is_aligned_with(summary) {
             resynced_at = Some(index);
             break;
         }
     }
 
-    if !saw_deleted {
+    if deleted_entries == 0 {
         return Ok(Some((
             tree.clone(),
-            with_read_stats_since(manager, reads_before, stats),
+            with_metric_stats_since(manager, metrics_before, stats),
         )));
     }
     if resynced_at.is_none() && window_end < root.len() {
@@ -220,6 +311,8 @@ pub(crate) fn try_localized_height_two<S: Store>(
     replacement_leaves.extend_from_slice(&old_leaves[old_cursor..]);
     stats.nodes_reused += replay_start.saturating_add(old_leaves.len() - old_cursor) as u64;
     stats.resync_distance_entries = stats.entries_streamed;
+    stats.input_mutations = deleted_entries;
+    stats.effective_mutations = deleted_entries;
 
     let builder = BatchBuilder::new(manager.store(), tree.config.clone());
     let (replacement_summaries, internal_nodes) =
@@ -334,7 +427,7 @@ pub(crate) fn try_localized_height_two<S: Store>(
             root: Some(new_root),
             config: tree.config.clone(),
         },
-        with_read_stats_since(manager, reads_before, stats),
+        with_metric_stats_since(manager, metrics_before, stats),
     )))
 }
 
@@ -349,26 +442,34 @@ fn child_cid(bytes: &[u8]) -> Result<Cid, Error> {
     Ok(Cid(bytes))
 }
 
-fn read_stats_since<S: Store>(
+fn metric_stats_since<S: Store>(
     manager: &Prolly<S>,
-    (nodes_before, bytes_before): (u64, u64),
+    metrics_before: super::ProllyMetricsSnapshot,
 ) -> CanonicalWriteStats {
     let metrics = manager.metrics();
     CanonicalWriteStats {
-        nodes_read: metrics.nodes_read.saturating_sub(nodes_before),
-        bytes_read: metrics.bytes_read.saturating_sub(bytes_before),
+        nodes_read: metrics.nodes_read.saturating_sub(metrics_before.nodes_read),
+        bytes_read: metrics.bytes_read.saturating_sub(metrics_before.bytes_read),
+        nodes_written: metrics
+            .nodes_written
+            .saturating_sub(metrics_before.nodes_written),
+        bytes_written: metrics
+            .bytes_written
+            .saturating_sub(metrics_before.bytes_written),
         ..CanonicalWriteStats::default()
     }
 }
 
-fn with_read_stats_since<S: Store>(
+fn with_metric_stats_since<S: Store>(
     manager: &Prolly<S>,
-    reads_before: (u64, u64),
+    metrics_before: super::ProllyMetricsSnapshot,
     mut stats: CanonicalWriteStats,
 ) -> CanonicalWriteStats {
-    let actual_reads = read_stats_since(manager, reads_before);
-    stats.nodes_read = actual_reads.nodes_read;
-    stats.bytes_read = actual_reads.bytes_read;
+    let actual_metrics = metric_stats_since(manager, metrics_before);
+    stats.nodes_read = actual_metrics.nodes_read;
+    stats.bytes_read = actual_metrics.bytes_read;
+    stats.nodes_written = actual_metrics.nodes_written;
+    stats.bytes_written = actual_metrics.bytes_written;
     stats
 }
 

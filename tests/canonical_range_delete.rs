@@ -1,6 +1,6 @@
 use prolly::{
-    chunking, BatchBuilder, BatchOp, Config, MemStore, MemStoreError, Node, NodeLayoutSpec, Prolly,
-    Store, Tree,
+    chunking, BatchBuilder, BatchOp, Config, MemStore, MemStoreError, Mutation, Node,
+    NodeLayoutSpec, Prolly, Store, Tree,
 };
 use std::fmt;
 use std::sync::{
@@ -458,6 +458,195 @@ fn value_sensitive_height_two_root_promotion_falls_back_to_the_canonical_rebuild
         manager.metrics().store_batch_get_calls >= 1,
         "the valid height-2 tree must reach localized internal-window routing before falling back"
     );
+}
+
+#[test]
+fn localized_point_deletes_fall_back_when_the_canonical_root_promotes() {
+    let mut policy = chunking::entry_count_key_value_hash();
+    policy.min = 1;
+    policy.target = 2;
+    policy.max = 4;
+    policy.hash_seed = 184;
+    let config = Config::builder()
+        .chunking(policy)
+        .node_layout(NodeLayoutSpec::Plain)
+        .build();
+    let store = Arc::new(MemStore::new());
+    let manager = Prolly::new(store.clone(), config.clone());
+    let mut base_builder = BatchBuilder::new(store.clone(), config.clone());
+    for index in 0..24 {
+        base_builder.add(key(index), value(index));
+    }
+    let base = base_builder.build().unwrap();
+    let base_root = Node::from_bytes(
+        &store
+            .get(base.root.as_ref().unwrap().as_bytes())
+            .unwrap()
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(base_root.level, 2, "regression must start height two");
+
+    let expected_store = Arc::new(MemStore::new());
+    let mut expected_builder = BatchBuilder::new(expected_store.clone(), config);
+    for index in 0..24 {
+        if !(8..14).contains(&index) {
+            expected_builder.add(key(index), value(index));
+        }
+    }
+    let expected = expected_builder.build().unwrap();
+    let expected_root = Node::from_bytes(
+        &expected_store
+            .get(expected.root.as_ref().unwrap().as_bytes())
+            .unwrap()
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        expected_root.level, 3,
+        "the clean oracle must promote when changed internal CIDs affect root boundaries"
+    );
+
+    let (actual, _) = manager
+        .canonical_batch_with_stats(
+            &base,
+            (8..14)
+                .map(|index| Mutation::Delete { key: key(index) })
+                .collect(),
+        )
+        .unwrap();
+
+    assert_eq!(actual.root, expected.root);
+}
+
+#[test]
+fn synchronous_range_stats_report_existing_deletes_and_manager_io_for_all_paths() {
+    let (manager, leaf_root) = fixture([b"a", b"b", b"c", b"d", b"e", b"f"]);
+    manager.clear_cache();
+    manager.reset_metrics();
+    let before = manager.metrics();
+    let (deleted_leaf, leaf_stats) = manager
+        .delete_range_with_stats(&leaf_root, b"b", b"e")
+        .unwrap();
+    let after = manager.metrics();
+    assert_eq!(leaf_stats.input_mutations, 3, "{leaf_stats:?}");
+    assert_eq!(leaf_stats.effective_mutations, 3, "{leaf_stats:?}");
+    assert_eq!(leaf_stats.nodes_read, after.nodes_read - before.nodes_read);
+    assert_eq!(leaf_stats.bytes_read, after.bytes_read - before.bytes_read);
+    assert_eq!(
+        leaf_stats.nodes_written,
+        after.nodes_written - before.nodes_written
+    );
+    assert_eq!(
+        leaf_stats.bytes_written,
+        after.bytes_written - before.bytes_written
+    );
+    assert!(leaf_stats.nodes_written > 0, "{leaf_stats:?}");
+    assert_eq!(keys(&manager, &deleted_leaf), bytes(["a", "e", "f"]));
+
+    let config = fixed_small_chunk_config(NodeLayoutSpec::Plain);
+    let store = Arc::new(MemStore::new());
+    let manager = Prolly::new(store.clone(), config.clone());
+    let mut builder = BatchBuilder::new(store, config);
+    for index in 0..40 {
+        builder.add(key(index), value(index));
+    }
+    let height_two = builder.build().unwrap();
+    let root = Node::from_bytes(
+        &manager
+            .store()
+            .get(height_two.root.as_ref().unwrap().as_bytes())
+            .unwrap()
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(root.level, 2, "test must exercise the localized splice");
+
+    manager.clear_cache();
+    manager.reset_metrics();
+    let before = manager.metrics();
+    let (_, localized_stats) = manager
+        .delete_range_with_stats(&height_two, &key(10), &key(30))
+        .unwrap();
+    let after = manager.metrics();
+    assert_eq!(localized_stats.input_mutations, 20, "{localized_stats:?}");
+    assert_eq!(
+        localized_stats.effective_mutations, 20,
+        "{localized_stats:?}"
+    );
+    assert_eq!(
+        localized_stats.nodes_read,
+        after.nodes_read - before.nodes_read,
+        "{localized_stats:?}"
+    );
+    assert_eq!(
+        localized_stats.bytes_read,
+        after.bytes_read - before.bytes_read,
+        "{localized_stats:?}"
+    );
+    assert_eq!(
+        localized_stats.nodes_written,
+        after.nodes_written - before.nodes_written,
+        "{localized_stats:?}"
+    );
+    assert_eq!(
+        localized_stats.bytes_written,
+        after.bytes_written - before.bytes_written,
+        "{localized_stats:?}"
+    );
+    assert!(localized_stats.nodes_written > 0, "{localized_stats:?}");
+
+    let config = fixed_small_chunk_config(NodeLayoutSpec::Plain);
+    let store = Arc::new(MemStore::new());
+    let manager = Prolly::new(store.clone(), config.clone());
+    let mut builder = BatchBuilder::new(store, config);
+    for index in 0..2_000 {
+        builder.add(key(index), value(index));
+    }
+    let height_three = builder.build().unwrap();
+    let root = Node::from_bytes(
+        &manager
+            .store()
+            .get(height_three.root.as_ref().unwrap().as_bytes())
+            .unwrap()
+            .unwrap(),
+    )
+    .unwrap();
+    assert!(root.level >= 3, "test must exercise streaming fallback");
+
+    manager.clear_cache();
+    manager.reset_metrics();
+    let before = manager.metrics();
+    let (_, fallback_stats) = manager
+        .delete_range_with_stats(&height_three, &key(600), &key(1_400))
+        .unwrap();
+    let after = manager.metrics();
+    assert_eq!(fallback_stats.input_mutations, 800, "{fallback_stats:?}");
+    assert_eq!(
+        fallback_stats.effective_mutations, 800,
+        "{fallback_stats:?}"
+    );
+    assert_eq!(
+        fallback_stats.nodes_read,
+        after.nodes_read - before.nodes_read,
+        "{fallback_stats:?}"
+    );
+    assert_eq!(
+        fallback_stats.bytes_read,
+        after.bytes_read - before.bytes_read,
+        "{fallback_stats:?}"
+    );
+    assert_eq!(
+        fallback_stats.nodes_written,
+        after.nodes_written - before.nodes_written,
+        "{fallback_stats:?}"
+    );
+    assert_eq!(
+        fallback_stats.bytes_written,
+        after.bytes_written - before.bytes_written,
+        "{fallback_stats:?}"
+    );
+    assert!(fallback_stats.nodes_written > 0, "{fallback_stats:?}");
 }
 
 #[test]
