@@ -113,6 +113,9 @@ pub(crate) fn apply<S: Store>(
     if start >= end || tree.root.is_none() {
         return Ok((tree.clone(), CanonicalWriteStats::default()));
     }
+    if manager.range(tree, start, Some(end))?.next().transpose()?.is_none() {
+        return Ok((tree.clone(), CanonicalWriteStats::default()));
+    }
     let mut saw_deleted = false;
     let mut builder = SortedBatchBuilder::new(manager.store(), tree.config.clone());
     for entry in manager.range(tree, &[], None)? {
@@ -123,9 +126,7 @@ pub(crate) fn apply<S: Store>(
             builder.add(key, value)?;
         }
     }
-    if !saw_deleted {
-        return Ok((tree.clone(), CanonicalWriteStats::default()));
-    }
+    debug_assert!(saw_deleted, "the existence probe found a key in the range");
     let written = builder.build()?;
     Ok((written, CanonicalWriteStats::default()))
 }
