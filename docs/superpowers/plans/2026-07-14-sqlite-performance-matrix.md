@@ -397,4 +397,3 @@ Remove detached worktrees, isolated targets, database fixtures, WAL/SHM files, g
 - [ ] **Step 5: Deliver the report**
 
 Lead with remaining regressions, then gains, validation, durability differences, scale behavior, memory/storage/I/O trade-offs, and coverage limitations. Do not merge without user direction.
-
