@@ -1,0 +1,2 @@
+version,profile,records,run,workload,operations,total_ns,ns_per_op,ops_per_sec,nodes_read,nodes_written,bytes_read,bytes_written,cache_hits,cache_misses,cache_evictions,result_entries,num_nodes,num_leaves,num_internal,height,tree_bytes,db_bytes_before,db_bytes_after,wal_bytes_after,shm_bytes_after,fixture_bytes_after,sqlite_node_count,sqlite_node_payload_bytes,validated,status
+current,normal,10000000,3,sorted_stream_build,10000000,9363382667,936.338,1067990.101,0,0,0,0,0,0,0,10000000,36631,36496,135,2,415826370,0,468590592,0,0,468590592,36631,415826370,true,ok
