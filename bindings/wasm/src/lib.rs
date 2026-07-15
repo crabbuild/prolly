@@ -3,10 +3,11 @@ use std::sync::Arc;
 use js_sys::{Array, Object, Reflect, Uint8Array};
 use prolly::{
     is_boundary_config as core_is_boundary_config, AuthenticatedProofEnvelope, BatchApplyResult,
-    BatchApplyStats, CanonicalWriteStats, Cid, Config, Conflict, Diff, DiffPageProof, Encoding, Error, KeyProof,
-    MemStore, MultiKeyProof, Mutation, Node, OwnedProllyTransaction, ParallelConfig, Prolly,
-    RangeCursor, RangePageProof, RangeProof, Resolver, ReverseCursor, SnapshotBundle,
-    SnapshotBundleNode, SnapshotNamespace, StructuralDiffCursor, StructuralDiffMarker, Tree,
+    BatchApplyStats, CanonicalWriteStats, Cid, Config, Conflict, Diff, DiffPageProof, Encoding,
+    Error, KeyProof, MemStore, MultiKeyProof, Mutation, Node, OwnedProllyTransaction,
+    ParallelConfig, Prolly, RangeCursor, RangePageProof, RangeProof, Resolver, ReverseCursor,
+    SnapshotBundle, SnapshotBundleNode, SnapshotNamespace, StructuralDiffCursor,
+    StructuralDiffMarker, Tree,
 };
 use serde_json::Value;
 use wasm_bindgen::prelude::*;
@@ -3256,7 +3257,9 @@ fn batch_apply_result_to_object(result: BatchApplyResult) -> Result<Object, JsVa
     Ok(object)
 }
 
-fn canonical_write_result_to_object(result: (Tree, CanonicalWriteStats)) -> Result<Object, JsValue> {
+fn canonical_write_result_to_object(
+    result: (Tree, CanonicalWriteStats),
+) -> Result<Object, JsValue> {
     let object = Object::new();
     let tree: JsValue = WasmTree { inner: result.0 }.into();
     Reflect::set(&object, &"tree".into(), &tree)?;
@@ -3583,8 +3586,12 @@ mod tests {
 
     #[test]
     fn wasm_engine_exposes_delete_range_methods() {
-        let _: fn(&WasmProllyEngine, &WasmTree, Uint8Array, Uint8Array) -> Result<WasmTree, JsValue> =
-            WasmProllyEngine::delete_range;
+        let _: fn(
+            &WasmProllyEngine,
+            &WasmTree,
+            Uint8Array,
+            Uint8Array,
+        ) -> Result<WasmTree, JsValue> = WasmProllyEngine::delete_range;
         let _: fn(&WasmProllyEngine, &WasmTree, Uint8Array, Uint8Array) -> Result<Object, JsValue> =
             WasmProllyEngine::delete_range_with_stats;
     }
