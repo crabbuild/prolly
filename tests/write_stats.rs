@@ -143,7 +143,7 @@ fn middle_value_update_resynchronizes_without_streaming_the_tree() {
     let before_ranges = leaf_ranges(&store, &tree);
 
     let (updated, stats) = manager
-        .canonical_batch_with_stats(
+        .batch_with_write_stats(
             &tree,
             vec![Mutation::Upsert {
                 key: b"key-001000".to_vec(),
@@ -181,7 +181,7 @@ fn duplicate_mutations_are_last_write_wins_before_streaming() {
     let manager = Prolly::new(store, config());
     let tree = manager.batch(&manager.create(), records()).unwrap();
     let (updated, stats) = manager
-        .canonical_batch_with_stats(
+        .batch_with_write_stats(
             &tree,
             vec![
                 Mutation::Upsert {
@@ -272,7 +272,7 @@ fn scattered_value_updates_use_batched_canonical_rewrite() {
     assert_eq!(changed.len(), SCATTERED_UPDATES);
 
     let (updated, stats) = manager
-        .canonical_batch_with_stats(
+        .batch_with_write_stats(
             &base,
             changed
                 .iter()
@@ -320,7 +320,7 @@ fn batched_value_update_path_rejects_structural_and_growing_edits() {
             val: vec![b'x'; 128],
         })
         .collect();
-    let (_, growing_stats) = manager.canonical_batch_with_stats(&base, growing).unwrap();
+    let (_, growing_stats) = manager.batch_with_write_stats(&base, growing).unwrap();
     assert!(growing_stats.used_key_stable_fast_path);
     assert!(!growing_stats.used_batched_value_update_path);
 
@@ -334,9 +334,7 @@ fn batched_value_update_path_rejects_structural_and_growing_edits() {
         key: b"key-new".to_vec(),
         val: b"inserted".to_vec(),
     });
-    let (inserted, insertion_stats) = manager
-        .canonical_batch_with_stats(&base, insertion)
-        .unwrap();
+    let (inserted, insertion_stats) = manager.batch_with_write_stats(&base, insertion).unwrap();
     assert!(!insertion_stats.used_batched_value_update_path);
     assert_eq!(
         manager.get(&inserted, b"key-new").unwrap(),
@@ -352,7 +350,7 @@ fn batched_value_update_path_rejects_structural_and_growing_edits() {
     deletion.push(Mutation::Delete {
         key: b"key-000000000000019999".to_vec(),
     });
-    let (deleted, deletion_stats) = manager.canonical_batch_with_stats(&base, deletion).unwrap();
+    let (deleted, deletion_stats) = manager.batch_with_write_stats(&base, deletion).unwrap();
     assert!(!deletion_stats.used_batched_value_update_path);
     assert_eq!(
         manager.get(&deleted, b"key-000000000000019999").unwrap(),
@@ -379,7 +377,7 @@ fn clustered_batch_delete_batches_internal_frontier_reads() {
     manager.clear_cache();
     manager.reset_metrics();
     let (deleted, stats) = manager
-        .canonical_batch_with_stats(
+        .batch_with_write_stats(
             &base,
             (delete_start..delete_start + DELETES)
                 .map(|index| Mutation::Delete {
@@ -440,7 +438,7 @@ fn shrinking_a_cap_split_leaf_converges_to_the_canonical_root() {
     assert_nodes_fit_hard_cap(&store, &initial, HARD_CAP as usize);
 
     let (updated, stats) = manager
-        .canonical_batch_with_stats(
+        .batch_with_write_stats(
             &initial,
             vec![Mutation::Upsert {
                 key: b"key-0020".to_vec(),

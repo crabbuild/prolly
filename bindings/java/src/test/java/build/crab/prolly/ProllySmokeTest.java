@@ -41,7 +41,7 @@ class ProllySmokeTest {
             }
             TreeRecord deleted = prolly.deleteRange(tree, "b".getBytes(), "e".getBytes());
             assertEquals(List.of("a", "e", "f"), prolly.range(deleted, new byte[0], Optional.empty()).stream().map(entry -> new String(entry.key())).toList());
-            CanonicalWriteResult withStats = prolly.deleteRangeWithStats(tree, "b".getBytes(), "e".getBytes());
+            WriteResult withStats = prolly.deleteRangeWithStats(tree, "b".getBytes(), "e".getBytes());
             assertEquals(List.of("a", "e", "f"), prolly.range(withStats.tree(), new byte[0], Optional.empty()).stream().map(entry -> new String(entry.key())).toList());
         }
     }

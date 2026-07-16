@@ -3,11 +3,11 @@ use std::sync::Arc;
 use js_sys::{Array, Object, Reflect, Uint8Array};
 use prolly::{
     is_boundary_config as core_is_boundary_config, AuthenticatedProofEnvelope, BatchApplyResult,
-    BatchApplyStats, CanonicalWriteStats, Cid, Config, Conflict, Diff, DiffPageProof, Encoding,
-    Error, KeyProof, MemStore, MultiKeyProof, Mutation, Node, OwnedProllyTransaction,
-    ParallelConfig, Prolly, RangeCursor, RangePageProof, RangeProof, Resolver, ReverseCursor,
-    SnapshotBundle, SnapshotBundleNode, SnapshotNamespace, StructuralDiffCursor,
-    StructuralDiffMarker, Tree,
+    BatchApplyStats, Cid, Config, Conflict, Diff, DiffPageProof, Encoding, Error, KeyProof,
+    MemStore, MultiKeyProof, Mutation, Node, OwnedProllyTransaction, ParallelConfig, Prolly,
+    RangeCursor, RangePageProof, RangeProof, Resolver, ReverseCursor, SnapshotBundle,
+    SnapshotBundleNode, SnapshotNamespace, StructuralDiffCursor, StructuralDiffMarker, Tree,
+    WriteStats,
 };
 use serde_json::Value;
 use wasm_bindgen::prelude::*;
@@ -554,7 +554,7 @@ impl WasmProllyEngine {
         self.inner
             .delete_range_with_stats(&tree.inner, &start.to_vec(), &end.to_vec())
             .map_err(js_error)
-            .and_then(canonical_write_result_to_object)
+            .and_then(write_result_to_object)
     }
 
     #[wasm_bindgen(js_name = loadNamedRoot)]
@@ -3257,21 +3257,15 @@ fn batch_apply_result_to_object(result: BatchApplyResult) -> Result<Object, JsVa
     Ok(object)
 }
 
-fn canonical_write_result_to_object(
-    result: (Tree, CanonicalWriteStats),
-) -> Result<Object, JsValue> {
+fn write_result_to_object(result: (Tree, WriteStats)) -> Result<Object, JsValue> {
     let object = Object::new();
     let tree: JsValue = WasmTree { inner: result.0 }.into();
     Reflect::set(&object, &"tree".into(), &tree)?;
-    Reflect::set(
-        &object,
-        &"stats".into(),
-        &canonical_write_stats_to_object(result.1)?,
-    )?;
+    Reflect::set(&object, &"stats".into(), &write_stats_to_object(result.1)?)?;
     Ok(object)
 }
 
-fn canonical_write_stats_to_object(stats: CanonicalWriteStats) -> Result<JsValue, JsValue> {
+fn write_stats_to_object(stats: WriteStats) -> Result<JsValue, JsValue> {
     let object = Object::new();
     for (key, value) in [
         ("inputMutations", stats.input_mutations),

@@ -725,59 +725,59 @@ object ProllyJavaAdapters {
         record.stats
 
     @JvmStatic
-    fun canonicalWriteResultTree(record: CanonicalWriteResultRecord): TreeRecord =
+    fun writeResultTree(record: WriteResultRecord): TreeRecord =
         record.tree
 
     @JvmStatic
-    fun canonicalWriteResultStats(record: CanonicalWriteResultRecord): CanonicalWriteStatsRecord =
+    fun writeResultStats(record: WriteResultRecord): WriteStatsRecord =
         record.stats
 
     @JvmStatic
-    fun canonicalWriteStatsInputMutations(record: CanonicalWriteStatsRecord): Long =
+    fun writeStatsInputMutations(record: WriteStatsRecord): Long =
         record.inputMutations.toLong()
 
     @JvmStatic
-    fun canonicalWriteStatsEffectiveMutations(record: CanonicalWriteStatsRecord): Long =
+    fun writeStatsEffectiveMutations(record: WriteStatsRecord): Long =
         record.effectiveMutations.toLong()
 
     @JvmStatic
-    fun canonicalWriteStatsEntriesStreamed(record: CanonicalWriteStatsRecord): Long =
+    fun writeStatsEntriesStreamed(record: WriteStatsRecord): Long =
         record.entriesStreamed.toLong()
 
     @JvmStatic
-    fun canonicalWriteStatsNodesRead(record: CanonicalWriteStatsRecord): Long =
+    fun writeStatsNodesRead(record: WriteStatsRecord): Long =
         record.nodesRead.toLong()
 
     @JvmStatic
-    fun canonicalWriteStatsNodesWritten(record: CanonicalWriteStatsRecord): Long =
+    fun writeStatsNodesWritten(record: WriteStatsRecord): Long =
         record.nodesWritten.toLong()
 
     @JvmStatic
-    fun canonicalWriteStatsNodesReused(record: CanonicalWriteStatsRecord): Long =
+    fun writeStatsNodesReused(record: WriteStatsRecord): Long =
         record.nodesReused.toLong()
 
     @JvmStatic
-    fun canonicalWriteStatsBytesRead(record: CanonicalWriteStatsRecord): Long =
+    fun writeStatsBytesRead(record: WriteStatsRecord): Long =
         record.bytesRead.toLong()
 
     @JvmStatic
-    fun canonicalWriteStatsBytesWritten(record: CanonicalWriteStatsRecord): Long =
+    fun writeStatsBytesWritten(record: WriteStatsRecord): Long =
         record.bytesWritten.toLong()
 
     @JvmStatic
-    fun canonicalWriteStatsResyncDistanceEntries(record: CanonicalWriteStatsRecord): Long =
+    fun writeStatsResyncDistanceEntries(record: WriteStatsRecord): Long =
         record.resyncDistanceEntries.toLong()
 
     @JvmStatic
-    fun canonicalWriteStatsResyncDistanceNodes(record: CanonicalWriteStatsRecord): Long =
+    fun writeStatsResyncDistanceNodes(record: WriteStatsRecord): Long =
         record.resyncDistanceNodes.toLong()
 
     @JvmStatic
-    fun canonicalWriteStatsUsedKeyStableFastPath(record: CanonicalWriteStatsRecord): Boolean =
+    fun writeStatsUsedKeyStableFastPath(record: WriteStatsRecord): Boolean =
         record.usedKeyStableFastPath
 
     @JvmStatic
-    fun canonicalWriteStatsUsedBatchedValueUpdatePath(record: CanonicalWriteStatsRecord): Boolean =
+    fun writeStatsUsedBatchedValueUpdatePath(record: WriteStatsRecord): Boolean =
         record.usedBatchedValueUpdatePath
 
     @JvmStatic

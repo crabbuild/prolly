@@ -521,7 +521,7 @@ type BatchApplyResult struct {
 	Stats BatchApplyStats
 }
 
-type CanonicalWriteStats struct {
+type WriteStats struct {
 	InputMutations             uint64
 	EffectiveMutations         uint64
 	EntriesStreamed            uint64
@@ -536,9 +536,9 @@ type CanonicalWriteStats struct {
 	UsedBatchedValueUpdatePath bool
 }
 
-type CanonicalWriteResult struct {
+type WriteResult struct {
 	Tree  Tree
-	Stats CanonicalWriteStats
+	Stats WriteStats
 }
 
 type RangeCursor struct {
@@ -2196,32 +2196,32 @@ func (e *Engine) DeleteRange(tree Tree, start []byte, rangeEnd []byte) (Tree, er
 	return Tree{raw: copyRustBuffer(buf)}, nil
 }
 
-// DeleteRangeWithStats removes [start, rangeEnd) and returns canonical-write statistics.
-func (e *Engine) DeleteRangeWithStats(tree Tree, start []byte, rangeEnd []byte) (CanonicalWriteResult, error) {
+// DeleteRangeWithStats removes [start, rangeEnd) and returns write statistics.
+func (e *Engine) DeleteRangeWithStats(tree Tree, start []byte, rangeEnd []byte) (WriteResult, error) {
 	handle, err := e.cloneHandle()
 	if err != nil {
-		return CanonicalWriteResult{}, err
+		return WriteResult{}, err
 	}
 	treeBuf, err := rustBufferFromBytes(tree.raw)
 	if err != nil {
-		return CanonicalWriteResult{}, err
+		return WriteResult{}, err
 	}
 	startBuf, err := rustBufferFromBytes(encodeByteArray(start))
 	if err != nil {
-		return CanonicalWriteResult{}, err
+		return WriteResult{}, err
 	}
 	rangeEndBuf, err := rustBufferFromBytes(encodeByteArray(rangeEnd))
 	if err != nil {
-		return CanonicalWriteResult{}, err
+		return WriteResult{}, err
 	}
 
 	var status C.RustCallStatus
 	buf := C.uniffi_prolly_bindings_fn_method_prollyengine_delete_range_with_stats(handle, treeBuf, startBuf, rangeEndBuf, &status)
 	if err := statusError(&status); err != nil {
-		return CanonicalWriteResult{}, err
+		return WriteResult{}, err
 	}
 	defer freeRustBuffer(buf)
-	return decodeCanonicalWriteResult(copyRustBuffer(buf))
+	return decodeWriteResult(copyRustBuffer(buf))
 }
 
 func (e *Engine) Get(tree Tree, key []byte) ([]byte, bool, error) {
@@ -7136,17 +7136,17 @@ func decodeBatchApplyResult(data []byte) (BatchApplyResult, error) {
 	return BatchApplyResult{Tree: tree, Stats: stats}, decoder.done()
 }
 
-func decodeCanonicalWriteResult(data []byte) (CanonicalWriteResult, error) {
+func decodeWriteResult(data []byte) (WriteResult, error) {
 	decoder := byteDecoder{data: data}
 	tree, err := decoder.readTree()
 	if err != nil {
-		return CanonicalWriteResult{}, err
+		return WriteResult{}, err
 	}
-	stats, err := decoder.readCanonicalWriteStats()
+	stats, err := decoder.readWriteStats()
 	if err != nil {
-		return CanonicalWriteResult{}, err
+		return WriteResult{}, err
 	}
-	return CanonicalWriteResult{Tree: tree, Stats: stats}, decoder.done()
+	return WriteResult{Tree: tree, Stats: stats}, decoder.done()
 }
 
 func decodeRangePage(data []byte) (RangePage, error) {
@@ -9058,56 +9058,56 @@ func (d *byteDecoder) readBatchApplyStats() (BatchApplyStats, error) {
 	}, nil
 }
 
-func (d *byteDecoder) readCanonicalWriteStats() (CanonicalWriteStats, error) {
+func (d *byteDecoder) readWriteStats() (WriteStats, error) {
 	inputMutations, err := d.readUint64()
 	if err != nil {
-		return CanonicalWriteStats{}, err
+		return WriteStats{}, err
 	}
 	effectiveMutations, err := d.readUint64()
 	if err != nil {
-		return CanonicalWriteStats{}, err
+		return WriteStats{}, err
 	}
 	entriesStreamed, err := d.readUint64()
 	if err != nil {
-		return CanonicalWriteStats{}, err
+		return WriteStats{}, err
 	}
 	nodesRead, err := d.readUint64()
 	if err != nil {
-		return CanonicalWriteStats{}, err
+		return WriteStats{}, err
 	}
 	nodesWritten, err := d.readUint64()
 	if err != nil {
-		return CanonicalWriteStats{}, err
+		return WriteStats{}, err
 	}
 	nodesReused, err := d.readUint64()
 	if err != nil {
-		return CanonicalWriteStats{}, err
+		return WriteStats{}, err
 	}
 	bytesRead, err := d.readUint64()
 	if err != nil {
-		return CanonicalWriteStats{}, err
+		return WriteStats{}, err
 	}
 	bytesWritten, err := d.readUint64()
 	if err != nil {
-		return CanonicalWriteStats{}, err
+		return WriteStats{}, err
 	}
 	resyncDistanceEntries, err := d.readUint64()
 	if err != nil {
-		return CanonicalWriteStats{}, err
+		return WriteStats{}, err
 	}
 	resyncDistanceNodes, err := d.readUint64()
 	if err != nil {
-		return CanonicalWriteStats{}, err
+		return WriteStats{}, err
 	}
 	usedKeyStableFastPath, err := d.readBool()
 	if err != nil {
-		return CanonicalWriteStats{}, err
+		return WriteStats{}, err
 	}
 	usedBatchedValueUpdatePath, err := d.readBool()
 	if err != nil {
-		return CanonicalWriteStats{}, err
+		return WriteStats{}, err
 	}
-	return CanonicalWriteStats{
+	return WriteStats{
 		InputMutations:             inputMutations,
 		EffectiveMutations:         effectiveMutations,
 		EntriesStreamed:            entriesStreamed,

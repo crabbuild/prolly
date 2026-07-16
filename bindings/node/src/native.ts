@@ -64,7 +64,7 @@ export interface NativeBatchApplyResultRecord {
   stats: NativeBatchApplyStatsRecord;
 }
 
-export interface NativeCanonicalWriteStatsRecord {
+export interface NativeWriteStatsRecord {
   inputMutations: string;
   effectiveMutations: string;
   entriesStreamed: string;
@@ -79,9 +79,9 @@ export interface NativeCanonicalWriteStatsRecord {
   usedBatchedValueUpdatePath: boolean;
 }
 
-export interface NativeCanonicalWriteResultRecord {
+export interface NativeWriteResultRecord {
   tree: NativeTreeRecord;
-  stats: NativeCanonicalWriteStatsRecord;
+  stats: NativeWriteStatsRecord;
 }
 
 export interface NativeRangeCursorRecord {
@@ -867,7 +867,7 @@ export interface NativeProllyEngine {
     tree: NativeTreeRecord,
     start: Uint8Array,
     rangeEnd: Uint8Array,
-  ): NativeCanonicalWriteResultRecord;
+  ): NativeWriteResultRecord;
   get(tree: NativeTreeRecord, key: Uint8Array): Uint8Array | null;
   getValueRef(tree: NativeTreeRecord, key: Uint8Array): NativeValueRefRecord | null;
   getLargeValue(blobStore: NativeProllyBlobStore, tree: NativeTreeRecord, key: Uint8Array): Uint8Array | null;

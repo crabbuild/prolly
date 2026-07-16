@@ -224,10 +224,10 @@ pub enum Error {
     InvalidStructuralPatch(String),
     /// Sorted bulk loading received keys out of order.
     UnsortedInput { previous: Vec<u8>, next: Vec<u8> },
-    /// Canonical splice received more than one mutation for a logical key.
-    DuplicateCanonicalMutation { key: Vec<u8> },
-    /// Canonical splice manager and immutable tree use different shape settings.
-    CanonicalSpliceConfigMismatch,
+    /// Splice received more than one mutation for a logical key.
+    DuplicateMutation { key: Vec<u8> },
+    /// Splice manager and immutable tree use different shape settings.
+    SpliceConfigMismatch,
     /// A GC retention policy referenced named roots that were not present.
     MissingNamedRoots { names: Vec<Vec<u8>> },
     /// A portable snapshot bundle is malformed or not self-contained.
@@ -377,11 +377,11 @@ impl std::fmt::Display for Error {
                 "sorted input keys are out of order: previous={:?} next={:?}",
                 previous, next
             ),
-            Error::DuplicateCanonicalMutation { key } => {
-                write!(f, "duplicate canonical splice mutation: {key:?}")
+            Error::DuplicateMutation { key } => {
+                write!(f, "duplicate splice mutation: {key:?}")
             }
-            Error::CanonicalSpliceConfigMismatch => {
-                write!(f, "canonical splice manager/tree configuration mismatch")
+            Error::SpliceConfigMismatch => {
+                write!(f, "splice manager/tree configuration mismatch")
             }
             Error::MissingNamedRoots { names } => {
                 write!(f, "missing named roots for retention policy: {:?}", names)

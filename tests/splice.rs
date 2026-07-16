@@ -1,4 +1,4 @@
-use prolly::{canonical_splice, BatchBuilder, Config, MemStore, Mutation, Prolly};
+use prolly::{splice, BatchBuilder, Config, MemStore, Mutation, Prolly};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
@@ -41,7 +41,7 @@ fn middle_splice_matches_clean_root_and_reuses_untouched_nodes() {
     records.insert(key.clone(), value.clone());
 
     let (after, stats) =
-        canonical_splice(&prolly, &before, vec![Mutation::Upsert { key, val: value }]).unwrap();
+        splice(&prolly, &before, vec![Mutation::Upsert { key, val: value }]).unwrap();
     let clean = clean_build(store, config, &records);
 
     assert_eq!(after.root, clean.root);
@@ -77,7 +77,7 @@ fn mixed_splice_history_matches_clean_builder_at_chunk_and_root_edges() {
             records.insert(key.clone(), value.clone());
             Mutation::Upsert { key, val: value }
         };
-        tree = canonical_splice(&prolly, &tree, vec![mutation]).unwrap().0;
+        tree = splice(&prolly, &tree, vec![mutation]).unwrap().0;
         let clean = clean_build(store.clone(), config.clone(), &records);
         assert_eq!(tree.root, clean.root, "step {step}");
     }
@@ -129,7 +129,7 @@ fn run_randomized_histories(seeds: std::ops::Range<u64>, initial_records: usize,
                 };
                 by_key.insert(key, mutation);
             }
-            tree = canonical_splice(&prolly, &tree, by_key.into_values().collect())
+            tree = splice(&prolly, &tree, by_key.into_values().collect())
                 .unwrap()
                 .0;
             let clean = clean_build(store.clone(), config.clone(), &records);
@@ -144,7 +144,7 @@ fn empty_growth_collapse_and_noop_delete_are_canonical() {
     let config = config();
     let prolly = Prolly::new(store.clone(), config.clone());
     let empty = prolly.create();
-    let (still_empty, stats) = canonical_splice(
+    let (still_empty, stats) = splice(
         &prolly,
         &empty,
         vec![Mutation::Delete {
@@ -161,13 +161,13 @@ fn empty_growth_collapse_and_noop_delete_are_canonical() {
             val: vec![index as u8],
         })
         .collect();
-    let grown = canonical_splice(&prolly, &still_empty, inserts).unwrap().0;
+    let grown = splice(&prolly, &still_empty, inserts).unwrap().0;
     assert!(grown.root.is_some());
     let deletes: Vec<_> = (0..48)
         .map(|index| Mutation::Delete {
             key: format!("edge-{index:03}").into_bytes(),
         })
         .collect();
-    let collapsed = canonical_splice(&prolly, &grown, deletes).unwrap().0;
+    let collapsed = splice(&prolly, &grown, deletes).unwrap().0;
     assert_eq!(collapsed.root, None);
 }

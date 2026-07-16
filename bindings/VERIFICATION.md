@@ -9,7 +9,7 @@ async wrappers.
 
 | Group | Behavior verified |
 | --- | --- |
-| Core tree | `create`, `get`, `get_many`, `put`, `delete`, raw-byte half-open `delete_range(start, end)`, canonical-write stats, `batch`, batch stats, bulk build, sorted bulk build, append batch, parallel batch stats |
+| Core tree | `create`, `get`, `get_many`, `put`, `delete`, raw-byte half-open `delete_range(start, end)`, write stats, `batch`, batch stats, bulk build, sorted bulk build, append batch, parallel batch stats |
 | Range/page | `range`, `prefix`, `prefix_page`, `range_after`, ordered boundary helpers, cursor resumption, cursor windows, range pages, reverse and prefix-reverse pages, diff pages |
 | Wire/helpers | compact `CRAB` nodes, CIDs, config, boundary decisions, key helpers, value/blob envelopes, root manifests |
 | Diff/merge | eager diff, range diff, conflict pages, built-in resolvers, merge explanations, range/prefix merge |

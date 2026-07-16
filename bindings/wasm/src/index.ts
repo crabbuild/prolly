@@ -38,7 +38,7 @@ export interface WasmBatchApplyResultRecord {
   stats: WasmBatchApplyStatsRecord;
 }
 
-export interface WasmCanonicalWriteStatsRecord {
+export interface WasmWriteStatsRecord {
   inputMutations: number;
   effectiveMutations: number;
   entriesStreamed: number;
@@ -53,9 +53,9 @@ export interface WasmCanonicalWriteStatsRecord {
   usedBatchedValueUpdatePath: boolean;
 }
 
-export interface WasmCanonicalWriteResultRecord {
+export interface WasmWriteResultRecord {
   tree: unknown;
-  stats: WasmCanonicalWriteStatsRecord;
+  stats: WasmWriteStatsRecord;
 }
 
 export interface WasmSnapshotBundleNodeRecord {
@@ -527,7 +527,7 @@ export interface WasmProllyEngineInstance
     tree: WasmTree,
     start: Uint8Array,
     rangeEnd: Uint8Array,
-  ): WasmCanonicalWriteResultRecord;
+  ): WasmWriteResultRecord;
   loadNamedRoot(name: Uint8Array): WasmTree | null;
   compareAndSwapNamedRoot(
     name: Uint8Array,

@@ -5421,7 +5421,7 @@ class _UniffiFfiConverterTypeCacheStatsRecord(_UniffiConverterRustBuffer):
         _UniffiFfiConverterUInt64.write(value.pinned_bytes, buf)
 
 @dataclass
-class CanonicalWriteStatsRecord:
+class WriteStatsRecord:
     def __init__(self, *, input_mutations:int, effective_mutations:int, entries_streamed:int, nodes_read:int, nodes_written:int, nodes_reused:int, bytes_read:int, bytes_written:int, resync_distance_entries:int, resync_distance_nodes:int, used_key_stable_fast_path:bool, used_batched_value_update_path:bool):
         self.input_mutations = input_mutations
         self.effective_mutations = effective_mutations
@@ -5440,7 +5440,7 @@ class CanonicalWriteStatsRecord:
 
 
     def __str__(self):
-        return "CanonicalWriteStatsRecord(input_mutations={}, effective_mutations={}, entries_streamed={}, nodes_read={}, nodes_written={}, nodes_reused={}, bytes_read={}, bytes_written={}, resync_distance_entries={}, resync_distance_nodes={}, used_key_stable_fast_path={}, used_batched_value_update_path={})".format(self.input_mutations, self.effective_mutations, self.entries_streamed, self.nodes_read, self.nodes_written, self.nodes_reused, self.bytes_read, self.bytes_written, self.resync_distance_entries, self.resync_distance_nodes, self.used_key_stable_fast_path, self.used_batched_value_update_path)
+        return "WriteStatsRecord(input_mutations={}, effective_mutations={}, entries_streamed={}, nodes_read={}, nodes_written={}, nodes_reused={}, bytes_read={}, bytes_written={}, resync_distance_entries={}, resync_distance_nodes={}, used_key_stable_fast_path={}, used_batched_value_update_path={})".format(self.input_mutations, self.effective_mutations, self.entries_streamed, self.nodes_read, self.nodes_written, self.nodes_reused, self.bytes_read, self.bytes_written, self.resync_distance_entries, self.resync_distance_nodes, self.used_key_stable_fast_path, self.used_batched_value_update_path)
     def __eq__(self, other):
         if self.input_mutations != other.input_mutations:
             return False
@@ -5468,10 +5468,10 @@ class CanonicalWriteStatsRecord:
             return False
         return True
 
-class _UniffiFfiConverterTypeCanonicalWriteStatsRecord(_UniffiConverterRustBuffer):
+class _UniffiFfiConverterTypeWriteStatsRecord(_UniffiConverterRustBuffer):
     @staticmethod
     def read(buf):
-        return CanonicalWriteStatsRecord(
+        return WriteStatsRecord(
             input_mutations=_UniffiFfiConverterUInt64.read(buf),
             effective_mutations=_UniffiFfiConverterUInt64.read(buf),
             entries_streamed=_UniffiFfiConverterUInt64.read(buf),
@@ -5517,8 +5517,8 @@ class _UniffiFfiConverterTypeCanonicalWriteStatsRecord(_UniffiConverterRustBuffe
         _UniffiFfiConverterBoolean.write(value.used_batched_value_update_path, buf)
 
 @dataclass
-class CanonicalWriteResultRecord:
-    def __init__(self, *, tree:TreeRecord, stats:CanonicalWriteStatsRecord):
+class WriteResultRecord:
+    def __init__(self, *, tree:TreeRecord, stats:WriteStatsRecord):
         self.tree = tree
         self.stats = stats
 
@@ -5526,7 +5526,7 @@ class CanonicalWriteResultRecord:
 
 
     def __str__(self):
-        return "CanonicalWriteResultRecord(tree={}, stats={})".format(self.tree, self.stats)
+        return "WriteResultRecord(tree={}, stats={})".format(self.tree, self.stats)
     def __eq__(self, other):
         if self.tree != other.tree:
             return False
@@ -5534,23 +5534,23 @@ class CanonicalWriteResultRecord:
             return False
         return True
 
-class _UniffiFfiConverterTypeCanonicalWriteResultRecord(_UniffiConverterRustBuffer):
+class _UniffiFfiConverterTypeWriteResultRecord(_UniffiConverterRustBuffer):
     @staticmethod
     def read(buf):
-        return CanonicalWriteResultRecord(
+        return WriteResultRecord(
             tree=_UniffiFfiConverterTypeTreeRecord.read(buf),
-            stats=_UniffiFfiConverterTypeCanonicalWriteStatsRecord.read(buf),
+            stats=_UniffiFfiConverterTypeWriteStatsRecord.read(buf),
         )
 
     @staticmethod
     def check_lower(value):
         _UniffiFfiConverterTypeTreeRecord.check_lower(value.tree)
-        _UniffiFfiConverterTypeCanonicalWriteStatsRecord.check_lower(value.stats)
+        _UniffiFfiConverterTypeWriteStatsRecord.check_lower(value.stats)
 
     @staticmethod
     def write(value, buf):
         _UniffiFfiConverterTypeTreeRecord.write(value.tree, buf)
-        _UniffiFfiConverterTypeCanonicalWriteStatsRecord.write(value.stats, buf)
+        _UniffiFfiConverterTypeWriteStatsRecord.write(value.stats, buf)
 
 @dataclass
 class ChangedSpanRecord:
@@ -13691,9 +13691,9 @@ class ProllyEngineProtocol(typing.Protocol):
         Delete every raw-byte key in the half-open range `[start, end)`.
 """
         raise NotImplementedError
-    def delete_range_with_stats(self, tree: TreeRecord,start: bytes,range_end: bytes) -> CanonicalWriteResultRecord:
+    def delete_range_with_stats(self, tree: TreeRecord,start: bytes,range_end: bytes) -> WriteResultRecord:
         """
-        Delete every raw-byte key in `[start, end)` and return canonical write statistics.
+        Delete every raw-byte key in `[start, end)` and return write statistics.
 """
         raise NotImplementedError
     def delete_snapshot(self, namespace: SnapshotNamespaceRecord,id: bytes) -> None:
@@ -14525,9 +14525,9 @@ class ProllyEngine(ProllyEngineProtocol):
             *_uniffi_lowered_args,
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
-    def delete_range_with_stats(self, tree: TreeRecord,start: bytes,range_end: bytes) -> CanonicalWriteResultRecord:
+    def delete_range_with_stats(self, tree: TreeRecord,start: bytes,range_end: bytes) -> WriteResultRecord:
         """
-        Delete every raw-byte key in `[start, end)` and return canonical write statistics.
+        Delete every raw-byte key in `[start, end)` and return write statistics.
 """
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
@@ -14541,7 +14541,7 @@ class ProllyEngine(ProllyEngineProtocol):
             _UniffiFfiConverterBytes.lower(start),
             _UniffiFfiConverterBytes.lower(range_end),
         )
-        _uniffi_lift_return = _UniffiFfiConverterTypeCanonicalWriteResultRecord.lift
+        _uniffi_lift_return = _UniffiFfiConverterTypeWriteResultRecord.lift
         _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
         _uniffi_ffi_result = _uniffi_rust_call_with_error(
             _uniffi_error_converter,
@@ -18149,8 +18149,8 @@ __all__ = [
     "BlobGcPlanRecord",
     "BlobGcSweepRecord",
     "CacheStatsRecord",
-    "CanonicalWriteStatsRecord",
-    "CanonicalWriteResultRecord",
+    "WriteStatsRecord",
+    "WriteResultRecord",
     "ChangedSpanRecord",
     "ChangedSpanHintRecord",
     "ConflictRecord",

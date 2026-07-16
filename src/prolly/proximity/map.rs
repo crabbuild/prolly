@@ -1,8 +1,8 @@
 use super::super::builder::BatchBuilder;
-use super::super::canonical_splice::{canonical_splice, CanonicalSpliceStats};
 use super::super::cid::Cid;
 use super::super::config::Config;
 use super::super::error::{Error, Mutation as TreeMutation};
+use super::super::splice::{splice, SpliceStats};
 use super::super::store::Store;
 use super::super::Prolly;
 use super::builder::{build_hierarchy, build_hierarchy_parallel, IndexedRecord};
@@ -277,7 +277,7 @@ where
             });
         }
         let (directory_tree, directory_stats) =
-            canonical_splice(&self.directory, &self.tree.directory, directory_mutations)?;
+            splice(&self.directory, &self.tree.directory, directory_mutations)?;
 
         if logical_edits.is_empty() {
             let descriptor = Descriptor {
@@ -1690,7 +1690,7 @@ fn put_missing_nodes<S: Store>(store: &S, nodes: &[(Cid, Vec<u8>)]) -> Result<us
     Ok(missing.len())
 }
 
-fn apply_directory_stats(target: &mut ProximityMutationStats, source: CanonicalSpliceStats) {
+fn apply_directory_stats(target: &mut ProximityMutationStats, source: SpliceStats) {
     target.directory_entries_scanned = source.entries_scanned;
     target.directory_nodes_read = source.nodes_read;
     target.directory_nodes_rebuilt = source.nodes_rebuilt;
