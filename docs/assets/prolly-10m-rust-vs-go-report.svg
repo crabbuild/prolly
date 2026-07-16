@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1200" viewBox="0 0 1800 1200" role="img" aria-labelledby="title desc">
-  <title id="title">10 million key Rust versus Dolt Go prolly tree report</title>
-  <desc id="desc">One-page benchmark report comparing Rust and Dolt Go point reads, full scans, writes, memory, and the measured Rust read mechanisms.</desc>
+  <title id="title">10 million key Rust Prolly versus Go Prolly report</title>
+  <desc id="desc">One-page benchmark report comparing the Rust Prolly and Go Prolly implementations across point reads, full scans, writes, memory, and the measured Rust read mechanisms.</desc>
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#07111f"/>
@@ -38,7 +38,7 @@
 
   <!-- Header -->
   <text id="titleText" x="60" y="78" class="smallcaps" fill="#ff9a62">VERIFIED PERFORMANCE REPORT · 2026-07-16</text>
-  <text x="60" y="132" class="title">10 MILLION KEYS: RUST PROLLY vs DOLT GO</text>
+  <text x="60" y="132" class="title">10 MILLION KEYS: RUST PROLLY vs GO PROLLY</text>
   <text x="60" y="164" class="subtitle">Three-run medians · one worker · in-memory store · identical logical keys and values · lower ns/op is better</text>
 
   <g transform="translate(1428 48)" filter="url(#shadow)">
@@ -230,6 +230,6 @@
   <text x="1424" y="1093" class="tiny">Permuted 1,000-key groups:</text>
   <text x="1424" y="1112" class="tiny">locality inside each shuffled cluster.</text>
 
-  <text x="60" y="1180" class="tiny mono">Rust b087770d79b5+src.b85a0408b624 · Dolt 6b2372c7d4de+runner.0eeaa05ba605 · Apple M2 Max / 32 GiB</text>
+  <text x="60" y="1180" class="tiny mono">Rust impl b087770d79b5+src.b85a0408b624 · Go impl 6b2372c7d4de+runner.0eeaa05ba605 · Apple M2 Max / 32 GiB</text>
   <text x="1740" y="1180" class="tiny" text-anchor="end">Source: prolly-rust-go-performance-report-2026-07-16.md</text>
 </svg>
