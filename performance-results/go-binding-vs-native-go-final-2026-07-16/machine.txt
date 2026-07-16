@@ -1,0 +1,30 @@
+generated_utc=2026-07-16T19:51:58Z
+host=Haipings-Mac-Studio.local
+os=Darwin Haipings-Mac-Studio.local 25.5.0 Darwin Kernel Version 25.5.0: Tue Jun  9 22:28:24 PDT 2026; root:xnu-12377.121.10~1/RELEASE_ARM64_T6020 arm64
+binding_revision=5b12cbf906c3+binding.6d1fa4525595
+native_go_revision=6b2372c7d4de+runner.0eeaa05ba605
+binding_binary_sha256=6bd2037cb4e1b665504fbc50ca40a88b6582b62684c26fe70cc86b136122bd29
+binding_library=/Users/haipingfu/CrabDB/prolly/target/release/libprolly_bindings.dylib
+binding_library_sha256=a71b6d71ead0a1e98ba61e11bce6ca9032ae5d825feec8b5560266d2e56a3dad
+native_go_binary_sha256=fcdaf1c346cd41b0309b888a359568152786249e4112f065e00a563582ab4b45
+binding_dynamic_dependency=/Users/haipingfu/CrabDB/prolly/target/release/deps/libprolly_bindings.dylib (compatibility version 0.0.0, current version 0.0.0)
+rustc 1.97.0 (2d8144b78 2026-07-07)
+binary: rustc
+commit-hash: 2d8144b7880597b6e6d3dfd63a9a9efae3f533d3
+commit-date: 2026-07-07
+host: aarch64-apple-darwin
+release: 1.97.0
+LLVM version: 22.1.6
+go version go1.26.0 darwin/arm64
+sizes=10000 50000 1000000 5000000 10000000
+runs=3
+large_runs=3
+worker_threads=1
+storage=in-memory
+binding_build=release
+binding_point_api=Engine.Get per key
+binding_scan_api=Engine.ScanRange with 1024-entry pages
+batch_size=whole_workload
+mutation_ratio=30%
+mutation_insert_update_mix=50/50
+environment_note=macOS machine-wide swap observed mid-run: 6399.25 MiB used of 6912.00 MiB; every completed /usr/bin/time process record reported 0 swaps

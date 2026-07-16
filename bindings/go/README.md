@@ -61,9 +61,29 @@ cargo build --manifest-path bindings/uniffi/Cargo.toml --target-dir target
 (cd bindings/go && go test ./...)
 ```
 
-The cgo wrapper first links against `target/debug/libprolly_bindings.*` in this
-repository, then falls back to the parent workspace target. Release packages
-should replace this with CI-built native artifacts.
+By default the cgo wrapper links against
+`target/debug/libprolly_bindings.*` in this repository. The
+`prolly_release` build tag selects `target/release` instead. Release packages
+should ultimately replace these repository paths with CI-built native artifacts.
+
+For performance work, build the optimized Rust library and select the release
+link target explicitly:
+
+```sh
+cargo build --release -p prolly-bindings --target-dir target
+(cd bindings/go && go build -tags prolly_release ./cmd/prolly-compare)
+```
+
+The repository comparison harness builds both that Go binary and the native Go
+prolly runner, alternates process order, validates identical deterministic
+workloads, and retains latency plus peak-RSS evidence:
+
+```sh
+scripts/run_go_binding_comparison.sh
+```
+
+Do not benchmark the default debug link target; it is kept for fast local
+binding development and correctness tests.
 
 ## Source Tree Layout
 
