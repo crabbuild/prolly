@@ -4,13 +4,15 @@ use crate::prolly::config::Config;
 use crate::prolly::encoding::Encoding;
 use crate::prolly::error::Error;
 use crate::prolly::proximity::distance::{prepare_vector, query_score};
-use crate::prolly::proximity::search::{EligibilityCardinality, PreparedFilter};
+use crate::prolly::proximity::search::{
+    retained_candidate_bytes, EligibilityCardinality, PreparedFilter, RerankCandidate,
+};
 use crate::prolly::proximity::storage::codec::{
     put_cid, put_f32, put_f64, put_varint, Reader, MAX_OBJECT_ENTRIES,
 };
 use crate::prolly::proximity::storage::StoredRecord;
 use crate::prolly::proximity::{
-    BuildParallelism, DistanceMetric, Neighbor, ProximityMap, ProximitySearchStats, SearchBackend,
+    BuildParallelism, DistanceMetric, ProximityMap, ProximitySearchStats, SearchBackend,
     SearchCompletion, SearchPolicy, SearchRequest, SearchResult,
 };
 use crate::prolly::store::Store;
@@ -574,7 +576,9 @@ where
         approximate.sort();
         let shortlist = approximate.len();
 
-        let mut reranked = Vec::<(Vec<u8>, Vec<u8>, f64)>::with_capacity(shortlist);
+        let mut reranked = Vec::<RerankCandidate>::with_capacity(shortlist);
+        let mut vector_scratch = vec![0.0f32; map.tree().config.dimensions as usize];
+        let mut directory = map.directory_manager().read(&map.tree().directory)?;
         for candidate in approximate {
             if budget_exhausted(&request, &stats)
                 || request
@@ -585,9 +589,12 @@ where
                 completion = SearchCompletion::BudgetExhausted;
                 break;
             }
-            let (record, bytes) = map.get_stored(&candidate.key)?.ok_or_else(|| {
-                invalid_object("PQ code key is absent from authoritative directory")
-            })?;
+            let Some(handle) = directory.get_handle(&candidate.key)? else {
+                return Err(invalid_object(
+                    "PQ code key is absent from authoritative directory",
+                ));
+            };
+            let bytes = handle.value()?.len();
             if request
                 .budget
                 .max_committed_bytes
@@ -596,28 +603,32 @@ where
                 completion = SearchCompletion::BudgetExhausted;
                 break;
             }
+            let record = crate::prolly::proximity::storage::StoredRecordRef::decode(
+                handle.value()?,
+                map.tree().config.dimensions,
+            )?;
+            crate::prolly::proximity::ProximityVectorRef::from_encoded(record.vector)
+                .copy_to_slice(&mut vector_scratch)?;
+            let distance = query_score(request.kernel, self.metric, &query, &vector_scratch);
             stats.nodes_read += 1;
             stats.bytes_read = stats.bytes_read.saturating_add(bytes);
             stats.committed_bytes = stats.committed_bytes.saturating_add(bytes);
             stats.distance_evaluations += 1;
-            let distance = query_score(request.kernel, self.metric, &query, &record.vector);
-            reranked.push((candidate.key, record.value, distance));
+            reranked.push(RerankCandidate::new(handle, &candidate.key, distance)?);
         }
         stats.reranked_candidates = reranked.len();
+        stats.candidate_handles_peak = reranked.len();
+        stats.candidate_retained_bytes_peak = retained_candidate_bytes(&reranked);
         reranked.sort_by(|left, right| {
-            left.2
-                .total_cmp(&right.2)
-                .then_with(|| left.0.cmp(&right.0))
+            left.distance
+                .total_cmp(&right.distance)
+                .then_with(|| left.key().cmp(right.key()))
         });
         let neighbors = reranked
             .into_iter()
             .take(request.k)
-            .map(|(key, value, distance)| Neighbor {
-                key,
-                value,
-                distance,
-            })
-            .collect();
+            .map(|candidate| candidate.into_neighbor(map.tree().config.dimensions))
+            .collect::<Result<Vec<_>, Error>>()?;
         Ok(SearchResult {
             neighbors,
             stats,

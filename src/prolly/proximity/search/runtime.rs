@@ -147,13 +147,30 @@ impl<S: Store + Clone> Store for SearchIo<S> {
         match self.runtime.load(self, self.kind, &cid, 2, |bytes| {
             validate_cached_object(bytes, self.dimensions)
         }) {
-            Ok(loaded) => Ok(Some((*loaded.bytes).clone())),
+            Ok(loaded) => Ok(Some(loaded.bytes.as_ref().to_vec())),
             Err(Error::NotFound(_)) => Ok(None),
             Err(Error::Store(error)) => match error.downcast::<S::Error>() {
                 Ok(error) => Err(*error),
                 Err(_) => self.store.get(key),
             },
             Err(_) => self.store.get(key),
+        }
+    }
+
+    fn get_shared(&self, key: &[u8]) -> Result<Option<Arc<[u8]>>, Self::Error> {
+        let Ok(cid) = <[u8; 32]>::try_from(key).map(Cid) else {
+            return self.store.get_shared(key);
+        };
+        match self.runtime.load(self, self.kind, &cid, 2, |bytes| {
+            validate_cached_object(bytes, self.dimensions)
+        }) {
+            Ok(loaded) => Ok(Some(loaded.bytes)),
+            Err(Error::NotFound(_)) => Ok(None),
+            Err(Error::Store(error)) => match error.downcast::<S::Error>() {
+                Ok(error) => Err(*error),
+                Err(_) => self.store.get_shared(key),
+            },
+            Err(_) => self.store.get_shared(key),
         }
     }
 
@@ -180,7 +197,7 @@ impl<S: Store + Clone> Store for SearchIo<S> {
         match self.runtime.load_batch(self, &cids, self.kind, 2) {
             Ok(values) => Ok(values
                 .into_iter()
-                .map(|value| value.map(|bytes| (*bytes).clone()))
+                .map(|value| value.map(|bytes| bytes.as_ref().to_vec()))
                 .collect()),
             Err(Error::Store(error)) => match error.downcast::<S::Error>() {
                 Ok(error) => Err(*error),
@@ -195,6 +212,31 @@ impl<S: Store + Clone> Store for SearchIo<S> {
         keys: &[&[u8]],
     ) -> Result<Vec<Option<Vec<u8>>>, Self::Error> {
         self.batch_get_ordered(keys)
+    }
+
+    fn batch_get_shared_ordered_unique(
+        &self,
+        keys: &[&[u8]],
+    ) -> Result<Vec<Option<Arc<[u8]>>>, Self::Error> {
+        let cids = keys
+            .iter()
+            .map(|key| <[u8; 32]>::try_from(*key).map(Cid))
+            .collect::<Result<Vec<_>, _>>();
+        let Ok(cids) = cids else {
+            return self.store.batch_get_shared_ordered_unique(keys);
+        };
+        match self.runtime.load_batch(self, &cids, self.kind, 2) {
+            Ok(values) => Ok(values),
+            Err(Error::Store(error)) => match error.downcast::<S::Error>() {
+                Ok(error) => Err(*error),
+                Err(_) => self.store.batch_get_shared_ordered_unique(keys),
+            },
+            Err(_) => self.store.batch_get_shared_ordered_unique(keys),
+        }
+    }
+
+    fn has_native_shared_reads(&self) -> bool {
+        true
     }
 
     fn prefers_batch_reads(&self) -> bool {
@@ -232,13 +274,34 @@ where
             })
             .await
         {
-            Ok(loaded) => Ok(Some((*loaded.bytes).clone())),
+            Ok(loaded) => Ok(Some(loaded.bytes.as_ref().to_vec())),
             Err(Error::NotFound(_)) => Ok(None),
             Err(Error::Store(error)) => match error.downcast::<S::Error>() {
                 Ok(error) => Err(*error),
                 Err(_) => self.store.get(key).await,
             },
             Err(_) => self.store.get(key).await,
+        }
+    }
+
+    async fn get_shared(&self, key: &[u8]) -> Result<Option<Arc<[u8]>>, Self::Error> {
+        let Ok(cid) = <[u8; 32]>::try_from(key).map(Cid) else {
+            return self.store.get_shared(key).await;
+        };
+        match self
+            .runtime
+            .load_async(self, self.kind, &cid, 2, |bytes| {
+                validate_cached_object(bytes, self.dimensions)
+            })
+            .await
+        {
+            Ok(loaded) => Ok(Some(loaded.bytes)),
+            Err(Error::NotFound(_)) => Ok(None),
+            Err(Error::Store(error)) => match error.downcast::<S::Error>() {
+                Ok(error) => Err(*error),
+                Err(_) => self.store.get_shared(key).await,
+            },
+            Err(_) => self.store.get_shared(key).await,
         }
     }
 
@@ -252,6 +315,21 @@ where
 
     async fn batch(&self, ops: &[BatchOp<'_>]) -> Result<(), Self::Error> {
         self.store.batch(ops).await
+    }
+
+    async fn batch_get_shared_ordered_unique(
+        &self,
+        keys: &[&[u8]],
+    ) -> Result<Vec<Option<Arc<[u8]>>>, Self::Error> {
+        let mut values = Vec::with_capacity(keys.len());
+        for key in keys {
+            values.push(self.get_shared(key).await?);
+        }
+        Ok(values)
+    }
+
+    fn has_native_shared_reads(&self) -> bool {
+        true
     }
 
     fn prefers_batch_reads(&self) -> bool {
@@ -279,7 +357,7 @@ struct CacheKey {
 }
 
 struct CacheEntry {
-    bytes: Arc<Vec<u8>>,
+    bytes: Arc<[u8]>,
     partition: Partition,
     generation: u64,
 }
@@ -405,7 +483,7 @@ impl SearchRuntime {
             .unwrap_or_else(|poison| poison.into_inner());
         state.in_flight.remove(&key);
         let result = loaded.map(|bytes| {
-            let bytes = Arc::new(bytes);
+            let bytes = Arc::<[u8]>::from(bytes.into_boxed_slice());
             self.insert(&mut state, key.clone(), bytes.clone());
             RuntimeLoad { bytes }
         });
@@ -425,7 +503,7 @@ impl SearchRuntime {
         cids: &[Cid],
         kind: ContentObjectKind,
         decoder_version: u8,
-    ) -> Result<Vec<Option<Arc<Vec<u8>>>>, Error> {
+    ) -> Result<Vec<Option<Arc<[u8]>>>, Error> {
         let keys = cids
             .iter()
             .cloned()
@@ -511,7 +589,7 @@ impl SearchRuntime {
                     validate_cached_object(&bytes, io.dimensions)?;
                     io.physical_bytes_read
                         .fetch_add(bytes.len(), Ordering::Relaxed);
-                    let bytes = Arc::new(bytes);
+                    let bytes = Arc::<[u8]>::from(bytes.into_boxed_slice());
                     self.insert(&mut state, key.clone(), bytes.clone());
                     results[index] = Some(bytes);
                 }
@@ -613,7 +691,7 @@ impl SearchRuntime {
         state.in_flight.remove(&key);
         in_flight_guard.armed = false;
         let result = loaded.map(|bytes| {
-            let bytes = Arc::new(bytes);
+            let bytes = Arc::<[u8]>::from(bytes.into_boxed_slice());
             self.insert(&mut state, key.clone(), bytes.clone());
             RuntimeLoad { bytes }
         });
@@ -626,7 +704,7 @@ impl SearchRuntime {
         result
     }
 
-    fn insert(&self, state: &mut RuntimeState, key: CacheKey, bytes: Arc<Vec<u8>>) {
+    fn insert(&self, state: &mut RuntimeState, key: CacheKey, bytes: Arc<[u8]>) {
         let partition = partition(key.kind);
         let partition_limit = self.partition_limit(partition);
         if bytes.len() > self.policy.max_bytes || bytes.len() > partition_limit {
@@ -708,7 +786,7 @@ impl Drop for AsyncInFlightGuard<'_> {
 }
 
 pub(crate) struct RuntimeLoad {
-    pub bytes: Arc<Vec<u8>>,
+    pub bytes: Arc<[u8]>,
 }
 
 fn partition(kind: ContentObjectKind) -> Partition {
@@ -809,20 +887,20 @@ mod tests {
         let second_key = key(b"second", ContentObjectKind::OrderedNode);
         let third_key = key(b"third", ContentObjectKind::OrderedNode);
         let oversized_key = key(b"oversized", ContentObjectKind::OrderedNode);
-        let first = Arc::new(vec![1; 8]);
+        let first = Arc::<[u8]>::from(vec![1; 8]);
         let pinned = first.clone();
         let mut state = runtime.state.lock().unwrap();
         runtime.insert(&mut state, first_key.clone(), first);
-        runtime.insert(&mut state, second_key.clone(), Arc::new(vec![2; 8]));
-        runtime.insert(&mut state, third_key.clone(), Arc::new(vec![3; 8]));
+        runtime.insert(&mut state, second_key.clone(), Arc::from(vec![2; 8]));
+        runtime.insert(&mut state, third_key.clone(), Arc::from(vec![3; 8]));
         assert!(!state.entries.contains_key(&first_key));
         assert!(state.entries.contains_key(&second_key));
         assert!(state.entries.contains_key(&third_key));
         assert_eq!(state.bytes, 16);
-        runtime.insert(&mut state, oversized_key.clone(), Arc::new(vec![4; 17]));
+        runtime.insert(&mut state, oversized_key.clone(), Arc::from(vec![4; 17]));
         assert!(!state.entries.contains_key(&oversized_key));
         assert_eq!(state.bytes, 16);
         drop(state);
-        assert_eq!(pinned.as_slice(), &[1; 8]);
+        assert_eq!(pinned.as_ref(), &[1; 8]);
     }
 }

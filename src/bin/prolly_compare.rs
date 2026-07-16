@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 use prolly::{Config, MemStore, Mutation, Prolly, Tree};
 
 const CLUSTER_SIZE: usize = 1_000;
-const POINT_READS: usize = 100_000;
+const DEFAULT_POINT_READS: usize = 100_000;
 const RANDOM_SEED: u64 = 0x6a09_e667_f3bc_c909;
 const FNV_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
 const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
@@ -158,7 +158,21 @@ fn run_scenario(args: &Args) -> ScenarioResult {
         "post-write cardinality mismatch"
     );
 
-    let targets = read_targets(args.phase, args.workload, args.records, write_operations);
+    let point_reads = env::var("PROLLY_COMPARE_POINT_READS")
+        .ok()
+        .map(|value| {
+            value
+                .parse::<usize>()
+                .expect("PROLLY_COMPARE_POINT_READS must be an integer")
+        })
+        .unwrap_or(DEFAULT_POINT_READS);
+    let targets = read_targets(
+        args.phase,
+        args.workload,
+        args.records,
+        write_operations,
+        point_reads,
+    );
     for (key, expected) in &targets {
         assert_eq!(
             validation_reader
@@ -320,8 +334,9 @@ fn read_targets(
     workload: Workload,
     records: usize,
     writes: usize,
+    point_reads: usize,
 ) -> Vec<(Vec<u8>, Vec<u8>)> {
-    let count = POINT_READS.min(match phase {
+    let count = point_reads.min(match phase {
         Phase::Fresh => records,
         Phase::Mutation => records + writes,
     });

@@ -1,20 +1,22 @@
 # Prolly Zero-Copy Read Architecture
 
-**Status:** Proposed for review
+**Status:** Accepted architecture; implementation and performance validation in progress
 
-**Date:** 2026-07-15
+**Date:** 2026-07-15; revised 2026-07-16
 
 **Scope:** Program-level design for a safe zero-copy read substrate across the
 core prolly tree, diff and merge, versioned maps, secondary indexes, proximity
-maps, async execution, and language bindings. The core point-read and range-scan
-work is implementation-ready. Secondary-index and proximity-map sections define
-the extension contracts that immediate work must preserve; they do not require
-those consumers to migrate in the first delivery.
+maps and accelerators, async execution, proofs and maintenance, stores, and
+language bindings. Packed immutable read nodes and callback-scoped borrowed
+views are the canonical internal read path. Owned APIs remain explicit boundary
+adapters. Secondary-index and proximity-map consumers may migrate in stages,
+but their codecs, caches, candidate ownership, and query contracts must use the
+same foundation now so that no second lifetime or cache redesign is required.
 
 ## Summary
 
-The Rust implementation currently pays ownership and cache-management costs on
-read paths that Dolt's Go implementation avoids. A warm point read takes an
+Before this work, the Rust implementation paid ownership and cache-management
+costs on read paths that Dolt's Go implementation avoids. A warm point read took an
 exclusive node-cache lock, updates eviction metadata even when the cache is
 unbounded, hashes the root CID on every request, and clones the returned value.
 A range scan clones every key and value and clones the key a second time to
@@ -25,7 +27,7 @@ buffers.
 This design makes callback-scoped borrowed views the canonical Rust read
 mechanism. Existing owned APIs remain source-compatible wrappers and allocate
 only at their explicit ownership boundary. A reusable `ReadSession` retains the
-decoded root directly, keeps a session-local recent leaf, and traverses immutable
+packed root directly, keeps session-local routing state, and traverses immutable
 `Arc`-backed node handles. Cache hits use a read-only path when eviction is
 disabled, and no cache lock remains held during traversal callbacks.
 
@@ -42,18 +44,71 @@ The same foundation supplies:
   `.await`;
 - owned language-binding and persistence boundaries with no API break.
 
-"Zero-copy" in this design has a precise scope. Phase one avoids copying values
-that are already present in a decoded cached node. A cold store read still owns
-the bytes returned by `Store::get`, and the current `Node::from_bytes` still
-decodes keys and values. A later read-node representation may retain packed
-encoded bytes, but it is not required for the first performance gate and does
-not change the wire format.
+"Zero-copy" in this design has a precise scope. The preferred store contract
+returns a retained `Arc<[u8]>`; the cache and packed `ReadNode` keep that same
+allocation alive; values and plain/offset-table keys are slices of it; and a
+callback borrows those slices while the handle is strongly retained. A store
+that only supports owned `Vec<u8>` reads is adapted once into `Arc<[u8]>` at the
+store boundary. Prefix-compressed keys are reconstructed once per node into one
+contiguous retained arena, not allocated once per key or result. Existing node
+bytes and CIDs are unchanged.
 
 Correctness is non-negotiable. Borrowed references cannot escape their callback,
 cached content is immutable and fully validated before admission, snapshots stay
 root-bound, visitor reentrancy never occurs under a cache lock, and every owned
 legacy result must be byte-for-byte equivalent to the borrowed traversal it
-wraps.
+wraps. Unsafe indexing is optional, isolated to a validated packed-node accessor,
+and accepted only with a documented safety proof plus safe-path differential,
+Miri, fuzz, and malformed-input coverage.
+
+## Normative Decision Snapshot
+
+This section is the short authoritative decision record. If older staging text
+elsewhere in this document describes packed nodes, secondary-index views, or
+proximity candidate handles as merely hypothetical, this section takes
+precedence.
+
+1. **One canonical read representation.** Normal tree reads load
+   `Arc<ReadNode>`, not decoded `Arc<Node>`. The write representation may be
+   materialized lazily only when a mutation algorithm genuinely needs owned
+   vectors. A read must never decode through `Node::from_bytes` merely because
+   an owned public result is requested.
+2. **One retained byte allocation.** A native shared store read, cache entry,
+   packed node, traversal handle, secondary-index decoder, and proximity record
+   decoder share immutable bytes through `Arc<[u8]>`. Backends without retained
+   buffers use a correct default adapter with one unavoidable boundary move.
+3. **Borrow inside, own at escape boundaries.** Callback/HRTB views are the
+   internal source of truth. Ownership is introduced only for persisted output,
+   public owned return types, cursors/pages/proofs, FFI/WASM, synthesized merge
+   values, and final proximity neighbors.
+4. **No borrowed reference crosses suspension.** Async methods await a retained
+   handle, invoke a synchronous callback, drop all borrows, and only then await
+   again. Async application callbacks receive owned data or use bounded pages.
+5. **Caches retain handles, never references.** Eviction removes discoverability
+   but cannot invalidate an active `Arc`. Cache byte accounting includes packed
+   bytes, metadata, prefix arenas, decoded typed objects, and externally retained
+   candidate bytes.
+6. **Read-session locality is bounded.** A session retains its root and a small
+   bounded set of internal route nodes. Leaf retention is adaptive so random
+   workloads do not pay continual locality checks or pin a large working set.
+   Session state is worker-local and never changes snapshot identity.
+7. **Secondary indexes compose views.** Physical-key and index-value decoders
+   lend views from the tree callback or bounded scratch. Source joins retain
+   bounded locations/keys and use ordered multi-get; they never eagerly own the
+   full posting list and source result set.
+8. **Proximity search retains candidate sources.** Native hierarchy, eligible
+   exact, HNSW, PQ, and composite search retain `(Arc<typed node>, entry_index,
+   score)` or an equivalent typed handle. Authoritative reranking borrows exact
+   directory records and reuses vector scratch. Only the final `k` results own
+   keys and application values.
+9. **Persisted objects remain self-contained.** Tree nodes, manifests,
+   secondary-index descriptors/checkpoints/bundles, proximity descriptors and
+   accelerator objects, cursors, and proofs never serialize process-local
+   handles or borrowed offsets.
+10. **Performance never weakens validation.** CID, format, ordering, bounds,
+    cardinality, vector, projection, snapshot, and accelerator-source checks run
+    before cache admission or callback exposure. Fast paths may change how data
+    is retained, not what data is accepted.
 
 ## Relationship to Existing Designs
 
@@ -77,7 +132,7 @@ Where those designs require an owned serialized page, cursor, proof, manifest,
 or binding value, this design does not weaken that requirement. It removes
 intermediate ownership inside the Rust process.
 
-## Current Evidence
+## Pre-implementation Evidence and Measured Motivation
 
 ### Cross-language benchmark
 
@@ -85,7 +140,8 @@ The existing one-worker, in-memory comparison uses identical deterministic
 string keys, values from 1 through 100 bytes, append/random/clustered workloads,
 a 30% mixed mutation phase, and post-write point reads and full range scans.
 
-For the repeated one-million-key fresh/random workload, the current median is:
+For the repeated one-million-key fresh/random workload before the packed-read
+implementation, the measured median was:
 
 | Operation | Rust | Dolt Go | Current leader |
 |---|---:|---:|---:|
@@ -97,9 +153,9 @@ To beat the observed Dolt median by 1.5x, Rust must reach no more than
 no more than 718 ns/point read and 55.9 ns/scanned row. These are targets, not
 predicted or fabricated results.
 
-### Point-read path
+### Original point-read path
 
-The current synchronous path in `src/prolly/mod.rs`:
+The original synchronous path in `src/prolly/mod.rs`:
 
 1. probes process-global recent-leaf state using atomics and a lock;
 2. starts from a root CID rather than a retained root node;
@@ -116,7 +172,7 @@ roughly 14% to leaf-value allocation/copy. That benchmark used a more local
 access pattern than the cross-language random workload, so the sample is
 bottleneck evidence, not a replacement comparison result.
 
-### Range path
+### Original range path
 
 `RangeIter` owns its start and end bounds, holds an `Arc<Node>` traversal stack,
 and yields `Result<(Vec<u8>, Vec<u8>), Error>`. Each row currently:
@@ -128,7 +184,7 @@ and yields `Result<(Vec<u8>, Vec<u8>), Error>`. Each row currently:
 Node-cache work is amortized across a leaf, so per-row ownership dominates more
 strongly than it does for point reads.
 
-### Diff and merge
+### Original diff and merge paths
 
 Structural diff prunes identical subtrees correctly, but changed leaf entries
 become owned `Diff` values and are often queued in `VecDeque<Diff>`. Misaligned
@@ -147,14 +203,14 @@ owned right Diff list
   -> rewritten Node values
 ```
 
-### Secondary indexes
+### Original secondary-index paths
 
 Secondary-index exact, prefix, and range convenience methods collect complete
 owned result sets. Physical `(term, primary_key)` keys are decoded into two new
 vectors, and index projection envelopes copy their payload. `records()` first
 owns all index matches and then owns every source lookup value.
 
-### Proximity maps
+### Original proximity-map paths
 
 An exact proximity lookup owns the directory value, decodes the vector into a
 new `Vec<f32>`, and owns the application value. Search paths frequently copy
@@ -183,7 +239,7 @@ must be owned, but most intermediate candidates do not need to be.
 
 ## Non-Goals
 
-The first implementation does not:
+The architecture does not:
 
 - promise zero-copy across an FFI, WASM, serialization, or process boundary;
 - return a free-standing `&[u8]` whose lifetime is detached from a callback or
@@ -196,8 +252,9 @@ The first implementation does not:
 - allow an async visitor to retain borrowed content across `.await`;
 - guarantee the 1.5x-to-2x performance target before measurements demonstrate
   it;
-- implement secondary-index or proximity-map migration in the first core
-  delivery;
+- require every secondary-index build/maintenance or proximity accelerator to
+  migrate in the same core release, although their shared view/handle foundation
+  is mandatory;
 - use unsafe lifetime extension, self-referential structures, or transmute;
 - weaken full validation, snapshot isolation, resource budgets, or deterministic
   result ordering for speed.
@@ -217,18 +274,20 @@ Traversal setup may allocate a path stack, bounds, or reusable scratch space.
 visited entry once traversal is established. Scratch buffers may grow to a
 bounded high-water mark and then be reused.
 
-### Decoded zero-copy
+### Decoded borrowing
 
-The initial `Arc<Node>` cache already owns decoded `Vec<Vec<u8>>` keys and
-values. Borrowing those vectors avoids an additional result copy. This is the
-phase-one meaning of zero-copy.
+An owned `Arc<Node>` can lend its `Vec<Vec<u8>>` keys and values and is still a
+valid compatibility or mutation representation. It avoids a result copy, but it
+is not the canonical read representation because decoding allocates per key and
+value and produces poor cache locality.
 
 ### Packed zero-copy
 
-A later `ReadNode` may retain `Arc<[u8]>` encoded bytes and offsets so values,
-and keys under suitable layouts, can be borrowed without constructing a
-`Vec<Vec<u8>>`. Prefix-compressed keys may still require reconstruction into a
-contiguous arena or reusable scratch buffer.
+`ReadNode` retains `Arc<[u8]>` encoded bytes plus compact validated offsets, so
+values and keys under plain and offset-table layouts are borrowed without
+constructing `Vec<Vec<u8>>`. Prefix-compressed keys are reconstructed once into
+a contiguous `Arc<[u8]>` arena and addressed by the same metadata. This is the
+canonical tree read representation.
 
 ### Required ownership
 
@@ -267,7 +326,10 @@ The following are release-blocking:
 13. Proximity search continues to rerank returned candidates using authoritative
     vectors and preserves deterministic key tie-breaking.
 14. Logical work and budget accounting do not change with cache warmth.
-15. Unsafe code is not required for the initial architecture.
+15. The safe packed accessor is the semantic reference. Any unsafe hot accessor
+    is isolated, cannot construct references before complete validation, proves
+    index and byte-range validity from immutable metadata, and is continuously
+    differential-tested against the safe accessor.
 
 ## Alternatives Considered
 
@@ -298,12 +360,13 @@ Arena or slab allocation could lower allocator overhead, but it would continue
 copying every byte, retain unnecessary memory, and leave the cache/root gap
 untouched. It may complement owned wrappers but is not the core solution.
 
-### Immediately replace the node wire format
+### Replace the node wire format to obtain packed reads
 
-Packed offsets are attractive, but a format cutover would combine lifetime,
-cache, API, persistence, migration, and performance risks. The selected design
-first removes result ownership and cache overhead without a wire change, then
-uses measurements to justify a read representation or format change.
+Rejected. The current compact encodings already contain enough structure to
+build validated offsets over retained bytes. A packed in-memory `ReadNode` does
+not require a format cutover, so lifetime, cache, and API improvements remain
+independent of persisted-format migration. Any future wire-format change must
+still be justified separately by measured read/write and storage gains.
 
 ## Architecture Overview
 
@@ -311,7 +374,7 @@ uses measurements to justify a read representation or format change.
 Tree + Prolly manager
         |
         v
-  ReadSession ------------------- direct root NodeHandle
+  ReadSession ------------------- direct root Arc<ReadNode>
         |                         session-local recent leaf
         |                         request-local metrics
         v
@@ -331,15 +394,17 @@ Tree + Prolly manager
         |
         +---- binding/page/proof: serialize owned result
 
-NodeHandle obtains immutable content through:
+Arc<ReadNode> obtains immutable content through:
 
   Disabled cache | Unbounded read-mostly cache | Bounded cache
         |                    |                         |
         +--------------------+-------------------------+
                              |
-                       validated node load
+                  shared retained-byte load
                              |
-                  Decoded Node now, ReadNode later
+                 CID + format + layout validation
+                             |
+                    packed Arc<ReadNode>
 ```
 
 ## API Coverage and Adoption Policy
@@ -364,11 +429,49 @@ that changes public return types. The complete API surface adopts it as follows:
 | patch/CRDT comparison | borrowed point/diff inputs | persisted patch/result remains owned |
 | stats/debug/verification | borrowed traversal and scalar aggregation | owned report structures/text |
 | proof generation/verification | borrowed node/entry inspection | proofs remain self-contained and owned |
-| sync/GC/content walking | borrow decoded nodes while collecting CIDs | transfer manifests and CID sets own data |
+| sync/GC/content walking | borrow packed nodes while collecting CIDs | transfer manifests and CID sets own data |
 | secondary-index query/build | borrowed match/projection/source views | pages, cursors, bundles remain owned |
 | proximity exact/search/build | record/vector views and candidate handles | `Neighbor`, result, proof remain owned |
 | async equivalents | sync callback after each await | owned streams/pages unchanged |
 | language bindings/WASM | serialize directly from borrowed internals | foreign values remain owned |
+
+### Complete migration ledger
+
+The following ledger prevents an optimized point-read implementation from
+leaving hidden allocation islands in higher-level APIs. “Borrowed core” means
+the operation must consume `ReadNode`, a typed retained content handle, or a
+callback-scoped view; it must not call an owned convenience API internally.
+
+| Subsystem/API family | Canonical internal input | Required owned boundary | Foundation decision |
+|---|---|---|---|
+| point reads, contains, large-value envelope | retained leaf/value slice | legacy `Vec`, resolved external blob | `get_with` and `ValueRefView` |
+| multi-get | bounded `ValueLocation { Arc<ReadNode>, index }` | ordered legacy result vector | preserve duplicates, misses, and input order |
+| forward/reverse range and prefix | traversal stack plus live leaf handle | iterator item, page, serialized cursor | clone cursor key only at cursor/page boundary |
+| rank/select/bounds/first/last | packed internal routing and one leaf view | one optional `KeyValue` | scalar paths never copy values |
+| write-session/transaction reads | stable overlay view merged with base session | existing owned read result | no callback while overlay lock is held |
+| diff/range-diff | two retained subtree cursors and `DiffRef` | `Diff`, page, proof, sync artifact | no eager changed-subtree vectors |
+| conflicts/three-way merge | retained base/left/right views and symbolic decision | synthesized resolution and encoded output nodes | no intermediate owned Diff→Conflict→Mutation chain |
+| CRDT/patch | borrowed comparisons and conflict views | persisted patch/result | policy semantics unchanged |
+| snapshots/versioned/typed maps | root-bound session for exact historical tree | typed decoded object or legacy bytes | typed decode happens inside callback |
+| stats/debug/verify | packed traversal and scalar accumulators | report structures/text | no entry ownership unless report contains bytes |
+| membership/range/diff/search proofs | borrowed node/record inspection | self-contained proof object | proof validity never depends on cache lifetime |
+| sync/export/import/GC/content graph | borrowed child-CID inspection | CID set, transfer manifest, encoded bundle | transfer/persistence remains owned |
+| secondary exact/prefix/range/reverse | `SecondaryIndexMatchRef` over tree entry plus scratch | match/page/cursor | physical ordering and snapshot identity unchanged |
+| secondary source joins | bounded posting chunk plus ordered borrowed source reads | requested final records/page | never collect the full match set first |
+| secondary build/verify/repair/replace | source scan plus streaming extractor views | sorted run/output nodes, descriptors/checkpoints | copy each derived entry at most once into build state |
+| secondary bundle/retention/GC | borrowed tree walk | self-contained bundle/catalog/GC plan | persisted metadata remains canonical |
+| proximity exact/contains/record scan | `StoredRecordRef`/`ProximityRecordRef` | exact owned record | validate encoded vector before exposure |
+| proximity native hierarchy | retained proximity node and entry index | final neighbors | candidate count and pinned bytes are bounded |
+| proximity eligible exact | borrowed directory records | final neighbors | filter eligibility precedes authoritative score |
+| HNSW/PQ/SQ8/composite search | typed accelerator handles plus bounded scratch | final reranked neighbors | approximate scores never replace authoritative rerank |
+| proximity build/rebuild/mutate/verify | record scan and vector view/scratch | encoded nodes, accelerators, descriptors | representation chosen by reuse and measured kernel cost |
+| proximity proof | retained visited typed objects | self-contained proof | proof ordering/completeness independent of cache warmth |
+| async variants | retained handles followed by synchronous callbacks | stream/page or caller-owned copy across await | deterministic delivery after concurrent fetch |
+| FFI/WASM/language bindings | borrowed internal traversal | target-runtime allocation/serialization | existing foreign signatures need not change |
+
+This ledger is an implementation acceptance checklist. A subsystem is migrated
+only when its owned APIs are adapters over the borrowed core and equivalence,
+allocation, and malformed-input tests cover that adapter.
 
 Write APIs necessarily create persisted bytes. `put`, `delete`, `batch`, append,
 builders, range delete, and merge should accept crate-private borrowed mutation
@@ -378,7 +481,7 @@ copies. Public owned `Mutation` remains unchanged. A future public
 the read architecture.
 
 The existing public `Cursor::at_item(&Store, ...)` has no manager and therefore
-cannot use the decoded manager cache or direct-root session. It remains a
+cannot use the packed manager cache or direct-root session. It remains a
 low-level compatibility API, while `Prolly::cursor`, `range_cursor`, and all new
 performance APIs route through manager-backed traversal. Documentation must not
 present the store-only cursor as the preferred high-throughput path.
@@ -400,8 +503,9 @@ The status labels used below are:
   implementation must use the borrowed primitive and allocate only at its owned
   boundary;
 - **crate-private**: foundation required now without a public stability promise;
-- **deferred public**: named and reserved for the secondary-index or proximity
-  phase, not required for the first core release;
+- **foundation now**: public/typed view contract and cache/lifetime behavior are
+  fixed now; individual secondary-index or proximity consumers may migrate in
+  later performance phases;
 - **unchanged**: no signature, ownership, serialization, or binding change.
 
 ### Public types added in core phases 1–4
@@ -1026,8 +1130,8 @@ These names are implementation-oriented and may evolve without semver impact:
 
 | Area | Crate-private additions | Purpose |
 |---|---|---|
-| retained content | `NodeHandle`, `CachedNode`, `ReadNode` | keep validated bytes/decoded node alive for callback scope |
-| routing | `LeafWindow`, `KeyScratch`, `ValueLocation`, `ReadPath` | session-local recent leaf, reconstructed-key scratch, and point lookup location |
+| retained content | `NodeHandle = Arc<ReadNode>`, typed content handles | keep validated bytes and metadata alive for callback scope |
+| routing | `LeafWindow`, `SessionNodeTable`, `ValueLocation`, `ReadPath` | adaptive recent leaf, retained internal routes, and point lookup location |
 | scans | `RangeTraversal`, `ReverseRangeTraversal`, `BorrowedLeafCursor` | bounded forward/reverse leaf traversal shared by visitors and owned adapters |
 | comparison | `BorrowedDiffWalker`, `BorrowedConflictWalker` | aligned and misaligned subtree streaming without eager vectors |
 | writes | `BorrowedMutation<'a>`, `BorrowedMutationSource` | remove temporary owned mutation/diff copies before final node encoding |
@@ -1039,10 +1143,11 @@ The existing public `Store`, `AsyncStore`, `BlobStore`, `Tree`, `Config`, `Node`
 In particular, zero-copy does not require storage backends to return borrowed
 buffers, and it does not change canonical node CIDs.
 
-### Deferred secondary-index public API (phase 5)
+### Secondary-index public API and migration contract
 
-The core release reserves these names and semantics, but they are implemented
-only when secondary-index migration begins:
+These names and semantics are part of the shared foundation. Borrowed codecs,
+query visitors, source joins, and streaming extraction are implemented first;
+build/maintenance consumers migrate behind the unchanged owned API surface:
 
 ```rust,ignore
 pub enum IndexValueRef<'a> {
@@ -1205,7 +1310,7 @@ corresponding owned page API. Early stop returns the last delivered count but
 does not manufacture a serialized cursor; callers that need resumability use
 the existing owned page/cursor boundary.
 
-### Deferred proximity-map public API (phase 6)
+### Proximity-map public API and migration contract
 
 Public views expose safe logical records. Byte-layout helpers remain
 crate-private so an alignment or encoding change does not leak into the API.
@@ -1281,10 +1386,10 @@ then consume these views internally. Existing `ExactProximityRecord`,
 `Neighbor`, `SearchResult`, descriptors, proofs, and persisted accelerator
 artifacts remain owned and unchanged.
 
-`AsyncProximityMap` eventually gains `read`, `get_with`, and `scan_records`
-counterparts with synchronous post-await callbacks. Approximate-search callback
-results are deliberately not exposed: candidate heaps can use retained internal
-handles, but a public result must remain self-contained.
+`AsyncProximityMap` gains `read`, `get_with`, and `scan_records` counterparts
+with synchronous post-await callbacks when its exact-read surface is migrated.
+Approximate-search callback results are deliberately not exposed: candidate
+heaps use retained internal handles, but a public result remains self-contained.
 
 ### Source-file ownership and delivery
 
@@ -1296,7 +1401,7 @@ handles, but a public result must remain self-contained.
 | `src/prolly/diff.rs`, `error.rs`, merge/write modules | borrowed diff/conflict views, symbolic resolver, streaming apply | 3–4 |
 | `src/prolly/versioned_map.rs`, typed map layer, async modules | snapshot/session forwarding and decode-in-callback | 2–4 |
 | `src/prolly/secondary_index/{storage,snapshot,definition,coordinator}.rs` | deferred index views/query/build adoption | 5 |
-| `src/prolly/proximity/storage/record.rs`, `map.rs`, `search/`, `accelerator/`, `proof/` | deferred record/vector views and candidate handles | 6 |
+| `src/prolly/proximity/storage/record.rs`, `map.rs`, `search/`, `accelerator/`, `proof/` | record/vector views, retained candidate handles, authoritative borrowed rerank | 6 |
 | language bindings and WASM adapters | no signature change; serialize/copy at FFI boundary | after each native phase |
 
 Every public borrowed-view addition requires rustdoc examples for both
@@ -1328,9 +1433,9 @@ impl<'a> EntryRef<'a> {
 }
 ```
 
-Fields remain private so later read-node representations can preserve invariants
-without changing construction sites. `EntryRef` is copyable, but the compiler
-still prevents it from escaping its callback lifetime.
+Fields remain private so packed-node metadata and typed views can preserve
+invariants without changing construction sites. `EntryRef` is copyable, but the
+compiler still prevents it from escaping its callback lifetime.
 
 ### Read session
 
@@ -1338,8 +1443,9 @@ still prevents it from escaping its callback lifetime.
 pub struct ReadSession<'manager, 'tree, S: Store> {
     manager: &'manager Prolly<S>,
     tree: &'tree Tree,
-    root: Option<NodeHandle>,
+    root: Option<Arc<ReadNode>>,
     recent_leaf: Option<LeafWindow>,
+    route_nodes: SessionNodeTable,
     local_metrics: LocalReadMetrics,
 }
 
@@ -1359,25 +1465,43 @@ mutated; callers create one session per worker. The manager cache remains shared
 The session owns no persisted state and does not alter tree identity. Dropping it
 releases its root and recent-leaf handles and flushes any local metric aggregate.
 
-### Node handle and representation boundary
+### Packed node handle and representation boundary
 
 ```rust,ignore
-#[derive(Clone)]
-pub(crate) struct NodeHandle(Arc<CachedNode>);
+type NodeHandle = Arc<ReadNode>;
 
-pub(crate) struct CachedNode {
-    cid: Cid,
-    encoded_bytes: usize,
-    retained_bytes: usize,
-    repr: ReadNode,
+struct ReadEntryMeta {
+    key_start: u32,
+    key_len: u32,
+    value_start: u32,
+    value_len: u32,
+    child_count: u64,
 }
 
-pub(crate) enum ReadNode {
-    Decoded(Node),
-    // Later, without changing traversal callers:
-    // Packed(PackedNode),
+pub(crate) struct ReadNode {
+    bytes: Arc<[u8]>,
+    prefix_keys: Option<Arc<[u8]>>,
+    entries: Box<[ReadEntryMeta]>,
+    leaf: bool,
+    level: u8,
+    format: TreeFormat,
+}
+
+struct NodeCacheEntry {
+    read: OnceLock<Arc<ReadNode>>,
+    owned: OnceLock<Arc<Node>>,
+    retained_bytes: usize,
+    /* eviction metadata */
 }
 ```
+
+`bytes` is the immutable encoded allocation returned by `Store::get_shared` or
+created once by the owned-store adapter. Plain and offset-table keys and all
+values point into `bytes`. `prefix_keys` exists only for prefix-compressed
+layouts and contains all reconstructed keys in one immutable arena. Offsets are
+32-bit only after the parser rejects any object that cannot be addressed by
+them. This makes metadata compact and gives validation an explicit maximum
+object size.
 
 Traversal code accesses `ReadNode` through concrete inlineable methods:
 
@@ -1385,17 +1509,31 @@ Traversal code accesses `ReadNode` through concrete inlineable methods:
 fn len(&self) -> usize;
 fn level(&self) -> u8;
 fn is_leaf(&self) -> bool;
-fn key(&self, index: usize, scratch: &mut KeyScratch) -> Result<&[u8], Error>;
-fn value(&self, index: usize) -> Result<&[u8], Error>;
+fn key(&self, index: usize) -> Option<&[u8]>;
+fn value(&self, index: usize) -> Option<&[u8]>;
 fn child_cid(&self, index: usize) -> Result<Cid, Error>;
-fn child_count(&self, index: usize) -> Result<u64, Error>;
-fn search(&self, key: &[u8], scratch: &mut KeyScratch) -> Result<SearchResult, Error>;
+fn child_count(&self, index: usize) -> Option<u64>;
+fn search(&self, key: &[u8]) -> Result<usize, usize>;
 ```
 
-This is not a trait object and introduces no virtual call per key comparison.
-Phase one wraps the existing `Node`. Later packed and prefix-key representations
-can be selected by an enum branch outside tight per-entry loops or specialized
-by layout.
+This is not a trait object and introduces no virtual call or representation
+branch per key comparison. Parsing validates the compact header, canonical tree
+format, layout-specific offsets, sorted unique keys, internal-node shape, value
+ranges, and trailing bytes before publication. CID equality is checked by the
+loader before cache admission.
+
+The cache's `read` representation is authoritative for reads. `owned` is
+materialized lazily only for a write/legacy structural algorithm that cannot yet
+consume `ReadNode`. Cache insertion must not retain independent packed and
+decoded source allocations accidentally: conversion reuses the entry and byte
+accounting reflects every simultaneously live representation. New read code is
+not allowed to request `owned`.
+
+The binary-search hot path may use one isolated unchecked accessor after full
+validation. Its safety proof is: the entry index is bounded by `entries.len()`;
+all `(start, len)` pairs were range-checked against an immutable `Arc` backing;
+metadata and backing bytes cannot mutate; and the returned slice cannot outlive
+`&self`. A safe accessor remains available for validation and differential tests.
 
 Write paths may continue using owned `Node` during early phases. Read and write
 representations must share validation fixtures and canonical encoding tests.
@@ -1564,20 +1702,30 @@ bytes because the blob-store contract is owned.
 For a reusable session:
 
 1. If the tree is empty, return `None`.
-2. Check the session-local recent leaf using its first and last key. This uses no
-   atomics or global lock.
+2. If leaf locality remains enabled, check the session-local recent leaf using
+   its first and last key. This uses no atomics or global lock. After a small
+   bounded run of misses, disable the check for the session so random workloads
+   do not pay it forever.
 3. Start with the session's retained root handle.
 4. Search the current node for the greatest key less than or equal to the query.
 5. For an internal node, load its child handle after releasing all cache locks.
 6. For a leaf, verify exact key equality.
-7. Store the leaf in the session-local recent-leaf window.
+7. Store the leaf in the session-local recent-leaf window only while the
+   locality predictor remains useful.
 8. Invoke the callback with the leaf value slice while the leaf handle is alive.
 
-Random reads pay one predictable recent-leaf bounds check. Clustered and
-sequential reads can avoid the complete root-to-leaf traversal. The existing
-process-global atomics and `RwLock<Option<RecentLeafRead>>` are removed from the
-new session path. The convenience `Prolly::get_with` uses an ephemeral session;
-high-throughput users and benchmarks use a reusable session.
+Random reads pay only a bounded number of recent-leaf checks per session.
+Clustered and sequential reads can avoid the complete root-to-leaf traversal.
+The existing process-global atomics and `RwLock<Option<RecentLeafRead>>` are
+removed from the new session path. The convenience `Prolly::get_with` uses an
+ephemeral session; high-throughput users and benchmarks use a reusable session.
+
+The session also has a fixed-size set-associative route-node table keyed by CID.
+It retains internal nodes strongly for the session lifetime, avoids repeated
+global-cache locking and `Weak::upgrade` atomics, and deliberately excludes
+leaves so a random point workload cannot pin its entire leaf working set. Table
+size and associativity are performance constants validated across 1M, 5M, and
+10M working sets; they are not persisted or part of tree semantics.
 
 The root is never looked up in the cache after session construction. This is the
 direct counterpart of Dolt retaining `StaticMap.Root`.
@@ -1604,6 +1752,43 @@ Owned iterator/page wrappers copy bounds because they outlive the initiating
 call.
 
 ## Node Cache and Loading
+
+### Shared store buffers
+
+The storage contract has additive retained-buffer methods:
+
+```rust,ignore
+pub type SharedReadBatch = Vec<Option<Arc<[u8]>>>;
+
+pub trait Store {
+    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error>;
+
+    fn get_shared(&self, key: &[u8])
+        -> Result<Option<Arc<[u8]>>, Self::Error>;
+
+    fn batch_get_shared_ordered_unique(&self, keys: &[&[u8]])
+        -> Result<SharedReadBatch, Self::Error>;
+
+    fn has_native_shared_reads(&self) -> bool;
+}
+```
+
+The default `get_shared` converts the owned vector into an `Arc` without a
+second byte copy. The default shared batch delegates to the backend's ordered
+batch operation before converting each result, so adding zero-copy support does
+not silently disable remote multi-get. A native retained-buffer store returns
+the same allocation it already owns and reports `has_native_shared_reads =
+true`; `MemStore` is the reference implementation.
+
+`AsyncStore` has the same contract. `Arc<S>`, references, sync-as-async adapters,
+and search-runtime store wrappers must delegate the shared methods instead of
+falling back to the owned default. This is a conformance requirement because one
+missing delegation can reintroduce a full object copy in every read.
+
+Shared bytes are immutable by contract. A store must never mutate or recycle an
+allocation after returning it. A backend whose buffer pool cannot guarantee
+that property must use the owned adapter. `has_native_shared_reads` is only a
+performance capability signal; correctness cannot depend on its value.
 
 ### Explicit cache modes
 
@@ -1668,14 +1853,16 @@ contention profiling makes it necessary for the point-read gate.
 
 On a miss:
 
-1. fetch owned bytes from the store;
+1. fetch retained immutable bytes through `get_shared` (or its owned adapter);
 2. compute `Cid::from_bytes(bytes)` and require equality with the requested CID;
-3. decode the node under explicit size and entry limits;
+3. parse compact metadata and any prefix-key arena under explicit size and entry
+   limits;
 4. validate sorted keys, key/value cardinality, child counts, level, leaf flag,
    and persisted format;
 5. require the node format to equal the session tree format;
-6. calculate encoded and retained decoded byte weights;
-7. publish an immutable `CachedNode`.
+6. calculate encoded bytes, metadata bytes, prefix-arena bytes, and any lazy
+   owned representation already present;
+7. publish an immutable `Arc<ReadNode>` in the cache entry.
 
 If existing store conformance intentionally delegates CID validation elsewhere,
 the final implementation spec may avoid duplicate SHA-256 only when that
@@ -1861,8 +2048,9 @@ snapshot before application code runs.
 
 ## Secondary-Index Foundation
 
-Secondary-index migration is not required in the first core delivery, but core
-interfaces must support it without redesign.
+Secondary-index borrowed codecs and query composition are part of the shared
+foundation. Build and maintenance consumers may migrate after the core read
+path, but they must do so without changing the lifetime/cache model.
 
 ### Borrowed stored-value view
 
@@ -1945,6 +2133,15 @@ Batch size and retained bytes obey `QueryBudget`. Exact posting lists preserve
 primary-key order; broader term ranges preserve physical `(term, primary_key)`
 order.
 
+The chunk must not store `SecondaryIndexMatchRef` or a slice into reusable
+unescape scratch. It stores either (a) a retained physical leaf handle plus
+entry index when later decoding can be repeated cheaply, or (b) one bounded
+owned primary key/projection needed to cross the callback boundary. This is an
+intentional required copy, bounded by chunk policy, and is still materially
+different from owning the complete posting list. After ordered source reads,
+the callback receives a view valid only while both the posting chunk item and
+source leaf handle are alive.
+
 ### Extraction and builds
 
 The current extractor already receives borrowed primary-key and source-value
@@ -1975,7 +2172,7 @@ record before extraction.
 
 ### Secondary-index adoption gates
 
-Later migration must demonstrate:
+Each migrated secondary-index consumer must demonstrate:
 
 - exact owned/borrowed result equivalence for arbitrary escaped terms and keys;
 - zero steady-state allocations per `KeysOnly` match without escaped bytes;
@@ -2082,6 +2279,46 @@ An optional future `visit_neighbors` can invoke a callback over final borrowed
 neighbors for native callers that do not need an owned result. It must still
 retain all required candidate handles until final sorting is complete.
 
+Candidate ownership is backend-specific but follows one protocol:
+
+| Backend | Candidate state retained before rerank | Forbidden intermediate ownership |
+|---|---|---|
+| native hierarchy | `Arc<ProximityNode>`, entry index, approximate/exact score | cloned entry key and vector per frontier visit |
+| eligible exact | bounded directory leaf/record location and score | owned full directory record for every eligible row |
+| HNSW | graph-node/route handle, logical key location, navigation score | cloned application value during navigation |
+| PQ | code-page handle, code index, approximate distance | decoded full vector per candidate |
+| SQ8 | quantized-page handle, entry index, approximate distance | owned dequantized vector per candidate |
+| composite | tagged handle to base or delta source plus shadow decision | flattening both sources into owned candidates |
+
+The candidate set is kept sorted or heap-bounded to the planner's oversampling
+limit. Insertion and truncation must be deterministic on `(score.total_cmp,
+key-bytes)` and must not leave a handle with an invalid entry index. Duplicate
+keys from composite/base/delta sources are resolved before authoritative rerank
+according to shadow semantics.
+
+Authoritative reranking opens one reusable directory `ReadSession`, retrieves
+each exact `StoredRecordRef` through `get_with`/ordered locations, verifies that
+the stored key/vector matches the candidate source contract, copies components
+into aligned scratch only when the selected distance kernel benefits, and
+computes the exact metric. Approximate scores may order the rerank input but
+never the returned result. The final stable sort uses exact score then raw key
+bytes; only those final `k` rows clone key and application value.
+
+For repeated distance evaluation, the representation choice is explicit:
+
+- one-pass exact scan: iterate encoded components or decode into one reusable
+  aligned query-sized scratch buffer;
+- repeated HNSW routing-vector use: cache validated aligned `Arc<[f32]>` when
+  profiling shows that decoding dominates;
+- PQ/SQ8: retain compact codes and tables; decode only final authoritative
+  directory vectors;
+- public exact records: expose the safe encoded view and let callers opt into
+  `copy_to_slice`/`to_vec`.
+
+This hybrid is intentional: eliminating allocations is mandatory on the hot
+path, while eliminating every byte copy is not. A bounded copy into reusable
+SIMD-aligned scratch is correct when it lowers end-to-end latency.
+
 ### Search runtime integration
 
 The existing qualified `SearchRuntime` cache remains authoritative for typed
@@ -2103,7 +2340,7 @@ content kind and measured reuse.
 
 ### Proximity adoption gates
 
-Later migration must prove:
+Each migrated proximity consumer must prove:
 
 - owned exact lookup equals `ProximityRecordRef::to_owned` for every valid
   vector;
@@ -2114,6 +2351,35 @@ Later migration must prove:
   completion, or proofs;
 - candidate handle memory is bounded and accounted;
 - only final results or explicitly retained build/search state are owned.
+
+## Proofs, Maintenance, Sync, and Content Walking
+
+Zero-copy applies to inspection while these APIs run, not to the artifact they
+return. A membership, multi-key, range, diff, or proximity search proof must be
+self-contained and verifiable after every cache/session handle is dropped.
+Therefore proof generation borrows node keys, values, child CIDs, and typed
+records while deciding what to include, then copies/encodes each required proof
+component exactly once into the owned proof. Verification parses proof-owned
+bytes through the same strict view decoders where possible.
+
+Stats, debug, verification, reachability, GC, sync planning, missing-node copy,
+export, and content-graph walkers use `ReadNode`/typed handles for traversal.
+They own only aggregates, CIDs that must enter sets/queues, diagnostic samples,
+transfer manifests, or persisted bundles. Child CID extraction is a fixed
+32-byte value operation and is not treated as a large-value copy. Walkers must
+retain logical visit/budget semantics independently of cache warmth.
+
+Import and write-side verification remain fail-closed:
+
+1. validate serialized object length and kind;
+2. verify CID before cache admission;
+3. parse all layout/codec metadata and canonical constraints;
+4. publish an immutable retained handle only after validation;
+5. materialize owned output only if the import/write algorithm requires it.
+
+No proof, cursor, sync bundle, GC plan, manifest, descriptor, checkpoint, or
+catalog may contain an in-process offset, pointer, `Arc`, cache namespace, or
+session identifier. Snapshot/root CIDs remain the only durable identity.
 
 ## Async Architecture
 
@@ -2245,7 +2511,8 @@ allocator so production allocation paths are not instrumented per operation.
 - async compile-fail tests prove borrowed entries cannot cross `.await`;
 - `ReadSession` is `Send` when its manager/store permit moving between threads,
   but mutation requires exclusive access;
-- no initial API requires unsafe code.
+- no public API requires callers to use unsafe code; implementation unsafe is
+  confined to audited packed/SIMD internals.
 
 ### Core equivalence properties
 
@@ -2325,9 +2592,10 @@ where practical, plus stress tests under ThreadSanitizer-compatible builds.
 - compare owned and borrowed decoder acceptance/rejection sets;
 - run address/thread sanitizers or platform equivalents for concurrent cache and
   async-load stress tests;
-- require no new unsafe block in phase one. Any later SIMD/packed unsafe code
-  receives isolated invariants, Miri-compatible fallbacks, and differential
-  tests.
+- require every unsafe packed/SIMD block to state isolated invariants, retain a
+  safe or Miri-compatible reference path, and pass differential tests. No unsafe
+  lifetime extension, aliasing, unchecked parsing, or callback escape is
+  permitted.
 
 ## Performance Evaluation
 
@@ -2394,8 +2662,8 @@ If the target is missed, profile in this order:
 3. key comparison and binary-search cost;
 4. callback/inlining and traversal state cost;
 5. decoded `Vec<Vec<u8>>` locality;
-6. packed/arena read-node representation;
-7. node-size/chunking effects.
+6. packed metadata size, key-arena locality, and child-CID extraction;
+7. node-size/chunking and persisted-layout effects.
 
 Only one variable changes per diagnostic benchmark. Persisted format changes
 require their own design and compatibility decision.
@@ -2408,6 +2676,36 @@ benchmarks measure exact lookup, authoritative scan/build, eligible-exact,
 native hierarchy, PQ/HNSW reranking, vector dimensions, and candidate memory.
 These are adoption gates, not phase-one blockers.
 
+The minimum secondary-index matrix is:
+
+- posting cardinalities 1, 10, 100, 10K, and broad-range/full-index;
+- `KeysOnly`, included projection, and full-source projection;
+- no-escape and worst-case escaped term/primary keys;
+- owned collection, borrowed visitor, page/cursor, reverse, and early-stop;
+- warm/cold cache, source join hit/missing-source failure, and bounded batch
+  sizes;
+- build, verify, repair, and replace throughput plus peak retained memory.
+
+The minimum proximity matrix is:
+
+- dimensions 32, 128, 384, 768, and 1536 where supported;
+- `k` 1, 10, and 100 with planner oversampling limits recorded;
+- exact/native hierarchy, eligible exact at several selectivities, HNSW, PQ,
+  SQ8, and composite delta/shadow workloads;
+- encoded-component, reusable aligned scratch, and cached decoded-vector kernels;
+- candidate generation separately from authoritative rerank and final result
+  materialization;
+- latency, vectors/second, recall/completion, exact ordering digest, allocations,
+  physical reads, cache hits, candidate count, pinned bytes, and peak RSS.
+
+Every optimization row must pass the same correctness digest or exact neighbor
+comparison required by that backend. Approximate backends report recall and
+completion explicitly; they are never compared as though they performed exact
+work. Performance ratios use medians of interleaved runs on the same machine.
+Raw rows, revisions, compiler versions, CPU, configuration, and failed
+validation rows are retained. A 1.5x–2x target is an engineering objective, not
+permission to omit a regression or manufacture a result.
+
 ## Delivery Sequence
 
 ### Phase 0: Benchmark and semantic lock
@@ -2419,8 +2717,12 @@ These are adoption gates, not phase-one blockers.
 
 ### Phase 1: Core point-read substrate
 
-- introduce `EntryRef`, `ValueRefView`, `NodeHandle`, decoded `ReadNode`, and
+- introduce `EntryRef`, `ValueRefView`, retained shared store reads, packed
+  `ReadNode`, and
   `ReadSession`;
+- parse plain/offset keys and values as slices of `Arc<[u8]>`, reconstruct
+  prefix-compressed keys into one retained arena, and make the packed loader the
+  sole normal read path;
 - validate/load and retain the root;
 - implement session-local recent leaf;
 - implement `get_with`, `get_value_ref_with`, allocation-free `contains_key`,
@@ -2461,8 +2763,8 @@ These are adoption gates, not phase-one blockers.
 - add `scan_exact`, `scan_prefix`, `scan_range`, bounded `scan_records`, and
   `IndexedMap::get_with`;
 - adapt owned pages and bindings;
-- introduce streaming extractor/build sink when the bounded-build milestone is
-  implemented.
+- migrate build, verify, repair, replace, bundle, retention, and GC consumers to
+  source scan/streaming extraction with bounded owned output state.
 
 ### Phase 6: Proximity adoption
 
@@ -2473,50 +2775,98 @@ These are adoption gates, not phase-one blockers.
 - integrate handle accounting with `SearchRuntime`;
 - preserve owned search/proof boundaries.
 
-### Phase 7: Packed read-node evaluation
+### Phase 7: Read-path hardening and representation tuning
 
-- profile the optimized decoded path;
-- prototype packed `OffsetTable`/`Plain` values and prefix-key arenas behind
-  `ReadNode`;
-- compare cold decode time, warm point/range performance, RSS, and write impact;
-- change defaults or persisted formats only through a separate approved design.
+- profile packed point/range, diff/merge, secondary-index, and proximity paths;
+- tune metadata layout, session routing, leaf-locality prediction, batch width,
+  cache sharding, and decoded-vector representation one variable at a time;
+- compare cold parse time, warm performance, allocations, RSS, retained bytes,
+  and write materialization impact;
+- consider a new persisted layout only if the current packed parser remains a
+  measured bottleneck, through a separate format-identity and migration design.
 
 ## Implementation Record (2026-07-16)
 
-The first implementation follows this design without changing persisted bytes
-or existing owned/binding signatures. The implementation anchor is
-`src/prolly/read.rs`; its module documentation references this design directly.
+The implementation follows this design without changing persisted bytes or
+existing owned/binding signatures. The primary anchors are
+`src/prolly/read.rs`, `src/prolly/node.rs`, and the shared-read methods in
+`src/prolly/store/mod.rs`.
 
-Delivered now:
+Implemented foundation:
 
 - callback-scoped `EntryRef`, `ValueRefView`, `DiffRef`, and `ConflictRef`;
-- reusable synchronous and async read sessions, retained roots, session-local
-  recent leaves, and a fixed-size weak route-node table;
+- reusable synchronous and async read sessions with retained packed roots,
+  adaptive recent-leaf state, and a bounded strong internal-route table;
 - borrowed point, multi-get, forward/reverse range, prefix, bound, rank, select,
   diff, conflict, and symbolic merge APIs, including early termination;
+- `Store`/`AsyncStore` retained immutable reads and ordered shared batches, with
+  native `MemStore` support and owned-backend adapters;
+- packed `ReadNode` parsing for prefix-compressed, plain, and offset-table
+  layouts, with values and applicable keys borrowed from retained wire bytes;
+- a validated per-node common-prefix/order-word search accelerator that avoids
+  repeated full-key comparisons while retaining a full byte-order fallback;
+- hybrid cache entries that make packed nodes authoritative for reads and lazily
+  materialize owned nodes only for remaining write-side consumers;
 - owned core APIs adapted at their result boundary, with binding signatures
   unchanged;
-- bounded mutation application in the synchronous borrowed merge fallback;
+- packed structural diff traversal and bounded mutation application in the
+  synchronous borrowed merge fallback;
 - versioned/typed-map and write-session forwarding;
 - secondary-index borrowed wire views, forward/reverse posting scans, bounded
   source joins, and streaming extractor contracts;
-- proximity record/vector wire views and borrowed exact/authoritative record
-  scans; and
+- proximity record/vector views, borrowed exact/authoritative record scans,
+  retained native candidates, and callback-scoped authoritative reranking for
+  native, eligible, HNSW, PQ, and composite paths; and
 - identical Rust/Dolt benchmark runners with process isolation, workload/result
   validation, source/binary provenance, and retained raw output.
 
-Intentional staged boundaries:
+### Post-implementation performance evidence
 
-- async diff scanning is borrowed, but async conflict iteration and merge retain
-  one owned conflict or an owned diff staging set so no public borrowed view can
-  cross an await;
-- secondary-index build extraction and proximity candidate/rerank handles have
-  their public/internal foundations, while the existing builders and search
-  result boundaries remain owned;
-- decoded `Node` remains the phase-one read representation. Large random point
-  workloads show that packed read nodes and cache-footprint reduction are the
-  next required optimization; result-copy elimination alone is not sufficient
-  to guarantee the 1.5x point-read target at million-key working sets.
+On 2026-07-16, the final release binary was measured with one worker and the
+same deterministic in-memory fresh/random workload, key/value generator,
+100,000 point targets, full scan, digest, and result-count checks as the frozen
+Dolt Go comparator. Each cell below is the median of three successful runs.
+The final Rust reruns followed the profiling-guided search optimization; the
+frozen Dolt medians were measured minutes earlier on the same machine.
+
+| Records | Operation | Rust | Dolt Go | Rust speedup |
+|---:|---|---:|---:|---:|
+| 1M | write | 601 ns/op | 2,314 ns/op | 3.85x |
+| 1M | point read | 478 ns/op | 1,368 ns/op | 2.86x |
+| 1M | range scan | 5.02 ns/row | 25.0 ns/row | 4.98x |
+| 5M | write | 763 ns/op | 4,927 ns/op | 6.46x |
+| 5M | point read | 876 ns/op | 1,613 ns/op | 1.84x |
+| 5M | range scan | 5.54 ns/row | 38.2 ns/row | 6.89x |
+| 10M | write | 767 ns/op | 9,411 ns/op | 12.27x |
+| 10M | point read | 975 ns/op | 1,573 ns/op | 1.61x |
+| 10M | range scan | 6.04 ns/row | 37.8 ns/row | 6.27x |
+
+All compared rows reported identical workload digests and validated result
+counts. These measurements establish the requested 1.5x point-read floor for
+these representative large random workloads; they do not imply the same ratio
+for an unmeasured machine, store, key distribution, or proximity backend.
+
+A separate absolute 5,000-record, 128-dimension release run measured exact
+SIMD search at 265 microseconds, PQ search at 1.07 milliseconds, and HNSW
+search at 11.26 milliseconds. Those values are not presented as speedups
+because no equivalent pre-change proximity baseline was retained.
+
+Verification after the final optimization passed 479 library tests, the full
+integration suite, 97 documentation tests, and strict all-feature Clippy.
+
+Remaining staged migration and hardening:
+
+- eliminate remaining owned staging in async conflict/merge paths where doing so
+  does not permit a borrow to cross an await;
+- migrate every secondary-index build/verify/repair/replace/bundle path to the
+  streaming foundation and measure each projection/source-join workload;
+- extend retained-candidate accounting to any future proximity accelerator and
+  add repeatable before/after baselines for native, eligible, HNSW, PQ, SQ8,
+  and composite search independently;
+- run Miri/fuzz and allocation-count gates in addition to the completed
+  malformed-input, cache, full-feature, and cross-language checks; and
+- report any scale/workload that misses the desired 1.5x ratio without
+  extrapolation or fabricated results.
 
 These boundaries do not weaken correctness or lifetime guarantees. They are
 explicit optimization milestones under the unchanged APIs above.
@@ -2534,10 +2884,10 @@ without changing their external contract.
 No cache state, node handle, read session, scratch buffer, or borrowed view is
 serialized. Reopen behavior depends only on existing roots and formats.
 
-If a future packed read representation can decode the current bytes, it is an
-in-process implementation change. If a new wire layout/default is required, it
-must define format identity, coexistence, migration, conformance fixtures, and
-rollback independently.
+The packed read representation decodes the current bytes and is an in-process
+implementation choice. If a new wire layout/default is required, it must define
+format identity, coexistence or deliberate hard cutover, migration, conformance
+fixtures, and rollback independently.
 
 ## Risks and Mitigations
 
@@ -2562,9 +2912,11 @@ guards are intentionally avoided.
 
 ### Packed representation complexity
 
-The `ReadNode` boundary is introduced without committing to packed bytes.
-Decoded `Node` remains the reference implementation. Packed work occurs only
-after correctness fixtures and measured need.
+Packed `ReadNode` is the canonical read representation, while decoded `Node`
+remains the semantic and write-side reference. The mitigation is strict parser
+validation, identical fixtures for every layout, owned/packed differential
+tests, isolated unsafe access, and lazy owned materialization for algorithms not
+yet migrated. Persisted bytes are not changed by this choice.
 
 ### Zero-copy vector slowdown
 
@@ -2591,35 +2943,48 @@ The program design is successfully implemented when:
 
 1. Safe Rust prevents every borrowed view from escaping its callback.
 2. Warm reusable-session point hits and steady-state scans meet allocation gates.
-3. Unbounded cache hits perform no eviction bookkeeping and require no exclusive
+3. Native shared stores preserve one immutable byte allocation from store
+   through packed node and callback, while owned stores incur only their defined
+   boundary adaptation.
+4. Packed parsing accepts and rejects exactly the same canonical node set as the
+   owned decoder for every supported layout; unsafe hot access passes its stated
+   proof, Miri, fuzz, and differential gates.
+5. Unbounded cache hits perform no eviction bookkeeping and require no exclusive
    cache lock.
-4. Repeated reads retain the exact root directly and use session-local leaf
-   locality without global atomics.
-5. Existing owned core APIs pass byte/order/error/cursor equivalence tests.
-6. Cache eviction, clear, concurrency, corruption, and reentrancy tests pass.
-7. Borrowed diff and conflict scans match owned/model results, including
+6. Repeated reads retain the exact root directly and use bounded session-local
+   route and adaptive leaf locality without global atomics.
+7. Existing owned core APIs pass byte/order/error/cursor equivalence tests.
+8. Cache eviction, clear, concurrency, corruption, and reentrancy tests pass.
+9. Borrowed diff and conflict scans match owned/model results, including
    misaligned trees.
-8. Merge avoids owned Diff/Conflict layers on its native path and preserves
+10. Merge avoids owned Diff/Conflict layers on its native path and preserves
    canonical results and structural reuse.
-9. Async traversal never holds borrowed data across `.await`.
-10. Language bindings and persisted fixtures remain compatible.
-11. Secondary-index and proximity view contracts are implementable without a
-    core lifetime/cache redesign and pass their focused foundation tests when
-    adopted.
-12. The full benchmark matrix and raw results are published without fabricated
+11. Async traversal never holds borrowed data across `.await`.
+12. Language bindings and persisted fixtures remain compatible.
+13. Secondary-index query/source-join paths use borrowed views and bounded
+    scratch; build and maintenance paths consume the same streaming foundation
+    without an eager full-source or full-posting materialization.
+14. Proximity exact, native, eligible, HNSW, PQ, SQ8, and composite paths use
+    retained candidates and authoritative borrowed reranking; candidate bytes
+    are bounded/accounted and only final neighbors own application data.
+15. Proof, sync, GC, verification, and content-walk APIs inspect retained views
+    but return self-contained owned artifacts.
+16. The full benchmark matrix and raw results are published without fabricated
     ratios, failed validations, or omitted regressions.
-13. Rust reaches the 1.5x target where measurements prove it; any misses are
+17. Rust reaches the 1.5x target where measurements prove it; any misses are
     reported honestly with profiles and the next ranked bottleneck.
 
 ## Final Recommendation
 
-Adopt callback-scoped borrowed reads and a reusable root-bound `ReadSession` as
-the canonical internal architecture. Preserve owned APIs as explicit boundary
-adapters, fix cache policy overhead independently of data ownership, and migrate
-diff/merge before expanding into secondary-index and proximity consumers.
+Adopt packed retained nodes, callback-scoped borrowed views, and a reusable
+root-bound `ReadSession` as the canonical internal architecture. Preserve owned
+APIs as explicit boundary adapters, fix cache policy overhead independently of
+data ownership, and require diff/merge, secondary-index, and proximity consumers
+to compose over the same retained-handle protocol.
 
 This sequence attacks the measured point-read and range-scan bottlenecks first,
 keeps correctness and compatibility intact, and establishes a stable handle,
 codec-view, and traversal foundation for every higher-level prolly API. Packed
-nodes, unsafe SIMD, or wire-format changes remain measured later optimizations,
-not prerequisites or assumptions.
+nodes are part of that foundation. Unsafe SIMD, decoded-vector caches, metadata
+tuning, and wire-format changes remain measured, separately validated
+optimizations rather than assumptions.

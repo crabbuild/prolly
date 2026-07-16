@@ -1,6 +1,8 @@
 //! Node structure and builder for Prolly Trees
 
 use serde::{Deserialize, Serialize};
+use std::mem;
+use std::sync::Arc;
 
 use super::cid::Cid;
 use super::encoding::{Encoding, INIT_LEVEL};
@@ -25,6 +27,370 @@ pub struct Node {
     pub level: u8,
     /// Persisted settings that determine tree shape and node bytes.
     pub format: TreeFormat,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct ReadEntryMeta {
+    key_start: u32,
+    key_len: u32,
+    value_start: u32,
+    value_len: u32,
+    child_count: u64,
+    key_order: u64,
+}
+
+/// Immutable packed node used by read-only traversals.
+///
+/// Values, and keys in the plain and offset-table layouts, point directly into
+/// the retained encoded object. Prefix-compressed keys are reconstructed once
+/// into one contiguous arena instead of one allocation per key.
+#[derive(Debug)]
+pub(crate) struct ReadNode {
+    bytes: Arc<[u8]>,
+    prefix_keys: Option<Arc<[u8]>>,
+    entries: Box<[ReadEntryMeta]>,
+    common_prefix_len: u32,
+    leaf: bool,
+    level: u8,
+    format: TreeFormat,
+}
+
+impl ReadNode {
+    pub(crate) fn from_shared(bytes: Arc<[u8]>) -> Result<Self, Error> {
+        let (format, leaf, level, entries, prefix_keys) = {
+            let mut cursor = CompactCursor::new(&bytes);
+            cursor.expect_magic()?;
+            let version = cursor.read_varint()?;
+            if version != COMPACT_VERSION {
+                return Err(compact_error(format!(
+                    "unsupported compact node version {version}"
+                )));
+            }
+            let format_len = cursor.read_usize("tree format length")?;
+            let format = if format_len == 0 {
+                TreeFormat::default()
+            } else {
+                TreeFormat::from_canonical_bytes(cursor.read_bytes(format_len)?)?
+            };
+            format.validate()?;
+            let leaf = match cursor.read_varint()? {
+                0 => false,
+                1 => true,
+                other => return Err(compact_error(format!("invalid leaf flag {other}"))),
+            };
+            let level = cursor.read_u8_varint("level")?;
+            let entry_count = cursor.read_usize("entry_count")?;
+            let mut entries = Vec::with_capacity(entry_count);
+            let mut prefix_keys: Option<Arc<[u8]>> = None;
+
+            match &format.node_layout {
+                NodeLayoutSpec::PrefixCompressed => {
+                    let mut arena = Vec::<u8>::new();
+                    let mut previous_start = 0usize;
+                    let mut previous_len = 0usize;
+                    for _ in 0..entry_count {
+                        let shared = cursor.read_usize("shared key prefix length")?;
+                        if shared > previous_len {
+                            return Err(compact_error("shared key prefix exceeds previous key"));
+                        }
+                        let suffix_len = cursor.read_usize("key suffix length")?;
+                        let key_start = arena.len();
+                        if shared > 0 {
+                            arena.extend_from_within(previous_start..previous_start + shared);
+                        }
+                        arena.extend_from_slice(cursor.read_bytes(suffix_len)?);
+                        let key_len = shared
+                            .checked_add(suffix_len)
+                            .ok_or_else(|| compact_error("key length overflow"))?;
+                        let value_len = cursor.read_usize("value length")?;
+                        let value_start = cursor.position();
+                        cursor.read_bytes(value_len)?;
+                        let child_count = if leaf { 0 } else { cursor.read_varint()? };
+                        entries.push(ReadEntryMeta {
+                            key_start: compact_u32(key_start, "key offset")?,
+                            key_len: compact_u32(key_len, "key length")?,
+                            value_start: compact_u32(value_start, "value offset")?,
+                            value_len: compact_u32(value_len, "value length")?,
+                            child_count,
+                            key_order: 0,
+                        });
+                        previous_start = key_start;
+                        previous_len = key_len;
+                    }
+                    prefix_keys = Some(Arc::from(arena.into_boxed_slice()));
+                }
+                NodeLayoutSpec::Plain => {
+                    for _ in 0..entry_count {
+                        let key_len = cursor.read_usize("key length")?;
+                        let key_start = cursor.position();
+                        cursor.read_bytes(key_len)?;
+                        let value_len = cursor.read_usize("value length")?;
+                        let value_start = cursor.position();
+                        cursor.read_bytes(value_len)?;
+                        let child_count = if leaf { 0 } else { cursor.read_varint()? };
+                        entries.push(ReadEntryMeta {
+                            key_start: compact_u32(key_start, "key offset")?,
+                            key_len: compact_u32(key_len, "key length")?,
+                            value_start: compact_u32(value_start, "value offset")?,
+                            value_len: compact_u32(value_len, "value length")?,
+                            child_count,
+                            key_order: 0,
+                        });
+                    }
+                }
+                NodeLayoutSpec::OffsetTable => {
+                    let mut offsets = Vec::with_capacity(entry_count);
+                    for _ in 0..entry_count {
+                        let key_offset = cursor.read_usize("key offset")?;
+                        let key_len = cursor.read_usize("key length")?;
+                        let value_offset = cursor.read_usize("value offset")?;
+                        let value_len = cursor.read_usize("value length")?;
+                        let child_count = if leaf { 0 } else { cursor.read_varint()? };
+                        offsets.push((key_offset, key_len, value_offset, value_len, child_count));
+                    }
+                    let payload_len = cursor.read_usize("payload length")?;
+                    let payload_start = cursor.position();
+                    let payload = cursor.read_bytes(payload_len)?;
+                    for (key_offset, key_len, value_offset, value_len, child_count) in offsets {
+                        slice_payload(payload, key_offset, key_len, "key")?;
+                        slice_payload(payload, value_offset, value_len, "value")?;
+                        let key_start = payload_start
+                            .checked_add(key_offset)
+                            .ok_or_else(|| compact_error("key offset overflow"))?;
+                        let value_start = payload_start
+                            .checked_add(value_offset)
+                            .ok_or_else(|| compact_error("value offset overflow"))?;
+                        entries.push(ReadEntryMeta {
+                            key_start: compact_u32(key_start, "key offset")?,
+                            key_len: compact_u32(key_len, "key length")?,
+                            value_start: compact_u32(value_start, "value offset")?,
+                            value_len: compact_u32(value_len, "value length")?,
+                            child_count,
+                            key_order: 0,
+                        });
+                    }
+                }
+                NodeLayoutSpec::Custom { id, .. } => {
+                    return Err(Error::InvalidFormat(format!(
+                        "node layout '{id}' has no registered codec"
+                    )));
+                }
+            }
+            if !cursor.is_done() {
+                return Err(compact_error("trailing bytes in compact node"));
+            }
+            (format, leaf, level, entries, prefix_keys)
+        };
+
+        let mut entries = entries;
+        let key_source = prefix_keys.as_deref().unwrap_or(bytes.as_ref());
+        let common_prefix_len = match (entries.first(), entries.last()) {
+            (Some(first), Some(last)) => {
+                let first = read_slice(key_source, first.key_start, first.key_len)
+                    .ok_or(Error::InvalidNode)?;
+                let last = read_slice(key_source, last.key_start, last.key_len)
+                    .ok_or(Error::InvalidNode)?;
+                first
+                    .iter()
+                    .zip(last)
+                    .take_while(|(left, right)| left == right)
+                    .count()
+            }
+            _ => 0,
+        };
+        for entry in &mut entries {
+            let key =
+                read_slice(key_source, entry.key_start, entry.key_len).ok_or(Error::InvalidNode)?;
+            entry.key_order = key_order_word(key, common_prefix_len);
+        }
+
+        let node = Self {
+            bytes,
+            prefix_keys,
+            entries: entries.into_boxed_slice(),
+            common_prefix_len: compact_u32(common_prefix_len, "common key prefix length")?,
+            leaf,
+            level,
+            format,
+        };
+        node.validate()?;
+        Ok(node)
+    }
+
+    #[inline]
+    pub(crate) fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    #[inline]
+    pub(crate) fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    #[inline]
+    pub(crate) fn is_leaf(&self) -> bool {
+        self.leaf
+    }
+
+    #[inline]
+    pub(crate) fn level(&self) -> u8 {
+        self.level
+    }
+
+    #[inline]
+    pub(crate) fn format(&self) -> &TreeFormat {
+        &self.format
+    }
+
+    #[inline]
+    pub(crate) fn key(&self, index: usize) -> Option<&[u8]> {
+        let entry = self.entries.get(index)?;
+        let source = self.prefix_keys.as_deref().unwrap_or(&self.bytes);
+        read_slice(source, entry.key_start, entry.key_len)
+    }
+
+    #[inline]
+    pub(crate) fn value(&self, index: usize) -> Option<&[u8]> {
+        let entry = self.entries.get(index)?;
+        read_slice(&self.bytes, entry.value_start, entry.value_len)
+    }
+
+    #[inline]
+    pub(crate) fn child_count(&self, index: usize) -> Option<u64> {
+        (!self.leaf)
+            .then(|| self.entries.get(index).map(|entry| entry.child_count))
+            .flatten()
+    }
+
+    pub(crate) fn child_cid(&self, index: usize) -> Result<Cid, Error> {
+        let value = self.value(index).ok_or(Error::InvalidNode)?;
+        let bytes: [u8; 32] = value.try_into().map_err(|_| Error::InvalidNode)?;
+        Ok(Cid(bytes))
+    }
+
+    #[inline]
+    pub(crate) fn search(&self, key: &[u8]) -> Result<usize, usize> {
+        let source = self.prefix_keys.as_deref().unwrap_or(&self.bytes);
+        let common_prefix_len = self.common_prefix_len as usize;
+        if common_prefix_len > 0 {
+            // Every key has this prefix because the first and last sorted keys
+            // have it. A query that diverges inside it is outside the node's
+            // complete key interval and needs no entry-level comparisons.
+            let first = unsafe { self.entries.get_unchecked(0) };
+            let common = unsafe {
+                std::slice::from_raw_parts(
+                    source.as_ptr().add(first.key_start as usize),
+                    common_prefix_len,
+                )
+            };
+            let shared = key.len().min(common_prefix_len);
+            match key[..shared].cmp(&common[..shared]) {
+                std::cmp::Ordering::Less => return Err(0),
+                std::cmp::Ordering::Greater => return Err(self.len()),
+                std::cmp::Ordering::Equal if key.len() < common_prefix_len => return Err(0),
+                std::cmp::Ordering::Equal => {}
+            }
+        }
+        let query_order = key_order_word(key, common_prefix_len);
+        let mut left = 0usize;
+        let mut right = self.len();
+        while left < right {
+            let mid = left + (right - left) / 2;
+            // SAFETY: `mid < self.len()` by the binary-search invariant, and
+            // construction validated this immutable metadata range against
+            // `source` before the node was published.
+            let candidate = unsafe {
+                let entry = self.entries.get_unchecked(mid);
+                match entry.key_order.cmp(&query_order) {
+                    std::cmp::Ordering::Less => {
+                        left = mid + 1;
+                        continue;
+                    }
+                    std::cmp::Ordering::Greater => {
+                        right = mid;
+                        continue;
+                    }
+                    std::cmp::Ordering::Equal => {}
+                }
+                std::slice::from_raw_parts(
+                    source.as_ptr().add(entry.key_start as usize),
+                    entry.key_len as usize,
+                )
+            };
+            match candidate.cmp(key) {
+                std::cmp::Ordering::Less => left = mid + 1,
+                std::cmp::Ordering::Greater => right = mid,
+                std::cmp::Ordering::Equal => return Ok(mid),
+            }
+        }
+        Err(left)
+    }
+
+    pub(crate) fn to_owned(&self) -> Node {
+        Node {
+            keys: (0..self.len())
+                .map(|index| self.key(index).expect("validated read node").to_vec())
+                .collect(),
+            vals: (0..self.len())
+                .map(|index| self.value(index).expect("validated read node").to_vec())
+                .collect(),
+            child_counts: if self.leaf {
+                Vec::new()
+            } else {
+                self.entries.iter().map(|entry| entry.child_count).collect()
+            },
+            leaf: self.leaf,
+            level: self.level,
+            format: self.format.clone(),
+        }
+    }
+
+    pub(crate) fn retained_bytes(&self) -> usize {
+        self.bytes
+            .len()
+            .saturating_add(self.prefix_keys.as_ref().map_or(0, |keys| keys.len()))
+            .saturating_add(
+                self.entries
+                    .len()
+                    .saturating_mul(mem::size_of::<ReadEntryMeta>()),
+            )
+    }
+
+    fn validate(&self) -> Result<(), Error> {
+        if !self.leaf && self.entries.is_empty() {
+            return Err(Error::InvalidNode);
+        }
+        let mut previous: Option<&[u8]> = None;
+        for index in 0..self.len() {
+            let key = self.key(index).ok_or(Error::InvalidNode)?;
+            self.value(index).ok_or(Error::InvalidNode)?;
+            if previous.is_some_and(|previous| previous >= key) {
+                return Err(Error::InvalidNode);
+            }
+            previous = Some(key);
+        }
+        Ok(())
+    }
+}
+
+#[inline]
+fn key_order_word(key: &[u8], prefix_len: usize) -> u64 {
+    let suffix = key.get(prefix_len..).unwrap_or_default();
+    let mut word = [0u8; 8];
+    let copied = suffix.len().min(word.len());
+    word[..copied].copy_from_slice(&suffix[..copied]);
+    u64::from_be_bytes(word)
+}
+
+fn compact_u32(value: usize, field: &str) -> Result<u32, Error> {
+    u32::try_from(value).map_err(|_| compact_error(format!("{field} exceeds u32")))
+}
+
+#[inline]
+fn read_slice(bytes: &[u8], start: u32, len: u32) -> Option<&[u8]> {
+    let start = start as usize;
+    let end = start.checked_add(len as usize)?;
+    bytes.get(start..end)
 }
 
 impl Default for Node {
@@ -526,6 +892,11 @@ impl<'a> CompactCursor<'a> {
     fn is_done(&self) -> bool {
         self.pos == self.data.len()
     }
+
+    #[inline]
+    fn position(&self) -> usize {
+        self.pos
+    }
 }
 
 /// Builder pattern for Node construction
@@ -724,6 +1095,104 @@ mod tests {
         assert!(bytes.starts_with(COMPACT_MAGIC));
         let restored = Node::from_bytes(&bytes).unwrap();
         assert_eq!(node, restored);
+    }
+
+    #[test]
+    fn packed_read_node_matches_owned_node_for_every_builtin_layout() {
+        for layout in [
+            NodeLayoutSpec::PrefixCompressed,
+            NodeLayoutSpec::Plain,
+            NodeLayoutSpec::OffsetTable,
+        ] {
+            let format = TreeFormat {
+                node_layout: layout.clone(),
+                ..TreeFormat::default()
+            };
+            let node = Node::builder()
+                .keys(vec![
+                    b"alpha/0001".to_vec(),
+                    b"alpha/0002".to_vec(),
+                    b"beta/0003".to_vec(),
+                ])
+                .vals(vec![b"one".to_vec(), b"two".to_vec(), b"three".to_vec()])
+                .leaf(true)
+                .tree_format(format)
+                .build();
+            let bytes = Arc::<[u8]>::from(node.to_bytes());
+            let packed = ReadNode::from_shared(bytes)
+                .unwrap_or_else(|error| panic!("packed {layout:?} failed: {error}"));
+
+            assert_eq!(packed.to_owned(), node);
+            assert_eq!(packed.search(b"alpha/0002"), Ok(1));
+            assert_eq!(packed.search(b"alpha/0003"), Err(2));
+            assert!(packed.retained_bytes() >= node.to_bytes().len());
+        }
+    }
+
+    #[test]
+    fn packed_search_accelerator_preserves_full_byte_order() {
+        let keys = vec![
+            b"shared-prefix-00000000".to_vec(),
+            b"shared-prefix-00000000\0".to_vec(),
+            b"shared-prefix-00000000x".to_vec(),
+            b"shared-prefix-00000001".to_vec(),
+            b"shared-prefix-99999999".to_vec(),
+        ];
+        let queries: &[&[u8]] = &[
+            b"before-prefix",
+            b"shared",
+            b"shared-prefix-00000000",
+            b"shared-prefix-00000000\0",
+            b"shared-prefix-00000000a",
+            b"shared-prefix-00000001",
+            b"shared-prefix-50000000",
+            b"z-after-prefix",
+        ];
+
+        for layout in [
+            NodeLayoutSpec::PrefixCompressed,
+            NodeLayoutSpec::Plain,
+            NodeLayoutSpec::OffsetTable,
+        ] {
+            let node = Node::builder()
+                .keys(keys.clone())
+                .vals(vec![Vec::new(); keys.len()])
+                .tree_format(TreeFormat {
+                    node_layout: layout,
+                    ..TreeFormat::default()
+                })
+                .build();
+            let packed = ReadNode::from_shared(Arc::from(node.to_bytes())).unwrap();
+            for query in queries {
+                assert_eq!(packed.search(query), node.search(query), "query={query:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn packed_read_node_rejects_structural_corruption() {
+        let node = Node::builder()
+            .keys(vec![b"a".to_vec(), b"b".to_vec()])
+            .vals(vec![b"1".to_vec(), b"2".to_vec()])
+            .build();
+        let mut trailing = node.to_bytes();
+        trailing.push(0);
+        assert!(ReadNode::from_shared(Arc::from(trailing)).is_err());
+
+        let unsorted = Node::builder()
+            .keys(vec![b"b".to_vec(), b"a".to_vec()])
+            .vals(vec![b"1".to_vec(), b"2".to_vec()])
+            .build();
+        assert!(ReadNode::from_shared(Arc::from(unsorted.to_bytes())).is_err());
+
+        let invalid_internal = Node::builder()
+            .keys(Vec::new())
+            .vals(Vec::new())
+            .child_counts(Vec::new())
+            .leaf(false)
+            .level(1)
+            .build();
+        assert!(ReadNode::from_shared(Arc::from(invalid_internal.to_bytes())).is_err());
     }
 
     #[test]

@@ -1,6 +1,7 @@
 use super::{
-    adaptive_should_stop, engine::insert_top_k, AdaptiveContext, FrontierEntry, PreparedFilter,
-    SearchCandidate, SearchRequest,
+    adaptive_should_stop, engine::insert_top_k, insert_reranked_top_k, retained_candidate_bytes,
+    retained_search_candidate_bytes, AdaptiveContext, FrontierEntry, PreparedFilter,
+    RerankCandidate, SearchCandidate, SearchRequest,
 };
 use crate::prolly::cid::Cid;
 use crate::prolly::error::Error;
@@ -13,9 +14,7 @@ use crate::prolly::proximity::accelerator::{
 use crate::prolly::proximity::distance::{prepare_vector, query_score};
 use crate::prolly::proximity::storage::quantized::ScalarQuantized;
 use crate::prolly::proximity::storage::vector::ExternalVector;
-use crate::prolly::proximity::storage::{
-    Descriptor, PhysicalNodeKind, ProximityNode, StoredRecord, VectorRef,
-};
+use crate::prolly::proximity::storage::{Descriptor, PhysicalNodeKind, ProximityNode, VectorRef};
 use crate::prolly::proximity::{
     DistanceMetric, Neighbor, ProximitySearchStats, ProximityTree, SearchBackend, SearchCompletion,
     SearchPolicy, SearchResult,
@@ -181,7 +180,9 @@ where
         } else {
             SearchCompletion::Exact
         };
-        let mut ranked = Vec::<(Vec<u8>, Vec<u8>, f64)>::with_capacity(limit);
+        let mut ranked = Vec::<RerankCandidate>::with_capacity(limit);
+        let mut vector_scratch = vec![0.0f32; self.tree.config.dimensions as usize];
+        let mut directory = self.directory.read(&self.tree.directory).await?;
         for key in keys {
             if let Some(stopped) = stop_reason(control) {
                 completion = stopped;
@@ -191,7 +192,7 @@ where
                 completion = SearchCompletion::BudgetExhausted;
                 break;
             }
-            let Some(bytes) = self.directory.get(&self.tree.directory, key).await? else {
+            let Some(handle) = directory.get_handle(key).await? else {
                 if *source_bound {
                     return Err(Error::InvalidProximityObject {
                         kind: "eligible keys",
@@ -200,35 +201,46 @@ where
                 }
                 continue;
             };
+            let bytes = handle.value()?.len();
             if request
                 .budget
                 .max_committed_bytes
-                .is_some_and(|maximum| stats.committed_bytes.saturating_add(bytes.len()) > maximum)
+                .is_some_and(|maximum| stats.committed_bytes.saturating_add(bytes) > maximum)
             {
                 completion = SearchCompletion::BudgetExhausted;
                 break;
-            }
-            let record = StoredRecord::decode(&bytes, self.tree.config.dimensions)?;
-            stats.nodes_read += 1;
-            stats.bytes_read += bytes.len();
-            stats.committed_bytes += bytes.len();
-            stats.distance_evaluations += 1;
+            };
+            let record = crate::prolly::proximity::storage::StoredRecordRef::decode(
+                handle.value()?,
+                self.tree.config.dimensions,
+            )?;
+            crate::prolly::proximity::ProximityVectorRef::from_encoded(record.vector)
+                .copy_to_slice(&mut vector_scratch)?;
             let distance = query_score(
                 request.kernel,
                 self.tree.config.metric,
                 &query,
-                &record.vector,
+                &vector_scratch,
             );
-            insert_ranked(&mut ranked, (key.clone(), record.value, distance), limit);
+            insert_reranked_top_k(
+                &mut ranked,
+                RerankCandidate::new(handle, key, distance)?,
+                limit,
+            );
+            stats.nodes_read += 1;
+            stats.bytes_read += bytes;
+            stats.committed_bytes += bytes;
+            stats.distance_evaluations += 1;
+            stats.candidate_handles_peak = stats.candidate_handles_peak.max(ranked.len());
+            stats.candidate_retained_bytes_peak = stats
+                .candidate_retained_bytes_peak
+                .max(retained_candidate_bytes(&ranked));
         }
+        stats.reranked_candidates = stats.distance_evaluations;
         let neighbors = ranked
             .into_iter()
-            .map(|(key, value, distance)| Neighbor {
-                key,
-                value,
-                distance,
-            })
-            .collect();
+            .map(|candidate| candidate.into_neighbor(self.tree.config.dimensions))
+            .collect::<Result<Vec<_>, Error>>()?;
         Ok(SearchResult {
             neighbors,
             stats,
@@ -465,6 +477,7 @@ where
                 }
                 entry.vector = VectorRef::Inline(external.vector);
             }
+            let node = Arc::new(node);
             let quantizer = if use_scalar_quantization && node.kind.has_children(node.level) {
                 let config = self
                     .tree
@@ -616,11 +629,7 @@ where
                     };
                     insert_top_k(
                         &mut candidates,
-                        SearchCandidate {
-                            key: entry.key.clone(),
-                            vector: entry.vector.inline()?.to_vec(),
-                            score: leaf_score,
-                        },
+                        SearchCandidate::new(node.clone(), entry_index, leaf_score),
                         request.k,
                     );
                 }
@@ -633,26 +642,35 @@ where
         if use_scalar_quantization {
             stats.reranked_candidates = candidates.len();
         }
+        stats.candidate_handles_peak = stats.candidate_handles_peak.max(candidates.len());
+        stats.candidate_retained_bytes_peak = stats
+            .candidate_retained_bytes_peak
+            .max(retained_search_candidate_bytes(&candidates));
         let mut neighbors = Vec::with_capacity(candidates.len());
+        let mut directory_session = self.directory.read(&self.tree.directory).await?;
         for candidate in candidates {
-            let bytes = self
-                .directory
-                .get(&self.tree.directory, &candidate.key)
-                .await?
-                .ok_or_else(|| Error::InvalidProximityObject {
+            // This is the final owned result key; no borrowed candidate slice
+            // crosses the directory await.
+            let key = candidate.key()?.to_vec();
+            let handle = directory_session.get_handle(&key).await?.ok_or_else(|| {
+                Error::InvalidProximityObject {
                     kind: "node",
                     reason: "leaf key is absent from exact directory".to_owned(),
-                })?;
-            let record = StoredRecord::decode(&bytes, self.tree.config.dimensions)?;
-            if record.vector != candidate.vector {
+                }
+            })?;
+            let record = crate::prolly::proximity::storage::StoredRecordRef::decode(
+                handle.value()?,
+                self.tree.config.dimensions,
+            )?;
+            if !super::super::map::encoded_vector_matches(record.vector, candidate.vector()?) {
                 return Err(Error::InvalidProximityObject {
                     kind: "node",
                     reason: "leaf vector disagrees with exact directory".to_owned(),
                 });
             }
             neighbors.push(Neighbor {
-                key: candidate.key,
-                value: record.value,
+                key,
+                value: record.value.to_vec(),
                 distance: candidate.score,
             });
         }
@@ -794,26 +812,6 @@ fn budget_stops_record(
             .is_some_and(|limit| stats.committed_bytes.saturating_add(bytes) > limit)
 }
 
-fn insert_ranked(
-    ranked: &mut Vec<(Vec<u8>, Vec<u8>, f64)>,
-    value: (Vec<u8>, Vec<u8>, f64),
-    limit: usize,
-) {
-    if limit == 0 {
-        return;
-    }
-    let index = ranked
-        .binary_search_by(|candidate| {
-            candidate
-                .2
-                .total_cmp(&value.2)
-                .then_with(|| candidate.0.cmp(&value.0))
-        })
-        .unwrap_or_else(|index| index);
-    ranked.insert(index, value);
-    ranked.truncate(limit);
-}
-
 #[derive(Clone, Debug)]
 struct AsyncRanked {
     distance: f64,
@@ -938,7 +936,9 @@ where
     }
     let mut approximate = approximate.into_vec();
     approximate.sort();
-    let mut reranked = Vec::with_capacity(approximate.len());
+    let mut reranked = Vec::<RerankCandidate>::with_capacity(approximate.len());
+    let mut vector_scratch = vec![0.0f32; tree.config.dimensions as usize];
+    let mut directory_session = directory.read(&tree.directory).await?;
     for candidate in approximate {
         if let Some(stopped) = stop_reason(control) {
             completion = stopped;
@@ -948,47 +948,47 @@ where
             completion = SearchCompletion::BudgetExhausted;
             break;
         }
-        let bytes = directory
-            .get(&tree.directory, &candidate.key)
-            .await?
-            .ok_or_else(|| Error::InvalidProximityObject {
+        let Some(handle) = directory_session.get_handle(&candidate.key).await? else {
+            return Err(Error::InvalidProximityObject {
                 kind: "product quantizer",
                 reason: "PQ code key is absent from authoritative directory".to_owned(),
-            })?;
+            });
+        };
+        let bytes = handle.value()?.len();
         if request
             .budget
             .max_committed_bytes
-            .is_some_and(|limit| stats.committed_bytes.saturating_add(bytes.len()) > limit)
+            .is_some_and(|limit| stats.committed_bytes.saturating_add(bytes) > limit)
         {
             completion = SearchCompletion::BudgetExhausted;
             break;
         }
-        let record = StoredRecord::decode(&bytes, tree.config.dimensions)?;
+        let record = crate::prolly::proximity::storage::StoredRecordRef::decode(
+            handle.value()?,
+            tree.config.dimensions,
+        )?;
+        crate::prolly::proximity::ProximityVectorRef::from_encoded(record.vector)
+            .copy_to_slice(&mut vector_scratch)?;
+        let distance = query_score(request.kernel, index.metric, &query, &vector_scratch);
         stats.nodes_read += 1;
-        stats.bytes_read += bytes.len();
-        stats.committed_bytes += bytes.len();
+        stats.bytes_read += bytes;
+        stats.committed_bytes += bytes;
         stats.distance_evaluations += 1;
-        reranked.push((
-            candidate.key,
-            record.value,
-            query_score(request.kernel, index.metric, &query, &record.vector),
-        ));
+        reranked.push(RerankCandidate::new(handle, &candidate.key, distance)?);
     }
     stats.reranked_candidates = reranked.len();
+    stats.candidate_handles_peak = reranked.len();
+    stats.candidate_retained_bytes_peak = retained_candidate_bytes(&reranked);
     reranked.sort_by(|left, right| {
-        left.2
-            .total_cmp(&right.2)
-            .then_with(|| left.0.cmp(&right.0))
+        left.distance
+            .total_cmp(&right.distance)
+            .then_with(|| left.key().cmp(right.key()))
     });
     let neighbors = reranked
         .into_iter()
         .take(request.k)
-        .map(|(key, value, distance)| Neighbor {
-            key,
-            value,
-            distance,
-        })
-        .collect();
+        .map(|candidate| candidate.into_neighbor(tree.config.dimensions))
+        .collect::<Result<Vec<_>, Error>>()?;
     Ok(SearchResult {
         neighbors,
         stats,
@@ -1173,9 +1173,30 @@ where
     add_async_stats(&mut stats, &base_result.stats);
     let mut completion = base_result.completion;
     let query = prepare_vector(tree.config.metric, request.query, tree.config.dimensions)?;
-    let mut merged = BTreeMap::<Vec<u8>, Neighbor>::new();
+    enum CompositeValue {
+        Owned { value: Vec<u8>, distance: f64 },
+        Retained(RerankCandidate),
+    }
+    impl CompositeValue {
+        fn distance(&self) -> f64 {
+            match self {
+                Self::Owned { distance, .. } => *distance,
+                Self::Retained(candidate) => candidate.distance,
+            }
+        }
+    }
+    let mut merged = BTreeMap::<Vec<u8>, CompositeValue>::new();
     for neighbor in base_result.neighbors.drain(..) {
-        if merged.insert(neighbor.key.clone(), neighbor).is_some() {
+        if merged
+            .insert(
+                neighbor.key,
+                CompositeValue::Owned {
+                    value: neighbor.value,
+                    distance: neighbor.distance,
+                },
+            )
+            .is_some()
+        {
             return Err(Error::InvalidProximityObject {
                 kind: "composite base",
                 reason: "base executor returned a duplicate key".to_owned(),
@@ -1186,6 +1207,10 @@ where
     let mut delta_range = delta_manager
         .range(&composite.delta_tree, &[], None)
         .await?;
+    let mut directory_session = directory.read(&tree.directory).await?;
+    let mut vector_scratch = vec![0.0f32; tree.config.dimensions as usize];
+    let mut retained_backings = HashSet::new();
+    let mut retained_bytes = 0usize;
     while let Some(entry) = delta_range.next().await {
         if let Some(stopped) = stop_reason(control) {
             completion = stopped;
@@ -1205,7 +1230,15 @@ where
             completion = SearchCompletion::BudgetExhausted;
             break;
         }
-        let record = StoredRecord::decode(&bytes, tree.config.dimensions)?;
+        let distance = {
+            let record = crate::prolly::proximity::storage::StoredRecordRef::decode(
+                &bytes,
+                tree.config.dimensions,
+            )?;
+            crate::prolly::proximity::ProximityVectorRef::from_encoded(record.vector)
+                .copy_to_slice(&mut vector_scratch)?;
+            query_score(request.kernel, tree.config.metric, &query, &vector_scratch)
+        };
         stats.nodes_read += 1;
         stats.bytes_read += bytes.len();
         stats.committed_bytes += bytes.len();
@@ -1230,49 +1263,56 @@ where
             completion = SearchCompletion::BudgetExhausted;
             break;
         }
-        let authoritative_bytes = directory.get(&tree.directory, &key).await?.ok_or_else(|| {
-            Error::InvalidProximityObject {
+        let Some(handle) = directory_session.get_handle(&key).await? else {
+            return Err(Error::InvalidProximityObject {
                 kind: "composite delta",
                 reason: "delta key is absent from current source".to_owned(),
-            }
-        })?;
-        if request.budget.max_committed_bytes.is_some_and(|limit| {
-            stats
-                .committed_bytes
-                .saturating_add(authoritative_bytes.len())
-                > limit
-        }) {
+            });
+        };
+        let authoritative_bytes = handle.value()?.len();
+        if request
+            .budget
+            .max_committed_bytes
+            .is_some_and(|limit| stats.committed_bytes.saturating_add(authoritative_bytes) > limit)
+        {
             completion = SearchCompletion::BudgetExhausted;
             break;
         }
-        let authoritative = StoredRecord::decode(&authoritative_bytes, tree.config.dimensions)?;
-        if record.vector != authoritative.vector {
+        let authoritative = crate::prolly::proximity::storage::StoredRecordRef::decode(
+            handle.value()?,
+            tree.config.dimensions,
+        )?;
+        let delta = crate::prolly::proximity::storage::StoredRecordRef::decode(
+            &bytes,
+            tree.config.dimensions,
+        )?;
+        if !super::super::map::encoded_vectors_equal(authoritative.vector, delta.vector) {
             return Err(Error::InvalidProximityObject {
                 kind: "composite delta",
                 reason: "delta vector disagrees with current source".to_owned(),
             });
         }
         stats.nodes_read += 1;
-        stats.bytes_read += authoritative_bytes.len();
-        stats.committed_bytes += authoritative_bytes.len();
+        stats.bytes_read += authoritative_bytes;
+        stats.committed_bytes += authoritative_bytes;
         stats.distance_evaluations += 1;
         stats.reranked_candidates += 1;
-        let neighbor = Neighbor {
-            key: key.clone(),
-            value: authoritative.value,
-            distance: query_score(
-                request.kernel,
-                tree.config.metric,
-                &query,
-                &authoritative.vector,
-            ),
-        };
-        if merged.insert(key, neighbor).is_some() {
+        let candidate = RerankCandidate::new(handle, &key, distance)?;
+        if retained_backings.insert(candidate.backing_id()) {
+            retained_bytes = retained_bytes.saturating_add(candidate.retained_bytes());
+        }
+        if merged
+            .insert(key, CompositeValue::Retained(candidate))
+            .is_some()
+        {
             return Err(Error::InvalidProximityObject {
                 kind: "composite accelerator",
                 reason: "delta key was not shadowed from base".to_owned(),
             });
         }
+        stats.candidate_handles_peak = stats.candidate_handles_peak.max(retained_backings.len());
+        stats.candidate_retained_bytes_peak =
+            stats.candidate_retained_bytes_peak.max(retained_bytes);
     }
     if completion != SearchCompletion::BudgetExhausted
         && completion != SearchCompletion::Cancelled
@@ -1284,13 +1324,31 @@ where
             reason: "delta cardinality disagrees with manifest".to_owned(),
         });
     }
-    let mut neighbors = merged.into_values().collect::<Vec<_>>();
-    neighbors.sort_by(|left, right| {
-        left.distance
-            .total_cmp(&right.distance)
-            .then_with(|| left.key.cmp(&right.key))
+    let mut candidates = merged.into_iter().collect::<Vec<_>>();
+    candidates.sort_by(|(left_key, left), (right_key, right)| {
+        left.distance()
+            .total_cmp(&right.distance())
+            .then_with(|| left_key.cmp(right_key))
     });
-    neighbors.truncate((*merge_target).min(request.k));
+    candidates.truncate((*merge_target).min(request.k));
+    let neighbors = candidates
+        .into_iter()
+        .map(|(key, candidate)| match candidate {
+            CompositeValue::Owned { value, distance } => Ok(Neighbor {
+                key,
+                value,
+                distance,
+            }),
+            CompositeValue::Retained(candidate) => {
+                let record = candidate.record(tree.config.dimensions)?;
+                Ok(Neighbor {
+                    key,
+                    value: record.value.to_vec(),
+                    distance: candidate.distance,
+                })
+            }
+        })
+        .collect::<Result<Vec<_>, Error>>()?;
     Ok(SearchResult {
         neighbors,
         stats,
@@ -1334,6 +1392,12 @@ fn add_async_stats(total: &mut ProximitySearchStats, added: &ProximitySearchStat
         .reranked_candidates
         .saturating_add(added.reranked_candidates);
     total.frontier_peak = total.frontier_peak.max(added.frontier_peak);
+    total.candidate_handles_peak = total
+        .candidate_handles_peak
+        .max(added.candidate_handles_peak);
+    total.candidate_retained_bytes_peak = total
+        .candidate_retained_bytes_peak
+        .max(added.candidate_retained_bytes_peak);
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1496,11 +1560,10 @@ where
     }
     let mut candidates = eligible.into_vec();
     candidates.sort();
-    let mut neighbors = Vec::with_capacity(request.k.min(candidates.len()));
+    let mut reranked = Vec::<RerankCandidate>::with_capacity(candidates.len());
+    let mut vector_scratch = vec![0.0f32; tree.config.dimensions as usize];
+    let mut directory_session = directory.read(&tree.directory).await?;
     for candidate in candidates {
-        if neighbors.len() == request.k {
-            break;
-        }
         if let Some(stopped) = stop_reason(control) {
             state.completion = stopped;
             break;
@@ -1509,41 +1572,49 @@ where
             state.completion = SearchCompletion::BudgetExhausted;
             break;
         }
-        let bytes = directory
-            .get(&tree.directory, &candidate.key)
-            .await?
-            .ok_or_else(|| Error::InvalidProximityObject {
+        let Some(handle) = directory_session.get_handle(&candidate.key).await? else {
+            return Err(Error::InvalidProximityObject {
                 kind: "HNSW",
                 reason: "result key is absent from authoritative directory".to_owned(),
-            })?;
+            });
+        };
+        let bytes = handle.value()?.len();
         if request
             .budget
             .max_committed_bytes
-            .is_some_and(|limit| state.stats.committed_bytes.saturating_add(bytes.len()) > limit)
+            .is_some_and(|limit| state.stats.committed_bytes.saturating_add(bytes) > limit)
         {
             state.completion = SearchCompletion::BudgetExhausted;
             break;
         }
-        let record = StoredRecord::decode(&bytes, tree.config.dimensions)?;
-        state.stats.nodes_read += 1;
-        state.stats.bytes_read += bytes.len();
-        state.stats.committed_bytes += bytes.len();
-        let Some(distance) = state.distance(&query, &record.vector) else {
+        let record = crate::prolly::proximity::storage::StoredRecordRef::decode(
+            handle.value()?,
+            tree.config.dimensions,
+        )?;
+        crate::prolly::proximity::ProximityVectorRef::from_encoded(record.vector)
+            .copy_to_slice(&mut vector_scratch)?;
+        let Some(distance) = state.distance(&query, &vector_scratch) else {
+            state.completion = SearchCompletion::BudgetExhausted;
             break;
         };
+        state.stats.nodes_read += 1;
+        state.stats.bytes_read += bytes;
+        state.stats.committed_bytes += bytes;
         state.stats.reranked_candidates += 1;
-        neighbors.push(Neighbor {
-            key: candidate.key,
-            value: record.value,
-            distance,
-        });
+        reranked.push(RerankCandidate::new(handle, &candidate.key, distance)?);
     }
-    neighbors.sort_by(|left, right| {
+    state.stats.candidate_handles_peak = reranked.len();
+    state.stats.candidate_retained_bytes_peak = retained_candidate_bytes(&reranked);
+    reranked.sort_by(|left, right| {
         left.distance
             .total_cmp(&right.distance)
-            .then_with(|| left.key.cmp(&right.key))
+            .then_with(|| left.key().cmp(right.key()))
     });
-    neighbors.truncate(request.k);
+    let neighbors = reranked
+        .into_iter()
+        .take(request.k)
+        .map(|candidate| candidate.into_neighbor(tree.config.dimensions))
+        .collect::<Result<Vec<_>, Error>>()?;
     Ok(SearchResult {
         neighbors,
         stats: state.stats,

@@ -147,6 +147,11 @@ fn product_quantization_is_thread_identical_source_bound_and_full_precision_rera
     let result = loaded.search(&map, request).unwrap();
     assert!(result.stats.quantized_distance_evaluations > 0);
     assert_eq!(result.stats.reranked_candidates, 100);
+    assert_eq!(
+        result.stats.candidate_handles_peak,
+        result.stats.reranked_candidates
+    );
+    assert!(result.stats.candidate_retained_bytes_peak > 0);
     assert_eq!(result.neighbors.len(), exact.neighbors.len());
     for (expected, actual) in exact.neighbors.iter().zip(&result.neighbors) {
         assert_eq!(expected.key, actual.key);

@@ -206,6 +206,14 @@ fn async_scalar_quantized_routing_matches_sync_order_and_reranking() {
             actual.stats.reranked_candidates,
             expected.stats.reranked_candidates
         );
+        assert_eq!(
+            actual.stats.candidate_handles_peak,
+            expected.stats.candidate_handles_peak
+        );
+        assert_eq!(
+            actual.stats.candidate_retained_bytes_peak,
+            expected.stats.candidate_retained_bytes_peak
+        );
         assert_eq!(actual.stats.committed_bytes, expected.stats.committed_bytes);
     });
 }
@@ -319,6 +327,14 @@ fn async_only_hnsw_and_pq_use_the_sync_plan_and_logical_execution() {
             assert_eq!(
                 actual.stats.quantized_distance_evaluations,
                 expected.stats.quantized_distance_evaluations
+            );
+            assert_eq!(
+                actual.stats.candidate_handles_peak,
+                expected.stats.candidate_handles_peak
+            );
+            assert_eq!(
+                actual.stats.candidate_retained_bytes_peak,
+                expected.stats.candidate_retained_bytes_peak
             );
             assert_eq!(actual.stats.committed_bytes, expected.stats.committed_bytes);
         }

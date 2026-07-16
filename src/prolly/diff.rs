@@ -120,7 +120,7 @@ use serde::{Deserialize, Serialize};
 use super::batch::{get_max_key, BatchWriteCollector};
 use super::cid::Cid;
 use super::error::{Conflict, Diff, Error, Mutation, Resolution, Resolver};
-use super::node::Node;
+use super::node::{Node, ReadNode};
 use super::range::RangeCursor;
 use super::read::{BorrowedMergeResolver, ConflictRef, DiffRef, MergeDecision, ScanOutcome};
 #[cfg(feature = "async-store")]
@@ -965,11 +965,11 @@ pub(crate) fn stream_diff<'a, S: Store>(
 /// materializes complete subtree entries.
 struct BorrowedSubtreeCursor<'a, S: Store> {
     prolly: &'a Prolly<S>,
-    stack: Vec<(Arc<Node>, usize)>,
+    stack: Vec<(Arc<ReadNode>, usize)>,
 }
 
 impl<'a, S: Store> BorrowedSubtreeCursor<'a, S> {
-    fn new(prolly: &'a Prolly<S>, root: Arc<Node>) -> Result<Self, Error> {
+    fn new(prolly: &'a Prolly<S>, root: Arc<ReadNode>) -> Result<Self, Error> {
         let mut cursor = Self {
             prolly,
             stack: Vec::new(),
@@ -978,20 +978,47 @@ impl<'a, S: Store> BorrowedSubtreeCursor<'a, S> {
         Ok(cursor)
     }
 
+    fn new_at(prolly: &'a Prolly<S>, mut node: Arc<ReadNode>, start: &[u8]) -> Result<Self, Error> {
+        let mut stack = Vec::new();
+        loop {
+            if node.is_leaf() {
+                let index = match node.search(start) {
+                    Ok(index) | Err(index) => index,
+                };
+                let at_end = index >= node.len();
+                stack.push((node, index));
+                let mut cursor = Self { prolly, stack };
+                if at_end {
+                    cursor.advance()?;
+                }
+                return Ok(cursor);
+            }
+            if node.is_empty() {
+                return Err(Error::InvalidNode);
+            }
+            let index = match node.search(start) {
+                Ok(index) => index,
+                Err(index) => index.saturating_sub(1),
+            };
+            let child = prolly.load_read_arc(&node.child_cid(index)?)?;
+            stack.push((node, index));
+            node = child;
+        }
+    }
+
     fn current(&self) -> Result<Option<BorrowedEntry<'_>>, Error> {
         let Some((node, index)) = self.stack.last() else {
             return Ok(None);
         };
-        ensure_node_value_count(node)?;
-        if !node.leaf {
+        if !node.is_leaf() {
             return Err(Error::InvalidNode);
         }
         if *index >= node.len() {
             return Ok(None);
         }
         Ok(Some((
-            node.keys.get(*index).ok_or(Error::InvalidNode)?,
-            node_value(node, *index)?,
+            node.key(*index).ok_or(Error::InvalidNode)?,
+            node.value(*index).ok_or(Error::InvalidNode)?,
         )))
     }
 
@@ -999,8 +1026,7 @@ impl<'a, S: Store> BorrowedSubtreeCursor<'a, S> {
         let Some((leaf, index)) = self.stack.last_mut() else {
             return Ok(false);
         };
-        ensure_node_value_count(leaf)?;
-        if !leaf.leaf {
+        if !leaf.is_leaf() {
             return Err(Error::InvalidNode);
         }
         *index += 1;
@@ -1010,8 +1036,7 @@ impl<'a, S: Store> BorrowedSubtreeCursor<'a, S> {
 
         self.stack.pop();
         while let Some((parent, index)) = self.stack.last_mut() {
-            ensure_node_value_count(parent)?;
-            if parent.leaf {
+            if parent.is_leaf() {
                 return Err(Error::InvalidNode);
             }
             *index += 1;
@@ -1019,19 +1044,16 @@ impl<'a, S: Store> BorrowedSubtreeCursor<'a, S> {
                 self.stack.pop();
                 continue;
             }
-            let child = self
-                .prolly
-                .load_arc(&child_cid_validated(parent, *index)?)?;
+            let child = self.prolly.load_read_arc(&parent.child_cid(*index)?)?;
             self.descend_leftmost(child)?;
             return Ok(true);
         }
         Ok(false)
     }
 
-    fn descend_leftmost(&mut self, mut node: Arc<Node>) -> Result<(), Error> {
+    fn descend_leftmost(&mut self, mut node: Arc<ReadNode>) -> Result<(), Error> {
         loop {
-            ensure_node_value_count(&node)?;
-            if node.leaf {
+            if node.is_leaf() {
                 if !node.is_empty() {
                     self.stack.push((node, 0));
                 }
@@ -1040,7 +1062,7 @@ impl<'a, S: Store> BorrowedSubtreeCursor<'a, S> {
             if node.is_empty() {
                 return Err(Error::InvalidNode);
             }
-            let child = self.prolly.load_arc(&child_cid_validated(&node, 0)?)?;
+            let child = self.prolly.load_read_arc(&node.child_cid(0)?)?;
             self.stack.push((node, 0));
             node = child;
         }
@@ -1050,7 +1072,7 @@ impl<'a, S: Store> BorrowedSubtreeCursor<'a, S> {
 #[cfg(feature = "async-store")]
 struct AsyncBorrowedSubtreeCursor<'a, S: AsyncStore> {
     prolly: &'a AsyncProlly<S>,
-    stack: Vec<(Arc<Node>, usize)>,
+    stack: Vec<(Arc<ReadNode>, usize)>,
 }
 
 #[cfg(feature = "async-store")]
@@ -1059,7 +1081,7 @@ where
     S: AsyncStore,
     S::Error: Send + Sync,
 {
-    async fn new(prolly: &'a AsyncProlly<S>, root: Arc<Node>) -> Result<Self, Error> {
+    async fn new(prolly: &'a AsyncProlly<S>, root: Arc<ReadNode>) -> Result<Self, Error> {
         let mut cursor = Self {
             prolly,
             stack: Vec::new(),
@@ -1068,20 +1090,51 @@ where
         Ok(cursor)
     }
 
+    async fn new_at(
+        prolly: &'a AsyncProlly<S>,
+        mut node: Arc<ReadNode>,
+        start: &[u8],
+    ) -> Result<Self, Error> {
+        let mut stack = Vec::new();
+        loop {
+            if node.is_leaf() {
+                let index = match node.search(start) {
+                    Ok(index) | Err(index) => index,
+                };
+                let at_end = index >= node.len();
+                stack.push((node, index));
+                let mut cursor = Self { prolly, stack };
+                if at_end {
+                    cursor.advance().await?;
+                }
+                return Ok(cursor);
+            }
+            if node.is_empty() {
+                return Err(Error::InvalidNode);
+            }
+            let index = match node.search(start) {
+                Ok(index) => index,
+                Err(index) => index.saturating_sub(1),
+            };
+            let child = prolly.load_read_arc(&node.child_cid(index)?).await?;
+            stack.push((node, index));
+            node = child;
+        }
+    }
+
     fn current(&self) -> Result<Option<BorrowedEntry<'_>>, Error> {
         let Some((node, index)) = self.stack.last() else {
             return Ok(None);
         };
-        ensure_node_value_count(node)?;
-        if !node.leaf {
+        if !node.is_leaf() {
             return Err(Error::InvalidNode);
         }
         if *index >= node.len() {
             return Ok(None);
         }
         Ok(Some((
-            node.keys.get(*index).ok_or(Error::InvalidNode)?,
-            node_value(node, *index)?,
+            node.key(*index).ok_or(Error::InvalidNode)?,
+            node.value(*index).ok_or(Error::InvalidNode)?,
         )))
     }
 
@@ -1089,8 +1142,7 @@ where
         let Some((leaf, index)) = self.stack.last_mut() else {
             return Ok(false);
         };
-        ensure_node_value_count(leaf)?;
-        if !leaf.leaf {
+        if !leaf.is_leaf() {
             return Err(Error::InvalidNode);
         }
         *index += 1;
@@ -1100,8 +1152,7 @@ where
 
         self.stack.pop();
         while let Some((parent, index)) = self.stack.last_mut() {
-            ensure_node_value_count(parent)?;
-            if parent.leaf {
+            if parent.is_leaf() {
                 return Err(Error::InvalidNode);
             }
             *index += 1;
@@ -1111,7 +1162,7 @@ where
             }
             let child = self
                 .prolly
-                .load_arc(&child_cid_validated(parent, *index)?)
+                .load_read_arc(&parent.child_cid(*index)?)
                 .await?;
             self.descend_leftmost(child).await?;
             return Ok(true);
@@ -1119,10 +1170,9 @@ where
         Ok(false)
     }
 
-    async fn descend_leftmost(&mut self, mut node: Arc<Node>) -> Result<(), Error> {
+    async fn descend_leftmost(&mut self, mut node: Arc<ReadNode>) -> Result<(), Error> {
         loop {
-            ensure_node_value_count(&node)?;
-            if node.leaf {
+            if node.is_leaf() {
                 if !node.is_empty() {
                     self.stack.push((node, 0));
                 }
@@ -1131,10 +1181,7 @@ where
             if node.is_empty() {
                 return Err(Error::InvalidNode);
             }
-            let child = self
-                .prolly
-                .load_arc(&child_cid_validated(&node, 0)?)
-                .await?;
+            let child = self.prolly.load_read_arc(&node.child_cid(0)?).await?;
             self.stack.push((node, 0));
             node = child;
         }
@@ -1184,38 +1231,39 @@ where
 }
 
 fn visit_leaf_diff<F, B>(
-    base: &Node,
-    other: &Node,
+    base: &ReadNode,
+    other: &ReadNode,
     visitor: &mut BorrowedDiffVisitor<F, B>,
 ) -> Result<(), Error>
 where
     F: for<'diff> FnMut(DiffRef<'diff>) -> ControlFlow<B>,
 {
-    ensure_node_value_count(base)?;
-    ensure_node_value_count(other)?;
+    if !base.is_leaf() || !other.is_leaf() {
+        return Err(Error::InvalidNode);
+    }
     let mut base_index = 0usize;
     let mut other_index = 0usize;
     while base_index < base.len() && other_index < other.len() && !visitor.done {
-        let base_key = &base.keys[base_index];
-        let other_key = &other.keys[other_index];
+        let base_key = base.key(base_index).ok_or(Error::InvalidNode)?;
+        let other_key = other.key(other_index).ok_or(Error::InvalidNode)?;
         match base_key.cmp(other_key) {
             std::cmp::Ordering::Less => {
                 visitor.emit(DiffRef::Removed {
                     key: base_key,
-                    value: node_value(base, base_index)?,
+                    value: base.value(base_index).ok_or(Error::InvalidNode)?,
                 });
                 base_index += 1;
             }
             std::cmp::Ordering::Greater => {
                 visitor.emit(DiffRef::Added {
                     key: other_key,
-                    value: node_value(other, other_index)?,
+                    value: other.value(other_index).ok_or(Error::InvalidNode)?,
                 });
                 other_index += 1;
             }
             std::cmp::Ordering::Equal => {
-                let old = node_value(base, base_index)?;
-                let new = node_value(other, other_index)?;
+                let old = base.value(base_index).ok_or(Error::InvalidNode)?;
+                let new = other.value(other_index).ok_or(Error::InvalidNode)?;
                 if old != new {
                     visitor.emit(DiffRef::Changed {
                         key: base_key,
@@ -1230,15 +1278,15 @@ where
     }
     while base_index < base.len() && !visitor.done {
         visitor.emit(DiffRef::Removed {
-            key: &base.keys[base_index],
-            value: node_value(base, base_index)?,
+            key: base.key(base_index).ok_or(Error::InvalidNode)?,
+            value: base.value(base_index).ok_or(Error::InvalidNode)?,
         });
         base_index += 1;
     }
     while other_index < other.len() && !visitor.done {
         visitor.emit(DiffRef::Added {
-            key: &other.keys[other_index],
-            value: node_value(other, other_index)?,
+            key: other.key(other_index).ok_or(Error::InvalidNode)?,
+            value: other.value(other_index).ok_or(Error::InvalidNode)?,
         });
         other_index += 1;
     }
@@ -1247,8 +1295,8 @@ where
 
 fn visit_subtree_diff<S, F, B>(
     prolly: &Prolly<S>,
-    base: Arc<Node>,
-    other: Arc<Node>,
+    base: Arc<ReadNode>,
+    other: Arc<ReadNode>,
     visitor: &mut BorrowedDiffVisitor<F, B>,
 ) -> Result<(), Error>
 where
@@ -1302,11 +1350,76 @@ where
     Ok(())
 }
 
+fn visit_subtree_diff_range<S, F, B>(
+    prolly: &Prolly<S>,
+    base: Arc<ReadNode>,
+    other: Arc<ReadNode>,
+    start: &[u8],
+    end: Option<&[u8]>,
+    visitor: &mut BorrowedDiffVisitor<F, B>,
+) -> Result<(), Error>
+where
+    S: Store,
+    F: for<'diff> FnMut(DiffRef<'diff>) -> ControlFlow<B>,
+{
+    let mut base = BorrowedSubtreeCursor::new_at(prolly, base, start)?;
+    let mut other = BorrowedSubtreeCursor::new_at(prolly, other, start)?;
+    while !visitor.done {
+        let base_entry = base
+            .current()?
+            .filter(|(key, _)| end.map_or(true, |end| *key < end));
+        let other_entry = other
+            .current()?
+            .filter(|(key, _)| end.map_or(true, |end| *key < end));
+        match (base_entry, other_entry) {
+            (Some((base_key, base_value)), Some((other_key, other_value))) => {
+                match base_key.cmp(other_key) {
+                    std::cmp::Ordering::Less => {
+                        visitor.emit(DiffRef::Removed {
+                            key: base_key,
+                            value: base_value,
+                        });
+                        base.advance()?;
+                    }
+                    std::cmp::Ordering::Greater => {
+                        visitor.emit(DiffRef::Added {
+                            key: other_key,
+                            value: other_value,
+                        });
+                        other.advance()?;
+                    }
+                    std::cmp::Ordering::Equal => {
+                        if base_value != other_value {
+                            visitor.emit(DiffRef::Changed {
+                                key: base_key,
+                                old: base_value,
+                                new: other_value,
+                            });
+                        }
+                        base.advance()?;
+                        other.advance()?;
+                    }
+                }
+            }
+            (Some((key, value)), None) => {
+                visitor.emit(DiffRef::Removed { key, value });
+                base.advance()?;
+            }
+            (None, Some((key, value))) => {
+                visitor.emit(DiffRef::Added { key, value });
+                other.advance()?;
+            }
+            (None, None) => break,
+        }
+    }
+    Ok(())
+}
+
 #[cfg(feature = "async-store")]
 async fn visit_async_subtree_diff<S, F, B>(
     prolly: &AsyncProlly<S>,
-    base: Arc<Node>,
-    other: Arc<Node>,
+    base: Arc<ReadNode>,
+    other: Arc<ReadNode>,
     visitor: &mut BorrowedDiffVisitor<F, B>,
 ) -> Result<(), Error>
 where
@@ -1382,60 +1495,318 @@ where
     Ok(())
 }
 
+#[cfg(feature = "async-store")]
+async fn visit_async_subtree_diff_range<S, F, B>(
+    prolly: &AsyncProlly<S>,
+    base: Arc<ReadNode>,
+    other: Arc<ReadNode>,
+    start: &[u8],
+    end: Option<&[u8]>,
+    visitor: &mut BorrowedDiffVisitor<F, B>,
+) -> Result<(), Error>
+where
+    S: AsyncStore,
+    S::Error: Send + Sync,
+    F: for<'diff> FnMut(DiffRef<'diff>) -> ControlFlow<B>,
+{
+    enum Advance {
+        Base,
+        Other,
+        Both,
+        Done,
+    }
+
+    let mut base = AsyncBorrowedSubtreeCursor::new_at(prolly, base, start).await?;
+    let mut other = AsyncBorrowedSubtreeCursor::new_at(prolly, other, start).await?;
+    while !visitor.done {
+        let advance = {
+            let base_entry = base
+                .current()?
+                .filter(|(key, _)| end.map_or(true, |end| *key < end));
+            let other_entry = other
+                .current()?
+                .filter(|(key, _)| end.map_or(true, |end| *key < end));
+            match (base_entry, other_entry) {
+                (Some((base_key, base_value)), Some((other_key, other_value))) => {
+                    match base_key.cmp(other_key) {
+                        std::cmp::Ordering::Less => {
+                            visitor.emit(DiffRef::Removed {
+                                key: base_key,
+                                value: base_value,
+                            });
+                            Advance::Base
+                        }
+                        std::cmp::Ordering::Greater => {
+                            visitor.emit(DiffRef::Added {
+                                key: other_key,
+                                value: other_value,
+                            });
+                            Advance::Other
+                        }
+                        std::cmp::Ordering::Equal => {
+                            if base_value != other_value {
+                                visitor.emit(DiffRef::Changed {
+                                    key: base_key,
+                                    old: base_value,
+                                    new: other_value,
+                                });
+                            }
+                            Advance::Both
+                        }
+                    }
+                }
+                (Some((key, value)), None) => {
+                    visitor.emit(DiffRef::Removed { key, value });
+                    Advance::Base
+                }
+                (None, Some((key, value))) => {
+                    visitor.emit(DiffRef::Added { key, value });
+                    Advance::Other
+                }
+                (None, None) => Advance::Done,
+            }
+        };
+        match advance {
+            Advance::Base => {
+                base.advance().await?;
+            }
+            Advance::Other => {
+                other.advance().await?;
+            }
+            Advance::Both => {
+                base.advance().await?;
+                other.advance().await?;
+            }
+            Advance::Done => break,
+        }
+    }
+    Ok(())
+}
+
+enum BorrowedDiffFrame {
+    Structural(DiffFrame),
+    LocalRange {
+        base: Arc<ReadNode>,
+        other: Arc<ReadNode>,
+        start: Vec<u8>,
+        end: Option<Vec<u8>>,
+    },
+}
+
 fn borrowed_internal_frames(
-    base: &Node,
-    other: &Node,
+    base: &Arc<ReadNode>,
+    other: &Arc<ReadNode>,
     span_end: Option<&[u8]>,
-) -> Result<Option<Vec<DiffFrame>>, Error> {
-    ensure_node_value_count(base)?;
-    ensure_node_value_count(other)?;
+) -> Result<Vec<BorrowedDiffFrame>, Error> {
+    if base.is_leaf() || other.is_leaf() {
+        return Err(Error::InvalidNode);
+    }
     let mut frames = Vec::with_capacity(base.len().max(other.len()));
     let mut base_index = 0usize;
     let mut other_index = 0usize;
     while base_index < base.len() && other_index < other.len() {
-        let base_start = base.keys[base_index].as_slice();
-        let other_start = other.keys[other_index].as_slice();
-        let base_end = child_span_end(base, base_index, span_end);
-        let other_end = child_span_end(other, other_index, span_end);
+        let base_start = base.key(base_index).ok_or(Error::InvalidNode)?;
+        let other_start = other.key(other_index).ok_or(Error::InvalidNode)?;
+        let base_end = packed_child_span_end(base, base_index, span_end);
+        let other_end = packed_child_span_end(other, other_index, span_end);
+        if base_start == other_start
+            && base.child_cid(base_index)? == other.child_cid(other_index)?
+        {
+            base_index += 1;
+            other_index += 1;
+            continue;
+        }
         if base_start == other_start && base_end == other_end {
-            let base_cid = child_cid_validated(base, base_index)?;
-            let other_cid = child_cid_validated(other, other_index)?;
+            let base_cid = base.child_cid(base_index)?;
+            let other_cid = other.child_cid(other_index)?;
             if base_cid != other_cid {
-                frames.push(DiffFrame::Compare {
+                frames.push(BorrowedDiffFrame::Structural(DiffFrame::Compare {
                     base_cid,
                     other_cid,
                     span_end: base_end.map(<[u8]>::to_vec),
-                });
+                }));
             }
             base_index += 1;
             other_index += 1;
         } else if span_ends_before_or_at(base_end, other_start) {
-            frames.push(DiffFrame::Removed {
-                cid: child_cid_validated(base, base_index)?,
-            });
+            frames.push(BorrowedDiffFrame::Structural(DiffFrame::Removed {
+                cid: base.child_cid(base_index)?,
+            }));
             base_index += 1;
         } else if span_ends_before_or_at(other_end, base_start) {
-            frames.push(DiffFrame::Added {
-                cid: child_cid_validated(other, other_index)?,
-            });
+            frames.push(BorrowedDiffFrame::Structural(DiffFrame::Added {
+                cid: other.child_cid(other_index)?,
+            }));
+            other_index += 1;
+        } else if base_end == other_end {
+            let base_cid = base.child_cid(base_index)?;
+            let other_cid = other.child_cid(other_index)?;
+            if base_cid != other_cid {
+                frames.push(BorrowedDiffFrame::Structural(DiffFrame::Compare {
+                    base_cid,
+                    other_cid,
+                    span_end: base_end.map(<[u8]>::to_vec),
+                }));
+            }
+            base_index += 1;
             other_index += 1;
         } else {
-            return Ok(None);
+            let start = base_start.min(other_start).to_vec();
+            let resync = packed_next_shared_child_start(base, base_index, other, other_index)?;
+            let end = match resync {
+                Some((next_base, _)) => {
+                    Some(base.key(next_base).ok_or(Error::InvalidNode)?.to_vec())
+                }
+                None => span_end.map(<[u8]>::to_vec),
+            };
+            frames.push(BorrowedDiffFrame::LocalRange {
+                base: base.clone(),
+                other: other.clone(),
+                start,
+                end,
+            });
+            if let Some((next_base, next_other)) = resync {
+                base_index = next_base;
+                other_index = next_other;
+            } else {
+                base_index = base.len();
+                other_index = other.len();
+            }
         }
     }
     while base_index < base.len() {
-        frames.push(DiffFrame::Removed {
-            cid: child_cid_validated(base, base_index)?,
-        });
+        frames.push(BorrowedDiffFrame::Structural(DiffFrame::Removed {
+            cid: base.child_cid(base_index)?,
+        }));
         base_index += 1;
     }
     while other_index < other.len() {
-        frames.push(DiffFrame::Added {
-            cid: child_cid_validated(other, other_index)?,
-        });
+        frames.push(BorrowedDiffFrame::Structural(DiffFrame::Added {
+            cid: other.child_cid(other_index)?,
+        }));
         other_index += 1;
     }
-    Ok(Some(frames))
+    Ok(frames)
+}
+
+fn packed_next_shared_child_start(
+    base: &ReadNode,
+    base_index: usize,
+    other: &ReadNode,
+    other_index: usize,
+) -> Result<Option<(usize, usize)>, Error> {
+    let mut left = base_index + 1;
+    let mut right = other_index + 1;
+    while left < base.len() && right < other.len() {
+        match base
+            .key(left)
+            .ok_or(Error::InvalidNode)?
+            .cmp(other.key(right).ok_or(Error::InvalidNode)?)
+        {
+            std::cmp::Ordering::Less => left += 1,
+            std::cmp::Ordering::Greater => right += 1,
+            std::cmp::Ordering::Equal => return Ok(Some((left, right))),
+        }
+    }
+    Ok(None)
+}
+
+fn packed_child_span_end<'a>(
+    node: &'a ReadNode,
+    index: usize,
+    span_end: Option<&'a [u8]>,
+) -> Option<&'a [u8]> {
+    node.key(index + 1).or(span_end)
+}
+
+fn packed_child_diff_frames(node: &ReadNode, kind: DiffFrameKind) -> Result<Vec<DiffFrame>, Error> {
+    if node.is_leaf() {
+        return Err(Error::InvalidNode);
+    }
+    (0..node.len())
+        .map(|index| Ok(kind.frame(node.child_cid(index)?)))
+        .collect()
+}
+
+fn prefetch_borrowed_frame_roots<S: Store>(
+    prolly: &Prolly<S>,
+    frames: &[BorrowedDiffFrame],
+) -> Result<(), Error> {
+    if frames.len() <= 1 {
+        return Ok(());
+    }
+    let mut seen = HashSet::with_capacity(frames.len().saturating_mul(2));
+    let mut cids = Vec::with_capacity(frames.len().saturating_mul(2));
+    for frame in frames {
+        match frame {
+            BorrowedDiffFrame::Structural(DiffFrame::Compare {
+                base_cid,
+                other_cid,
+                ..
+            }) => {
+                if seen.insert(base_cid.clone()) {
+                    cids.push(base_cid.clone());
+                }
+                if seen.insert(other_cid.clone()) {
+                    cids.push(other_cid.clone());
+                }
+            }
+            BorrowedDiffFrame::Structural(DiffFrame::Added { cid })
+            | BorrowedDiffFrame::Structural(DiffFrame::Removed { cid }) => {
+                if seen.insert(cid.clone()) {
+                    cids.push(cid.clone());
+                }
+            }
+            BorrowedDiffFrame::LocalRange { .. } => {}
+        }
+    }
+    if !cids.is_empty() {
+        let _ = prolly.load_many_read_ordered(&cids)?;
+    }
+    Ok(())
+}
+
+#[cfg(feature = "async-store")]
+async fn prefetch_async_borrowed_frame_roots<S>(
+    prolly: &AsyncProlly<S>,
+    frames: &[BorrowedDiffFrame],
+) -> Result<(), Error>
+where
+    S: AsyncStore,
+    S::Error: Send + Sync,
+{
+    if frames.len() <= 1 {
+        return Ok(());
+    }
+    let mut seen = HashSet::with_capacity(frames.len().saturating_mul(2));
+    let mut cids = Vec::with_capacity(frames.len().saturating_mul(2));
+    for frame in frames {
+        match frame {
+            BorrowedDiffFrame::Structural(DiffFrame::Compare {
+                base_cid,
+                other_cid,
+                ..
+            }) => {
+                if seen.insert(base_cid.clone()) {
+                    cids.push(base_cid.clone());
+                }
+                if seen.insert(other_cid.clone()) {
+                    cids.push(other_cid.clone());
+                }
+            }
+            BorrowedDiffFrame::Structural(DiffFrame::Added { cid })
+            | BorrowedDiffFrame::Structural(DiffFrame::Removed { cid }) => {
+                if seen.insert(cid.clone()) {
+                    cids.push(cid.clone());
+                }
+            }
+            BorrowedDiffFrame::LocalRange { .. } => {}
+        }
+    }
+    if !cids.is_empty() {
+        let _ = prolly.load_many_read_ordered(&cids).await?;
+    }
+    Ok(())
 }
 
 fn scan_diff_borrowed<S, F, B>(
@@ -1467,55 +1838,55 @@ where
         break_value: None,
         done: false,
     };
-    let mut stack = initial_diff_stack(base, other);
+    let mut stack = initial_diff_stack(base, other)
+        .into_iter()
+        .map(BorrowedDiffFrame::Structural)
+        .collect::<Vec<_>>();
     while let Some(frame) = stack.pop() {
         if visitor.done {
             break;
         }
         match frame {
-            DiffFrame::Compare {
+            BorrowedDiffFrame::Structural(DiffFrame::Compare {
                 base_cid,
                 other_cid,
                 span_end,
-            } => {
+            }) => {
                 if base_cid == other_cid {
                     continue;
                 }
-                let nodes = prolly.load_many_ordered(&[base_cid, other_cid])?;
+                let nodes = prolly.load_many_read_ordered(&[base_cid, other_cid])?;
                 let base_node = nodes[0].clone();
                 let other_node = nodes[1].clone();
-                match (base_node.leaf, other_node.leaf) {
+                match (base_node.is_leaf(), other_node.is_leaf()) {
                     (true, true) => visit_leaf_diff(&base_node, &other_node, &mut visitor)?,
-                    (false, false) if base_node.level == other_node.level => {
-                        match borrowed_internal_frames(
-                            &base_node,
-                            &other_node,
-                            span_end.as_deref(),
-                        )? {
-                            Some(frames) => stack.extend(frames.into_iter().rev()),
-                            None => {
-                                visit_subtree_diff(prolly, base_node, other_node, &mut visitor)?
-                            }
-                        }
+                    (false, false) if base_node.level() == other_node.level() => {
+                        let frames =
+                            borrowed_internal_frames(&base_node, &other_node, span_end.as_deref())?;
+                        prefetch_borrowed_frame_roots(prolly, &frames)?;
+                        stack.extend(frames.into_iter().rev());
                     }
                     _ => visit_subtree_diff(prolly, base_node, other_node, &mut visitor)?,
                 }
             }
-            DiffFrame::Added { ref cid } | DiffFrame::Removed { ref cid } => {
-                let added = matches!(frame, DiffFrame::Added { .. });
-                let node = prolly.load_arc(cid)?;
-                if node.leaf {
-                    ensure_node_value_count(&node)?;
+            BorrowedDiffFrame::Structural(DiffFrame::Added { ref cid })
+            | BorrowedDiffFrame::Structural(DiffFrame::Removed { ref cid }) => {
+                let added = matches!(
+                    &frame,
+                    BorrowedDiffFrame::Structural(DiffFrame::Added { .. })
+                );
+                let node = prolly.load_read_arc(cid)?;
+                if node.is_leaf() {
                     for index in 0..node.len() {
                         let diff = if added {
                             DiffRef::Added {
-                                key: &node.keys[index],
-                                value: node_value(&node, index)?,
+                                key: node.key(index).ok_or(Error::InvalidNode)?,
+                                value: node.value(index).ok_or(Error::InvalidNode)?,
                             }
                         } else {
                             DiffRef::Removed {
-                                key: &node.keys[index],
-                                value: node_value(&node, index)?,
+                                key: node.key(index).ok_or(Error::InvalidNode)?,
+                                value: node.value(index).ok_or(Error::InvalidNode)?,
                             }
                         };
                         if !visitor.emit(diff) {
@@ -1528,10 +1899,22 @@ where
                     } else {
                         DiffFrameKind::Removed
                     };
-                    let mut frames = child_diff_frames(&node, kind)?;
+                    let mut frames = packed_child_diff_frames(&node, kind)?
+                        .into_iter()
+                        .map(BorrowedDiffFrame::Structural)
+                        .collect::<Vec<_>>();
+                    prefetch_borrowed_frame_roots(prolly, &frames)?;
                     frames.reverse();
                     stack.extend(frames);
                 }
+            }
+            BorrowedDiffFrame::LocalRange {
+                base,
+                other,
+                start,
+                end,
+            } => {
+                visit_subtree_diff_range(prolly, base, other, &start, end.as_deref(), &mut visitor)?
             }
         }
     }
@@ -1569,42 +1952,35 @@ where
         break_value: None,
         done: false,
     };
-    let mut stack = initial_diff_stack(base, other);
+    let mut stack = initial_diff_stack(base, other)
+        .into_iter()
+        .map(BorrowedDiffFrame::Structural)
+        .collect::<Vec<_>>();
     while let Some(frame) = stack.pop() {
         if visitor.done {
             break;
         }
         match frame {
-            DiffFrame::Compare {
+            BorrowedDiffFrame::Structural(DiffFrame::Compare {
                 base_cid,
                 other_cid,
                 span_end,
-            } => {
+            }) => {
                 if base_cid == other_cid {
                     continue;
                 }
-                let nodes = prolly.load_many_ordered(&[base_cid, other_cid]).await?;
+                let nodes = prolly
+                    .load_many_read_ordered(&[base_cid, other_cid])
+                    .await?;
                 let base_node = nodes[0].clone();
                 let other_node = nodes[1].clone();
-                match (base_node.leaf, other_node.leaf) {
+                match (base_node.is_leaf(), other_node.is_leaf()) {
                     (true, true) => visit_leaf_diff(&base_node, &other_node, &mut visitor)?,
-                    (false, false) if base_node.level == other_node.level => {
-                        match borrowed_internal_frames(
-                            &base_node,
-                            &other_node,
-                            span_end.as_deref(),
-                        )? {
-                            Some(frames) => stack.extend(frames.into_iter().rev()),
-                            None => {
-                                visit_async_subtree_diff(
-                                    prolly,
-                                    base_node,
-                                    other_node,
-                                    &mut visitor,
-                                )
-                                .await?
-                            }
-                        }
+                    (false, false) if base_node.level() == other_node.level() => {
+                        let frames =
+                            borrowed_internal_frames(&base_node, &other_node, span_end.as_deref())?;
+                        prefetch_async_borrowed_frame_roots(prolly, &frames).await?;
+                        stack.extend(frames.into_iter().rev());
                     }
                     _ => {
                         visit_async_subtree_diff(prolly, base_node, other_node, &mut visitor)
@@ -1612,21 +1988,24 @@ where
                     }
                 }
             }
-            DiffFrame::Added { ref cid } | DiffFrame::Removed { ref cid } => {
-                let added = matches!(frame, DiffFrame::Added { .. });
-                let node = prolly.load_arc(cid).await?;
-                if node.leaf {
-                    ensure_node_value_count(&node)?;
+            BorrowedDiffFrame::Structural(DiffFrame::Added { ref cid })
+            | BorrowedDiffFrame::Structural(DiffFrame::Removed { ref cid }) => {
+                let added = matches!(
+                    &frame,
+                    BorrowedDiffFrame::Structural(DiffFrame::Added { .. })
+                );
+                let node = prolly.load_read_arc(cid).await?;
+                if node.is_leaf() {
                     for index in 0..node.len() {
                         let diff = if added {
                             DiffRef::Added {
-                                key: &node.keys[index],
-                                value: node_value(&node, index)?,
+                                key: node.key(index).ok_or(Error::InvalidNode)?,
+                                value: node.value(index).ok_or(Error::InvalidNode)?,
                             }
                         } else {
                             DiffRef::Removed {
-                                key: &node.keys[index],
-                                value: node_value(&node, index)?,
+                                key: node.key(index).ok_or(Error::InvalidNode)?,
+                                value: node.value(index).ok_or(Error::InvalidNode)?,
                             }
                         };
                         if !visitor.emit(diff) {
@@ -1639,10 +2018,30 @@ where
                     } else {
                         DiffFrameKind::Removed
                     };
-                    let mut frames = child_diff_frames(&node, kind)?;
+                    let mut frames = packed_child_diff_frames(&node, kind)?
+                        .into_iter()
+                        .map(BorrowedDiffFrame::Structural)
+                        .collect::<Vec<_>>();
+                    prefetch_async_borrowed_frame_roots(prolly, &frames).await?;
                     frames.reverse();
                     stack.extend(frames);
                 }
+            }
+            BorrowedDiffFrame::LocalRange {
+                base,
+                other,
+                start,
+                end,
+            } => {
+                visit_async_subtree_diff_range(
+                    prolly,
+                    base,
+                    other,
+                    &start,
+                    end.as_deref(),
+                    &mut visitor,
+                )
+                .await?
             }
         }
     }
@@ -2235,11 +2634,9 @@ pub fn compute_diff<S: Store>(
     base: &Tree,
     other: &Tree,
 ) -> Result<Vec<Diff>, Error> {
-    if let Some(diffs) = try_append_only_diff(prolly, base, other)? {
-        return Ok(diffs);
-    }
-
-    compute_localized_diff(prolly, base, other).map(|(diffs, _)| diffs)
+    let mut diffs = Vec::new();
+    prolly.scan_diff(base, other, |diff| diffs.push(diff.to_owned()))?;
+    Ok(diffs)
 }
 
 fn compute_diff_with_stats<S: Store>(
@@ -2571,25 +2968,8 @@ pub fn compute_range_diff<S: Store>(
     start: &[u8],
     end: Option<&[u8]>,
 ) -> Result<Vec<Diff>, Error> {
-    if end.is_some_and(|end| end <= start) || base.root == other.root {
-        return Ok(Vec::new());
-    }
-
     let mut diffs = Vec::new();
-
-    match (&base.root, &other.root) {
-        (Some(base_cid), Some(other_cid)) => {
-            diff_range_nodes(prolly, base_cid, other_cid, None, start, end, &mut diffs)?;
-        }
-        (Some(base_cid), None) => {
-            collect_removed_range_from_cid(prolly, base_cid, None, start, end, &mut diffs)?;
-        }
-        (None, Some(other_cid)) => {
-            collect_added_range_from_cid(prolly, other_cid, None, start, end, &mut diffs)?;
-        }
-        (None, None) => {}
-    }
-
+    prolly.scan_range_diff(base, other, start, end, |diff| diffs.push(diff.to_owned()))?;
     Ok(diffs)
 }
 
@@ -2603,40 +2983,10 @@ where
     S: AsyncStore,
     S::Error: Send + Sync,
 {
-    if base.root == other.root {
-        return Ok(Vec::new());
-    }
-
     let mut diffs = Vec::new();
-    let mut stack = initial_diff_stack(base, other);
-
-    while let Some(frame) = stack.pop() {
-        match frame {
-            DiffFrame::Compare {
-                base_cid,
-                other_cid,
-                span_end,
-            } => {
-                process_async_diff_compare(
-                    prolly,
-                    base_cid,
-                    other_cid,
-                    span_end.as_deref(),
-                    &mut stack,
-                    &mut diffs,
-                    None,
-                )
-                .await?;
-            }
-            DiffFrame::Added { cid } => {
-                process_async_added(prolly, cid, &mut stack, &mut diffs, None).await?;
-            }
-            DiffFrame::Removed { cid } => {
-                process_async_removed(prolly, cid, &mut stack, &mut diffs, None).await?;
-            }
-        }
-    }
-
+    prolly
+        .scan_diff(base, other, |diff| diffs.push(diff.to_owned()))
+        .await?;
     Ok(diffs)
 }
 
@@ -2720,74 +3070,10 @@ where
     S: AsyncStore,
     S::Error: Send + Sync,
 {
-    if end.is_some_and(|end| end <= start) || base.root == other.root {
-        return Ok(Vec::new());
-    }
-
     let mut diffs = Vec::new();
-    let mut stack = match (&base.root, &other.root) {
-        (Some(base_cid), Some(other_cid)) => vec![RangeDiffFrame::Compare {
-            base_cid: base_cid.clone(),
-            other_cid: other_cid.clone(),
-            span_end: None,
-        }],
-        (Some(base_cid), None) => vec![RangeDiffFrame::Removed {
-            cid: base_cid.clone(),
-            span_end: None,
-        }],
-        (None, Some(other_cid)) => vec![RangeDiffFrame::Added {
-            cid: other_cid.clone(),
-            span_end: None,
-        }],
-        (None, None) => Vec::new(),
-    };
-
-    while let Some(frame) = stack.pop() {
-        match frame {
-            RangeDiffFrame::Compare {
-                base_cid,
-                other_cid,
-                span_end,
-            } => {
-                process_async_range_compare(
-                    prolly,
-                    base_cid,
-                    other_cid,
-                    span_end.as_deref(),
-                    start,
-                    end,
-                    &mut stack,
-                    &mut diffs,
-                )
-                .await?;
-            }
-            RangeDiffFrame::Added { cid, span_end } => {
-                let node = prolly.load_arc(&cid).await?;
-                collect_added_range_from_node_async(
-                    prolly,
-                    &node,
-                    span_end.as_deref(),
-                    start,
-                    end,
-                    &mut diffs,
-                )
-                .await?;
-            }
-            RangeDiffFrame::Removed { cid, span_end } => {
-                let node = prolly.load_arc(&cid).await?;
-                collect_removed_range_from_node_async(
-                    prolly,
-                    &node,
-                    span_end.as_deref(),
-                    start,
-                    end,
-                    &mut diffs,
-                )
-                .await?;
-            }
-        }
-    }
-
+    prolly
+        .scan_range_diff(base, other, start, end, |diff| diffs.push(diff.to_owned()))
+        .await?;
     Ok(diffs)
 }
 
@@ -3101,6 +3387,7 @@ where
 
 #[cfg(feature = "async-store")]
 #[derive(Clone)]
+#[allow(dead_code)]
 enum RangeDiffFrame {
     Compare {
         base_cid: Cid,
@@ -3312,6 +3599,7 @@ where
 
 #[cfg(feature = "async-store")]
 #[allow(clippy::too_many_arguments)]
+#[allow(dead_code)]
 async fn process_async_range_compare<S>(
     prolly: &AsyncProlly<S>,
     base_cid: Cid,
@@ -3370,6 +3658,7 @@ where
 
 #[cfg(feature = "async-store")]
 #[allow(clippy::too_many_arguments)]
+#[allow(dead_code)]
 async fn enqueue_async_internal_range_diff<S>(
     prolly: &AsyncProlly<S>,
     base: &Node,
@@ -3531,6 +3820,7 @@ where
 }
 
 #[cfg(feature = "async-store")]
+#[allow(dead_code)]
 async fn prefetch_async_range_frame_roots<S>(
     prolly: &AsyncProlly<S>,
     frames: &[RangeDiffFrame],
@@ -3574,6 +3864,7 @@ where
     Ok(())
 }
 
+#[allow(dead_code)]
 fn diff_range_nodes<S: Store>(
     prolly: &Prolly<S>,
     base_cid: &Cid,
@@ -3614,6 +3905,7 @@ fn diff_range_nodes<S: Store>(
     }
 }
 
+#[allow(dead_code)]
 fn load_range_diff_node_pair<S: Store>(
     prolly: &Prolly<S>,
     base_cid: &Cid,
@@ -3627,6 +3919,7 @@ fn load_range_diff_node_pair<S: Store>(
     Ok((prolly.load_arc(base_cid)?, prolly.load_arc(other_cid)?))
 }
 
+#[allow(dead_code)]
 fn diff_internal_nodes_range<S: Store>(
     prolly: &Prolly<S>,
     base: &Node,
@@ -3822,6 +4115,7 @@ fn diff_leaf_nodes(base: &Node, other: &Node, diffs: &mut Vec<Diff>) -> Result<(
     Ok(())
 }
 
+#[allow(dead_code)]
 fn diff_leaf_nodes_range(
     base: &Node,
     other: &Node,
@@ -4088,6 +4382,7 @@ fn collect_added_from_node<S: Store>(
     Ok(())
 }
 
+#[allow(dead_code)]
 fn collect_added_range_from_cid<S: Store>(
     prolly: &Prolly<S>,
     cid: &Cid,
@@ -4100,6 +4395,7 @@ fn collect_added_range_from_cid<S: Store>(
     collect_added_range_from_node(prolly, &node, span_end, range_start, range_end, diffs)
 }
 
+#[allow(dead_code)]
 fn collect_added_range_from_node<S: Store>(
     prolly: &Prolly<S>,
     node: &Node,
@@ -4143,6 +4439,7 @@ fn collect_added_range_from_node<S: Store>(
     Ok(())
 }
 
+#[allow(dead_code)]
 fn collect_removed_range_from_cid<S: Store>(
     prolly: &Prolly<S>,
     cid: &Cid,
@@ -4155,6 +4452,7 @@ fn collect_removed_range_from_cid<S: Store>(
     collect_removed_range_from_node(prolly, &node, span_end, range_start, range_end, diffs)
 }
 
+#[allow(dead_code)]
 fn collect_removed_range_from_node<S: Store>(
     prolly: &Prolly<S>,
     node: &Node,
@@ -4241,6 +4539,7 @@ where
 }
 
 #[cfg(feature = "async-store")]
+#[allow(dead_code)]
 async fn diff_collected_nodes_range_async<S>(
     prolly: &AsyncProlly<S>,
     base: &Node,
@@ -4309,6 +4608,7 @@ where
 }
 
 #[cfg(feature = "async-store")]
+#[allow(dead_code)]
 async fn collect_entries_range_from_node_async<S>(
     prolly: &AsyncProlly<S>,
     node: &Node,
@@ -4357,6 +4657,7 @@ where
 }
 
 #[cfg(feature = "async-store")]
+#[allow(dead_code)]
 async fn collect_added_range_from_node_async<S>(
     prolly: &AsyncProlly<S>,
     node: &Node,
@@ -4389,6 +4690,7 @@ where
 }
 
 #[cfg(feature = "async-store")]
+#[allow(dead_code)]
 async fn collect_removed_range_from_node_async<S>(
     prolly: &AsyncProlly<S>,
     node: &Node,

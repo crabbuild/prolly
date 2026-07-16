@@ -100,6 +100,28 @@ pub(crate) struct ProximityNode {
 }
 
 impl ProximityNode {
+    pub(crate) fn retained_bytes(&self) -> usize {
+        std::mem::size_of::<Self>()
+            .saturating_add(
+                self.entries
+                    .capacity()
+                    .saturating_mul(std::mem::size_of::<ProximityEntry>()),
+            )
+            .saturating_add(self.entries.iter().fold(0usize, |total, entry| {
+                let vector = match &entry.vector {
+                    VectorRef::Inline(vector) => {
+                        vector.capacity().saturating_mul(std::mem::size_of::<f32>())
+                    }
+                    VectorRef::External(_) => 0,
+                };
+                total
+                    .saturating_add(entry.key.capacity())
+                    .saturating_add(entry.min_key.capacity())
+                    .saturating_add(entry.max_key.capacity())
+                    .saturating_add(vector)
+            }))
+    }
+
     pub(crate) fn encode(&self) -> Result<Vec<u8>, Error> {
         self.validate(None)?;
         let mut bytes = Vec::new();

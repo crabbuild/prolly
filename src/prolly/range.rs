@@ -77,9 +77,8 @@
 //! The iterator is lazy and only loads nodes as needed, making it memory-efficient
 //! for large trees.
 
-use super::cid::Cid;
 use super::error::Error;
-use super::node::Node;
+use super::node::ReadNode;
 #[cfg(feature = "async-store")]
 use super::read::EntryRef;
 use super::store::Store;
@@ -237,7 +236,7 @@ pub fn create_range_iter<'a, S: Store>(
     }
 
     // Find path to start key
-    let path = prolly.find_path_arcs(tree, start)?;
+    let path = prolly.find_read_path_arcs(tree, start)?;
     Ok(RangeIter::new(prolly, path, start, end))
 }
 
@@ -252,7 +251,7 @@ pub fn create_range_after_iter<'a, S: Store>(
         return Ok(RangeIter::new_after(prolly, Vec::new(), after_key, end));
     }
 
-    let path = prolly.find_path_arcs(tree, after_key)?;
+    let path = prolly.find_read_path_arcs(tree, after_key)?;
     Ok(RangeIter::new_after(prolly, path, after_key, end))
 }
 
@@ -272,7 +271,7 @@ where
         return Ok(AsyncRangeIter::new(prolly, Vec::new(), start, end));
     }
 
-    let path = prolly.find_path_arcs(tree, start).await?;
+    let path = prolly.find_read_path_arcs(tree, start).await?;
     Ok(AsyncRangeIter::new(prolly, path, start, end))
 }
 
@@ -297,7 +296,7 @@ where
         ));
     }
 
-    let path = prolly.find_path_arcs(tree, after_key).await?;
+    let path = prolly.find_read_path_arcs(tree, after_key).await?;
     Ok(AsyncRangeIter::new_after(prolly, path, after_key, end))
 }
 
@@ -312,7 +311,7 @@ pub struct RangeIter<'a, S: Store> {
     /// Reference to the Prolly tree manager
     prolly: &'a Prolly<S>,
     /// Stack of (node, index) pairs representing the traversal path
-    stack: Vec<(Arc<Node>, usize)>,
+    stack: Vec<(Arc<ReadNode>, usize)>,
     /// Optional end bound (exclusive)
     end: Option<Vec<u8>>,
     /// Whether we've started iteration (for positioning at start key)
@@ -323,7 +322,7 @@ pub struct RangeIter<'a, S: Store> {
     skip_start_key: bool,
     /// Last retained leaf location yielded by this iterator. The key is copied
     /// only if a resumable cursor is requested.
-    last_location: Option<(Arc<Node>, usize)>,
+    last_location: Option<(Arc<ReadNode>, usize)>,
 }
 
 impl<'a, S: Store> RangeIter<'a, S> {
@@ -336,7 +335,7 @@ impl<'a, S: Store> RangeIter<'a, S> {
     /// * `end` - Optional ending key (exclusive)
     pub(crate) fn new(
         prolly: &'a Prolly<S>,
-        stack: Vec<(Arc<Node>, usize)>,
+        stack: Vec<(Arc<ReadNode>, usize)>,
         start: &[u8],
         end: Option<&[u8]>,
     ) -> Self {
@@ -353,7 +352,7 @@ impl<'a, S: Store> RangeIter<'a, S> {
 
     pub(crate) fn new_after(
         prolly: &'a Prolly<S>,
-        stack: Vec<(Arc<Node>, usize)>,
+        stack: Vec<(Arc<ReadNode>, usize)>,
         after_key: &[u8],
         end: Option<&[u8]>,
     ) -> Self {
@@ -375,8 +374,8 @@ impl<'a, S: Store> RangeIter<'a, S> {
     pub fn resume_cursor(&self) -> RangeCursor {
         self.last_location
             .as_ref()
-            .and_then(|(node, index)| node.keys.get(*index))
-            .cloned()
+            .and_then(|(node, index)| node.key(*index))
+            .map(<[u8]>::to_vec)
             .map(RangeCursor::after_key)
             .unwrap_or_else(RangeCursor::start)
     }
@@ -397,7 +396,7 @@ impl<'a, S: Store> RangeIter<'a, S> {
         let (node, idx) = self.stack.last_mut()?;
 
         // If we're at a leaf, find the correct starting position
-        if node.leaf {
+        if node.is_leaf() {
             // Find first key >= start_key
             let start_idx = match node.search(&self.start_key) {
                 Ok(i) if self.skip_start_key => i.saturating_add(1),
@@ -437,7 +436,7 @@ impl<'a, S: Store> RangeIter<'a, S> {
         loop {
             let (node, idx) = self.stack.last()?;
 
-            if node.leaf {
+            if node.is_leaf() {
                 // We're at a leaf, return the current entry
                 if *idx >= node.len() {
                     return self.advance_to_next_leaf();
@@ -505,23 +504,16 @@ impl<'a, S: Store> RangeIter<'a, S> {
                     // Descend to the next child
                     return self.descend_to_leaf();
                 }
-                if parent.keys.len() != parent.vals.len() {
-                    return Some(Err(Error::InvalidNode));
-                }
                 // Otherwise, continue popping
             }
         }
     }
 
-    fn load_child_for_descent(&self, node: &Node, idx: usize) -> Result<Arc<Node>, Error> {
-        let child_cid = child_cid_at(node, idx)?;
+    fn load_child_for_descent(&self, node: &ReadNode, idx: usize) -> Result<Arc<ReadNode>, Error> {
+        let child_cid = node.child_cid(idx)?;
 
         if !self.prolly.store().prefers_batch_reads() {
-            return self.prolly.load_arc(&child_cid);
-        }
-
-        if let Some(child) = self.prolly.cached_node_arc(&child_cid) {
-            return Ok(child);
+            return self.prolly.load_read_arc(&child_cid);
         }
 
         let max_child_idx = node
@@ -537,19 +529,17 @@ impl<'a, S: Store> RangeIter<'a, S> {
                 Err(_) => break,
             }
 
-            match child_cid_at(node, child_idx) {
+            match node.child_cid(child_idx) {
                 Ok(cid) => child_cids.push(cid),
                 Err(_) => break,
             }
         }
 
         if child_cids.len() == 1 {
-            return self.prolly.load_arc(&child_cids[0]);
+            return self.prolly.load_read_arc(&child_cids[0]);
         }
 
-        let children = self
-            .prolly
-            .load_many_ordered_with_parallelism(&child_cids, RANGE_CHILD_PREFETCH_PARALLELISM)?;
+        let children = self.prolly.load_many_read_ordered(&child_cids)?;
         children.into_iter().next().ok_or(Error::InvalidNode)
     }
 }
@@ -570,17 +560,13 @@ impl<'a, S: Store> Iterator for RangeIter<'a, S> {
         loop {
             let (node, idx) = self.stack.last_mut()?;
 
-            if !node.leaf && node.keys.len() != node.vals.len() {
-                return Some(Err(Error::InvalidNode));
-            }
-
             // If we've exhausted this node, advance to next
             if *idx >= node.len() {
                 return self.advance_to_next_leaf();
             }
 
             // If we're at a leaf, yield the current entry
-            if node.leaf {
+            if node.is_leaf() {
                 match leaf_entry_before_end(node, *idx, self.end.as_deref()) {
                     Ok(Some(entry)) => {
                         let location = (node.clone(), *idx);
@@ -623,12 +609,12 @@ impl<'a, S: Store> Iterator for RangeIter<'a, S> {
 #[cfg(feature = "async-store")]
 pub struct AsyncRangeIter<'a, S: AsyncStore> {
     prolly: &'a AsyncProlly<S>,
-    stack: Vec<(Arc<Node>, usize)>,
+    stack: Vec<(Arc<ReadNode>, usize)>,
     end: Option<Vec<u8>>,
     started: bool,
     start_key: Vec<u8>,
     skip_start_key: bool,
-    last_location: Option<(Arc<Node>, usize)>,
+    last_location: Option<(Arc<ReadNode>, usize)>,
 }
 
 #[cfg(feature = "async-store")]
@@ -639,7 +625,7 @@ where
 {
     pub(crate) fn new(
         prolly: &'a AsyncProlly<S>,
-        stack: Vec<(Arc<Node>, usize)>,
+        stack: Vec<(Arc<ReadNode>, usize)>,
         start: &[u8],
         end: Option<&[u8]>,
     ) -> Self {
@@ -656,7 +642,7 @@ where
 
     pub(crate) fn new_after(
         prolly: &'a AsyncProlly<S>,
-        stack: Vec<(Arc<Node>, usize)>,
+        stack: Vec<(Arc<ReadNode>, usize)>,
         after_key: &[u8],
         end: Option<&[u8]>,
     ) -> Self {
@@ -691,10 +677,6 @@ where
         loop {
             let (node, idx) = self.stack.last_mut()?;
 
-            if !node.leaf && node.keys.len() != node.vals.len() {
-                return Some(Err(Error::InvalidNode));
-            }
-
             if *idx >= node.len() {
                 match self.advance_to_next_sibling() {
                     Ok(true) => continue,
@@ -703,19 +685,16 @@ where
                 }
             }
 
-            if node.leaf {
-                if node.keys.len() != node.vals.len() {
-                    return Some(Err(Error::InvalidNode));
-                }
+            if node.is_leaf() {
                 let index = *idx;
-                let key = match node.keys.get(index) {
+                let key = match node.key(index) {
                     Some(key) => key,
                     None => return Some(Err(Error::InvalidNode)),
                 };
-                if self.end.as_deref().is_some_and(|end| key.as_slice() >= end) {
+                if self.end.as_deref().is_some_and(|end| key >= end) {
                     return None;
                 }
-                let value = match node.vals.get(index) {
+                let value = match node.value(index) {
                     Some(value) => value,
                     None => return Some(Err(Error::InvalidNode)),
                 };
@@ -762,8 +741,8 @@ where
     pub fn resume_cursor(&self) -> RangeCursor {
         self.last_location
             .as_ref()
-            .and_then(|(node, index)| node.keys.get(*index))
-            .cloned()
+            .and_then(|(node, index)| node.key(*index))
+            .map(<[u8]>::to_vec)
             .map(RangeCursor::after_key)
             .unwrap_or_else(RangeCursor::start)
     }
@@ -785,7 +764,7 @@ where
             return;
         };
 
-        if node.leaf {
+        if node.is_leaf() {
             *idx = match node.search(&self.start_key) {
                 Ok(i) if self.skip_start_key => i.saturating_add(1),
                 Ok(i) | Err(i) => i,
@@ -808,22 +787,18 @@ where
                 }
                 return Ok(true);
             }
-
-            if parent.keys.len() != parent.vals.len() {
-                return Err(Error::InvalidNode);
-            }
         }
     }
 
-    async fn load_child_for_descent(&self, node: &Node, idx: usize) -> Result<Arc<Node>, Error> {
-        let child_cid = child_cid_at(node, idx)?;
+    async fn load_child_for_descent(
+        &self,
+        node: &ReadNode,
+        idx: usize,
+    ) -> Result<Arc<ReadNode>, Error> {
+        let child_cid = node.child_cid(idx)?;
 
         if !self.prolly.store().prefers_batch_reads() {
-            return self.prolly.load_arc(&child_cid).await;
-        }
-
-        if let Some(child) = self.prolly.cached_node_arc(&child_cid) {
-            return Ok(child);
+            return self.prolly.load_read_arc(&child_cid).await;
         }
 
         let max_child_idx = node
@@ -837,50 +812,42 @@ where
                 break;
             }
 
-            match child_cid_at(node, child_idx) {
+            match node.child_cid(child_idx) {
                 Ok(cid) => child_cids.push(cid),
                 Err(_) => break,
             }
         }
 
         if child_cids.len() == 1 {
-            return self.prolly.load_arc(&child_cids[0]).await;
+            return self.prolly.load_read_arc(&child_cids[0]).await;
         }
 
-        let children = self.prolly.load_child_frontier_ordered(&child_cids).await?;
+        let children = self.prolly.load_many_read_ordered(&child_cids).await?;
         children.into_iter().next().ok_or(Error::InvalidNode)
     }
 }
 
-fn leaf_entry_before_end(node: &Node, idx: usize, end: Option<&[u8]>) -> OptionalLeafEntry {
-    let key = node.keys.get(idx).ok_or(Error::InvalidNode)?;
+fn leaf_entry_before_end(node: &ReadNode, idx: usize, end: Option<&[u8]>) -> OptionalLeafEntry {
+    let key = node.key(idx).ok_or(Error::InvalidNode)?;
     if let Some(end) = end {
-        if key.as_slice() >= end {
+        if key >= end {
             return Ok(None);
         }
     }
 
-    let val = node.vals.get(idx).ok_or(Error::InvalidNode)?;
-    Ok(Some((key.clone(), val.clone())))
+    let val = node.value(idx).ok_or(Error::InvalidNode)?;
+    Ok(Some((key.to_vec(), val.to_vec())))
 }
 
 fn child_starts_at_or_after_end(
     end: Option<&[u8]>,
-    node: &Node,
+    node: &ReadNode,
     child_index: usize,
 ) -> Result<bool, Error> {
     let Some(end) = end else {
         return Ok(false);
     };
 
-    let first_key = node.keys.get(child_index).ok_or(Error::InvalidNode)?;
-    Ok(first_key.as_slice() >= end)
-}
-
-fn child_cid_at(node: &Node, idx: usize) -> Result<Cid, Error> {
-    let child = node.vals.get(idx).ok_or(Error::InvalidNode)?;
-    Ok(Cid(child
-        .as_slice()
-        .try_into()
-        .map_err(|_| Error::InvalidNode)?))
+    let first_key = node.key(child_index).ok_or(Error::InvalidNode)?;
+    Ok(first_key >= end)
 }

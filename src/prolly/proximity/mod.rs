@@ -419,6 +419,11 @@ pub struct ProximitySearchStats {
     pub quantized_distance_evaluations: usize,
     pub reranked_candidates: usize,
     pub frontier_peak: usize,
+    /// Maximum number of retained authoritative directory records awaiting
+    /// final top-k materialization.
+    pub candidate_handles_peak: usize,
+    /// Maximum unique packed-leaf bytes retained by authoritative candidates.
+    pub candidate_retained_bytes_peak: usize,
 }
 
 #[derive(Clone, Debug, PartialEq)]

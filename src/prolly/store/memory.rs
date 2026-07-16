@@ -1,7 +1,7 @@
 //! In-memory storage backend implementation
 
 use std::collections::{BTreeMap, HashMap};
-use std::sync::RwLock;
+use std::sync::{Arc, RwLock};
 
 use super::super::error::Error;
 use super::super::manifest::{
@@ -17,7 +17,7 @@ use super::{cid_from_store_key, sort_cids, BatchOp, NodeStoreScan, OrderedBatchR
 /// In-memory store for testing and simple use cases
 #[derive(Debug, Default)]
 pub struct MemStore {
-    data: RwLock<BTreeMap<Vec<u8>, Vec<u8>>>,
+    data: RwLock<BTreeMap<Vec<u8>, Arc<[u8]>>>,
     roots: RwLock<BTreeMap<Vec<u8>, RootManifest>>,
 }
 
@@ -51,6 +51,14 @@ impl Store for MemStore {
             .data
             .read()
             .map_err(|e| MemStoreError(format!("lock poisoned: {}", e)))?;
+        Ok(data.get(key).map(|value| value.as_ref().to_vec()))
+    }
+
+    fn get_shared(&self, key: &[u8]) -> Result<Option<Arc<[u8]>>, Self::Error> {
+        let data = self
+            .data
+            .read()
+            .map_err(|e| MemStoreError(format!("lock poisoned: {}", e)))?;
         Ok(data.get(key).cloned())
     }
 
@@ -59,7 +67,7 @@ impl Store for MemStore {
             .data
             .write()
             .map_err(|e| MemStoreError(format!("lock poisoned: {}", e)))?;
-        data.insert(key.to_vec(), value.to_vec());
+        data.insert(key.to_vec(), Arc::from(value));
         Ok(())
     }
 
@@ -81,7 +89,7 @@ impl Store for MemStore {
         for op in ops {
             match op {
                 BatchOp::Upsert { key, value } => {
-                    data.insert(key.to_vec(), value.to_vec());
+                    data.insert(key.to_vec(), Arc::from(*value));
                 }
                 BatchOp::Delete { key } => {
                     data.remove(*key);
@@ -103,7 +111,7 @@ impl Store for MemStore {
         let mut results = HashMap::with_capacity(plan.unique_keys().len());
         for key in plan.unique_keys() {
             if let Some(value) = data.get(*key) {
-                results.insert(key.to_vec(), value.clone());
+                results.insert(key.to_vec(), value.as_ref().to_vec());
             }
         }
         Ok(results)
@@ -120,7 +128,7 @@ impl Store for MemStore {
         let unique_values = plan
             .unique_keys()
             .iter()
-            .map(|key| data.get(*key).cloned())
+            .map(|key| data.get(*key).map(|value| value.as_ref().to_vec()))
             .collect::<Vec<_>>();
         Ok(plan.expand_owned(unique_values))
     }
@@ -134,7 +142,25 @@ impl Store for MemStore {
             .read()
             .map_err(|e| MemStoreError(format!("lock poisoned: {}", e)))?;
 
+        Ok(keys
+            .iter()
+            .map(|key| data.get(*key).map(|value| value.as_ref().to_vec()))
+            .collect())
+    }
+
+    fn batch_get_shared_ordered_unique(
+        &self,
+        keys: &[&[u8]],
+    ) -> Result<Vec<Option<Arc<[u8]>>>, Self::Error> {
+        let data = self
+            .data
+            .read()
+            .map_err(|e| MemStoreError(format!("lock poisoned: {}", e)))?;
         Ok(keys.iter().map(|key| data.get(*key).cloned()).collect())
+    }
+
+    fn has_native_shared_reads(&self) -> bool {
+        true
     }
 
     fn prefers_batch_reads(&self) -> bool {
@@ -149,7 +175,7 @@ impl Store for MemStore {
             .map_err(|e| MemStoreError(format!("lock poisoned: {}", e)))?;
 
         for (key, value) in entries {
-            data.insert(key.to_vec(), value.to_vec());
+            data.insert(key.to_vec(), Arc::from(*value));
         }
         Ok(())
     }
@@ -279,7 +305,7 @@ impl TransactionalStore for MemStore {
         for write in node_writes {
             match write {
                 TransactionNodeWrite::Upsert { key, value } => {
-                    data.insert(key.clone(), value.clone());
+                    data.insert(key.clone(), Arc::from(value.as_slice()));
                 }
                 TransactionNodeWrite::Delete { key } => {
                     data.remove(key);
@@ -326,6 +352,18 @@ mod tests {
         let store = MemStore::new();
         let result = store.get(b"nonexistent").unwrap();
         assert_eq!(result, None);
+    }
+
+    #[test]
+    fn shared_reads_retain_the_same_immutable_allocation() {
+        let store = MemStore::new();
+        store.put(b"key", b"value").unwrap();
+
+        let first = store.get_shared(b"key").unwrap().unwrap();
+        let second = store.get_shared(b"key").unwrap().unwrap();
+
+        assert!(Arc::ptr_eq(&first, &second));
+        assert_eq!(first.as_ref(), b"value");
     }
 
     #[test]

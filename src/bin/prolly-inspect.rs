@@ -71,20 +71,22 @@ fn roots(prolly: &FileProlly, args: &[String]) -> CliResult<()> {
 fn stats(prolly: &FileProlly, args: &[String]) -> CliResult<()> {
     expect_arg_count("stats", args, 1)?;
     let tree = load_named_root(prolly, &args[0])?;
+    let reader = reader_for_tree(prolly, &tree);
     println!("root_name={}", debug_key(args[0].as_bytes()));
     println!("root={}", format_optional_cid(tree.root.as_ref()));
-    println!("{}", prolly.collect_stats(&tree).map_err(format_error)?);
+    println!("{}", reader.collect_stats(&tree).map_err(format_error)?);
     Ok(())
 }
 
 fn walk(prolly: &FileProlly, args: &[String]) -> CliResult<()> {
     expect_arg_count("walk", args, 1)?;
     let tree = load_named_root(prolly, &args[0])?;
+    let reader = reader_for_tree(prolly, &tree);
     println!("root_name={}", debug_key(args[0].as_bytes()));
     println!("root={}", format_optional_cid(tree.root.as_ref()));
     println!(
         "{}",
-        prolly.debug_tree(&tree).map_err(format_error)?.to_text()
+        reader.debug_tree(&tree).map_err(format_error)?.to_text()
     );
     Ok(())
 }
@@ -93,13 +95,14 @@ fn compare(prolly: &FileProlly, args: &[String]) -> CliResult<()> {
     expect_arg_count("compare", args, 2)?;
     let left = load_named_root(prolly, &args[0])?;
     let right = load_named_root(prolly, &args[1])?;
+    let reader = reader_for_tree(prolly, &left);
     println!("left_name={}", debug_key(args[0].as_bytes()));
     println!("left_root={}", format_optional_cid(left.root.as_ref()));
     println!("right_name={}", debug_key(args[1].as_bytes()));
     println!("right_root={}", format_optional_cid(right.root.as_ref()));
     println!(
         "{}",
-        prolly
+        reader
             .debug_compare_trees(&left, &right)
             .map_err(format_error)?
             .to_text()
@@ -116,7 +119,8 @@ fn changed(prolly: &FileProlly, args: &[String]) -> CliResult<()> {
     let span_size = parse_span_size(&args[2..])?;
     let base = load_named_root(prolly, &args[0])?;
     let other = load_named_root(prolly, &args[1])?;
-    let mut diffs = prolly.diff(&base, &other).map_err(format_error)?;
+    let reader = reader_for_tree(prolly, &base);
+    let mut diffs = reader.diff(&base, &other).map_err(format_error)?;
     diffs.sort_by(|left, right| left.key().cmp(right.key()));
 
     println!("base_name={}", debug_key(args[0].as_bytes()));
@@ -227,6 +231,10 @@ fn load_named_root(prolly: &FileProlly, name: &str) -> CliResult<Tree> {
         .load_named_root(name.as_bytes())
         .map_err(|err| format!("failed to load named root {name:?}: {err}"))?
         .ok_or_else(|| format!("named root not found: {name:?}"))
+}
+
+fn reader_for_tree(prolly: &FileProlly, tree: &Tree) -> FileProlly {
+    Prolly::new(prolly.store().clone(), tree.config.clone())
 }
 
 fn parse_span_size(args: &[String]) -> CliResult<usize> {
