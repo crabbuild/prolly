@@ -383,11 +383,934 @@ low-level compatibility API, while `Prolly::cursor`, `range_cursor`, and all new
 performance APIs route through manager-backed traversal. Documentation must not
 present the store-only cursor as the preferred high-throughput path.
 
+## Normative API Change Set
+
+This section is the implementation contract for the API surface. Later sections
+define behavior and algorithms; if an illustrative signature later in the
+document is abbreviated, the signatures here take precedence. Core public
+read-view types live in `prolly::read` and are re-exported from the crate root
+beside the existing `Prolly`, `Tree`, `Diff`, and `Conflict` types. Deferred
+secondary-index and proximity views live in their domain modules and follow the
+crate's existing root re-export policy.
+
+The status labels used below are:
+
+- **add now**: public API delivered in core phases 1–4;
+- **update internally**: an existing public signature remains unchanged, but its
+  implementation must use the borrowed primitive and allocate only at its owned
+  boundary;
+- **crate-private**: foundation required now without a public stability promise;
+- **deferred public**: named and reserved for the secondary-index or proximity
+  phase, not required for the first core release;
+- **unchanged**: no signature, ownership, serialization, or binding change.
+
+### Public types added in core phases 1–4
+
+```rust,ignore
+pub struct EntryRef<'a> { /* private fields */ }
+
+impl<'a> EntryRef<'a> {
+    pub fn key(&self) -> &'a [u8];
+    pub fn value(&self) -> &'a [u8];
+    pub fn to_owned(self) -> KeyValue;
+}
+
+pub struct ScanOutcome<B> {
+    pub visited: u64,
+    pub break_value: Option<B>,
+}
+
+pub enum ValueRefView<'a> {
+    Inline(&'a [u8]),
+    Blob { cid: Cid, len: u64 },
+}
+
+impl ValueRefView<'_> {
+    pub fn to_owned(self) -> blob::ValueRef;
+}
+
+pub struct ReadSession<'manager, 'tree, S: Store> { /* private fields */ }
+
+#[derive(Clone, Copy, Debug)]
+pub enum DiffRef<'a> {
+    Added { key: &'a [u8], value: &'a [u8] },
+    Removed { key: &'a [u8], value: &'a [u8] },
+    Changed {
+        key: &'a [u8],
+        old: &'a [u8],
+        new: &'a [u8],
+    },
+}
+
+impl DiffRef<'_> {
+    pub fn key(&self) -> &[u8];
+    pub fn to_owned(self) -> Diff;
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct ConflictRef<'a> {
+    pub key: &'a [u8],
+    pub base: Option<&'a [u8]>,
+    pub left: Option<&'a [u8]>,
+    pub right: Option<&'a [u8]>,
+}
+
+impl ConflictRef<'_> {
+    pub fn to_owned(self) -> Conflict;
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum MergeDecision {
+    UseBase,
+    UseLeft,
+    UseRight,
+    Value(Vec<u8>),
+    Delete,
+    Unresolved,
+}
+
+pub trait BorrowedMergeResolver: Send + Sync {
+    fn resolve(&self, conflict: ConflictRef<'_>) -> MergeDecision;
+}
+```
+
+`ValueRefView::Blob` owns its fixed-size CID because the CID parser already
+validates and materializes that small identifier. The potentially large inline
+payload remains borrowed. No public view contains a reference that can outlive
+its callback.
+
+### `Prolly` and `ReadSession` additions
+
+The root-bound session is the primary high-throughput interface. Direct
+`Prolly` visitor methods are one-shot conveniences that create a session and
+delegate to it; they do not contain a second traversal implementation.
+
+```rust,ignore
+impl<S: Store> Prolly<S> {
+    pub fn read<'manager, 'tree>(
+        &'manager self,
+        tree: &'tree Tree,
+    ) -> Result<ReadSession<'manager, 'tree, S>, Error>;
+
+    pub fn get_with<R>(
+        &self,
+        tree: &Tree,
+        key: &[u8],
+        read: impl FnOnce(&[u8]) -> R,
+    ) -> Result<Option<R>, Error>;
+
+    pub fn contains_key(&self, tree: &Tree, key: &[u8]) -> Result<bool, Error>;
+
+    pub fn get_value_ref_with<R>(
+        &self,
+        tree: &Tree,
+        key: &[u8],
+        read: impl for<'value> FnOnce(ValueRefView<'value>) -> R,
+    ) -> Result<Option<R>, Error>;
+
+    pub fn get_many_with<K, F>(
+        &self,
+        tree: &Tree,
+        keys: &[K],
+        visit: F,
+    ) -> Result<(), Error>
+    where
+        K: AsRef<[u8]>,
+        F: for<'value> FnMut(usize, &[u8], Option<&'value [u8]>);
+
+    pub fn select_with<R>(
+        &self,
+        tree: &Tree,
+        ordinal: u64,
+        read: impl for<'entry> FnOnce(EntryRef<'entry>) -> R,
+    ) -> Result<Option<R>, Error>;
+
+    pub fn first_entry_with<R>(
+        &self,
+        tree: &Tree,
+        read: impl for<'entry> FnOnce(EntryRef<'entry>) -> R,
+    ) -> Result<Option<R>, Error>;
+
+    pub fn last_entry_with<R>(
+        &self,
+        tree: &Tree,
+        read: impl for<'entry> FnOnce(EntryRef<'entry>) -> R,
+    ) -> Result<Option<R>, Error>;
+
+    pub fn lower_bound_with<R>(
+        &self,
+        tree: &Tree,
+        key: &[u8],
+        read: impl for<'entry> FnOnce(EntryRef<'entry>) -> R,
+    ) -> Result<Option<R>, Error>;
+
+    pub fn upper_bound_with<R>(
+        &self,
+        tree: &Tree,
+        key: &[u8],
+        read: impl for<'entry> FnOnce(EntryRef<'entry>) -> R,
+    ) -> Result<Option<R>, Error>;
+
+    pub fn scan_range(
+        &self,
+        tree: &Tree,
+        start: &[u8],
+        end: Option<&[u8]>,
+        visit: impl for<'entry> FnMut(EntryRef<'entry>),
+    ) -> Result<u64, Error>;
+
+    pub fn scan_range_until<B>(
+        &self,
+        tree: &Tree,
+        start: &[u8],
+        end: Option<&[u8]>,
+        visit: impl for<'entry> FnMut(EntryRef<'entry>) -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error>;
+
+    pub fn scan_prefix(
+        &self,
+        tree: &Tree,
+        prefix: &[u8],
+        visit: impl for<'entry> FnMut(EntryRef<'entry>),
+    ) -> Result<u64, Error>;
+
+    pub fn scan_prefix_until<B>(
+        &self,
+        tree: &Tree,
+        prefix: &[u8],
+        visit: impl for<'entry> FnMut(EntryRef<'entry>) -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error>;
+
+    pub fn scan_range_reverse(
+        &self,
+        tree: &Tree,
+        start: &[u8],
+        end: Option<&[u8]>,
+        visit: impl for<'entry> FnMut(EntryRef<'entry>),
+    ) -> Result<u64, Error>;
+
+    pub fn scan_range_reverse_until<B>(
+        &self,
+        tree: &Tree,
+        start: &[u8],
+        end: Option<&[u8]>,
+        visit: impl for<'entry> FnMut(EntryRef<'entry>) -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error>;
+
+    pub fn scan_prefix_reverse(
+        &self,
+        tree: &Tree,
+        prefix: &[u8],
+        visit: impl for<'entry> FnMut(EntryRef<'entry>),
+    ) -> Result<u64, Error>;
+
+    pub fn scan_prefix_reverse_until<B>(
+        &self,
+        tree: &Tree,
+        prefix: &[u8],
+        visit: impl for<'entry> FnMut(EntryRef<'entry>) -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error>;
+}
+```
+
+`ReadSession` exposes the same operations without the `tree` parameter:
+
+```rust,ignore
+impl<S: Store> ReadSession<'_, '_, S> {
+    pub fn tree(&self) -> &Tree;
+    pub fn len(&self) -> Result<u64, Error>;
+    pub fn rank(&mut self, key: &[u8]) -> Result<u64, Error>;
+    pub fn get_with<R>(&mut self, key: &[u8], read: impl FnOnce(&[u8]) -> R)
+        -> Result<Option<R>, Error>;
+    pub fn get_value_ref_with<R>(
+        &mut self,
+        key: &[u8],
+        read: impl for<'value> FnOnce(ValueRefView<'value>) -> R,
+    ) -> Result<Option<R>, Error>;
+    pub fn contains_key(&mut self, key: &[u8]) -> Result<bool, Error>;
+    pub fn get_many_with<K, F>(&mut self, keys: &[K], visit: F) -> Result<(), Error>
+    where
+        K: AsRef<[u8]>,
+        F: for<'value> FnMut(usize, &[u8], Option<&'value [u8]>);
+    pub fn select_with<R>(
+        &mut self,
+        ordinal: u64,
+        read: impl for<'entry> FnOnce(EntryRef<'entry>) -> R,
+    ) -> Result<Option<R>, Error>;
+    pub fn first_entry_with<R>(
+        &mut self,
+        read: impl for<'entry> FnOnce(EntryRef<'entry>) -> R,
+    ) -> Result<Option<R>, Error>;
+    pub fn last_entry_with<R>(
+        &mut self,
+        read: impl for<'entry> FnOnce(EntryRef<'entry>) -> R,
+    ) -> Result<Option<R>, Error>;
+    pub fn lower_bound_with<R>(
+        &mut self,
+        key: &[u8],
+        read: impl for<'entry> FnOnce(EntryRef<'entry>) -> R,
+    ) -> Result<Option<R>, Error>;
+    pub fn upper_bound_with<R>(
+        &mut self,
+        key: &[u8],
+        read: impl for<'entry> FnOnce(EntryRef<'entry>) -> R,
+    ) -> Result<Option<R>, Error>;
+    pub fn scan_range(
+        &mut self,
+        start: &[u8],
+        end: Option<&[u8]>,
+        visit: impl for<'entry> FnMut(EntryRef<'entry>),
+    ) -> Result<u64, Error>;
+    pub fn scan_range_until<B>(
+        &mut self,
+        start: &[u8],
+        end: Option<&[u8]>,
+        visit: impl for<'entry> FnMut(EntryRef<'entry>) -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error>;
+    pub fn scan_prefix(
+        &mut self,
+        prefix: &[u8],
+        visit: impl for<'entry> FnMut(EntryRef<'entry>),
+    ) -> Result<u64, Error>;
+    pub fn scan_prefix_until<B>(
+        &mut self,
+        prefix: &[u8],
+        visit: impl for<'entry> FnMut(EntryRef<'entry>) -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error>;
+    pub fn scan_range_reverse(
+        &mut self,
+        start: &[u8],
+        end: Option<&[u8]>,
+        visit: impl for<'entry> FnMut(EntryRef<'entry>),
+    ) -> Result<u64, Error>;
+    pub fn scan_range_reverse_until<B>(
+        &mut self,
+        start: &[u8],
+        end: Option<&[u8]>,
+        visit: impl for<'entry> FnMut(EntryRef<'entry>) -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error>;
+    pub fn scan_prefix_reverse(
+        &mut self,
+        prefix: &[u8],
+        visit: impl for<'entry> FnMut(EntryRef<'entry>),
+    ) -> Result<u64, Error>;
+    pub fn scan_prefix_reverse_until<B>(
+        &mut self,
+        prefix: &[u8],
+        visit: impl for<'entry> FnMut(EntryRef<'entry>) -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error>;
+}
+```
+
+`get_many_with` invokes the callback exactly once per input position, in input
+order, including duplicate keys and misses. The key argument is the caller's
+input slice; the optional value is borrowed only for that invocation. Reverse
+ranges retain the existing half-open `[start, end)` semantics and merely change
+delivery order.
+
+### Diff and merge additions
+
+```rust,ignore
+impl<S: Store> Prolly<S> {
+    pub fn scan_diff(
+        &self,
+        base: &Tree,
+        other: &Tree,
+        visit: impl for<'diff> FnMut(DiffRef<'diff>),
+    ) -> Result<u64, Error>;
+
+    pub fn scan_diff_until<B>(
+        &self,
+        base: &Tree,
+        other: &Tree,
+        visit: impl for<'diff> FnMut(DiffRef<'diff>) -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error>;
+
+    pub fn scan_range_diff(
+        &self,
+        base: &Tree,
+        other: &Tree,
+        start: &[u8],
+        end: Option<&[u8]>,
+        visit: impl for<'diff> FnMut(DiffRef<'diff>),
+    ) -> Result<u64, Error>;
+
+    pub fn scan_range_diff_until<B>(
+        &self,
+        base: &Tree,
+        other: &Tree,
+        start: &[u8],
+        end: Option<&[u8]>,
+        visit: impl for<'diff> FnMut(DiffRef<'diff>) -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error>;
+
+    pub fn scan_conflicts(
+        &self,
+        base: &Tree,
+        left: &Tree,
+        right: &Tree,
+        visit: impl for<'conflict> FnMut(ConflictRef<'conflict>),
+    ) -> Result<u64, Error>;
+
+    pub fn scan_conflicts_until<B>(
+        &self,
+        base: &Tree,
+        left: &Tree,
+        right: &Tree,
+        visit: impl for<'conflict> FnMut(ConflictRef<'conflict>) -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error>;
+
+    pub fn merge_with(
+        &self,
+        base: &Tree,
+        left: &Tree,
+        right: &Tree,
+        resolver: Option<&dyn BorrowedMergeResolver>,
+    ) -> Result<Tree, Error>;
+
+    pub fn merge_range_with(
+        &self,
+        base: &Tree,
+        left: &Tree,
+        right: &Tree,
+        start: &[u8],
+        end: Option<&[u8]>,
+        resolver: Option<&dyn BorrowedMergeResolver>,
+    ) -> Result<Tree, Error>;
+
+    pub fn merge_prefix_with(
+        &self,
+        base: &Tree,
+        left: &Tree,
+        right: &Tree,
+        prefix: &[u8],
+        resolver: Option<&dyn BorrowedMergeResolver>,
+    ) -> Result<Tree, Error>;
+}
+```
+
+The `*_until` methods are the sole public early-stop variants; ordinary visitor
+methods delegate with `ControlFlow::Continue(())`. `merge_with` is intentionally
+distinct from the existing `merge(..., Option<Resolver>)`, so existing resolver
+closures keep their owned `Conflict` contract and source compatibility.
+
+### Versioned-map additions
+
+Snapshot methods reuse the core types rather than introduce snapshot-specific
+entry views. These are **add now** because secondary indexes already depend on
+`MapSnapshot` and need a stable zero-copy source-reader foundation.
+
+```rust,ignore
+impl<'snapshot, S: Store> MapSnapshot<'snapshot, S> {
+    pub fn read<'tree>(
+        &'tree self,
+    ) -> Result<ReadSession<'snapshot, 'tree, S>, Error>;
+    pub fn get_with<R>(
+        &self,
+        key: &[u8],
+        read: impl FnOnce(&[u8]) -> R,
+    ) -> Result<Option<R>, Error>;
+    pub fn get_value_ref_with<R>(
+        &self,
+        key: &[u8],
+        read: impl for<'value> FnOnce(ValueRefView<'value>) -> R,
+    ) -> Result<Option<R>, Error>;
+    pub fn get_many_with<K, F>(&self, keys: &[K], visit: F) -> Result<(), Error>
+    where
+        K: AsRef<[u8]>,
+        F: for<'value> FnMut(usize, &[u8], Option<&'value [u8]>);
+    pub fn scan_range(
+        &self,
+        start: &[u8],
+        end: Option<&[u8]>,
+        visit: impl for<'entry> FnMut(EntryRef<'entry>),
+    ) -> Result<u64, Error>;
+    pub fn scan_prefix(
+        &self,
+        prefix: &[u8],
+        visit: impl for<'entry> FnMut(EntryRef<'entry>),
+    ) -> Result<u64, Error>;
+}
+
+impl<'engine, S: Store> VersionedMap<'engine, S> {
+    pub fn get_with<R>(
+        &self,
+        key: &[u8],
+        read: impl FnOnce(&[u8]) -> R,
+    ) -> Result<Option<R>, Error>;
+    pub fn get_at_with<R>(
+        &self,
+        id: &MapVersionId,
+        key: &[u8],
+        read: impl FnOnce(&[u8]) -> R,
+    ) -> Result<Option<R>, Error>;
+    pub fn get_value_ref_with<R>(
+        &self,
+        key: &[u8],
+        read: impl for<'value> FnOnce(ValueRefView<'value>) -> R,
+    ) -> Result<Option<R>, Error>;
+    pub fn get_value_ref_at_with<R>(
+        &self,
+        id: &MapVersionId,
+        key: &[u8],
+        read: impl for<'value> FnOnce(ValueRefView<'value>) -> R,
+    ) -> Result<Option<R>, Error>;
+    pub fn scan_range(
+        &self,
+        start: &[u8],
+        end: Option<&[u8]>,
+        visit: impl for<'entry> FnMut(EntryRef<'entry>),
+    ) -> Result<u64, Error>;
+    pub fn scan_prefix(
+        &self,
+        prefix: &[u8],
+        visit: impl for<'entry> FnMut(EntryRef<'entry>),
+    ) -> Result<u64, Error>;
+    pub fn scan_range_at(
+        &self,
+        id: &MapVersionId,
+        start: &[u8],
+        end: Option<&[u8]>,
+        visit: impl for<'entry> FnMut(EntryRef<'entry>),
+    ) -> Result<u64, Error>;
+    pub fn scan_prefix_at(
+        &self,
+        id: &MapVersionId,
+        prefix: &[u8],
+        visit: impl for<'entry> FnMut(EntryRef<'entry>),
+    ) -> Result<u64, Error>;
+}
+```
+
+`MapSnapshot::read` borrows the manager for `'snapshot` and the snapshot tree
+for `'tree`; the implementation may shorten the manager borrow to the method
+borrow if Rust's inferred variance permits a simpler concrete signature. The
+observable guarantee is that the session cannot outlive either snapshot input.
+The typed map decodes inside `get_with` internally; it does not expose encoded
+borrowed bytes through `TypedVersionedMap<K, V>`.
+
+### Async additions behind `async-store`
+
+The async API awaits node loads and then invokes a synchronous callback. It does
+not hold a borrowed value across `.await`, and it does not accept an async
+visitor. This makes callback lifetime safety identical to the synchronous API.
+
+```rust,ignore
+pub struct AsyncReadSession<'manager, 'tree, S: AsyncStore> { /* private */ }
+
+impl<S: AsyncStore> AsyncProlly<S> {
+    pub async fn read<'manager, 'tree>(
+        &'manager self,
+        tree: &'tree Tree,
+    ) -> Result<AsyncReadSession<'manager, 'tree, S>, Error>;
+    pub async fn get_with<R>(
+        &self,
+        tree: &Tree,
+        key: &[u8],
+        read: impl FnOnce(&[u8]) -> R,
+    ) -> Result<Option<R>, Error>;
+    pub async fn get_value_ref_with<R>(
+        &self,
+        tree: &Tree,
+        key: &[u8],
+        read: impl for<'value> FnOnce(ValueRefView<'value>) -> R,
+    ) -> Result<Option<R>, Error>;
+    pub async fn get_many_with<K, F>(
+        &self,
+        tree: &Tree,
+        keys: &[K],
+        visit: F,
+    ) -> Result<(), Error>
+    where
+        K: AsRef<[u8]>,
+        F: for<'value> FnMut(usize, &[u8], Option<&'value [u8]>);
+    pub async fn scan_range(
+        &self,
+        tree: &Tree,
+        start: &[u8],
+        end: Option<&[u8]>,
+        visit: impl for<'entry> FnMut(EntryRef<'entry>),
+    ) -> Result<u64, Error>;
+    pub async fn scan_prefix(
+        &self,
+        tree: &Tree,
+        prefix: &[u8],
+        visit: impl for<'entry> FnMut(EntryRef<'entry>),
+    ) -> Result<u64, Error>;
+    pub async fn scan_diff(
+        &self,
+        base: &Tree,
+        other: &Tree,
+        visit: impl for<'diff> FnMut(DiffRef<'diff>),
+    ) -> Result<u64, Error>;
+    pub async fn scan_conflicts(
+        &self,
+        base: &Tree,
+        left: &Tree,
+        right: &Tree,
+        visit: impl for<'conflict> FnMut(ConflictRef<'conflict>),
+    ) -> Result<u64, Error>;
+}
+
+impl<S: AsyncStore> AsyncReadSession<'_, '_, S> {
+    pub async fn get_with<R>(
+        &mut self,
+        key: &[u8],
+        read: impl FnOnce(&[u8]) -> R,
+    ) -> Result<Option<R>, Error>;
+    pub async fn get_value_ref_with<R>(
+        &mut self,
+        key: &[u8],
+        read: impl for<'value> FnOnce(ValueRefView<'value>) -> R,
+    ) -> Result<Option<R>, Error>;
+    pub async fn get_many_with<K, F>(&mut self, keys: &[K], visit: F)
+        -> Result<(), Error>
+    where
+        K: AsRef<[u8]>,
+        F: for<'value> FnMut(usize, &[u8], Option<&'value [u8]>);
+    pub async fn scan_range(
+        &mut self,
+        start: &[u8],
+        end: Option<&[u8]>,
+        visit: impl for<'entry> FnMut(EntryRef<'entry>),
+    ) -> Result<u64, Error>;
+    pub async fn scan_prefix(
+        &mut self,
+        prefix: &[u8],
+        visit: impl for<'entry> FnMut(EntryRef<'entry>),
+    ) -> Result<u64, Error>;
+}
+```
+
+The complete async addition set is listed below. I/O methods have the matching
+synchronous signature above with `async fn`, `AsyncReadSession`, or the async
+snapshot type substituted; pure accessors such as `tree` remain synchronous and
+callbacks remain synchronous.
+
+| Async type | Added method names |
+|---|---|
+| `AsyncProlly` | `read`, `get_with`, `get_value_ref_with`, `get_many_with`, `scan_range`, `scan_range_until`, `scan_prefix`, `scan_prefix_until`, `scan_range_reverse`, `scan_range_reverse_until`, `scan_prefix_reverse`, `scan_prefix_reverse_until`, `scan_diff`, `scan_diff_until`, `scan_range_diff`, `scan_range_diff_until`, `scan_conflicts`, `scan_conflicts_until`, `merge_with`, `merge_range_with`, `merge_prefix_with` |
+| `AsyncReadSession` | `tree`, `len`, `rank`, `get_with`, `get_value_ref_with`, `contains_key`, `get_many_with`, `select_with`, `first_entry_with`, `last_entry_with`, `lower_bound_with`, `upper_bound_with`, `scan_range`, `scan_range_until`, `scan_prefix`, `scan_prefix_until`, `scan_range_reverse`, `scan_range_reverse_until`, `scan_prefix_reverse`, `scan_prefix_reverse_until` |
+| `AsyncMapSnapshot` | `read`, `get_with`, `get_value_ref_with`, `get_many_with`, `scan_range`, `scan_prefix` |
+| `AsyncVersionedMap` | `get_with`, `get_at_with`, `get_value_ref_with`, `get_value_ref_at_with`, `scan_range`, `scan_prefix`, `scan_range_at`, `scan_prefix_at` |
+
+Async borrowed merge resolvers execute only after all values for one conflict
+are retained and before the next await. There is no async borrowed resolver
+trait; an application that must await resolution uses the existing owned
+conflict workflow.
+
+### Existing public methods updated internally
+
+No method in this table changes its signature. Each must become a thin owned or
+scalar adapter over the new foundation, so optimizations benefit the entire API
+instead of only callers that opt into visitors.
+
+| Type/module | Existing methods routed through borrowed traversal |
+|---|---|
+| `Prolly` | `get`, `get_value_ref`, `get_large_value`, `get_many`, `len`, `rank`, `select`, `first_entry`, `last_entry`, `lower_bound`, `upper_bound`, `range`, `prefix`, `range_after`, `range_from_cursor`, `prefix_page`, `range_page`, `reverse_page`, `prefix_reverse_page`, `reverse_range_page`, `cursor`, `cursor_window`, `range_cursor` |
+| diff/merge | `diff`, `range_diff`, `diff_from_cursor`, `diff_page`, `structural_diff_page`, `diff_cursor`, `stream_diff`, `stream_conflicts`, `merge`, `merge_explain`, `merge_range`, `merge_prefix`, CRDT merge variants |
+| writes/transactions | `put`, `put_large_value`, `delete`, `delete_range`, all batch/append/parallel-batch variants, write-session reads and overlay/base ordered merge |
+| maintenance | stats, debug comparison, verification, proofs, reachability, missing-node planning/copying, export/import, and GC walkers use `ReadNode`/`NodeHandle` accessors, but keep their owned reports and artifacts |
+| `MapSnapshot` | `get`, `get_value_ref`, `get_large_value`, `contains_key`, `get_many`, `first_entry`, `last_entry`, `lower_bound`, `upper_bound`, `range`, `stream_range`, `prefix`, `stream_prefix`, `range_page`, `prefix_page`, `reverse_page`, `prefix_reverse_page`, `reverse_scan`, `prefix_reverse_scan`, `cursor_window`, stats/debug/proof/sync helpers |
+| `VersionedMap` | current and historical `get`, `get_large_value`, `contains_key`, `get_many`, `range`, `prefix`, `range_page`, `prefix_page`, `get_at`, `get_many_at`, `range_at`, `prefix_at`, `range_page_at`, `prefix_page_at`, `diff`, and `changes_since` families |
+| async types | every async counterpart of the core, snapshot, versioned, diff, merge, cursor/page, proof, and maintenance families above |
+
+The legacy `RangeIter`, cursor, diff iterator, page, proof, `KeyValue`, `Diff`,
+`Conflict`, and blob result types still own their yielded data. They clone once
+when an item crosses that compatibility boundary; they must not trigger an
+additional intermediate clone inside traversal.
+
+### Crate-private foundation added now
+
+These names are implementation-oriented and may evolve without semver impact:
+
+| Area | Crate-private additions | Purpose |
+|---|---|---|
+| retained content | `NodeHandle`, `CachedNode`, `ReadNode` | keep validated bytes/decoded node alive for callback scope |
+| routing | `LeafWindow`, `KeyScratch`, `ValueLocation`, `ReadPath` | session-local recent leaf, reconstructed-key scratch, and point lookup location |
+| scans | `RangeTraversal`, `ReverseRangeTraversal`, `BorrowedLeafCursor` | bounded forward/reverse leaf traversal shared by visitors and owned adapters |
+| comparison | `BorrowedDiffWalker`, `BorrowedConflictWalker` | aligned and misaligned subtree streaming without eager vectors |
+| writes | `BorrowedMutation<'a>`, `BorrowedMutationSource` | remove temporary owned mutation/diff copies before final node encoding |
+| cache | `CachePolicy`, `CacheLookup`, `CacheAdmission`, `PinnedReadHandle` | separate read hits from bounded-policy bookkeeping and pin callback backing |
+| instrumentation | `LocalReadMetrics`, `AllocationClass` | aggregate hot-loop counters and distinguish required boundary allocation |
+
+The existing public `Store`, `AsyncStore`, `BlobStore`, `Tree`, `Config`, `Node`,
+`Mutation`, `Resolver`, `Resolution`, and persistence formats are **unchanged**.
+In particular, zero-copy does not require storage backends to return borrowed
+buffers, and it does not change canonical node CIDs.
+
+### Deferred secondary-index public API (phase 5)
+
+The core release reserves these names and semantics, but they are implemented
+only when secondary-index migration begins:
+
+```rust,ignore
+pub enum IndexValueRef<'a> {
+    KeysOnly,
+    Included(&'a [u8]),
+    FullSource(&'a [u8]),
+}
+
+impl<'a> IndexValueRef<'a> {
+    pub fn decode(bytes: &'a [u8], limit: usize) -> Result<Self, Error>;
+    pub fn to_owned(self) -> IndexValue;
+}
+
+pub struct DecodedPhysicalIndexKeyRef<'a> {
+    pub term: &'a [u8],
+    pub primary_key: &'a [u8],
+}
+
+pub struct SecondaryIndexMatchRef<'a> {
+    pub term: &'a [u8],
+    pub primary_key: &'a [u8],
+    pub projection: Option<&'a [u8]>,
+}
+
+impl SecondaryIndexMatchRef<'_> {
+    pub fn to_owned(self) -> SecondaryIndexMatch;
+}
+
+pub struct IndexedSourceRecordRef<'a> {
+    pub term: &'a [u8],
+    pub primary_key: &'a [u8],
+    pub projection: Option<&'a [u8]>,
+    pub source_value: &'a [u8],
+}
+
+impl IndexedSourceRecordRef<'_> {
+    pub fn to_owned(self) -> IndexedSourceRecord;
+}
+
+impl<'snapshot, S: Store> SecondaryIndexSnapshot<'snapshot, S> {
+    pub fn scan_exact(
+        &self,
+        term: &[u8],
+        visit: impl for<'row> FnMut(SecondaryIndexMatchRef<'row>),
+    ) -> Result<u64, Error>;
+    pub fn scan_prefix(
+        &self,
+        prefix: &[u8],
+        visit: impl for<'row> FnMut(SecondaryIndexMatchRef<'row>),
+    ) -> Result<u64, Error>;
+    pub fn scan_range(
+        &self,
+        start_term: &[u8],
+        end_term: Option<&[u8]>,
+        visit: impl for<'row> FnMut(SecondaryIndexMatchRef<'row>),
+    ) -> Result<u64, Error>;
+    pub fn scan_records(
+        &self,
+        term: &[u8],
+        visit: impl for<'row> FnMut(IndexedSourceRecordRef<'row>),
+    ) -> Result<u64, Error>;
+    pub fn scan_exact_until<B>(
+        &self,
+        term: &[u8],
+        visit: impl for<'row> FnMut(SecondaryIndexMatchRef<'row>)
+            -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error>;
+    pub fn scan_prefix_until<B>(
+        &self,
+        prefix: &[u8],
+        visit: impl for<'row> FnMut(SecondaryIndexMatchRef<'row>)
+            -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error>;
+    pub fn scan_range_until<B>(
+        &self,
+        start_term: &[u8],
+        end_term: Option<&[u8]>,
+        visit: impl for<'row> FnMut(SecondaryIndexMatchRef<'row>)
+            -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error>;
+    pub fn scan_records_until<B>(
+        &self,
+        term: &[u8],
+        visit: impl for<'row> FnMut(IndexedSourceRecordRef<'row>)
+            -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error>;
+    pub fn scan_exact_reverse(
+        &self,
+        term: &[u8],
+        visit: impl for<'row> FnMut(SecondaryIndexMatchRef<'row>),
+    ) -> Result<u64, Error>;
+    pub fn scan_prefix_reverse(
+        &self,
+        prefix: &[u8],
+        visit: impl for<'row> FnMut(SecondaryIndexMatchRef<'row>),
+    ) -> Result<u64, Error>;
+    pub fn scan_range_reverse(
+        &self,
+        start_term: &[u8],
+        end_term: Option<&[u8]>,
+        visit: impl for<'row> FnMut(SecondaryIndexMatchRef<'row>),
+    ) -> Result<u64, Error>;
+    pub fn scan_exact_reverse_until<B>(
+        &self,
+        term: &[u8],
+        visit: impl for<'row> FnMut(SecondaryIndexMatchRef<'row>)
+            -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error>;
+    pub fn scan_prefix_reverse_until<B>(
+        &self,
+        prefix: &[u8],
+        visit: impl for<'row> FnMut(SecondaryIndexMatchRef<'row>)
+            -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error>;
+    pub fn scan_range_reverse_until<B>(
+        &self,
+        start_term: &[u8],
+        end_term: Option<&[u8]>,
+        visit: impl for<'row> FnMut(SecondaryIndexMatchRef<'row>)
+            -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error>;
+}
+
+impl<'engine, S> IndexedMap<'engine, S>
+where
+    S: Store + ManifestStore + TransactionalStore,
+{
+    pub fn get_with<R>(
+        &self,
+        key: &[u8],
+        read: impl FnOnce(&[u8]) -> R,
+    ) -> Result<Option<R>, Error>;
+}
+
+pub struct SecondaryIndexEntryRef<'a> {
+    pub term: &'a [u8],
+    pub projection: Option<&'a [u8]>,
+}
+
+pub trait StreamingSecondaryIndexExtractor: Send + Sync {
+    fn extract(
+        &self,
+        primary_key: &[u8],
+        source_value: &[u8],
+        emit: &mut dyn FnMut(SecondaryIndexEntryRef<'_>)
+            -> Result<(), SecondaryIndexError>,
+    ) -> Result<(), SecondaryIndexError>;
+}
+```
+
+`SecondaryIndexSnapshot::{exact,prefix,range,primary_keys,projected,records}`
+and all page/reverse-page methods become owned adapters. `IndexedMap::get`,
+build, verify, repair, replace, and mutation coordination consume core snapshot
+visitors internally. `IndexValueRef` and physical-key decoding validate exactly
+the same limits and canonical encoding as their owned counterparts. Escaped
+physical-key components may use bounded reusable scratch, so the guarantee is
+steady-state allocation-free decoding, not universal direct subslicing.
+Forward and reverse visitors preserve the exact logical ordering used by the
+corresponding owned page API. Early stop returns the last delivered count but
+does not manufacture a serialized cursor; callers that need resumability use
+the existing owned page/cursor boundary.
+
+### Deferred proximity-map public API (phase 6)
+
+Public views expose safe logical records. Byte-layout helpers remain
+crate-private so an alignment or encoding change does not leak into the API.
+
+```rust,ignore
+#[derive(Clone, Copy, Debug)]
+pub struct ProximityVectorRef<'a> { /* private encoded bytes and dimensions */ }
+
+impl ProximityVectorRef<'_> {
+    pub fn dimensions(&self) -> usize;
+    pub fn component(&self, index: usize) -> Option<f32>;
+    pub fn iter(&self) -> impl ExactSizeIterator<Item = f32> + '_;
+    pub fn copy_to_slice(&self, output: &mut [f32]) -> Result<(), Error>;
+    pub fn to_vec(&self) -> Vec<f32>;
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct ProximityRecordRef<'a> {
+    pub vector: ProximityVectorRef<'a>,
+    pub value: &'a [u8],
+}
+
+impl ProximityRecordRef<'_> {
+    pub fn to_owned(self) -> ExactProximityRecord;
+}
+
+pub struct ProximityReadSession<'map, S: Store> { /* private fields */ }
+
+impl<S: Store> ProximityMap<S> {
+    pub fn read(&self) -> Result<ProximityReadSession<'_, S>, Error>;
+    pub fn get_with<R>(
+        &self,
+        key: &[u8],
+        read: impl for<'record> FnOnce(ProximityRecordRef<'record>) -> R,
+    ) -> Result<Option<R>, Error>;
+    pub fn scan_records(
+        &self,
+        visit: impl for<'record> FnMut(&[u8], ProximityRecordRef<'record>),
+    ) -> Result<u64, Error>;
+    pub fn scan_records_until<B>(
+        &self,
+        visit: impl for<'record> FnMut(&[u8], ProximityRecordRef<'record>)
+            -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error>;
+}
+
+impl<S: Store> ProximityReadSession<'_, S> {
+    pub fn get_with<R>(
+        &mut self,
+        key: &[u8],
+        read: impl for<'record> FnOnce(ProximityRecordRef<'record>) -> R,
+    ) -> Result<Option<R>, Error>;
+    pub fn contains_key(&mut self, key: &[u8]) -> Result<bool, Error>;
+    pub fn scan_records(
+        &mut self,
+        visit: impl for<'record> FnMut(&[u8], ProximityRecordRef<'record>),
+    ) -> Result<u64, Error>;
+    pub fn scan_records_until<B>(
+        &mut self,
+        visit: impl for<'record> FnMut(&[u8], ProximityRecordRef<'record>)
+            -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error>;
+}
+```
+
+`StoredRecordRef` and `EncodedVectorRef` are the crate-private wire views that
+back public `ProximityRecordRef` and `ProximityVectorRef`. They validate format,
+vector dimensions, finite canonical components, and value bounds before the
+callback.
+They never cast persisted bytes to `&[f32]`. `ProximityMap::{get,contains_key}`,
+rebuild/mutate, verification, exact search, SQ8/PQ/HNSW build, and async search
+then consume these views internally. Existing `ExactProximityRecord`,
+`Neighbor`, `SearchResult`, descriptors, proofs, and persisted accelerator
+artifacts remain owned and unchanged.
+
+`AsyncProximityMap` eventually gains `read`, `get_with`, and `scan_records`
+counterparts with synchronous post-await callbacks. Approximate-search callback
+results are deliberately not exposed: candidate heaps can use retained internal
+handles, but a public result must remain self-contained.
+
+### Source-file ownership and delivery
+
+| Source area | API/design ownership | Delivery phase |
+|---|---|---|
+| new `src/prolly/read.rs` plus root re-exports | public views, sessions, scan outcomes | 1–2 |
+| new/extracted `src/prolly/cache.rs`, existing `src/prolly/node.rs` | retained read handles, accounting, `ReadNode` accessors | 1 |
+| `src/prolly/mod.rs`, `range.rs`, `cursor.rs`, `blob.rs` | point/bound/scan visitors and owned adapters | 2 |
+| `src/prolly/diff.rs`, `error.rs`, merge/write modules | borrowed diff/conflict views, symbolic resolver, streaming apply | 3–4 |
+| `src/prolly/versioned_map.rs`, typed map layer, async modules | snapshot/session forwarding and decode-in-callback | 2–4 |
+| `src/prolly/secondary_index/{storage,snapshot,definition,coordinator}.rs` | deferred index views/query/build adoption | 5 |
+| `src/prolly/proximity/storage/record.rs`, `map.rs`, `search/`, `accelerator/`, `proof/` | deferred record/vector views and candidate handles | 6 |
+| language bindings and WASM adapters | no signature change; serialize/copy at FFI boundary | after each native phase |
+
+Every public borrowed-view addition requires rustdoc examples for both
+allocation-free consumption and explicit `to_owned` escape. Compile-fail
+doctests must prove
+that `EntryRef`, `DiffRef`, `ConflictRef`, secondary-index scratch views, and
+proximity record views cannot escape their callback. Existing binding APIs are
+regression-tested but do not expose Rust lifetimes.
+
 ## Core Types
 
-Names in this section are the intended public direction. Exact module placement
-may follow repository conventions, but lifetime and ownership semantics are
-normative.
+Names and behavior in this section explain the normative API set above. Core
+public read views live in `prolly::read` and are re-exported from the crate
+root; crate-private helpers follow the source-file ownership table.
 
 ### Entry view
 
@@ -517,6 +1440,13 @@ pub fn get(&self, tree: &Tree, key: &[u8]) -> Result<Option<Vec<u8>>, Error> {
 ```
 
 `contains_key` stops after exact-key validation and never clones the value.
+
+`get_value_ref_with` parses the large-value envelope while the stored leaf value
+is borrowed. Raw and envelope-inline payloads are lent as
+`ValueRefView::Inline`; blob references validate their CID and length without
+loading blob content. Existing `get_value_ref` converts the view once to owned
+`blob::ValueRef`, while `get_large_value` necessarily owns bytes returned by the
+separate `BlobStore` contract.
 
 ### Range scan
 
@@ -945,8 +1875,8 @@ pub enum IndexValueRef<'a> {
     FullSource(&'a [u8]),
 }
 
-impl IndexValueRef<'_> {
-    pub fn decode(bytes: &[u8], limit: usize) -> Result<IndexValueRef<'_>, Error>;
+impl<'a> IndexValueRef<'a> {
+    pub fn decode(bytes: &'a [u8], limit: usize) -> Result<Self, Error>;
     pub fn to_owned(self) -> IndexValue;
 }
 ```
@@ -1061,12 +1991,12 @@ zero-copy representation differs from ordinary key/value entries.
 ### Stored record view
 
 ```rust,ignore
-pub struct StoredRecordRef<'a> {
-    pub vector: EncodedVectorRef<'a>,
+pub(crate) struct StoredRecordRef<'a> {
+    vector: EncodedVectorRef<'a>,
     pub value: &'a [u8],
 }
 
-pub struct EncodedVectorRef<'a> {
+pub(crate) struct EncodedVectorRef<'a> {
     bytes: &'a [u8],
     dimensions: u32,
 }
@@ -1075,6 +2005,9 @@ pub struct EncodedVectorRef<'a> {
 `StoredRecordRef::decode` validates magic, version, encoding, dimensions,
 canonical varints, vector byte length, finite components, negative zero, value
 length, and trailing bytes without allocating the application value.
+After validation, it is wrapped as the public `ProximityRecordRef` and
+`ProximityVectorRef` defined by the normative API set. This keeps persisted
+byte-layout details private while preserving borrowed logical access.
 
 The persisted vector starts after a variable-length header and is not guaranteed
 to be aligned for `f32`. It is little-endian encoded. The implementation must not
@@ -1095,8 +2028,8 @@ a core directory `ReadSession`, immutable proximity descriptor information, and
 reusable vector scratch. Future native APIs are:
 
 ```rust,ignore
-pub struct ProximityReadSession<'a, S: Store> {
-    directory: ReadSession<'a, 'a, S>,
+pub struct ProximityReadSession<'map, S: Store> {
+    directory: ReadSession<'map, 'map, S>,
     dimensions: u32,
     vector_scratch: Vec<f32>,
 }
@@ -1104,12 +2037,12 @@ pub struct ProximityReadSession<'a, S: Store> {
 pub fn get_with<R>(
     &mut self,
     key: &[u8],
-    read: impl FnOnce(StoredRecordRef<'_>) -> R,
+    read: impl for<'record> FnOnce(ProximityRecordRef<'record>) -> R,
 ) -> Result<Option<R>, Error>;
 
 pub fn scan_records(
     &mut self,
-    visit: impl for<'record> FnMut(&[u8], StoredRecordRef<'record>),
+    visit: impl for<'record> FnMut(&[u8], ProximityRecordRef<'record>),
 ) -> Result<u64, Error>;
 ```
 
@@ -1172,7 +2105,8 @@ content kind and measured reuse.
 
 Later migration must prove:
 
-- owned exact lookup equals `StoredRecordRef::to_owned` for every valid vector;
+- owned exact lookup equals `ProximityRecordRef::to_owned` for every valid
+  vector;
 - malformed formats fail identically without partial result delivery;
 - scalar and SIMD distance outputs remain bit/ordering compatible under current
   tolerances and canonical tie rules;
@@ -1306,8 +2240,8 @@ allocator so production allocation paths are not instrumented per operation.
 
 - `get_with` and scan callbacks can consume slices and return owned/scalar data.
 - compile-fail tests prove a callback cannot store or return `EntryRef`,
-  `DiffRef`, `ConflictRef`, `IndexValueRef`, or `StoredRecordRef` beyond its
-  invocation;
+  `ValueRefView`, `DiffRef`, `ConflictRef`, `IndexValueRef`, or
+  `ProximityRecordRef` beyond its invocation;
 - async compile-fail tests prove borrowed entries cannot cross `.await`;
 - `ReadSession` is `Send` when its manager/store permit moving between threads,
   but mutation requires exclusive access;
@@ -1318,7 +2252,10 @@ allocator so production allocation paths are not instrumented per operation.
 For generated trees and all `NodeLayoutSpec` variants:
 
 - `get == get_with(...to_vec)` for hits and misses;
-- `get_many` equals ordered `get_with` for unique and duplicate inputs;
+- `get_value_ref` equals `get_value_ref_with(...to_owned)` for raw inline,
+  escaped inline, and blob envelopes, including malformed inputs;
+- `get_many` equals ordered `get_many_with` collection for unique and duplicate
+  inputs, hits, misses, and caller order;
 - `range.collect()` equals `scan_range` collection;
 - forward/reverse scans are exact inverses under matching bounds;
 - prefix scans equal filtered full scans;
@@ -1364,16 +2301,20 @@ where practical, plus stress tests under ThreadSanitizer-compatible builds.
 - borrowed physical-key decoding equals owned decoding for every byte value;
 - scratch buffers stay bounded and are reused;
 - borrowed matches collected to owned equal exact/prefix/range/page results;
+- reverse and early-stop visitors match reverse pages and the corresponding
+  forward-prefix subsets;
 - missing source records still fail snapshot validation;
 - projection tags, limits, cursors, and snapshot IDs remain strict.
 
 ### Proximity foundation tests
 
-- `StoredRecordRef::to_owned == StoredRecord::decode`;
+- `ProximityRecordRef::to_owned == StoredRecord::decode`;
 - vector views reject every malformed header/component/trailing-byte case;
 - unaligned vector offsets never use an invalid `&[f32]` cast;
 - encoded and scratch distance paths agree with decoded scalar/SIMD results;
 - candidate handles preserve deterministic top-k and key ties;
+- `scan_records_until` reports the exact delivered count and never exposes a
+  view after return;
 - owned search results and proofs remain unchanged;
 - cache eviction and cancellation cannot invalidate active vector/value views.
 
@@ -1478,10 +2419,12 @@ These are adoption gates, not phase-one blockers.
 
 ### Phase 1: Core point-read substrate
 
-- introduce `EntryRef`, `NodeHandle`, decoded `ReadNode`, and `ReadSession`;
+- introduce `EntryRef`, `ValueRefView`, `NodeHandle`, decoded `ReadNode`, and
+  `ReadSession`;
 - validate/load and retain the root;
 - implement session-local recent leaf;
-- implement `get_with` and allocation-free `contains_key`;
+- implement `get_with`, `get_value_ref_with`, allocation-free `contains_key`,
+  and callback-based select/bound entry reads;
 - make owned `get` a wrapper;
 - implement unbounded-cache read-only hit path and single-probe bounded hit;
 - benchmark after each independently measurable change.
@@ -1497,7 +2440,8 @@ These are adoption gates, not phase-one blockers.
 ### Phase 3: Multi-get, async, overlays, and bindings
 
 - implement location-based `get_many_with`;
-- adapt typed/versioned reads and write-session overlays;
+- add snapshot/versioned `get_with` and scan forwarding, then adapt typed reads
+  and write-session overlays;
 - add `AsyncReadSession` and synchronous borrowed callbacks;
 - route bindings through borrowed internals without changing generated APIs;
 - add load coalescing if concurrency profiling justifies it.
@@ -1513,15 +2457,17 @@ These are adoption gates, not phase-one blockers.
 
 ### Phase 5: Secondary-index adoption
 
-- add borrowed index-value and physical-key views;
-- add borrowed query scans and bounded source joins;
+- add `IndexValueRef`, `DecodedPhysicalIndexKeyRef`, and borrowed match views;
+- add `scan_exact`, `scan_prefix`, `scan_range`, bounded `scan_records`, and
+  `IndexedMap::get_with`;
 - adapt owned pages and bindings;
 - introduce streaming extractor/build sink when the bounded-build milestone is
   implemented.
 
 ### Phase 6: Proximity adoption
 
-- add stored-record and encoded-vector views;
+- add public `ProximityRecordRef`/`ProximityVectorRef` and private wire views;
+- add `ProximityReadSession`, `get_with`, and `scan_records`;
 - migrate exact reads, verification, and authoritative scans;
 - introduce bounded candidate handles and borrowed rerank reads;
 - integrate handle accounting with `SearchRuntime`;
