@@ -309,7 +309,7 @@ pub(crate) struct LeafSpan {
 /// Store's bulk upsert API.
 ///
 /// # Example
-/// ```ignore
+/// ```text
 /// let mut collector = BatchWriteCollector::new();
 /// let cid = collector.add(&node);
 /// collector.flush(&store)?;
@@ -5338,7 +5338,7 @@ impl BatchWriter {
     /// - Requirement 7.4: Ensure atomicity - either all mutations applied or none
     ///
     /// # Example
-    /// ```rust,ignore
+    /// ```rust
     /// use prolly::{BatchWriter, BatchWriterConfig, Prolly, MemStore, Config, Mutation};
     ///
     /// let store = MemStore::new();
