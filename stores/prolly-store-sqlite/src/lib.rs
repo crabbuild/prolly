@@ -5,6 +5,8 @@ use std::path::Path;
 use std::sync::{Mutex, MutexGuard};
 use std::time::Duration;
 
+#[cfg(unix)]
+use rusqlite::OpenFlags;
 use rusqlite::{params, Connection, OptionalExtension};
 
 use prolly::{
@@ -189,6 +191,17 @@ pub struct SqliteStore {
     conn: Mutex<Connection>,
 }
 
+/// Identity obtained from SQLite's actual open main-database file descriptor.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SqliteMainFileIdentity {
+    /// Filesystem device containing the open database file.
+    pub device: u64,
+    /// Filesystem inode of the open database file.
+    pub inode: u64,
+    /// Length observed through the open descriptor.
+    pub length: u64,
+}
+
 impl SqliteStore {
     /// Open or create a SQLite database at the given path with default config.
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, SqliteStoreError> {
@@ -209,6 +222,50 @@ impl SqliteStore {
         Self::from_connection(conn, config)
     }
 
+    /// Open an existing SQLite database with default runtime configuration.
+    ///
+    /// Unlike [`Self::open`], this never creates the database file and does not
+    /// execute schema DDL. Callers must validate the required schema before
+    /// using this path.
+    pub fn open_existing<P: AsRef<Path>>(path: P) -> Result<Self, SqliteStoreError> {
+        Self::open_existing_verified(path, |_| Ok(()))
+    }
+
+    /// Open an existing database and verify SQLite's actual main-file handle
+    /// before executing any pragma, schema statement, or other SQL.
+    #[cfg(unix)]
+    pub fn open_existing_verified<P, F>(path: P, verifier: F) -> Result<Self, SqliteStoreError>
+    where
+        P: AsRef<Path>,
+        F: FnOnce(SqliteMainFileIdentity) -> Result<(), SqliteStoreError>,
+    {
+        let conn = Connection::open_with_flags(
+            path.as_ref(),
+            OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        )
+        .map_err(|error| {
+            SqliteStoreError::from_sqlite(
+                error,
+                format!("Failed to open existing database at {:?}", path.as_ref()),
+            )
+        })?;
+        verifier(sqlite_main_file_identity(&conn)?)?;
+        Self::from_existing_connection(conn, SqliteStoreConfig::default())
+    }
+
+    /// Non-Unix platforms cannot currently prove the SQLite VFS handle's
+    /// identity before SQL runs, so verified opens fail closed there.
+    #[cfg(not(unix))]
+    pub fn open_existing_verified<P, F>(_path: P, _verifier: F) -> Result<Self, SqliteStoreError>
+    where
+        P: AsRef<Path>,
+        F: FnOnce(SqliteMainFileIdentity) -> Result<(), SqliteStoreError>,
+    {
+        Err(SqliteStoreError::new(
+            "verified existing SQLite opens are unsupported on this platform",
+        ))
+    }
+
     /// Create an in-memory SQLite store.
     pub fn open_in_memory() -> Result<Self, SqliteStoreError> {
         let conn = Connection::open_in_memory()
@@ -220,6 +277,33 @@ impl SqliteStore {
         conn: Connection,
         config: SqliteStoreConfig,
     ) -> Result<Self, SqliteStoreError> {
+        Self::apply_runtime_config(&conn, &config)?;
+        conn.execute_batch(CREATE_TABLE_SQL)
+            .map_err(|e| SqliteStoreError::from_sqlite(e, "Failed to initialize schema"))?;
+        conn.execute_batch(CREATE_HINTS_TABLE_SQL)
+            .map_err(|e| SqliteStoreError::from_sqlite(e, "Failed to initialize hint schema"))?;
+        conn.execute_batch(CREATE_ROOTS_TABLE_SQL)
+            .map_err(|e| SqliteStoreError::from_sqlite(e, "Failed to initialize root schema"))?;
+
+        Ok(Self {
+            conn: Mutex::new(conn),
+        })
+    }
+
+    fn from_existing_connection(
+        conn: Connection,
+        config: SqliteStoreConfig,
+    ) -> Result<Self, SqliteStoreError> {
+        Self::apply_runtime_config(&conn, &config)?;
+        Ok(Self {
+            conn: Mutex::new(conn),
+        })
+    }
+
+    fn apply_runtime_config(
+        conn: &Connection,
+        config: &SqliteStoreConfig,
+    ) -> Result<(), SqliteStoreError> {
         conn.busy_timeout(Duration::from_millis(config.busy_timeout_ms))
             .map_err(|e| SqliteStoreError::from_sqlite(e, "Failed to set busy timeout"))?;
 
@@ -235,16 +319,7 @@ impl SqliteStore {
         }
         conn.pragma_update(None, "temp_store", "MEMORY")
             .map_err(|e| SqliteStoreError::from_sqlite(e, "Failed to set temp_store=MEMORY"))?;
-        conn.execute_batch(CREATE_TABLE_SQL)
-            .map_err(|e| SqliteStoreError::from_sqlite(e, "Failed to initialize schema"))?;
-        conn.execute_batch(CREATE_HINTS_TABLE_SQL)
-            .map_err(|e| SqliteStoreError::from_sqlite(e, "Failed to initialize hint schema"))?;
-        conn.execute_batch(CREATE_ROOTS_TABLE_SQL)
-            .map_err(|e| SqliteStoreError::from_sqlite(e, "Failed to initialize root schema"))?;
-
-        Ok(Self {
-            conn: Mutex::new(conn),
-        })
+        Ok(())
     }
 
     fn connection(&self) -> Result<MutexGuard<'_, Connection>, SqliteStoreError> {
@@ -252,6 +327,64 @@ impl SqliteStore {
             .lock()
             .map_err(|e| SqliteStoreError::new(format!("lock poisoned: {}", e)))
     }
+}
+
+#[cfg(unix)]
+/// Inspect SQLite's actual open main-database descriptor without executing SQL.
+pub fn sqlite_main_file_identity(
+    conn: &Connection,
+) -> Result<SqliteMainFileIdentity, SqliteStoreError> {
+    use std::ffi::{c_int, c_void};
+    use std::fs::File;
+    use std::os::fd::BorrowedFd;
+    use std::os::unix::fs::MetadataExt;
+
+    // Every bundled Unix SQLite VFS begins its concrete `unixFile` with this
+    // stable prefix. `SQLITE_FCNTL_FILE_POINTER` returns the actual main-file
+    // object owned by this connection, not a pathname-derived approximation.
+    #[repr(C)]
+    struct UnixFilePrefix {
+        methods: *const rusqlite::ffi::sqlite3_io_methods,
+        vfs: *mut rusqlite::ffi::sqlite3_vfs,
+        inode: *mut c_void,
+        fd: c_int,
+    }
+
+    let mut sqlite_file: *mut rusqlite::ffi::sqlite3_file = std::ptr::null_mut();
+    // SAFETY: `conn` remains alive for the call, `main` is NUL terminated, and
+    // SQLite writes one sqlite3_file pointer into `sqlite_file` for this opcode.
+    let rc = unsafe {
+        rusqlite::ffi::sqlite3_file_control(
+            conn.handle(),
+            b"main\0".as_ptr().cast(),
+            rusqlite::ffi::SQLITE_FCNTL_FILE_POINTER,
+            (&mut sqlite_file as *mut *mut rusqlite::ffi::sqlite3_file).cast(),
+        )
+    };
+    if rc != rusqlite::ffi::SQLITE_OK || sqlite_file.is_null() {
+        return Err(SqliteStoreError::new(format!(
+            "SQLite did not expose its main-file handle (code {rc})"
+        )));
+    }
+    // SAFETY: the bundled Unix VFS concrete file begins with UnixFilePrefix,
+    // and SQLite retains the descriptor for the lifetime of this connection.
+    let fd = unsafe { (*(sqlite_file.cast::<UnixFilePrefix>())).fd };
+    // Duplicate the descriptor so the temporary File cannot close SQLite's
+    // owned descriptor when it is dropped.
+    let borrowed = unsafe { BorrowedFd::borrow_raw(fd) };
+    let owned = borrowed.try_clone_to_owned().map_err(|error| {
+        SqliteStoreError::new(format!(
+            "failed to duplicate SQLite main-file handle: {error}"
+        ))
+    })?;
+    let metadata = File::from(owned).metadata().map_err(|error| {
+        SqliteStoreError::new(format!("failed to stat SQLite main-file handle: {error}"))
+    })?;
+    Ok(SqliteMainFileIdentity {
+        device: metadata.dev(),
+        inode: metadata.ino(),
+        length: metadata.len(),
+    })
 }
 
 impl Store for SqliteStore {
