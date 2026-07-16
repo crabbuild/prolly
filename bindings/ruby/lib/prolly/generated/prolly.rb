@@ -4060,6 +4060,13 @@ class RustBufferStream
     return ProllyEngine.uniffi_allocate(handle)
   end
 
+  # The Object type ProllyReadSession.
+
+  def readTypeProllyReadSession
+    handle = unpack_from 8, 'Q>'
+    return ProllyReadSession.uniffi_allocate(handle)
+  end
+
   # The Object type ProllyTransaction.
 
   def readTypeProllyTransaction
@@ -6677,6 +6684,13 @@ class RustBufferBuilder
     pack_into(8, 'Q>', handle)
   end
 
+  # The Object type ProllyReadSession.
+
+  def write_TypeProllyReadSession(obj)
+    handle = ProllyReadSession.uniffi_lower obj
+    pack_into(8, 'Q>', handle)
+  end
+
   # The Object type ProllyTransaction.
 
   def write_TypeProllyTransaction(obj)
@@ -9123,6 +9137,9 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_fn_method_prollyengine_range_page,
     [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
     RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_prollyengine_read_session,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
   attach_function :uniffi_prolly_bindings_fn_method_prollyengine_reset_metrics,
     [:uint64, RustCallStatus.by_ref],
     :void
@@ -9182,6 +9199,30 @@ module UniFFILib
     :uint64
   attach_function :uniffi_prolly_bindings_fn_method_prollyengine_upper_bound,
     [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_clone_prollyreadsession,
+    [:uint64, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_free_prollyreadsession,
+    [:uint64, RustCallStatus.by_ref],
+    :void
+  attach_function :uniffi_prolly_bindings_fn_method_prollyreadsession_fast_handle,
+    [:uint64, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_prollyreadsession_get,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_prollyreadsession_get_many,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_prollyreadsession_scan_conflicts,
+    [:uint64, :uint64, :uint64, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_prollyreadsession_scan_range,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_prollyreadsession_scan_range_diff,
+    [:uint64, :uint64, RustBuffer.by_value, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
     RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_clone_prollytransaction,
     [:uint64, RustCallStatus.by_ref],
@@ -10380,6 +10421,9 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_range_page,
     [RustCallStatus.by_ref],
     :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_read_session,
+    [RustCallStatus.by_ref],
+    :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_reset_metrics,
     [RustCallStatus.by_ref],
     :uint16
@@ -10438,6 +10482,24 @@ module UniFFILib
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_upper_bound,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_prollyreadsession_fast_handle,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_prollyreadsession_get,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_prollyreadsession_get_many,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_prollyreadsession_scan_conflicts,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_prollyreadsession_scan_range,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_prollyreadsession_scan_range_diff,
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_prollytransaction_batch,
@@ -17264,6 +17326,12 @@ end
     result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_range_page,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.alloc_from_OptionalTypeRangeCursorRecord(cursor),RustBuffer.alloc_from_Optionalbytes(range_end),limit)
     return result.consumeIntoTypeRangePageRecord
   end
+  def read_session(tree)
+        tree = tree
+        RustBuffer.check_lower_TypeTreeRecord(tree)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_read_session,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree))
+    return ProllyReadSession.uniffi_allocate(result)
+  end
   def reset_metrics()
       Prolly.rust_call(:uniffi_prolly_bindings_fn_method_prollyengine_reset_metrics,uniffi_clone_handle(),)
   end
@@ -17449,6 +17517,102 @@ end
 
     result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_upper_bound,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.allocFromBytes(key))
     return result.consumeIntoOptionalTypeEntryRecord
+  end
+
+end
+
+  class ProllyReadSession
+
+  # A private helper for initializing instances of the class from a raw handle,
+  # bypassing any initialization logic and ensuring they are GC'd properly.
+  def self.uniffi_allocate(handle)
+    inst = allocate
+    inst.instance_variable_set :@handle, handle
+    ObjectSpace.define_finalizer(inst, uniffi_define_finalizer_by_handle(handle, inst.object_id))
+    return inst
+  end
+
+  # A private helper for registering an object finalizer.
+  # N.B. it's important that this does not capture a reference
+  # to the actual instance, only its underlying handle.
+  def self.uniffi_define_finalizer_by_handle(handle, object_id)
+    Proc.new do |_id|
+      Prolly.rust_call(
+        :uniffi_prolly_bindings_fn_free_prollyreadsession,
+        handle
+      )
+    end
+  end
+
+  # A private helper for lowering instances into a raw handle.
+  # This does an explicit typecheck, because accidentally lowering a different type of
+  # object in a place where this type is expected, could lead to memory unsafety.
+  def self.uniffi_check_lower(inst)
+    if not inst.is_a? self
+      raise TypeError.new "Expected a ProllyReadSession instance, got #{inst}"
+    end
+  end
+
+  def uniffi_clone_handle()
+    return Prolly.rust_call(
+      :uniffi_prolly_bindings_fn_clone_prollyreadsession,
+      @handle
+    )
+  end
+
+  def self.uniffi_lower(inst)
+    return inst.uniffi_clone_handle()
+  end
+
+
+
+  def fast_handle()
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_prollyreadsession_fast_handle,uniffi_clone_handle(),)
+    return result.to_i
+  end
+  def get(key)
+        key = Prolly::uniffi_bytes(key)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyreadsession_get,uniffi_clone_handle(),RustBuffer.allocFromBytes(key))
+    return result.consumeIntoOptionalbytes
+  end
+  def get_many(keys)
+        keys = keys.map { |v| Prolly::uniffi_bytes(v) }
+        RustBuffer.check_lower_Sequencebytes(keys)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyreadsession_get_many,uniffi_clone_handle(),RustBuffer.alloc_from_Sequencebytes(keys))
+    return result.consumeIntoSequenceOptionalbytes
+  end
+  def scan_conflicts(left, right, visitor)
+        left = left
+        (ProllyReadSession.uniffi_check_lower left)
+        right = right
+        (ProllyReadSession.uniffi_check_lower right)
+        visitor = visitor
+        (ConflictVisitorCallback.uniffi_check_lower visitor)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyreadsession_scan_conflicts,uniffi_clone_handle(),(ProllyReadSession.uniffi_lower left),(ProllyReadSession.uniffi_lower right),(ConflictVisitorCallback.uniffi_lower visitor))
+    return result.consumeIntoTypeScanOutcomeRecord
+  end
+  def scan_range(start, range_end, visitor)
+        start = Prolly::uniffi_bytes(start)
+
+        range_end = (range_end ? Prolly::uniffi_bytes(range_end) : nil)
+        RustBuffer.check_lower_Optionalbytes(range_end)
+        visitor = visitor
+        (EntryVisitorCallback.uniffi_check_lower visitor)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyreadsession_scan_range,uniffi_clone_handle(),RustBuffer.allocFromBytes(start),RustBuffer.alloc_from_Optionalbytes(range_end),(EntryVisitorCallback.uniffi_lower visitor))
+    return result.consumeIntoTypeScanOutcomeRecord
+  end
+  def scan_range_diff(other, start, range_end, visitor)
+        other = other
+        (ProllyReadSession.uniffi_check_lower other)
+        start = Prolly::uniffi_bytes(start)
+
+        range_end = (range_end ? Prolly::uniffi_bytes(range_end) : nil)
+        RustBuffer.check_lower_Optionalbytes(range_end)
+        visitor = visitor
+        (DiffVisitorCallback.uniffi_check_lower visitor)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyreadsession_scan_range_diff,uniffi_clone_handle(),(ProllyReadSession.uniffi_lower other),RustBuffer.allocFromBytes(start),RustBuffer.alloc_from_Optionalbytes(range_end),(DiffVisitorCallback.uniffi_lower visitor))
+    return result.consumeIntoTypeScanOutcomeRecord
   end
 
 end

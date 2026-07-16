@@ -2835,6 +2835,13 @@ public protocol ProllyEngineProtocol: AnyObject, Sendable {
 
     func rangePage(tree: TreeRecord, cursor: RangeCursorRecord?, rangeEnd: Data?, limit: UInt64) throws  -> RangePageRecord
 
+    /**
+     * Bind one immutable tree to a reusable read object. Foreign callers that
+     * issue repeated reads should prefer this over retransmitting `TreeRecord`
+     * on every operation.
+     */
+    func readSession(tree: TreeRecord) throws  -> ProllyReadSession
+
     func resetMetrics()
 
     func reversePage(tree: TreeRecord, cursor: ReverseCursorRecord?, start: Data, limit: UInt64) throws  -> ReversePageRecord
@@ -4063,6 +4070,20 @@ open func rangePage(tree: TreeRecord, cursor: RangeCursorRecord?, rangeEnd: Data
 })
 }
 
+    /**
+     * Bind one immutable tree to a reusable read object. Foreign callers that
+     * issue repeated reads should prefer this over retransmitting `TreeRecord`
+     * on every operation.
+     */
+open func readSession(tree: TreeRecord)throws  -> ProllyReadSession  {
+    return try  FfiConverterTypeProllyReadSession_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_prollyengine_read_session(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeTreeRecord_lower(tree),$0
+    )
+})
+}
+
 open func resetMetrics()  {try! rustCall() {
     uniffi_prolly_bindings_fn_method_prollyengine_reset_metrics(
             self.uniffiCloneHandle(),$0
@@ -4339,6 +4360,234 @@ public func FfiConverterTypeProllyEngine_lift(_ handle: UInt64) throws -> Prolly
 #endif
 public func FfiConverterTypeProllyEngine_lower(_ value: ProllyEngine) -> UInt64 {
     return FfiConverterTypeProllyEngine.lower(value)
+}
+
+
+
+
+
+
+/**
+ * A root-bound read object that amortizes tree decoding and ownership across
+ * repeated foreign-language reads.
+ */
+public protocol ProllyReadSessionProtocol: AnyObject, Sendable {
+
+    /**
+     * Internal opaque transport handle used by handwritten native adapters.
+     * The handle resolves only while this UniFFI object is alive.
+     */
+    func fastHandle()  -> UInt64
+
+    /**
+     * Return an owned value while reusing the decoded tree bound to this
+     * session. This is the portable UniFFI session API.
+     */
+    func get(key: Data) throws  -> Data?
+
+    /**
+     * Batch point reads while serializing the key set and result only once.
+     */
+    func getMany(keys: [Data]) throws  -> [Data?]
+
+    /**
+     * Stream genuine three-way conflicts. The receiver is the merge base.
+     */
+    func scanConflicts(left: ProllyReadSession, right: ProllyReadSession, visitor: ConflictVisitorCallback) throws  -> ScanOutcomeRecord
+
+    /**
+     * Stream a half-open range without retransmitting the tree on every
+     * operation. Callback records remain owned for compatibility.
+     */
+    func scanRange(start: Data, rangeEnd: Data?, visitor: EntryVisitorCallback) throws  -> ScanOutcomeRecord
+
+    /**
+     * Stream structural differences against another root-bound session.
+     */
+    func scanRangeDiff(other: ProllyReadSession, start: Data, rangeEnd: Data?, visitor: DiffVisitorCallback) throws  -> ScanOutcomeRecord
+
+}
+/**
+ * A root-bound read object that amortizes tree decoding and ownership across
+ * repeated foreign-language reads.
+ */
+open class ProllyReadSession: ProllyReadSessionProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_prolly_bindings_fn_clone_prollyreadsession(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_prolly_bindings_fn_free_prollyreadsession(handle, $0) }
+    }
+
+
+
+
+    /**
+     * Internal opaque transport handle used by handwritten native adapters.
+     * The handle resolves only while this UniFFI object is alive.
+     */
+open func fastHandle() -> UInt64  {
+    return try!  FfiConverterUInt64.lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_method_prollyreadsession_fast_handle(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+    /**
+     * Return an owned value while reusing the decoded tree bound to this
+     * session. This is the portable UniFFI session API.
+     */
+open func get(key: Data)throws  -> Data?  {
+    return try  FfiConverterOptionData.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_prollyreadsession_get(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(key),$0
+    )
+})
+}
+
+    /**
+     * Batch point reads while serializing the key set and result only once.
+     */
+open func getMany(keys: [Data])throws  -> [Data?]  {
+    return try  FfiConverterSequenceOptionData.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_prollyreadsession_get_many(
+            self.uniffiCloneHandle(),
+        FfiConverterSequenceData.lower(keys),$0
+    )
+})
+}
+
+    /**
+     * Stream genuine three-way conflicts. The receiver is the merge base.
+     */
+open func scanConflicts(left: ProllyReadSession, right: ProllyReadSession, visitor: ConflictVisitorCallback)throws  -> ScanOutcomeRecord  {
+    return try  FfiConverterTypeScanOutcomeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_prollyreadsession_scan_conflicts(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeProllyReadSession_lower(left),
+        FfiConverterTypeProllyReadSession_lower(right),
+        FfiConverterTypeConflictVisitorCallback_lower(visitor),$0
+    )
+})
+}
+
+    /**
+     * Stream a half-open range without retransmitting the tree on every
+     * operation. Callback records remain owned for compatibility.
+     */
+open func scanRange(start: Data, rangeEnd: Data?, visitor: EntryVisitorCallback)throws  -> ScanOutcomeRecord  {
+    return try  FfiConverterTypeScanOutcomeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_prollyreadsession_scan_range(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(start),
+        FfiConverterOptionData.lower(rangeEnd),
+        FfiConverterTypeEntryVisitorCallback_lower(visitor),$0
+    )
+})
+}
+
+    /**
+     * Stream structural differences against another root-bound session.
+     */
+open func scanRangeDiff(other: ProllyReadSession, start: Data, rangeEnd: Data?, visitor: DiffVisitorCallback)throws  -> ScanOutcomeRecord  {
+    return try  FfiConverterTypeScanOutcomeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_prollyreadsession_scan_range_diff(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeProllyReadSession_lower(other),
+        FfiConverterData.lower(start),
+        FfiConverterOptionData.lower(rangeEnd),
+        FfiConverterTypeDiffVisitorCallback_lower(visitor),$0
+    )
+})
+}
+
+
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProllyReadSession: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = ProllyReadSession
+
+    public static func lift(_ handle: UInt64) throws -> ProllyReadSession {
+        return ProllyReadSession(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: ProllyReadSession) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProllyReadSession {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: ProllyReadSession, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProllyReadSession_lift(_ handle: UInt64) throws -> ProllyReadSession {
+    return try FfiConverterTypeProllyReadSession.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProllyReadSession_lower(_ value: ProllyReadSession) -> UInt64 {
+    return FfiConverterTypeProllyReadSession.lower(value)
 }
 
 
@@ -15827,6 +16076,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_prolly_bindings_checksum_method_prollyengine_range_page() != 7048) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_prolly_bindings_checksum_method_prollyengine_read_session() != 13696) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_prolly_bindings_checksum_method_prollyengine_reset_metrics() != 10217) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -15885,6 +16137,24 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_prollyengine_upper_bound() != 36418) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_prollyreadsession_fast_handle() != 48376) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_prollyreadsession_get() != 9311) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_prollyreadsession_get_many() != 38930) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_prollyreadsession_scan_conflicts() != 60233) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_prollyreadsession_scan_range() != 59438) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_prollyreadsession_scan_range_diff() != 52527) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_prollytransaction_batch() != 26023) {

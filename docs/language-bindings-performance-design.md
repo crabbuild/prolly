@@ -1,6 +1,6 @@
 # Language Bindings Performance Architecture
 
-Status: proposed
+Status: phases 1–3 implemented; phase 4 portable-session foundation implemented
 
 Date: 2026-07-16
 
@@ -50,6 +50,63 @@ Correctness is non-negotiable. No binding optimization may change key order,
 value bytes, cursor semantics, root CIDs, error timing guarantees, merge
 results, or persisted formats. No foreign pointer may be retained beyond the
 duration permitted by that runtime.
+
+## Delivery Status (2026-07-16)
+
+This design is now implemented through the shared session, Go point/multi-get,
+and packed forward-scan phases. The shipped implementation includes:
+
+- `OwnedReadSession`, `OwnedValueLease`, and `OwnedRangeScanSession` in the Rust
+  core, with a retained root, bounded route table, recent-leaf locality, and a
+  scan stack that seeks once;
+- root-bound `ProllyReadSession` objects for memory, file, SQLite, and host
+  stores through UniFFI;
+- portable owned session methods for point read, ordered multi-get, forward
+  range scan, range diff, and three-way conflict inspection;
+- regenerated Python, Kotlin/JVM, Ruby, and Swift bindings, plus a Java
+  `AutoCloseable` session facade;
+- hot ABI v1 operations for caller-buffer point reads, retained value leases,
+  packed multi-get, retained forward scans, and packed entry pages;
+- opaque registry IDs for sessions, scans, values, and pages, so arbitrary or
+  stale IDs are rejected without dereferencing foreign addresses and release is
+  idempotent;
+- owner-scoped scan handles, pre-allocation limit validation, a 64 MiB packed
+  arena ceiling, panic containment, and callbacks invoked without adapter or
+  registry locks held; and
+- Go legacy-session reuse, explicit `ReadSession`, owned `Get`/`GetMany`/
+  `ScanRange`, callback-scoped `GetView`/`ScanRangeView`, and synchronized close.
+
+The following parts remain planned and must not be represented as complete:
+
+- packed retained reverse/prefix, diff, and conflict sessions;
+- batched host-language merge resolvers;
+- packed mutation input and write-side RSS reduction;
+- production transport counters and handle/lease high-water metrics;
+- scoped/direct-buffer view adapters for Python, JVM, Swift, Ruby, and WASM;
+- Node/WASM session integration; and
+- direct secondary-index and proximity-map use of binding page kinds.
+
+The session and opaque-lease substrate deliberately supports those later page
+kinds without changing persisted nodes or existing owned APIs.
+
+### Current measured evidence
+
+Release-mode, process-isolated, one-worker in-memory validation on the Apple M2
+Max used identical logical Go workloads and native-Go comparison runs. These
+measurements include cgo and adapter work and use product-default encodings.
+
+| Tier | Repetitions | Point-view result | Full-scan-view result | Peak RSS signal |
+| --- | ---: | --- | --- | --- |
+| 10K + 50K | 3 per scenario | Rust won 12/12; 1.17–1.53x faster | Rust lost 12/12; 1.41–2.24x slower | highest median 0.10 vs 0.07 GiB |
+| 1M | 1 per scenario | Rust won 6/6; 1.55–1.87x faster | Rust lost 6/6; 1.21–1.49x slower | highest observed 1.42 vs 0.60 GiB |
+
+The 1M run is a smoke result, not a stable median. No 5M/10M claim is made by
+this implementation pass. Point reads now meet the desired 1.5x signal at 1M
+in that single run, but the evidence is not sufficient for a release claim.
+Full scans remain behind native Go even where the ratio is within the 1.5x
+target, and binding RSS remains materially higher at 1M. Both are active
+optimization areas. Reproduce with `PROLLY_COMPARE_POINT_API=view`,
+`PROLLY_COMPARE_SCAN_API=view`, and `scripts/run_go_binding_comparison.sh`.
 
 ## Relationship to Existing Designs
 
@@ -430,10 +487,14 @@ value_offset     u32
 value_length     u32
 ```
 
-Offsets are relative to the arena. Page construction rejects any arena larger
-than the configured `u32` offset range and starts another page. Every decoder
-checks magic, version, kind, table size, count multiplication overflow, arena
-size, individual ranges, and non-overlap rules before producing views.
+Offsets are relative to the arena. ABI v1 caps a page at 65,536 records and a
+packed result arena at 64 MiB. The configured byte target is soft for the first
+record so a single value up to that hard ceiling can make progress; a larger
+single record is rejected and must use the large-value/blob API. Once a page
+has a record, a record that would cross the requested target starts the next
+page. Every decoder checks magic, version, kind, table size, count
+multiplication overflow, arena size, individual ranges, and ordering before
+producing views.
 
 The default page policy is the first of 4,096 records or 4 MiB of arena bytes.
 Those values are tuning defaults, not ABI. Benchmarks must cover 256, 1,024,
@@ -534,9 +595,8 @@ defer session.Close()
 
 value, found, err := session.Get(key) // owned
 
-found, err = session.GetView(key, func(value []byte) bool {
+found, err = session.GetView(key, func(value []byte) {
     consume(value) // valid only here
-    return true
 })
 
 outcome, err := session.ScanRangeView(start, end, func(entry EntryView) bool {

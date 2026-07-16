@@ -129,25 +129,58 @@ func runScenario(args arguments) scenarioResult {
 		validateGet(engine, tree, target)
 	}
 
-	readStarted := time.Now()
 	observedBytes := 0
-	for _, target := range targets {
-		observedBytes += validateGet(engine, tree, target)
+	var readElapsed time.Duration
+	pointAPI := os.Getenv("PROLLY_COMPARE_POINT_API")
+	if pointAPI == "view" || pointAPI == "session" {
+		session, err := engine.Read(tree)
+		must(err)
+		readStarted := time.Now()
+		for _, target := range targets {
+			if pointAPI == "view" {
+				observedBytes += validateGetView(session, target)
+			} else {
+				observedBytes += validateSessionGet(session, target)
+			}
+		}
+		readElapsed = time.Since(readStarted)
+		session.Close()
+	} else {
+		readStarted := time.Now()
+		for _, target := range targets {
+			observedBytes += validateGet(engine, tree, target)
+		}
+		readElapsed = time.Since(readStarted)
 	}
-	readElapsed := time.Since(readStarted)
 	runtime.KeepAlive(observedBytes)
 
 	validateRange(engine, tree, resultCount)
 	scanCount := 0
 	scannedBytes := 0
-	scanStarted := time.Now()
-	outcome, err := engine.ScanRange(tree, []byte{}, nil, func(entry prolly.Entry) bool {
-		scannedBytes += len(entry.Key) + len(entry.Value)
-		scanCount++
-		return true
-	})
-	scanElapsed := time.Since(scanStarted)
-	must(err)
+	var outcome prolly.ScanOutcome
+	var scanElapsed time.Duration
+	if os.Getenv("PROLLY_COMPARE_SCAN_API") == "view" {
+		session, err := engine.Read(tree)
+		must(err)
+		scanStarted := time.Now()
+		outcome, err = session.ScanRangeView([]byte{}, nil, func(entry prolly.EntryView) bool {
+			scannedBytes += len(entry.Key) + len(entry.Value)
+			scanCount++
+			return true
+		})
+		scanElapsed = time.Since(scanStarted)
+		session.Close()
+		must(err)
+	} else {
+		scanStarted := time.Now()
+		outcome, err = engine.ScanRange(tree, []byte{}, nil, func(entry prolly.Entry) bool {
+			scannedBytes += len(entry.Key) + len(entry.Value)
+			scanCount++
+			return true
+		})
+		scanElapsed = time.Since(scanStarted)
+		must(err)
+	}
 	if outcome.Stopped || int(outcome.Visited) != resultCount || scanCount != resultCount {
 		panic(fmt.Sprintf("range scan cardinality mismatch: visited=%d callback=%d want=%d", outcome.Visited, scanCount, resultCount))
 	}
@@ -216,6 +249,30 @@ func validateGet(engine *prolly.Engine, tree prolly.Tree, target readTarget) int
 		panic(fmt.Sprintf("point-read mismatch for %q", target.key))
 	}
 	return len(actual)
+}
+
+func validateSessionGet(session *prolly.ReadSession, target readTarget) int {
+	actual, found, err := session.Get(target.key)
+	must(err)
+	if !found || !bytes.Equal(actual, target.expected) {
+		panic(fmt.Sprintf("session point-read mismatch for %q", target.key))
+	}
+	return len(actual)
+}
+
+func validateGetView(session *prolly.ReadSession, target readTarget) int {
+	observed := 0
+	found, err := session.GetView(target.key, func(actual []byte) {
+		if !bytes.Equal(actual, target.expected) {
+			panic(fmt.Sprintf("point-read view mismatch for %q", target.key))
+		}
+		observed = len(actual)
+	})
+	must(err)
+	if !found {
+		panic(fmt.Sprintf("point-read view missing for %q", target.key))
+	}
+	return observed
 }
 
 func validateRange(engine *prolly.Engine, tree prolly.Tree, resultCount int) {

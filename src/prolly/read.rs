@@ -6,7 +6,7 @@
 //! synchronous callback. Existing owned APIs remain compatibility wrappers.
 
 use std::ops::ControlFlow;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use super::blob;
 use super::cid::Cid;
@@ -199,6 +199,30 @@ pub(crate) struct ReadValueHandle {
     index: usize,
 }
 
+/// An owned lease over one value in an immutable packed leaf.
+///
+/// The byte slice remains valid for the lifetime of this object even if the
+/// shared node cache evicts the leaf. Native bindings use this as the owner
+/// behind callback-scoped zero-copy value views.
+#[derive(Clone, Debug)]
+pub struct OwnedValueLease {
+    handle: ReadValueHandle,
+}
+
+impl OwnedValueLease {
+    /// Borrow the leased value bytes.
+    #[inline]
+    pub fn as_bytes(&self) -> Result<&[u8], Error> {
+        self.handle.value()
+    }
+
+    /// Account the complete retained packed leaf, not only the value slice.
+    #[inline]
+    pub fn retained_bytes(&self) -> usize {
+        self.handle.retained_bytes()
+    }
+}
+
 impl ReadValueHandle {
     #[inline]
     pub(crate) fn key(&self) -> Result<&[u8], Error> {
@@ -304,6 +328,34 @@ pub struct ReadSession<'manager, 'tree, S: Store> {
     local_nodes: SessionNodeTable,
 }
 
+struct OwnedReadSessionState {
+    root: Option<Arc<ReadNode>>,
+    recent_leaf: Option<Arc<ReadNode>>,
+    recent_leaf_misses: u8,
+    recent_leaf_disabled: bool,
+    local_nodes: SessionNodeTable,
+}
+
+/// An owned, root-bound read context suitable for long-lived native binding
+/// handles. Unlike [`ReadSession`], this type owns both manager and tree state,
+/// so foreign-language adapters can reuse retained routing state across calls.
+///
+/// Stateful point reads are synchronized. High-concurrency callers should use
+/// one session per worker rather than sharing one session across all workers.
+pub struct OwnedReadSession<S: Store> {
+    manager: Arc<Prolly<S>>,
+    tree: Tree,
+    state: Mutex<OwnedReadSessionState>,
+}
+
+/// Retained forward traversal over one owned read session.
+pub struct OwnedRangeScanSession<S: Store> {
+    manager: Arc<Prolly<S>>,
+    end: Option<Vec<u8>>,
+    stack: Vec<PathFrame>,
+    done: bool,
+}
+
 /// Reusable root-bound read context for an asynchronous store.
 ///
 /// All visitors are synchronous. A node is fully loaded before a visitor sees
@@ -370,6 +422,23 @@ impl<S: Store> Prolly<S> {
             recent_leaf_misses: 0,
             recent_leaf_disabled: false,
             local_nodes: SessionNodeTable::new(),
+        })
+    }
+
+    /// Open an owned read session for a long-lived native handle.
+    pub fn read_owned(self: &Arc<Self>, tree: Tree) -> Result<OwnedReadSession<S>, Error> {
+        let session = self.read(&tree)?;
+        let state = OwnedReadSessionState {
+            root: session.root,
+            recent_leaf: session.recent_leaf,
+            recent_leaf_misses: session.recent_leaf_misses,
+            recent_leaf_disabled: session.recent_leaf_disabled,
+            local_nodes: session.local_nodes,
+        };
+        Ok(OwnedReadSession {
+            manager: self.clone(),
+            tree,
+            state: Mutex::new(state),
         })
     }
 
@@ -583,6 +652,316 @@ impl<S: Store> Prolly<S> {
         visit: impl for<'entry> FnMut(EntryRef<'entry>) -> ControlFlow<B>,
     ) -> Result<ScanOutcome<B>, Error> {
         self.read(tree)?.scan_prefix_reverse_until(prefix, visit)
+    }
+}
+
+impl<S: Store> OwnedReadSession<S> {
+    fn get_handle_with_state(
+        &self,
+        state: &mut OwnedReadSessionState,
+        key: &[u8],
+    ) -> Result<Option<ReadValueHandle>, Error> {
+        if let Some(leaf) = state
+            .recent_leaf
+            .as_ref()
+            .filter(|_| !state.recent_leaf_disabled)
+        {
+            ReadSession::<S>::validate_leaf(leaf)?;
+            if leaf
+                .key(0)
+                .zip(leaf.key(leaf.len().saturating_sub(1)))
+                .is_some_and(|(first, last)| key >= first && key <= last)
+            {
+                state.recent_leaf_misses = 0;
+                return Ok(leaf.search(key).ok().map(|index| ReadValueHandle {
+                    node: leaf.clone(),
+                    index,
+                }));
+            }
+            state.recent_leaf_misses = state.recent_leaf_misses.saturating_add(1);
+            if state.recent_leaf_misses >= RECENT_LEAF_DISABLE_AFTER_MISSES {
+                state.recent_leaf = None;
+                state.recent_leaf_misses = 0;
+                state.recent_leaf_disabled = true;
+            }
+        }
+
+        let Some(mut node) = state.root.clone() else {
+            return Ok(None);
+        };
+        loop {
+            if node.is_leaf() {
+                ReadSession::<S>::validate_leaf(&node)?;
+                if !state.recent_leaf_disabled {
+                    state.recent_leaf = Some(node.clone());
+                }
+                return Ok(node
+                    .search(key)
+                    .ok()
+                    .map(|index| ReadValueHandle { node, index }));
+            }
+            let index = ReadSession::<S>::route_index(&node, key)?;
+            let cid = node.child_cid(index)?;
+            node = match state.local_nodes.get(&cid) {
+                Some(node) => node,
+                None => {
+                    let node = self.manager.load_read_arc(&cid)?;
+                    if !node.is_leaf() {
+                        state.local_nodes.insert(cid, &node);
+                    }
+                    node
+                }
+            };
+        }
+    }
+
+    /// Read a value without allocating it while retaining root and route state
+    /// across calls.
+    pub fn get_with<R>(
+        &self,
+        key: &[u8],
+        read: impl FnOnce(&[u8]) -> R,
+    ) -> Result<Option<R>, Error> {
+        let mut state = self.state.lock().map_err(|_| Error::InvalidNode)?;
+        self.get_handle_with_state(&mut state, key)?
+            .map(|handle| handle.value().map(read))
+            .transpose()
+    }
+
+    /// Retain the packed leaf containing a value. This is intended for native
+    /// adapters that expose a callback-scoped view and release it
+    /// deterministically when the callback returns.
+    pub fn get_lease(&self, key: &[u8]) -> Result<Option<OwnedValueLease>, Error> {
+        let mut state = self.state.lock().map_err(|_| Error::InvalidNode)?;
+        self.get_handle_with_state(&mut state, key)
+            .map(|handle| handle.map(|handle| OwnedValueLease { handle }))
+    }
+
+    /// Read keys in caller order while holding the session state once.
+    pub fn get_many(&self, keys: &[Vec<u8>]) -> Result<Vec<Option<Vec<u8>>>, Error> {
+        let mut values = vec![None; keys.len()];
+        self.get_many_with(keys, |position, _, value| {
+            values[position] = value.map(<[u8]>::to_vec);
+        })?;
+        Ok(values)
+    }
+
+    /// Visit batch point-read results in input order while sharing route work.
+    pub fn get_many_with<K, F>(&self, keys: &[K], mut visit: F) -> Result<(), Error>
+    where
+        K: AsRef<[u8]>,
+        F: for<'value> FnMut(usize, &[u8], Option<&'value [u8]>),
+    {
+        if keys.is_empty() {
+            return Ok(());
+        }
+        let root = self
+            .state
+            .lock()
+            .map_err(|_| Error::InvalidNode)?
+            .root
+            .clone();
+        let Some(root) = root else {
+            for (position, key) in keys.iter().enumerate() {
+                visit(position, key.as_ref(), None);
+            }
+            return Ok(());
+        };
+        let positions =
+            InlinePositions::from_vec(sorted_key_positions(keys)).expect("non-empty key positions");
+        let mut frames = vec![(root, positions)];
+        let mut locations: Vec<Option<(Arc<ReadNode>, usize)>> = vec![None; keys.len()];
+        while !frames.is_empty() {
+            let mut children = Vec::new();
+            for (node, positions) in frames {
+                if node.is_leaf() {
+                    fill_packed_leaf_locations(node, positions, keys, &mut locations)?;
+                } else {
+                    children.extend(route_packed_positions(&node, positions, keys)?);
+                }
+            }
+            if children.is_empty() {
+                break;
+            }
+            let cids = children
+                .iter()
+                .map(|frame| frame.cid.clone())
+                .collect::<Vec<_>>();
+            let nodes = self.manager.load_many_read_ordered(&cids)?;
+            frames = children
+                .into_iter()
+                .zip(nodes)
+                .map(|(frame, node)| (node, frame.positions))
+                .collect();
+        }
+        for (position, key) in keys.iter().enumerate() {
+            let value = locations[position]
+                .as_ref()
+                .map(|(node, index)| node.value(*index).ok_or(Error::InvalidNode))
+                .transpose()?;
+            visit(position, key.as_ref(), value);
+        }
+        Ok(())
+    }
+
+    /// Visit a half-open range. The owned session keeps the root warm; the
+    /// traversal itself remains borrowed and callback-scoped.
+    pub fn scan_range_until<B>(
+        &self,
+        start: &[u8],
+        end: Option<&[u8]>,
+        visit: impl for<'entry> FnMut(EntryRef<'entry>) -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error> {
+        self.scan_range_session(start, end)?.next_until(visit)
+    }
+
+    fn ensure_same_manager(&self, other: &Self) -> Result<(), Error> {
+        if Arc::ptr_eq(&self.manager, &other.manager) {
+            Ok(())
+        } else {
+            Err(Error::InvalidFormat(
+                "read sessions belong to different prolly managers".to_string(),
+            ))
+        }
+    }
+
+    /// Visit differences between two root-bound sessions without copying diff
+    /// fields. Both sessions must come from the same manager/store identity.
+    pub fn scan_range_diff_until<B>(
+        &self,
+        other: &Self,
+        start: &[u8],
+        end: Option<&[u8]>,
+        visit: impl for<'diff> FnMut(DiffRef<'diff>) -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error> {
+        self.ensure_same_manager(other)?;
+        self.manager
+            .scan_range_diff_until(&self.tree, &other.tree, start, end, visit)
+    }
+
+    /// Visit genuine three-way conflicts between compatible root-bound
+    /// sessions. The receiver is the merge base.
+    pub fn scan_conflicts_until<B>(
+        &self,
+        left: &Self,
+        right: &Self,
+        visit: impl for<'conflict> FnMut(ConflictRef<'conflict>) -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error> {
+        self.ensure_same_manager(left)?;
+        self.ensure_same_manager(right)?;
+        self.manager
+            .scan_conflicts_until(&self.tree, &left.tree, &right.tree, visit)
+    }
+
+    /// Open a retained forward traversal that seeks once and continues from
+    /// the same native stack across pages.
+    pub fn scan_range_session(
+        &self,
+        start: &[u8],
+        end: Option<&[u8]>,
+    ) -> Result<OwnedRangeScanSession<S>, Error> {
+        let root = self
+            .state
+            .lock()
+            .map_err(|_| Error::InvalidNode)?
+            .root
+            .clone();
+        OwnedRangeScanSession::new(self.manager.clone(), root, start, end)
+    }
+
+    /// The immutable tree bound to this session.
+    pub fn tree(&self) -> &Tree {
+        &self.tree
+    }
+}
+
+impl<S: Store> OwnedRangeScanSession<S> {
+    fn new(
+        manager: Arc<Prolly<S>>,
+        root: Option<Arc<ReadNode>>,
+        start: &[u8],
+        end: Option<&[u8]>,
+    ) -> Result<Self, Error> {
+        let done = end.is_some_and(|end| end <= start);
+        let stack = if done {
+            Vec::new()
+        } else {
+            Self::seek_forward(manager.as_ref(), root, start)?
+        };
+        Ok(Self {
+            manager,
+            end: end.map(<[u8]>::to_vec),
+            done,
+            stack,
+        })
+    }
+
+    fn seek_forward(
+        manager: &Prolly<S>,
+        root: Option<Arc<ReadNode>>,
+        key: &[u8],
+    ) -> Result<Vec<PathFrame>, Error> {
+        let Some(mut node) = root else {
+            return Ok(Vec::new());
+        };
+        let mut stack = Vec::new();
+        loop {
+            if node.is_leaf() {
+                ReadSession::<S>::validate_leaf(&node)?;
+                let index = packed_partition_point(&node, |candidate| candidate < key);
+                stack.push(PathFrame { node, index });
+                return Ok(stack);
+            }
+            ReadSession::<S>::validate_internal(&node)?;
+            let index =
+                packed_partition_point(&node, |candidate| candidate <= key).saturating_sub(1);
+            let cid = node.child_cid(index)?;
+            stack.push(PathFrame { node, index });
+            node = manager.load_read_arc(&cid)?;
+        }
+    }
+
+    /// Continue the retained traversal until its bound or callback stop.
+    pub fn next_until<B>(
+        &mut self,
+        mut visit: impl for<'entry> FnMut(EntryRef<'entry>) -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error> {
+        if self.done {
+            return Ok(ScanOutcome::complete(0));
+        }
+        let mut visited = 0u64;
+        loop {
+            let Some(frame) = self.stack.last_mut() else {
+                self.done = true;
+                return Ok(ScanOutcome::complete(visited));
+            };
+            if !frame.node.is_leaf() {
+                return Err(Error::InvalidNode);
+            }
+            ReadSession::<S>::validate_leaf(&frame.node)?;
+            if frame.index >= frame.node.len() {
+                if !ReadSession::<S>::advance_forward(self.manager.as_ref(), &mut self.stack)? {
+                    self.done = true;
+                    return Ok(ScanOutcome::complete(visited));
+                }
+                continue;
+            }
+            let key = frame.node.key(frame.index).ok_or(Error::InvalidNode)?;
+            if self.end.as_deref().is_some_and(|end| key >= end) {
+                self.done = true;
+                return Ok(ScanOutcome::complete(visited));
+            }
+            let value = frame.node.value(frame.index).ok_or(Error::InvalidNode)?;
+            frame.index += 1;
+            visited = visited.saturating_add(1);
+            if let ControlFlow::Break(value) = visit(EntryRef::new(key, value)) {
+                return Ok(ScanOutcome::stopped(visited, value));
+            }
+        }
+    }
+
+    pub fn is_done(&self) -> bool {
+        self.done
     }
 }
 

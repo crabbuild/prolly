@@ -202,6 +202,11 @@ tree = engine.put(tree, 'a'.b, '1'.b)
 
 assert_equal '1'.b, engine.get(tree, 'a'.b)
 
+read_session = engine.read_session(tree)
+assert_equal '1'.b, read_session.get('a'.b)
+assert_equal nil, read_session.get('missing'.b)
+assert_equal ['1'.b, nil, '1'.b], read_session.get_many(['a'.b, 'missing'.b, 'a'.b])
+
 entries = engine.range(tree, ''.b, nil)
 assert_equal 1, entries.length
 assert_equal 'a'.b, entries.first.key

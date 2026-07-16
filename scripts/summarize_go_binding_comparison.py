@@ -36,6 +36,11 @@ def main() -> None:
         raise SystemExit("usage: summarize_go_binding_comparison.py RESULTS.csv OUT_DIR")
     source = Path(sys.argv[1])
     out = Path(sys.argv[2])
+    machine = {}
+    for line in (out / "machine.txt").read_text(encoding="utf-8").splitlines():
+        if "=" in line:
+            key, value = line.split("=", 1)
+            machine[key] = value
     rows = list(csv.DictReader(source.open(newline="", encoding="utf-8")))
     if not rows:
         fail("no measurement rows")
@@ -183,8 +188,8 @@ def main() -> None:
             "## What is included at the binding boundary",
             "",
             "- Write timing includes encoding the complete Go mutation slice into UniFFI bytes, one cgo call, Rust tree work, and decoding the returned tree handle.",
-            "- Point reads call the public `Engine.Get` once per key, including cgo crossing plus owned result-buffer decode/free.",
-            "- Range scans call the public bounded-memory `Engine.ScanRange`, which fetches 1,024-entry pages and delivers owned Go `Entry` values.",
+            f"- Binding point-read path: {machine.get('binding_point_api', 'not recorded')}.",
+            f"- Binding scan path: {machine.get('binding_scan_api', 'not recorded')}.",
             "- Fixture/key/value construction is outside write timing; one untimed point-read warm pass precedes measurement.",
             f"- Highest scenario median peak RSS: Rust Go binding {peak_rss[BINDING] / 2**30:.2f} GiB; native Go {peak_rss[NATIVE] / 2**30:.2f} GiB.",
             "",
@@ -203,7 +208,7 @@ def main() -> None:
             "",
             "## Workload and validation contract",
             "",
-            "- Dataset sizes: 10K, 50K, 1M, 5M, and 10M base records.",
+            f"- Dataset sizes measured in this report: {machine.get('sizes', 'not recorded')} base records.",
             "- Keys: fixed-width, zero-padded UTF-8 strings; values: deterministic pseudo-random 1–100 byte payloads.",
             "- Fresh workloads: ascending append order, uniform deterministic permutation, and permuted 1,000-key clusters.",
             "- Mutation workloads: 30% of base size; random and clustered use 50% inserts and 50% updates.",
@@ -217,17 +222,17 @@ def main() -> None:
             "It does not cover disk I/O, cold cache, multiple workers, deployment packaging, partial/selective range scans, or concurrent readers. "
             "Medians describe these measured runs; they are not confidence intervals.",
             "",
-            "## Engineering implications",
+            "## Implemented mechanisms and remaining work",
             "",
-            "These are code-path hypotheses, not contributions isolated by this benchmark:",
+            "The benchmark measures these mechanisms together; it does not isolate each contribution:",
             "",
-            "1. Add a retained Go read-session handle so point reads do not repeatedly encode/decode the tree record or reacquire root state.",
-            "2. Add a specialized single-call `get_into` ABI that borrows Go input only for the cgo call and writes into caller-owned storage, avoiding RustBuffer allocate/copy/free crossings.",
-            "3. Make `GetMany` the throughput-oriented Go API and benchmark batch sizes separately; it amortizes the native boundary without changing single-key semantics.",
-            "4. Return packed scan pages with offset tables and scope-bound entry views, then let Go decode lazily without allocating two byte slices per row.",
-            "5. Encode writes into a packed key/value arena so the binding does not retain a Go slice-of-slices and a second complete UniFFI mutation buffer simultaneously.",
+            "1. Point reads reuse a root-bound native session; owned reads use caller-provided output and view reads retain the immutable packed leaf for callback scope.",
+            "2. Multi-get crosses cgo once with a packed key arena and returns one validated packed result page in caller order.",
+            "3. Full scans seek once, retain the native traversal stack, and return validated 4,096-record pages; `ScanRangeView` allocates no Go key/value slices per row.",
+            "4. Opaque registry handles reject stale IDs; page/value release and scan close are idempotent.",
+            "5. Remaining work is to profile the scan gap, add packed retained diff/conflict pages, benchmark multi-get widths, add transport counters, and reduce write-side mutation/RSS copies.",
             "",
-            "Each fast path needs byte-for-byte parity tests, malformed-offset rejection, explicit lifetime rules, race/close tests, and separate allocation/cgo-call counters before it replaces the compatibility API.",
+            "Owned compatibility APIs remain unchanged. View APIs are opt-in and callback-scoped; callers must copy any bytes retained after the callback.",
             "",
             "Raw process output is retained in `raw/`; `results.csv` contains normalized measurements, and `machine.txt` identifies the exact release library loaded.",
         ]

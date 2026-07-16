@@ -28,6 +28,27 @@ class UniFfiBindingTests(unittest.TestCase):
             [b"2", None, b"1"],
         )
 
+        # Repeated reads should bind the immutable root once instead of
+        # retransmitting and decoding TreeRecord for every operation.
+        session = engine.read_session(tree)
+        self.assertEqual(session.get(b"a"), b"1")
+        self.assertIsNone(session.get(b"missing"))
+        self.assertEqual(
+            session.get_many([b"b", b"missing", b"a", b"b"]),
+            [b"2", None, b"1", b"2"],
+        )
+
+        session_keys = []
+
+        class SessionEntries(prolly.EntryVisitorCallback):
+            def visit(self, entry):
+                session_keys.append(entry.key)
+                return True
+
+        session_outcome = session.scan_range(b"a", b"c", SessionEntries())
+        self.assertEqual(session_keys, [b"a", b"b"])
+        self.assertEqual((session_outcome.visited, session_outcome.stopped), (2, False))
+
         entries = engine.range(tree, b"", None)
         self.assertEqual(
             [(entry.key, entry.value) for entry in entries],
@@ -77,6 +98,37 @@ class UniFfiBindingTests(unittest.TestCase):
 
         self.assertEqual(engine.scan_conflicts(base, left, right, Conflicts()).visited, 1)
         self.assertEqual(conflict_keys, [b"b"])
+
+        # Root-bound sessions keep the same semantics while avoiding repeated
+        # TreeRecord transport for diff/conflict inspection.
+        base_session = engine.read_session(base)
+        left_session = engine.read_session(left)
+        right_session = engine.read_session(right)
+        session_kinds = []
+
+        class SessionDiffs(prolly.DiffVisitorCallback):
+            def visit(self, diff):
+                session_kinds.append(diff.kind)
+                return True
+
+        session_diff = base_session.scan_range_diff(
+            right_session, b"", None, SessionDiffs()
+        )
+        self.assertEqual((session_diff.visited, session_diff.stopped), (1, False))
+        self.assertEqual(session_kinds, [prolly.DiffKind.CHANGED])
+
+        session_conflict_keys = []
+
+        class SessionConflicts(prolly.ConflictVisitorCallback):
+            def visit(self, conflict):
+                session_conflict_keys.append(conflict.key)
+                return True
+
+        session_conflicts = base_session.scan_conflicts(
+            left_session, right_session, SessionConflicts()
+        )
+        self.assertEqual((session_conflicts.visited, session_conflicts.stopped), (1, False))
+        self.assertEqual(session_conflict_keys, [b"b"])
 
     def test_delete_range_uses_half_open_raw_byte_bounds(self) -> None:
         engine = prolly.ProllyEngine.memory(prolly.default_config())

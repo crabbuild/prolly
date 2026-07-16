@@ -376,8 +376,8 @@ pub use prolly::range::{
 #[cfg(feature = "async-store")]
 pub use prolly::read::AsyncReadSession;
 pub use prolly::read::{
-    BorrowedMergeResolver, ConflictRef, DiffRef, EntryRef, MergeDecision, ReadSession, ScanOutcome,
-    ValueRefView,
+    BorrowedMergeResolver, ConflictRef, DiffRef, EntryRef, MergeDecision, OwnedRangeScanSession,
+    OwnedReadSession, OwnedValueLease, ReadSession, ScanOutcome, ValueRefView,
 };
 pub use prolly::secondary_index::{
     catalog_checkpoint_key, catalog_checkpoints_prefix, catalog_current_key,

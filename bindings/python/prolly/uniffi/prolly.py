@@ -449,9 +449,9 @@ def _uniffi_load_indirect():
     This is how we find and load the dynamic library provided by the component.
     For now we just look it up by name.
     """
-    configured_path = os.environ.get("PROLLY_BINDINGS_LIBRARY")
-    if configured_path:
-        return ctypes.cdll.LoadLibrary(configured_path)
+    override = os.environ.get("PROLLY_BINDINGS_LIBRARY")
+    if override:
+        return ctypes.cdll.LoadLibrary(override)
 
     if sys.platform == "darwin":
         libname = "lib{}.dylib"
@@ -1016,6 +1016,8 @@ def _uniffi_check_api_checksums(lib):
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_prollyengine_range_page() != 7048:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_prollyengine_read_session() != 13696:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_prollyengine_reset_metrics() != 10217:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_prollyengine_reverse_page() != 38329:
@@ -1055,6 +1057,18 @@ def _uniffi_check_api_checksums(lib):
     if lib.uniffi_prolly_bindings_checksum_method_prollyengine_unpin_all_cache_nodes() != 58636:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_prollyengine_upper_bound() != 36418:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_prollyreadsession_fast_handle() != 48376:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_prollyreadsession_get() != 9311:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_prollyreadsession_get_many() != 38930:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_prollyreadsession_scan_conflicts() != 60233:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_prollyreadsession_scan_range() != 59438:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_prollyreadsession_scan_range_diff() != 52527:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_prollytransaction_batch() != 26023:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
@@ -1431,6 +1445,16 @@ _UniffiLib.uniffi_prolly_bindings_fn_free_prollyengine.argtypes = (
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UniffiLib.uniffi_prolly_bindings_fn_free_prollyengine.restype = None
+_UniffiLib.uniffi_prolly_bindings_fn_clone_prollyreadsession.argtypes = (
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_clone_prollyreadsession.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_free_prollyreadsession.argtypes = (
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_free_prollyreadsession.restype = None
 _UniffiLib.uniffi_prolly_bindings_fn_clone_prollytransaction.argtypes = (
     ctypes.c_uint64,
     ctypes.POINTER(_UniffiRustCallStatus),
@@ -3261,6 +3285,12 @@ _UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_range_page.argtypes = (
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_range_page.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_read_session.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_read_session.restype = ctypes.c_uint64
 _UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_reset_metrics.argtypes = (
     ctypes.c_uint64,
     ctypes.POINTER(_UniffiRustCallStatus),
@@ -3414,6 +3444,48 @@ _UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_upper_bound.argtypes = 
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_upper_bound.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollyreadsession_fast_handle.argtypes = (
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollyreadsession_fast_handle.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollyreadsession_get.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollyreadsession_get.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollyreadsession_get_many.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollyreadsession_get_many.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollyreadsession_scan_conflicts.argtypes = (
+    ctypes.c_uint64,
+    ctypes.c_uint64,
+    ctypes.c_uint64,
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollyreadsession_scan_conflicts.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollyreadsession_scan_range.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollyreadsession_scan_range.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollyreadsession_scan_range_diff.argtypes = (
+    ctypes.c_uint64,
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollyreadsession_scan_range_diff.restype = _UniffiRustBuffer
 _UniffiLib.uniffi_prolly_bindings_fn_method_prollytransaction_batch.argtypes = (
     ctypes.c_uint64,
     _UniffiRustBuffer,
@@ -4289,6 +4361,9 @@ _UniffiLib.uniffi_prolly_bindings_checksum_method_prollyengine_range_from_cursor
 _UniffiLib.uniffi_prolly_bindings_checksum_method_prollyengine_range_page.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_prollyengine_range_page.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollyengine_read_session.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollyengine_read_session.restype = ctypes.c_uint16
 _UniffiLib.uniffi_prolly_bindings_checksum_method_prollyengine_reset_metrics.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_prollyengine_reset_metrics.restype = ctypes.c_uint16
@@ -4349,6 +4424,24 @@ _UniffiLib.uniffi_prolly_bindings_checksum_method_prollyengine_unpin_all_cache_n
 _UniffiLib.uniffi_prolly_bindings_checksum_method_prollyengine_upper_bound.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_prollyengine_upper_bound.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollyreadsession_fast_handle.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollyreadsession_fast_handle.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollyreadsession_get.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollyreadsession_get.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollyreadsession_get_many.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollyreadsession_get_many.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollyreadsession_scan_conflicts.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollyreadsession_scan_conflicts.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollyreadsession_scan_range.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollyreadsession_scan_range.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollyreadsession_scan_range_diff.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollyreadsession_scan_range_diff.restype = ctypes.c_uint16
 _UniffiLib.uniffi_prolly_bindings_checksum_method_prollytransaction_batch.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_prollytransaction_batch.restype = ctypes.c_uint16
@@ -14284,6 +14377,234 @@ class _UniffiFfiConverterSequenceTypeTreeRecord(_UniffiConverterRustBuffer):
         ]
 
 
+class ProllyReadSessionProtocol(typing.Protocol):
+    """
+    A root-bound read object that amortizes tree decoding and ownership across
+    repeated foreign-language reads.
+"""
+
+    def fast_handle(self, ) -> int:
+        """
+        Internal opaque transport handle used by handwritten native adapters.
+        The handle resolves only while this UniFFI object is alive.
+"""
+        raise NotImplementedError
+    def get(self, key: bytes) -> typing.Optional[bytes]:
+        """
+        Return an owned value while reusing the decoded tree bound to this
+        session. This is the portable UniFFI session API.
+"""
+        raise NotImplementedError
+    def get_many(self, keys: typing.List[bytes]) -> typing.List[typing.Optional[bytes]]:
+        """
+        Batch point reads while serializing the key set and result only once.
+"""
+        raise NotImplementedError
+    def scan_conflicts(self, left: ProllyReadSession,right: ProllyReadSession,visitor: ConflictVisitorCallback) -> ScanOutcomeRecord:
+        """
+        Stream genuine three-way conflicts. The receiver is the merge base.
+"""
+        raise NotImplementedError
+    def scan_range(self, start: bytes,range_end: typing.Optional[bytes],visitor: EntryVisitorCallback) -> ScanOutcomeRecord:
+        """
+        Stream a half-open range without retransmitting the tree on every
+        operation. Callback records remain owned for compatibility.
+"""
+        raise NotImplementedError
+    def scan_range_diff(self, other: ProllyReadSession,start: bytes,range_end: typing.Optional[bytes],visitor: DiffVisitorCallback) -> ScanOutcomeRecord:
+        """
+        Stream structural differences against another root-bound session.
+"""
+        raise NotImplementedError
+
+class ProllyReadSession(ProllyReadSessionProtocol):
+    """
+    A root-bound read object that amortizes tree decoding and ownership across
+    repeated foreign-language reads.
+"""
+
+    _handle: ctypes.c_uint64
+
+    def __init__(self, *args, **kwargs):
+        raise ValueError("This class has no default constructor")
+
+    def __del__(self):
+        # In case of partial initialization of instances.
+        handle = getattr(self, "_handle", None)
+        if handle is not None:
+            _uniffi_rust_call(_UniffiLib.uniffi_prolly_bindings_fn_free_prollyreadsession, handle)
+
+    def _uniffi_clone_handle(self):
+        return _uniffi_rust_call(_UniffiLib.uniffi_prolly_bindings_fn_clone_prollyreadsession, self._handle)
+
+    # Used by alternative constructors or any methods which return this type.
+    @classmethod
+    def _uniffi_make_instance(cls, handle):
+        # Lightly yucky way to bypass the usual __init__ logic
+        # and just create a new instance with the required handle.
+        inst = cls.__new__(cls)
+        inst._handle = handle
+        return inst
+    def fast_handle(self, ) -> int:
+        """
+        Internal opaque transport handle used by handwritten native adapters.
+        The handle resolves only while this UniFFI object is alive.
+"""
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterUInt64.lift
+        _uniffi_error_converter = None
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_prollyreadsession_fast_handle,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def get(self, key: bytes) -> typing.Optional[bytes]:
+        """
+        Return an owned value while reusing the decoded tree bound to this
+        session. This is the portable UniFFI session API.
+"""
+
+        _UniffiFfiConverterBytes.check_lower(key)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterBytes.lower(key),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterOptionalBytes.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_prollyreadsession_get,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def get_many(self, keys: typing.List[bytes]) -> typing.List[typing.Optional[bytes]]:
+        """
+        Batch point reads while serializing the key set and result only once.
+"""
+
+        _UniffiFfiConverterSequenceBytes.check_lower(keys)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterSequenceBytes.lower(keys),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterSequenceOptionalBytes.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_prollyreadsession_get_many,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def scan_conflicts(self, left: ProllyReadSession,right: ProllyReadSession,visitor: ConflictVisitorCallback) -> ScanOutcomeRecord:
+        """
+        Stream genuine three-way conflicts. The receiver is the merge base.
+"""
+
+        _UniffiFfiConverterTypeProllyReadSession.check_lower(left)
+
+        _UniffiFfiConverterTypeProllyReadSession.check_lower(right)
+
+        _UniffiFfiConverterTypeConflictVisitorCallback.check_lower(visitor)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeProllyReadSession.lower(left),
+            _UniffiFfiConverterTypeProllyReadSession.lower(right),
+            _UniffiFfiConverterTypeConflictVisitorCallback.lower(visitor),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeScanOutcomeRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_prollyreadsession_scan_conflicts,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def scan_range(self, start: bytes,range_end: typing.Optional[bytes],visitor: EntryVisitorCallback) -> ScanOutcomeRecord:
+        """
+        Stream a half-open range without retransmitting the tree on every
+        operation. Callback records remain owned for compatibility.
+"""
+
+        _UniffiFfiConverterBytes.check_lower(start)
+
+        _UniffiFfiConverterOptionalBytes.check_lower(range_end)
+
+        _UniffiFfiConverterTypeEntryVisitorCallback.check_lower(visitor)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterBytes.lower(start),
+            _UniffiFfiConverterOptionalBytes.lower(range_end),
+            _UniffiFfiConverterTypeEntryVisitorCallback.lower(visitor),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeScanOutcomeRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_prollyreadsession_scan_range,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def scan_range_diff(self, other: ProllyReadSession,start: bytes,range_end: typing.Optional[bytes],visitor: DiffVisitorCallback) -> ScanOutcomeRecord:
+        """
+        Stream structural differences against another root-bound session.
+"""
+
+        _UniffiFfiConverterTypeProllyReadSession.check_lower(other)
+
+        _UniffiFfiConverterBytes.check_lower(start)
+
+        _UniffiFfiConverterOptionalBytes.check_lower(range_end)
+
+        _UniffiFfiConverterTypeDiffVisitorCallback.check_lower(visitor)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeProllyReadSession.lower(other),
+            _UniffiFfiConverterBytes.lower(start),
+            _UniffiFfiConverterOptionalBytes.lower(range_end),
+            _UniffiFfiConverterTypeDiffVisitorCallback.lower(visitor),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeScanOutcomeRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_prollyreadsession_scan_range_diff,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+
+
+
+
+
+class _UniffiFfiConverterTypeProllyReadSession:
+    @staticmethod
+    def lift(value: int) -> ProllyReadSession:
+        return ProllyReadSession._uniffi_make_instance(value)
+
+    @staticmethod
+    def check_lower(value: ProllyReadSession):
+        if not isinstance(value, ProllyReadSession):
+            raise TypeError("Expected ProllyReadSession instance, {} found".format(type(value).__name__))
+
+    @staticmethod
+    def lower(value: ProllyReadSession) -> ctypes.c_uint64:
+        return value._uniffi_clone_handle()
+
+    @classmethod
+    def read(cls, buf: _UniffiRustBuffer) -> ProllyReadSession:
+        ptr = buf.read_u64()
+        if ptr == 0:
+            raise InternalError("Raw handle value was null")
+        return cls.lift(ptr)
+
+    @classmethod
+    def write(cls, value: ProllyReadSession, buf: _UniffiRustBuffer):
+        buf.write_u64(cls.lower(value))
+
+
 class ProllyEngineProtocol(typing.Protocol):
 
     def append_batch(self, tree: TreeRecord,mutations: typing.List[MutationRecord]) -> TreeRecord:
@@ -14495,6 +14816,13 @@ class ProllyEngineProtocol(typing.Protocol):
     def range_from_cursor(self, tree: TreeRecord,cursor: typing.Optional[RangeCursorRecord],range_end: typing.Optional[bytes]) -> typing.List[EntryRecord]:
         raise NotImplementedError
     def range_page(self, tree: TreeRecord,cursor: typing.Optional[RangeCursorRecord],range_end: typing.Optional[bytes],limit: int) -> RangePageRecord:
+        raise NotImplementedError
+    def read_session(self, tree: TreeRecord) -> ProllyReadSession:
+        """
+        Bind one immutable tree to a reusable read object. Foreign callers that
+        issue repeated reads should prefer this over retransmitting `TreeRecord`
+        on every operation.
+"""
         raise NotImplementedError
     def reset_metrics(self, ) -> None:
         raise NotImplementedError
@@ -16658,6 +16986,26 @@ class ProllyEngine(ProllyEngineProtocol):
         _uniffi_ffi_result = _uniffi_rust_call_with_error(
             _uniffi_error_converter,
             _UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_range_page,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def read_session(self, tree: TreeRecord) -> ProllyReadSession:
+        """
+        Bind one immutable tree to a reusable read object. Foreign callers that
+        issue repeated reads should prefer this over retransmitting `TreeRecord`
+        on every operation.
+"""
+
+        _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeTreeRecord.lower(tree),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeProllyReadSession.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_read_session,
             *_uniffi_lowered_args,
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
@@ -19255,6 +19603,8 @@ __all__ = [
     "ProllyBlobStoreProtocol",
     "ProllyTransaction",
     "ProllyTransactionProtocol",
+    "ProllyReadSession",
+    "ProllyReadSessionProtocol",
     "ProllyEngine",
     "ProllyEngineProtocol",
 ]

@@ -14,6 +14,8 @@ The generated source lives in
 Compiled native libraries are built by Cargo or release CI and are not checked
 in. The generated surface includes:
 
+- `readSession(tree)` for reusable owned point, multi-get, range, diff, and
+  conflict reads; close it with `use`;
 - ordered boundary, prefix, cursor, range-page, and diff-page helpers;
 - bulk-build, append-batch, parallel-batch, and execution-stat APIs;
 - merge policies, resolver callbacks, CRDT helpers, and explanation traces;

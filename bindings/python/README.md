@@ -36,6 +36,7 @@ CRUD, batch, append, parallel batch, and bulk-build operations.
 
 It also exposes:
 
+- root-bound `read_session` point, multi-get, range, diff, and conflict reads;
 - prefix, range, cursor, reverse-page, diff-page, and boundary helpers;
 - conflict inspection, merge policies, merge traces, and Python callbacks;
 - named roots, root manifests, node/CID helpers, GC, sync, cache, and metrics;
