@@ -80,6 +80,8 @@
 use super::cid::Cid;
 use super::error::Error;
 use super::node::Node;
+#[cfg(feature = "async-store")]
+use super::read::EntryRef;
 use super::store::Store;
 use super::tree::Tree;
 
@@ -319,8 +321,9 @@ pub struct RangeIter<'a, S: Store> {
     start_key: Vec<u8>,
     /// Whether to skip an entry equal to the start key.
     skip_start_key: bool,
-    /// Last key yielded by this iterator.
-    last_key: Option<Vec<u8>>,
+    /// Last retained leaf location yielded by this iterator. The key is copied
+    /// only if a resumable cursor is requested.
+    last_location: Option<(Arc<Node>, usize)>,
 }
 
 impl<'a, S: Store> RangeIter<'a, S> {
@@ -344,7 +347,7 @@ impl<'a, S: Store> RangeIter<'a, S> {
             started: false,
             start_key: start.to_vec(),
             skip_start_key: false,
-            last_key: None,
+            last_location: None,
         }
     }
 
@@ -361,7 +364,7 @@ impl<'a, S: Store> RangeIter<'a, S> {
             started: false,
             start_key: after_key.to_vec(),
             skip_start_key: true,
-            last_key: None,
+            last_location: None,
         }
     }
 
@@ -370,8 +373,10 @@ impl<'a, S: Store> RangeIter<'a, S> {
     /// If the iterator has not yielded an item yet, this returns
     /// [`RangeCursor::start`].
     pub fn resume_cursor(&self) -> RangeCursor {
-        self.last_key
-            .clone()
+        self.last_location
+            .as_ref()
+            .and_then(|(node, index)| node.keys.get(*index))
+            .cloned()
             .map(RangeCursor::after_key)
             .unwrap_or_else(RangeCursor::start)
     }
@@ -410,8 +415,9 @@ impl<'a, S: Store> RangeIter<'a, S> {
 
             match leaf_entry_before_end(node, *idx, self.end.as_deref()) {
                 Ok(Some(entry)) => {
+                    let location = (node.clone(), *idx);
                     *idx += 1;
-                    self.last_key = Some(entry.0.clone());
+                    self.last_location = Some(location);
                     return Some(Ok(entry));
                 }
                 Ok(None) => return None,
@@ -439,10 +445,11 @@ impl<'a, S: Store> RangeIter<'a, S> {
 
                 match leaf_entry_before_end(node, *idx, self.end.as_deref()) {
                     Ok(Some(entry)) => {
+                        let location = (node.clone(), *idx);
                         if let Some((_, idx)) = self.stack.last_mut() {
                             *idx += 1;
                         }
-                        self.last_key = Some(entry.0.clone());
+                        self.last_location = Some(location);
                         return Some(Ok(entry));
                     }
                     Ok(None) => return None,
@@ -576,8 +583,9 @@ impl<'a, S: Store> Iterator for RangeIter<'a, S> {
             if node.leaf {
                 match leaf_entry_before_end(node, *idx, self.end.as_deref()) {
                     Ok(Some(entry)) => {
+                        let location = (node.clone(), *idx);
                         *idx += 1;
-                        self.last_key = Some(entry.0.clone());
+                        self.last_location = Some(location);
                         return Some(Ok(entry));
                     }
                     Ok(None) => return None,
@@ -620,7 +628,7 @@ pub struct AsyncRangeIter<'a, S: AsyncStore> {
     started: bool,
     start_key: Vec<u8>,
     skip_start_key: bool,
-    last_key: Option<Vec<u8>>,
+    last_location: Option<(Arc<Node>, usize)>,
 }
 
 #[cfg(feature = "async-store")]
@@ -642,7 +650,7 @@ where
             started: false,
             start_key: start.to_vec(),
             skip_start_key: false,
-            last_key: None,
+            last_location: None,
         }
     }
 
@@ -659,13 +667,26 @@ where
             started: false,
             start_key: after_key.to_vec(),
             skip_start_key: true,
-            last_key: None,
+            last_location: None,
         }
     }
 
     /// Return the next key-value pair in lexicographic order.
     pub async fn next(&mut self) -> Option<RangeItem> {
+        self.next_with(|entry| entry.to_owned()).await
+    }
+
+    /// Visit the next entry without copying its key or value.
+    ///
+    /// The callback is synchronous and runs after any required child load has
+    /// completed, so its borrowed entry cannot cross an `.await` boundary.
+    pub async fn next_with<R>(
+        &mut self,
+        read: impl for<'entry> FnOnce(EntryRef<'entry>) -> R,
+    ) -> Option<Result<R, Error>> {
         self.position_at_start();
+
+        let mut read = Some(read);
 
         loop {
             let (node, idx) = self.stack.last_mut()?;
@@ -683,15 +704,28 @@ where
             }
 
             if node.leaf {
-                match leaf_entry_before_end(node, *idx, self.end.as_deref()) {
-                    Ok(Some(entry)) => {
-                        *idx += 1;
-                        self.last_key = Some(entry.0.clone());
-                        return Some(Ok(entry));
-                    }
-                    Ok(None) => return None,
-                    Err(e) => return Some(Err(e)),
+                if node.keys.len() != node.vals.len() {
+                    return Some(Err(Error::InvalidNode));
                 }
+                let index = *idx;
+                let key = match node.keys.get(index) {
+                    Some(key) => key,
+                    None => return Some(Err(Error::InvalidNode)),
+                };
+                if self.end.as_deref().is_some_and(|end| key.as_slice() >= end) {
+                    return None;
+                }
+                let value = match node.vals.get(index) {
+                    Some(value) => value,
+                    None => return Some(Err(Error::InvalidNode)),
+                };
+                *idx += 1;
+                self.last_location = Some((node.clone(), index));
+                return Some(Ok(read
+                    .take()
+                    .expect("async range callback is invoked at most once")(
+                    EntryRef::new(key, value),
+                )));
             }
 
             match child_starts_at_or_after_end(self.end.as_deref(), node, *idx) {
@@ -726,8 +760,10 @@ where
     /// If the iterator has not yielded an item yet, this returns
     /// [`RangeCursor::start`].
     pub fn resume_cursor(&self) -> RangeCursor {
-        self.last_key
-            .clone()
+        self.last_location
+            .as_ref()
+            .and_then(|(node, index)| node.keys.get(*index))
+            .cloned()
             .map(RangeCursor::after_key)
             .unwrap_or_else(RangeCursor::start)
     }

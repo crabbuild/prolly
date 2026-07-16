@@ -2,6 +2,7 @@ use super::super::cid::Cid;
 use super::super::error::Error;
 use super::super::manifest::ManifestStore;
 use super::super::range::ReverseCursor;
+use super::super::read::{EntryRef, ScanOutcome};
 use super::super::store::Store;
 use super::super::transaction::TransactionalStore;
 use super::super::tree::Tree;
@@ -11,14 +12,23 @@ use super::coordinator::{validate_catalog_format, IndexedMap};
 use super::definition::IndexProjection;
 use super::storage::{
     catalog_checkpoint_key, catalog_current_key, catalog_descriptor_key, catalog_map_id,
-    decode_physical_index_key, term_bounds_exact, term_bounds_prefix, term_bounds_range,
-    IndexCheckpoint, IndexValue, IndexedHeadRecord, SecondaryIndexDescriptor, TermBounds,
+    decode_physical_index_key, decode_physical_index_key_ref, term_bounds_exact,
+    term_bounds_prefix, term_bounds_range, IndexCheckpoint, IndexValue, IndexValueRef,
+    IndexedHeadRecord, SecondaryIndexDescriptor, TermBounds,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use std::ops::ControlFlow;
 
 const CURSOR_MAGIC: &[u8; 8] = b"PSICUR01";
 const CURSOR_VERSION: u32 = 1;
+const SOURCE_JOIN_BATCH_SIZE: usize = 256;
+
+struct SourceJoinMatch {
+    term: Vec<u8>,
+    primary_key: Vec<u8>,
+    projection: Option<Vec<u8>>,
+}
 
 /// Reproducible identity of one catalog-selected indexed snapshot.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -33,6 +43,39 @@ pub struct SecondaryIndexMatch {
     pub term: Vec<u8>,
     pub primary_key: Vec<u8>,
     pub projection: Option<Vec<u8>>,
+}
+
+/// Callback-scoped decoded secondary-index match.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SecondaryIndexMatchRef<'a> {
+    pub term: &'a [u8],
+    pub primary_key: &'a [u8],
+    pub projection: Option<&'a [u8]>,
+}
+
+impl SecondaryIndexMatchRef<'_> {
+    pub fn to_owned(self) -> SecondaryIndexMatch {
+        SecondaryIndexMatch {
+            term: self.term.to_vec(),
+            primary_key: self.primary_key.to_vec(),
+            projection: self.projection.map(<[u8]>::to_vec),
+        }
+    }
+}
+
+/// Callback-scoped index match joined to its pinned source record.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct IndexedSourceRecordRef<'a> {
+    pub term: &'a [u8],
+    pub primary_key: &'a [u8],
+    pub projection: Option<&'a [u8]>,
+    pub source_value: &'a [u8],
+}
+
+impl IndexedSourceRecordRef<'_> {
+    pub fn to_owned(self) -> IndexedSourceRecord {
+        (self.primary_key.to_vec(), self.source_value.to_vec())
+    }
 }
 
 /// One primary key and its optional projected bytes.
@@ -233,11 +276,15 @@ impl<'a, S: Store> SecondaryIndexSnapshot<'a, S> {
     }
 
     pub fn exact(&self, term: &[u8]) -> Result<Vec<SecondaryIndexMatch>, Error> {
-        self.collect(LogicalBounds::Exact(term.to_vec()))
+        let mut matches = Vec::new();
+        self.scan_exact(term, |matched| matches.push(matched.to_owned()))?;
+        Ok(matches)
     }
 
     pub fn prefix(&self, prefix: &[u8]) -> Result<Vec<SecondaryIndexMatch>, Error> {
-        self.collect(LogicalBounds::Prefix(prefix.to_vec()))
+        let mut matches = Vec::new();
+        self.scan_prefix(prefix, |matched| matches.push(matched.to_owned()))?;
+        Ok(matches)
     }
 
     pub fn range(
@@ -245,10 +292,165 @@ impl<'a, S: Store> SecondaryIndexSnapshot<'a, S> {
         start_term: &[u8],
         end_term: Option<&[u8]>,
     ) -> Result<Vec<SecondaryIndexMatch>, Error> {
-        self.collect(LogicalBounds::Range(
-            start_term.to_vec(),
-            end_term.map(ToOwned::to_owned),
-        ))
+        let mut matches = Vec::new();
+        self.scan_range(start_term, end_term, |matched| {
+            matches.push(matched.to_owned())
+        })?;
+        Ok(matches)
+    }
+
+    pub fn scan_exact(
+        &self,
+        term: &[u8],
+        mut visit: impl for<'row> FnMut(SecondaryIndexMatchRef<'row>),
+    ) -> Result<u64, Error> {
+        Ok(self
+            .scan_exact_until(term, |row| {
+                visit(row);
+                ControlFlow::<()>::Continue(())
+            })?
+            .visited)
+    }
+
+    pub fn scan_exact_until<B>(
+        &self,
+        term: &[u8],
+        visit: impl for<'row> FnMut(SecondaryIndexMatchRef<'row>) -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error> {
+        self.scan_matches_until(
+            LogicalBounds::Exact(term.to_vec()),
+            SecondaryIndexDirection::Forward,
+            visit,
+        )
+    }
+
+    pub fn scan_prefix(
+        &self,
+        prefix: &[u8],
+        mut visit: impl for<'row> FnMut(SecondaryIndexMatchRef<'row>),
+    ) -> Result<u64, Error> {
+        Ok(self
+            .scan_prefix_until(prefix, |row| {
+                visit(row);
+                ControlFlow::<()>::Continue(())
+            })?
+            .visited)
+    }
+
+    pub fn scan_prefix_until<B>(
+        &self,
+        prefix: &[u8],
+        visit: impl for<'row> FnMut(SecondaryIndexMatchRef<'row>) -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error> {
+        self.scan_matches_until(
+            LogicalBounds::Prefix(prefix.to_vec()),
+            SecondaryIndexDirection::Forward,
+            visit,
+        )
+    }
+
+    pub fn scan_range(
+        &self,
+        start_term: &[u8],
+        end_term: Option<&[u8]>,
+        mut visit: impl for<'row> FnMut(SecondaryIndexMatchRef<'row>),
+    ) -> Result<u64, Error> {
+        Ok(self
+            .scan_range_until(start_term, end_term, |row| {
+                visit(row);
+                ControlFlow::<()>::Continue(())
+            })?
+            .visited)
+    }
+
+    pub fn scan_range_until<B>(
+        &self,
+        start_term: &[u8],
+        end_term: Option<&[u8]>,
+        visit: impl for<'row> FnMut(SecondaryIndexMatchRef<'row>) -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error> {
+        self.scan_matches_until(
+            LogicalBounds::Range(start_term.to_vec(), end_term.map(ToOwned::to_owned)),
+            SecondaryIndexDirection::Forward,
+            visit,
+        )
+    }
+
+    pub fn scan_exact_reverse(
+        &self,
+        term: &[u8],
+        mut visit: impl for<'row> FnMut(SecondaryIndexMatchRef<'row>),
+    ) -> Result<u64, Error> {
+        Ok(self
+            .scan_exact_reverse_until(term, |row| {
+                visit(row);
+                ControlFlow::<()>::Continue(())
+            })?
+            .visited)
+    }
+
+    pub fn scan_exact_reverse_until<B>(
+        &self,
+        term: &[u8],
+        visit: impl for<'row> FnMut(SecondaryIndexMatchRef<'row>) -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error> {
+        self.scan_matches_until(
+            LogicalBounds::Exact(term.to_vec()),
+            SecondaryIndexDirection::Reverse,
+            visit,
+        )
+    }
+
+    pub fn scan_prefix_reverse(
+        &self,
+        prefix: &[u8],
+        mut visit: impl for<'row> FnMut(SecondaryIndexMatchRef<'row>),
+    ) -> Result<u64, Error> {
+        Ok(self
+            .scan_prefix_reverse_until(prefix, |row| {
+                visit(row);
+                ControlFlow::<()>::Continue(())
+            })?
+            .visited)
+    }
+
+    pub fn scan_prefix_reverse_until<B>(
+        &self,
+        prefix: &[u8],
+        visit: impl for<'row> FnMut(SecondaryIndexMatchRef<'row>) -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error> {
+        self.scan_matches_until(
+            LogicalBounds::Prefix(prefix.to_vec()),
+            SecondaryIndexDirection::Reverse,
+            visit,
+        )
+    }
+
+    pub fn scan_range_reverse(
+        &self,
+        start_term: &[u8],
+        end_term: Option<&[u8]>,
+        mut visit: impl for<'row> FnMut(SecondaryIndexMatchRef<'row>),
+    ) -> Result<u64, Error> {
+        Ok(self
+            .scan_range_reverse_until(start_term, end_term, |row| {
+                visit(row);
+                ControlFlow::<()>::Continue(())
+            })?
+            .visited)
+    }
+
+    pub fn scan_range_reverse_until<B>(
+        &self,
+        start_term: &[u8],
+        end_term: Option<&[u8]>,
+        visit: impl for<'row> FnMut(SecondaryIndexMatchRef<'row>) -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error> {
+        self.scan_matches_until(
+            LogicalBounds::Range(start_term.to_vec(), end_term.map(ToOwned::to_owned)),
+            SecondaryIndexDirection::Reverse,
+            visit,
+        )
     }
 
     pub fn primary_keys(&self, term: &[u8]) -> Result<Vec<Vec<u8>>, Error> {
@@ -269,27 +471,108 @@ impl<'a, S: Store> SecondaryIndexSnapshot<'a, S> {
 
     /// Resolve matching primary keys with one ordered batched source read.
     pub fn records(&self, term: &[u8]) -> Result<Vec<IndexedSourceRecord>, Error> {
-        let matches = self.exact(term)?;
-        let keys: Vec<&[u8]> = matches
+        let mut records = Vec::new();
+        self.scan_records(term, |record| records.push(record.to_owned()))?;
+        Ok(records)
+    }
+
+    pub fn scan_records(
+        &self,
+        term: &[u8],
+        mut visit: impl for<'row> FnMut(IndexedSourceRecordRef<'row>),
+    ) -> Result<u64, Error> {
+        Ok(self
+            .scan_records_until(term, |row| {
+                visit(row);
+                ControlFlow::<()>::Continue(())
+            })?
+            .visited)
+    }
+
+    pub fn scan_records_until<B>(
+        &self,
+        term: &[u8],
+        mut visit: impl for<'row> FnMut(IndexedSourceRecordRef<'row>) -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error> {
+        let mut source = self.prolly.read(&self.source_tree)?;
+        let mut chunk = Vec::with_capacity(SOURCE_JOIN_BATCH_SIZE);
+        let mut delivered = 0u64;
+        let mut terminal = None;
+        self.scan_exact_until(term, |matched| {
+            chunk.push(SourceJoinMatch {
+                term: matched.term.to_vec(),
+                primary_key: matched.primary_key.to_vec(),
+                projection: matched.projection.map(<[u8]>::to_vec),
+            });
+            if chunk.len() < SOURCE_JOIN_BATCH_SIZE {
+                return ControlFlow::Continue(());
+            }
+            match self.flush_source_join_chunk(&mut source, &mut chunk, &mut delivered, &mut visit)
+            {
+                Ok(Some(value)) => {
+                    terminal = Some(Ok(value));
+                    ControlFlow::Break(())
+                }
+                Ok(None) => ControlFlow::Continue(()),
+                Err(error) => {
+                    terminal = Some(Err(error));
+                    ControlFlow::Break(())
+                }
+            }
+        })?;
+
+        if terminal.is_none() && !chunk.is_empty() {
+            terminal = self
+                .flush_source_join_chunk(&mut source, &mut chunk, &mut delivered, &mut visit)
+                .transpose();
+        }
+        match terminal {
+            Some(Ok(value)) => Ok(ScanOutcome::stopped(delivered, value)),
+            Some(Err(error)) => Err(error),
+            None => Ok(ScanOutcome::complete(delivered)),
+        }
+    }
+
+    fn flush_source_join_chunk<B>(
+        &self,
+        source: &mut super::super::read::ReadSession<'_, '_, S>,
+        chunk: &mut Vec<SourceJoinMatch>,
+        delivered: &mut u64,
+        visit: &mut impl for<'row> FnMut(IndexedSourceRecordRef<'row>) -> ControlFlow<B>,
+    ) -> Result<Option<B>, Error> {
+        let keys = chunk
             .iter()
             .map(|matched| matched.primary_key.as_slice())
-            .collect();
-        let values = self.prolly.get_many(&self.source_tree, &keys)?;
-        matches
-            .into_iter()
-            .zip(values)
-            .map(|(matched, value)| match value {
-                Some(value) => Ok((matched.primary_key, value)),
-                None => Err(Error::IndexCheckpointMismatch {
+            .collect::<Vec<_>>();
+        let mut terminal = None;
+        source.get_many_with(&keys, |position, _, source_value| {
+            if terminal.is_some() {
+                return;
+            }
+            let matched = &chunk[position];
+            let Some(source_value) = source_value else {
+                terminal = Some(Err(Error::IndexCheckpointMismatch {
                     name: self.descriptor.name.clone(),
                     source_version: self.snapshot_id.source_version.clone(),
                     reason: format!(
                         "index references missing source primary key {:?}",
                         matched.primary_key
                     ),
-                }),
-            })
-            .collect()
+                }));
+                return;
+            };
+            *delivered = delivered.saturating_add(1);
+            if let ControlFlow::Break(value) = visit(IndexedSourceRecordRef {
+                term: &matched.term,
+                primary_key: &matched.primary_key,
+                projection: matched.projection.as_deref(),
+                source_value,
+            }) {
+                terminal = Some(Ok(value));
+            }
+        })?;
+        chunk.clear();
+        terminal.transpose()
     }
 
     pub fn exact_page(
@@ -378,15 +661,49 @@ impl<'a, S: Store> SecondaryIndexSnapshot<'a, S> {
         )
     }
 
-    fn collect(&self, logical: LogicalBounds) -> Result<Vec<SecondaryIndexMatch>, Error> {
+    fn scan_matches_until<B>(
+        &self,
+        logical: LogicalBounds,
+        direction: SecondaryIndexDirection,
+        mut visit: impl for<'row> FnMut(SecondaryIndexMatchRef<'row>) -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error> {
         let bounds = physical_bounds(&logical)?;
-        self.prolly
-            .range(self.index.tree(), &bounds.start, bounds.end.as_deref())?
-            .map(|entry| {
-                let (key, value) = entry?;
-                self.decode_match(&key, &value)
-            })
-            .collect()
+        let mut term_scratch = Vec::new();
+        let mut primary_key_scratch = Vec::new();
+        let mut handle = |entry: EntryRef<'_>| {
+            let matched = match self.decode_match_ref(
+                entry.key(),
+                entry.value(),
+                &mut term_scratch,
+                &mut primary_key_scratch,
+            ) {
+                Ok(matched) => matched,
+                Err(error) => return ControlFlow::Break(Err(error)),
+            };
+            match visit(matched) {
+                ControlFlow::Continue(()) => ControlFlow::Continue(()),
+                ControlFlow::Break(value) => ControlFlow::Break(Ok(value)),
+            }
+        };
+        let outcome = match direction {
+            SecondaryIndexDirection::Forward => self.prolly.scan_range_until(
+                self.index.tree(),
+                &bounds.start,
+                bounds.end.as_deref(),
+                &mut handle,
+            )?,
+            SecondaryIndexDirection::Reverse => self.prolly.scan_range_reverse_until(
+                self.index.tree(),
+                &bounds.start,
+                bounds.end.as_deref(),
+                &mut handle,
+            )?,
+        };
+        match outcome.break_value {
+            Some(Ok(value)) => Ok(ScanOutcome::stopped(outcome.visited, value)),
+            Some(Err(error)) => Err(error),
+            None => Ok(ScanOutcome::complete(outcome.visited)),
+        }
     }
 
     fn page(
@@ -531,6 +848,34 @@ impl<'a, S: Store> SecondaryIndexSnapshot<'a, S> {
             }
         };
         Ok(SecondaryIndexMatch {
+            term: decoded.term,
+            primary_key: decoded.primary_key,
+            projection,
+        })
+    }
+
+    fn decode_match_ref<'row>(
+        &self,
+        key: &'row [u8],
+        value: &'row [u8],
+        term_scratch: &'row mut Vec<u8>,
+        primary_key_scratch: &'row mut Vec<u8>,
+    ) -> Result<SecondaryIndexMatchRef<'row>, Error> {
+        let decoded = decode_physical_index_key_ref(key, term_scratch, primary_key_scratch)?;
+        let stored = IndexValueRef::decode(value, self.max_projection_bytes)?;
+        let projection = match (self.descriptor.projection, stored) {
+            (IndexProjection::KeysOnly, IndexValueRef::KeysOnly) => None,
+            (IndexProjection::Include, IndexValueRef::Included(bytes))
+            | (IndexProjection::All, IndexValueRef::FullSource(bytes)) => Some(bytes),
+            _ => {
+                return Err(Error::IndexCheckpointMismatch {
+                    name: self.descriptor.name.clone(),
+                    source_version: self.snapshot_id.source_version.clone(),
+                    reason: "stored projection value does not match its descriptor".to_string(),
+                })
+            }
+        };
+        Ok(SecondaryIndexMatchRef {
             term: decoded.term,
             primary_key: decoded.primary_key,
             projection,

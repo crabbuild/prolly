@@ -38,7 +38,7 @@ pub use accelerator::{
     AsyncProductQuantizer,
 };
 pub use build::{BuildParallelism, ProximityBuildStats};
-pub use map::ProximityMap;
+pub use map::{ProximityMap, ProximityReadSession};
 pub use proof::{
     ProximityMembershipProof, ProximityMembershipVerification, ProximityProofFilter,
     ProximitySearchClaim, ProximitySearchEvent, ProximitySearchProof, ProximitySearchRequest,
@@ -320,6 +320,77 @@ pub struct ProximityRecord {
 
 /// Vector and application value returned by an exact-key lookup.
 pub type ExactProximityRecord = (Vec<f32>, Vec<u8>);
+
+/// Safe borrowed view of little-endian persisted vector components.
+#[derive(Clone, Copy, Debug)]
+pub struct ProximityVectorRef<'a> {
+    bytes: &'a [u8],
+    dimensions: u32,
+}
+
+impl<'a> ProximityVectorRef<'a> {
+    pub(crate) fn from_encoded(vector: storage::EncodedVectorRef<'a>) -> Self {
+        Self {
+            bytes: vector.bytes,
+            dimensions: vector.dimensions,
+        }
+    }
+
+    pub fn dimensions(&self) -> usize {
+        self.dimensions as usize
+    }
+
+    pub fn component(&self, index: usize) -> Option<f32> {
+        if index >= self.dimensions() {
+            return None;
+        }
+        let start = index.checked_mul(4)?;
+        let bytes: [u8; 4] = self.bytes.get(start..start + 4)?.try_into().ok()?;
+        Some(f32::from_bits(u32::from_le_bytes(bytes)))
+    }
+
+    pub fn iter(&self) -> impl ExactSizeIterator<Item = f32> + '_ {
+        self.bytes.chunks_exact(4).map(|bytes| {
+            f32::from_bits(u32::from_le_bytes(
+                bytes.try_into().expect("validated vector component"),
+            ))
+        })
+    }
+
+    pub fn copy_to_slice(&self, output: &mut [f32]) -> Result<(), Error> {
+        if output.len() != self.dimensions() {
+            return Err(Error::InvalidProximityObject {
+                kind: "record",
+                reason: format!(
+                    "output dimensions {} do not match record dimensions {}",
+                    output.len(),
+                    self.dimensions()
+                ),
+            });
+        }
+        for (slot, component) in output.iter_mut().zip(self.iter()) {
+            *slot = component;
+        }
+        Ok(())
+    }
+
+    pub fn to_vec(&self) -> Vec<f32> {
+        self.iter().collect()
+    }
+}
+
+/// Callback-scoped exact proximity record.
+#[derive(Clone, Copy, Debug)]
+pub struct ProximityRecordRef<'a> {
+    pub vector: ProximityVectorRef<'a>,
+    pub value: &'a [u8],
+}
+
+impl ProximityRecordRef<'_> {
+    pub fn to_owned(self) -> ExactProximityRecord {
+        (self.vector.to_vec(), self.value.to_vec())
+    }
+}
 
 /// One immutable-map mutation. `None` deletes the key.
 #[derive(Clone, Debug, PartialEq)]

@@ -2,6 +2,7 @@ use prolly::{
     DistanceMetric, Error, MemStore, ProximityConfig, ProximityFilter, ProximityMap,
     ProximityRecord, SearchBackend, SearchBudget, SearchCompletion, SearchPolicy, SearchRequest,
 };
+use std::ops::ControlFlow;
 use std::sync::Arc;
 
 fn config(dimensions: u32) -> ProximityConfig {
@@ -81,6 +82,30 @@ fn proximity_build_supports_exact_present_and_absent_key_lookup() {
     assert_eq!(value, b"payload".to_vec());
     assert_eq!(map.get(b"absent").unwrap(), None);
     assert!(!map.contains_key(b"absent").unwrap());
+
+    let borrowed = map
+        .get_with(b"document-1", |record| {
+            assert_eq!(record.vector.dimensions(), 2);
+            assert_eq!(record.vector.component(0), Some(1.0));
+            assert_eq!(record.vector.component(1), Some(0.0));
+            assert_eq!(record.vector.component(2), None);
+            let mut output = [0.0; 2];
+            record.vector.copy_to_slice(&mut output).unwrap();
+            (output, record.value.to_vec())
+        })
+        .unwrap();
+    assert_eq!(borrowed, Some(([1.0, 0.0], b"payload".to_vec())));
+
+    let mut session = map.read().unwrap();
+    assert!(session.contains_key(b"document-1").unwrap());
+    let stopped = session
+        .scan_records_until(|key, record| {
+            assert_eq!(record.to_owned(), (vec![1.0, 0.0], b"payload".to_vec()));
+            ControlFlow::Break(key.to_vec())
+        })
+        .unwrap();
+    assert_eq!(stopped.visited, 1);
+    assert_eq!(stopped.break_value, Some(b"document-1".to_vec()));
 }
 
 #[test]

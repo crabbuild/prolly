@@ -536,29 +536,16 @@ pub enum IndexValue {
     FullSource(Vec<u8>),
 }
 
-impl IndexValue {
-    pub fn to_bytes(&self) -> Result<Vec<u8>, Error> {
-        let (tag, payload) = match self {
-            Self::KeysOnly => return Ok(Vec::new()),
-            Self::Included(payload) => (1, payload),
-            Self::FullSource(payload) => (2, payload),
-        };
-        let payload_len =
-            u32::try_from(payload.len()).map_err(|_| Error::IndexResourceLimitExceeded {
-                resource: "projection_bytes",
-                limit: u32::MAX as usize,
-                actual: payload.len(),
-            })?;
-        let mut bytes = Vec::with_capacity(13usize.saturating_add(payload.len()));
-        bytes.extend_from_slice(INDEX_VALUE_MAGIC);
-        bytes.extend_from_slice(&SECONDARY_INDEX_FORMAT_VERSION.to_be_bytes());
-        bytes.push(tag);
-        bytes.extend_from_slice(&payload_len.to_be_bytes());
-        bytes.extend_from_slice(payload);
-        Ok(bytes)
-    }
+/// Strict borrowed view of a persisted secondary-index value.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum IndexValueRef<'a> {
+    KeysOnly,
+    Included(&'a [u8]),
+    FullSource(&'a [u8]),
+}
 
-    pub fn from_bytes(bytes: &[u8], max_payload_bytes: usize) -> Result<Self, Error> {
+impl<'a> IndexValueRef<'a> {
+    pub fn decode(bytes: &'a [u8], max_payload_bytes: usize) -> Result<Self, Error> {
         if bytes.is_empty() {
             return Ok(Self::KeysOnly);
         }
@@ -588,7 +575,7 @@ impl IndexValue {
                 "secondary-index value length mismatch or trailing bytes".to_string(),
             ));
         }
-        let payload = bytes[13..].to_vec();
+        let payload = &bytes[13..];
         match bytes[8] {
             1 => Ok(Self::Included(payload)),
             2 => Ok(Self::FullSource(payload)),
@@ -596,6 +583,41 @@ impl IndexValue {
                 "unknown secondary-index value tag {tag}"
             ))),
         }
+    }
+
+    pub fn to_owned(self) -> IndexValue {
+        match self {
+            Self::KeysOnly => IndexValue::KeysOnly,
+            Self::Included(value) => IndexValue::Included(value.to_vec()),
+            Self::FullSource(value) => IndexValue::FullSource(value.to_vec()),
+        }
+    }
+}
+
+impl IndexValue {
+    pub fn to_bytes(&self) -> Result<Vec<u8>, Error> {
+        let (tag, payload) = match self {
+            Self::KeysOnly => return Ok(Vec::new()),
+            Self::Included(payload) => (1, payload),
+            Self::FullSource(payload) => (2, payload),
+        };
+        let payload_len =
+            u32::try_from(payload.len()).map_err(|_| Error::IndexResourceLimitExceeded {
+                resource: "projection_bytes",
+                limit: u32::MAX as usize,
+                actual: payload.len(),
+            })?;
+        let mut bytes = Vec::with_capacity(13usize.saturating_add(payload.len()));
+        bytes.extend_from_slice(INDEX_VALUE_MAGIC);
+        bytes.extend_from_slice(&SECONDARY_INDEX_FORMAT_VERSION.to_be_bytes());
+        bytes.push(tag);
+        bytes.extend_from_slice(&payload_len.to_be_bytes());
+        bytes.extend_from_slice(payload);
+        Ok(bytes)
+    }
+
+    pub fn from_bytes(bytes: &[u8], max_payload_bytes: usize) -> Result<Self, Error> {
+        Ok(IndexValueRef::decode(bytes, max_payload_bytes)?.to_owned())
     }
 }
 
@@ -646,6 +668,83 @@ fn append_hex(output: &mut Vec<u8>, bytes: &[u8]) {
 pub struct DecodedPhysicalIndexKey {
     pub term: Vec<u8>,
     pub primary_key: Vec<u8>,
+}
+
+/// Borrowed logical components of one physical secondary-index key.
+///
+/// Unescaped components point directly into `key`; escaped components use the
+/// caller-owned scratch buffers, which are reusable across rows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DecodedPhysicalIndexKeyRef<'a> {
+    pub term: &'a [u8],
+    pub primary_key: &'a [u8],
+}
+
+pub fn decode_physical_index_key_ref<'a>(
+    key: &'a [u8],
+    term_scratch: &'a mut Vec<u8>,
+    primary_key_scratch: &'a mut Vec<u8>,
+) -> Result<DecodedPhysicalIndexKeyRef<'a>, Error> {
+    let mut offset = 0usize;
+    let term = decode_physical_segment_ref(key, &mut offset, term_scratch)?;
+    let primary_key = decode_physical_segment_ref(key, &mut offset, primary_key_scratch)?;
+    if offset != key.len() {
+        return Err(Error::Deserialize(
+            "physical secondary-index key must contain exactly two segments".to_string(),
+        ));
+    }
+    Ok(DecodedPhysicalIndexKeyRef { term, primary_key })
+}
+
+fn decode_physical_segment_ref<'a>(
+    key: &'a [u8],
+    offset: &mut usize,
+    scratch: &'a mut Vec<u8>,
+) -> Result<&'a [u8], Error> {
+    let start = *offset;
+    let mut cursor = start;
+    let mut escaped = false;
+    loop {
+        let byte = *key.get(cursor).ok_or_else(|| {
+            Error::Deserialize("unterminated physical secondary-index segment".to_string())
+        })?;
+        if byte != 0 {
+            cursor += 1;
+            continue;
+        }
+        let marker = *key.get(cursor + 1).ok_or_else(|| {
+            Error::Deserialize("truncated physical secondary-index escape".to_string())
+        })?;
+        match marker {
+            0 => {
+                *offset = cursor + 2;
+                if !escaped {
+                    return Ok(&key[start..cursor]);
+                }
+                scratch.clear();
+                let mut decode = start;
+                while decode < cursor {
+                    if key[decode] == 0 {
+                        scratch.push(0);
+                        decode += 2;
+                    } else {
+                        scratch.push(key[decode]);
+                        decode += 1;
+                    }
+                }
+                return Ok(scratch.as_slice());
+            }
+            0xff => {
+                escaped = true;
+                cursor += 2;
+            }
+            marker => {
+                return Err(Error::Deserialize(format!(
+                    "invalid physical secondary-index escape marker {marker}"
+                )))
+            }
+        }
+    }
 }
 
 pub fn physical_index_key(term: &[u8], primary_key: &[u8]) -> Result<Vec<u8>, Error> {
@@ -769,6 +868,23 @@ mod tests {
     }
 
     #[test]
+    fn borrowed_physical_keys_reuse_scratch_and_match_owned_decoding() {
+        let mut term_scratch = Vec::with_capacity(16);
+        let mut key_scratch = Vec::with_capacity(16);
+        let encoded = physical_index_key(&[0, b'a'], &[b'u', 0, 0xff]).unwrap();
+        let decoded =
+            decode_physical_index_key_ref(&encoded, &mut term_scratch, &mut key_scratch).unwrap();
+        assert_eq!(decoded.term, &[0, b'a']);
+        assert_eq!(decoded.primary_key, &[b'u', 0, 0xff]);
+
+        let direct = physical_index_key(b"plain", b"key").unwrap();
+        let decoded =
+            decode_physical_index_key_ref(&direct, &mut term_scratch, &mut key_scratch).unwrap();
+        assert_eq!(decoded.term.as_ptr(), direct.as_ptr());
+        assert_eq!(decoded.primary_key, b"key");
+    }
+
+    #[test]
     fn projection_values_are_versioned_and_canonical() {
         assert_eq!(IndexValue::KeysOnly.to_bytes().unwrap(), Vec::<u8>::new());
         let encoded = IndexValue::Included(b"Ada".to_vec()).to_bytes().unwrap();
@@ -776,6 +892,10 @@ mod tests {
         assert_eq!(
             IndexValue::from_bytes(&encoded, 1024).unwrap(),
             IndexValue::Included(b"Ada".to_vec())
+        );
+        assert_eq!(
+            IndexValueRef::decode(&encoded, 1024).unwrap(),
+            IndexValueRef::Included(b"Ada")
         );
         assert!(IndexValue::from_bytes(&[encoded, vec![0]].concat(), 1024).is_err());
         assert!(

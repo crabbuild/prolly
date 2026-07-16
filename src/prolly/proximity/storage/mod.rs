@@ -9,7 +9,7 @@ pub(crate) mod vector;
 
 pub(crate) use descriptor::Descriptor;
 pub(crate) use node::{PhysicalNodeKind, ProximityEntry, ProximityNode, VectorRef};
-pub(crate) use record::StoredRecord;
+pub(crate) use record::{EncodedVectorRef, StoredRecord, StoredRecordRef};
 
 #[allow(dead_code)] // Consumed by the typed graph walker and replication slices.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

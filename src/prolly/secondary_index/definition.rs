@@ -26,6 +26,23 @@ pub struct SecondaryIndexEntry {
     pub projection: Option<Vec<u8>>,
 }
 
+/// Callback-scoped index emission used by allocation-reusing extractors.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SecondaryIndexEntryRef<'a> {
+    pub term: &'a [u8],
+    pub projection: Option<&'a [u8]>,
+}
+
+/// Extractor that emits borrowed terms/projections into a synchronous sink.
+pub trait StreamingSecondaryIndexExtractor: Send + Sync {
+    fn extract(
+        &self,
+        primary_key: &[u8],
+        source_value: &[u8],
+        emit: &mut dyn FnMut(SecondaryIndexEntryRef<'_>) -> Result<(), SecondaryIndexError>,
+    ) -> Result<(), SecondaryIndexError>;
+}
+
 impl SecondaryIndexEntry {
     /// Emit a term without application projection bytes.
     pub fn term(term: impl AsRef<[u8]>) -> Self {

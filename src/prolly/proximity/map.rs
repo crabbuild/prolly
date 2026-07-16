@@ -2,6 +2,7 @@ use super::super::builder::BatchBuilder;
 use super::super::cid::Cid;
 use super::super::config::Config;
 use super::super::error::{Error, Mutation as TreeMutation};
+use super::super::read::{ReadSession, ScanOutcome};
 use super::super::splice::{splice, SpliceStats};
 use super::super::store::Store;
 use super::super::Prolly;
@@ -15,15 +16,19 @@ use super::search::{
 };
 use super::storage::quantized::ScalarQuantized;
 use super::storage::vector::ExternalVector;
-use super::storage::{Descriptor, PhysicalNodeKind, ProximityNode, StoredRecord, VectorRef};
+use super::storage::{
+    Descriptor, PhysicalNodeKind, ProximityNode, StoredRecord, StoredRecordRef, VectorRef,
+};
 use super::vector::promotion_level;
 use super::{
     AcceleratorSet, BuildParallelism, DistanceMetric, ExactProximityRecord, Neighbor,
     ProximityBuildStats, ProximityConfig, ProximityMutation, ProximityMutationStats,
-    ProximityRecord, ProximitySearchStats, ProximityTree, ProximityVerification, SearchBackend,
-    SearchBudget, SearchCompletion, SearchIo, SearchPolicy, SearchRequest, SearchResult,
+    ProximityRecord, ProximityRecordRef, ProximitySearchStats, ProximityTree, ProximityVectorRef,
+    ProximityVerification, SearchBackend, SearchBudget, SearchCompletion, SearchIo, SearchPolicy,
+    SearchRequest, SearchResult,
 };
 use std::collections::{BTreeMap, BTreeSet, BinaryHeap, HashSet};
+use std::ops::ControlFlow;
 use std::sync::{Arc, Mutex};
 
 /// Immutable exact-key directory plus deterministic ANN hierarchy.
@@ -32,6 +37,72 @@ pub struct ProximityMap<S: Store> {
     directory: Prolly<S>,
     tree: ProximityTree,
     node_cache: Mutex<ContentCache<ProximityNode>>,
+}
+
+/// Reusable exact-read context over one immutable proximity map.
+pub struct ProximityReadSession<'map, S: Store> {
+    directory: ReadSession<'map, 'map, S>,
+    dimensions: u32,
+}
+
+impl<S: Store> ProximityReadSession<'_, S> {
+    pub fn get_with<R>(
+        &mut self,
+        key: &[u8],
+        read: impl for<'record> FnOnce(ProximityRecordRef<'record>) -> R,
+    ) -> Result<Option<R>, Error> {
+        self.directory
+            .get_with(key, |bytes| {
+                let stored = StoredRecordRef::decode(bytes, self.dimensions)?;
+                Ok(read(ProximityRecordRef {
+                    vector: ProximityVectorRef::from_encoded(stored.vector),
+                    value: stored.value,
+                }))
+            })?
+            .transpose()
+    }
+
+    pub fn contains_key(&mut self, key: &[u8]) -> Result<bool, Error> {
+        Ok(self.get_with(key, |_| ())?.is_some())
+    }
+
+    pub fn scan_records(
+        &mut self,
+        mut visit: impl for<'record> FnMut(&[u8], ProximityRecordRef<'record>),
+    ) -> Result<u64, Error> {
+        Ok(self
+            .scan_records_until(|key, record| {
+                visit(key, record);
+                ControlFlow::<()>::Continue(())
+            })?
+            .visited)
+    }
+
+    pub fn scan_records_until<B>(
+        &mut self,
+        mut visit: impl for<'record> FnMut(&[u8], ProximityRecordRef<'record>) -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error> {
+        let dimensions = self.dimensions;
+        let outcome = self.directory.scan_range_until(&[], None, |entry| {
+            let stored = match StoredRecordRef::decode(entry.value(), dimensions) {
+                Ok(stored) => stored,
+                Err(error) => return ControlFlow::Break(Err(error)),
+            };
+            let record = ProximityRecordRef {
+                vector: ProximityVectorRef::from_encoded(stored.vector),
+                value: stored.value,
+            };
+            match visit(entry.key(), record) {
+                ControlFlow::Continue(()) => ControlFlow::Continue(()),
+                ControlFlow::Break(value) => ControlFlow::Break(Ok(value)),
+            }
+        })?;
+        match outcome.break_value {
+            Some(Ok(value)) => Ok(ScanOutcome::stopped(outcome.visited, value)),
+            Some(Err(error)) => Err(error),
+            None => Ok(ScanOutcome::complete(outcome.visited)),
+        }
+    }
 }
 
 impl<S> ProximityMap<S>
@@ -174,18 +245,45 @@ where
 
     /// Exact key lookup through the authoritative ordered directory.
     pub fn get(&self, key: &[u8]) -> Result<Option<ExactProximityRecord>, Error> {
-        self.directory
-            .get(&self.tree.directory, key)?
-            .map(|bytes| {
-                let record = StoredRecord::decode(&bytes, self.tree.config.dimensions)?;
-                Ok((record.vector, record.value))
-            })
-            .transpose()
+        self.get_with(key, |record| record.to_owned())
+    }
+
+    /// Open a reusable zero-copy exact-read session.
+    pub fn read(&self) -> Result<ProximityReadSession<'_, S>, Error> {
+        Ok(ProximityReadSession {
+            directory: self.directory.read(&self.tree.directory)?,
+            dimensions: self.tree.config.dimensions,
+        })
+    }
+
+    /// Inspect one exact record without allocating its vector or value.
+    pub fn get_with<R>(
+        &self,
+        key: &[u8],
+        read: impl for<'record> FnOnce(ProximityRecordRef<'record>) -> R,
+    ) -> Result<Option<R>, Error> {
+        self.read()?.get_with(key, read)
+    }
+
+    /// Visit every exact record in key order without allocating records.
+    pub fn scan_records(
+        &self,
+        visit: impl for<'record> FnMut(&[u8], ProximityRecordRef<'record>),
+    ) -> Result<u64, Error> {
+        self.read()?.scan_records(visit)
+    }
+
+    /// Visit exact records with callback-directed early termination.
+    pub fn scan_records_until<B>(
+        &self,
+        visit: impl for<'record> FnMut(&[u8], ProximityRecordRef<'record>) -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error> {
+        self.read()?.scan_records_until(visit)
     }
 
     /// Exact key membership through the authoritative ordered directory.
     pub fn contains_key(&self, key: &[u8]) -> Result<bool, Error> {
-        Ok(self.get(key)?.is_some())
+        self.read()?.contains_key(key)
     }
 
     /// Canonical full rebuild after applying a sorted-unique logical mutation batch.
@@ -1270,14 +1368,28 @@ where
     }
 
     pub(crate) fn get_stored(&self, key: &[u8]) -> Result<Option<(StoredRecord, usize)>, Error> {
-        let Some(bytes) = self.directory.get(&self.tree.directory, key)? else {
-            return Ok(None);
-        };
-        let len = bytes.len();
-        Ok(Some((
-            StoredRecord::decode(&bytes, self.tree.config.dimensions)?,
-            len,
-        )))
+        self.directory
+            .get_with(&self.tree.directory, key, |bytes| {
+                let len = bytes.len();
+                let view = StoredRecordRef::decode(bytes, self.tree.config.dimensions)?;
+                Ok((
+                    StoredRecord {
+                        vector: view
+                            .vector
+                            .bytes
+                            .chunks_exact(4)
+                            .map(|component| {
+                                f32::from_bits(u32::from_le_bytes(
+                                    component.try_into().expect("validated vector component"),
+                                ))
+                            })
+                            .collect(),
+                        value: view.value.to_vec(),
+                    },
+                    len,
+                ))
+            })?
+            .transpose()
     }
 
     pub(super) fn directory_manager(&self) -> &Prolly<S> {
@@ -1293,17 +1405,30 @@ where
         directory: &super::super::tree::Tree,
     ) -> Result<BTreeMap<Vec<u8>, ProximityRecord>, Error> {
         let mut records = BTreeMap::new();
-        for entry in self.directory.range(directory, &[], None)? {
-            let (key, bytes) = entry?;
-            let stored = StoredRecord::decode(&bytes, self.tree.config.dimensions)?;
-            records.insert(
-                key.clone(),
-                ProximityRecord {
-                    key,
-                    vector: stored.vector,
-                    value: stored.value,
-                },
-            );
+        let mut decode_error = None;
+        self.directory
+            .scan_range_until(directory, &[], None, |entry| {
+                let stored =
+                    match StoredRecordRef::decode(entry.value(), self.tree.config.dimensions) {
+                        Ok(stored) => stored,
+                        Err(error) => {
+                            decode_error = Some(error);
+                            return ControlFlow::Break(());
+                        }
+                    };
+                let key = entry.key().to_vec();
+                records.insert(
+                    key.clone(),
+                    ProximityRecord {
+                        key,
+                        vector: ProximityVectorRef::from_encoded(stored.vector).to_vec(),
+                        value: stored.value.to_vec(),
+                    },
+                );
+                ControlFlow::Continue(())
+            })?;
+        if let Some(error) = decode_error {
+            return Err(error);
         }
         Ok(records)
     }

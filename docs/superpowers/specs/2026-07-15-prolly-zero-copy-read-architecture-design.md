@@ -2481,6 +2481,46 @@ These are adoption gates, not phase-one blockers.
 - compare cold decode time, warm point/range performance, RSS, and write impact;
 - change defaults or persisted formats only through a separate approved design.
 
+## Implementation Record (2026-07-16)
+
+The first implementation follows this design without changing persisted bytes
+or existing owned/binding signatures. The implementation anchor is
+`src/prolly/read.rs`; its module documentation references this design directly.
+
+Delivered now:
+
+- callback-scoped `EntryRef`, `ValueRefView`, `DiffRef`, and `ConflictRef`;
+- reusable synchronous and async read sessions, retained roots, session-local
+  recent leaves, and a fixed-size weak route-node table;
+- borrowed point, multi-get, forward/reverse range, prefix, bound, rank, select,
+  diff, conflict, and symbolic merge APIs, including early termination;
+- owned core APIs adapted at their result boundary, with binding signatures
+  unchanged;
+- bounded mutation application in the synchronous borrowed merge fallback;
+- versioned/typed-map and write-session forwarding;
+- secondary-index borrowed wire views, forward/reverse posting scans, bounded
+  source joins, and streaming extractor contracts;
+- proximity record/vector wire views and borrowed exact/authoritative record
+  scans; and
+- identical Rust/Dolt benchmark runners with process isolation, workload/result
+  validation, source/binary provenance, and retained raw output.
+
+Intentional staged boundaries:
+
+- async diff scanning is borrowed, but async conflict iteration and merge retain
+  one owned conflict or an owned diff staging set so no public borrowed view can
+  cross an await;
+- secondary-index build extraction and proximity candidate/rerank handles have
+  their public/internal foundations, while the existing builders and search
+  result boundaries remain owned;
+- decoded `Node` remains the phase-one read representation. Large random point
+  workloads show that packed read nodes and cache-footprint reduction are the
+  next required optimization; result-copy elimination alone is not sufficient
+  to guarantee the 1.5x point-read target at million-key working sets.
+
+These boundaries do not weaken correctness or lifetime guarantees. They are
+explicit optimization milestones under the unchanged APIs above.
+
 ## Compatibility and Migration
 
 Phases 1 through 6 are additive at the public Rust API and make no persisted

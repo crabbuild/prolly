@@ -106,9 +106,12 @@
 //! - **Different roots**: O(changed subtrees) when chunk boundaries align, with
 //!   a local full-scan fallback when boundaries diverge
 
+use std::borrow::Cow;
 #[cfg(test)]
 use std::collections::BTreeMap;
 use std::collections::{HashSet, VecDeque};
+use std::ops::ControlFlow;
+use std::sync::Arc;
 
 #[cfg(feature = "async-store")]
 use futures_util::stream::{self, Stream};
@@ -119,6 +122,7 @@ use super::cid::Cid;
 use super::error::{Conflict, Diff, Error, Mutation, Resolution, Resolver};
 use super::node::Node;
 use super::range::RangeCursor;
+use super::read::{BorrowedMergeResolver, ConflictRef, DiffRef, MergeDecision, ScanOutcome};
 #[cfg(feature = "async-store")]
 use super::store::AsyncStore;
 use super::store::Store;
@@ -129,9 +133,11 @@ use super::AsyncProlly;
 use super::Prolly;
 
 type ChildSpanCid<'a> = (Option<&'a [u8]>, Cid);
+type BorrowedEntry<'a> = (&'a [u8], &'a [u8]);
 const DIFF_COLLECTION_PREFETCH_PARALLELISM: usize = 16;
 const DIFF_FRAME_PREFETCH_PARALLELISM: usize = 16;
 const MERGE_FRONTIER_PREFETCH_PARALLELISM: usize = 16;
+const BORROWED_MERGE_MUTATION_BATCH: usize = 4096;
 
 /// A bounded page of diff results.
 ///
@@ -422,15 +428,97 @@ impl<'a> MergeTraceRecorder<'a> {
         conflict: &Conflict,
         resolution: &Resolution,
     ) {
-        self.record(MergeTraceEvent::ResolverCalled {
-            stage,
-            key: conflict.key.clone(),
-            resolution: MergeResolutionKind::from(resolution),
-        });
+        self.record_resolver_kind(stage, &conflict.key, MergeResolutionKind::from(resolution));
+    }
+
+    fn record_resolver_kind(
+        &mut self,
+        stage: MergeTraceStage,
+        key: &[u8],
+        resolution: MergeResolutionKind,
+    ) {
+        // Avoid constructing owned diagnostic data when tracing is disabled.
+        if self.trace.is_some() {
+            self.record(MergeTraceEvent::ResolverCalled {
+                stage,
+                key: key.to_vec(),
+                resolution,
+            });
+        }
     }
 
     fn record_fallback(&mut self, reason: MergeFallbackReason) {
         self.record(MergeTraceEvent::Fallback { reason });
+    }
+}
+
+#[derive(Clone, Copy)]
+enum MergeResolverRef<'a> {
+    Legacy(&'a dyn Fn(&Conflict) -> Resolution),
+    Borrowed(&'a dyn BorrowedMergeResolver),
+}
+
+fn resolve_conflict<'value>(
+    resolver: Option<MergeResolverRef<'_>>,
+    conflict: ConflictRef<'value>,
+    stage: MergeTraceStage,
+    recorder: &mut MergeTraceRecorder<'_>,
+) -> Result<Option<Cow<'value, [u8]>>, Conflict> {
+    match resolver {
+        Some(MergeResolverRef::Borrowed(resolve)) => {
+            let decision = resolve.resolve(conflict);
+            let (selected, kind) = match decision {
+                MergeDecision::UseBase => (
+                    conflict.base.map(Cow::Borrowed),
+                    if conflict.base.is_some() {
+                        MergeResolutionKind::Value
+                    } else {
+                        MergeResolutionKind::Delete
+                    },
+                ),
+                MergeDecision::UseLeft => (
+                    conflict.left.map(Cow::Borrowed),
+                    if conflict.left.is_some() {
+                        MergeResolutionKind::Value
+                    } else {
+                        MergeResolutionKind::Delete
+                    },
+                ),
+                MergeDecision::UseRight => (
+                    conflict.right.map(Cow::Borrowed),
+                    if conflict.right.is_some() {
+                        MergeResolutionKind::Value
+                    } else {
+                        MergeResolutionKind::Delete
+                    },
+                ),
+                MergeDecision::Value(value) => {
+                    (Some(Cow::Owned(value)), MergeResolutionKind::Value)
+                }
+                MergeDecision::Delete => (None, MergeResolutionKind::Delete),
+                MergeDecision::Unresolved => {
+                    recorder.record_resolver_kind(
+                        stage,
+                        conflict.key,
+                        MergeResolutionKind::Unresolved,
+                    );
+                    return Err(conflict.to_owned());
+                }
+            };
+            recorder.record_resolver_kind(stage, conflict.key, kind);
+            Ok(selected)
+        }
+        Some(MergeResolverRef::Legacy(resolve)) => {
+            let owned = conflict.to_owned();
+            let resolution = resolve(&owned);
+            recorder.record_resolver(stage, &owned, &resolution);
+            match resolution {
+                Resolution::Value(value) => Ok(Some(Cow::Owned(value))),
+                Resolution::Delete => Ok(None),
+                Resolution::Unresolved => Err(owned),
+            }
+        }
+        None => Err(conflict.to_owned()),
     }
 }
 
@@ -870,6 +958,968 @@ pub(crate) fn stream_diff<'a, S: Store>(
     other: &Tree,
 ) -> StructuralDiffIter<'a, S> {
     StructuralDiffIter::new(prolly, base, other)
+}
+
+/// A retained cursor over one subtree used only for boundary-misaligned
+/// borrowed diff fallback. It keeps memory bounded by tree height and never
+/// materializes complete subtree entries.
+struct BorrowedSubtreeCursor<'a, S: Store> {
+    prolly: &'a Prolly<S>,
+    stack: Vec<(Arc<Node>, usize)>,
+}
+
+impl<'a, S: Store> BorrowedSubtreeCursor<'a, S> {
+    fn new(prolly: &'a Prolly<S>, root: Arc<Node>) -> Result<Self, Error> {
+        let mut cursor = Self {
+            prolly,
+            stack: Vec::new(),
+        };
+        cursor.descend_leftmost(root)?;
+        Ok(cursor)
+    }
+
+    fn current(&self) -> Result<Option<BorrowedEntry<'_>>, Error> {
+        let Some((node, index)) = self.stack.last() else {
+            return Ok(None);
+        };
+        ensure_node_value_count(node)?;
+        if !node.leaf {
+            return Err(Error::InvalidNode);
+        }
+        if *index >= node.len() {
+            return Ok(None);
+        }
+        Ok(Some((
+            node.keys.get(*index).ok_or(Error::InvalidNode)?,
+            node_value(node, *index)?,
+        )))
+    }
+
+    fn advance(&mut self) -> Result<bool, Error> {
+        let Some((leaf, index)) = self.stack.last_mut() else {
+            return Ok(false);
+        };
+        ensure_node_value_count(leaf)?;
+        if !leaf.leaf {
+            return Err(Error::InvalidNode);
+        }
+        *index += 1;
+        if *index < leaf.len() {
+            return Ok(true);
+        }
+
+        self.stack.pop();
+        while let Some((parent, index)) = self.stack.last_mut() {
+            ensure_node_value_count(parent)?;
+            if parent.leaf {
+                return Err(Error::InvalidNode);
+            }
+            *index += 1;
+            if *index >= parent.len() {
+                self.stack.pop();
+                continue;
+            }
+            let child = self
+                .prolly
+                .load_arc(&child_cid_validated(parent, *index)?)?;
+            self.descend_leftmost(child)?;
+            return Ok(true);
+        }
+        Ok(false)
+    }
+
+    fn descend_leftmost(&mut self, mut node: Arc<Node>) -> Result<(), Error> {
+        loop {
+            ensure_node_value_count(&node)?;
+            if node.leaf {
+                if !node.is_empty() {
+                    self.stack.push((node, 0));
+                }
+                return Ok(());
+            }
+            if node.is_empty() {
+                return Err(Error::InvalidNode);
+            }
+            let child = self.prolly.load_arc(&child_cid_validated(&node, 0)?)?;
+            self.stack.push((node, 0));
+            node = child;
+        }
+    }
+}
+
+#[cfg(feature = "async-store")]
+struct AsyncBorrowedSubtreeCursor<'a, S: AsyncStore> {
+    prolly: &'a AsyncProlly<S>,
+    stack: Vec<(Arc<Node>, usize)>,
+}
+
+#[cfg(feature = "async-store")]
+impl<'a, S> AsyncBorrowedSubtreeCursor<'a, S>
+where
+    S: AsyncStore,
+    S::Error: Send + Sync,
+{
+    async fn new(prolly: &'a AsyncProlly<S>, root: Arc<Node>) -> Result<Self, Error> {
+        let mut cursor = Self {
+            prolly,
+            stack: Vec::new(),
+        };
+        cursor.descend_leftmost(root).await?;
+        Ok(cursor)
+    }
+
+    fn current(&self) -> Result<Option<BorrowedEntry<'_>>, Error> {
+        let Some((node, index)) = self.stack.last() else {
+            return Ok(None);
+        };
+        ensure_node_value_count(node)?;
+        if !node.leaf {
+            return Err(Error::InvalidNode);
+        }
+        if *index >= node.len() {
+            return Ok(None);
+        }
+        Ok(Some((
+            node.keys.get(*index).ok_or(Error::InvalidNode)?,
+            node_value(node, *index)?,
+        )))
+    }
+
+    async fn advance(&mut self) -> Result<bool, Error> {
+        let Some((leaf, index)) = self.stack.last_mut() else {
+            return Ok(false);
+        };
+        ensure_node_value_count(leaf)?;
+        if !leaf.leaf {
+            return Err(Error::InvalidNode);
+        }
+        *index += 1;
+        if *index < leaf.len() {
+            return Ok(true);
+        }
+
+        self.stack.pop();
+        while let Some((parent, index)) = self.stack.last_mut() {
+            ensure_node_value_count(parent)?;
+            if parent.leaf {
+                return Err(Error::InvalidNode);
+            }
+            *index += 1;
+            if *index >= parent.len() {
+                self.stack.pop();
+                continue;
+            }
+            let child = self
+                .prolly
+                .load_arc(&child_cid_validated(parent, *index)?)
+                .await?;
+            self.descend_leftmost(child).await?;
+            return Ok(true);
+        }
+        Ok(false)
+    }
+
+    async fn descend_leftmost(&mut self, mut node: Arc<Node>) -> Result<(), Error> {
+        loop {
+            ensure_node_value_count(&node)?;
+            if node.leaf {
+                if !node.is_empty() {
+                    self.stack.push((node, 0));
+                }
+                return Ok(());
+            }
+            if node.is_empty() {
+                return Err(Error::InvalidNode);
+            }
+            let child = self
+                .prolly
+                .load_arc(&child_cid_validated(&node, 0)?)
+                .await?;
+            self.stack.push((node, 0));
+            node = child;
+        }
+    }
+}
+
+struct BorrowedDiffVisitor<F, B> {
+    visit: F,
+    start: Option<Vec<u8>>,
+    end: Option<Vec<u8>>,
+    visited: u64,
+    break_value: Option<B>,
+    done: bool,
+}
+
+impl<F, B> BorrowedDiffVisitor<F, B>
+where
+    F: for<'diff> FnMut(DiffRef<'diff>) -> ControlFlow<B>,
+{
+    fn emit(&mut self, diff: DiffRef<'_>) -> bool {
+        if self.done {
+            return false;
+        }
+        let key = diff.key();
+        if self.start.as_deref().is_some_and(|start| key < start) {
+            return true;
+        }
+        if self.end.as_deref().is_some_and(|end| key >= end) {
+            self.done = true;
+            return false;
+        }
+        self.visited = self.visited.saturating_add(1);
+        if let ControlFlow::Break(value) = (self.visit)(diff) {
+            self.break_value = Some(value);
+            self.done = true;
+            return false;
+        }
+        true
+    }
+
+    fn finish(self) -> ScanOutcome<B> {
+        match self.break_value {
+            Some(value) => ScanOutcome::stopped(self.visited, value),
+            None => ScanOutcome::complete(self.visited),
+        }
+    }
+}
+
+fn visit_leaf_diff<F, B>(
+    base: &Node,
+    other: &Node,
+    visitor: &mut BorrowedDiffVisitor<F, B>,
+) -> Result<(), Error>
+where
+    F: for<'diff> FnMut(DiffRef<'diff>) -> ControlFlow<B>,
+{
+    ensure_node_value_count(base)?;
+    ensure_node_value_count(other)?;
+    let mut base_index = 0usize;
+    let mut other_index = 0usize;
+    while base_index < base.len() && other_index < other.len() && !visitor.done {
+        let base_key = &base.keys[base_index];
+        let other_key = &other.keys[other_index];
+        match base_key.cmp(other_key) {
+            std::cmp::Ordering::Less => {
+                visitor.emit(DiffRef::Removed {
+                    key: base_key,
+                    value: node_value(base, base_index)?,
+                });
+                base_index += 1;
+            }
+            std::cmp::Ordering::Greater => {
+                visitor.emit(DiffRef::Added {
+                    key: other_key,
+                    value: node_value(other, other_index)?,
+                });
+                other_index += 1;
+            }
+            std::cmp::Ordering::Equal => {
+                let old = node_value(base, base_index)?;
+                let new = node_value(other, other_index)?;
+                if old != new {
+                    visitor.emit(DiffRef::Changed {
+                        key: base_key,
+                        old,
+                        new,
+                    });
+                }
+                base_index += 1;
+                other_index += 1;
+            }
+        }
+    }
+    while base_index < base.len() && !visitor.done {
+        visitor.emit(DiffRef::Removed {
+            key: &base.keys[base_index],
+            value: node_value(base, base_index)?,
+        });
+        base_index += 1;
+    }
+    while other_index < other.len() && !visitor.done {
+        visitor.emit(DiffRef::Added {
+            key: &other.keys[other_index],
+            value: node_value(other, other_index)?,
+        });
+        other_index += 1;
+    }
+    Ok(())
+}
+
+fn visit_subtree_diff<S, F, B>(
+    prolly: &Prolly<S>,
+    base: Arc<Node>,
+    other: Arc<Node>,
+    visitor: &mut BorrowedDiffVisitor<F, B>,
+) -> Result<(), Error>
+where
+    S: Store,
+    F: for<'diff> FnMut(DiffRef<'diff>) -> ControlFlow<B>,
+{
+    let mut base = BorrowedSubtreeCursor::new(prolly, base)?;
+    let mut other = BorrowedSubtreeCursor::new(prolly, other)?;
+    while !visitor.done {
+        match (base.current()?, other.current()?) {
+            (Some((base_key, base_value)), Some((other_key, other_value))) => {
+                match base_key.cmp(other_key) {
+                    std::cmp::Ordering::Less => {
+                        visitor.emit(DiffRef::Removed {
+                            key: base_key,
+                            value: base_value,
+                        });
+                        base.advance()?;
+                    }
+                    std::cmp::Ordering::Greater => {
+                        visitor.emit(DiffRef::Added {
+                            key: other_key,
+                            value: other_value,
+                        });
+                        other.advance()?;
+                    }
+                    std::cmp::Ordering::Equal => {
+                        if base_value != other_value {
+                            visitor.emit(DiffRef::Changed {
+                                key: base_key,
+                                old: base_value,
+                                new: other_value,
+                            });
+                        }
+                        base.advance()?;
+                        other.advance()?;
+                    }
+                }
+            }
+            (Some((key, value)), None) => {
+                visitor.emit(DiffRef::Removed { key, value });
+                base.advance()?;
+            }
+            (None, Some((key, value))) => {
+                visitor.emit(DiffRef::Added { key, value });
+                other.advance()?;
+            }
+            (None, None) => break,
+        }
+    }
+    Ok(())
+}
+
+#[cfg(feature = "async-store")]
+async fn visit_async_subtree_diff<S, F, B>(
+    prolly: &AsyncProlly<S>,
+    base: Arc<Node>,
+    other: Arc<Node>,
+    visitor: &mut BorrowedDiffVisitor<F, B>,
+) -> Result<(), Error>
+where
+    S: AsyncStore,
+    S::Error: Send + Sync,
+    F: for<'diff> FnMut(DiffRef<'diff>) -> ControlFlow<B>,
+{
+    enum Advance {
+        Base,
+        Other,
+        Both,
+        Done,
+    }
+
+    let mut base = AsyncBorrowedSubtreeCursor::new(prolly, base).await?;
+    let mut other = AsyncBorrowedSubtreeCursor::new(prolly, other).await?;
+    while !visitor.done {
+        let advance = {
+            match (base.current()?, other.current()?) {
+                (Some((base_key, base_value)), Some((other_key, other_value))) => {
+                    match base_key.cmp(other_key) {
+                        std::cmp::Ordering::Less => {
+                            visitor.emit(DiffRef::Removed {
+                                key: base_key,
+                                value: base_value,
+                            });
+                            Advance::Base
+                        }
+                        std::cmp::Ordering::Greater => {
+                            visitor.emit(DiffRef::Added {
+                                key: other_key,
+                                value: other_value,
+                            });
+                            Advance::Other
+                        }
+                        std::cmp::Ordering::Equal => {
+                            if base_value != other_value {
+                                visitor.emit(DiffRef::Changed {
+                                    key: base_key,
+                                    old: base_value,
+                                    new: other_value,
+                                });
+                            }
+                            Advance::Both
+                        }
+                    }
+                }
+                (Some((key, value)), None) => {
+                    visitor.emit(DiffRef::Removed { key, value });
+                    Advance::Base
+                }
+                (None, Some((key, value))) => {
+                    visitor.emit(DiffRef::Added { key, value });
+                    Advance::Other
+                }
+                (None, None) => Advance::Done,
+            }
+        };
+        match advance {
+            Advance::Base => {
+                base.advance().await?;
+            }
+            Advance::Other => {
+                other.advance().await?;
+            }
+            Advance::Both => {
+                base.advance().await?;
+                other.advance().await?;
+            }
+            Advance::Done => break,
+        }
+    }
+    Ok(())
+}
+
+fn borrowed_internal_frames(
+    base: &Node,
+    other: &Node,
+    span_end: Option<&[u8]>,
+) -> Result<Option<Vec<DiffFrame>>, Error> {
+    ensure_node_value_count(base)?;
+    ensure_node_value_count(other)?;
+    let mut frames = Vec::with_capacity(base.len().max(other.len()));
+    let mut base_index = 0usize;
+    let mut other_index = 0usize;
+    while base_index < base.len() && other_index < other.len() {
+        let base_start = base.keys[base_index].as_slice();
+        let other_start = other.keys[other_index].as_slice();
+        let base_end = child_span_end(base, base_index, span_end);
+        let other_end = child_span_end(other, other_index, span_end);
+        if base_start == other_start && base_end == other_end {
+            let base_cid = child_cid_validated(base, base_index)?;
+            let other_cid = child_cid_validated(other, other_index)?;
+            if base_cid != other_cid {
+                frames.push(DiffFrame::Compare {
+                    base_cid,
+                    other_cid,
+                    span_end: base_end.map(<[u8]>::to_vec),
+                });
+            }
+            base_index += 1;
+            other_index += 1;
+        } else if span_ends_before_or_at(base_end, other_start) {
+            frames.push(DiffFrame::Removed {
+                cid: child_cid_validated(base, base_index)?,
+            });
+            base_index += 1;
+        } else if span_ends_before_or_at(other_end, base_start) {
+            frames.push(DiffFrame::Added {
+                cid: child_cid_validated(other, other_index)?,
+            });
+            other_index += 1;
+        } else {
+            return Ok(None);
+        }
+    }
+    while base_index < base.len() {
+        frames.push(DiffFrame::Removed {
+            cid: child_cid_validated(base, base_index)?,
+        });
+        base_index += 1;
+    }
+    while other_index < other.len() {
+        frames.push(DiffFrame::Added {
+            cid: child_cid_validated(other, other_index)?,
+        });
+        other_index += 1;
+    }
+    Ok(Some(frames))
+}
+
+fn scan_diff_borrowed<S, F, B>(
+    prolly: &Prolly<S>,
+    base: &Tree,
+    other: &Tree,
+    start: Option<&[u8]>,
+    end: Option<&[u8]>,
+    visit: F,
+) -> Result<ScanOutcome<B>, Error>
+where
+    S: Store,
+    F: for<'diff> FnMut(DiffRef<'diff>) -> ControlFlow<B>,
+{
+    if start.zip(end).is_some_and(|(start, end)| end <= start) {
+        return Ok(ScanOutcome::complete(0));
+    }
+    if base.config.format != other.config.format || base.config.format != prolly.config.format {
+        return Err(Error::FormatMismatch {
+            expected: prolly.config.format.digest()?,
+            actual: other.config.format.digest()?,
+        });
+    }
+    let mut visitor = BorrowedDiffVisitor {
+        visit,
+        start: start.map(<[u8]>::to_vec),
+        end: end.map(<[u8]>::to_vec),
+        visited: 0,
+        break_value: None,
+        done: false,
+    };
+    let mut stack = initial_diff_stack(base, other);
+    while let Some(frame) = stack.pop() {
+        if visitor.done {
+            break;
+        }
+        match frame {
+            DiffFrame::Compare {
+                base_cid,
+                other_cid,
+                span_end,
+            } => {
+                if base_cid == other_cid {
+                    continue;
+                }
+                let nodes = prolly.load_many_ordered(&[base_cid, other_cid])?;
+                let base_node = nodes[0].clone();
+                let other_node = nodes[1].clone();
+                match (base_node.leaf, other_node.leaf) {
+                    (true, true) => visit_leaf_diff(&base_node, &other_node, &mut visitor)?,
+                    (false, false) if base_node.level == other_node.level => {
+                        match borrowed_internal_frames(
+                            &base_node,
+                            &other_node,
+                            span_end.as_deref(),
+                        )? {
+                            Some(frames) => stack.extend(frames.into_iter().rev()),
+                            None => {
+                                visit_subtree_diff(prolly, base_node, other_node, &mut visitor)?
+                            }
+                        }
+                    }
+                    _ => visit_subtree_diff(prolly, base_node, other_node, &mut visitor)?,
+                }
+            }
+            DiffFrame::Added { ref cid } | DiffFrame::Removed { ref cid } => {
+                let added = matches!(frame, DiffFrame::Added { .. });
+                let node = prolly.load_arc(cid)?;
+                if node.leaf {
+                    ensure_node_value_count(&node)?;
+                    for index in 0..node.len() {
+                        let diff = if added {
+                            DiffRef::Added {
+                                key: &node.keys[index],
+                                value: node_value(&node, index)?,
+                            }
+                        } else {
+                            DiffRef::Removed {
+                                key: &node.keys[index],
+                                value: node_value(&node, index)?,
+                            }
+                        };
+                        if !visitor.emit(diff) {
+                            break;
+                        }
+                    }
+                } else {
+                    let kind = if added {
+                        DiffFrameKind::Added
+                    } else {
+                        DiffFrameKind::Removed
+                    };
+                    let mut frames = child_diff_frames(&node, kind)?;
+                    frames.reverse();
+                    stack.extend(frames);
+                }
+            }
+        }
+    }
+    Ok(visitor.finish())
+}
+
+#[cfg(feature = "async-store")]
+async fn scan_diff_borrowed_async<S, F, B>(
+    prolly: &AsyncProlly<S>,
+    base: &Tree,
+    other: &Tree,
+    start: Option<&[u8]>,
+    end: Option<&[u8]>,
+    visit: F,
+) -> Result<ScanOutcome<B>, Error>
+where
+    S: AsyncStore,
+    S::Error: Send + Sync,
+    F: for<'diff> FnMut(DiffRef<'diff>) -> ControlFlow<B>,
+{
+    if start.zip(end).is_some_and(|(start, end)| end <= start) {
+        return Ok(ScanOutcome::complete(0));
+    }
+    if base.config.format != other.config.format || base.config.format != prolly.config().format {
+        return Err(Error::FormatMismatch {
+            expected: prolly.config().format.digest()?,
+            actual: other.config.format.digest()?,
+        });
+    }
+    let mut visitor = BorrowedDiffVisitor {
+        visit,
+        start: start.map(<[u8]>::to_vec),
+        end: end.map(<[u8]>::to_vec),
+        visited: 0,
+        break_value: None,
+        done: false,
+    };
+    let mut stack = initial_diff_stack(base, other);
+    while let Some(frame) = stack.pop() {
+        if visitor.done {
+            break;
+        }
+        match frame {
+            DiffFrame::Compare {
+                base_cid,
+                other_cid,
+                span_end,
+            } => {
+                if base_cid == other_cid {
+                    continue;
+                }
+                let nodes = prolly.load_many_ordered(&[base_cid, other_cid]).await?;
+                let base_node = nodes[0].clone();
+                let other_node = nodes[1].clone();
+                match (base_node.leaf, other_node.leaf) {
+                    (true, true) => visit_leaf_diff(&base_node, &other_node, &mut visitor)?,
+                    (false, false) if base_node.level == other_node.level => {
+                        match borrowed_internal_frames(
+                            &base_node,
+                            &other_node,
+                            span_end.as_deref(),
+                        )? {
+                            Some(frames) => stack.extend(frames.into_iter().rev()),
+                            None => {
+                                visit_async_subtree_diff(
+                                    prolly,
+                                    base_node,
+                                    other_node,
+                                    &mut visitor,
+                                )
+                                .await?
+                            }
+                        }
+                    }
+                    _ => {
+                        visit_async_subtree_diff(prolly, base_node, other_node, &mut visitor)
+                            .await?
+                    }
+                }
+            }
+            DiffFrame::Added { ref cid } | DiffFrame::Removed { ref cid } => {
+                let added = matches!(frame, DiffFrame::Added { .. });
+                let node = prolly.load_arc(cid).await?;
+                if node.leaf {
+                    ensure_node_value_count(&node)?;
+                    for index in 0..node.len() {
+                        let diff = if added {
+                            DiffRef::Added {
+                                key: &node.keys[index],
+                                value: node_value(&node, index)?,
+                            }
+                        } else {
+                            DiffRef::Removed {
+                                key: &node.keys[index],
+                                value: node_value(&node, index)?,
+                            }
+                        };
+                        if !visitor.emit(diff) {
+                            break;
+                        }
+                    }
+                } else {
+                    let kind = if added {
+                        DiffFrameKind::Added
+                    } else {
+                        DiffFrameKind::Removed
+                    };
+                    let mut frames = child_diff_frames(&node, kind)?;
+                    frames.reverse();
+                    stack.extend(frames);
+                }
+            }
+        }
+    }
+    Ok(visitor.finish())
+}
+
+impl<S: Store> Prolly<S> {
+    /// Visit structural differences without allocating owned diff records.
+    pub fn scan_diff(
+        &self,
+        base: &Tree,
+        other: &Tree,
+        mut visit: impl for<'diff> FnMut(DiffRef<'diff>),
+    ) -> Result<u64, Error> {
+        Ok(self
+            .scan_diff_until(base, other, |diff| {
+                visit(diff);
+                ControlFlow::<()>::Continue(())
+            })?
+            .visited)
+    }
+
+    /// Visit structural differences with callback-controlled early termination.
+    pub fn scan_diff_until<B>(
+        &self,
+        base: &Tree,
+        other: &Tree,
+        visit: impl for<'diff> FnMut(DiffRef<'diff>) -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error> {
+        scan_diff_borrowed(self, base, other, None, None, visit)
+    }
+
+    /// Visit differences whose keys fall in `[start, end)`.
+    pub fn scan_range_diff(
+        &self,
+        base: &Tree,
+        other: &Tree,
+        start: &[u8],
+        end: Option<&[u8]>,
+        mut visit: impl for<'diff> FnMut(DiffRef<'diff>),
+    ) -> Result<u64, Error> {
+        Ok(self
+            .scan_range_diff_until(base, other, start, end, |diff| {
+                visit(diff);
+                ControlFlow::<()>::Continue(())
+            })?
+            .visited)
+    }
+
+    /// Visit a range of differences with early termination.
+    pub fn scan_range_diff_until<B>(
+        &self,
+        base: &Tree,
+        other: &Tree,
+        start: &[u8],
+        end: Option<&[u8]>,
+        visit: impl for<'diff> FnMut(DiffRef<'diff>) -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error> {
+        scan_diff_borrowed(self, base, other, Some(start), end, visit)
+    }
+
+    /// Visit only genuine three-way conflicts without allocating `Conflict`.
+    pub fn scan_conflicts(
+        &self,
+        base: &Tree,
+        left: &Tree,
+        right: &Tree,
+        mut visit: impl for<'conflict> FnMut(ConflictRef<'conflict>),
+    ) -> Result<u64, Error> {
+        Ok(self
+            .scan_conflicts_until(base, left, right, |conflict| {
+                visit(conflict);
+                ControlFlow::<()>::Continue(())
+            })?
+            .visited)
+    }
+
+    /// Visit genuine conflicts with callback-controlled early termination.
+    pub fn scan_conflicts_until<B>(
+        &self,
+        base: &Tree,
+        left: &Tree,
+        right: &Tree,
+        mut visit: impl for<'conflict> FnMut(ConflictRef<'conflict>) -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error> {
+        enum Break<B> {
+            User(B),
+            Engine(Error),
+        }
+
+        let mut left = self.read(left)?;
+        let mut conflicts = 0u64;
+        let outcome = self.scan_diff_until(base, right, |diff| {
+            let (key, base_value, right_value) = match diff {
+                DiffRef::Added { key, value } => (key, None, Some(value)),
+                DiffRef::Removed { key, value } => (key, Some(value), None),
+                DiffRef::Changed { key, old, new } => (key, Some(old), Some(new)),
+            };
+
+            let mut inspect = |left_value: Option<&[u8]>| {
+                if left_value == base_value || left_value == right_value {
+                    return ControlFlow::Continue(());
+                }
+                conflicts = conflicts.saturating_add(1);
+                match visit(ConflictRef {
+                    key,
+                    base: base_value,
+                    left: left_value,
+                    right: right_value,
+                }) {
+                    ControlFlow::Continue(()) => ControlFlow::Continue(()),
+                    ControlFlow::Break(value) => ControlFlow::Break(Break::User(value)),
+                }
+            };
+
+            match left.get_with(key, |value| inspect(Some(value))) {
+                Ok(Some(flow)) => flow,
+                Ok(None) => inspect(None),
+                Err(error) => ControlFlow::Break(Break::Engine(error)),
+            }
+        })?;
+
+        match outcome.break_value {
+            Some(Break::User(value)) => Ok(ScanOutcome::stopped(conflicts, value)),
+            Some(Break::Engine(error)) => Err(error),
+            None => Ok(ScanOutcome::complete(conflicts)),
+        }
+    }
+}
+
+#[cfg(feature = "async-store")]
+impl<S> AsyncProlly<S>
+where
+    S: AsyncStore,
+    S::Error: Send + Sync,
+{
+    /// Visit async structural differences without owned diff records.
+    pub async fn scan_diff(
+        &self,
+        base: &Tree,
+        other: &Tree,
+        mut visit: impl for<'diff> FnMut(DiffRef<'diff>),
+    ) -> Result<u64, Error> {
+        Ok(self
+            .scan_diff_until(base, other, |diff| {
+                visit(diff);
+                ControlFlow::<()>::Continue(())
+            })
+            .await?
+            .visited)
+    }
+
+    /// Visit async structural differences with early termination.
+    pub async fn scan_diff_until<B>(
+        &self,
+        base: &Tree,
+        other: &Tree,
+        visit: impl for<'diff> FnMut(DiffRef<'diff>) -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error> {
+        scan_diff_borrowed_async(self, base, other, None, None, visit).await
+    }
+
+    /// Visit async differences in `[start, end)` without owned records.
+    pub async fn scan_range_diff(
+        &self,
+        base: &Tree,
+        other: &Tree,
+        start: &[u8],
+        end: Option<&[u8]>,
+        mut visit: impl for<'diff> FnMut(DiffRef<'diff>),
+    ) -> Result<u64, Error> {
+        Ok(self
+            .scan_range_diff_until(base, other, start, end, |diff| {
+                visit(diff);
+                ControlFlow::<()>::Continue(())
+            })
+            .await?
+            .visited)
+    }
+
+    /// Visit async range differences with early termination.
+    pub async fn scan_range_diff_until<B>(
+        &self,
+        base: &Tree,
+        other: &Tree,
+        start: &[u8],
+        end: Option<&[u8]>,
+        visit: impl for<'diff> FnMut(DiffRef<'diff>) -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error> {
+        scan_diff_borrowed_async(self, base, other, Some(start), end, visit).await
+    }
+
+    /// Visit async three-way conflicts through a callback-scoped view.
+    ///
+    /// The current async iterator retains one owned conflict at a time so no
+    /// borrowed node data crosses an await. The callback API is stable for a
+    /// future retained-node-handle implementation and never accumulates all
+    /// conflicts in memory.
+    pub async fn scan_conflicts(
+        &self,
+        base: &Tree,
+        left: &Tree,
+        right: &Tree,
+        mut visit: impl for<'conflict> FnMut(ConflictRef<'conflict>),
+    ) -> Result<u64, Error> {
+        Ok(self
+            .scan_conflicts_until(base, left, right, |conflict| {
+                visit(conflict);
+                ControlFlow::<()>::Continue(())
+            })
+            .await?
+            .visited)
+    }
+
+    /// Visit async conflicts with callback-controlled early termination.
+    pub async fn scan_conflicts_until<B>(
+        &self,
+        base: &Tree,
+        left: &Tree,
+        right: &Tree,
+        mut visit: impl for<'conflict> FnMut(ConflictRef<'conflict>) -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error> {
+        let mut conflicts = AsyncConflictIter::new(self, base, left, right);
+        let mut visited = 0u64;
+        while let Some(conflict) = conflicts.next().await {
+            let conflict = conflict?;
+            visited = visited.saturating_add(1);
+            let view = ConflictRef {
+                key: &conflict.key,
+                base: conflict.base.as_deref(),
+                left: conflict.left.as_deref(),
+                right: conflict.right.as_deref(),
+            };
+            if let ControlFlow::Break(value) = visit(view) {
+                return Ok(ScanOutcome::stopped(visited, value));
+            }
+        }
+        Ok(ScanOutcome::complete(visited))
+    }
+
+    /// Async merge with a callback-scoped symbolic conflict resolver.
+    pub async fn merge_with(
+        &self,
+        base: &Tree,
+        left: &Tree,
+        right: &Tree,
+        resolver: Option<&dyn BorrowedMergeResolver>,
+    ) -> Result<Tree, Error> {
+        merge_trees_borrowed_async(self, base, left, right, resolver).await
+    }
+
+    /// Async range merge with a borrowed conflict resolver.
+    pub async fn merge_range_with(
+        &self,
+        base: &Tree,
+        left: &Tree,
+        right: &Tree,
+        start: &[u8],
+        end: Option<&[u8]>,
+        resolver: Option<&dyn BorrowedMergeResolver>,
+    ) -> Result<Tree, Error> {
+        merge_trees_range_borrowed_async(self, base, left, right, start, end, resolver).await
+    }
+
+    /// Async prefix merge with a borrowed conflict resolver.
+    pub async fn merge_prefix_with(
+        &self,
+        base: &Tree,
+        left: &Tree,
+        right: &Tree,
+        prefix: &[u8],
+        resolver: Option<&dyn BorrowedMergeResolver>,
+    ) -> Result<Tree, Error> {
+        let (start, end) = super::key::prefix_range(prefix);
+        self.merge_range_with(base, left, right, &start, end.as_deref(), resolver)
+            .await
+    }
 }
 
 pub(crate) fn structural_diff_page<S: Store>(
@@ -1765,6 +2815,114 @@ where
 
     let right_diff = compute_async_diff(prolly, base, right).await?;
     merge_trees_with_right_diff_async(prolly, left, &right_diff, resolver).await
+}
+
+/// Async three-way merge using callback-scoped conflict views.
+///
+/// Async diff entries are currently retained as owned staging records because
+/// node-backed views may not cross store awaits. Symbolic decisions still avoid
+/// constructing the legacy `Conflict` on successfully resolved conflicts.
+#[cfg(feature = "async-store")]
+pub async fn merge_trees_borrowed_async<S>(
+    prolly: &AsyncProlly<S>,
+    base: &Tree,
+    left: &Tree,
+    right: &Tree,
+    resolver: Option<&dyn BorrowedMergeResolver>,
+) -> Result<Tree, Error>
+where
+    S: AsyncStore,
+    S::Error: Send + Sync,
+{
+    if left.root == right.root {
+        return Ok(left.clone());
+    }
+    if left.root == base.root {
+        return Ok(right.clone());
+    }
+    if right.root == base.root {
+        return Ok(left.clone());
+    }
+
+    let right_diff = compute_async_diff(prolly, base, right).await?;
+    merge_trees_with_right_diff_borrowed_async(prolly, left, &right_diff, resolver).await
+}
+
+/// Async range merge using callback-scoped conflict views.
+#[cfg(feature = "async-store")]
+pub async fn merge_trees_range_borrowed_async<S>(
+    prolly: &AsyncProlly<S>,
+    base: &Tree,
+    left: &Tree,
+    right: &Tree,
+    start: &[u8],
+    end: Option<&[u8]>,
+    resolver: Option<&dyn BorrowedMergeResolver>,
+) -> Result<Tree, Error>
+where
+    S: AsyncStore,
+    S::Error: Send + Sync,
+{
+    if left.root == right.root || right.root == base.root || end.is_some_and(|end| end <= start) {
+        return Ok(left.clone());
+    }
+
+    let right_diff = compute_async_range_diff(prolly, base, right, start, end).await?;
+    merge_trees_with_right_diff_borrowed_async(prolly, left, &right_diff, resolver).await
+}
+
+#[cfg(feature = "async-store")]
+async fn merge_trees_with_right_diff_borrowed_async<S>(
+    prolly: &AsyncProlly<S>,
+    left: &Tree,
+    right_diff: &[Diff],
+    resolver: Option<&dyn BorrowedMergeResolver>,
+) -> Result<Tree, Error>
+where
+    S: AsyncStore,
+    S::Error: Send + Sync,
+{
+    let right_changes = build_merge_change_refs(right_diff);
+    let keys = right_changes
+        .iter()
+        .map(|entry| entry.key)
+        .collect::<Vec<_>>();
+    let left_values = prolly.get_many(left, &keys).await?;
+    let mut mutations = Vec::with_capacity(right_changes.len());
+
+    for (entry, left_value) in right_changes.iter().zip(left_values) {
+        if left_value.as_deref() == entry.base {
+            push_change_mutation(&mut mutations, entry.key, entry.value);
+            continue;
+        }
+        if option_bytes_eq(&left_value, entry.value) {
+            continue;
+        }
+
+        let conflict = ConflictRef {
+            key: entry.key,
+            base: entry.base,
+            left: left_value.as_deref(),
+            right: entry.value,
+        };
+        let mut recorder = MergeTraceRecorder::disabled();
+        let selected = resolve_conflict(
+            resolver.map(MergeResolverRef::Borrowed),
+            conflict,
+            MergeTraceStage::Batch,
+            &mut recorder,
+        )
+        .map_err(Error::Conflict)?;
+        if selected.as_deref() != left_value.as_deref() {
+            push_change_mutation(&mut mutations, entry.key, selected.as_deref());
+        }
+    }
+
+    if mutations.is_empty() {
+        Ok(left.clone())
+    } else {
+        prolly.batch(left, mutations).await
+    }
 }
 
 /// Perform an async three-way merge and return structured trace events with the result.
@@ -3429,6 +4587,146 @@ pub fn merge_trees<S: Store>(
     merge_trees_with_right_diff(prolly, base, left, &right_diff, resolver)
 }
 
+/// Perform a three-way merge whose resolver inspects callback-scoped values.
+///
+/// The structural path can select an existing base/left/right value without
+/// constructing an owned conflict. Shape-misaligned changes stream directly
+/// into the mutation layer, avoiding an intermediate owned diff vector.
+pub fn merge_trees_borrowed<S: Store>(
+    prolly: &Prolly<S>,
+    base: &Tree,
+    left: &Tree,
+    right: &Tree,
+    resolver: Option<&dyn BorrowedMergeResolver>,
+) -> Result<Tree, Error> {
+    if left.root == right.root {
+        return Ok(left.clone());
+    }
+    if left.root == base.root {
+        return Ok(right.clone());
+    }
+    if right.root == base.root {
+        return Ok(left.clone());
+    }
+
+    let mut recorder = MergeTraceRecorder::disabled();
+    if let Some(merged) = try_structural_merge_traced(
+        prolly,
+        base,
+        left,
+        right,
+        resolver.map(MergeResolverRef::Borrowed),
+        &mut recorder,
+    )? {
+        return Ok(merged);
+    }
+
+    merge_borrowed_diff_range(prolly, base, left, right, &[], None, resolver)
+}
+
+/// Merge right-side changes in `[start, end)` using a borrowed resolver.
+pub fn merge_trees_range_borrowed<S: Store>(
+    prolly: &Prolly<S>,
+    base: &Tree,
+    left: &Tree,
+    right: &Tree,
+    start: &[u8],
+    end: Option<&[u8]>,
+    resolver: Option<&dyn BorrowedMergeResolver>,
+) -> Result<Tree, Error> {
+    if left.root == right.root || right.root == base.root || end.is_some_and(|end| end <= start) {
+        return Ok(left.clone());
+    }
+    merge_borrowed_diff_range(prolly, base, left, right, start, end, resolver)
+}
+
+fn merge_borrowed_diff_range<S: Store>(
+    prolly: &Prolly<S>,
+    base: &Tree,
+    left: &Tree,
+    right: &Tree,
+    start: &[u8],
+    end: Option<&[u8]>,
+    resolver: Option<&dyn BorrowedMergeResolver>,
+) -> Result<Tree, Error> {
+    let mut left_reader = prolly.read(left)?;
+    let mut merged = left.clone();
+    let mut mutations = Vec::with_capacity(BORROWED_MERGE_MUTATION_BATCH);
+    let mut applied = false;
+    let mut merge_error = None;
+
+    let outcome = prolly.scan_range_diff_until(base, right, start, end, |diff| {
+        let (key, base_value, right_value) = match diff {
+            DiffRef::Added { key, value } => (key, None, Some(value)),
+            DiffRef::Removed { key, value } => (key, Some(value), None),
+            DiffRef::Changed { key, old, new } => (key, Some(old), Some(new)),
+        };
+
+        let mut resolution_result = Ok(());
+        let lookup_result = left_reader.get_many_with(&[key], |_, _, left_value| {
+            resolution_result = (|| {
+                if left_value == base_value {
+                    push_change_mutation(&mut mutations, key, right_value);
+                    if mutations.len() == BORROWED_MERGE_MUTATION_BATCH {
+                        merged = prolly.batch(&merged, std::mem::take(&mut mutations))?;
+                        mutations.reserve(BORROWED_MERGE_MUTATION_BATCH);
+                        applied = true;
+                    }
+                    return Ok(());
+                }
+                if left_value == right_value {
+                    return Ok(());
+                }
+
+                let conflict = ConflictRef {
+                    key,
+                    base: base_value,
+                    left: left_value,
+                    right: right_value,
+                };
+                let mut recorder = MergeTraceRecorder::disabled();
+                let selected = resolve_conflict(
+                    resolver.map(MergeResolverRef::Borrowed),
+                    conflict,
+                    MergeTraceStage::Batch,
+                    &mut recorder,
+                )
+                .map_err(Error::Conflict)?;
+
+                if selected.as_deref() != left_value {
+                    push_change_mutation(&mut mutations, key, selected.as_deref());
+                    if mutations.len() == BORROWED_MERGE_MUTATION_BATCH {
+                        merged = prolly.batch(&merged, std::mem::take(&mut mutations))?;
+                        mutations.reserve(BORROWED_MERGE_MUTATION_BATCH);
+                        applied = true;
+                    }
+                }
+                Ok(())
+            })();
+        });
+
+        let result = lookup_result.and(resolution_result);
+        match result {
+            Ok(()) => ControlFlow::Continue(()),
+            Err(error) => {
+                merge_error = Some(error);
+                ControlFlow::Break(())
+            }
+        }
+    })?;
+
+    if let Some(error) = merge_error {
+        return Err(error);
+    }
+    debug_assert!(outcome.break_value.is_none());
+
+    if !mutations.is_empty() {
+        merged = prolly.batch(&merged, mutations)?;
+        applied = true;
+    }
+    Ok(if applied { merged } else { left.clone() })
+}
+
 /// Perform a three-way merge and return structured trace events with the result.
 ///
 /// Unlike [`merge_trees`], this function keeps the trace even if the merge
@@ -3480,7 +4778,7 @@ fn merge_trees_explain_result<S: Store>(
             base,
             left,
             right,
-            resolver.as_deref(),
+            resolver.as_deref().map(MergeResolverRef::Legacy),
             &mut recorder,
         )?
     };
@@ -3523,7 +4821,14 @@ fn try_structural_merge<S: Store>(
     resolver: Option<&dyn Fn(&Conflict) -> Resolution>,
 ) -> Result<Option<Tree>, Error> {
     let mut recorder = MergeTraceRecorder::disabled();
-    try_structural_merge_traced(prolly, base, left, right, resolver, &mut recorder)
+    try_structural_merge_traced(
+        prolly,
+        base,
+        left,
+        right,
+        resolver.map(MergeResolverRef::Legacy),
+        &mut recorder,
+    )
 }
 
 fn try_structural_merge_traced<S: Store>(
@@ -3531,7 +4836,7 @@ fn try_structural_merge_traced<S: Store>(
     base: &Tree,
     left: &Tree,
     right: &Tree,
-    resolver: Option<&dyn Fn(&Conflict) -> Resolution>,
+    resolver: Option<MergeResolverRef<'_>>,
     recorder: &mut MergeTraceRecorder<'_>,
 ) -> Result<Option<Tree>, Error> {
     let (Some(base_cid), Some(left_cid), Some(right_cid)) = (&base.root, &left.root, &right.root)
@@ -3587,7 +4892,7 @@ fn try_structural_merge_cids<S: Store>(
     base_cid: &Cid,
     left_cid: &Cid,
     right_cid: &Cid,
-    resolver: Option<&dyn Fn(&Conflict) -> Resolution>,
+    resolver: Option<MergeResolverRef<'_>>,
     collector: &mut BatchWriteCollector,
     recorder: &mut MergeTraceRecorder<'_>,
 ) -> Result<Option<StructuralMergeResult>, Error> {
@@ -3642,7 +4947,7 @@ fn try_structural_merge_internal<S: Store>(
     base_cid: &Cid,
     left_cid: &Cid,
     right_cid: &Cid,
-    resolver: Option<&dyn Fn(&Conflict) -> Resolution>,
+    resolver: Option<MergeResolverRef<'_>>,
     collector: &mut BatchWriteCollector,
     recorder: &mut MergeTraceRecorder<'_>,
 ) -> Result<Option<StructuralMergeResult>, Error> {
@@ -3772,12 +5077,10 @@ fn try_structural_merge_leaf<S: Store>(
     base_cid: &Cid,
     left_cid: &Cid,
     right_cid: &Cid,
-    resolver: Option<&dyn Fn(&Conflict) -> Resolution>,
+    resolver: Option<MergeResolverRef<'_>>,
     collector: &mut BatchWriteCollector,
     recorder: &mut MergeTraceRecorder<'_>,
 ) -> Result<Option<StructuralMergeResult>, Error> {
-    use std::borrow::Cow;
-
     ensure_node_value_count(base)?;
     ensure_node_value_count(left)?;
     ensure_node_value_count(right)?;
@@ -3799,26 +5102,17 @@ fn try_structural_merge_leaf<S: Store>(
         } else if right_val == base_val {
             Some(Cow::Borrowed(left_val.as_slice()))
         } else {
-            let conflict = Conflict {
-                key: base.keys[idx].clone(),
-                base: Some(base_val.clone()),
-                left: Some(left_val.clone()),
-                right: Some(right_val.clone()),
+            let conflict = ConflictRef {
+                key: &base.keys[idx],
+                base: Some(base_val),
+                left: Some(left_val),
+                right: Some(right_val),
             };
-            if let Some(resolve) = resolver {
-                let resolution = resolve(&conflict);
-                recorder.record_resolver(MergeTraceStage::Structural, &conflict, &resolution);
-                match resolution {
-                    Resolution::Value(value) => Some(Cow::Owned(value)),
-                    Resolution::Delete => {
-                        deleted_any = true;
-                        None
-                    }
-                    Resolution::Unresolved => return Err(Error::Conflict(conflict)),
-                }
-            } else {
-                return Err(Error::Conflict(conflict));
-            }
+            let selected =
+                resolve_conflict(resolver, conflict, MergeTraceStage::Structural, recorder)
+                    .map_err(Error::Conflict)?;
+            deleted_any |= selected.is_none();
+            selected
         };
 
         let selected_bytes = selected.as_deref();

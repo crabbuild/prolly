@@ -356,13 +356,14 @@ pub use prolly::proximity::{
     ProductQuantizationConfig, ProductQuantizationQuality, ProductQuantizer, ProximityBuildStats,
     ProximityConfig, ProximityFilter, ProximityMap, ProximityMembershipProof,
     ProximityMembershipVerification, ProximityMutation, ProximityMutationStats,
-    ProximityProofFilter, ProximityRecord, ProximitySearchClaim, ProximitySearchEvent,
-    ProximitySearchProof, ProximitySearchRequest, ProximitySearchStats,
-    ProximitySearchVerification, ProximityStructuralProof, ProximityStructuralVerification,
-    ProximityTree, ProximityVerification, QueryKernel, ScalarQuantizationConfig, SearchBackend,
-    SearchBudget, SearchCompletion, SearchIo, SearchOptions, SearchPlan, SearchPlanSummary,
-    SearchPolicy, SearchRequest, SearchResult, SearchRuntime, SearchRuntimePolicy,
-    StoreCacheNamespace, VectorStorageConfig, SEARCH_PLAN_FORMAT_VERSION,
+    ProximityProofFilter, ProximityReadSession, ProximityRecord, ProximityRecordRef,
+    ProximitySearchClaim, ProximitySearchEvent, ProximitySearchProof, ProximitySearchRequest,
+    ProximitySearchStats, ProximitySearchVerification, ProximityStructuralProof,
+    ProximityStructuralVerification, ProximityTree, ProximityVectorRef, ProximityVerification,
+    QueryKernel, ScalarQuantizationConfig, SearchBackend, SearchBudget, SearchCompletion, SearchIo,
+    SearchOptions, SearchPlan, SearchPlanSummary, SearchPolicy, SearchRequest, SearchResult,
+    SearchRuntime, SearchRuntimePolicy, StoreCacheNamespace, VectorStorageConfig,
+    SEARCH_PLAN_FORMAT_VERSION,
 };
 #[cfg(feature = "async-store")]
 pub use prolly::proximity::{
@@ -372,22 +373,30 @@ pub use prolly::proximity::{
 pub use prolly::range::{
     CursorWindow, RangeCursor, RangeIter, RangePage, ReverseCursor, ReversePage,
 };
+#[cfg(feature = "async-store")]
+pub use prolly::read::AsyncReadSession;
+pub use prolly::read::{
+    BorrowedMergeResolver, ConflictRef, DiffRef, EntryRef, MergeDecision, ReadSession, ScanOutcome,
+    ValueRefView,
+};
 pub use prolly::secondary_index::{
     catalog_checkpoint_key, catalog_checkpoints_prefix, catalog_current_key,
     catalog_descriptor_key, catalog_format_key, catalog_map_id, catalog_retired_key,
-    control_record_key, control_root_name, decode_physical_index_key, descriptor_fingerprint,
-    index_map_id, physical_index_key, term_bounds_exact, term_bounds_prefix, term_bounds_range,
-    ActiveIndexControl, ActiveIndexHealth, DecodedPhysicalIndexKey, IndexBuildResult,
-    IndexCheckpoint, IndexControl, IndexProjection, IndexValue, IndexVerification,
+    control_record_key, control_root_name, decode_physical_index_key,
+    decode_physical_index_key_ref, descriptor_fingerprint, index_map_id, physical_index_key,
+    term_bounds_exact, term_bounds_prefix, term_bounds_range, ActiveIndexControl,
+    ActiveIndexHealth, DecodedPhysicalIndexKey, DecodedPhysicalIndexKeyRef, IndexBuildResult,
+    IndexCheckpoint, IndexControl, IndexProjection, IndexValue, IndexValueRef, IndexVerification,
     IndexedHeadRecord, IndexedMap, IndexedMapEditor, IndexedMapHealth, IndexedMapMetricsSnapshot,
     IndexedMapUpdate, IndexedRetentionResult, IndexedSnapshot, IndexedSnapshotBundle,
     IndexedSnapshotBundleIndex, IndexedSnapshotBundleSummary, IndexedSnapshotBundleVerification,
-    IndexedSnapshotId, IndexedSourceRecord, IndexedVersion, ProjectedIndexEntry, SecondaryIndex,
-    SecondaryIndexBuilder, SecondaryIndexCursor, SecondaryIndexDescriptor, SecondaryIndexDirection,
-    SecondaryIndexEntry, SecondaryIndexError, SecondaryIndexExtractor, SecondaryIndexLimits,
-    SecondaryIndexMatch, SecondaryIndexPage, SecondaryIndexRegistry, SecondaryIndexSnapshot,
-    TermBounds, INDEXED_SNAPSHOT_BUNDLE_FORMAT_VERSION, INDEX_PHYSICAL_LAYOUT_VERSION,
-    SECONDARY_INDEX_FORMAT_VERSION,
+    IndexedSnapshotId, IndexedSourceRecord, IndexedSourceRecordRef, IndexedVersion,
+    ProjectedIndexEntry, SecondaryIndex, SecondaryIndexBuilder, SecondaryIndexCursor,
+    SecondaryIndexDescriptor, SecondaryIndexDirection, SecondaryIndexEntry, SecondaryIndexEntryRef,
+    SecondaryIndexError, SecondaryIndexExtractor, SecondaryIndexLimits, SecondaryIndexMatch,
+    SecondaryIndexMatchRef, SecondaryIndexPage, SecondaryIndexRegistry, SecondaryIndexSnapshot,
+    StreamingSecondaryIndexExtractor, TermBounds, INDEXED_SNAPSHOT_BUNDLE_FORMAT_VERSION,
+    INDEX_PHYSICAL_LAYOUT_VERSION, SECONDARY_INDEX_FORMAT_VERSION,
 };
 pub use prolly::snapshot::{
     snapshot_id_from_name, snapshot_root_name, SnapshotManager, SnapshotNamespace, SnapshotRoot,

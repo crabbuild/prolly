@@ -3,6 +3,7 @@ use prolly::{
     Config, Error, IndexControl, IndexProjection, MemStore, Mutation, ParallelConfig, Prolly,
     SecondaryIndex, SecondaryIndexEntry, SecondaryIndexError, SecondaryIndexRegistry,
 };
+use std::ops::ControlFlow;
 use std::sync::Arc;
 
 #[test]
@@ -691,6 +692,29 @@ fn indexed_snapshot_queries_are_exact_projected_paged_and_historical() {
             (b"user-2".to_vec(), b"active|Grace".to_vec()),
         ]
     );
+    let mut borrowed = Vec::new();
+    assert_eq!(
+        by_status
+            .scan_exact(b"active", |matched| borrowed.push(matched.to_owned()))
+            .unwrap(),
+        2
+    );
+    assert_eq!(borrowed, by_status.exact(b"active").unwrap());
+    let mut borrowed_records = Vec::new();
+    by_status
+        .scan_records(b"active", |record| borrowed_records.push(record.to_owned()))
+        .unwrap();
+    assert_eq!(borrowed_records, by_status.records(b"active").unwrap());
+    let mut reverse_keys = Vec::new();
+    let stopped = by_status
+        .scan_exact_reverse_until(b"active", |matched| {
+            reverse_keys.push(matched.primary_key.to_vec());
+            ControlFlow::Break(matched.primary_key.to_vec())
+        })
+        .unwrap();
+    assert_eq!(stopped.visited, 1);
+    assert_eq!(reverse_keys, vec![b"user-2".to_vec()]);
+    assert_eq!(stopped.break_value, Some(b"user-2".to_vec()));
     assert_eq!(
         historical
             .index(b"by-status-name")
