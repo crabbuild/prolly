@@ -62,6 +62,10 @@ tests described here.
 - [Language Bindings Design](language-bindings-design.md): technical design
   for exposing the Rust implementation through UniFFI and language-specific
   binding adapters.
+- [Language Bindings Performance Architecture](language-bindings-performance-design.md):
+  measured design for retained binding read sessions, a versioned hot-path
+  transport, packed pages, scoped views, cross-language lifetime rules,
+  diff/merge/index reuse, and performance acceptance gates.
 - [Cross-Language Store Adapters Design](language-store-adapters-design.md):
   implementation design for optional DynamoDB, PostgreSQL, MySQL, and other
   host-language store packages over a shared async protocol.
