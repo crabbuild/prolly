@@ -61,6 +61,9 @@ binary hashes. See the
 for the full 90-row matrix, repetition stability, peak RSS, provenance, and
 limitations.
 
+For the 10M behavior and the measured Rust read-path mechanisms in one visual,
+see the [10M one-page report](prolly-10m-one-page-report.md).
+
 Across the 90 scenario-operation medians, Rust won 88 and Dolt Go won 2. Rust
 won all point-read (30/30) and full-range-scan (30/30) groups. Point-read
 speedups range from 1.68x to 5.75x with a 3.16x geometric mean; all 90 paired
