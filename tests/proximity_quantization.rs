@@ -1,7 +1,8 @@
 use prolly::{
-    BuildParallelism, DistanceMetric, MemStore, ProductQuantizationConfig, ProductQuantizer,
-    ProximityConfig, ProximityFilter, ProximityMap, ProximityMutation, ProximityRecord,
-    QueryKernel, ScalarQuantizationConfig, SearchBackend, SearchPolicy, SearchRequest,
+    BuildParallelism, DistanceMetric, MemStore, ProductQuantizationBuildLimits,
+    ProductQuantizationConfig, ProductQuantizer, ProximityConfig, ProximityFilter, ProximityMap,
+    ProximityMutation, ProximityRecord, QueryKernel, ScalarQuantizationConfig, SearchBackend,
+    SearchPolicy, SearchRequest,
 };
 use std::sync::Arc;
 
@@ -102,10 +103,24 @@ fn product_quantization_is_thread_identical_source_bound_and_full_precision_rera
         training_iterations: 6,
         rerank_multiplier: 16,
         seed: 0x5eed,
+        max_training_vectors: 32,
     };
 
     let (serial, serial_stats) =
         ProductQuantizer::build(&map, config.clone(), BuildParallelism::serial()).unwrap();
+    assert_eq!(serial_stats.training_vectors, 32);
+    assert!(matches!(
+        ProductQuantizer::build_with_limits(
+            &map,
+            config.clone(),
+            BuildParallelism::serial(),
+            ProductQuantizationBuildLimits {
+                max_training_bytes: Some(1),
+                ..Default::default()
+            },
+        ),
+        Err(prolly::Error::ProximityResourceLimitExceeded { .. })
+    ));
     for threads in [2, 4] {
         let (parallel, stats) = ProductQuantizer::build(
             &map,
@@ -127,7 +142,7 @@ fn product_quantization_is_thread_identical_source_bound_and_full_precision_rera
     let exact = map.search(exact_request).unwrap();
     let mut request = SearchRequest::exact(&query, 11);
     request.policy = SearchPolicy::FixedBudget;
-    request.backend = SearchBackend::ProductQuantized;
+    request.options.backend = SearchBackend::ProductQuantized;
     request.filter = ProximityFilter::Prefix(b"vector-00");
     let result = loaded.search(&map, request).unwrap();
     assert!(result.stats.quantized_distance_evaluations > 0);
@@ -154,7 +169,7 @@ fn product_quantization_is_thread_identical_source_bound_and_full_precision_rera
         .unwrap();
     let mut stale_request = SearchRequest::exact(&query, 3);
     stale_request.policy = SearchPolicy::FixedBudget;
-    stale_request.backend = SearchBackend::ProductQuantized;
+    stale_request.options.backend = SearchBackend::ProductQuantized;
     assert!(matches!(
         loaded.search(&mutated, stale_request),
         Err(prolly::Error::InvalidProximitySearch { .. })
@@ -181,6 +196,7 @@ fn product_quantization_reranks_all_canonical_metrics() {
                 training_iterations: 4,
                 rerank_multiplier: 16,
                 seed: 7,
+                max_training_vectors: 65_536,
             },
             BuildParallelism::serial(),
         )
@@ -189,7 +205,7 @@ fn product_quantization_reranks_all_canonical_metrics() {
         let exact = map.search(SearchRequest::exact(&query, 5)).unwrap();
         let mut request = SearchRequest::exact(&query, 5);
         request.policy = SearchPolicy::FixedBudget;
-        request.backend = SearchBackend::ProductQuantized;
+        request.options.backend = SearchBackend::ProductQuantized;
         let accelerated = pq.search(&map, request).unwrap();
         for (expected, actual) in exact.neighbors.iter().zip(&accelerated.neighbors) {
             assert_eq!(expected.key, actual.key, "metric={metric:?}");

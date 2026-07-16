@@ -1,6 +1,7 @@
 use prolly::{
-    HnswConfig, HnswIndex, MemStore, ProximityConfig, ProximityFilter, ProximityMap,
-    ProximityMutation, ProximityRecord, SearchBackend, SearchPolicy, SearchRequest, Store,
+    HnswBuildLimits, HnswConfig, HnswIndex, MemStore, ProximityConfig, ProximityFilter,
+    ProximityMap, ProximityMutation, ProximityRecord, SearchBackend, SearchPolicy, SearchRequest,
+    Store,
 };
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -35,6 +36,7 @@ fn config() -> HnswConfig {
         level_bits: 4,
         overfetch_multiplier: 16,
         seed: 0x5eed,
+        routing_vector_encoding: prolly::HnswRoutingVectorEncoding::FullF32,
     }
 }
 
@@ -50,11 +52,30 @@ fn clean_graph_is_permutation_identical_loadable_and_disposable_mode_is_explicit
     assert_eq!(forward_map.tree().descriptor, reverse_map.tree().descriptor);
 
     let (first, first_stats) = HnswIndex::build(&forward_map, config()).unwrap();
-    let (second, second_stats) = HnswIndex::build(&reverse_map, config()).unwrap();
+    let (second, second_stats) = HnswIndex::build_with_limits(
+        &reverse_map,
+        config(),
+        HnswBuildLimits {
+            worker_threads: 4,
+            ..Default::default()
+        },
+    )
+    .unwrap();
     assert_eq!(first.manifest_cid(), second.manifest_cid());
     assert_eq!(first_stats, second_stats);
     assert!(first.is_canonical());
     assert!(first_stats.directed_edges > 0);
+    assert!(matches!(
+        HnswIndex::build_with_limits(
+            &forward_map,
+            config(),
+            HnswBuildLimits {
+                max_records: Some(1),
+                ..Default::default()
+            },
+        ),
+        Err(prolly::Error::ProximityResourceLimitExceeded { .. })
+    ));
 
     let loaded = HnswIndex::load(forward_store.clone(), first.manifest_cid().clone()).unwrap();
     assert_eq!(loaded.source_descriptor(), &forward_map.tree().descriptor);
@@ -83,10 +104,10 @@ fn hnsw_has_fixed_seed_recall_enforces_filters_and_resolves_authoritative_values
     let (index, _) = HnswIndex::build(&map, config()).unwrap();
     let query = [20.1, 20.2, 20.3, 20.4, 20.5, 20.6, 20.7, 20.8];
 
-    let exact = map.search(SearchRequest::exact(&query, 12)).unwrap();
-    let mut request = SearchRequest::exact(&query, 12);
+    let exact = map.search(SearchRequest::exact(&query, 10)).unwrap();
+    let mut request = SearchRequest::exact(&query, 10);
     request.policy = SearchPolicy::FixedBudget;
-    request.backend = SearchBackend::Hnsw;
+    request.options.backend = SearchBackend::Hnsw;
     let first = index.search(&map, request.clone()).unwrap();
     let second = index.search(&map, request).unwrap();
     assert_eq!(first.neighbors, second.neighbors);
@@ -97,7 +118,7 @@ fn hnsw_has_fixed_seed_recall_enforces_filters_and_resolves_authoritative_values
         .iter()
         .filter(|hit| exact_keys.contains(&hit.key))
         .count();
-    assert!(overlap >= 10, "fixed-seed recall was {overlap}/12");
+    assert_eq!(overlap, 10, "fixed-seed recall was {overlap}/10");
     for hit in &first.neighbors {
         assert_eq!(map.get(&hit.key).unwrap().unwrap().1, hit.value);
     }
@@ -107,9 +128,10 @@ fn hnsw_has_fixed_seed_recall_enforces_filters_and_resolves_authoritative_values
     let expected = map.search(filtered_exact).unwrap();
     let mut filtered = SearchRequest::exact(&query, 8);
     filtered.policy = SearchPolicy::FixedBudget;
-    filtered.backend = SearchBackend::Hnsw;
+    filtered.options.backend = SearchBackend::Hnsw;
     filtered.filter = ProximityFilter::Prefix(b"hnsw-00");
     let actual = index.search(&map, filtered).unwrap();
+    assert_eq!(actual.neighbors.len(), 8);
     assert!(actual
         .neighbors
         .iter()
@@ -130,13 +152,65 @@ fn hnsw_has_fixed_seed_recall_enforces_filters_and_resolves_authoritative_values
 }
 
 #[test]
+fn construction_and_search_ef_increase_logical_work_and_preserve_recall_floor() {
+    let source = records();
+    let store = Arc::new(MemStore::new());
+    let map = map(store, source);
+    let mut low_config = config();
+    low_config.ef_construction = 32;
+    let mut high_config = low_config.clone();
+    high_config.ef_construction = 128;
+    let (low_index, low_build) = HnswIndex::build(&map, low_config).unwrap();
+    let (index, high_build) = HnswIndex::build(&map, high_config).unwrap();
+    assert!(high_build.distance_evaluations >= low_build.distance_evaluations);
+
+    let query = [20.1, 20.2, 20.3, 20.4, 20.5, 20.6, 20.7, 20.8];
+    let exact = map.search(SearchRequest::exact(&query, 10)).unwrap();
+    let exact_keys: HashSet<_> = exact.neighbors.iter().map(|hit| hit.key.clone()).collect();
+    let mut low_construction_request = SearchRequest::exact(&query, 10);
+    low_construction_request.policy = SearchPolicy::FixedBudget;
+    low_construction_request.options.backend = SearchBackend::Hnsw;
+    let low_construction_result = low_index.search(&map, low_construction_request).unwrap();
+    assert_eq!(
+        low_construction_result
+            .neighbors
+            .iter()
+            .filter(|hit| exact_keys.contains(&hit.key))
+            .count(),
+        10
+    );
+    let mut low = SearchRequest::exact(&query, 10);
+    low.policy = SearchPolicy::FixedBudget;
+    low.options.backend = SearchBackend::Hnsw;
+    low.options.hnsw.ef_search = Some(16);
+    let mut high = low.clone();
+    high.options.hnsw.ef_search = Some(128);
+    let low = index.search(&map, low).unwrap();
+    let high = index.search(&map, high).unwrap();
+    assert!(high.stats.distance_evaluations >= low.stats.distance_evaluations);
+    assert!(high.stats.reranked_candidates >= low.stats.reranked_candidates);
+    let low_recall = low
+        .neighbors
+        .iter()
+        .filter(|hit| exact_keys.contains(&hit.key))
+        .count();
+    let high_recall = high
+        .neighbors
+        .iter()
+        .filter(|hit| exact_keys.contains(&hit.key))
+        .count();
+    assert!(high_recall >= low_recall);
+    assert_eq!(high_recall, 10);
+}
+
+#[test]
 fn explicit_hnsw_rejects_exact_and_stale_while_auto_falls_back_to_native() {
     let store = Arc::new(MemStore::new());
     let map = map(store, records());
     let (index, _) = HnswIndex::build(&map, config()).unwrap();
     let query = [4.0; 8];
     let mut exact_hnsw = SearchRequest::exact(&query, 5);
-    exact_hnsw.backend = SearchBackend::Hnsw;
+    exact_hnsw.options.backend = SearchBackend::Hnsw;
     assert!(matches!(
         index.search(&map, exact_hnsw),
         Err(prolly::Error::InvalidProximitySearch { .. })
@@ -150,7 +224,7 @@ fn explicit_hnsw_rejects_exact_and_stale_while_auto_falls_back_to_native() {
         .unwrap();
     let mut stale = SearchRequest::exact(&query, 5);
     stale.policy = SearchPolicy::FixedBudget;
-    stale.backend = SearchBackend::Hnsw;
+    stale.options.backend = SearchBackend::Hnsw;
     assert!(matches!(
         index.search(&mutated, stale),
         Err(prolly::Error::InvalidProximitySearch { .. })
@@ -158,21 +232,21 @@ fn explicit_hnsw_rejects_exact_and_stale_while_auto_falls_back_to_native() {
 
     let mut automatic = SearchRequest::exact(&query, 5);
     automatic.policy = SearchPolicy::FixedBudget;
-    automatic.backend = SearchBackend::Auto;
+    automatic.options.backend = SearchBackend::Auto;
     let fallback = index.search(&mutated, automatic.clone()).unwrap();
-    automatic.backend = SearchBackend::Native;
+    automatic.options.backend = SearchBackend::Native;
     let native = mutated.search(automatic).unwrap();
     assert_eq!(fallback.neighbors, native.neighbors);
     assert_eq!(fallback.completion, native.completion);
 
     let mut missing_sidecar = SearchRequest::exact(&query, 5);
     missing_sidecar.policy = SearchPolicy::FixedBudget;
-    missing_sidecar.backend = SearchBackend::Auto;
+    missing_sidecar.options.backend = SearchBackend::Auto;
     assert_eq!(
         mutated.search(missing_sidecar.clone()).unwrap().neighbors,
         mutated
             .search({
-                missing_sidecar.backend = SearchBackend::Native;
+                missing_sidecar.options.backend = SearchBackend::Native;
                 missing_sidecar
             })
             .unwrap()

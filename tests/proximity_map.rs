@@ -237,8 +237,11 @@ fn search_distance_budget_is_deterministic_and_reported() {
             ..SearchBudget::default()
         },
         filter: ProximityFilter::All,
-        backend: SearchBackend::Native,
         kernel: prolly::QueryKernel::AutoDeterministic,
+        options: prolly::SearchOptions {
+            backend: SearchBackend::Native,
+            ..Default::default()
+        },
     };
 
     let first = map.search(request.clone()).unwrap();

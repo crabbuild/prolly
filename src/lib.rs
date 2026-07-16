@@ -347,8 +347,14 @@ pub use prolly::proof::{
     RangePageProofVerification, RangeProof, RangeProofVerification,
 };
 pub use prolly::proximity::{
-    AdaptiveQuality, BuildParallelism, DistanceMetric, ExactProximityRecord, HierarchyConfig,
-    HnswBuildStats, HnswConfig, HnswIndex, Neighbor, OverflowConfig, ProductQuantizationBuildStats,
+    AcceleratorCatalog, AcceleratorCatalogEntry, AcceleratorSet, AdaptiveQuality,
+    ApproximatePreference, BuildParallelism, CatalogAcceleratorKind, CompositeAccelerator,
+    CompositeAcceleratorConfig, CompositeBase, CompositeBaseKind, CompositeBuildLimits,
+    CompositeBuildOrRebuildOutcome, CompositeBuildOutcome, CompositeBuildStats,
+    CompositeRebuildOptions, DistanceMetric, ExactProximityRecord, FullRebuildReason,
+    HierarchyConfig, HnswBuildLimits, HnswBuildStats, HnswConfig, HnswIndex,
+    HnswRoutingVectorEncoding, HnswSearchOptions, Neighbor, OverflowConfig, PlannerPolicy,
+    PqSearchOptions, ProductQuantizationBuildLimits, ProductQuantizationBuildStats,
     ProductQuantizationConfig, ProductQuantizationQuality, ProductQuantizer, ProximityBuildStats,
     ProximityConfig, ProximityFilter, ProximityMap, ProximityMembershipProof,
     ProximityMembershipVerification, ProximityMutation, ProximityMutationStats,
@@ -356,11 +362,14 @@ pub use prolly::proximity::{
     ProximitySearchProof, ProximitySearchRequest, ProximitySearchStats,
     ProximitySearchVerification, ProximityStructuralProof, ProximityStructuralVerification,
     ProximityTree, ProximityVerification, QueryKernel, ScalarQuantizationConfig, SearchBackend,
-    SearchBudget, SearchCompletion, SearchPolicy, SearchRequest, SearchResult, VectorStorageConfig,
+    SearchBudget, SearchCompletion, SearchIo, SearchOptions, SearchPlan, SearchPlanSummary,
+    SearchPolicy, SearchRequest, SearchResult, SearchRuntime, SearchRuntimePolicy,
+    StoreCacheNamespace, VectorStorageConfig, SEARCH_PLAN_FORMAT_VERSION,
 };
 #[cfg(feature = "async-store")]
 pub use prolly::proximity::{
-    AsyncIoConfig, AsyncProximityMap, AsyncSearchControl, CancellationToken,
+    AsyncAcceleratorCatalog, AsyncAcceleratorSet, AsyncCompositeAccelerator, AsyncHnswIndex,
+    AsyncIoConfig, AsyncProductQuantizer, AsyncProximityMap, AsyncSearchControl, CancellationToken,
 };
 pub use prolly::range::{
     CursorWindow, RangeCursor, RangeIter, RangePage, ReverseCursor, ReversePage,

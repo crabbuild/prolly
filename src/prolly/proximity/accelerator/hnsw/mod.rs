@@ -1,5 +1,5 @@
 mod build;
-mod search;
+pub(crate) mod search;
 pub(crate) mod storage;
 
 use crate::prolly::cid::Cid;
@@ -11,6 +11,31 @@ use crate::prolly::store::Store;
 use crate::prolly::tree::Tree;
 use crate::prolly::Prolly;
 
+/// Persisted routing-vector representation used by HNSW graph nodes.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum HnswRoutingVectorEncoding {
+    #[default]
+    FullF32,
+}
+
+impl HnswRoutingVectorEncoding {
+    pub(super) const fn id(self) -> u8 {
+        match self {
+            Self::FullF32 => 1,
+        }
+    }
+
+    pub(super) fn from_id(id: u8) -> Result<Self, Error> {
+        match id {
+            1 => Ok(Self::FullF32),
+            _ => Err(Error::InvalidProximityObject {
+                kind: "HNSW",
+                reason: format!("unsupported routing-vector encoding {id}"),
+            }),
+        }
+    }
+}
+
 /// Deterministic HNSW shape and serving limits.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HnswConfig {
@@ -20,6 +45,7 @@ pub struct HnswConfig {
     pub level_bits: u8,
     pub overfetch_multiplier: u32,
     pub seed: u64,
+    pub routing_vector_encoding: HnswRoutingVectorEncoding,
 }
 
 impl Default for HnswConfig {
@@ -31,7 +57,53 @@ impl Default for HnswConfig {
             level_bits: 4,
             overfetch_multiplier: 8,
             seed: 0,
+            routing_vector_encoding: HnswRoutingVectorEncoding::FullF32,
         }
+    }
+}
+
+/// Hard bounds for one HNSW build.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HnswBuildLimits {
+    pub max_records: Option<usize>,
+    pub max_owned_bytes: Option<usize>,
+    pub max_distance_evaluations: Option<usize>,
+    pub worker_threads: usize,
+    pub max_encoded_graph_bytes: Option<usize>,
+}
+
+impl Default for HnswBuildLimits {
+    fn default() -> Self {
+        Self {
+            max_records: None,
+            max_owned_bytes: None,
+            max_distance_evaluations: None,
+            worker_threads: 1,
+            max_encoded_graph_bytes: None,
+        }
+    }
+}
+
+impl HnswBuildLimits {
+    fn validate(&self) -> Result<(), Error> {
+        if self.worker_threads == 0 {
+            return Err(Error::InvalidProximityConfig {
+                reason: "HNSW worker_threads must be greater than zero".to_owned(),
+            });
+        }
+        for (name, value) in [
+            ("max_records", self.max_records),
+            ("max_owned_bytes", self.max_owned_bytes),
+            ("max_distance_evaluations", self.max_distance_evaluations),
+            ("max_encoded_graph_bytes", self.max_encoded_graph_bytes),
+        ] {
+            if value == Some(0) {
+                return Err(Error::InvalidProximityConfig {
+                    reason: format!("HNSW {name} must be greater than zero"),
+                });
+            }
+        }
+        Ok(())
     }
 }
 
@@ -58,6 +130,8 @@ pub struct HnswBuildStats {
     pub distance_evaluations: usize,
     pub directed_edges: usize,
     pub maximum_level: u8,
+    pub owned_bytes: usize,
+    pub encoded_graph_bytes: usize,
 }
 
 /// Persisted HNSW serving graph bound to one proximity descriptor CID.
@@ -68,6 +142,7 @@ pub struct HnswIndex<S: Store> {
     pub(super) source: Cid,
     pub(super) dimensions: u32,
     pub(super) metric: crate::prolly::proximity::DistanceMetric,
+    pub(super) count: u64,
     pub(super) config: HnswConfig,
     pub(super) entry_point: Vec<u8>,
     pub(super) maximum_level: u8,
@@ -84,7 +159,15 @@ where
         map: &ProximityMap<S>,
         config: HnswConfig,
     ) -> Result<(Self, HnswBuildStats), Error> {
-        Self::build_with_mode(map, config, true)
+        Self::build_with_limits(map, config, HnswBuildLimits::default())
+    }
+
+    pub fn build_with_limits(
+        map: &ProximityMap<S>,
+        config: HnswConfig,
+        limits: HnswBuildLimits,
+    ) -> Result<(Self, HnswBuildStats), Error> {
+        Self::build_with_mode(map, config, limits, true)
     }
 
     /// Build a disposable serving cache. It is source-bound but makes no canonical claim.
@@ -92,21 +175,32 @@ where
         map: &ProximityMap<S>,
         config: HnswConfig,
     ) -> Result<(Self, HnswBuildStats), Error> {
-        Self::build_with_mode(map, config, false)
+        Self::build_disposable_with_limits(map, config, HnswBuildLimits::default())
+    }
+
+    pub fn build_disposable_with_limits(
+        map: &ProximityMap<S>,
+        config: HnswConfig,
+        limits: HnswBuildLimits,
+    ) -> Result<(Self, HnswBuildStats), Error> {
+        Self::build_with_mode(map, config, limits, false)
     }
 
     fn build_with_mode(
         map: &ProximityMap<S>,
         config: HnswConfig,
+        limits: HnswBuildLimits,
         canonical: bool,
     ) -> Result<(Self, HnswBuildStats), Error> {
         config.validate()?;
+        limits.validate()?;
         let store = map.store_clone();
-        let built = build::build_graph(map, &config, store.clone())?;
+        let built = build::build_graph(map, &config, &limits, store.clone())?;
         let manifest_object = storage::Manifest {
             source: map.tree().descriptor.clone(),
             dimensions: map.tree().config.dimensions,
             metric: map.tree().config.metric,
+            count: map.tree().count,
             config: config.clone(),
             graph_root: built
                 .tree
@@ -129,6 +223,7 @@ where
                 source: manifest_object.source,
                 dimensions: manifest_object.dimensions,
                 metric: manifest_object.metric,
+                count: manifest_object.count,
                 config,
                 entry_point: built.entry_point,
                 maximum_level: built.maximum_level,
@@ -165,6 +260,7 @@ where
             source: object.source,
             dimensions: object.dimensions,
             metric: object.metric,
+            count: object.count,
             config: object.config,
             entry_point: object.entry_point,
             maximum_level: object.maximum_level,
@@ -188,29 +284,42 @@ where
         self.canonical
     }
 
-    /// Search this graph. `Auto` falls back to native search on stale/corrupt sidecars.
+    pub(crate) fn rebind<T: Store>(&self, store: T) -> HnswIndex<T> {
+        HnswIndex {
+            graph: Prolly::new(store, self.graph_tree.config.clone()),
+            graph_tree: self.graph_tree.clone(),
+            manifest: self.manifest.clone(),
+            source: self.source.clone(),
+            dimensions: self.dimensions,
+            metric: self.metric,
+            count: self.count,
+            config: self.config.clone(),
+            entry_point: self.entry_point.clone(),
+            maximum_level: self.maximum_level,
+            canonical: self.canonical,
+        }
+    }
+
+    /// Search this graph. `Auto` may choose native before execution for an
+    /// incompatible sidecar, but execution errors never switch backends.
     pub fn search(
         &self,
         map: &ProximityMap<S>,
         request: SearchRequest<'_>,
     ) -> Result<SearchResult, Error> {
-        if request.backend == SearchBackend::Auto {
+        if request.options.backend == SearchBackend::Auto {
             if request.policy == SearchPolicy::Exact
                 || self.source != map.tree().descriptor
                 || self.dimensions != map.tree().config.dimensions
                 || self.metric != map.tree().config.metric
             {
                 let mut native = request;
-                native.backend = SearchBackend::Native;
+                native.options.backend = SearchBackend::Native;
                 return map.search(native);
             }
-            return search::search(self, map, request.clone()).or_else(|_| {
-                let mut native = request;
-                native.backend = SearchBackend::Native;
-                map.search(native)
-            });
+            return search::search(self, map, request);
         }
-        if request.backend != SearchBackend::Hnsw {
+        if request.options.backend != SearchBackend::Hnsw {
             return Err(Error::InvalidProximitySearch {
                 reason: "HNSW index requires Hnsw or Auto backend".to_owned(),
             });
@@ -240,7 +349,7 @@ mod tests {
     use std::sync::Arc;
 
     #[test]
-    fn auto_falls_back_when_a_loaded_graph_becomes_corrupt() {
+    fn auto_does_not_fall_back_after_corrupt_graph_execution_begins() {
         let store = Arc::new(MemStore::new());
         let map = ProximityMap::build(
             store.clone(),
@@ -259,6 +368,7 @@ mod tests {
             level_bits: 4,
             overfetch_multiplier: 4,
             seed: 9,
+            routing_vector_encoding: HnswRoutingVectorEncoding::FullF32,
         };
         let (index, _) = HnswIndex::build(&map, config).unwrap();
         let root = index.graph_tree.root.clone().unwrap();
@@ -267,14 +377,12 @@ mod tests {
         let query = [7.0, 1.0];
         let mut automatic = SearchRequest::exact(&query, 4);
         automatic.policy = SearchPolicy::FixedBudget;
-        automatic.backend = SearchBackend::Auto;
-        let fallback = index.search(&map, automatic.clone()).unwrap();
-        automatic.backend = SearchBackend::Native;
-        assert_eq!(fallback.neighbors, map.search(automatic).unwrap().neighbors);
+        automatic.options.backend = SearchBackend::Auto;
+        assert!(index.search(&map, automatic).is_err());
 
         let mut explicit = SearchRequest::exact(&query, 4);
         explicit.policy = SearchPolicy::FixedBudget;
-        explicit.backend = SearchBackend::Hnsw;
+        explicit.options.backend = SearchBackend::Hnsw;
         assert!(index.search(&map, explicit).is_err());
     }
 }

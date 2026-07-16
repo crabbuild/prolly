@@ -168,6 +168,7 @@ fn typed_walk_covers_proximity_and_accelerator_graphs_with_limits_and_sharing() 
             training_iterations: 3,
             rerank_multiplier: 4,
             seed: 3,
+            max_training_vectors: 65_536,
         },
         BuildParallelism::new(2).unwrap(),
     )
@@ -181,6 +182,7 @@ fn typed_walk_covers_proximity_and_accelerator_graphs_with_limits_and_sharing() 
             level_bits: 4,
             overfetch_multiplier: 4,
             seed: 5,
+            routing_vector_encoding: prolly::HnswRoutingVectorEncoding::FullF32,
         },
     )
     .unwrap();
@@ -206,7 +208,7 @@ fn typed_walk_covers_proximity_and_accelerator_graphs_with_limits_and_sharing() 
     );
     assert!(combined.objects.len() < proximity.objects.len() * 3 + 10);
 
-    let hnsw_page_bytes = b"HNSN\x02\x00\x00\x01\x00";
+    let hnsw_page_bytes = b"HNSN\x02\x00\x00\x01\x01\x00\x00\x00\x00\x01\x00";
     let hnsw_page = prolly::Cid::from_bytes(hnsw_page_bytes);
     prolly::Store::put(&store, hnsw_page.as_bytes(), hnsw_page_bytes).unwrap();
     let page = TypedContentRoot::new(ContentObjectKind::HnswPage, hnsw_page);

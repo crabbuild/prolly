@@ -308,6 +308,12 @@ pub enum Error {
     DuplicateProximityKey { key: Vec<u8> },
     /// Proximity search options are invalid.
     InvalidProximitySearch { reason: String },
+    /// Proximity accelerator construction exceeded an explicit resource bound.
+    ProximityResourceLimitExceeded {
+        resource: &'static str,
+        limit: usize,
+        actual: usize,
+    },
     /// A persisted proximity record, node, or descriptor is malformed.
     InvalidProximityObject { kind: &'static str, reason: String },
     /// One canonical proximity node exceeds the configured hard byte limit.
@@ -496,6 +502,14 @@ impl std::fmt::Display for Error {
             Error::InvalidProximitySearch { reason } => {
                 write!(f, "invalid proximity search options: {reason}")
             }
+            Error::ProximityResourceLimitExceeded {
+                resource,
+                limit,
+                actual,
+            } => write!(
+                f,
+                "proximity accelerator resource limit exceeded: resource={resource} limit={limit} actual={actual}"
+            ),
             Error::InvalidProximityObject { kind, reason } => {
                 write!(f, "invalid proximity {kind}: {reason}")
             }

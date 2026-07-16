@@ -10,20 +10,20 @@ use super::cache::{ContentCache, DEFAULT_PROXIMITY_CACHE_NODES};
 use super::distance::{prepare_vector, query_score, score};
 use super::mutation::{mutate_hierarchy, LogicalEdit};
 use super::search::{
-    adaptive_should_stop, insert_top_k, AdaptiveContext, FrontierEntry, PreparedFilter,
-    SearchCandidate,
+    adaptive_should_stop, insert_top_k, plan_search, AdaptiveContext, FrontierEntry,
+    PreparedFilter, SearchCandidate, SearchPlan,
 };
 use super::storage::quantized::ScalarQuantized;
 use super::storage::vector::ExternalVector;
 use super::storage::{Descriptor, PhysicalNodeKind, ProximityNode, StoredRecord, VectorRef};
 use super::vector::promotion_level;
 use super::{
-    BuildParallelism, DistanceMetric, ExactProximityRecord, Neighbor, ProximityBuildStats,
-    ProximityConfig, ProximityMutation, ProximityMutationStats, ProximityRecord,
-    ProximitySearchStats, ProximityTree, ProximityVerification, SearchBackend, SearchCompletion,
-    SearchPolicy, SearchRequest, SearchResult,
+    AcceleratorSet, BuildParallelism, DistanceMetric, ExactProximityRecord, Neighbor,
+    ProximityBuildStats, ProximityConfig, ProximityMutation, ProximityMutationStats,
+    ProximityRecord, ProximitySearchStats, ProximityTree, ProximityVerification, SearchBackend,
+    SearchBudget, SearchCompletion, SearchIo, SearchPolicy, SearchRequest, SearchResult,
 };
-use std::collections::{BTreeMap, BinaryHeap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, BinaryHeap, HashSet};
 use std::sync::{Arc, Mutex};
 
 /// Immutable exact-key directory plus deterministic ANN hierarchy.
@@ -391,6 +391,455 @@ where
         self.search_with_trace(request, None)
     }
 
+    /// Plan and execute against validated, source-bound derived accelerators.
+    /// The `SearchIo` binding supplies the authoritative store for this call.
+    pub fn search_with(
+        &self,
+        accelerators: &AcceleratorSet<S>,
+        search_io: &SearchIo<S>,
+        request: SearchRequest<'_>,
+    ) -> Result<SearchResult, Error> {
+        request.validate()?;
+        let physical_bytes_before = search_io.physical_bytes_read();
+        let eligibility = PreparedFilter::new(request.filter.clone(), &self.tree.directory)?;
+        let plan = plan_search(&self.tree, accelerators, &request, &eligibility)?;
+        search_io.runtime().load(
+            search_io,
+            super::super::content_graph::ContentObjectKind::ProximityDescriptor,
+            &self.tree.descriptor,
+            2,
+            |bytes| Descriptor::decode(bytes).map(|_| ()),
+        )?;
+        match &plan {
+            SearchPlan::Hnsw { .. } => {
+                let index = accelerators.hnsw().expect("planner validated HNSW");
+                search_io.runtime().load(
+                    search_io,
+                    super::super::content_graph::ContentObjectKind::HnswManifest,
+                    index.manifest_cid(),
+                    2,
+                    |bytes| super::accelerator::hnsw::storage::Manifest::decode(bytes).map(|_| ()),
+                )?;
+            }
+            SearchPlan::ProductQuantized { .. } => {
+                let index = accelerators.pq().expect("planner validated PQ");
+                search_io.runtime().load(
+                    search_io,
+                    super::super::content_graph::ContentObjectKind::ProductQuantization,
+                    index.manifest_cid(),
+                    2,
+                    |bytes| super::accelerator::pq::Manifest::decode(bytes).map(|_| ()),
+                )?;
+            }
+            SearchPlan::Composite { .. } => {
+                let accelerator = accelerators
+                    .composite()
+                    .expect("planner validated composite");
+                search_io.runtime().load(
+                    search_io,
+                    super::super::content_graph::ContentObjectKind::CompositeAccelerator,
+                    accelerator.manifest_cid(),
+                    1,
+                    |bytes| super::accelerator::composite::Manifest::decode(bytes).map(|_| ()),
+                )?;
+            }
+            SearchPlan::Native | SearchPlan::EligibleExact { .. } => {}
+        }
+        let bound_map = ProximityMap::load(
+            search_io.for_kind_with_dimensions(
+                super::super::content_graph::ContentObjectKind::ProximityNode,
+                self.tree.config.dimensions,
+            ),
+            self.tree.descriptor.clone(),
+        )?;
+        let mut result = match &plan {
+            SearchPlan::Native => {
+                let mut native = request;
+                native.options.backend = SearchBackend::Native;
+                bound_map.search(native)
+            }
+            SearchPlan::EligibleExact {
+                key_count,
+                source_bound,
+            } => bound_map.search_eligible_exact(
+                &request,
+                &eligibility,
+                *key_count,
+                *source_bound,
+                plan,
+            ),
+            SearchPlan::Hnsw { .. } => {
+                let index = accelerators
+                    .hnsw()
+                    .ok_or_else(|| Error::InvalidProximitySearch {
+                        reason: "planned HNSW accelerator is unavailable".to_owned(),
+                    })?;
+                let index = index.rebind(
+                    search_io.for_kind(super::super::content_graph::ContentObjectKind::HnswPage),
+                );
+                super::accelerator::hnsw::search::search_planned(&index, &bound_map, request, &plan)
+            }
+            SearchPlan::ProductQuantized { .. } => {
+                let index = accelerators
+                    .pq()
+                    .ok_or_else(|| Error::InvalidProximitySearch {
+                        reason: "planned product-quantized accelerator is unavailable".to_owned(),
+                    })?;
+                let index =
+                    index.rebind(search_io.for_kind(
+                        super::super::content_graph::ContentObjectKind::ProductQuantization,
+                    ));
+                index.search_planned(&bound_map, request, &plan)
+            }
+            SearchPlan::Composite { .. } => self.search_composite(
+                accelerators
+                    .composite()
+                    .ok_or_else(|| Error::InvalidProximitySearch {
+                        reason: "planned composite accelerator is unavailable".to_owned(),
+                    })?,
+                search_io,
+                &bound_map,
+                request,
+                &eligibility,
+                &plan,
+            ),
+        }?;
+        result.stats.physical_bytes_read = search_io
+            .physical_bytes_read()
+            .saturating_sub(physical_bytes_before);
+        Ok(result)
+    }
+
+    pub(crate) fn search_composite(
+        &self,
+        composite: &super::accelerator::composite::CompositeAccelerator<S>,
+        search_io: &SearchIo<S>,
+        current: &ProximityMap<SearchIo<S>>,
+        request: SearchRequest<'_>,
+        eligibility: &PreparedFilter<'_>,
+        plan: &SearchPlan,
+    ) -> Result<SearchResult, Error> {
+        let SearchPlan::Composite {
+            base,
+            delta_records,
+            shadow_records,
+            merge_target,
+        } = plan
+        else {
+            return Err(Error::InvalidProximitySearch {
+                reason: "composite executor requires a composite plan".to_owned(),
+            });
+        };
+        if *delta_records != composite.delta_count as usize
+            || *shadow_records != composite.shadow_count as usize
+            || composite.current_source != self.tree.descriptor
+        {
+            return Err(Error::InvalidProximityObject {
+                kind: "composite accelerator",
+                reason: "plan or source binding disagrees with manifest".to_owned(),
+            });
+        }
+        let ordered_store =
+            search_io.for_kind(super::super::content_graph::ContentObjectKind::OrderedNode);
+        let shadow_manager =
+            Prolly::new(ordered_store.clone(), composite.shadow_tree.config.clone());
+        let delta_manager = Prolly::new(ordered_store, composite.delta_tree.config.clone());
+        let mut stats = ProximitySearchStats::default();
+        let mut shadow = BTreeSet::new();
+        for entry in shadow_manager.range(&composite.shadow_tree, &[], None)? {
+            let (key, value) = entry?;
+            if !value.is_empty() || !shadow.insert(key.clone()) {
+                return Err(Error::InvalidProximityObject {
+                    kind: "composite shadow",
+                    reason: "shadow tree contains a value or duplicate key".to_owned(),
+                });
+            }
+            if request
+                .budget
+                .max_nodes
+                .is_some_and(|limit| stats.nodes_read >= limit)
+                || request
+                    .budget
+                    .max_committed_bytes
+                    .is_some_and(|limit| stats.committed_bytes.saturating_add(key.len()) > limit)
+            {
+                return Ok(SearchResult {
+                    neighbors: Vec::new(),
+                    stats,
+                    completion: SearchCompletion::BudgetExhausted,
+                    plan: plan.summary(),
+                });
+            }
+            stats.nodes_read += 1;
+            stats.bytes_read += key.len();
+            stats.committed_bytes += key.len();
+        }
+        if shadow.len() != *shadow_records {
+            return Err(Error::InvalidProximityObject {
+                kind: "composite shadow",
+                reason: "shadow tree cardinality disagrees with manifest".to_owned(),
+            });
+        }
+        if search_budget_exhausted(&request.budget, &stats) {
+            return Ok(SearchResult {
+                neighbors: Vec::new(),
+                stats,
+                completion: SearchCompletion::BudgetExhausted,
+                plan: plan.summary(),
+            });
+        }
+        let mut base_request = request.clone();
+        base_request.budget = remaining_budget(&request.budget, &stats);
+        let mut base_result = match &composite.base {
+            super::accelerator::composite::CompositeBase::Hnsw(index) => {
+                let index = index.rebind(
+                    search_io.for_kind(super::super::content_graph::ContentObjectKind::HnswPage),
+                );
+                super::accelerator::hnsw::search::search_planned_with_exclusion(
+                    &index,
+                    current,
+                    &composite.base_source,
+                    base_request,
+                    base,
+                    |key| Ok(shadow.contains(key)),
+                )
+            }
+            super::accelerator::composite::CompositeBase::ProductQuantized(index) => {
+                let index =
+                    index.rebind(search_io.for_kind(
+                        super::super::content_graph::ContentObjectKind::ProductQuantization,
+                    ));
+                index.search_planned_with_exclusion(
+                    current,
+                    &composite.base_source,
+                    base_request,
+                    base,
+                    |key| Ok(shadow.contains(key)),
+                )
+            }
+        }?;
+        add_search_stats(&mut stats, &base_result.stats);
+        let mut completion = base_result.completion;
+        let query = prepare_vector(
+            self.tree.config.metric,
+            request.query,
+            self.tree.config.dimensions,
+        )?;
+        let mut delta_seen = 0usize;
+        let mut merged = BTreeMap::<Vec<u8>, Neighbor>::new();
+        for neighbor in base_result.neighbors.drain(..) {
+            if merged.insert(neighbor.key.clone(), neighbor).is_some() {
+                return Err(Error::InvalidProximityObject {
+                    kind: "composite base",
+                    reason: "base executor returned a duplicate key".to_owned(),
+                });
+            }
+        }
+        for entry in delta_manager.range(&composite.delta_tree, &[], None)? {
+            let (key, bytes) = entry?;
+            delta_seen += 1;
+            if request
+                .budget
+                .max_nodes
+                .is_some_and(|limit| stats.nodes_read.saturating_add(1) > limit)
+                || request
+                    .budget
+                    .max_committed_bytes
+                    .is_some_and(|limit| stats.committed_bytes.saturating_add(bytes.len()) > limit)
+            {
+                completion = SearchCompletion::BudgetExhausted;
+                break;
+            }
+            let record = StoredRecord::decode(&bytes, self.tree.config.dimensions)?;
+            stats.nodes_read += 1;
+            stats.bytes_read += bytes.len();
+            stats.committed_bytes += bytes.len();
+            if !eligibility.contains(&key) {
+                continue;
+            }
+            if request
+                .budget
+                .max_nodes
+                .is_some_and(|limit| stats.nodes_read.saturating_add(1) > limit)
+                || request
+                    .budget
+                    .max_distance_evaluations
+                    .is_some_and(|limit| {
+                        stats
+                            .distance_evaluations
+                            .saturating_add(stats.quantized_distance_evaluations)
+                            .saturating_add(1)
+                            > limit
+                    })
+            {
+                completion = SearchCompletion::BudgetExhausted;
+                break;
+            }
+            let Some((authoritative, authoritative_bytes)) = current.get_stored(&key)? else {
+                return Err(Error::InvalidProximityObject {
+                    kind: "composite delta",
+                    reason: "delta key is absent from current source".to_owned(),
+                });
+            };
+            if record.vector != authoritative.vector {
+                return Err(Error::InvalidProximityObject {
+                    kind: "composite delta",
+                    reason: "delta vector disagrees with current source".to_owned(),
+                });
+            }
+            if request.budget.max_committed_bytes.is_some_and(|limit| {
+                stats.committed_bytes.saturating_add(authoritative_bytes) > limit
+            }) {
+                completion = SearchCompletion::BudgetExhausted;
+                break;
+            }
+            stats.nodes_read += 1;
+            stats.bytes_read += authoritative_bytes;
+            stats.committed_bytes += authoritative_bytes;
+            stats.distance_evaluations += 1;
+            stats.reranked_candidates += 1;
+            let neighbor = Neighbor {
+                key: key.clone(),
+                value: authoritative.value,
+                distance: query_score(
+                    request.kernel,
+                    self.tree.config.metric,
+                    &query,
+                    &authoritative.vector,
+                ),
+            };
+            if merged.insert(key, neighbor).is_some() {
+                return Err(Error::InvalidProximityObject {
+                    kind: "composite accelerator",
+                    reason: "delta key was not shadowed from the base".to_owned(),
+                });
+            }
+        }
+        if completion != SearchCompletion::BudgetExhausted && delta_seen != *delta_records {
+            return Err(Error::InvalidProximityObject {
+                kind: "composite delta",
+                reason: "delta tree cardinality disagrees with manifest".to_owned(),
+            });
+        }
+        let mut neighbors = merged.into_values().collect::<Vec<_>>();
+        neighbors.sort_by(|left, right| {
+            left.distance
+                .total_cmp(&right.distance)
+                .then_with(|| left.key.cmp(&right.key))
+        });
+        neighbors.truncate((*merge_target).min(request.k));
+        Ok(SearchResult {
+            neighbors,
+            stats,
+            completion,
+            plan: plan.summary(),
+        })
+    }
+
+    fn search_eligible_exact(
+        &self,
+        request: &SearchRequest<'_>,
+        eligibility: &PreparedFilter<'_>,
+        key_count: u64,
+        source_bound: bool,
+        plan: SearchPlan,
+    ) -> Result<SearchResult, Error> {
+        let Some((keys, prepared_source_bound)) = eligibility.sorted_keys() else {
+            return Err(Error::InvalidProximitySearch {
+                reason: "eligible-exact plan requires sorted eligible keys".to_owned(),
+            });
+        };
+        if key_count != keys.len() as u64 || source_bound != prepared_source_bound {
+            return Err(Error::InvalidProximitySearch {
+                reason: "eligible-exact plan disagrees with prepared eligibility".to_owned(),
+            });
+        }
+        let query = prepare_vector(
+            self.tree.config.metric,
+            request.query,
+            self.tree.config.dimensions,
+        )?;
+        let mut stats = ProximitySearchStats::default();
+        let candidate_limit = request
+            .budget
+            .max_frontier_entries
+            .unwrap_or(request.k)
+            .min(request.k);
+        let mut completion = if candidate_limit < request.k.min(keys.len()) {
+            SearchCompletion::BudgetExhausted
+        } else {
+            SearchCompletion::Exact
+        };
+        let mut candidates = Vec::<(Vec<u8>, Vec<u8>, f64)>::with_capacity(candidate_limit);
+        for key in keys {
+            if request
+                .budget
+                .max_nodes
+                .is_some_and(|limit| stats.nodes_read >= limit)
+                || request
+                    .budget
+                    .max_distance_evaluations
+                    .is_some_and(|limit| stats.distance_evaluations >= limit)
+            {
+                completion = SearchCompletion::BudgetExhausted;
+                break;
+            }
+            stats.nodes_read += 1;
+            let Some(bytes) = self.directory.get(&self.tree.directory, key)? else {
+                if source_bound {
+                    return Err(Error::InvalidProximityObject {
+                        kind: "eligible keys",
+                        reason:
+                            "source-bound eligible key is absent from the authoritative directory"
+                                .to_owned(),
+                    });
+                }
+                continue;
+            };
+            if request
+                .budget
+                .max_committed_bytes
+                .is_some_and(|limit| stats.committed_bytes.saturating_add(bytes.len()) > limit)
+            {
+                completion = SearchCompletion::BudgetExhausted;
+                break;
+            }
+            stats.bytes_read = stats.bytes_read.saturating_add(bytes.len());
+            stats.committed_bytes = stats.committed_bytes.saturating_add(bytes.len());
+            let record = StoredRecord::decode(&bytes, self.tree.config.dimensions)?;
+            stats.distance_evaluations += 1;
+            let distance = query_score(
+                request.kernel,
+                self.tree.config.metric,
+                &query,
+                &record.vector,
+            );
+            candidates.push((key.clone(), record.value, distance));
+            candidates.sort_by(|left, right| {
+                left.2
+                    .total_cmp(&right.2)
+                    .then_with(|| left.0.cmp(&right.0))
+            });
+            candidates.truncate(candidate_limit);
+            stats.frontier_peak = stats.frontier_peak.max(candidates.len());
+        }
+        stats.reranked_candidates = stats.distance_evaluations;
+        let neighbors = candidates
+            .into_iter()
+            .map(|(key, value, distance)| Neighbor {
+                key,
+                value,
+                distance,
+            })
+            .collect();
+        Ok(SearchResult {
+            neighbors,
+            stats,
+            completion,
+            plan: plan.summary(),
+        })
+    }
+
     pub(super) fn search_with_trace(
         &self,
         request: SearchRequest<'_>,
@@ -398,7 +847,7 @@ where
     ) -> Result<SearchResult, Error> {
         request.validate()?;
         if matches!(
-            request.backend,
+            request.options.backend,
             SearchBackend::ProductQuantized | SearchBackend::Hnsw
         ) {
             return Err(Error::InvalidProximitySearch {
@@ -674,6 +1123,7 @@ where
             neighbors,
             stats,
             completion,
+            plan: super::search::SearchPlan::Native.summary(),
         })
     }
 
@@ -817,6 +1267,17 @@ where
 
     pub(crate) fn store_clone(&self) -> S {
         self.store.clone()
+    }
+
+    pub(crate) fn get_stored(&self, key: &[u8]) -> Result<Option<(StoredRecord, usize)>, Error> {
+        let Some(bytes) = self.directory.get(&self.tree.directory, key)? else {
+            return Ok(None);
+        };
+        let len = bytes.len();
+        Ok(Some((
+            StoredRecord::decode(&bytes, self.tree.config.dimensions)?,
+            len,
+        )))
     }
 
     pub(super) fn directory_manager(&self) -> &Prolly<S> {
@@ -1117,6 +1578,58 @@ impl VerifiedSubtree {
             points,
         }
     }
+}
+
+fn remaining_budget(budget: &SearchBudget, used: &ProximitySearchStats) -> SearchBudget {
+    SearchBudget {
+        max_nodes: budget
+            .max_nodes
+            .map(|limit| limit.saturating_sub(used.nodes_read)),
+        max_committed_bytes: budget
+            .max_committed_bytes
+            .map(|limit| limit.saturating_sub(used.committed_bytes)),
+        max_distance_evaluations: budget.max_distance_evaluations.map(|limit| {
+            limit.saturating_sub(
+                used.distance_evaluations
+                    .saturating_add(used.quantized_distance_evaluations),
+            )
+        }),
+        max_frontier_entries: budget.max_frontier_entries,
+    }
+}
+
+fn search_budget_exhausted(budget: &SearchBudget, used: &ProximitySearchStats) -> bool {
+    budget
+        .max_nodes
+        .is_some_and(|limit| used.nodes_read >= limit)
+        || budget
+            .max_committed_bytes
+            .is_some_and(|limit| used.committed_bytes >= limit)
+        || budget.max_distance_evaluations.is_some_and(|limit| {
+            used.distance_evaluations
+                .saturating_add(used.quantized_distance_evaluations)
+                >= limit
+        })
+}
+
+fn add_search_stats(total: &mut ProximitySearchStats, added: &ProximitySearchStats) {
+    total.levels_visited = total.levels_visited.saturating_add(added.levels_visited);
+    total.nodes_read = total.nodes_read.saturating_add(added.nodes_read);
+    total.bytes_read = total.bytes_read.saturating_add(added.bytes_read);
+    total.physical_bytes_read = total
+        .physical_bytes_read
+        .saturating_add(added.physical_bytes_read);
+    total.committed_bytes = total.committed_bytes.saturating_add(added.committed_bytes);
+    total.distance_evaluations = total
+        .distance_evaluations
+        .saturating_add(added.distance_evaluations);
+    total.quantized_distance_evaluations = total
+        .quantized_distance_evaluations
+        .saturating_add(added.quantized_distance_evaluations);
+    total.reranked_candidates = total
+        .reranked_candidates
+        .saturating_add(added.reranked_candidates);
+    total.frontier_peak = total.frontier_peak.max(added.frontier_peak);
 }
 
 fn load_content<S: Store>(store: &S, cid: &Cid) -> Result<Vec<u8>, Error> {

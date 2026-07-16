@@ -1,6 +1,8 @@
 use prolly::{
-    BuildParallelism, ContentGraphLimits, HnswConfig, HnswIndex, MemStore,
-    ProductQuantizationConfig, ProductQuantizer, ProximityConfig, ProximityFilter, ProximityMap,
+    AcceleratorCatalog, AcceleratorSet, BuildParallelism, CompositeAccelerator,
+    CompositeAcceleratorConfig, CompositeBase, CompositeBuildLimits, CompositeBuildOutcome,
+    ContentGraphLimits, HnswConfig, HnswIndex, MemStore, ProductQuantizationConfig,
+    ProductQuantizer, ProximityConfig, ProximityFilter, ProximityMap, ProximityMutation,
     ProximityRecord, ProximitySearchClaim, QueryKernel, ScalarQuantizationConfig, SearchBackend,
     SearchPolicy, SearchRequest,
 };
@@ -134,7 +136,7 @@ fn native_search_proof_replays_filter_quantized_execution_and_exact_l2_claims() 
 
 #[test]
 fn pq_and_hnsw_proofs_authenticate_sidecars_and_only_claim_honest_execution() {
-    let (_, map) = fixture();
+    let (store, map) = fixture();
     let limits = ContentGraphLimits::default();
     let (pq, _) = ProductQuantizer::build(
         &map,
@@ -144,6 +146,7 @@ fn pq_and_hnsw_proofs_authenticate_sidecars_and_only_claim_honest_execution() {
             training_iterations: 3,
             rerank_multiplier: 4,
             seed: 11,
+            max_training_vectors: 65_536,
         },
         BuildParallelism::new(2).unwrap(),
     )
@@ -157,6 +160,7 @@ fn pq_and_hnsw_proofs_authenticate_sidecars_and_only_claim_honest_execution() {
             level_bits: 4,
             overfetch_multiplier: 4,
             seed: 13,
+            routing_vector_encoding: prolly::HnswRoutingVectorEncoding::FullF32,
         },
     )
     .unwrap();
@@ -164,20 +168,113 @@ fn pq_and_hnsw_proofs_authenticate_sidecars_and_only_claim_honest_execution() {
 
     let mut pq_request = SearchRequest::exact(&query, 5);
     pq_request.policy = SearchPolicy::FixedBudget;
-    pq_request.backend = SearchBackend::ProductQuantized;
+    pq_request.options.backend = SearchBackend::ProductQuantized;
     let pq_proof = pq.prove_search(&map, pq_request, &limits).unwrap();
     assert_eq!(pq_proof.claim, ProximitySearchClaim::HonestExecution);
     pq_proof.verify(&limits).unwrap();
 
     let mut hnsw_request = SearchRequest::exact(&query, 5);
     hnsw_request.policy = SearchPolicy::FixedBudget;
-    hnsw_request.backend = SearchBackend::Hnsw;
+    hnsw_request.options.backend = SearchBackend::Hnsw;
     let hnsw_proof = hnsw.prove_search(&map, hnsw_request, &limits).unwrap();
     assert_eq!(hnsw_proof.claim, ProximitySearchClaim::HonestExecution);
     hnsw_proof.verify(&limits).unwrap();
+
+    let set = AcceleratorSet::try_new(map.tree(), Some(hnsw), Some(pq)).unwrap();
+    let catalog = AcceleratorCatalog::build(store, map.tree(), set).unwrap();
+    for backend in [SearchBackend::Hnsw, SearchBackend::ProductQuantized] {
+        let mut request = SearchRequest::exact(&query, 5);
+        request.policy = SearchPolicy::FixedBudget;
+        request.options.backend = backend;
+        let proof = catalog.prove_search(&map, request, &limits).unwrap();
+        assert_eq!(proof.result.plan.backend, backend);
+        proof.verify(&limits).unwrap();
+    }
 
     let mut graph_tamper = hnsw_proof;
     let object = graph_tamper.accelerator_objects.last_mut().unwrap();
     object.bytes[0] ^= 1;
     assert!(graph_tamper.verify(&limits).is_err());
+}
+
+#[test]
+fn composite_proof_authenticates_base_delta_shadow_and_replays_committed_plan() {
+    let (store, base) = fixture();
+    let (current, _) = base
+        .mutate_batch([
+            ProximityMutation {
+                key: b"proof-0001".to_vec(),
+                value: None,
+            },
+            ProximityMutation {
+                key: b"proof-0017".to_vec(),
+                value: Some((vec![99.0; 8], b"updated".to_vec())),
+            },
+            ProximityMutation {
+                key: b"proof-0096".to_vec(),
+                value: Some((vec![2.0; 8], b"inserted".to_vec())),
+            },
+        ])
+        .unwrap();
+    let (base_hnsw, _) = HnswIndex::build(&base, HnswConfig::default()).unwrap();
+    let composite = match CompositeAccelerator::build(
+        &base,
+        &current,
+        CompositeBase::Hnsw(base_hnsw),
+        CompositeAcceleratorConfig::default(),
+        CompositeBuildLimits::default(),
+    )
+    .unwrap()
+    {
+        CompositeBuildOutcome::Composite { accelerator, .. } => accelerator,
+        CompositeBuildOutcome::FullRebuildRequired { reasons, .. } => {
+            panic!("unexpected rebuild: {reasons:?}")
+        }
+    };
+    let query = [2.0f32; 8];
+    let mut request = SearchRequest::exact(&query, 6);
+    request.policy = SearchPolicy::FixedBudget;
+    request.options.backend = SearchBackend::Composite;
+    let limits = ContentGraphLimits::default();
+    let proof = composite.prove_search(&current, request, &limits).unwrap();
+    assert_eq!(proof.result.plan.backend, SearchBackend::Composite);
+    assert_eq!(proof.claim, ProximitySearchClaim::HonestExecution);
+    assert_eq!(proof.verify(&limits).unwrap().result, proof.result);
+
+    let loaded =
+        CompositeAccelerator::load(store.clone(), composite.manifest_cid().clone()).unwrap();
+    let set = AcceleratorSet::empty()
+        .with_composite(current.tree(), loaded)
+        .unwrap();
+    let catalog = AcceleratorCatalog::build(store.clone(), current.tree(), set).unwrap();
+    let mut catalog_request = SearchRequest::exact(&query, 6);
+    catalog_request.policy = SearchPolicy::FixedBudget;
+    catalog_request.options.backend = SearchBackend::Composite;
+    let catalog_proof = catalog
+        .prove_search(&current, catalog_request, &limits)
+        .unwrap();
+    assert_eq!(
+        catalog_proof.accelerator_root.as_ref().unwrap().kind,
+        prolly::ContentObjectKind::AcceleratorCatalog
+    );
+    assert_eq!(
+        catalog_proof.verify(&limits).unwrap().result,
+        catalog_proof.result
+    );
+
+    let mut missing_delta_or_shadow = proof.clone();
+    let position = missing_delta_or_shadow
+        .accelerator_objects
+        .iter()
+        .position(|object| object.root.kind == prolly::ContentObjectKind::OrderedNode)
+        .unwrap();
+    missing_delta_or_shadow.accelerator_objects.remove(position);
+    assert!(missing_delta_or_shadow.verify(&limits).is_err());
+
+    let mut plan_tamper = proof;
+    if let prolly::SearchPlan::Composite { delta_records, .. } = &mut plan_tamper.plan {
+        *delta_records += 1;
+    }
+    assert!(plan_tamper.verify(&limits).is_err());
+    drop(store);
 }

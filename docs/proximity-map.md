@@ -26,6 +26,8 @@ PRXI descriptor
 
 PQPQ product-quantization sidecar ──bound to PRXI CID
 HNSW graph sidecar                ──bound to PRXI CID
+Composite accelerator            ──current PRXI + ancestor base + delta/shadow
+Accelerator catalog              ──bound to one current PRXI CID
 ```
 
 The application-visible immutable version is the PRXI descriptor CID. PQ and
@@ -157,7 +159,7 @@ routing only; leaf candidates are resolved and reranked from full vectors.
 
 ```rust,no_run
 # use prolly::*;
-# fn sidecars<S>(map: &ProximityMap<S>) -> Result<(), Error>
+# fn sidecars<S>(store: S, map: &ProximityMap<S>) -> Result<(), Error>
 # where S: Store + Clone + Send + Sync, S::Error: Send + Sync {
 let (pq, _) = ProductQuantizer::build(
     map,
@@ -167,28 +169,109 @@ let (pq, _) = ProductQuantizer::build(
         training_iterations: 8,
         rerank_multiplier: 8,
         seed: 7,
+        max_training_vectors: 65_536,
     },
     BuildParallelism::new(4)?,
 )?;
 let (hnsw, _) = HnswIndex::build(map, HnswConfig::default())?;
+let accelerators = AcceleratorSet::try_new(map.tree(), Some(hnsw), Some(pq))?;
+let runtime = std::sync::Arc::new(SearchRuntime::default());
+let search_io = SearchIo::new(store, runtime);
 
 let query = vec![0.0; map.tree().config.dimensions as usize];
-let mut pq_request = SearchRequest::exact(&query, 10);
-pq_request.policy = SearchPolicy::FixedBudget;
-pq_request.backend = SearchBackend::ProductQuantized;
-let _ = pq.search(map, pq_request)?;
-
-let mut hnsw_request = SearchRequest::exact(&query, 10);
-hnsw_request.policy = SearchPolicy::FixedBudget;
-hnsw_request.backend = SearchBackend::Hnsw;
-let _ = hnsw.search(map, hnsw_request)?;
+let mut request = SearchRequest::exact(&query, 10);
+request.policy = SearchPolicy::FixedBudget;
+// Auto deterministically prefers HNSW. Cache warmth and store type are not inputs.
+let result = map.search_with(&accelerators, &search_io, request)?;
+assert_eq!(result.plan.backend, SearchBackend::Hnsw);
 # Ok(()) }
 ```
 
-PQ training and clean HNSW construction are key-ordered and deterministic.
-Both manifests bind source descriptor, dimensions, metric, and configuration.
-Explicit stale/corrupt sidecars fail. `Auto` may fall back to native search;
-neither PQ nor HNSW can satisfy `Exact`.
+PQ uses deterministic bounded training samples and streams its code pass.
+HNSW embeds routing vectors and uses bounded graph insertion. Both manifests
+bind source descriptor, dimensions, metric, count, and configuration. `Auto`
+may select native while planning when an accelerator is absent, stale, or not
+budget-admissible. Corruption or store/decode failure after execution begins is
+returned; execution never switches backends. Neither PQ nor HNSW claims exact
+completion.
+
+Accelerator component names are unversioned: HNSW, PQ,
+`CompositeAccelerator`, and `AcceleratorCatalog` always identify the current
+data structures. Accelerator codec changes are hard cutovers; the engine does
+not expose parallel generation types, compatibility aliases, or legacy
+accelerator readers.
+
+`SearchIo` implements both `Store` and, with the `async-store` feature,
+`AsyncStore`. For async proximity reads, bind decoder context with
+`search_io.with_proximity_dimensions(dimensions)`, load
+`AsyncProximityMap<SearchIo<_>>`, and call `search_with_runtime` so physical
+byte statistics reflect actual cache misses rather than logical object use.
+Async-only object stores load sidecars with `AsyncHnswIndex::load` and
+`AsyncProductQuantizer::load`, validate them into an `AsyncAcceleratorSet`, and
+call `search_with_accelerators`. That entry point uses the same planner and
+plan summaries as `ProximityMap::search_with`; only I/O scheduling and physical
+read statistics differ.
+
+## Composite accelerators and catalogs
+
+`CompositeAccelerator` avoids rebuilding a large HNSW or PQ sidecar for every
+immutable snapshot. It structurally diffs the ancestor and current ordered
+directories, stores inserts and vector updates in a bounded delta tree, and
+stores deleted and vector-updated keys in a shadow tree. Value-only changes use
+the current authoritative directory and add nothing to either tree.
+
+```rust,no_run
+# use prolly::*;
+# fn composite<S>(store: S, base: &ProximityMap<S>, current: &ProximityMap<S>)
+#     -> Result<(), Error>
+# where S: Store + Clone + Send + Sync, S::Error: Send + Sync {
+let (base_hnsw, _) = HnswIndex::build(base, HnswConfig::default())?;
+let composite = match CompositeAccelerator::build(
+    base,
+    current,
+    CompositeBase::Hnsw(base_hnsw),
+    CompositeAcceleratorConfig::default(),
+    CompositeBuildLimits::default(),
+)? {
+    CompositeBuildOutcome::Composite { accelerator, .. } => accelerator,
+    CompositeBuildOutcome::FullRebuildRequired { .. } => unreachable!("schedule rebuild"),
+};
+let accelerators = AcceleratorSet::empty()
+    .with_composite(current.tree(), *composite)?;
+let catalog = AcceleratorCatalog::build(store.clone(), current.tree(), accelerators)?;
+
+let mut request = SearchRequest::exact(&vec![0.0; current.tree().config.dimensions as usize], 10);
+request.policy = SearchPolicy::FixedBudget;
+request.options.backend = SearchBackend::Composite;
+let result = current.search_with(
+    catalog.accelerators(),
+    &SearchIo::new(store, std::sync::Arc::new(SearchRuntime::default())),
+    request,
+)?;
+assert_eq!(result.plan.backend, SearchBackend::Composite);
+# Ok(()) }
+```
+
+Construction limits diff entries, retained bytes, encoded output, and distance
+work. Absolute and ratio thresholds return `FullRebuildRequired` before composite
+publication. `build_or_rebuild` can instead synchronously build a full
+current-source sidecar with the base configuration. A composite is one generation
+deep, so composites cannot form unbounded chains. If the current source is
+empty, rebuild resolution returns `NoAcceleratorRequired` because native empty
+search needs no derived sidecar.
+
+Accelerator catalogs contain validated direct HNSW, direct PQ, and composite roots.
+Publish `catalog.typed_root()` with `put_named_content_root` or
+`compare_and_swap_named_content_root`; replacement is atomic and independent
+of PRXI publication. `AsyncAcceleratorCatalog::load` and
+`AsyncCompositeAccelerator::load` provide the same validation and planner
+capabilities for async-only stores.
+
+Composite execution filters and shadows before authoritative lookup, scans the
+bounded full-precision delta, and merges in `(distance, key)` order. Missing or
+misbound content fails closed. Proofs authenticate the composite closure—including
+both PRXI descriptors, base sidecar, delta, and shadow—and replay the committed
+nested plan without replanning.
 
 ## Named publication, replication, and GC
 
@@ -226,7 +309,7 @@ the content-root manifest. Interrupted copies remain unreachable.
 
 Use `compare_and_swap_named_content_root` for concurrent heads.
 `plan_content_gc`/`sweep_content_gc_with_invalidator` mark any number of ordered,
-PRXI, snapshot, PQ, or HNSW roots and preserve shared objects. Candidate sets
+PRXI, snapshot, PQ, HNSW, composite, or accelerator-catalog roots and preserve shared objects. Candidate sets
 are explicit; the invalidator lets applications evict swept process caches.
 
 ## Proofs
@@ -252,8 +335,8 @@ Membership proofs bind PRXI bytes, the ordered path, and exact PRVR bytes.
 Structural proofs carry the exact typed closure and replay every summary,
 radius, routing, vector, and directory invariant in an isolated store. Native
 search proofs commit request/filter/budgets/kernel and record frontier, visited
-objects, candidates, and completion. PQ and HNSW proofs authenticate sidecar
-closures and replay execution. Only exact native L2 returns
+objects, candidates, and completion. PQ, HNSW, and composite proofs authenticate
+sidecar closures and replay execution. Only exact native L2 returns
 `ExactL2Optimal`; other modes return `HonestExecution`.
 
 ## Verification and operational limits
@@ -282,13 +365,26 @@ claim Dolt byte compatibility.
 ## Benchmarking
 
 The harness covers dimensions 8/128/768/1536, build worker counts, localized
-mutation, exact/adaptive/SQ8 search, scalar/SIMD, PQ/HNSW, overflow, content
+mutation, exact/adaptive/SQ8 search, scalar/SIMD, PQ/HNSW/composite, overflow, content
 graph copy/GC, and proofs. Async parity is exercised by the all-feature test
 suite and benchmark compilation.
 
 ```sh
 PROLLY_PROXIMITY_BENCH_RECORDS=10000 \
 PROLLY_PROXIMITY_BENCH_DIMENSIONS=8,128,768,1536 \
+cargo bench --all-features --bench proximity_bench
+```
+
+For large cardinality tests, set `PROLLY_PROXIMITY_BENCH_SCALE_ONLY=1`. The
+scale profile keeps authoritative build, exact/adaptive search, and localized
+mutation rows while skipping full-graph duplication, proof replay, recall
+recomputation, and secondary-accelerator construction.
+
+```sh
+PROLLY_PROXIMITY_BENCH_RECORDS=10000000 \
+PROLLY_PROXIMITY_BENCH_DIMENSIONS=8 \
+PROLLY_PROXIMITY_BENCH_THREADS=1 \
+PROLLY_PROXIMITY_BENCH_SCALE_ONLY=1 \
 cargo bench --all-features --bench proximity_bench
 ```
 

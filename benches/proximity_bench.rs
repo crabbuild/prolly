@@ -1,9 +1,10 @@
 use prolly::{
-    copy_content_graph, plan_content_gc, AdaptiveQuality, BuildParallelism, ContentGraphLimits,
-    DistanceMetric, HnswConfig, HnswIndex, MemStore, ProductQuantizationConfig, ProductQuantizer,
-    ProximityConfig, ProximityFilter, ProximityMap, ProximityMutation, ProximityRecord,
-    QueryKernel, ScalarQuantizationConfig, SearchBackend, SearchPolicy, SearchRequest,
-    TypedContentRoot,
+    copy_content_graph, plan_content_gc, AcceleratorSet, AdaptiveQuality, BuildParallelism,
+    CompositeAccelerator, CompositeAcceleratorConfig, CompositeBase, CompositeBuildLimits,
+    CompositeBuildOutcome, ContentGraphLimits, DistanceMetric, HnswConfig, HnswIndex, MemStore,
+    ProductQuantizationConfig, ProductQuantizer, ProximityConfig, ProximityFilter, ProximityMap,
+    ProximityMutation, ProximityRecord, QueryKernel, ScalarQuantizationConfig, SearchBackend,
+    SearchIo, SearchPolicy, SearchRequest, SearchRuntime, TypedContentRoot,
 };
 #[cfg(feature = "async-store")]
 use prolly::{AsyncProximityMap, AsyncSearchControl, SyncStoreAsAsync};
@@ -21,15 +22,17 @@ fn main() {
     let dimensions =
         env_list("PROLLY_PROXIMITY_BENCH_DIMENSIONS").unwrap_or_else(|| vec![8, 128, 768, 1_536]);
     let threads = env_list("PROLLY_PROXIMITY_BENCH_THREADS").unwrap_or_else(|| vec![1, 2, 4]);
+    let scale_only = env_bool("PROLLY_PROXIMITY_BENCH_SCALE_ONLY");
     println!("prolly proximity benchmark");
     println!("records={records}");
+    println!("profile={}", if scale_only { "scale" } else { "complete" });
     println!("operation,dimensions,threads,micros,metric_a,metric_b");
     for dimension in dimensions {
-        bench_case(records, dimension, &threads);
+        bench_case(records, dimension, &threads, scale_only);
     }
 }
 
-fn bench_case(count: usize, dimensions: usize, threads: &[usize]) {
+fn bench_case(count: usize, dimensions: usize, threads: &[usize], scale_only: bool) {
     let records = make_records(count, dimensions);
     for &workers in threads {
         let store = Arc::new(MemStore::new());
@@ -88,7 +91,7 @@ fn bench_case(count: usize, dimensions: usize, threads: &[usize]) {
             result.stats.nodes_read,
             result.stats.distance_evaluations + result.stats.quantized_distance_evaluations,
         );
-        if name == "search_exact_scalar" {
+        if name == "search_exact_scalar" && !scale_only {
             let recall = recall_at_k(&records, &query, &result, k);
             println!("recall_exact,{dimensions},0,0,{:.6},0", recall);
         }
@@ -110,6 +113,10 @@ fn bench_case(count: usize, dimensions: usize, threads: &[usize]) {
         stats.nodes_written,
         stats.nodes_reused,
     );
+
+    if scale_only {
+        return;
+    }
 
     let limits = ContentGraphLimits::default();
     let root = TypedContentRoot::proximity_descriptor(map.tree().descriptor.clone());
@@ -166,14 +173,19 @@ fn bench_case(count: usize, dimensions: usize, threads: &[usize]) {
     );
 
     if dimensions <= 128 && count >= 16 {
-        bench_accelerators(&map, &query, k, dimensions);
+        bench_accelerators(&map, store.clone(), &query, k, dimensions);
     }
     #[cfg(feature = "async-store")]
     bench_async(&map, store, &query, k, dimensions);
 }
 
-fn bench_accelerators<S>(map: &ProximityMap<S>, query: &[f32], k: usize, dimensions: usize)
-where
+fn bench_accelerators<S>(
+    map: &ProximityMap<S>,
+    store: S,
+    query: &[f32],
+    k: usize,
+    dimensions: usize,
+) where
     S: prolly::Store + Clone + Send + Sync,
     S::Error: Send + Sync,
 {
@@ -186,6 +198,7 @@ where
             training_iterations: 4,
             rerank_multiplier: 8,
             seed: 17,
+            max_training_vectors: 65_536,
         },
         BuildParallelism::new(2).unwrap(),
     )
@@ -200,7 +213,7 @@ where
     );
     let mut request = SearchRequest::exact(query, k);
     request.policy = SearchPolicy::FixedBudget;
-    request.backend = SearchBackend::ProductQuantized;
+    request.options.backend = SearchBackend::ProductQuantized;
     let started = Instant::now();
     let result = pq.search(map, request).unwrap();
     row(
@@ -224,7 +237,7 @@ where
     );
     let mut request = SearchRequest::exact(query, k);
     request.policy = SearchPolicy::FixedBudget;
-    request.backend = SearchBackend::Hnsw;
+    request.options.backend = SearchBackend::Hnsw;
     let started = Instant::now();
     let result = hnsw.search(map, request).unwrap();
     row(
@@ -234,6 +247,59 @@ where
         started.elapsed(),
         result.stats.nodes_read,
         result.stats.distance_evaluations,
+    );
+
+    let changed_key = format!("record-{:08}", map.tree().count / 2).into_bytes();
+    let (current, _) = map
+        .mutate_batch([ProximityMutation {
+            key: changed_key,
+            value: Some((query.to_vec(), b"composite-update".to_vec())),
+        }])
+        .unwrap();
+    let started = Instant::now();
+    let (composite, build_stats) = match CompositeAccelerator::build(
+        map,
+        &current,
+        CompositeBase::Hnsw(hnsw),
+        CompositeAcceleratorConfig::default(),
+        CompositeBuildLimits::default(),
+    )
+    .unwrap()
+    {
+        CompositeBuildOutcome::Composite { accelerator, stats } => (accelerator, stats),
+        CompositeBuildOutcome::FullRebuildRequired { reasons, .. } => {
+            panic!("benchmark delta unexpectedly requires rebuild: {reasons:?}")
+        }
+    };
+    row(
+        "composite_build",
+        dimensions,
+        0,
+        started.elapsed(),
+        build_stats.diff_entries,
+        build_stats.encoded_output_bytes,
+    );
+    let accelerators = AcceleratorSet::empty()
+        .with_composite(current.tree(), *composite)
+        .unwrap();
+    let mut request = SearchRequest::exact(query, k);
+    request.policy = SearchPolicy::FixedBudget;
+    request.options.backend = SearchBackend::Composite;
+    let started = Instant::now();
+    let result = current
+        .search_with(
+            &accelerators,
+            &SearchIo::new(store, Arc::new(SearchRuntime::default())),
+            request,
+        )
+        .unwrap();
+    row(
+        "composite_search",
+        dimensions,
+        0,
+        started.elapsed(),
+        result.stats.nodes_read,
+        result.stats.distance_evaluations + result.stats.quantized_distance_evaluations,
     );
 }
 
@@ -365,6 +431,15 @@ fn recall_at_k(
 
 fn env_usize(name: &str) -> Option<usize> {
     std::env::var(name).ok()?.parse().ok()
+}
+
+fn env_bool(name: &str) -> bool {
+    std::env::var(name).is_ok_and(|value| {
+        matches!(
+            value.trim().to_ascii_lowercase().as_str(),
+            "1" | "true" | "yes"
+        )
+    })
 }
 
 fn env_list(name: &str) -> Option<Vec<usize>> {

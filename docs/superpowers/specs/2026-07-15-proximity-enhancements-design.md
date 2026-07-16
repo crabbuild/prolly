@@ -14,6 +14,14 @@ no compatibility requirement for existing accelerator objects or accelerator
 search proofs. The authoritative PRXI, PRVR, PRXN, PRXV, and PQS8 formats remain
 unchanged.
 
+Component names are deliberately unversioned. `HnswIndex`,
+`ProductQuantizer`, `CompositeAccelerator`, and `AcceleratorCatalog` always mean
+the current implementation and wire shape. A future structural replacement
+updates those components in place unless compatibility becomes an explicit
+requirement; it does not introduce parallel `V1`/`V2` public types or product
+names. Internal magic bytes and codec discriminators are wire-validation
+details, not architecture component names.
+
 ## Decision Summary
 
 The engine will use a layered derived-accelerator architecture:
@@ -27,7 +35,7 @@ The engine will use a layered derived-accelerator architecture:
 - authoritative full-precision vectors determine returned distances;
 - proofs commit to the selected plan and replay it without replanning.
 
-Phase one replaces HNSW v1 with a deterministic bounded HNSW v2, adds
+Phase one hard-cuts HNSW over to deterministic bounded construction, adds
 selectivity-aware filter planning, bounds PQ construction and search, and adds
 the shared runtime. Phase two adds composite base-plus-delta accelerators. Phase
 three adds a packed disk-oriented graph. Phase four considers advanced routing
@@ -88,7 +96,7 @@ engine.
 
 Phase one does not include:
 
-- backward decoding or migration of HNSW v1 or PQ v1 objects;
+- backward decoding or migration of superseded HNSW or PQ objects;
 - changes to authoritative proximity formats;
 - external-memory HNSW construction;
 - incremental or background accelerator maintenance;
@@ -459,11 +467,11 @@ clamped to known eligible cardinality and source cardinality. The HNSW plan
 contains both the expansion target and rerank target; the executor does not
 derive either value again.
 
-## HNSW v2
+## HNSW
 
 ### Format cutover
 
-HNSW v2 reuses:
+The current HNSW implementation reuses:
 
 - `HnswIndex` and `HnswConfig` public names;
 - `HnswManifest` and `HnswPage` content kinds;
@@ -471,9 +479,9 @@ HNSW v2 reuses:
 - typed content walking, replication, GC, and proof closure;
 - canonical and disposable build modes.
 
-The manifest and graph-record codecs accept format version 2 only. Version 1
-returns an `UnsupportedHnswFormat` error that identifies the found and required
-versions. There is no compatibility decoder or migration API.
+The manifest and graph-record codecs accept only the current wire shape.
+Superseded bytes fail decoding. There is no compatibility decoder, public
+generation suffix, or migration API.
 
 ### Configuration and limits
 
@@ -827,14 +835,15 @@ validates the typed closures, and executes the committed plan directly.
 Runtime cache state, batching, prefetch, worker count, and physical timing are
 excluded from the claim.
 
-The typed content walker learns the HNSW v2 and PQ v2 codecs while retaining the
+The typed content walker understands the current HNSW and PQ codecs while retaining the
 existing `HnswManifest`, `HnswPage`, and `ProductQuantization` content kinds.
-Unsupported versions fail before closure traversal or replay.
+Unsupported wire shapes fail before closure traversal or replay.
 
 ## Later Phase Architecture
 
-The following phases are directional. They are not authorized for
-implementation by this specification.
+Phase two was subsequently authorized by the phase-two child design and is
+implemented. Phases three and four remain directional and are not authorized
+for implementation by this specification.
 
 ### Phase two: composite base-plus-delta accelerators
 
@@ -845,13 +854,15 @@ A `CompositeAcceleratorManifest` bound to the current descriptor references:
 - a sorted tombstone/shadow set for deleted and updated keys;
 - base/current source lineage and configuration fingerprints.
 
-Search executes base and delta plans, excludes shadowed base results, merges by
-key, and reranks against the current authoritative directory. Small deltas use
-eligible-exact execution; larger deltas may use disposable HNSW.
+Search executes the committed base plan, excludes shadowed base results, scans
+the explicitly bounded full-precision delta, merges by key, and reranks against
+the current authoritative directory.
 
 Explicit thresholds on delta cardinality, tombstone ratio, and build work
-trigger a background full rebuild. Publication changes an accelerator catalog
-root, never PRXI. Old snapshots retain their exact closures.
+return `FullRebuildRequired`; `build_or_rebuild` can synchronously construct the
+replacement, and callers may schedule that same operation in the background.
+Publication changes an accelerator catalog root, never PRXI. Old snapshots
+retain their exact closures.
 
 ### Phase three: packed disk graph
 
@@ -873,7 +884,7 @@ may optimize access internally, but the accelerator does not require `mmap`,
 
 ### Phase four: routing and query composition
 
-- Add SQ8 routing vectors under the HNSW v2 routing encoding tag.
+- Add SQ8 routing vectors under the HNSW routing encoding tag.
 - Evaluate RaBitQ only after provenance, deterministic encoding,
   cross-platform identity, recall, and build-cost gates pass.
 - Add RRF or weighted multi-query fusion in a separate orchestration layer above
@@ -885,7 +896,7 @@ may optimize access internally, but the accelerator does not require `mmap`,
 
 ### Accelerator catalog lifecycle
 
-Phase one receives an explicit runtime `AcceleratorSet`. Phase two may add a
+Phase one receives an explicit runtime `AcceleratorSet`. Phase two adds a
 source-bound `AcceleratorCatalog` content object whose entries are sorted by
 kind and configuration fingerprint. Catalog publication is independent of
 PRXI and uses existing named-root/CAS infrastructure. Planner input is always
@@ -895,8 +906,8 @@ one pinned catalog snapshot.
 
 ### Unit tests
 
-- HNSW v2 manifest and graph-record round trips;
-- rejection of HNSW v1 and PQ v1 bytes;
+- HNSW manifest and graph-record round trips;
+- rejection of superseded HNSW and PQ bytes;
 - configuration fingerprints and source binding;
 - deterministic level assignment and entry-point updates;
 - candidate-heap, result-heap, and key-tie ordering;
@@ -929,7 +940,7 @@ one pinned catalog snapshot.
 - automatic absent/stale sidecars fall back according to the recorded plan;
 - corruption and store errors during execution do not silently fall back;
 - build failures publish no manifest;
-- content graph copy, import, export, GC, and cache invalidation include all v2
+- content graph copy, import, export, GC, and cache invalidation include all
   descendants;
 - accelerator proof generation, replay, and tamper detection;
 - proof replay does not invoke automatic planning;
@@ -942,8 +953,8 @@ one pinned catalog snapshot.
 
 Commit fixtures for:
 
-- HNSW v2 config, manifest, graph records, root, and build statistics;
-- PQ v2 config, deterministic training sample, codebooks, manifest, and root;
+- HNSW config, manifest, graph records, root, and build statistics;
+- PQ config, deterministic training sample, codebooks, manifest, and root;
 - `SearchPlanSummary` for every plan variant;
 - accelerator search-proof envelopes;
 - explicit unsupported-version errors.
@@ -983,8 +994,8 @@ documented scalability limit and cannot be presented as a passing row.
 - HNSW defaults achieve recall@10 of at least 0.95 on every checked-in
   deterministic benchmark fixture.
 - PQ defaults achieve recall@10 of at least 0.90 after authoritative reranking.
-- HNSW v2 performs at least five times fewer construction distance evaluations
-  than the frozen v1 implementation at 10K records.
+- HNSW performs at least five times fewer construction distance evaluations
+  than the frozen superseded implementation at 10K records.
 - Increasing `ef_construction` increases or preserves construction work and
   every tested setting meets the HNSW recall floor.
 - On one fixed graph, increasing `ef_search` increases or preserves traversal

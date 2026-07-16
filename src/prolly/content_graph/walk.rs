@@ -2,6 +2,10 @@ use super::kind::{ContentObjectKind, TypedContentObject, TypedContentRoot};
 use crate::prolly::cid::Cid;
 use crate::prolly::error::Error;
 use crate::prolly::node::Node;
+use crate::prolly::proximity::accelerator::catalog::{
+    CatalogAcceleratorKind, Manifest as CatalogManifest,
+};
+use crate::prolly::proximity::accelerator::composite::Manifest as CompositeManifest;
 use crate::prolly::proximity::accelerator::hnsw::storage::{GraphNode, Manifest as HnswManifest};
 use crate::prolly::proximity::accelerator::pq::Manifest as PqManifest;
 use crate::prolly::proximity::storage::quantized::ScalarQuantized;
@@ -267,6 +271,50 @@ fn references(
         ContentObjectKind::HnswPage => {
             GraphNode::decode(bytes)?;
             ContentObjectKind::HnswPage
+        }
+        ContentObjectKind::CompositeAccelerator => {
+            let manifest = CompositeManifest::decode(bytes)?;
+            output.push(TypedContentRoot::proximity_descriptor(
+                manifest.current_source,
+            ));
+            output.push(TypedContentRoot::proximity_descriptor(manifest.base_source));
+            output.push(TypedContentRoot::new(
+                match manifest.base_kind {
+                    crate::prolly::proximity::CompositeBaseKind::Hnsw => {
+                        ContentObjectKind::HnswManifest
+                    }
+                    crate::prolly::proximity::CompositeBaseKind::ProductQuantized => {
+                        ContentObjectKind::ProductQuantization
+                    }
+                },
+                manifest.base_manifest,
+            ));
+            if let Some(root) = manifest.delta_root {
+                output.push(TypedContentRoot::new(ContentObjectKind::OrderedNode, root));
+            }
+            if let Some(root) = manifest.shadow_root {
+                output.push(TypedContentRoot::new(ContentObjectKind::OrderedNode, root));
+            }
+            ContentObjectKind::CompositeAccelerator
+        }
+        ContentObjectKind::AcceleratorCatalog => {
+            let manifest = CatalogManifest::decode(bytes)?;
+            output.push(TypedContentRoot::proximity_descriptor(manifest.source));
+            for entry in manifest.entries {
+                output.push(TypedContentRoot::new(
+                    match entry.kind {
+                        CatalogAcceleratorKind::Hnsw => ContentObjectKind::HnswManifest,
+                        CatalogAcceleratorKind::ProductQuantized => {
+                            ContentObjectKind::ProductQuantization
+                        }
+                        CatalogAcceleratorKind::Composite => {
+                            ContentObjectKind::CompositeAccelerator
+                        }
+                    },
+                    entry.manifest,
+                ));
+            }
+            ContentObjectKind::AcceleratorCatalog
         }
     };
     Ok((actual, output))

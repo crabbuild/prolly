@@ -16,10 +16,26 @@ use super::cid::Cid;
 use super::error::Error;
 use super::tree::Tree;
 
-pub use accelerator::hnsw::{HnswBuildStats, HnswConfig, HnswIndex};
+pub use accelerator::catalog::{
+    AcceleratorCatalog, AcceleratorCatalogEntry, CatalogAcceleratorKind,
+};
+pub use accelerator::composite::{
+    CompositeAccelerator, CompositeAcceleratorConfig, CompositeBase, CompositeBaseKind,
+    CompositeBuildLimits, CompositeBuildOrRebuildOutcome, CompositeBuildOutcome,
+    CompositeBuildStats, CompositeRebuildOptions, FullRebuildReason,
+};
+pub use accelerator::hnsw::{
+    HnswBuildLimits, HnswBuildStats, HnswConfig, HnswIndex, HnswRoutingVectorEncoding,
+};
 pub use accelerator::pq::{
-    ProductQuantizationBuildStats, ProductQuantizationConfig, ProductQuantizationQuality,
-    ProductQuantizer,
+    ProductQuantizationBuildLimits, ProductQuantizationBuildStats, ProductQuantizationConfig,
+    ProductQuantizationQuality, ProductQuantizer,
+};
+pub use accelerator::AcceleratorSet;
+#[cfg(feature = "async-store")]
+pub use accelerator::{
+    AsyncAcceleratorCatalog, AsyncAcceleratorSet, AsyncCompositeAccelerator, AsyncHnswIndex,
+    AsyncProductQuantizer,
 };
 pub use build::{BuildParallelism, ProximityBuildStats};
 pub use map::ProximityMap;
@@ -28,9 +44,13 @@ pub use proof::{
     ProximitySearchClaim, ProximitySearchEvent, ProximitySearchProof, ProximitySearchRequest,
     ProximitySearchVerification, ProximityStructuralProof, ProximityStructuralVerification,
 };
+pub use search::{
+    ApproximatePreference, HnswSearchOptions, PlannerPolicy, PqSearchOptions, ProximityFilter,
+    SearchIo, SearchOptions, SearchPlan, SearchPlanSummary, SearchRequest, SearchRuntime,
+    SearchRuntimePolicy, StoreCacheNamespace, SEARCH_PLAN_FORMAT_VERSION,
+};
 #[cfg(feature = "async-store")]
 pub use search::{AsyncIoConfig, AsyncProximityMap, AsyncSearchControl, CancellationToken};
-pub use search::{ProximityFilter, SearchRequest};
 
 const MIN_PROXIMITY_NODE_BYTES: u32 = 64;
 
@@ -228,6 +248,7 @@ pub enum SearchBackend {
     Native,
     ProductQuantized,
     Hnsw,
+    Composite,
     Auto,
 }
 
@@ -334,6 +355,7 @@ pub struct SearchResult {
     pub neighbors: Vec<Neighbor>,
     pub stats: ProximitySearchStats,
     pub completion: SearchCompletion,
+    pub plan: search::SearchPlanSummary,
 }
 
 /// Observable copy-on-write work for one mutation batch.

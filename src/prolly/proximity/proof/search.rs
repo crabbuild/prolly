@@ -5,9 +5,12 @@ use crate::prolly::content_graph::{
 };
 use crate::prolly::error::Error;
 use crate::prolly::proximity::distance::{prepare_vector, query_score};
+use crate::prolly::proximity::search::PreparedFilter;
 use crate::prolly::proximity::{
-    DistanceMetric, HnswIndex, ProductQuantizer, ProximityFilter, ProximityMap, QueryKernel,
-    SearchBackend, SearchBudget, SearchCompletion, SearchPolicy, SearchRequest, SearchResult,
+    AcceleratorCatalog, AcceleratorSet, CompositeAccelerator, DistanceMetric, HnswIndex,
+    ProductQuantizer, ProximityFilter, ProximityMap, QueryKernel, SearchBackend, SearchBudget,
+    SearchCompletion, SearchIo, SearchOptions, SearchPlan, SearchPlanSummary, SearchPolicy,
+    SearchRequest, SearchResult, SearchRuntime, SEARCH_PLAN_FORMAT_VERSION,
 };
 use crate::prolly::store::{MemStore, Store};
 use crate::prolly::tree::Tree;
@@ -92,8 +95,8 @@ pub struct ProximitySearchRequest {
     pub policy: SearchPolicy,
     pub budget: SearchBudget,
     pub filter: ProximityProofFilter,
-    pub backend: SearchBackend,
     pub kernel: QueryKernel,
+    pub options: SearchOptions,
 }
 
 impl ProximitySearchRequest {
@@ -104,8 +107,8 @@ impl ProximitySearchRequest {
             policy: request.policy,
             budget: request.budget.clone(),
             filter: ProximityProofFilter::capture(&request.filter),
-            backend: request.backend,
             kernel: request.kernel,
+            options: request.options.clone(),
         }
     }
 
@@ -116,8 +119,8 @@ impl ProximitySearchRequest {
             policy: self.policy,
             budget: self.budget.clone(),
             filter: self.filter.borrowed(),
-            backend: self.backend,
             kernel: self.kernel,
+            options: self.options.clone(),
         }
     }
 }
@@ -147,12 +150,14 @@ pub enum ProximitySearchEvent {
 /// Self-contained proof for native, PQ, or HNSW search replay.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ProximitySearchProof {
+    pub format_version: u8,
     pub source: ProximityStructuralProof,
     pub accelerator_root: Option<TypedContentRoot>,
     pub accelerator_objects: Vec<TypedContentObject>,
     pub request: ProximitySearchRequest,
     pub request_commitment: Cid,
     pub result: SearchResult,
+    pub plan: SearchPlan,
     pub events: Vec<ProximitySearchEvent>,
     pub claim: ProximitySearchClaim,
 }
@@ -186,7 +191,7 @@ impl ProximitySearchProof {
         &self,
         limits: &ContentGraphLimits,
     ) -> Result<ProximitySearchVerification, Error> {
-        if request_commitment(&self.request) != self.request_commitment {
+        if request_commitment(&self.request, &self.plan) != self.request_commitment {
             return Err(invalid("search request commitment mismatch"));
         }
         let (map, _) = self.source.verified_map(limits)?;
@@ -198,21 +203,61 @@ impl ProximitySearchProof {
             &self.accelerator_objects,
             limits,
         )?;
-        let request = self.request.borrowed();
+        if self.format_version != SEARCH_PLAN_FORMAT_VERSION
+            || self.plan.summary() != self.result.plan
+        {
+            return Err(invalid(
+                "unsupported proof version or search plan summary mismatch",
+            ));
+        }
+        let mut request = self.request.borrowed();
         let mut native_trace = Vec::new();
-        let replayed = match (&self.accelerator_root, self.request.backend) {
-            (None, SearchBackend::Native | SearchBackend::Auto) => {
+        let replayed = match (&self.accelerator_root, &self.plan) {
+            (None, SearchPlan::Native) => {
+                request.options.backend = SearchBackend::Native;
                 map.search_with_trace(request, Some(&mut native_trace))?
             }
-            (Some(root), SearchBackend::ProductQuantized | SearchBackend::Auto)
+            (Some(root), SearchPlan::ProductQuantized { .. })
                 if root.kind == ContentObjectKind::ProductQuantization =>
             {
-                ProductQuantizer::load(store.clone(), root.cid.clone())?.search(&map, request)?
+                ProductQuantizer::load(store.clone(), root.cid.clone())?
+                    .search_planned(&map, request, &self.plan)?
             }
-            (Some(root), SearchBackend::Hnsw | SearchBackend::Auto)
+            (Some(root), SearchPlan::Hnsw { .. })
                 if root.kind == ContentObjectKind::HnswManifest =>
             {
-                HnswIndex::load(store, root.cid.clone())?.search(&map, request)?
+                let index = HnswIndex::load(store, root.cid.clone())?;
+                crate::prolly::proximity::accelerator::hnsw::search::search_planned(
+                    &index, &map, request, &self.plan,
+                )?
+            }
+            (Some(root), SearchPlan::Composite { .. })
+                if root.kind == ContentObjectKind::CompositeAccelerator =>
+            {
+                let composite = CompositeAccelerator::load(store.clone(), root.cid.clone())?;
+                let search_io = SearchIo::new(store.clone(), Arc::new(SearchRuntime::default()));
+                let bound_map = ProximityMap::load(
+                    search_io.for_kind_with_dimensions(
+                        ContentObjectKind::ProximityNode,
+                        map.tree().config.dimensions,
+                    ),
+                    map.tree().descriptor.clone(),
+                )?;
+                let eligibility =
+                    PreparedFilter::new(request.filter.clone(), &map.tree().directory)?;
+                map.search_composite(
+                    &composite,
+                    &search_io,
+                    &bound_map,
+                    request,
+                    &eligibility,
+                    &self.plan,
+                )?
+            }
+            (Some(root), plan) if root.kind == ContentObjectKind::AcceleratorCatalog => {
+                let catalog =
+                    AcceleratorCatalog::load(store.clone(), root.cid.clone(), map.tree())?;
+                replay_catalog_plan(&map, store, catalog.accelerators(), request, plan)?
             }
             _ => return Err(invalid("search backend and accelerator evidence disagree")),
         };
@@ -262,8 +307,8 @@ where
         limits: &ContentGraphLimits,
     ) -> Result<ProximitySearchProof, Error> {
         if matches!(
-            request.backend,
-            SearchBackend::ProductQuantized | SearchBackend::Hnsw
+            request.options.backend,
+            SearchBackend::ProductQuantized | SearchBackend::Hnsw | SearchBackend::Composite
         ) {
             return Err(invalid(
                 "explicit accelerator search proofs must be produced by that sidecar",
@@ -319,6 +364,113 @@ where
     }
 }
 
+impl<S> CompositeAccelerator<S>
+where
+    S: Store + Clone + Send + Sync,
+    S::Error: Send + Sync,
+{
+    /// Prove a source-bound base-plus-delta execution and its committed child plan.
+    pub fn prove_search(
+        &self,
+        map: &ProximityMap<S>,
+        request: SearchRequest<'_>,
+        limits: &ContentGraphLimits,
+    ) -> Result<ProximitySearchProof, Error> {
+        let composite = CompositeAccelerator::load(map.store_clone(), self.manifest_cid().clone())?;
+        let accelerators = AcceleratorSet::empty().with_composite(map.tree(), composite)?;
+        let search_io = SearchIo::new(map.store_clone(), Arc::new(SearchRuntime::default()));
+        let mut result = map.search_with(&accelerators, &search_io, request.clone())?;
+        // Physical reads depend on verifier cache warmth and transport. Proofs
+        // commit only to deterministic logical execution statistics.
+        result.stats.physical_bytes_read = 0;
+        let root = TypedContentRoot::new(
+            ContentObjectKind::CompositeAccelerator,
+            self.manifest_cid().clone(),
+        );
+        let objects =
+            walk_content_graph(&map.store_clone(), std::slice::from_ref(&root), limits)?.objects;
+        build_proof(map, request, result, Some(root), objects, None, limits)
+    }
+}
+
+impl<S> AcceleratorCatalog<S>
+where
+    S: Store + Clone + Send + Sync,
+    S::Error: Send + Sync,
+{
+    /// Prove execution against one pinned accelerator-catalog snapshot and its exact closure.
+    pub fn prove_search(
+        &self,
+        map: &ProximityMap<S>,
+        request: SearchRequest<'_>,
+        limits: &ContentGraphLimits,
+    ) -> Result<ProximitySearchProof, Error> {
+        let search_io = SearchIo::new(map.store_clone(), Arc::new(SearchRuntime::default()));
+        let mut result = map.search_with(self.accelerators(), &search_io, request.clone())?;
+        if !matches!(
+            result.plan.backend,
+            SearchBackend::Hnsw | SearchBackend::ProductQuantized | SearchBackend::Composite
+        ) {
+            return Err(invalid(
+                "catalog proof requires an accelerator-backed committed plan",
+            ));
+        }
+        result.stats.physical_bytes_read = 0;
+        let root = self.typed_root();
+        let objects =
+            walk_content_graph(&map.store_clone(), std::slice::from_ref(&root), limits)?.objects;
+        build_proof(map, request, result, Some(root), objects, None, limits)
+    }
+}
+
+fn replay_catalog_plan(
+    map: &ProximityMap<Arc<MemStore>>,
+    store: Arc<MemStore>,
+    accelerators: &AcceleratorSet<Arc<MemStore>>,
+    request: SearchRequest<'_>,
+    plan: &SearchPlan,
+) -> Result<SearchResult, Error> {
+    match plan {
+        SearchPlan::Hnsw { .. } => {
+            let index = accelerators
+                .hnsw()
+                .ok_or_else(|| invalid("catalog has no committed HNSW accelerator"))?;
+            crate::prolly::proximity::accelerator::hnsw::search::search_planned(
+                index, map, request, plan,
+            )
+        }
+        SearchPlan::ProductQuantized { .. } => accelerators
+            .pq()
+            .ok_or_else(|| invalid("catalog has no committed PQ accelerator"))?
+            .search_planned(map, request, plan),
+        SearchPlan::Composite { .. } => {
+            let composite = accelerators
+                .composite()
+                .ok_or_else(|| invalid("catalog has no committed composite accelerator"))?;
+            let search_io = SearchIo::new(store, Arc::new(SearchRuntime::default()));
+            let bound_map = ProximityMap::load(
+                search_io.for_kind_with_dimensions(
+                    ContentObjectKind::ProximityNode,
+                    map.tree().config.dimensions,
+                ),
+                map.tree().descriptor.clone(),
+            )?;
+            let eligibility = PreparedFilter::new(request.filter.clone(), &map.tree().directory)?;
+            map.search_composite(
+                composite,
+                &search_io,
+                &bound_map,
+                request,
+                &eligibility,
+                plan,
+            )
+        }
+        SearchPlan::Native | SearchPlan::EligibleExact { .. } => Err(invalid(
+            "catalog proof contains a non-accelerator committed plan",
+        )),
+    }
+}
+
 fn build_proof<S>(
     map: &ProximityMap<S>,
     request: SearchRequest<'_>,
@@ -333,8 +485,9 @@ where
     S::Error: Send + Sync,
 {
     let source = map.prove_structure(limits)?;
+    let plan = plan_from_summary(&result.plan, &request.filter)?;
     let request = ProximitySearchRequest::capture(&request);
-    let request_commitment = request_commitment(&request);
+    let request_commitment = request_commitment(&request, &plan);
     let claim = claim_for(map, &request, &result, accelerator_root.is_some())?;
     let events = match native_trace {
         Some(trace) => native_events(&request_commitment, trace),
@@ -346,12 +499,14 @@ where
         ),
     };
     Ok(ProximitySearchProof {
+        format_version: SEARCH_PLAN_FORMAT_VERSION,
         source,
         accelerator_root,
         accelerator_objects,
         request,
         request_commitment,
         result,
+        plan,
         events,
         claim,
     })
@@ -480,8 +635,8 @@ fn native_events(commitment: &Cid, trace: Vec<ProximitySearchEvent>) -> Vec<Prox
     events
 }
 
-fn request_commitment(request: &ProximitySearchRequest) -> Cid {
-    let mut bytes = b"PSRQ\x02".to_vec();
+fn request_commitment(request: &ProximitySearchRequest, plan: &SearchPlan) -> Cid {
+    let mut bytes = b"PSRQ\x03".to_vec();
     put_len(request.query.len(), &mut bytes);
     for component in &request.query {
         bytes.extend_from_slice(&component.to_bits().to_le_bytes());
@@ -503,18 +658,143 @@ fn request_commitment(request: &ProximitySearchRequest) -> Cid {
         put_optional_usize(limit, &mut bytes);
     }
     encode_filter(&request.filter, &mut bytes);
-    bytes.push(match request.backend {
+    bytes.push(match request.options.backend {
         SearchBackend::Native => 0,
         SearchBackend::ProductQuantized => 1,
         SearchBackend::Hnsw => 2,
         SearchBackend::Auto => 3,
+        SearchBackend::Composite => 4,
     });
     bytes.push(match request.kernel {
         QueryKernel::ScalarDeterministic => 0,
         QueryKernel::SimdDeterministic => 1,
         QueryKernel::AutoDeterministic => 2,
     });
+    bytes.push(u8::from(
+        request.options.planner.allow_exact_for_approximate,
+    ));
+    put_usize(
+        request.options.planner.eligible_exact_max_records,
+        &mut bytes,
+    );
+    bytes.extend_from_slice(
+        &request
+            .options
+            .planner
+            .eligible_exact_ratio_ppm
+            .to_le_bytes(),
+    );
+    bytes.push(match request.options.planner.approximate_preference {
+        crate::prolly::proximity::ApproximatePreference::HnswFirst => 0,
+        crate::prolly::proximity::ApproximatePreference::ProductQuantizedFirst => 1,
+    });
+    put_optional_usize(
+        request.options.hnsw.ef_search.map(|value| value as usize),
+        &mut bytes,
+    );
+    put_optional_usize(
+        request.options.pq.rerank_multiplier.map(usize::from),
+        &mut bytes,
+    );
+    encode_plan(plan, &mut bytes);
     Cid::from_bytes(&bytes)
+}
+
+fn encode_plan(plan: &SearchPlan, bytes: &mut Vec<u8>) {
+    match plan {
+        SearchPlan::Native => bytes.push(0),
+        SearchPlan::EligibleExact {
+            key_count,
+            source_bound,
+        } => {
+            bytes.push(1);
+            bytes.extend_from_slice(&key_count.to_le_bytes());
+            bytes.push(u8::from(*source_bound));
+        }
+        SearchPlan::ProductQuantized {
+            rerank_target,
+            direct_lookup,
+        } => {
+            bytes.push(2);
+            put_usize(*rerank_target, bytes);
+            bytes.push(u8::from(*direct_lookup));
+        }
+        SearchPlan::Hnsw {
+            ef_search,
+            expansion_target,
+            rerank_target,
+        } => {
+            bytes.push(3);
+            bytes.extend_from_slice(&ef_search.to_le_bytes());
+            put_usize(*expansion_target, bytes);
+            put_usize(*rerank_target, bytes);
+        }
+        SearchPlan::Composite {
+            base,
+            delta_records,
+            shadow_records,
+            merge_target,
+        } => {
+            bytes.push(4);
+            encode_plan(base, bytes);
+            put_usize(*delta_records, bytes);
+            put_usize(*shadow_records, bytes);
+            put_usize(*merge_target, bytes);
+        }
+    }
+}
+
+fn plan_from_summary(
+    summary: &SearchPlanSummary,
+    filter: &ProximityFilter<'_>,
+) -> Result<SearchPlan, Error> {
+    if summary.format_version != SEARCH_PLAN_FORMAT_VERSION {
+        return Err(invalid("unsupported search plan summary version"));
+    }
+    if let Some(key_count) = summary.eligible_exact_records {
+        return Ok(SearchPlan::EligibleExact {
+            key_count,
+            source_bound: matches!(filter, ProximityFilter::SecondaryEligible { .. }),
+        });
+    }
+    match summary.backend {
+        SearchBackend::Native | SearchBackend::Auto => Ok(SearchPlan::Native),
+        SearchBackend::ProductQuantized => Ok(SearchPlan::ProductQuantized {
+            rerank_target: summary
+                .rerank_target
+                .ok_or_else(|| invalid("PQ plan summary has no rerank target"))?,
+            direct_lookup: summary.direct_lookup,
+        }),
+        SearchBackend::Hnsw => Ok(SearchPlan::Hnsw {
+            ef_search: summary
+                .hnsw_ef_search
+                .ok_or_else(|| invalid("HNSW plan summary has no ef_search"))?,
+            expansion_target: summary
+                .expansion_target
+                .ok_or_else(|| invalid("HNSW plan summary has no expansion target"))?,
+            rerank_target: summary
+                .rerank_target
+                .ok_or_else(|| invalid("HNSW plan summary has no rerank target"))?,
+        }),
+        SearchBackend::Composite => Ok(SearchPlan::Composite {
+            base: Box::new(plan_from_summary(
+                summary
+                    .composite_base
+                    .as_deref()
+                    .ok_or_else(|| invalid("composite plan summary has no base plan"))?,
+                filter,
+            )?),
+            delta_records: summary
+                .delta_records
+                .ok_or_else(|| invalid("composite plan summary has no delta count"))?,
+            shadow_records: summary
+                .shadow_records
+                .ok_or_else(|| invalid("composite plan summary has no shadow count"))?,
+            merge_target: summary
+                .rerank_target
+                .ok_or_else(|| invalid("composite plan summary has no merge target"))?,
+        }),
+    }
 }
 
 fn encode_filter(filter: &ProximityProofFilter, bytes: &mut Vec<u8>) {

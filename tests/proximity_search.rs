@@ -76,8 +76,11 @@ fn exact_request<'a>(query: &'a [f32], k: usize, filter: ProximityFilter<'a>) ->
         policy: SearchPolicy::Exact,
         budget: SearchBudget::default(),
         filter,
-        backend: SearchBackend::Native,
         kernel: prolly::QueryKernel::AutoDeterministic,
+        options: prolly::SearchOptions {
+            backend: SearchBackend::Native,
+            ..Default::default()
+        },
     }
 }
 
@@ -193,8 +196,11 @@ fn hard_budgets_return_deterministic_honest_partial_results() {
             ..SearchBudget::default()
         },
         filter: ProximityFilter::All,
-        backend: SearchBackend::Native,
         kernel: prolly::QueryKernel::AutoDeterministic,
+        options: prolly::SearchOptions {
+            backend: SearchBackend::Native,
+            ..Default::default()
+        },
     };
     let first = map.search(request.clone()).unwrap();
     let second = map.search(request).unwrap();
@@ -255,8 +261,11 @@ fn adaptive_profiles_have_fixed_seed_deterministic_completion() {
         policy: SearchPolicy::Adaptive(AdaptiveQuality::Fast),
         budget: SearchBudget::default(),
         filter: ProximityFilter::All,
-        backend: SearchBackend::Native,
         kernel: prolly::QueryKernel::AutoDeterministic,
+        options: prolly::SearchOptions {
+            backend: SearchBackend::Native,
+            ..Default::default()
+        },
     };
     let first = map.search(request.clone()).unwrap();
     let second = map.search(request).unwrap();
