@@ -1,8 +1,10 @@
 //! Bounded read-through mutation sessions.
 
 use std::collections::BTreeMap;
+use std::ops::{Bound, ControlFlow};
 
 use super::error::{Error, Mutation};
+use super::read::{EntryRef, ScanOutcome};
 use super::store::Store;
 use super::{KeyValue, Prolly, Tree};
 
@@ -65,34 +67,121 @@ impl<'a, S: Store> WriteSession<'a, S> {
     }
 
     pub fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Error> {
+        self.get_with(key, <[u8]>::to_vec)
+    }
+
+    /// Read through the overlay without cloning a staged or base value.
+    pub fn get_with<R>(
+        &self,
+        key: &[u8],
+        read: impl FnOnce(&[u8]) -> R,
+    ) -> Result<Option<R>, Error> {
         match self.overlay.get(key) {
-            Some(PendingValue::Value(value)) => Ok(Some(value.clone())),
+            Some(PendingValue::Value(value)) => Ok(Some(read(value))),
             Some(PendingValue::Deleted) => Ok(None),
-            None => self.manager.get(&self.base, key),
+            None => self.manager.get_with(&self.base, key, read),
         }
     }
 
     /// Materialize one bounded merged range from the base cursor and overlay.
     pub fn range(&self, start: &[u8], end: Option<&[u8]>) -> Result<Vec<KeyValue>, Error> {
-        let mut merged = BTreeMap::new();
-        for entry in self.manager.range(&self.base, start, end)? {
-            let (key, value) = entry?;
-            merged.insert(key, value);
-        }
-        for (key, pending) in self.overlay.range(start.to_vec()..) {
-            if end.map(|bound| key.as_slice() >= bound).unwrap_or(false) {
-                break;
-            }
-            match pending {
-                PendingValue::Value(value) => {
-                    merged.insert(key.clone(), value.clone());
+        let mut entries = Vec::new();
+        self.scan_range(start, end, |entry| entries.push(entry.to_owned()))?;
+        Ok(entries)
+    }
+
+    /// Visit the ordered overlay/base merge without materializing a map.
+    pub fn scan_range(
+        &self,
+        start: &[u8],
+        end: Option<&[u8]>,
+        mut visit: impl for<'entry> FnMut(EntryRef<'entry>),
+    ) -> Result<u64, Error> {
+        Ok(self
+            .scan_range_until(start, end, |entry| {
+                visit(entry);
+                ControlFlow::<()>::Continue(())
+            })?
+            .visited)
+    }
+
+    /// Visit the ordered overlay/base merge with early termination.
+    pub fn scan_range_until<B>(
+        &self,
+        start: &[u8],
+        end: Option<&[u8]>,
+        mut visit: impl for<'entry> FnMut(EntryRef<'entry>) -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error> {
+        let mut overlay = self
+            .overlay
+            .range::<[u8], _>((Bound::Included(start), Bound::Unbounded))
+            .take_while(|(key, _)| end.map_or(true, |end| key.as_slice() < end))
+            .peekable();
+        let mut visited = 0u64;
+        let mut stopped = None;
+
+        let base_outcome = self
+            .manager
+            .scan_range_until(&self.base, start, end, |base_entry| {
+                while overlay
+                    .peek()
+                    .is_some_and(|(key, _)| key.as_slice() < base_entry.key())
+                {
+                    let (key, pending) = overlay.next().expect("peeked overlay entry");
+                    if let PendingValue::Value(value) = pending {
+                        visited = visited.saturating_add(1);
+                        if let ControlFlow::Break(value) =
+                            visit(EntryRef::new(key.as_slice(), value.as_slice()))
+                        {
+                            stopped = Some(value);
+                            return ControlFlow::Break(());
+                        }
+                    }
                 }
-                PendingValue::Deleted => {
-                    merged.remove(key);
+
+                if overlay
+                    .peek()
+                    .is_some_and(|(key, _)| key.as_slice() == base_entry.key())
+                {
+                    let (key, pending) = overlay.next().expect("peeked overlay entry");
+                    if let PendingValue::Value(value) = pending {
+                        visited = visited.saturating_add(1);
+                        if let ControlFlow::Break(value) =
+                            visit(EntryRef::new(key.as_slice(), value.as_slice()))
+                        {
+                            stopped = Some(value);
+                            return ControlFlow::Break(());
+                        }
+                    }
+                    return ControlFlow::Continue(());
+                }
+
+                visited = visited.saturating_add(1);
+                if let ControlFlow::Break(value) = visit(base_entry) {
+                    stopped = Some(value);
+                    ControlFlow::Break(())
+                } else {
+                    ControlFlow::Continue(())
+                }
+            })?;
+
+        if base_outcome.break_value.is_some() {
+            return Ok(ScanOutcome {
+                visited,
+                break_value: stopped,
+            });
+        }
+        for (key, pending) in overlay {
+            if let PendingValue::Value(value) = pending {
+                visited = visited.saturating_add(1);
+                if let ControlFlow::Break(value) =
+                    visit(EntryRef::new(key.as_slice(), value.as_slice()))
+                {
+                    return Ok(ScanOutcome::stopped(visited, value));
                 }
             }
         }
-        Ok(merged.into_iter().collect())
+        Ok(ScanOutcome::complete(visited))
     }
 
     pub fn savepoint(&self) -> Savepoint {

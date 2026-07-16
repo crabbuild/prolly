@@ -318,6 +318,15 @@ where
         self.source().get(key)
     }
 
+    /// Read one source value without allocating an intermediate owned value.
+    pub fn get_with<R>(
+        &self,
+        key: &[u8],
+        read: impl FnOnce(&[u8]) -> R,
+    ) -> Result<Option<R>, Error> {
+        self.source().get_with(key, read)
+    }
+
     /// Re-run bounded structural startup validation and return exact health state.
     pub fn health(&self) -> Result<IndexedMapHealth, Error> {
         self.validate_state()

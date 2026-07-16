@@ -88,19 +88,20 @@ use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::borrow::Borrow;
 use std::collections::{hash_map::Entry, HashMap, HashSet, VecDeque};
+use std::hash::{BuildHasherDefault, Hasher};
+#[cfg(any(feature = "async-store", test))]
 use std::ops::Range;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, OnceLock, RwLock};
 #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const PARALLEL_NODE_DECODE_THRESHOLD: usize = 16;
 const GET_MANY_PREFETCH_PARALLELISM: usize = 16;
+#[cfg(any(feature = "async-store", test))]
 const GET_MANY_BOUNDARY_ROUTE_MIN_POSITIONS: usize = 32;
 const STATS_FRONTIER_PREFETCH_PARALLELISM: usize = 16;
 const RECENT_LEAF_MISS_SAMPLE_INTERVAL: usize = 16;
-const RECENT_LEAF_PROBE_INTERVAL: usize = 16;
-const RECENT_LEAF_HOT_READS: usize = 256;
 #[cfg(feature = "async-store")]
 const ASYNC_NODE_PREFETCH_BATCH_SIZE: usize = 64;
 
@@ -141,6 +142,7 @@ pub mod policy;
 pub mod proof;
 pub mod proximity;
 pub(crate) mod range_delete;
+pub mod read;
 pub mod snapshot;
 pub mod splice;
 pub mod stats;
@@ -189,6 +191,7 @@ use manifest::{
     NamedRootUpdate, RootManifest,
 };
 use node::Node;
+use node::ReadNode;
 use stats::{StatsComparison, TreeStats};
 #[cfg(feature = "async-store")]
 use store::AsyncStore;
@@ -224,6 +227,7 @@ impl InlinePositions {
         }
     }
 
+    #[cfg(any(feature = "async-store", test))]
     fn with_rest_capacity(first: usize, rest_capacity: usize) -> Self {
         Self {
             first,
@@ -248,6 +252,7 @@ impl InlinePositions {
         1 + self.rest.len()
     }
 
+    #[cfg(any(feature = "async-store", test))]
     fn at(&self, offset: usize) -> usize {
         if offset == 0 {
             self.first
@@ -290,17 +295,79 @@ impl MissingNodeBatch {
     }
 }
 
+fn plan_cached_nodes<T>(
+    cids: &[Cid],
+    mut lookup: impl FnMut(&Cid) -> Option<Arc<T>>,
+) -> (Vec<Option<Arc<T>>>, Option<MissingNodeBatch>, usize) {
+    let mut nodes = Vec::with_capacity(cids.len());
+    let mut missing = MissingNodeBatch::with_capacity(cids.len());
+    let mut cache_hits = 0usize;
+    for (position, cid) in cids.iter().enumerate() {
+        if let Some(node) = lookup(cid) {
+            cache_hits += 1;
+            nodes.push(Some(node));
+        } else {
+            nodes.push(None);
+            missing.record(cid, position);
+        }
+    }
+    let missing = (!missing.cids.is_empty()).then_some(missing);
+    (nodes, missing, cache_hits)
+}
+
+fn read_node_from_shared(bytes: Arc<[u8]>) -> Result<ReadNode, Error> {
+    ReadNode::from_shared(bytes).map_err(|error| match error {
+        Error::Deserialize(_) => Error::InvalidNode,
+        other => other,
+    })
+}
+
 struct NodeCacheEntry {
-    node: Arc<Node>,
+    owned: OnceLock<Arc<Node>>,
+    read: OnceLock<Arc<ReadNode>>,
     generation: u64,
     bytes: usize,
     pinned: bool,
 }
 
+/// Hashes the first 64 bits of a content digest for in-process cache routing.
+///
+/// CIDs are SHA-256 outputs, so their first word is already uniformly
+/// distributed. HashMap still compares the complete CID on a hash collision;
+/// this changes only bucket selection, not identity or correctness.
+#[derive(Default)]
+struct CidCacheHasher {
+    prefix: u64,
+    filled: u8,
+}
+
+impl Hasher for CidCacheHasher {
+    #[inline]
+    fn finish(&self) -> u64 {
+        self.prefix
+    }
+
+    #[inline]
+    fn write(&mut self, bytes: &[u8]) {
+        let remaining = 8usize.saturating_sub(usize::from(self.filled));
+        for &byte in bytes.iter().take(remaining) {
+            self.prefix |= u64::from(byte) << (u32::from(self.filled) * 8);
+            self.filled += 1;
+        }
+    }
+
+    // Array/slice Hash implementations may prefix their length. Every key in
+    // this table is one fixed-width CID, so the prefix contains no entropy.
+    #[inline]
+    fn write_usize(&mut self, _value: usize) {}
+}
+
+type CidNodeCacheMap = HashMap<Cid, NodeCacheEntry, BuildHasherDefault<CidCacheHasher>>;
+
 struct NodeCache {
     max_nodes: Option<usize>,
     max_bytes: Option<usize>,
-    nodes: HashMap<Cid, NodeCacheEntry>,
+    nodes: CidNodeCacheMap,
     access_log: VecDeque<(Cid, u64)>,
     next_generation: u64,
     bytes: usize,
@@ -311,7 +378,7 @@ impl NodeCache {
         Self {
             max_nodes,
             max_bytes,
-            nodes: HashMap::new(),
+            nodes: CidNodeCacheMap::default(),
             access_log: VecDeque::new(),
             next_generation: 0,
             bytes: 0,
@@ -338,6 +405,42 @@ impl NodeCache {
             .sum()
     }
 
+    #[inline]
+    fn is_unbounded(&self) -> bool {
+        self.max_nodes.is_none() && self.max_bytes.is_none()
+    }
+
+    #[inline]
+    fn is_disabled(&self) -> bool {
+        self.max_nodes == Some(0) || self.max_bytes == Some(0)
+    }
+
+    #[inline]
+    fn peek(&self, cid: &Cid) -> Option<Arc<Node>> {
+        self.nodes.get(cid).map(|entry| {
+            entry
+                .owned
+                .get_or_init(|| {
+                    Arc::new(
+                        entry
+                            .read
+                            .get()
+                            .expect("cache entry has one representation")
+                            .as_ref()
+                            .to_owned(),
+                    )
+                })
+                .clone()
+        })
+    }
+
+    #[inline]
+    fn peek_read(&self, cid: &Cid) -> Option<Arc<ReadNode>> {
+        self.nodes
+            .get(cid)
+            .and_then(|entry| entry.read.get().cloned())
+    }
+
     fn clear(&mut self) -> usize {
         let evicted = self.nodes.len();
         self.nodes.clear();
@@ -347,6 +450,9 @@ impl NodeCache {
     }
 
     fn get(&mut self, cid: &Cid) -> Option<Arc<Node>> {
+        if self.is_unbounded() {
+            return self.peek(cid);
+        }
         if !self.nodes.contains_key(cid) {
             return None;
         }
@@ -358,7 +464,35 @@ impl NodeCache {
                 .get_mut(cid)
                 .expect("node was checked before generation update");
             entry.generation = generation;
-            entry.node.clone()
+            entry
+                .owned
+                .get_or_init(|| {
+                    Arc::new(
+                        entry
+                            .read
+                            .get()
+                            .expect("cache entry has one representation")
+                            .as_ref()
+                            .to_owned(),
+                    )
+                })
+                .clone()
+        };
+        self.access_log.push_back((cid.clone(), generation));
+        self.compact_access_log_if_needed();
+        Some(node)
+    }
+
+    fn get_read(&mut self, cid: &Cid) -> Option<Arc<ReadNode>> {
+        if self.is_unbounded() {
+            return self.peek_read(cid);
+        }
+        self.nodes.get(cid).and_then(|entry| entry.read.get())?;
+        let generation = self.next_generation();
+        let node = {
+            let entry = self.nodes.get_mut(cid).expect("read node was checked");
+            entry.generation = generation;
+            entry.read.get().expect("read node was checked").clone()
         };
         self.access_log.push_back((cid.clone(), generation));
         self.compact_access_log_if_needed();
@@ -366,14 +500,14 @@ impl NodeCache {
     }
 
     fn insert(&mut self, cid: Cid, node: Arc<Node>, bytes: usize) -> usize {
-        self.insert_with_pin(cid, node, bytes, false).1
+        self.insert_owned_with_pin(cid, node, bytes, false).1
     }
 
     fn insert_pinned(&mut self, cid: Cid, node: Arc<Node>, bytes: usize) -> (bool, usize) {
-        self.insert_with_pin(cid, node, bytes, true)
+        self.insert_owned_with_pin(cid, node, bytes, true)
     }
 
-    fn insert_with_pin(
+    fn insert_owned_with_pin(
         &mut self,
         cid: Cid,
         node: Arc<Node>,
@@ -385,27 +519,77 @@ impl NodeCache {
         }
 
         let generation = self.next_generation();
-        let mut newly_pinned = pinned;
-        if let Some(previous) = self.nodes.insert(
+        let owned = OnceLock::new();
+        owned.set(node).expect("new owned cache slot");
+        let previous = self.nodes.insert(
             cid.clone(),
             NodeCacheEntry {
-                node,
+                owned,
+                read: OnceLock::new(),
                 generation,
                 bytes,
                 pinned,
             },
-        ) {
-            newly_pinned = pinned && !previous.pinned;
-            let entry = self
-                .nodes
-                .get_mut(&cid)
-                .expect("entry was inserted before preserving pin state");
-            entry.pinned = previous.pinned || pinned;
+        );
+        let newly_pinned = pinned && previous.as_ref().map_or(true, |entry| !entry.pinned);
+        if let Some(previous) = previous {
             self.bytes = self.bytes.saturating_sub(previous.bytes);
+            self.nodes
+                .get_mut(&cid)
+                .expect("replacement cache entry")
+                .pinned |= previous.pinned;
         }
         self.bytes = self.bytes.saturating_add(bytes);
+        if self.is_unbounded() {
+            return (newly_pinned, 0);
+        }
         self.access_log.push_back((cid, generation));
 
+        let evicted = self.evict_to_limit();
+        self.compact_access_log_if_needed();
+        (newly_pinned, evicted)
+    }
+
+    fn insert_read(&mut self, cid: Cid, node: Arc<ReadNode>) -> usize {
+        self.insert_read_with_pin(cid, node, false).1
+    }
+
+    fn insert_read_with_pin(
+        &mut self,
+        cid: Cid,
+        node: Arc<ReadNode>,
+        pinned: bool,
+    ) -> (bool, usize) {
+        if self.is_disabled() {
+            return (false, self.clear());
+        }
+        let generation = self.next_generation();
+        let retained = node.retained_bytes();
+        let read = OnceLock::new();
+        read.set(node).expect("new packed cache slot");
+        let previous = self.nodes.insert(
+            cid.clone(),
+            NodeCacheEntry {
+                owned: OnceLock::new(),
+                read,
+                generation,
+                bytes: retained,
+                pinned,
+            },
+        );
+        let newly_pinned = pinned && previous.as_ref().map_or(true, |entry| !entry.pinned);
+        if let Some(previous) = previous {
+            self.bytes = self.bytes.saturating_sub(previous.bytes);
+            self.nodes
+                .get_mut(&cid)
+                .expect("replacement cache entry")
+                .pinned |= previous.pinned;
+        }
+        self.bytes = self.bytes.saturating_add(retained);
+        if self.is_unbounded() {
+            return (newly_pinned, 0);
+        }
+        self.access_log.push_back((cid, generation));
         let evicted = self.evict_to_limit();
         self.compact_access_log_if_needed();
         (newly_pinned, evicted)
@@ -708,17 +892,13 @@ pub struct Prolly<S: Store> {
     node_cache: RwLock<NodeCache>,
     recent_leaf: RwLock<Option<RecentLeafRead>>,
     recent_leaf_misses: AtomicUsize,
-    recent_leaf_probes: AtomicUsize,
-    recent_leaf_hot_reads: AtomicUsize,
     rightmost_path_cache: RwLock<Option<(Cid, Vec<CachedRightmostPathEntry>)>>,
     metrics: ProllyMetrics,
 }
 
 struct RecentLeafRead {
     root: Cid,
-    first_key: Vec<u8>,
-    last_key: Vec<u8>,
-    node: Arc<Node>,
+    node: Arc<ReadNode>,
 }
 
 /// Async Prolly tree manager.
@@ -1063,8 +1243,6 @@ impl<S: Store> Prolly<S> {
             node_cache: RwLock::new(NodeCache::new(node_cache_max_nodes, node_cache_max_bytes)),
             recent_leaf: RwLock::new(None),
             recent_leaf_misses: AtomicUsize::new(0),
-            recent_leaf_probes: AtomicUsize::new(0),
-            recent_leaf_hot_reads: AtomicUsize::new(0),
             rightmost_path_cache: RwLock::new(None),
             metrics: ProllyMetrics::default(),
         }
@@ -1135,90 +1313,24 @@ impl<S: Store> Prolly<S> {
     /// * `Ok(None)` if the key does not exist
     /// * `Err` on storage or deserialization errors
     pub fn get(&self, tree: &Tree, key: &[u8]) -> Result<Option<Vec<u8>>, Error> {
-        let Some(root_cid) = &tree.root else {
-            return Ok(None);
-        };
-        if let Some(result) = self.probe_recent_leaf(root_cid, key) {
-            return result;
-        }
-
-        let mut cid = root_cid.clone();
-        loop {
-            let node = self.load_arc(&cid)?;
-            let idx = match node.search(key) {
-                Ok(i) => i,
-                Err(i) => {
-                    if i == 0 {
-                        return Ok(None);
-                    } else {
-                        i - 1
-                    }
-                }
-            };
-
-            if node.leaf {
-                self.maybe_cache_recent_leaf(root_cid, node.clone());
-                return if node.keys.get(idx).map(|k| k.as_slice()) == Some(key) {
-                    Ok(Some(leaf_value_at(&node, idx)?))
-                } else {
-                    Ok(None)
-                };
-            }
-
-            // Descend to child
-            cid = child_cid_at(&node, idx)?;
-        }
+        self.get_with(tree, key, <[u8]>::to_vec)
     }
 
-    fn probe_recent_leaf(&self, root: &Cid, key: &[u8]) -> Option<Result<Option<Vec<u8>>, Error>> {
-        let hot = self
-            .recent_leaf_hot_reads
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |remaining| {
-                remaining.checked_sub(1)
-            })
-            .is_ok();
-        if !hot
-            && self.recent_leaf_probes.fetch_add(1, Ordering::Relaxed) % RECENT_LEAF_PROBE_INTERVAL
-                != 0
-        {
-            return None;
-        }
-        let recent = self.recent_leaf.read().ok()?;
-        let recent = recent.as_ref()?;
-        if &recent.root != root
-            || key < recent.first_key.as_slice()
-            || key > recent.last_key.as_slice()
-        {
-            return None;
-        }
-        self.recent_leaf_hot_reads
-            .store(RECENT_LEAF_HOT_READS, Ordering::Relaxed);
-        self.metrics.add_cache_hits(1);
-        Some(match recent.node.search(key) {
-            Ok(index) => leaf_value_at(&recent.node, index).map(Some),
-            Err(_) => Ok(None),
-        })
-    }
-
-    fn maybe_cache_recent_leaf(&self, root: &Cid, node: Arc<Node>) {
-        if node.keys.is_empty()
+    fn maybe_cache_recent_leaf(&self, root: &Cid, node: Arc<ReadNode>) {
+        if self
+            .node_cache
+            .read()
+            .map_or(true, |cache| cache.is_disabled())
+            || node.is_empty()
             || self.recent_leaf_misses.fetch_add(1, Ordering::Relaxed)
                 % RECENT_LEAF_MISS_SAMPLE_INTERVAL
                 != 0
         {
             return;
         }
-        let Some(first_key) = node.keys.first().cloned() else {
-            return;
-        };
-        let Some(last_key) = node.keys.last().cloned() else {
-            return;
-        };
         if let Ok(mut recent) = self.recent_leaf.write() {
             *recent = Some(RecentLeafRead {
                 root: root.clone(),
-                first_key,
-                last_key,
                 node,
             });
         }
@@ -1226,140 +1338,54 @@ impl<S: Store> Prolly<S> {
 
     /// Return the number of logical key/value entries in the tree.
     pub fn len(&self, tree: &Tree) -> Result<u64, Error> {
-        match &tree.root {
-            Some(root) => self.subtree_count(root),
-            None => Ok(0),
-        }
+        self.read(tree)?.len()
     }
 
     /// Return the number of keys strictly less than `key`.
     pub fn rank(&self, tree: &Tree, key: &[u8]) -> Result<u64, Error> {
-        let Some(mut cid) = tree.root.clone() else {
-            return Ok(0);
-        };
-        let mut rank = 0u64;
-        loop {
-            let node = self.load_arc(&cid)?;
-            if node.leaf {
-                rank += node
-                    .keys
-                    .partition_point(|candidate| candidate.as_slice() < key)
-                    as u64;
-                return Ok(rank);
-            }
-            if node.keys.is_empty() || node.keys.len() != node.vals.len() {
-                return Err(Error::InvalidNode);
-            }
-            let insertion = node
-                .keys
-                .partition_point(|candidate| candidate.as_slice() <= key);
-            if insertion == 0 {
-                return Ok(rank);
-            }
-            let child_index = insertion - 1;
-            for index in 0..child_index {
-                rank = rank.saturating_add(self.child_count_at(&node, index)?);
-            }
-            cid = child_cid_at(&node, child_index)?;
-        }
+        self.read(tree)?.rank(key)
     }
 
-    /// Return the zero-based entry at `ordinal`, or `None` when out of range.
-    pub fn select(&self, tree: &Tree, mut ordinal: u64) -> Result<Option<KeyValue>, Error> {
-        let Some(mut cid) = tree.root.clone() else {
-            return Ok(None);
-        };
-        loop {
-            let node = self.load_arc(&cid)?;
-            if node.leaf {
-                let index = usize::try_from(ordinal).map_err(|_| Error::InvalidNode)?;
-                let Some(key) = node.keys.get(index).cloned() else {
-                    return Ok(None);
-                };
-                return Ok(Some((key, leaf_value_at(&node, index)?)));
-            }
-            let mut selected = None;
-            for index in 0..node.len() {
-                let count = self.child_count_at(&node, index)?;
-                if ordinal < count {
-                    selected = Some(index);
-                    break;
-                }
-                ordinal -= count;
-            }
-            let Some(index) = selected else {
-                return Ok(None);
-            };
-            cid = child_cid_at(&node, index)?;
+    pub(crate) fn subtree_count(&self, cid: &Cid) -> Result<u64, Error> {
+        let node = self.load_read_arc(cid)?;
+        if node.is_leaf() {
+            return Ok(node.len() as u64);
         }
-    }
-
-    fn subtree_count(&self, cid: &Cid) -> Result<u64, Error> {
-        let node = self.load_arc(cid)?;
-        if node.leaf {
-            return Ok(node.keys.len() as u64);
-        }
-        if node.keys.len() != node.vals.len() {
-            return Err(Error::InvalidNode);
-        }
-        if node.child_counts.len() == node.len() && node.child_counts.iter().all(|count| *count > 0)
-        {
-            return Ok(node.child_counts.iter().copied().sum());
+        if (0..node.len()).all(|index| node.child_count(index).is_some_and(|count| count > 0)) {
+            return Ok((0..node.len())
+                .map(|index| node.child_count(index).expect("checked child count"))
+                .sum());
         }
         let mut total = 0u64;
         for index in 0..node.len() {
-            total = total.saturating_add(self.subtree_count(&child_cid_at(&node, index)?)?);
+            total = total.saturating_add(self.subtree_count(&node.child_cid(index)?)?);
         }
         Ok(total)
     }
 
-    fn child_count_at(&self, node: &Node, index: usize) -> Result<u64, Error> {
-        match node.child_counts.get(index).copied() {
-            Some(count) if count > 0 => Ok(count),
-            _ => self.subtree_count(&child_cid_at(node, index)?),
-        }
+    /// Return the zero-based entry at `ordinal`, or `None` when out of range.
+    pub fn select(&self, tree: &Tree, ordinal: u64) -> Result<Option<KeyValue>, Error> {
+        self.select_with(tree, ordinal, |entry| entry.to_owned())
     }
 
     /// Return the first key-value entry in key order.
     pub fn first_entry(&self, tree: &Tree) -> Result<Option<KeyValue>, Error> {
-        self.lower_bound(tree, &[])
+        self.first_entry_with(tree, |entry| entry.to_owned())
     }
 
     /// Return the last key-value entry in key order.
     pub fn last_entry(&self, tree: &Tree) -> Result<Option<KeyValue>, Error> {
-        let Some(root_cid) = &tree.root else {
-            return Ok(None);
-        };
-
-        let mut cid = root_cid.clone();
-        loop {
-            let node = self.load_arc(&cid)?;
-            let idx = node.len().checked_sub(1).ok_or(Error::InvalidNode)?;
-
-            if node.leaf {
-                let key = node.keys.get(idx).cloned().ok_or(Error::InvalidNode)?;
-                let value = leaf_value_at(&node, idx)?;
-                return Ok(Some((key, value)));
-            }
-
-            cid = child_cid_at(&node, idx)?;
-        }
+        self.last_entry_with(tree, |entry| entry.to_owned())
     }
 
     /// Return the first entry whose key is greater than or equal to `key`.
     pub fn lower_bound(&self, tree: &Tree, key: &[u8]) -> Result<Option<KeyValue>, Error> {
-        match self.range(tree, key, None)?.next() {
-            Some(entry) => entry.map(Some),
-            None => Ok(None),
-        }
+        self.lower_bound_with(tree, key, |entry| entry.to_owned())
     }
 
     /// Return the first entry whose key is strictly greater than `key`.
     pub fn upper_bound(&self, tree: &Tree, key: &[u8]) -> Result<Option<KeyValue>, Error> {
-        match self.range_after(tree, key, None)?.next() {
-            Some(entry) => entry.map(Some),
-            None => Ok(None),
-        }
+        self.upper_bound_with(tree, key, |entry| entry.to_owned())
     }
 
     /// Get a stored large-value reference by key.
@@ -1368,9 +1394,7 @@ impl<S: Store> Prolly<S> {
     /// can inspect trees that mix ordinary raw values and offloaded blob
     /// references.
     pub fn get_value_ref(&self, tree: &Tree, key: &[u8]) -> Result<Option<blob::ValueRef>, Error> {
-        self.get(tree, key)?
-            .map(|value| blob::ValueRef::from_stored_bytes(&value))
-            .transpose()
+        self.get_value_ref_with(tree, key, |value| value.to_owned())
     }
 
     /// Get a value by key, resolving offloaded blob references when present.
@@ -1423,50 +1447,9 @@ impl<S: Store> Prolly<S> {
         keys: &[K],
     ) -> Result<Vec<Option<Vec<u8>>>, Error> {
         let mut values = vec![None; keys.len()];
-        let Some(root_cid) = &tree.root else {
-            return Ok(values);
-        };
-
-        if keys.is_empty() {
-            return Ok(values);
-        }
-
-        let positions = InlinePositions::from_vec(sorted_key_positions(keys))
-            .expect("keys is non-empty after early return");
-
-        let mut frames = vec![KeyLookupFrame {
-            cid: root_cid.clone(),
-            positions,
-        }];
-
-        while !frames.is_empty() {
-            let cids = frames
-                .iter()
-                .map(|frame| frame.cid.clone())
-                .collect::<Vec<_>>();
-            let nodes = if self.store.prefers_batch_reads() {
-                self.load_many_ordered_with_parallelism(&cids, GET_MANY_PREFETCH_PARALLELISM)?
-            } else {
-                self.load_many_ordered(&cids)?
-            };
-            let mut next_frames = Vec::new();
-
-            for (frame, node) in frames.into_iter().zip(nodes) {
-                if node.leaf {
-                    fill_leaf_lookup_values(&node, frame.positions, keys, &mut values)?;
-                    continue;
-                }
-
-                next_frames.extend(route_key_positions_to_children(
-                    &node,
-                    frame.positions,
-                    keys,
-                )?);
-            }
-
-            frames = next_frames;
-        }
-
+        self.get_many_with(tree, keys, |position, _, value| {
+            values[position] = value.map(<[u8]>::to_vec);
+        })?;
         Ok(values)
     }
 
@@ -1979,6 +1962,20 @@ impl<S: Store> Prolly<S> {
         diff::merge_trees(self, base, left, right, resolver)
     }
 
+    /// Merge two trees with a callback-scoped zero-copy conflict resolver.
+    ///
+    /// Symbolic `UseBase`, `UseLeft`, and `UseRight` decisions avoid copying
+    /// conflict values before the final persisted output node is encoded.
+    pub fn merge_with(
+        &self,
+        base: &Tree,
+        left: &Tree,
+        right: &Tree,
+        resolver: Option<&dyn read::BorrowedMergeResolver>,
+    ) -> Result<Tree, Error> {
+        diff::merge_trees_borrowed(self, base, left, right, resolver)
+    }
+
     /// Perform a three-way merge and return structured diagnostic trace events.
     ///
     /// This is the diagnostics-oriented counterpart to [`Prolly::merge`]. The
@@ -2067,6 +2064,19 @@ impl<S: Store> Prolly<S> {
         diff::merge_trees_range(self, base, left, right, start, end, resolver)
     }
 
+    /// Merge right-side changes in `[start, end)` with borrowed conflicts.
+    pub fn merge_range_with(
+        &self,
+        base: &Tree,
+        left: &Tree,
+        right: &Tree,
+        start: &[u8],
+        end: Option<&[u8]>,
+        resolver: Option<&dyn read::BorrowedMergeResolver>,
+    ) -> Result<Tree, Error> {
+        diff::merge_trees_range_borrowed(self, base, left, right, start, end, resolver)
+    }
+
     /// Merge only right-side changes whose keys start with `prefix`.
     ///
     /// This is a convenience wrapper over [`Prolly::merge_range`] using the
@@ -2081,6 +2091,19 @@ impl<S: Store> Prolly<S> {
     ) -> Result<Tree, Error> {
         let (start, end) = key::prefix_range(prefix);
         self.merge_range(base, left, right, &start, end.as_deref(), resolver)
+    }
+
+    /// Merge right-side changes with `prefix` using borrowed conflicts.
+    pub fn merge_prefix_with(
+        &self,
+        base: &Tree,
+        left: &Tree,
+        right: &Tree,
+        prefix: &[u8],
+        resolver: Option<&dyn read::BorrowedMergeResolver>,
+    ) -> Result<Tree, Error> {
+        let (start, end) = key::prefix_range(prefix);
+        self.merge_range_with(base, left, right, &start, end.as_deref(), resolver)
     }
 
     /// Collect comprehensive statistics about a tree
@@ -3244,10 +3267,25 @@ impl<S: Store> Prolly<S> {
 
     /// Load a node by its CID, reusing the in-process immutable node cache.
     pub(crate) fn load_arc(&self, cid: &Cid) -> Result<Arc<Node>, Error> {
-        if let Ok(mut cache) = self.node_cache.write() {
-            if let Some(node) = cache.get(cid) {
-                self.metrics.add_cache_hits(1);
-                return Ok(node);
+        let unbounded = if let Ok(cache) = self.node_cache.read() {
+            if cache.is_unbounded() {
+                if let Some(node) = cache.peek(cid) {
+                    self.metrics.add_cache_hits(1);
+                    return Ok(node);
+                }
+                true
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+        if !unbounded {
+            if let Ok(mut cache) = self.node_cache.write() {
+                if let Some(node) = cache.get(cid) {
+                    self.metrics.add_cache_hits(1);
+                    return Ok(node);
+                }
             }
         }
 
@@ -3266,6 +3304,181 @@ impl<S: Store> Prolly<S> {
         }
 
         Ok(node)
+    }
+
+    /// Load the immutable packed representation used by read-only traversals.
+    pub(crate) fn load_read_arc(&self, cid: &Cid) -> Result<Arc<ReadNode>, Error> {
+        let unbounded = if let Ok(cache) = self.node_cache.read() {
+            if cache.is_unbounded() {
+                if let Some(node) = cache.peek_read(cid) {
+                    self.metrics.add_cache_hits(1);
+                    return Ok(node);
+                }
+                true
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+        if !unbounded {
+            if let Ok(mut cache) = self.node_cache.write() {
+                if let Some(node) = cache.get_read(cid) {
+                    self.metrics.add_cache_hits(1);
+                    return Ok(node);
+                }
+            }
+        }
+
+        // Nodes admitted by a write already have an owned representation. Turn
+        // it into the packed form without issuing a redundant store read.
+        let owned = if self.store.has_native_shared_reads() {
+            None
+        } else if let Ok(mut cache) = self.node_cache.write() {
+            cache.get(cid)
+        } else {
+            None
+        };
+        if let Some(owned) = owned {
+            let packed = Arc::new(read_node_from_shared(Arc::from(owned.to_bytes()))?);
+            if let Ok(mut cache) = self.node_cache.write() {
+                let evictions = cache.insert_read(cid.clone(), packed.clone());
+                self.metrics.add_cache_evictions(evictions);
+            }
+            self.metrics.add_cache_hits(1);
+            return Ok(packed);
+        }
+
+        self.metrics.add_cache_misses(1);
+        let bytes = self
+            .store
+            .get_shared(cid.as_bytes())
+            .map_err(|e| Error::Store(Box::new(e)))?
+            .ok_or_else(|| Error::NotFound(cid.clone()))?;
+        self.metrics.record_point_read(bytes.len());
+        let actual = Cid::from_bytes(&bytes);
+        if actual != *cid {
+            return Err(Error::CidMismatch {
+                expected: cid.clone(),
+                actual,
+            });
+        }
+        let node = Arc::new(read_node_from_shared(bytes)?);
+        if let Ok(mut cache) = self.node_cache.write() {
+            let evictions = cache.insert_read(cid.clone(), node.clone());
+            self.metrics.add_cache_evictions(evictions);
+        }
+        Ok(node)
+    }
+
+    pub(crate) fn load_many_read_ordered(&self, cids: &[Cid]) -> Result<Vec<Arc<ReadNode>>, Error> {
+        if cids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let unbounded_plan = self.node_cache.read().ok().and_then(|cache| {
+            cache
+                .is_unbounded()
+                .then(|| plan_cached_nodes(cids, |cid| cache.peek_read(cid)))
+        });
+        let (mut nodes, missing, hits) = if let Some(plan) = unbounded_plan {
+            plan
+        } else if let Ok(mut cache) = self.node_cache.write() {
+            plan_cached_nodes(cids, |cid| cache.get_read(cid))
+        } else {
+            plan_cached_nodes(cids, |_| None)
+        };
+        self.metrics.add_cache_hits(hits);
+        if let Some(MissingNodeBatch {
+            cids: missing_cids,
+            positions,
+            ..
+        }) = missing
+        {
+            if missing_cids.len() == 1 && !self.store.prefers_batch_reads() {
+                let node = self.load_read_arc(&missing_cids[0])?;
+                for position in positions.into_iter().next().ok_or(Error::InvalidNode)? {
+                    nodes[position] = Some(node.clone());
+                }
+            } else {
+                self.metrics.add_cache_misses(missing_cids.len());
+                let loaded = if missing_cids.len() <= GET_MANY_PREFETCH_PARALLELISM {
+                    let keys = missing_cids
+                        .iter()
+                        .map(|cid| cid.as_bytes() as &[u8])
+                        .collect::<Vec<_>>();
+                    let loaded = self
+                        .store
+                        .batch_get_shared_ordered_unique(&keys)
+                        .map_err(|error| Error::Store(Box::new(error)))?;
+                    let loaded_bytes = loaded.iter().flatten().map(|bytes| bytes.len()).sum();
+                    let loaded_nodes = loaded.iter().flatten().count();
+                    self.metrics
+                        .record_batch_read(keys.len(), loaded_bytes, loaded_nodes);
+                    loaded
+                } else {
+                    let chunk_size = missing_cids.len().div_ceil(GET_MANY_PREFETCH_PARALLELISM);
+                    missing_cids
+                        .par_chunks(chunk_size)
+                        .map(|chunk| {
+                            let keys = chunk
+                                .iter()
+                                .map(|cid| cid.as_bytes() as &[u8])
+                                .collect::<Vec<_>>();
+                            let loaded = self
+                                .store
+                                .batch_get_shared_ordered_unique(&keys)
+                                .map_err(|error| Error::Store(Box::new(error)))?;
+                            if loaded.len() != chunk.len() {
+                                return Err(Error::InvalidNode);
+                            }
+                            let loaded_bytes =
+                                loaded.iter().flatten().map(|bytes| bytes.len()).sum();
+                            let loaded_nodes = loaded.iter().flatten().count();
+                            self.metrics
+                                .record_batch_read(keys.len(), loaded_bytes, loaded_nodes);
+                            Ok(loaded)
+                        })
+                        .collect::<Result<Vec<_>, Error>>()?
+                        .into_iter()
+                        .flatten()
+                        .collect()
+                };
+                if loaded.len() != missing_cids.len() {
+                    return Err(Error::InvalidNode);
+                }
+                let decoded = missing_cids
+                    .into_iter()
+                    .zip(loaded)
+                    .map(|(cid, bytes)| {
+                        let bytes = bytes.ok_or_else(|| Error::NotFound(cid.clone()))?;
+                        let actual = Cid::from_bytes(&bytes);
+                        if actual != cid {
+                            return Err(Error::CidMismatch {
+                                expected: cid,
+                                actual,
+                            });
+                        }
+                        let node = Arc::new(read_node_from_shared(bytes)?);
+                        Ok((node, cid))
+                    })
+                    .collect::<Result<Vec<_>, Error>>()?;
+                let mut cache = self.node_cache.write().ok();
+                let mut evictions = 0usize;
+                for ((node, cid), positions) in decoded.into_iter().zip(positions) {
+                    if let Some(cache) = cache.as_mut() {
+                        evictions += cache.insert_read(cid, node.clone());
+                    }
+                    for position in positions {
+                        nodes[position] = Some(node.clone());
+                    }
+                }
+                self.metrics.add_cache_evictions(evictions);
+            }
+        }
+        nodes
+            .into_iter()
+            .collect::<Option<Vec<_>>>()
+            .ok_or(Error::InvalidNode)
     }
 
     fn load_arc_pinned(&self, cid: &Cid) -> Result<(Arc<Node>, bool), Error> {
@@ -3313,50 +3526,25 @@ impl<S: Store> Prolly<S> {
             return Ok(Vec::new());
         }
 
-        let mut nodes: Vec<Option<Arc<Node>>>;
-        let mut missing: Option<MissingNodeBatch>;
-        if let Ok(mut cache) = self.node_cache.write() {
-            let mut cache_hits = 0usize;
-            let mut cached_nodes = Vec::with_capacity(cids.len());
-            let mut first_miss = None;
-            for (idx, cid) in cids.iter().enumerate() {
-                if let Some(node) = cache.get(cid) {
-                    cache_hits += 1;
-                    cached_nodes.push(node.clone());
-                } else {
-                    first_miss = Some(idx);
-                    break;
-                }
-            }
-
-            let Some(first_miss) = first_miss else {
-                self.metrics.add_cache_hits(cache_hits);
-                return Ok(cached_nodes);
-            };
-
-            nodes = Vec::with_capacity(cids.len());
-            nodes.extend(cached_nodes.into_iter().map(Some));
-            nodes.resize_with(cids.len(), || None);
-            missing = Some(MissingNodeBatch::with_capacity(cids.len() - first_miss));
-            if let Some(missing_batch) = missing.as_mut() {
-                missing_batch.record(&cids[first_miss], first_miss);
-                for (idx, cid) in cids.iter().enumerate().skip(first_miss + 1) {
-                    if let Some(node) = cache.get(cid) {
-                        cache_hits += 1;
-                        nodes[idx] = Some(node.clone());
-                    } else {
-                        missing_batch.record(cid, idx);
-                    }
-                }
-            }
-            self.metrics.add_cache_hits(cache_hits);
+        let unbounded_plan = self.node_cache.read().ok().and_then(|cache| {
+            cache
+                .is_unbounded()
+                .then(|| plan_cached_nodes(cids, |cid| cache.peek(cid)))
+        });
+        let (mut nodes, missing, cache_hits) = if let Some(plan) = unbounded_plan {
+            plan
+        } else if let Ok(mut cache) = self.node_cache.write() {
+            plan_cached_nodes(cids, |cid| cache.get(cid))
         } else {
-            nodes = vec![None; cids.len()];
-            let mut missing_batch = MissingNodeBatch::with_capacity(cids.len());
-            for (idx, cid) in cids.iter().enumerate() {
-                missing_batch.record(cid, idx);
-            }
-            missing = Some(missing_batch);
+            plan_cached_nodes(cids, |_| None)
+        };
+        self.metrics.add_cache_hits(cache_hits);
+
+        if missing.is_none() {
+            return nodes
+                .into_iter()
+                .collect::<Option<Vec<_>>>()
+                .ok_or(Error::InvalidNode);
         }
 
         if let Some(MissingNodeBatch {
@@ -3490,18 +3678,6 @@ impl<S: Store> Prolly<S> {
         }
     }
 
-    pub(crate) fn cached_node_arc(&self, cid: &Cid) -> Option<Arc<Node>> {
-        let node = self
-            .node_cache
-            .write()
-            .ok()
-            .and_then(|mut cache| cache.get(cid));
-        if node.is_some() {
-            self.metrics.add_cache_hits(1);
-        }
-        node
-    }
-
     pub(crate) fn cached_rightmost_path(
         &self,
         root: &Cid,
@@ -3534,8 +3710,6 @@ impl<S: Store> Prolly<S> {
             *recent = None;
         }
         self.recent_leaf_misses.store(0, Ordering::Relaxed);
-        self.recent_leaf_probes.store(0, Ordering::Relaxed);
-        self.recent_leaf_hot_reads.store(0, Ordering::Relaxed);
         if let Ok(mut cache) = self.rightmost_path_cache.write() {
             *cache = None;
         }
@@ -4067,36 +4241,36 @@ impl<S: Store> Prolly<S> {
         Ok(path)
     }
 
-    /// Find the path from root to the key using shared cached nodes.
-    pub(crate) fn find_path_arcs(
+    /// Find a read-only path using the canonical packed representation.
+    pub(crate) fn find_read_path_arcs(
         &self,
         tree: &Tree,
         key: &[u8],
-    ) -> Result<Vec<(Arc<Node>, usize)>, Error> {
+    ) -> Result<Vec<(Arc<ReadNode>, usize)>, Error> {
         let mut path = Vec::new();
-
         let Some(root_cid) = &tree.root else {
             return Ok(path);
         };
-
         let mut cid = root_cid.clone();
         loop {
-            let node = self.load_arc(&cid)?;
-            let idx = match node.search(key) {
-                Ok(i) => i,
-                Err(i) => i.saturating_sub(1),
-            };
-
-            path.push((node.clone(), idx));
-
-            if node.leaf {
-                break;
+            let node = self.load_read_arc(&cid)?;
+            if node.is_empty() {
+                if node.is_leaf() {
+                    path.push((node, 0));
+                    return Ok(path);
+                }
+                return Err(Error::InvalidNode);
             }
-
-            cid = child_cid_at(&node, idx)?;
+            let index = match node.search(key) {
+                Ok(index) => index,
+                Err(index) => index.saturating_sub(1),
+            };
+            path.push((node.clone(), index));
+            if node.is_leaf() {
+                return Ok(path);
+            }
+            cid = node.child_cid(index)?;
         }
-
-        Ok(path)
     }
 
     fn find_path_hint_entries(
@@ -6837,10 +7011,25 @@ where
     }
 
     pub(crate) async fn load_arc(&self, cid: &Cid) -> Result<Arc<Node>, Error> {
-        if let Ok(mut cache) = self.node_cache.write() {
-            if let Some(node) = cache.get(cid) {
-                self.metrics.add_cache_hits(1);
-                return Ok(node);
+        let unbounded = if let Ok(cache) = self.node_cache.read() {
+            if cache.is_unbounded() {
+                if let Some(node) = cache.peek(cid) {
+                    self.metrics.add_cache_hits(1);
+                    return Ok(node);
+                }
+                true
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+        if !unbounded {
+            if let Ok(mut cache) = self.node_cache.write() {
+                if let Some(node) = cache.get(cid) {
+                    self.metrics.add_cache_hits(1);
+                    return Ok(node);
+                }
             }
         }
 
@@ -6860,6 +7049,145 @@ where
         }
 
         Ok(node)
+    }
+
+    pub(crate) async fn load_read_arc(&self, cid: &Cid) -> Result<Arc<ReadNode>, Error> {
+        let unbounded = if let Ok(cache) = self.node_cache.read() {
+            if cache.is_unbounded() {
+                if let Some(node) = cache.peek_read(cid) {
+                    self.metrics.add_cache_hits(1);
+                    return Ok(node);
+                }
+                true
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+        if !unbounded {
+            if let Ok(mut cache) = self.node_cache.write() {
+                if let Some(node) = cache.get_read(cid) {
+                    self.metrics.add_cache_hits(1);
+                    return Ok(node);
+                }
+            }
+        }
+        let owned = if self.store.has_native_shared_reads() {
+            None
+        } else if let Ok(mut cache) = self.node_cache.write() {
+            cache.get(cid)
+        } else {
+            None
+        };
+        if let Some(owned) = owned {
+            let packed = Arc::new(read_node_from_shared(Arc::from(owned.to_bytes()))?);
+            if let Ok(mut cache) = self.node_cache.write() {
+                let evictions = cache.insert_read(cid.clone(), packed.clone());
+                self.metrics.add_cache_evictions(evictions);
+            }
+            self.metrics.add_cache_hits(1);
+            return Ok(packed);
+        }
+
+        self.metrics.add_cache_misses(1);
+        let bytes = self
+            .store
+            .get_shared(cid.as_bytes())
+            .await
+            .map_err(|e| Error::Store(Box::new(e)))?
+            .ok_or_else(|| Error::NotFound(cid.clone()))?;
+        self.metrics.record_point_read(bytes.len());
+        let actual = Cid::from_bytes(&bytes);
+        if actual != *cid {
+            return Err(Error::CidMismatch {
+                expected: cid.clone(),
+                actual,
+            });
+        }
+        let node = Arc::new(read_node_from_shared(bytes)?);
+        if let Ok(mut cache) = self.node_cache.write() {
+            let evictions = cache.insert_read(cid.clone(), node.clone());
+            self.metrics.add_cache_evictions(evictions);
+        }
+        Ok(node)
+    }
+
+    pub(crate) async fn load_many_read_ordered(
+        &self,
+        cids: &[Cid],
+    ) -> Result<Vec<Arc<ReadNode>>, Error> {
+        if cids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let unbounded_plan = self.node_cache.read().ok().and_then(|cache| {
+            cache
+                .is_unbounded()
+                .then(|| plan_cached_nodes(cids, |cid| cache.peek_read(cid)))
+        });
+        let (mut nodes, missing, hits) = if let Some(plan) = unbounded_plan {
+            plan
+        } else if let Ok(mut cache) = self.node_cache.write() {
+            plan_cached_nodes(cids, |cid| cache.get_read(cid))
+        } else {
+            plan_cached_nodes(cids, |_| None)
+        };
+        self.metrics.add_cache_hits(hits);
+        if let Some(MissingNodeBatch {
+            cids: missing_cids,
+            positions,
+            ..
+        }) = missing
+        {
+            let keys = missing_cids
+                .iter()
+                .map(|cid| cid.as_bytes() as &[u8])
+                .collect::<Vec<_>>();
+            self.metrics.add_cache_misses(keys.len());
+            let loaded = self
+                .store
+                .batch_get_shared_ordered_unique(&keys)
+                .await
+                .map_err(|error| Error::Store(Box::new(error)))?;
+            if loaded.len() != missing_cids.len() {
+                return Err(Error::InvalidNode);
+            }
+            let loaded_bytes = loaded.iter().flatten().map(|bytes| bytes.len()).sum();
+            let loaded_nodes = loaded.iter().flatten().count();
+            self.metrics
+                .record_batch_read(keys.len(), loaded_bytes, loaded_nodes);
+            let decoded = missing_cids
+                .into_iter()
+                .zip(loaded)
+                .map(|(cid, bytes)| {
+                    let bytes = bytes.ok_or_else(|| Error::NotFound(cid.clone()))?;
+                    let actual = Cid::from_bytes(&bytes);
+                    if actual != cid {
+                        return Err(Error::CidMismatch {
+                            expected: cid,
+                            actual,
+                        });
+                    }
+                    let node = Arc::new(read_node_from_shared(bytes)?);
+                    Ok((node, cid))
+                })
+                .collect::<Result<Vec<_>, Error>>()?;
+            let mut cache = self.node_cache.write().ok();
+            let mut evictions = 0usize;
+            for ((node, cid), positions) in decoded.into_iter().zip(positions) {
+                if let Some(cache) = cache.as_mut() {
+                    evictions += cache.insert_read(cid, node.clone());
+                }
+                for position in positions {
+                    nodes[position] = Some(node.clone());
+                }
+            }
+            self.metrics.add_cache_evictions(evictions);
+        }
+        nodes
+            .into_iter()
+            .collect::<Option<Vec<_>>>()
+            .ok_or(Error::InvalidNode)
     }
 
     async fn load_arc_pinned(&self, cid: &Cid) -> Result<(Arc<Node>, bool), Error> {
@@ -6943,50 +7271,25 @@ where
             return Ok(Vec::new());
         }
 
-        let mut nodes: Vec<Option<Arc<Node>>>;
-        let mut missing: Option<MissingNodeBatch>;
-        if let Ok(mut cache) = self.node_cache.write() {
-            let mut cache_hits = 0usize;
-            let mut cached_nodes = Vec::with_capacity(cids.len());
-            let mut first_miss = None;
-            for (idx, cid) in cids.iter().enumerate() {
-                if let Some(node) = cache.get(cid) {
-                    cache_hits += 1;
-                    cached_nodes.push(node.clone());
-                } else {
-                    first_miss = Some(idx);
-                    break;
-                }
-            }
-
-            let Some(first_miss) = first_miss else {
-                self.metrics.add_cache_hits(cache_hits);
-                return Ok(cached_nodes);
-            };
-
-            nodes = Vec::with_capacity(cids.len());
-            nodes.extend(cached_nodes.into_iter().map(Some));
-            nodes.resize_with(cids.len(), || None);
-            missing = Some(MissingNodeBatch::with_capacity(cids.len() - first_miss));
-            if let Some(missing_batch) = missing.as_mut() {
-                missing_batch.record(&cids[first_miss], first_miss);
-                for (idx, cid) in cids.iter().enumerate().skip(first_miss + 1) {
-                    if let Some(node) = cache.get(cid) {
-                        cache_hits += 1;
-                        nodes[idx] = Some(node.clone());
-                    } else {
-                        missing_batch.record(cid, idx);
-                    }
-                }
-            }
-            self.metrics.add_cache_hits(cache_hits);
+        let unbounded_plan = self.node_cache.read().ok().and_then(|cache| {
+            cache
+                .is_unbounded()
+                .then(|| plan_cached_nodes(cids, |cid| cache.peek(cid)))
+        });
+        let (mut nodes, missing, cache_hits) = if let Some(plan) = unbounded_plan {
+            plan
+        } else if let Ok(mut cache) = self.node_cache.write() {
+            plan_cached_nodes(cids, |cid| cache.get(cid))
         } else {
-            nodes = vec![None; cids.len()];
-            let mut missing_batch = MissingNodeBatch::with_capacity(cids.len());
-            for (idx, cid) in cids.iter().enumerate() {
-                missing_batch.record(cid, idx);
-            }
-            missing = Some(missing_batch);
+            plan_cached_nodes(cids, |_| None)
+        };
+        self.metrics.add_cache_hits(cache_hits);
+
+        if missing.is_none() {
+            return nodes
+                .into_iter()
+                .collect::<Option<Vec<_>>>()
+                .ok_or(Error::InvalidNode);
         }
 
         if let Some(MissingNodeBatch {
@@ -7057,18 +7360,6 @@ where
             .ok_or(Error::InvalidNode)
     }
 
-    pub(crate) fn cached_node_arc(&self, cid: &Cid) -> Option<Arc<Node>> {
-        let node = self
-            .node_cache
-            .write()
-            .ok()
-            .and_then(|mut cache| cache.get(cid));
-        if node.is_some() {
-            self.metrics.add_cache_hits(1);
-        }
-        node
-    }
-
     fn cache_node(&self, cid: Cid, node: Node) {
         if let Ok(mut cache) = self.node_cache.write() {
             let bytes = node.encoded_len();
@@ -7104,35 +7395,35 @@ where
         Ok(path)
     }
 
-    pub(crate) async fn find_path_arcs(
+    pub(crate) async fn find_read_path_arcs(
         &self,
         tree: &Tree,
         key: &[u8],
-    ) -> Result<Vec<(Arc<Node>, usize)>, Error> {
+    ) -> Result<Vec<(Arc<ReadNode>, usize)>, Error> {
         let mut path = Vec::new();
-
         let Some(root_cid) = &tree.root else {
             return Ok(path);
         };
-
         let mut cid = root_cid.clone();
         loop {
-            let node = self.load_arc(&cid).await?;
-            let idx = match node.search(key) {
-                Ok(i) => i,
-                Err(i) => i.saturating_sub(1),
-            };
-
-            path.push((node.clone(), idx));
-
-            if node.leaf {
-                break;
+            let node = self.load_read_arc(&cid).await?;
+            if node.is_empty() {
+                if node.is_leaf() {
+                    path.push((node, 0));
+                    return Ok(path);
+                }
+                return Err(Error::InvalidNode);
             }
-
-            cid = child_cid_at(&node, idx)?;
+            let index = match node.search(key) {
+                Ok(index) => index,
+                Err(index) => index.saturating_sub(1),
+            };
+            path.push((node.clone(), index));
+            if node.is_leaf() {
+                return Ok(path);
+            }
+            cid = node.child_cid(index)?;
         }
-
-        Ok(path)
     }
 
     fn build_internal_level_from_summaries(
@@ -7927,6 +8218,7 @@ fn path_index_for_key(node: &Node, key: &[u8]) -> usize {
     }
 }
 
+#[cfg(feature = "async-store")]
 fn fill_leaf_lookup_values<K: AsRef<[u8]>>(
     node: &Node,
     positions: InlinePositions,
@@ -7988,6 +8280,7 @@ fn keys_are_sorted<K: AsRef<[u8]>>(keys: &[K]) -> bool {
         .all(|pair| pair[0].as_ref() <= pair[1].as_ref())
 }
 
+#[cfg(any(feature = "async-store", test))]
 fn route_key_positions_to_children<K: AsRef<[u8]>>(
     node: &Node,
     positions: InlinePositions,
@@ -8026,6 +8319,7 @@ fn route_key_positions_to_children<K: AsRef<[u8]>>(
     Ok(frames)
 }
 
+#[cfg(any(feature = "async-store", test))]
 fn route_key_positions_to_children_by_boundary<K: AsRef<[u8]>>(
     node: &Node,
     positions: InlinePositions,
@@ -8068,6 +8362,7 @@ fn route_key_positions_to_children_by_boundary<K: AsRef<[u8]>>(
     Ok(frames)
 }
 
+#[cfg(any(feature = "async-store", test))]
 fn lower_bound_position_key<K: AsRef<[u8]>>(
     positions: &InlinePositions,
     keys: &[K],
@@ -8089,6 +8384,7 @@ fn lower_bound_position_key<K: AsRef<[u8]>>(
     left
 }
 
+#[cfg(any(feature = "async-store", test))]
 fn inline_positions_from_range(
     positions: &InlinePositions,
     range: Range<usize>,
@@ -8104,6 +8400,7 @@ fn inline_positions_from_range(
     bucket
 }
 
+#[cfg(any(feature = "async-store", test))]
 fn child_index_for_lookup_key(node: &Node, key: &[u8]) -> usize {
     node.keys
         .partition_point(|candidate| candidate.as_slice() <= key)
@@ -8122,6 +8419,7 @@ fn reverse_scan_end<'a>(
     }
 }
 
+#[cfg(feature = "async-store")]
 fn leaf_value_at(node: &Node, idx: usize) -> Result<Vec<u8>, Error> {
     node.vals.get(idx).cloned().ok_or(Error::InvalidNode)
 }
@@ -9776,9 +10074,12 @@ mod tests {
             config: Config::default(),
         };
 
-        let err = prolly.range(&tree, &[], None).unwrap().next().unwrap();
+        let err = match prolly.range(&tree, &[], None) {
+            Ok(_) => panic!("malformed leaf should fail during packed-node validation"),
+            Err(err) => err,
+        };
 
-        assert!(matches!(err, Err(Error::InvalidNode)));
+        assert!(matches!(err, Error::InvalidNode));
     }
 
     #[test]
@@ -9798,14 +10099,12 @@ mod tests {
             config: Config::default(),
         };
 
-        let mut iter = prolly.range(&tree, &[], None).unwrap();
-        assert_eq!(
-            iter.next().unwrap().unwrap(),
-            (b"a".to_vec(), b"1".to_vec())
-        );
-        let err = iter.next().unwrap();
+        let err = match prolly.range(&tree, &[], None) {
+            Ok(_) => panic!("malformed internal node should fail during packed-node validation"),
+            Err(err) => err,
+        };
 
-        assert!(matches!(err, Err(Error::InvalidNode)));
+        assert!(matches!(err, Error::InvalidNode));
     }
 
     #[test]

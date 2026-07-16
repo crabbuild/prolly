@@ -13,6 +13,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::cid::Cid;
 use super::error::Error;
+use super::read::ValueRefView;
 
 const VALUE_REF_MAGIC: &[u8; 4] = b"PLVB";
 const VALUE_REF_VERSION: u8 = 1;
@@ -20,6 +21,50 @@ const VALUE_REF_INLINE: u8 = 0;
 const VALUE_REF_BLOB: u8 = 1;
 const VALUE_REF_HEADER_LEN: usize = 6;
 const U64_LEN: usize = 8;
+
+/// Parse stored bytes into a callback-scoped borrowed value-reference view.
+pub(crate) fn value_ref_view_from_stored_bytes(bytes: &[u8]) -> Result<ValueRefView<'_>, Error> {
+    if !bytes.starts_with(VALUE_REF_MAGIC) {
+        return Ok(ValueRefView::Inline(bytes));
+    }
+    if bytes.len() < VALUE_REF_HEADER_LEN {
+        return Err(value_ref_error("value reference header is truncated"));
+    }
+    if bytes[4] != VALUE_REF_VERSION {
+        return Err(value_ref_error(format!(
+            "unsupported value reference version {}",
+            bytes[4]
+        )));
+    }
+
+    match bytes[5] {
+        VALUE_REF_INLINE => {
+            let mut offset = VALUE_REF_HEADER_LEN;
+            let len = usize::try_from(read_u64(bytes, &mut offset, "inline value length")?)
+                .map_err(|_| value_ref_error("inline value length exceeds platform limits"))?;
+            if bytes.len().saturating_sub(offset) != len {
+                return Err(value_ref_error(
+                    "inline value length does not match payload",
+                ));
+            }
+            Ok(ValueRefView::Inline(&bytes[offset..]))
+        }
+        VALUE_REF_BLOB => {
+            let expected_len = VALUE_REF_HEADER_LEN + 32 + U64_LEN;
+            if bytes.len() != expected_len {
+                return Err(value_ref_error("blob reference length is invalid"));
+            }
+            let mut cid = [0u8; 32];
+            cid.copy_from_slice(&bytes[VALUE_REF_HEADER_LEN..VALUE_REF_HEADER_LEN + 32]);
+            let mut offset = VALUE_REF_HEADER_LEN + 32;
+            let len = read_u64(bytes, &mut offset, "blob length")?;
+            Ok(ValueRefView::Blob { cid: Cid(cid), len })
+        }
+        tag => Err(value_ref_error(format!(
+            "unknown value reference tag {tag}"
+        ))),
+    }
+}
 
 /// Default maximum value size stored directly in leaf nodes by large-value
 /// helpers.

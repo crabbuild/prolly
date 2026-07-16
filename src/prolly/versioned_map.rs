@@ -18,6 +18,7 @@ use super::error::{Diff, Error, Mutation};
 use super::key::decode_segments;
 use super::manifest::{ManifestStore, ManifestStoreScan, NamedRootRetention, RootManifest};
 use super::range::{CursorWindow, RangeCursor, RangeIter, RangePage, ReverseCursor, ReversePage};
+use super::read::{EntryRef, ReadSession, ValueRefView};
 use super::secondary_index::{control_record_key, control_root_name, IndexControl};
 use super::stats::TreeStats;
 use super::store::Store;
@@ -801,6 +802,57 @@ impl<'a, S: Store> MapSnapshot<'a, S> {
         &self.version.tree
     }
 
+    /// Open a reusable zero-copy read session pinned to this snapshot.
+    pub fn read<'snapshot>(&'snapshot self) -> Result<ReadSession<'a, 'snapshot, S>, Error> {
+        self.prolly.read(self.tree())
+    }
+
+    /// Read one key through a callback-scoped borrowed value.
+    pub fn get_with<R>(
+        &self,
+        key: &[u8],
+        read: impl FnOnce(&[u8]) -> R,
+    ) -> Result<Option<R>, Error> {
+        self.prolly.get_with(self.tree(), key, read)
+    }
+
+    /// Inspect an inline/blob envelope without copying inline payload bytes.
+    pub fn get_value_ref_with<R>(
+        &self,
+        key: &[u8],
+        read: impl for<'value> FnOnce(ValueRefView<'value>) -> R,
+    ) -> Result<Option<R>, Error> {
+        self.prolly.get_value_ref_with(self.tree(), key, read)
+    }
+
+    /// Visit ordered point-read results without owning hit values.
+    pub fn get_many_with<K, F>(&self, keys: &[K], visit: F) -> Result<(), Error>
+    where
+        K: AsRef<[u8]>,
+        F: for<'value> FnMut(usize, &[u8], Option<&'value [u8]>),
+    {
+        self.prolly.get_many_with(self.tree(), keys, visit)
+    }
+
+    /// Visit a snapshot-pinned half-open range without per-row allocation.
+    pub fn scan_range(
+        &self,
+        start: &[u8],
+        end: Option<&[u8]>,
+        visit: impl for<'entry> FnMut(EntryRef<'entry>),
+    ) -> Result<u64, Error> {
+        self.prolly.scan_range(self.tree(), start, end, visit)
+    }
+
+    /// Visit a snapshot-pinned prefix without per-row allocation.
+    pub fn scan_prefix(
+        &self,
+        prefix: &[u8],
+        visit: impl for<'entry> FnMut(EntryRef<'entry>),
+    ) -> Result<u64, Error> {
+        self.prolly.scan_prefix(self.tree(), prefix, visit)
+    }
+
     /// Read one key.
     pub fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Error> {
         self.prolly.get(self.tree(), key)
@@ -1315,8 +1367,7 @@ where
     pub fn get(&self, key: &K) -> Result<Option<V>, Error> {
         let key = self.key_codec.encode_key(key)?;
         self.inner
-            .get(&key)?
-            .map(|bytes| self.value_codec.decode(&bytes))
+            .get_with(&key, |bytes| self.value_codec.decode(bytes))?
             .transpose()
     }
 
@@ -1324,8 +1375,7 @@ where
     pub fn get_at(&self, id: &MapVersionId, key: &K) -> Result<Option<V>, Error> {
         let key = self.key_codec.encode_key(key)?;
         self.inner
-            .get_at(id, &key)?
-            .map(|bytes| self.value_codec.decode(&bytes))
+            .get_at_with(id, &key, |bytes| self.value_codec.decode(bytes))?
             .transpose()
     }
 
@@ -1880,6 +1930,30 @@ where
         }
     }
 
+    /// Read a key from the current version through a borrowed callback.
+    pub fn get_with<R>(
+        &self,
+        key: &[u8],
+        read: impl FnOnce(&[u8]) -> R,
+    ) -> Result<Option<R>, Error> {
+        match self.head()? {
+            Some(version) => self.prolly.get_with(&version.tree, key, read),
+            None => Ok(None),
+        }
+    }
+
+    /// Inspect a current inline/blob envelope without copying inline bytes.
+    pub fn get_value_ref_with<R>(
+        &self,
+        key: &[u8],
+        read: impl for<'value> FnOnce(ValueRefView<'value>) -> R,
+    ) -> Result<Option<R>, Error> {
+        match self.head()? {
+            Some(version) => self.prolly.get_value_ref_with(&version.tree, key, read),
+            None => Ok(None),
+        }
+    }
+
     /// Read one value from head and resolve offloaded blob content.
     pub fn get_large_value<B: super::blob::BlobStore>(
         &self,
@@ -1931,6 +2005,33 @@ where
             .map(|version| version.tree)
             .unwrap_or_else(|| self.prolly.create());
         self.prolly.prefix(&tree, prefix)
+    }
+
+    /// Visit a current-snapshot range without owning rows.
+    pub fn scan_range(
+        &self,
+        start: &[u8],
+        end: Option<&[u8]>,
+        visit: impl for<'entry> FnMut(EntryRef<'entry>),
+    ) -> Result<u64, Error> {
+        let tree = self
+            .head()?
+            .map(|version| version.tree)
+            .unwrap_or_else(|| self.prolly.create());
+        self.prolly.scan_range(&tree, start, end, visit)
+    }
+
+    /// Visit a current-snapshot prefix without owning rows.
+    pub fn scan_prefix(
+        &self,
+        prefix: &[u8],
+        visit: impl for<'entry> FnMut(EntryRef<'entry>),
+    ) -> Result<u64, Error> {
+        let tree = self
+            .head()?
+            .map(|version| version.tree)
+            .unwrap_or_else(|| self.prolly.create());
+        self.prolly.scan_prefix(&tree, prefix, visit)
     }
 
     /// Read a cursor page from the current version.
@@ -2000,6 +2101,32 @@ where
         self.prolly.get(&version.tree, key)
     }
 
+    /// Read one key from a specific version through a borrowed callback.
+    pub fn get_at_with<R>(
+        &self,
+        id: &MapVersionId,
+        key: &[u8],
+        read: impl FnOnce(&[u8]) -> R,
+    ) -> Result<Option<R>, Error> {
+        let version = self
+            .version(id)?
+            .ok_or_else(|| Error::InvalidVersionedMap(format!("unknown map version {id}")))?;
+        self.prolly.get_with(&version.tree, key, read)
+    }
+
+    /// Inspect an inline/blob envelope at a specific immutable version.
+    pub fn get_value_ref_at_with<R>(
+        &self,
+        id: &MapVersionId,
+        key: &[u8],
+        read: impl for<'value> FnOnce(ValueRefView<'value>) -> R,
+    ) -> Result<Option<R>, Error> {
+        let version = self
+            .version(id)?
+            .ok_or_else(|| Error::InvalidVersionedMap(format!("unknown map version {id}")))?;
+        self.prolly.get_value_ref_with(&version.tree, key, read)
+    }
+
     /// Read several keys from a specific immutable version.
     pub fn get_many_at<K: AsRef<[u8]>>(
         &self,
@@ -2035,6 +2162,33 @@ where
             .version(id)?
             .ok_or_else(|| Error::InvalidVersionedMap(format!("unknown map version {id}")))?;
         self.prolly.prefix(&version.tree, prefix)
+    }
+
+    /// Visit a range at a specific immutable version without owning rows.
+    pub fn scan_range_at(
+        &self,
+        id: &MapVersionId,
+        start: &[u8],
+        end: Option<&[u8]>,
+        visit: impl for<'entry> FnMut(EntryRef<'entry>),
+    ) -> Result<u64, Error> {
+        let version = self
+            .version(id)?
+            .ok_or_else(|| Error::InvalidVersionedMap(format!("unknown map version {id}")))?;
+        self.prolly.scan_range(&version.tree, start, end, visit)
+    }
+
+    /// Visit a prefix at a specific immutable version without owning rows.
+    pub fn scan_prefix_at(
+        &self,
+        id: &MapVersionId,
+        prefix: &[u8],
+        visit: impl for<'entry> FnMut(EntryRef<'entry>),
+    ) -> Result<u64, Error> {
+        let version = self
+            .version(id)?
+            .ok_or_else(|| Error::InvalidVersionedMap(format!("unknown map version {id}")))?;
+        self.prolly.scan_prefix(&version.tree, prefix, visit)
     }
 
     /// Read a cursor page from a specific immutable version.

@@ -99,6 +99,9 @@ pub enum BatchOp<'a> {
     Delete { key: &'a [u8] },
 }
 
+/// Ordered results from a retained immutable-byte batch read.
+pub type SharedReadBatch = Vec<Option<Arc<[u8]>>>;
+
 /// Storage backend trait for Prolly Trees
 ///
 /// Keys are CID bytes, values are serialized nodes.
@@ -112,6 +115,32 @@ pub trait Store: Send + Sync {
     /// Returns `Ok(Some(value))` if key exists, `Ok(None)` if not found,
     /// or `Err` on storage failure.
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error>;
+
+    /// Get immutable shared bytes without requiring the engine to copy an
+    /// already-retained cache value. Stores that cannot retain values may use
+    /// the default owned-read adapter.
+    fn get_shared(&self, key: &[u8]) -> Result<Option<Arc<[u8]>>, Self::Error> {
+        self.get(key)
+            .map(|value| value.map(|bytes| Arc::from(bytes.into_boxed_slice())))
+    }
+
+    /// Retrieve unique keys in order as retained immutable byte buffers.
+    fn batch_get_shared_ordered_unique(
+        &self,
+        keys: &[&[u8]],
+    ) -> Result<SharedReadBatch, Self::Error> {
+        self.batch_get_ordered_unique(keys).map(|values| {
+            values
+                .into_iter()
+                .map(|value| value.map(|bytes| Arc::from(bytes.into_boxed_slice())))
+                .collect()
+        })
+    }
+
+    /// Whether shared reads return an already-retained immutable allocation.
+    fn has_native_shared_reads(&self) -> bool {
+        false
+    }
 
     /// Store key-value pair
     ///
@@ -317,6 +346,31 @@ pub trait AsyncStore {
 
     /// Get value by key.
     async fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error>;
+
+    /// Async immutable shared-byte read.
+    async fn get_shared(&self, key: &[u8]) -> Result<Option<Arc<[u8]>>, Self::Error> {
+        self.get(key)
+            .await
+            .map(|value| value.map(|bytes| Arc::from(bytes.into_boxed_slice())))
+    }
+
+    /// Async ordered retained-byte batch read for unique keys.
+    async fn batch_get_shared_ordered_unique(
+        &self,
+        keys: &[&[u8]],
+    ) -> Result<SharedReadBatch, Self::Error> {
+        self.batch_get_ordered_unique(keys).await.map(|values| {
+            values
+                .into_iter()
+                .map(|value| value.map(|bytes| Arc::from(bytes.into_boxed_slice())))
+                .collect()
+        })
+    }
+
+    /// Whether async shared reads retain backend-owned immutable allocations.
+    fn has_native_shared_reads(&self) -> bool {
+        false
+    }
 
     /// Store key-value pair.
     async fn put(&self, key: &[u8], value: &[u8]) -> Result<(), Self::Error>;
@@ -951,6 +1005,21 @@ impl<T: Store> Store for std::sync::Arc<T> {
         (**self).get(key)
     }
 
+    fn get_shared(&self, key: &[u8]) -> Result<Option<Arc<[u8]>>, Self::Error> {
+        (**self).get_shared(key)
+    }
+
+    fn batch_get_shared_ordered_unique(
+        &self,
+        keys: &[&[u8]],
+    ) -> Result<SharedReadBatch, Self::Error> {
+        (**self).batch_get_shared_ordered_unique(keys)
+    }
+
+    fn has_native_shared_reads(&self) -> bool {
+        (**self).has_native_shared_reads()
+    }
+
     fn put(&self, key: &[u8], value: &[u8]) -> Result<(), Self::Error> {
         (**self).put(key, value)
     }
@@ -1021,6 +1090,21 @@ impl<T: Store + ?Sized> Store for &T {
         (**self).get(key)
     }
 
+    fn get_shared(&self, key: &[u8]) -> Result<Option<Arc<[u8]>>, Self::Error> {
+        (**self).get_shared(key)
+    }
+
+    fn batch_get_shared_ordered_unique(
+        &self,
+        keys: &[&[u8]],
+    ) -> Result<SharedReadBatch, Self::Error> {
+        (**self).batch_get_shared_ordered_unique(keys)
+    }
+
+    fn has_native_shared_reads(&self) -> bool {
+        (**self).has_native_shared_reads()
+    }
+
     fn put(&self, key: &[u8], value: &[u8]) -> Result<(), Self::Error> {
         (**self).put(key, value)
     }
@@ -1085,6 +1169,21 @@ impl<T: AsyncStore> AsyncStore for std::sync::Arc<T> {
 
     async fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
         (**self).get(key).await
+    }
+
+    async fn get_shared(&self, key: &[u8]) -> Result<Option<Arc<[u8]>>, Self::Error> {
+        (**self).get_shared(key).await
+    }
+
+    async fn batch_get_shared_ordered_unique(
+        &self,
+        keys: &[&[u8]],
+    ) -> Result<SharedReadBatch, Self::Error> {
+        (**self).batch_get_shared_ordered_unique(keys).await
+    }
+
+    fn has_native_shared_reads(&self) -> bool {
+        (**self).has_native_shared_reads()
     }
 
     async fn put(&self, key: &[u8], value: &[u8]) -> Result<(), Self::Error> {

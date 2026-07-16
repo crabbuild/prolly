@@ -136,9 +136,12 @@ impl<'a> Reader<'a> {
             }
             value |= u64::from(byte & 0x7f) << shift;
             if byte & 0x80 == 0 {
-                let mut canonical = Vec::new();
-                put_varint(value, &mut canonical);
-                if canonical.as_slice() != &self.bytes[start..self.offset] {
+                let canonical_len = if value == 0 {
+                    1
+                } else {
+                    ((64 - value.leading_zeros()) as usize).div_ceil(7)
+                };
+                if self.offset - start != canonical_len {
                     return Err(self.invalid("non-canonical varint"));
                 }
                 return Ok(value);

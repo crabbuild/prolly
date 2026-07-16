@@ -47,6 +47,12 @@ fn main() {
             bench_point_deletes(scale);
             return;
         }
+        Ok("zero-copy-reads") => {
+            bench_point_get(scale);
+            bench_range_scan(scale);
+            bench_range_scan_window(scale);
+            return;
+        }
         Ok(_) | Err(_) => {}
     }
 
@@ -128,6 +134,18 @@ fn bench_point_get(items: usize) {
             black_box(prolly.get(&tree, black_box(key)).unwrap());
         }
     });
+
+    let mut session = prolly.read(&tree).unwrap();
+    measure("point_get_borrowed_mem", 10, gets, || {
+        for i in 0..gets {
+            let key = &data[i % data.len()].0;
+            black_box(
+                session
+                    .get_with(black_box(key), |value| black_box(value.len()))
+                    .unwrap(),
+            );
+        }
+    });
 }
 
 fn bench_point_updates(items: usize) {
@@ -177,6 +195,17 @@ fn bench_range_scan(items: usize) {
             .count();
         black_box(count);
     });
+
+    let mut session = prolly.read(&tree).unwrap();
+    measure("range_scan_borrowed_mem", 25, items, || {
+        let count = session
+            .scan_range(&[], None, |entry| {
+                black_box(entry.key());
+                black_box(entry.value());
+            })
+            .unwrap();
+        black_box(count);
+    });
 }
 
 fn bench_range_scan_window(items: usize) {
@@ -200,6 +229,21 @@ fn bench_range_scan_window(items: usize) {
                 black_box(entry);
             })
             .count();
+        black_box(count);
+    });
+
+    let mut session = prolly.read(&tree).unwrap();
+    measure("range_scan_window_borrowed_mem", 50, window_items, || {
+        let count = session
+            .scan_range(
+                black_box(start.as_slice()),
+                Some(black_box(end.as_slice())),
+                |entry| {
+                    black_box(entry.key());
+                    black_box(entry.value());
+                },
+            )
+            .unwrap();
         black_box(count);
     });
 }

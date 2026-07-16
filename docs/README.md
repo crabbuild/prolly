@@ -51,6 +51,9 @@ tests described here.
 - [Performance](performance.md): optimization principles, tuning guidance,
   benchmark harnesses, current evidence, workload playbooks, and future
   performance work.
+- [Zero-Copy Read Architecture](superpowers/specs/2026-07-15-prolly-zero-copy-read-architecture-design.md):
+  comprehensive ownership, packed-node, cache, API, diff/merge,
+  secondary-index, proximity, async, binding, correctness, and benchmark design.
 - [Roadmap](roadmap.md): the canonical roadmap for public `0.1`,
   compatibility, production hardening, async/remote storage, AI-native
   primitives, language bindings, and collaboration.

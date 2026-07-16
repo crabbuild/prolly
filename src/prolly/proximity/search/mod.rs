@@ -11,7 +11,10 @@ use super::{QueryKernel, SearchBackend, SearchBudget, SearchPolicy};
 use crate::prolly::error::Error;
 use crate::prolly::tree::Tree;
 
-pub(crate) use engine::{insert_top_k, FrontierEntry, SearchCandidate};
+pub(crate) use engine::{
+    insert_reranked_top_k, insert_top_k, retained_candidate_bytes, retained_search_candidate_bytes,
+    FrontierEntry, RerankCandidate, SearchCandidate,
+};
 pub use filter::EligibilityCardinality;
 pub(crate) use filter::PreparedEligibility as PreparedFilter;
 pub(crate) use planner::plan_search;

@@ -1,4 +1,5 @@
 use prolly::{Config, Error, MemStore, Mutation, Prolly};
+use std::ops::ControlFlow;
 use std::sync::Arc;
 
 fn base() -> (Prolly<Arc<MemStore>>, prolly::Tree) {
@@ -32,12 +33,30 @@ fn overlay_reads_ranges_and_flush_match_direct_batch() {
     assert_eq!(session.get(b"a").unwrap(), None);
     assert_eq!(session.get(b"b").unwrap(), Some(b"2".to_vec()));
     assert_eq!(
+        session.get_with(b"b", |value| value[0]).unwrap(),
+        Some(b'2')
+    );
+    assert_eq!(
         session.range(b"a", Some(b"d")).unwrap(),
         vec![
             (b"b".to_vec(), b"2".to_vec()),
             (b"c".to_vec(), b"changed".to_vec()),
         ]
     );
+    let mut borrowed = Vec::new();
+    let outcome = session
+        .scan_range_until(b"a", Some(b"d"), |entry| {
+            borrowed.push(entry.to_owned());
+            if borrowed.len() == 2 {
+                ControlFlow::Break(entry.key().to_vec())
+            } else {
+                ControlFlow::Continue(())
+            }
+        })
+        .unwrap();
+    assert_eq!(outcome.visited, 2);
+    assert_eq!(outcome.break_value, Some(b"c".to_vec()));
+    assert_eq!(borrowed, session.range(b"a", Some(b"d")).unwrap());
 
     let direct = manager
         .batch(

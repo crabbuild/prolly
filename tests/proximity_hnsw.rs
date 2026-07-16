@@ -112,6 +112,12 @@ fn hnsw_has_fixed_seed_recall_enforces_filters_and_resolves_authoritative_values
     let second = index.search(&map, request).unwrap();
     assert_eq!(first.neighbors, second.neighbors);
     assert_eq!(first.stats, second.stats);
+    assert!(first.stats.reranked_candidates > first.neighbors.len());
+    assert_eq!(
+        first.stats.candidate_handles_peak,
+        first.stats.reranked_candidates
+    );
+    assert!(first.stats.candidate_retained_bytes_peak > 0);
     let exact_keys: HashSet<_> = exact.neighbors.iter().map(|hit| hit.key.clone()).collect();
     let overlap = first
         .neighbors
