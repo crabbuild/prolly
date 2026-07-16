@@ -753,6 +753,11 @@ public final class Prolly implements AutoCloseable {
         return new Transaction(engine.beginTransaction());
     }
 
+    /** Bind one immutable tree for repeated point, range, diff, and conflict reads. */
+    public ReadSession read(TreeRecord tree) throws ProllyBindingException {
+        return new ReadSession(engine.readSession(Objects.requireNonNull(tree)));
+    }
+
     public Optional<byte[]> get(TreeRecord tree, byte[] key) throws ProllyBindingException {
         return Optional.ofNullable(engine.get(tree, key.clone())).map(byte[]::clone);
     }

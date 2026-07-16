@@ -17,6 +17,34 @@ class ProllySmokeTest {
 
             assertArrayEquals("1".toByteArray(), engine.get(tree, "a".toByteArray()))
 
+            engine.readSession(tree).use { session ->
+                assertArrayEquals("1".toByteArray(), session.get("a".toByteArray()))
+                assertEquals(null, session.get("missing".toByteArray()))
+
+                val values = session.getMany(
+                    listOf(
+                        "a".toByteArray(),
+                        "missing".toByteArray(),
+                        "a".toByteArray(),
+                    ),
+                )
+                assertArrayEquals("1".toByteArray(), values[0])
+                assertEquals(null, values[1])
+                assertArrayEquals("1".toByteArray(), values[2])
+
+                val visited = mutableListOf<String>()
+                val visitor = object : EntryVisitorCallback {
+                    override fun visit(entry: EntryRecord): Boolean {
+                        visited += entry.key.decodeToString()
+                        return true
+                    }
+                }
+                val outcome = session.scanRange(ByteArray(0), null, visitor)
+                assertEquals(listOf("a"), visited)
+                assertEquals(1UL, outcome.visited)
+                assertFalse(outcome.stopped)
+            }
+
             val entries = engine.range(tree, ByteArray(0), null)
             assertEquals(1, entries.size)
             assertArrayEquals("a".toByteArray(), entries[0].key)

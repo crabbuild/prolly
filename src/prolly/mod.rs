@@ -8471,6 +8471,7 @@ mod tests {
     use super::*;
     use error::Diff;
     use std::collections::BTreeMap;
+    use std::ops::ControlFlow;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::{Arc, Mutex};
     #[cfg(feature = "async-store")]
@@ -8594,6 +8595,68 @@ mod tests {
 
         assert!(tree.is_empty());
         assert!(tree.root.is_none());
+    }
+
+    #[test]
+    fn owned_read_session_retains_values_and_scan_position() {
+        let prolly = Arc::new(Prolly::new(MemStore::new(), Config::default()));
+        let empty = prolly.create();
+        let tree = prolly
+            .batch(
+                &empty,
+                (0..20)
+                    .map(|index| Mutation::Upsert {
+                        key: format!("key-{index:02}").into_bytes(),
+                        val: format!("value-{index:02}").into_bytes(),
+                    })
+                    .collect(),
+            )
+            .unwrap();
+
+        let session = prolly.read_owned(tree).unwrap();
+        assert_eq!(
+            session.get_with(b"key-07", <[u8]>::to_vec).unwrap(),
+            Some(b"value-07".to_vec())
+        );
+        let lease = session.get_lease(b"key-07").unwrap().unwrap();
+        assert_eq!(lease.as_bytes().unwrap(), b"value-07");
+        assert!(lease.retained_bytes() >= lease.as_bytes().unwrap().len());
+
+        let mut scan = session
+            .scan_range_session(b"key-05", Some(b"key-10"))
+            .unwrap();
+        let mut first = Vec::new();
+        let outcome = scan
+            .next_until(|entry| {
+                first.push(entry.key().to_vec());
+                if first.len() == 2 {
+                    ControlFlow::Break(())
+                } else {
+                    ControlFlow::Continue(())
+                }
+            })
+            .unwrap();
+        assert_eq!(outcome.visited, 2);
+        assert!(outcome.break_value.is_some());
+        assert_eq!(first, [b"key-05".to_vec(), b"key-06".to_vec()]);
+
+        let mut rest = Vec::new();
+        let outcome = scan
+            .next_until(|entry| {
+                rest.push(entry.key().to_vec());
+                ControlFlow::<()>::Continue(())
+            })
+            .unwrap();
+        assert_eq!(outcome.visited, 3);
+        assert!(outcome.break_value.is_none());
+        assert_eq!(
+            rest,
+            [b"key-07".to_vec(), b"key-08".to_vec(), b"key-09".to_vec()]
+        );
+        assert!(scan.is_done());
+
+        drop(session);
+        assert_eq!(lease.as_bytes().unwrap(), b"value-07");
     }
 
     #[test]

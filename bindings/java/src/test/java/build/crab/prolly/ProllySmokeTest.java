@@ -24,6 +24,15 @@ class ProllySmokeTest {
 
             assertArrayEquals("1".getBytes(), prolly.get(tree, "a".getBytes()).orElseThrow());
 
+            try (ReadSession session = prolly.read(tree)) {
+                assertArrayEquals("1".getBytes(), session.get("a".getBytes()).orElseThrow());
+                assertTrue(session.get("missing".getBytes()).isEmpty());
+                List<byte[]> values = session.getMany(List.of("a".getBytes(), "missing".getBytes(), "a".getBytes()));
+                assertArrayEquals("1".getBytes(), values.get(0));
+                assertEquals(null, values.get(1));
+                assertArrayEquals("1".getBytes(), values.get(2));
+            }
+
             List<Entry> entries = prolly.range(tree, new byte[0], Optional.empty());
             assertEquals(1, entries.size());
             assertArrayEquals("a".getBytes(), entries.get(0).key());

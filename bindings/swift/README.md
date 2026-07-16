@@ -6,6 +6,8 @@ CIDs, node bytes, and envelopes.
 
 The generated API includes:
 
+- root-bound `readSession(tree:)` point, multi-get, range, diff, and conflict
+  reads whose compatibility results remain owned Swift values;
 - single-key, multi-key, range, prefix, reverse-page, and cursor-page helpers;
 - cursor-resumed diffs, structural diff resume, and diff pages;
 - named-root manifest metadata and retained named-root GC;

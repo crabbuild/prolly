@@ -16,6 +16,39 @@ typedef struct RustCallStatus {
 	RustBuffer error_buf;
 } RustCallStatus;
 
+typedef struct ProllyFastCopyResult {
+	int32_t status;
+	uint8_t found;
+	uint8_t reserved[3];
+	uint64_t written;
+	uint64_t required;
+} ProllyFastCopyResult;
+
+typedef struct ProllyFastPageResult {
+	int32_t status;
+	uint8_t terminal;
+	uint8_t reserved[3];
+	uint32_t record_count;
+	uint64_t lease_handle;
+	const uint8_t *data_ptr;
+	uint64_t data_len;
+} ProllyFastPageResult;
+
+typedef struct ProllyFastScanOpenResult {
+	int32_t status;
+	uint32_t reserved;
+	uint64_t scan_handle;
+} ProllyFastScanOpenResult;
+
+typedef struct ProllyFastValueLeaseResult {
+	int32_t status;
+	uint8_t found;
+	uint8_t reserved[3];
+	uint64_t lease_handle;
+	const uint8_t *data_ptr;
+	uint64_t data_len;
+} ProllyFastValueLeaseResult;
+
 typedef void (*MergeResolverFreeCallback)(uint64_t handle);
 typedef uint64_t (*MergeResolverCloneCallback)(uint64_t handle);
 typedef void (*MergeResolverResolveCallback)(uint64_t handle, RustBuffer conflict, RustBuffer *out_return, RustCallStatus *out_status);
@@ -169,12 +202,28 @@ extern void uniffi_prolly_bindings_fn_method_mergepolicyregistry_set_default_res
 extern void uniffi_prolly_bindings_fn_method_mergepolicyregistry_set_default_resolver_name(uint64_t ptr, RustBuffer name, RustCallStatus *out_err);
 extern uint64_t uniffi_prolly_bindings_fn_clone_prollyengine(uint64_t ptr, RustCallStatus *out_err);
 extern void uniffi_prolly_bindings_fn_free_prollyengine(uint64_t ptr, RustCallStatus *out_err);
+extern uint64_t uniffi_prolly_bindings_fn_clone_prollyreadsession(uint64_t ptr, RustCallStatus *out_err);
+extern void uniffi_prolly_bindings_fn_free_prollyreadsession(uint64_t ptr, RustCallStatus *out_err);
 extern uint64_t uniffi_prolly_bindings_fn_constructor_prollyengine_custom_store(uint64_t callback, RustBuffer config, RustCallStatus *out_err);
 extern uint64_t uniffi_prolly_bindings_fn_constructor_prollyengine_file(RustBuffer path, RustBuffer config, RustCallStatus *out_err);
 extern uint64_t uniffi_prolly_bindings_fn_constructor_prollyengine_memory(RustBuffer config, RustCallStatus *out_err);
 extern uint64_t uniffi_prolly_bindings_fn_constructor_prollyengine_sqlite(RustBuffer path, RustBuffer config, RustCallStatus *out_err);
 extern uint64_t uniffi_prolly_bindings_fn_constructor_prollyengine_sqlite_in_memory(RustBuffer config, RustCallStatus *out_err);
 extern uint64_t uniffi_prolly_bindings_fn_method_prollyengine_begin_transaction(uint64_t ptr, RustCallStatus *out_err);
+extern uint64_t uniffi_prolly_bindings_fn_method_prollyengine_read_session(uint64_t ptr, RustBuffer tree, RustCallStatus *out_err);
+extern uint64_t uniffi_prolly_bindings_fn_method_prollyreadsession_fast_handle(uint64_t ptr, RustCallStatus *out_err);
+extern uint32_t prolly_fast_abi_version(void);
+extern uint64_t prolly_fast_abi_capabilities(void);
+extern ProllyFastCopyResult prolly_fast_read_session_get_into(uint64_t session, const uint8_t *key_ptr, size_t key_len, uint8_t *out_ptr, size_t out_capacity);
+extern ProllyFastValueLeaseResult prolly_fast_read_session_get_lease(uint64_t session, const uint8_t *key_ptr, size_t key_len);
+extern ProllyFastPageResult prolly_fast_read_session_get_many_page(uint64_t session, const uint8_t *input_ptr, size_t input_len, uint32_t key_count);
+extern ProllyFastCopyResult prolly_fast_read_session_last_error_into(uint64_t session, uint8_t *out_ptr, size_t out_capacity);
+extern ProllyFastPageResult prolly_fast_read_session_scan_page(uint64_t session, const uint8_t *start_ptr, size_t start_len, const uint8_t *end_ptr, size_t end_len, uint8_t has_end, const uint8_t *after_ptr, size_t after_len, uint8_t has_after, uint32_t max_records, uint64_t max_arena_bytes);
+extern ProllyFastScanOpenResult prolly_fast_read_session_scan_open(uint64_t session, const uint8_t *start_ptr, size_t start_len, const uint8_t *end_ptr, size_t end_len, uint8_t has_end);
+extern ProllyFastPageResult prolly_fast_read_session_scan_next(uint64_t session, uint64_t scan_handle, uint32_t max_records, uint64_t max_arena_bytes);
+extern void prolly_fast_scan_close(uint64_t scan_handle);
+extern void prolly_fast_page_release(uint64_t lease_handle);
+extern void prolly_fast_value_release(uint64_t lease_handle);
 extern uint64_t uniffi_prolly_bindings_fn_clone_prollytransaction(uint64_t ptr, RustCallStatus *out_err);
 extern void uniffi_prolly_bindings_fn_free_prollytransaction(uint64_t ptr, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_prollytransaction_batch(uint64_t ptr, RustBuffer tree, RustBuffer mutations, RustCallStatus *out_err);
@@ -1484,7 +1533,33 @@ type Engine struct {
 	handle          C.uint64_t
 	closed          atomic.Bool
 	hostStoreHandle uint64
+	mu              sync.RWMutex
+
+	readCacheMu   sync.Mutex
+	readCacheTree []byte
+	readCache     *ReadSession
 }
+
+// ReadSession binds one immutable tree to a native read object. Reusing a
+// session avoids serializing the tree and allocating UniFFI RustBuffers for
+// every point read.
+type ReadSession struct {
+	handle C.uint64_t
+	fast   C.uint64_t
+	closed atomic.Bool
+	mu     sync.RWMutex
+}
+
+const (
+	fastABIVersion             = 1
+	fastCapabilityGetInto      = uint64(1 << 0)
+	fastCapabilityScanPage     = uint64(1 << 1)
+	fastCapabilityRetainedScan = uint64(1 << 2)
+	fastCapabilityGetManyPage  = uint64(1 << 3)
+	fastCapabilityValueLease   = uint64(1 << 4)
+	fastStatusOK               = 0
+	fastStatusBufferTooSmall   = 1
+)
 
 type Transaction struct {
 	handle C.uint64_t
@@ -1960,8 +2035,528 @@ func (t Tree) Root() ([]byte, bool, error) {
 	return root, ok, nil
 }
 
+// Read binds tree to a reusable native read session. The returned session owns
+// the native engine state it needs and remains valid until Close is called.
+func (e *Engine) Read(tree Tree) (*ReadSession, error) {
+	if uint32(C.prolly_fast_abi_version()) != fastABIVersion ||
+		uint64(C.prolly_fast_abi_capabilities())&fastCapabilityGetInto == 0 {
+		return nil, errors.New("prolly native library does not support the required fast read ABI")
+	}
+
+	engineHandle, err := e.cloneHandle()
+	if err != nil {
+		return nil, err
+	}
+	treeBuf, err := rustBufferFromBytes(tree.raw)
+	if err != nil {
+		return nil, err
+	}
+
+	var status C.RustCallStatus
+	handle := C.uniffi_prolly_bindings_fn_method_prollyengine_read_session(engineHandle, treeBuf, &status)
+	if err := statusError(&status); err != nil {
+		return nil, err
+	}
+
+	cloned := C.uniffi_prolly_bindings_fn_clone_prollyreadsession(handle, &status)
+	if err := statusError(&status); err != nil {
+		C.uniffi_prolly_bindings_fn_free_prollyreadsession(handle, &status)
+		_ = statusError(&status)
+		return nil, err
+	}
+	fast := C.uniffi_prolly_bindings_fn_method_prollyreadsession_fast_handle(cloned, &status)
+	if err := statusError(&status); err != nil {
+		C.uniffi_prolly_bindings_fn_free_prollyreadsession(handle, &status)
+		_ = statusError(&status)
+		return nil, err
+	}
+
+	session := &ReadSession{handle: handle, fast: fast}
+	runtime.SetFinalizer(session, (*ReadSession).Close)
+	return session, nil
+}
+
+// Close releases the root-bound native session. It waits for active reads and
+// is safe to call more than once.
+func (s *ReadSession) Close() {
+	if s == nil || s.closed.Swap(true) {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	runtime.SetFinalizer(s, nil)
+	if s.handle == 0 {
+		return
+	}
+	var status C.RustCallStatus
+	C.uniffi_prolly_bindings_fn_free_prollyreadsession(s.handle, &status)
+	_ = statusError(&status)
+	s.handle = 0
+	s.fast = 0
+}
+
+// Get reads one key through the caller-buffer fast path. Returned bytes are
+// owned by Go and may be retained after the session is closed.
+func (s *ReadSession) Get(key []byte) ([]byte, bool, error) {
+	if s == nil {
+		return nil, false, errors.New("prolly read session is closed")
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.closed.Load() || s.fast == 0 {
+		return nil, false, errors.New("prolly read session is closed")
+	}
+	return s.getLocked(key)
+}
+
+// GetView exposes a callback-scoped view of a value retained by an immutable
+// native leaf. The callback must copy bytes it needs after returning.
+func (s *ReadSession) GetView(key []byte, visitor func([]byte)) (bool, error) {
+	if visitor == nil {
+		return false, errors.New("nil value view visitor")
+	}
+	if s == nil {
+		return false, errors.New("prolly read session is closed")
+	}
+	s.mu.RLock()
+	if s.closed.Load() || s.fast == 0 {
+		s.mu.RUnlock()
+		return false, errors.New("prolly read session is closed")
+	}
+	if uint64(C.prolly_fast_abi_capabilities())&fastCapabilityValueLease == 0 {
+		s.mu.RUnlock()
+		return false, errors.New("prolly native library does not support point-read leases")
+	}
+	result := C.prolly_fast_read_session_get_lease(
+		s.fast,
+		bytePointer(key),
+		C.size_t(len(key)),
+	)
+	runtime.KeepAlive(key)
+	if int32(result.status) != fastStatusOK {
+		err := s.fastErrorLocked(int32(result.status))
+		s.mu.RUnlock()
+		return false, err
+	}
+	s.mu.RUnlock()
+	if result.found == 0 {
+		if result.lease_handle != 0 {
+			C.prolly_fast_value_release(result.lease_handle)
+			return false, errors.New("missing point read returned a value lease")
+		}
+		return false, nil
+	}
+	dataLen := uint64(result.data_len)
+	if dataLen > uint64(^uint(0)>>1) || result.lease_handle == 0 || (dataLen != 0 && result.data_ptr == nil) {
+		if result.lease_handle != 0 {
+			C.prolly_fast_value_release(result.lease_handle)
+		}
+		return false, errors.New("prolly point read returned an invalid value lease")
+	}
+	defer C.prolly_fast_value_release(result.lease_handle)
+	var value []byte
+	if dataLen == 0 {
+		value = []byte{}
+	} else {
+		value = unsafe.Slice((*byte)(unsafe.Pointer(result.data_ptr)), int(dataLen))
+	}
+	visitor(value)
+	runtime.KeepAlive(value)
+	return true, nil
+}
+
+// GetMany returns point-read results in input order while crossing the native
+// boundary once for the entire key arena.
+func (s *ReadSession) GetMany(keys [][]byte) ([][]byte, []bool, error) {
+	if s == nil {
+		return nil, nil, errors.New("prolly read session is closed")
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.closed.Load() || s.fast == 0 {
+		return nil, nil, errors.New("prolly read session is closed")
+	}
+	return s.getManyLocked(keys)
+}
+
+func (s *ReadSession) getManyLocked(keys [][]byte) ([][]byte, []bool, error) {
+	if len(keys) == 0 {
+		return [][]byte{}, []bool{}, nil
+	}
+	if len(keys) > 65_536 {
+		return nil, nil, errors.New("packed multi-get supports at most 65536 keys per call")
+	}
+	if uint64(C.prolly_fast_abi_capabilities())&fastCapabilityGetManyPage == 0 {
+		return nil, nil, errors.New("prolly native library does not support packed multi-get")
+	}
+	if uint64(len(keys)) > uint64(^uint32(0)) {
+		return nil, nil, errors.New("too many keys for packed multi-get")
+	}
+	tableBytes64 := (uint64(len(keys)) + 1) * 4
+	arenaBytes64 := uint64(0)
+	for _, key := range keys {
+		if uint64(len(key)) > uint64(^uint32(0))-arenaBytes64 {
+			return nil, nil, errors.New("packed multi-get key arena exceeds u32")
+		}
+		arenaBytes64 += uint64(len(key))
+	}
+	if tableBytes64+arenaBytes64 > uint64(^uint(0)>>1) {
+		return nil, nil, errors.New("packed multi-get input exceeds this Go process")
+	}
+	tableBytes := int(tableBytes64)
+	arenaBytes := int(arenaBytes64)
+	input := make([]byte, tableBytes+arenaBytes)
+	offset := 0
+	for index, key := range keys {
+		copy(input[tableBytes+offset:], key)
+		offset += len(key)
+		binary.LittleEndian.PutUint32(input[(index+1)*4:], uint32(offset))
+	}
+	result := C.prolly_fast_read_session_get_many_page(
+		s.fast,
+		bytePointer(input),
+		C.size_t(len(input)),
+		C.uint32_t(len(keys)),
+	)
+	runtime.KeepAlive(input)
+	if int32(result.status) != fastStatusOK {
+		return nil, nil, s.fastErrorLocked(int32(result.status))
+	}
+	page, err := fastScanPageFromResult(result)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer page.close()
+	return decodePackedGetMany(page.bytes, len(keys))
+}
+
+func bytePointer(bytes []byte) *C.uint8_t {
+	if len(bytes) == 0 {
+		return nil
+	}
+	return (*C.uint8_t)(unsafe.Pointer(&bytes[0]))
+}
+
+func (s *ReadSession) getLocked(key []byte) ([]byte, bool, error) {
+	var small [256]byte
+	result := C.prolly_fast_read_session_get_into(
+		s.fast,
+		bytePointer(key),
+		C.size_t(len(key)),
+		bytePointer(small[:]),
+		C.size_t(len(small)),
+	)
+	runtime.KeepAlive(key)
+	if int32(result.status) == fastStatusOK {
+		if result.found == 0 {
+			return nil, false, nil
+		}
+		written := uint64(result.written)
+		if written > uint64(len(small)) {
+			return nil, false, errors.New("prolly fast read returned an invalid byte count")
+		}
+		return small[:int(written)], true, nil
+	}
+	if int32(result.status) != fastStatusBufferTooSmall {
+		return nil, false, s.fastErrorLocked(int32(result.status))
+	}
+
+	required := uint64(result.required)
+	if required > uint64(^uint(0)>>1) {
+		return nil, false, errors.New("prolly value is too large for this Go process")
+	}
+	value := make([]byte, int(required))
+	result = C.prolly_fast_read_session_get_into(
+		s.fast,
+		bytePointer(key),
+		C.size_t(len(key)),
+		bytePointer(value),
+		C.size_t(len(value)),
+	)
+	runtime.KeepAlive(key)
+	runtime.KeepAlive(value)
+	if int32(result.status) != fastStatusOK || result.found == 0 || uint64(result.written) != required {
+		if int32(result.status) != fastStatusOK {
+			return nil, false, s.fastErrorLocked(int32(result.status))
+		}
+		return nil, false, errors.New("prolly value changed during a root-bound read")
+	}
+	return value, true, nil
+}
+
+func (s *ReadSession) fastErrorLocked(status int32) error {
+	var small [256]byte
+	result := C.prolly_fast_read_session_last_error_into(
+		s.fast,
+		bytePointer(small[:]),
+		C.size_t(len(small)),
+	)
+	if int32(result.status) == fastStatusOK && uint64(result.written) <= uint64(len(small)) {
+		return fmt.Errorf("prolly fast read failed (status %d): %s", status, small[:int(result.written)])
+	}
+	if int32(result.status) == fastStatusBufferTooSmall && uint64(result.required) <= uint64(^uint(0)>>1) {
+		message := make([]byte, int(result.required))
+		result = C.prolly_fast_read_session_last_error_into(
+			s.fast,
+			bytePointer(message),
+			C.size_t(len(message)),
+		)
+		if int32(result.status) == fastStatusOK && uint64(result.written) == uint64(len(message)) {
+			return fmt.Errorf("prolly fast read failed (status %d): %s", status, message)
+		}
+	}
+	return fmt.Errorf("prolly fast read failed (status %d)", status)
+}
+
+type fastScanPage struct {
+	lease    C.uint64_t
+	bytes    []byte
+	records  uint32
+	terminal bool
+}
+
+type fastScan struct {
+	handle C.uint64_t
+}
+
+func (p *fastScanPage) close() {
+	if p == nil || p.lease == 0 {
+		return
+	}
+	C.prolly_fast_page_release(p.lease)
+	p.lease = 0
+	p.bytes = nil
+}
+
+func fastScanPageFromResult(result C.ProllyFastPageResult) (fastScanPage, error) {
+	dataLen := uint64(result.data_len)
+	if dataLen > uint64(^uint(0)>>1) || (dataLen != 0 && result.data_ptr == nil) || result.lease_handle == 0 {
+		if result.lease_handle != 0 {
+			C.prolly_fast_page_release(result.lease_handle)
+		}
+		return fastScanPage{}, errors.New("prolly fast transport returned an invalid page lease")
+	}
+	data := unsafe.Slice((*byte)(unsafe.Pointer(result.data_ptr)), int(dataLen))
+	return fastScanPage{
+		lease:    result.lease_handle,
+		bytes:    data,
+		records:  uint32(result.record_count),
+		terminal: result.terminal != 0,
+	}, nil
+}
+
+func decodePackedGetMany(data []byte, expected int) ([][]byte, []bool, error) {
+	if len(data) < fastPageHeaderBytes || !bytes.Equal(data[:4], []byte("PRPG")) {
+		return nil, nil, errors.New("malformed packed multi-get page header")
+	}
+	version := binary.LittleEndian.Uint16(data[4:6])
+	kind := binary.LittleEndian.Uint16(data[6:8])
+	flags := binary.LittleEndian.Uint32(data[8:12])
+	records := binary.LittleEndian.Uint32(data[12:16])
+	tableBytes := binary.LittleEndian.Uint32(data[16:20])
+	arenaBytes := binary.LittleEndian.Uint64(data[20:28])
+	if version != 1 || kind != 2 || flags&1 == 0 || uint64(records) != uint64(expected) ||
+		uint64(tableBytes) != uint64(records)*12 {
+		return nil, nil, errors.New("inconsistent packed multi-get page metadata")
+	}
+	total := uint64(fastPageHeaderBytes) + uint64(tableBytes) + arenaBytes
+	if total != uint64(len(data)) {
+		return nil, nil, errors.New("malformed packed multi-get page length")
+	}
+	arena := data[fastPageHeaderBytes+int(tableBytes):]
+	values := make([][]byte, expected)
+	found := make([]bool, expected)
+	for index := 0; index < expected; index++ {
+		base := fastPageHeaderBytes + index*12
+		present := binary.LittleEndian.Uint32(data[base : base+4])
+		offset := binary.LittleEndian.Uint32(data[base+4 : base+8])
+		length := binary.LittleEndian.Uint32(data[base+8 : base+12])
+		if present > 1 || (present == 0 && (offset != 0 || length != 0)) {
+			return nil, nil, fmt.Errorf("invalid packed multi-get presence at index %d", index)
+		}
+		if present == 0 {
+			continue
+		}
+		value, ok := packedRange(arena, offset, length)
+		if !ok {
+			return nil, nil, fmt.Errorf("packed multi-get value %d is out of range", index)
+		}
+		values[index] = append([]byte(nil), value...)
+		if len(value) == 0 {
+			values[index] = []byte{}
+		}
+		found[index] = true
+	}
+	return values, found, nil
+}
+
+func (scan *fastScan) close() {
+	if scan == nil || scan.handle == 0 {
+		return
+	}
+	C.prolly_fast_scan_close(scan.handle)
+	scan.handle = 0
+}
+
+func (s *ReadSession) openScanLocked(start []byte, end []byte) (fastScan, error) {
+	if uint64(C.prolly_fast_abi_capabilities())&fastCapabilityRetainedScan == 0 {
+		return fastScan{}, errors.New("prolly native library does not support retained scans")
+	}
+	hasEnd := C.uint8_t(0)
+	if end != nil {
+		hasEnd = 1
+	}
+	result := C.prolly_fast_read_session_scan_open(
+		s.fast,
+		bytePointer(start),
+		C.size_t(len(start)),
+		bytePointer(end),
+		C.size_t(len(end)),
+		hasEnd,
+	)
+	runtime.KeepAlive(start)
+	runtime.KeepAlive(end)
+	if int32(result.status) != fastStatusOK {
+		return fastScan{}, s.fastErrorLocked(int32(result.status))
+	}
+	if result.scan_handle == 0 {
+		return fastScan{}, errors.New("prolly retained scan returned an invalid handle")
+	}
+	return fastScan{handle: result.scan_handle}, nil
+}
+
+func (s *ReadSession) scanNextLocked(
+	scan *fastScan,
+	maxRecords uint32,
+	maxArenaBytes uint64,
+) (fastScanPage, error) {
+	if scan == nil || scan.handle == 0 {
+		return fastScanPage{}, errors.New("prolly retained scan is closed")
+	}
+	result := C.prolly_fast_read_session_scan_next(
+		s.fast,
+		scan.handle,
+		C.uint32_t(maxRecords),
+		C.uint64_t(maxArenaBytes),
+	)
+	if int32(result.status) != fastStatusOK {
+		return fastScanPage{}, s.fastErrorLocked(int32(result.status))
+	}
+	dataLen := uint64(result.data_len)
+	if dataLen > uint64(^uint(0)>>1) || (dataLen != 0 && result.data_ptr == nil) || result.lease_handle == 0 {
+		if result.lease_handle != 0 {
+			C.prolly_fast_page_release(result.lease_handle)
+		}
+		return fastScanPage{}, errors.New("prolly retained scan returned an invalid page lease")
+	}
+	data := unsafe.Slice((*byte)(unsafe.Pointer(result.data_ptr)), int(dataLen))
+	return fastScanPage{
+		lease:    result.lease_handle,
+		bytes:    data,
+		records:  uint32(result.record_count),
+		terminal: result.terminal != 0,
+	}, nil
+}
+
+func (s *ReadSession) scanPageLocked(
+	start []byte,
+	end []byte,
+	after []byte,
+	hasAfter bool,
+	maxRecords uint32,
+	maxArenaBytes uint64,
+) (fastScanPage, error) {
+	if uint64(C.prolly_fast_abi_capabilities())&fastCapabilityScanPage == 0 {
+		return fastScanPage{}, errors.New("prolly native library does not support packed scan pages")
+	}
+	hasEnd := C.uint8_t(0)
+	if end != nil {
+		hasEnd = 1
+	}
+	hasAfterValue := C.uint8_t(0)
+	if hasAfter {
+		hasAfterValue = 1
+	}
+	result := C.prolly_fast_read_session_scan_page(
+		s.fast,
+		bytePointer(start),
+		C.size_t(len(start)),
+		bytePointer(end),
+		C.size_t(len(end)),
+		hasEnd,
+		bytePointer(after),
+		C.size_t(len(after)),
+		hasAfterValue,
+		C.uint32_t(maxRecords),
+		C.uint64_t(maxArenaBytes),
+	)
+	runtime.KeepAlive(start)
+	runtime.KeepAlive(end)
+	runtime.KeepAlive(after)
+	if int32(result.status) != fastStatusOK {
+		return fastScanPage{}, s.fastErrorLocked(int32(result.status))
+	}
+	dataLen := uint64(result.data_len)
+	if dataLen > uint64(^uint(0)>>1) || (dataLen != 0 && result.data_ptr == nil) || result.lease_handle == 0 {
+		if result.lease_handle != 0 {
+			C.prolly_fast_page_release(result.lease_handle)
+		}
+		return fastScanPage{}, errors.New("prolly fast scan returned an invalid page lease")
+	}
+	data := unsafe.Slice((*byte)(unsafe.Pointer(result.data_ptr)), int(dataLen))
+	return fastScanPage{
+		lease:    result.lease_handle,
+		bytes:    data,
+		records:  uint32(result.record_count),
+		terminal: result.terminal != 0,
+	}, nil
+}
+
+func (e *Engine) cachedReadSession(tree Tree) (*ReadSession, error) {
+	if e == nil || e.closed.Load() {
+		return nil, errors.New("prolly engine is closed")
+	}
+	e.readCacheMu.Lock()
+	defer e.readCacheMu.Unlock()
+
+	if e.readCache == nil || !bytes.Equal(e.readCacheTree, tree.raw) {
+		next, err := e.Read(tree)
+		if err != nil {
+			return nil, err
+		}
+		previous := e.readCache
+		e.readCache = next
+		e.readCacheTree = append(e.readCacheTree[:0], tree.raw...)
+		if previous != nil {
+			previous.Close()
+		}
+	}
+
+	e.readCache.mu.RLock()
+	if e.readCache.closed.Load() || e.readCache.fast == 0 {
+		e.readCache.mu.RUnlock()
+		return nil, errors.New("prolly read session is closed")
+	}
+	return e.readCache, nil
+}
+
 func (e *Engine) Close() {
-	if e == nil || e.closed.Swap(true) || e.handle == 0 {
+	if e == nil || e.closed.Swap(true) {
+		return
+	}
+
+	e.readCacheMu.Lock()
+	cached := e.readCache
+	e.readCache = nil
+	e.readCacheTree = nil
+	e.readCacheMu.Unlock()
+	if cached != nil {
+		cached.Close()
+	}
+
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.handle == 0 {
 		return
 	}
 	var status C.RustCallStatus
@@ -2222,26 +2817,12 @@ func (e *Engine) DeleteRangeWithStats(tree Tree, start []byte, rangeEnd []byte) 
 }
 
 func (e *Engine) Get(tree Tree, key []byte) ([]byte, bool, error) {
-	handle, err := e.cloneHandle()
+	session, err := e.cachedReadSession(tree)
 	if err != nil {
 		return nil, false, err
 	}
-	treeBuf, err := rustBufferFromBytes(tree.raw)
-	if err != nil {
-		return nil, false, err
-	}
-	keyBuf, err := rustBufferFromBytes(encodeByteArray(key))
-	if err != nil {
-		return nil, false, err
-	}
-
-	var status C.RustCallStatus
-	buf := C.uniffi_prolly_bindings_fn_method_prollyengine_get(handle, treeBuf, keyBuf, &status)
-	if err := statusError(&status); err != nil {
-		return nil, false, err
-	}
-	defer freeRustBuffer(buf)
-	return decodeOptionalByteArray(copyRustBuffer(buf))
+	defer session.mu.RUnlock()
+	return session.getLocked(key)
 }
 
 func (t *Transaction) Create() (Tree, error) {
@@ -2504,26 +3085,12 @@ func (e *Engine) PutLargeValue(blobStore *BlobStore, tree Tree, key []byte, valu
 }
 
 func (e *Engine) GetMany(tree Tree, keys [][]byte) ([][]byte, []bool, error) {
-	handle, err := e.cloneHandle()
+	session, err := e.cachedReadSession(tree)
 	if err != nil {
 		return nil, nil, err
 	}
-	treeBuf, err := rustBufferFromBytes(tree.raw)
-	if err != nil {
-		return nil, nil, err
-	}
-	keysBuf, err := rustBufferFromBytes(encodeByteArraySequence(keys))
-	if err != nil {
-		return nil, nil, err
-	}
-
-	var status C.RustCallStatus
-	buf := C.uniffi_prolly_bindings_fn_method_prollyengine_get_many(handle, treeBuf, keysBuf, &status)
-	if err := statusError(&status); err != nil {
-		return nil, nil, err
-	}
-	defer freeRustBuffer(buf)
-	return decodeOptionalByteArraySequence(copyRustBuffer(buf))
+	defer session.mu.RUnlock()
+	return session.getManyLocked(keys)
 }
 
 func (e *Engine) ProveKey(tree Tree, key []byte) (KeyProof, error) {
@@ -6384,6 +6951,11 @@ func (e *Engine) largeValueReadArgs(blobStore *BlobStore, tree Tree, key []byte)
 }
 
 func (e *Engine) cloneHandle() (C.uint64_t, error) {
+	if e == nil {
+		return 0, errors.New("prolly engine is closed")
+	}
+	e.mu.RLock()
+	defer e.mu.RUnlock()
 	if e == nil || e.closed.Load() || e.handle == 0 {
 		return 0, errors.New("prolly engine is closed")
 	}

@@ -88,8 +88,16 @@ if [ "$RESUME" != 1 ] || [ ! -f "$OUT/machine.txt" ]; then
     printf 'worker_threads=1\n'
     printf 'storage=in-memory\n'
     printf 'binding_build=release\n'
-    printf 'binding_point_api=Engine.Get per key\n'
-    printf 'binding_scan_api=Engine.ScanRange with 1024-entry pages\n'
+    case "${PROLLY_COMPARE_POINT_API:-cached}" in
+        view) printf 'binding_point_api=ReadSession.GetView with callback-scoped retained leaf lease\n' ;;
+        session) printf 'binding_point_api=ReadSession.Get via caller-owned get_into buffer\n' ;;
+        *) printf 'binding_point_api=Engine.Get via cached root-bound get_into session\n' ;;
+    esac
+    if [ "${PROLLY_COMPARE_SCAN_API:-owned}" = view ]; then
+        printf 'binding_scan_api=ReadSession.ScanRangeView with retained 4096-entry packed pages\n'
+    else
+        printf 'binding_scan_api=Engine.ScanRange owned compatibility over retained 4096-entry packed pages\n'
+    fi
     printf 'batch_size=whole_workload\n'
     printf 'mutation_ratio=30%%\n'
     printf 'mutation_insert_update_mix=50/50\n'

@@ -12,6 +12,7 @@ helpers, and core tree operations.
 
 It also covers:
 
+- root-bound `read_session` point, multi-get, range, diff, and conflict reads;
 - paged range, diff, conflict, reverse-page, and cursor-resume flows;
 - bulk-build, append-batch, parallel-batch, and execution-stat APIs;
 - merge policies, Ruby callbacks, CRDT helpers, and explanation traces;

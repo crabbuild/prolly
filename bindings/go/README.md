@@ -85,6 +85,36 @@ scripts/run_go_binding_comparison.sh
 Do not benchmark the default debug link target; it is kept for fast local
 binding development and correctness tests.
 
+## Root-Bound Read Sessions
+
+Use one `ReadSession` for repeated reads of an immutable tree. `Get`,
+`GetMany`, and `ScanRange` return owned Go bytes. `GetView` and
+`ScanRangeView` expose native-backed bytes only for the callback duration;
+copy anything that must outlive the callback.
+
+View callbacks run without the session's close lock held, so they may call
+other session methods or close the session without deadlocking. Closing during
+a multi-page scan cancels the scan before its next page unless the callback
+already stopped or completed the terminal page.
+
+```go
+session, err := engine.Read(tree)
+if err != nil { return err }
+defer session.Close()
+
+value, found, err := session.Get(key)
+found, err = session.GetView(key, func(view []byte) {
+    consume(view) // copy here if retained
+})
+outcome, err := session.ScanRangeView(start, end, func(entry prolly.EntryView) bool {
+    consumeEntry(entry.Key, entry.Value)
+    return true
+})
+```
+
+Legacy `Engine.Get` remains compatible and internally keeps one recent
+root-bound session. Explicit sessions make ownership and reuse predictable.
+
 ## Source Tree Layout
 
 The Go binding is intentionally small at the package boundary. The public

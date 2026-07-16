@@ -13,6 +13,8 @@ the Rust `prolly-bindings` native library through the Kotlin/JVM artifact.
 
 The facade includes:
 
+- `prolly.read(tree)` returning an `AutoCloseable` root-bound `ReadSession` for
+  repeated point, multi-get, range, diff, and conflict reads;
 - ordered boundary, prefix, cursor, range-page, and diff-page helpers;
 - bulk-build, append-batch, parallel-batch, and execution-stat APIs;
 - merge policies, Java callbacks, CRDT helpers, and explanation traces;

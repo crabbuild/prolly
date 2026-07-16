@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -366,6 +367,224 @@ func TestMemoryEngineCrudAndRange(t *testing.T) {
 	}
 	if !bytes.Equal(entries[0].Key, []byte("a")) || !bytes.Equal(entries[0].Value, []byte("1")) {
 		t.Fatalf("range returned %#v", entries[0])
+	}
+}
+
+func TestReadSessionPointReadsOwnResultsAndHandleLargeValues(t *testing.T) {
+	engine, err := OpenMemory()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tree, err := engine.Create()
+	if err != nil {
+		t.Fatal(err)
+	}
+	large := bytes.Repeat([]byte("v"), 4096)
+	tree, err = engine.Batch(tree, []Mutation{
+		UpsertMutation([]byte("empty"), []byte{}),
+		UpsertMutation([]byte("large"), large),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	session, err := engine.Read(tree)
+	if err != nil {
+		t.Fatal(err)
+	}
+	value, found, err := session.Get([]byte("large"))
+	if err != nil || !found || !bytes.Equal(value, large) {
+		t.Fatalf("large session get found=%v len=%d err=%v", found, len(value), err)
+	}
+	empty, found, err := session.Get([]byte("empty"))
+	if err != nil || !found || empty == nil || len(empty) != 0 {
+		t.Fatalf("empty session get value=%v found=%v err=%v", empty, found, err)
+	}
+	missing, found, err := session.Get([]byte("missing"))
+	if err != nil || found || missing != nil {
+		t.Fatalf("missing session get value=%v found=%v err=%v", missing, found, err)
+	}
+	values, present, err := session.GetMany([][]byte{
+		[]byte("large"),
+		[]byte("missing"),
+		[]byte("empty"),
+		[]byte("large"),
+	})
+	if err != nil || len(values) != 4 || len(present) != 4 {
+		t.Fatalf("session multi-get lengths values=%d present=%d err=%v", len(values), len(present), err)
+	}
+	if !reflect.DeepEqual(present, []bool{true, false, true, true}) ||
+		!bytes.Equal(values[0], large) || values[1] != nil || values[2] == nil || len(values[2]) != 0 ||
+		!bytes.Equal(values[3], large) {
+		t.Fatalf("session multi-get values lengths=[%d %d %d %d] present=%v err=%v", len(values[0]), len(values[1]), len(values[2]), len(values[3]), present, err)
+	}
+	if _, _, err := session.GetMany(make([][]byte, 65537)); err == nil {
+		t.Fatal("session multi-get accepted more than the ABI key limit")
+	}
+
+	var viewed []byte
+	found, err = session.GetView([]byte("large"), func(value []byte) {
+		viewed = append([]byte(nil), value...)
+	})
+	if err != nil || !found || !bytes.Equal(viewed, large) {
+		t.Fatalf("session value view found=%v len=%d err=%v", found, len(viewed), err)
+	}
+	emptyVisited := false
+	found, err = session.GetView([]byte("empty"), func(value []byte) {
+		emptyVisited = true
+		if value == nil || len(value) != 0 {
+			t.Fatalf("empty value view was %#v", value)
+		}
+	})
+	if err != nil || !found || !emptyVisited {
+		t.Fatalf("empty value view found=%v visited=%v err=%v", found, emptyVisited, err)
+	}
+	found, err = session.GetView([]byte("missing"), func([]byte) {
+		t.Fatal("missing value invoked view callback")
+	})
+	if err != nil || found {
+		t.Fatalf("missing value view found=%v err=%v", found, err)
+	}
+
+	engine.Close()
+	second, found, err := session.Get([]byte("large"))
+	if err != nil || !found || !bytes.Equal(second, large) {
+		t.Fatalf("session should retain native engine state after engine close: found=%v err=%v", found, err)
+	}
+	session.Close()
+	if _, _, err := session.Get([]byte("large")); err == nil {
+		t.Fatal("get after session close succeeded")
+	}
+	if !bytes.Equal(value, large) {
+		t.Fatal("owned Go result changed after native session close")
+	}
+}
+
+func TestEngineGetCachedSessionTracksTreeIdentity(t *testing.T) {
+	engine, err := OpenMemory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer engine.Close()
+
+	base, err := engine.Create()
+	if err != nil {
+		t.Fatal(err)
+	}
+	left, err := engine.Put(base, []byte("key"), []byte("left"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	right, err := engine.Put(base, []byte("key"), []byte("right"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, check := range []struct {
+		tree Tree
+		want string
+	}{{left, "left"}, {left, "left"}, {right, "right"}, {left, "left"}} {
+		value, found, err := engine.Get(check.tree, []byte("key"))
+		if err != nil || !found || string(value) != check.want {
+			t.Fatalf("cached get want=%q value=%q found=%v err=%v", check.want, value, found, err)
+		}
+	}
+}
+
+func TestViewCallbacksCanCloseTheirReadSession(t *testing.T) {
+	engine, err := OpenMemory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer engine.Close()
+
+	tree, err := engine.Create()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tree, err = engine.Put(tree, []byte("key"), []byte("value"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pointSession, err := engine.Read(tree)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pointVisited := false
+	found, err := pointSession.GetView([]byte("key"), func(value []byte) {
+		pointVisited = bytes.Equal(value, []byte("value"))
+		pointSession.Close()
+	})
+	if err != nil || !found || !pointVisited {
+		t.Fatalf("closing point callback found=%v visited=%v err=%v", found, pointVisited, err)
+	}
+
+	scanSession, err := engine.Read(tree)
+	if err != nil {
+		t.Fatal(err)
+	}
+	outcome, err := scanSession.ScanRangeView(nil, nil, func(entry EntryView) bool {
+		scanSession.Close()
+		return false
+	})
+	if err != nil || outcome != (ScanOutcome{Visited: 1, Stopped: true}) {
+		t.Fatalf("closing scan callback outcome=%+v err=%v", outcome, err)
+	}
+}
+
+func TestReadSessionScanRangeViewCrossesPackedPageBoundary(t *testing.T) {
+	engine, err := OpenMemory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer engine.Close()
+
+	tree, err := engine.Create()
+	if err != nil {
+		t.Fatal(err)
+	}
+	mutations := make([]Mutation, 0, 5000)
+	for index := 0; index < 5000; index++ {
+		key := []byte(fmt.Sprintf("%08d", index))
+		mutations = append(mutations, UpsertMutation(key, []byte("value")))
+	}
+	tree, err = engine.Batch(tree, mutations)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	session, err := engine.Read(tree)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+
+	var previous []byte
+	count := 0
+	outcome, err := session.ScanRangeView(nil, nil, func(entry EntryView) bool {
+		if previous != nil && bytes.Compare(previous, entry.Key) >= 0 {
+			t.Fatalf("view scan is not ordered at %q after %q", entry.Key, previous)
+		}
+		previous = append(previous[:0], entry.Key...)
+		count++
+		return true
+	})
+	if err != nil || outcome != (ScanOutcome{Visited: 5000}) || count != 5000 {
+		t.Fatalf("view scan count=%d outcome=%+v err=%v", count, outcome, err)
+	}
+	if string(previous) != "00004999" {
+		t.Fatalf("view scan last key=%q", previous)
+	}
+
+	count = 0
+	outcome, err = session.ScanRangeView(nil, nil, func(EntryView) bool {
+		count++
+		return count < 4097
+	})
+	if err != nil || outcome != (ScanOutcome{Visited: 4097, Stopped: true}) || count != 4097 {
+		t.Fatalf("early view scan count=%d outcome=%+v err=%v", count, outcome, err)
 	}
 }
 

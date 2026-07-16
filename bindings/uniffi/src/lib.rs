@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, HashMap};
 use std::ops::ControlFlow;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use prolly::{
@@ -32,22 +33,50 @@ use prolly_store_sqlite::SqliteStore;
 use serde::Serialize;
 use thiserror::Error;
 
+mod fast_abi;
+
 type MemoryEngine = Prolly<Arc<MemStore>>;
 type FileEngine = Prolly<Arc<FileNodeStore>>;
 #[cfg(feature = "sqlite")]
 type SqliteEngine = Prolly<Arc<SqliteStore>>;
 type HostEngine = Prolly<Arc<HostStore>>;
+type MemoryReadSession = prolly::OwnedReadSession<Arc<MemStore>>;
+type FileReadSession = prolly::OwnedReadSession<Arc<FileNodeStore>>;
+#[cfg(feature = "sqlite")]
+type SqliteReadSession = prolly::OwnedReadSession<Arc<SqliteStore>>;
+type HostReadSession = prolly::OwnedReadSession<Arc<HostStore>>;
+type MemoryRangeScanSession = prolly::OwnedRangeScanSession<Arc<MemStore>>;
+type FileRangeScanSession = prolly::OwnedRangeScanSession<Arc<FileNodeStore>>;
+#[cfg(feature = "sqlite")]
+type SqliteRangeScanSession = prolly::OwnedRangeScanSession<Arc<SqliteStore>>;
+type HostRangeScanSession = prolly::OwnedRangeScanSession<Arc<HostStore>>;
 type MemoryTransaction = OwnedProllyTransaction<Arc<MemStore>>;
 type FileTransaction = OwnedProllyTransaction<Arc<FileNodeStore>>;
 #[cfg(feature = "sqlite")]
 type SqliteTransaction = OwnedProllyTransaction<Arc<SqliteStore>>;
 
 enum BindingEngine {
-    Memory(MemoryEngine),
-    File(FileEngine),
+    Memory(Arc<MemoryEngine>),
+    File(Arc<FileEngine>),
     #[cfg(feature = "sqlite")]
-    Sqlite(SqliteEngine),
-    Host(HostEngine),
+    Sqlite(Arc<SqliteEngine>),
+    Host(Arc<HostEngine>),
+}
+
+enum BindingReadSession {
+    Memory(MemoryReadSession),
+    File(FileReadSession),
+    #[cfg(feature = "sqlite")]
+    Sqlite(SqliteReadSession),
+    Host(HostReadSession),
+}
+
+pub(crate) enum BindingRangeScanSession {
+    Memory(MemoryRangeScanSession),
+    File(FileRangeScanSession),
+    #[cfg(feature = "sqlite")]
+    Sqlite(SqliteRangeScanSession),
+    Host(HostRangeScanSession),
 }
 
 enum BindingTransaction {
@@ -1965,6 +1994,296 @@ impl ProllyTransaction {
     }
 }
 
+impl BindingReadSession {
+    fn new(engine: &BindingEngine, tree: Tree) -> Result<Self, ProllyBindingError> {
+        match engine {
+            BindingEngine::Memory(engine) => Ok(Self::Memory(engine.read_owned(tree)?)),
+            BindingEngine::File(engine) => Ok(Self::File(engine.read_owned(tree)?)),
+            #[cfg(feature = "sqlite")]
+            BindingEngine::Sqlite(engine) => Ok(Self::Sqlite(engine.read_owned(tree)?)),
+            BindingEngine::Host(engine) => Ok(Self::Host(engine.read_owned(tree)?)),
+        }
+    }
+
+    fn get_with<R>(
+        &self,
+        key: &[u8],
+        read: impl FnOnce(&[u8]) -> R,
+    ) -> Result<Option<R>, prolly::Error> {
+        match self {
+            Self::Memory(session) => session.get_with(key, read),
+            Self::File(session) => session.get_with(key, read),
+            #[cfg(feature = "sqlite")]
+            Self::Sqlite(session) => session.get_with(key, read),
+            Self::Host(session) => session.get_with(key, read),
+        }
+    }
+
+    fn get_many(&self, keys: &[Vec<u8>]) -> Result<Vec<Option<Vec<u8>>>, prolly::Error> {
+        match self {
+            Self::Memory(session) => session.get_many(keys),
+            Self::File(session) => session.get_many(keys),
+            #[cfg(feature = "sqlite")]
+            Self::Sqlite(session) => session.get_many(keys),
+            Self::Host(session) => session.get_many(keys),
+        }
+    }
+
+    fn get_lease(&self, key: &[u8]) -> Result<Option<prolly::OwnedValueLease>, prolly::Error> {
+        match self {
+            Self::Memory(session) => session.get_lease(key),
+            Self::File(session) => session.get_lease(key),
+            #[cfg(feature = "sqlite")]
+            Self::Sqlite(session) => session.get_lease(key),
+            Self::Host(session) => session.get_lease(key),
+        }
+    }
+
+    pub(crate) fn get_many_with<K, F>(&self, keys: &[K], visit: F) -> Result<(), prolly::Error>
+    where
+        K: AsRef<[u8]>,
+        F: for<'value> FnMut(usize, &[u8], Option<&'value [u8]>),
+    {
+        match self {
+            Self::Memory(session) => session.get_many_with(keys, visit),
+            Self::File(session) => session.get_many_with(keys, visit),
+            #[cfg(feature = "sqlite")]
+            Self::Sqlite(session) => session.get_many_with(keys, visit),
+            Self::Host(session) => session.get_many_with(keys, visit),
+        }
+    }
+
+    fn scan_range_until<B>(
+        &self,
+        start: &[u8],
+        end: Option<&[u8]>,
+        visit: impl for<'entry> FnMut(prolly::EntryRef<'entry>) -> ControlFlow<B>,
+    ) -> Result<prolly::ScanOutcome<B>, prolly::Error> {
+        match self {
+            Self::Memory(session) => session.scan_range_until(start, end, visit),
+            Self::File(session) => session.scan_range_until(start, end, visit),
+            #[cfg(feature = "sqlite")]
+            Self::Sqlite(session) => session.scan_range_until(start, end, visit),
+            Self::Host(session) => session.scan_range_until(start, end, visit),
+        }
+    }
+
+    fn scan_range_diff_until<B>(
+        &self,
+        other: &Self,
+        start: &[u8],
+        end: Option<&[u8]>,
+        visit: impl for<'diff> FnMut(prolly::DiffRef<'diff>) -> ControlFlow<B>,
+    ) -> Result<prolly::ScanOutcome<B>, prolly::Error> {
+        match (self, other) {
+            (Self::Memory(base), Self::Memory(other)) => {
+                base.scan_range_diff_until(other, start, end, visit)
+            }
+            (Self::File(base), Self::File(other)) => {
+                base.scan_range_diff_until(other, start, end, visit)
+            }
+            #[cfg(feature = "sqlite")]
+            (Self::Sqlite(base), Self::Sqlite(other)) => {
+                base.scan_range_diff_until(other, start, end, visit)
+            }
+            (Self::Host(base), Self::Host(other)) => {
+                base.scan_range_diff_until(other, start, end, visit)
+            }
+            _ => Err(prolly::Error::InvalidFormat(
+                "read sessions use different store implementations".to_string(),
+            )),
+        }
+    }
+
+    fn scan_conflicts_until<B>(
+        &self,
+        left: &Self,
+        right: &Self,
+        visit: impl for<'conflict> FnMut(prolly::ConflictRef<'conflict>) -> ControlFlow<B>,
+    ) -> Result<prolly::ScanOutcome<B>, prolly::Error> {
+        match (self, left, right) {
+            (Self::Memory(base), Self::Memory(left), Self::Memory(right)) => {
+                base.scan_conflicts_until(left, right, visit)
+            }
+            (Self::File(base), Self::File(left), Self::File(right)) => {
+                base.scan_conflicts_until(left, right, visit)
+            }
+            #[cfg(feature = "sqlite")]
+            (Self::Sqlite(base), Self::Sqlite(left), Self::Sqlite(right)) => {
+                base.scan_conflicts_until(left, right, visit)
+            }
+            (Self::Host(base), Self::Host(left), Self::Host(right)) => {
+                base.scan_conflicts_until(left, right, visit)
+            }
+            _ => Err(prolly::Error::InvalidFormat(
+                "read sessions use different store implementations".to_string(),
+            )),
+        }
+    }
+
+    pub(crate) fn open_range_scan(
+        &self,
+        start: &[u8],
+        end: Option<&[u8]>,
+    ) -> Result<BindingRangeScanSession, prolly::Error> {
+        match self {
+            Self::Memory(session) => session
+                .scan_range_session(start, end)
+                .map(BindingRangeScanSession::Memory),
+            Self::File(session) => session
+                .scan_range_session(start, end)
+                .map(BindingRangeScanSession::File),
+            #[cfg(feature = "sqlite")]
+            Self::Sqlite(session) => session
+                .scan_range_session(start, end)
+                .map(BindingRangeScanSession::Sqlite),
+            Self::Host(session) => session
+                .scan_range_session(start, end)
+                .map(BindingRangeScanSession::Host),
+        }
+    }
+}
+
+impl BindingRangeScanSession {
+    pub(crate) fn next_until<B>(
+        &mut self,
+        visit: impl for<'entry> FnMut(prolly::EntryRef<'entry>) -> ControlFlow<B>,
+    ) -> Result<prolly::ScanOutcome<B>, prolly::Error> {
+        match self {
+            Self::Memory(scan) => scan.next_until(visit),
+            Self::File(scan) => scan.next_until(visit),
+            #[cfg(feature = "sqlite")]
+            Self::Sqlite(scan) => scan.next_until(visit),
+            Self::Host(scan) => scan.next_until(visit),
+        }
+    }
+}
+
+/// A root-bound read object that amortizes tree decoding and ownership across
+/// repeated foreign-language reads.
+#[derive(uniffi::Object)]
+pub struct ProllyReadSession {
+    inner: BindingReadSession,
+    last_fast_error: Mutex<Option<String>>,
+    fast_handle: AtomicU64,
+}
+
+impl ProllyReadSession {
+    fn new(inner: BindingReadSession) -> Arc<Self> {
+        let session = Arc::new(Self {
+            inner,
+            last_fast_error: Mutex::new(None),
+            fast_handle: AtomicU64::new(0),
+        });
+        let handle = fast_abi::register_read_session(&session);
+        session.fast_handle.store(handle, Ordering::Release);
+        session
+    }
+
+    pub(crate) fn get_with<R>(
+        &self,
+        key: &[u8],
+        read: impl FnOnce(&[u8]) -> R,
+    ) -> Result<Option<R>, prolly::Error> {
+        self.inner.get_with(key, read)
+    }
+
+    pub(crate) fn set_fast_error(&self, error: impl Into<String>) {
+        if let Ok(mut slot) = self.last_fast_error.lock() {
+            *slot = Some(error.into());
+        }
+    }
+
+    pub(crate) fn clear_fast_error(&self) {
+        if let Ok(mut slot) = self.last_fast_error.lock() {
+            *slot = None;
+        }
+    }
+
+    pub(crate) fn fast_error(&self) -> String {
+        self.last_fast_error
+            .lock()
+            .ok()
+            .and_then(|error| error.clone())
+            .unwrap_or_else(|| "unknown fast binding error".to_string())
+    }
+}
+
+#[uniffi::export]
+impl ProllyReadSession {
+    /// Return an owned value while reusing the decoded tree bound to this
+    /// session. This is the portable UniFFI session API.
+    pub fn get(&self, key: Vec<u8>) -> Result<Option<Vec<u8>>, ProllyBindingError> {
+        self.inner
+            .get_with(&key, <[u8]>::to_vec)
+            .map_err(Into::into)
+    }
+
+    /// Batch point reads while serializing the key set and result only once.
+    pub fn get_many(&self, keys: Vec<Vec<u8>>) -> Result<Vec<Option<Vec<u8>>>, ProllyBindingError> {
+        self.inner.get_many(&keys).map_err(Into::into)
+    }
+
+    /// Stream a half-open range without retransmitting the tree on every
+    /// operation. Callback records remain owned for compatibility.
+    pub fn scan_range(
+        &self,
+        start: Vec<u8>,
+        range_end: Option<Vec<u8>>,
+        visitor: Arc<dyn EntryVisitorCallback>,
+    ) -> Result<ScanOutcomeRecord, ProllyBindingError> {
+        self.inner
+            .scan_range_until(&start, range_end.as_deref(), |entry| {
+                visitor_flow(visitor.visit(borrowed_entry_record(entry)))
+            })
+            .map(scan_outcome_record)
+            .map_err(Into::into)
+    }
+
+    /// Stream structural differences against another root-bound session.
+    pub fn scan_range_diff(
+        &self,
+        other: Arc<ProllyReadSession>,
+        start: Vec<u8>,
+        range_end: Option<Vec<u8>>,
+        visitor: Arc<dyn DiffVisitorCallback>,
+    ) -> Result<ScanOutcomeRecord, ProllyBindingError> {
+        self.inner
+            .scan_range_diff_until(&other.inner, &start, range_end.as_deref(), |diff| {
+                visitor_flow(visitor.visit(borrowed_diff_record(diff)))
+            })
+            .map(scan_outcome_record)
+            .map_err(Into::into)
+    }
+
+    /// Stream genuine three-way conflicts. The receiver is the merge base.
+    pub fn scan_conflicts(
+        &self,
+        left: Arc<ProllyReadSession>,
+        right: Arc<ProllyReadSession>,
+        visitor: Arc<dyn ConflictVisitorCallback>,
+    ) -> Result<ScanOutcomeRecord, ProllyBindingError> {
+        self.inner
+            .scan_conflicts_until(&left.inner, &right.inner, |conflict| {
+                visitor_flow(visitor.visit(borrowed_conflict_record(conflict)))
+            })
+            .map(scan_outcome_record)
+            .map_err(Into::into)
+    }
+
+    /// Internal opaque transport handle used by handwritten native adapters.
+    /// The handle resolves only while this UniFFI object is alive.
+    pub fn fast_handle(&self) -> u64 {
+        self.fast_handle.load(Ordering::Acquire)
+    }
+}
+
+impl Drop for ProllyReadSession {
+    fn drop(&mut self) {
+        fast_abi::unregister_read_session(self.fast_handle.load(Ordering::Relaxed));
+    }
+}
+
 #[derive(uniffi::Object)]
 pub struct ProllyEngine {
     inner: BindingEngine,
@@ -1977,7 +2296,7 @@ impl ProllyEngine {
         let config = config.try_into()?;
         let store = Arc::new(MemStore::new());
         Ok(Self {
-            inner: BindingEngine::Memory(Prolly::new(store, config)),
+            inner: BindingEngine::Memory(Arc::new(Prolly::new(store, config))),
         })
     }
 
@@ -1986,7 +2305,7 @@ impl ProllyEngine {
         let config = config.try_into()?;
         let store = Arc::new(FileNodeStore::open(path).map_err(store_error)?);
         Ok(Self {
-            inner: BindingEngine::File(Prolly::new(store, config)),
+            inner: BindingEngine::File(Arc::new(Prolly::new(store, config))),
         })
     }
 
@@ -1998,12 +2317,26 @@ impl ProllyEngine {
         let config = config.try_into()?;
         let store = Arc::new(HostStore::new(callback));
         Ok(Self {
-            inner: BindingEngine::Host(Prolly::new(store, config)),
+            inner: BindingEngine::Host(Arc::new(Prolly::new(store, config))),
         })
     }
 
     pub fn create(&self) -> TreeRecord {
         with_engine!(self, engine, { engine.create().into() })
+    }
+
+    /// Bind one immutable tree to a reusable read object. Foreign callers that
+    /// issue repeated reads should prefer this over retransmitting `TreeRecord`
+    /// on every operation.
+    pub fn read_session(
+        &self,
+        tree: TreeRecord,
+    ) -> Result<Arc<ProllyReadSession>, ProllyBindingError> {
+        let tree = tree.try_into()?;
+        Ok(ProllyReadSession::new(BindingReadSession::new(
+            &self.inner,
+            tree,
+        )?))
     }
 
     pub fn begin_transaction(&self) -> Result<Arc<ProllyTransaction>, ProllyBindingError> {
@@ -4150,7 +4483,7 @@ impl ProllyEngine {
         let config = config.try_into()?;
         let store = Arc::new(SqliteStore::open(path).map_err(store_error)?);
         Ok(Self {
-            inner: BindingEngine::Sqlite(Prolly::new(store, config)),
+            inner: BindingEngine::Sqlite(Arc::new(Prolly::new(store, config))),
         })
     }
 
@@ -4159,7 +4492,7 @@ impl ProllyEngine {
         let config = config.try_into()?;
         let store = Arc::new(SqliteStore::open_in_memory().map_err(store_error)?);
         Ok(Self {
-            inner: BindingEngine::Sqlite(Prolly::new(store, config)),
+            inner: BindingEngine::Sqlite(Arc::new(Prolly::new(store, config))),
         })
     }
 }
