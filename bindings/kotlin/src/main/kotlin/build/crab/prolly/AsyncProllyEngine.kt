@@ -114,6 +114,32 @@ class AsyncProllyEngine private constructor(
     suspend fun range(tree: TreeRecord, start: ByteArray, end: ByteArray?): List<EntryRecord> =
         engine.range(tree, start, end)
 
+    suspend fun scanRange(
+        tree: TreeRecord,
+        start: ByteArray,
+        end: ByteArray?,
+        visitor: EntryVisitorCallback,
+    ): ScanOutcomeRecord = engine.scanRange(tree, start, end, visitor)
+
+    suspend fun scanPrefix(
+        tree: TreeRecord,
+        prefix: ByteArray,
+        visitor: EntryVisitorCallback,
+    ): ScanOutcomeRecord = engine.scanPrefix(tree, prefix, visitor)
+
+    suspend fun scanRangeReverse(
+        tree: TreeRecord,
+        start: ByteArray,
+        end: ByteArray?,
+        visitor: EntryVisitorCallback,
+    ): ScanOutcomeRecord = engine.scanRangeReverse(tree, start, end, visitor)
+
+    suspend fun scanPrefixReverse(
+        tree: TreeRecord,
+        prefix: ByteArray,
+        visitor: EntryVisitorCallback,
+    ): ScanOutcomeRecord = engine.scanPrefixReverse(tree, prefix, visitor)
+
     suspend fun rangeAfter(tree: TreeRecord, afterKey: ByteArray, end: ByteArray?): List<EntryRecord> =
         engine.rangeAfter(tree, afterKey, end)
 
@@ -146,6 +172,20 @@ class AsyncProllyEngine private constructor(
     suspend fun rangeDiff(base: TreeRecord, other: TreeRecord, start: ByteArray, end: ByteArray?): List<DiffRecord> =
         engine.rangeDiff(base, other, start, end)
 
+    suspend fun scanDiff(
+        base: TreeRecord,
+        other: TreeRecord,
+        visitor: DiffVisitorCallback,
+    ): ScanOutcomeRecord = engine.scanDiff(base, other, visitor)
+
+    suspend fun scanRangeDiff(
+        base: TreeRecord,
+        other: TreeRecord,
+        start: ByteArray,
+        end: ByteArray?,
+        visitor: DiffVisitorCallback,
+    ): ScanOutcomeRecord = engine.scanRangeDiff(base, other, start, end, visitor)
+
     suspend fun diffFromCursor(
         base: TreeRecord,
         other: TreeRecord,
@@ -168,6 +208,13 @@ class AsyncProllyEngine private constructor(
         cursor: RangeCursorRecord?,
         limit: ULong,
     ): ConflictPageRecord = engine.conflictPage(base, left, right, cursor, limit)
+
+    suspend fun scanConflicts(
+        base: TreeRecord,
+        left: TreeRecord,
+        right: TreeRecord,
+        visitor: ConflictVisitorCallback,
+    ): ScanOutcomeRecord = engine.scanConflicts(base, left, right, visitor)
 
     suspend fun merge(base: TreeRecord, left: TreeRecord, right: TreeRecord, resolver: String?): TreeRecord =
         engine.merge(base, left, right, resolver)

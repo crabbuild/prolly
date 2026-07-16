@@ -11,6 +11,10 @@ export interface NodeEntryRecord {
   key: Buffer
   value: Buffer
 }
+export interface NodeScanOutcomeRecord {
+  visited: string
+  stopped: boolean
+}
 export interface NodeDiffRecord {
   kind: string
   key: Buffer
@@ -770,6 +774,10 @@ export declare class NativeProllyEngine {
   upperBound(tree: NodeTreeRecord, key: Buffer): NodeEntryRecord | null
   range(tree: NodeTreeRecord, start: Buffer, end?: Buffer | undefined | null): Array<NodeEntryRecord>
   prefix(tree: NodeTreeRecord, prefix: Buffer): Array<NodeEntryRecord>
+  scanRange(tree: NodeTreeRecord, start: Buffer, end: Buffer | null | undefined, visitor: (entry: NodeEntryRecord) => boolean): NodeScanOutcomeRecord
+  scanPrefix(tree: NodeTreeRecord, prefix: Buffer, visitor: (entry: NodeEntryRecord) => boolean): NodeScanOutcomeRecord
+  scanRangeReverse(tree: NodeTreeRecord, start: Buffer, end: Buffer | null | undefined, visitor: (entry: NodeEntryRecord) => boolean): NodeScanOutcomeRecord
+  scanPrefixReverse(tree: NodeTreeRecord, prefix: Buffer, visitor: (entry: NodeEntryRecord) => boolean): NodeScanOutcomeRecord
   prefixPage(tree: NodeTreeRecord, prefix: Buffer, cursor: NodeRangeCursorRecord | undefined | null, limit: string): NodeRangePageRecord
   prefixReversePage(tree: NodeTreeRecord, prefix: Buffer, cursor: NodeReverseCursorRecord | undefined | null, limit: string): NodeReversePageRecord
   rangeAfter(tree: NodeTreeRecord, afterKey: Buffer, end?: Buffer | undefined | null): Array<NodeEntryRecord>
@@ -779,9 +787,12 @@ export declare class NativeProllyEngine {
   cursorWindow(tree: NodeTreeRecord, key: Buffer, end: Buffer | undefined | null, limit: string): NodeCursorWindowRecord
   diff(base: NodeTreeRecord, other: NodeTreeRecord): Array<NodeDiffRecord>
   rangeDiff(base: NodeTreeRecord, other: NodeTreeRecord, start: Buffer, end?: Buffer | undefined | null): Array<NodeDiffRecord>
+  scanDiff(base: NodeTreeRecord, other: NodeTreeRecord, visitor: (diff: NodeDiffRecord) => boolean): NodeScanOutcomeRecord
+  scanRangeDiff(base: NodeTreeRecord, other: NodeTreeRecord, start: Buffer, end: Buffer | null | undefined, visitor: (diff: NodeDiffRecord) => boolean): NodeScanOutcomeRecord
   diffFromCursor(base: NodeTreeRecord, other: NodeTreeRecord, cursor?: NodeRangeCursorRecord | undefined | null, end?: Buffer | undefined | null): Array<NodeDiffRecord>
   diffPage(base: NodeTreeRecord, other: NodeTreeRecord, cursor: NodeRangeCursorRecord | undefined | null, end: Buffer | undefined | null, limit: string): NodeDiffPageRecord
   conflictPage(base: NodeTreeRecord, left: NodeTreeRecord, right: NodeTreeRecord, cursor: NodeRangeCursorRecord | undefined | null, limit: string): NodeConflictPageRecord
+  scanConflicts(base: NodeTreeRecord, left: NodeTreeRecord, right: NodeTreeRecord, visitor: (conflict: NodeConflictRecord) => boolean): NodeScanOutcomeRecord
   merge(base: NodeTreeRecord, left: NodeTreeRecord, right: NodeTreeRecord, resolver?: string | undefined | null): NodeTreeRecord
   mergeWithResolver(base: NodeTreeRecord, left: NodeTreeRecord, right: NodeTreeRecord, resolver: (conflict: NodeConflictRecord) => NodeResolutionRecord): NodeTreeRecord
   mergeWithPolicy(base: NodeTreeRecord, left: NodeTreeRecord, right: NodeTreeRecord, policy: NativeMergePolicyRegistry): NodeTreeRecord

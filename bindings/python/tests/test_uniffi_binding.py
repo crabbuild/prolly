@@ -39,6 +39,45 @@ class UniFfiBindingTests(unittest.TestCase):
         self.assertEqual(len(diffs), 1)
         self.assertEqual(diffs[0].key, b"a")
 
+    def test_streaming_visitors_preserve_order_and_early_stop(self) -> None:
+        engine = prolly.ProllyEngine.memory(prolly.default_config())
+        base = engine.create()
+        for key in b"abcd":
+            base = engine.put(base, bytes([key]), bytes([key]))
+
+        keys = []
+
+        class Entries(prolly.EntryVisitorCallback):
+            def visit(self, entry):
+                keys.append(entry.key)
+                return len(keys) < 2
+
+        outcome = engine.scan_range(base, b"b", None, Entries())
+        self.assertEqual(keys, [b"b", b"c"])
+        self.assertEqual((outcome.visited, outcome.stopped), (2, True))
+
+        left = engine.put(base, b"b", b"left")
+        right = engine.put(base, b"b", b"right")
+        kinds = []
+
+        class Diffs(prolly.DiffVisitorCallback):
+            def visit(self, diff):
+                kinds.append(diff.kind)
+                return True
+
+        self.assertEqual(engine.scan_diff(base, right, Diffs()).visited, 1)
+        self.assertEqual(kinds, [prolly.DiffKind.CHANGED])
+
+        conflict_keys = []
+
+        class Conflicts(prolly.ConflictVisitorCallback):
+            def visit(self, conflict):
+                conflict_keys.append(conflict.key)
+                return True
+
+        self.assertEqual(engine.scan_conflicts(base, left, right, Conflicts()).visited, 1)
+        self.assertEqual(conflict_keys, [b"b"])
+
     def test_delete_range_uses_half_open_raw_byte_bounds(self) -> None:
         engine = prolly.ProllyEngine.memory(prolly.default_config())
         tree = engine.create()

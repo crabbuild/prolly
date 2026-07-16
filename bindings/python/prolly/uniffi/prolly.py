@@ -728,7 +728,13 @@ def _uniffi_check_api_checksums(lib):
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_func_versioned_value_to_bytes() != 30630:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_conflictvisitorcallback_visit() != 1459:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_crdtresolvercallback_resolve() != 61599:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_diffvisitorcallback_visit() != 12838:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_entryvisitorcallback_visit() != 30875:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_hoststorecallback_get() != 14064:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
@@ -866,7 +872,7 @@ def _uniffi_check_api_checksums(lib):
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_prollyengine_delete_range() != 41608:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    if lib.uniffi_prolly_bindings_checksum_method_prollyengine_delete_range_with_stats() != 26465:
+    if lib.uniffi_prolly_bindings_checksum_method_prollyengine_delete_range_with_stats() != 16306:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_prollyengine_delete_snapshot() != 45711:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
@@ -1013,6 +1019,20 @@ def _uniffi_check_api_checksums(lib):
     if lib.uniffi_prolly_bindings_checksum_method_prollyengine_reset_metrics() != 10217:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_prollyengine_reverse_page() != 38329:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_prollyengine_scan_conflicts() != 1796:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_prollyengine_scan_diff() != 27332:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_prollyengine_scan_prefix() != 14307:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_prollyengine_scan_prefix_reverse() != 64065:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_prollyengine_scan_range() != 54396:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_prollyengine_scan_range_diff() != 54182:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_prollyengine_scan_range_reverse() != 50504:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_prollyengine_stats_diff() != 34349:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
@@ -1321,6 +1341,16 @@ _UniffiLib.ffi_prolly_bindings_rust_future_free_void.argtypes = (
     ctypes.c_uint64,
 )
 _UniffiLib.ffi_prolly_bindings_rust_future_free_void.restype = None
+_UniffiLib.uniffi_prolly_bindings_fn_clone_conflictvisitorcallback.argtypes = (
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_clone_conflictvisitorcallback.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_free_conflictvisitorcallback.argtypes = (
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_free_conflictvisitorcallback.restype = None
 _UniffiLib.uniffi_prolly_bindings_fn_clone_crdtresolvercallback.argtypes = (
     ctypes.c_uint64,
     ctypes.POINTER(_UniffiRustCallStatus),
@@ -1331,6 +1361,26 @@ _UniffiLib.uniffi_prolly_bindings_fn_free_crdtresolvercallback.argtypes = (
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UniffiLib.uniffi_prolly_bindings_fn_free_crdtresolvercallback.restype = None
+_UniffiLib.uniffi_prolly_bindings_fn_clone_diffvisitorcallback.argtypes = (
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_clone_diffvisitorcallback.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_free_diffvisitorcallback.argtypes = (
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_free_diffvisitorcallback.restype = None
+_UniffiLib.uniffi_prolly_bindings_fn_clone_entryvisitorcallback.argtypes = (
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_clone_entryvisitorcallback.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_free_entryvisitorcallback.argtypes = (
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_free_entryvisitorcallback.restype = None
 _UniffiLib.uniffi_prolly_bindings_fn_clone_hoststorecallback.argtypes = (
     ctypes.c_uint64,
     ctypes.POINTER(_UniffiRustCallStatus),
@@ -1391,6 +1441,23 @@ _UniffiLib.uniffi_prolly_bindings_fn_free_prollytransaction.argtypes = (
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UniffiLib.uniffi_prolly_bindings_fn_free_prollytransaction.restype = None
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_CONFLICT_VISITOR_CALLBACK_METHOD0 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,ctypes.POINTER(ctypes.c_int8),
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UNIFFI_CALLBACK_INTERFACE_CLONE_PROLLY_CONFLICT_VISITOR_CALLBACK = ctypes.CFUNCTYPE(ctypes.c_uint64,ctypes.c_uint64,
+)
+_UNIFFI_CALLBACK_INTERFACE_FREE_PROLLY_CONFLICT_VISITOR_CALLBACK = ctypes.CFUNCTYPE(None,ctypes.c_uint64,
+)
+class _UniffiVTableCallbackInterfaceProllyConflictVisitorCallback(ctypes.Structure):
+    _fields_ = [
+        ("uniffi_free", _UNIFFI_CALLBACK_INTERFACE_FREE_PROLLY_CONFLICT_VISITOR_CALLBACK),
+        ("uniffi_clone", _UNIFFI_CALLBACK_INTERFACE_CLONE_PROLLY_CONFLICT_VISITOR_CALLBACK),
+        ("visit", _UNIFFI_CALLBACK_INTERFACE_PROLLY_CONFLICT_VISITOR_CALLBACK_METHOD0),
+    ]
+_UniffiLib.uniffi_prolly_bindings_fn_init_callback_vtable_conflictvisitorcallback.argtypes = (
+    ctypes.POINTER(_UniffiVTableCallbackInterfaceProllyConflictVisitorCallback),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_init_callback_vtable_conflictvisitorcallback.restype = None
 _UNIFFI_CALLBACK_INTERFACE_PROLLY_CRDT_RESOLVER_CALLBACK_METHOD0 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,ctypes.POINTER(_UniffiRustBuffer),
     ctypes.POINTER(_UniffiRustCallStatus),
 )
@@ -1408,6 +1475,40 @@ _UniffiLib.uniffi_prolly_bindings_fn_init_callback_vtable_crdtresolvercallback.a
     ctypes.POINTER(_UniffiVTableCallbackInterfaceProllyCrdtResolverCallback),
 )
 _UniffiLib.uniffi_prolly_bindings_fn_init_callback_vtable_crdtresolvercallback.restype = None
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_DIFF_VISITOR_CALLBACK_METHOD0 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,ctypes.POINTER(ctypes.c_int8),
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UNIFFI_CALLBACK_INTERFACE_CLONE_PROLLY_DIFF_VISITOR_CALLBACK = ctypes.CFUNCTYPE(ctypes.c_uint64,ctypes.c_uint64,
+)
+_UNIFFI_CALLBACK_INTERFACE_FREE_PROLLY_DIFF_VISITOR_CALLBACK = ctypes.CFUNCTYPE(None,ctypes.c_uint64,
+)
+class _UniffiVTableCallbackInterfaceProllyDiffVisitorCallback(ctypes.Structure):
+    _fields_ = [
+        ("uniffi_free", _UNIFFI_CALLBACK_INTERFACE_FREE_PROLLY_DIFF_VISITOR_CALLBACK),
+        ("uniffi_clone", _UNIFFI_CALLBACK_INTERFACE_CLONE_PROLLY_DIFF_VISITOR_CALLBACK),
+        ("visit", _UNIFFI_CALLBACK_INTERFACE_PROLLY_DIFF_VISITOR_CALLBACK_METHOD0),
+    ]
+_UniffiLib.uniffi_prolly_bindings_fn_init_callback_vtable_diffvisitorcallback.argtypes = (
+    ctypes.POINTER(_UniffiVTableCallbackInterfaceProllyDiffVisitorCallback),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_init_callback_vtable_diffvisitorcallback.restype = None
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_ENTRY_VISITOR_CALLBACK_METHOD0 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,ctypes.POINTER(ctypes.c_int8),
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UNIFFI_CALLBACK_INTERFACE_CLONE_PROLLY_ENTRY_VISITOR_CALLBACK = ctypes.CFUNCTYPE(ctypes.c_uint64,ctypes.c_uint64,
+)
+_UNIFFI_CALLBACK_INTERFACE_FREE_PROLLY_ENTRY_VISITOR_CALLBACK = ctypes.CFUNCTYPE(None,ctypes.c_uint64,
+)
+class _UniffiVTableCallbackInterfaceProllyEntryVisitorCallback(ctypes.Structure):
+    _fields_ = [
+        ("uniffi_free", _UNIFFI_CALLBACK_INTERFACE_FREE_PROLLY_ENTRY_VISITOR_CALLBACK),
+        ("uniffi_clone", _UNIFFI_CALLBACK_INTERFACE_CLONE_PROLLY_ENTRY_VISITOR_CALLBACK),
+        ("visit", _UNIFFI_CALLBACK_INTERFACE_PROLLY_ENTRY_VISITOR_CALLBACK_METHOD0),
+    ]
+_UniffiLib.uniffi_prolly_bindings_fn_init_callback_vtable_entryvisitorcallback.argtypes = (
+    ctypes.POINTER(_UniffiVTableCallbackInterfaceProllyEntryVisitorCallback),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_init_callback_vtable_entryvisitorcallback.restype = None
 _UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD0 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,ctypes.POINTER(_UniffiRustBuffer),
     ctypes.POINTER(_UniffiRustCallStatus),
 )
@@ -2148,12 +2249,30 @@ _UniffiLib.uniffi_prolly_bindings_fn_func_versioned_value_to_bytes.argtypes = (
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UniffiLib.uniffi_prolly_bindings_fn_func_versioned_value_to_bytes.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_method_conflictvisitorcallback_visit.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_conflictvisitorcallback_visit.restype = ctypes.c_int8
 _UniffiLib.uniffi_prolly_bindings_fn_method_crdtresolvercallback_resolve.argtypes = (
     ctypes.c_uint64,
     _UniffiRustBuffer,
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UniffiLib.uniffi_prolly_bindings_fn_method_crdtresolvercallback_resolve.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_method_diffvisitorcallback_visit.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_diffvisitorcallback_visit.restype = ctypes.c_int8
+_UniffiLib.uniffi_prolly_bindings_fn_method_entryvisitorcallback_visit.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_entryvisitorcallback_visit.restype = ctypes.c_int8
 _UniffiLib.uniffi_prolly_bindings_fn_method_hoststorecallback_get.argtypes = (
     ctypes.c_uint64,
     _UniffiRustBuffer,
@@ -3156,6 +3275,67 @@ _UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_reverse_page.argtypes =
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_reverse_page.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_scan_conflicts.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_scan_conflicts.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_scan_diff.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_scan_diff.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_scan_prefix.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_scan_prefix.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_scan_prefix_reverse.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_scan_prefix_reverse.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_scan_range.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_scan_range.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_scan_range_diff.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_scan_range_diff.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_scan_range_reverse.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_scan_range_reverse.restype = _UniffiRustBuffer
 _UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_stats_diff.argtypes = (
     ctypes.c_uint64,
     _UniffiRustBuffer,
@@ -3677,9 +3857,18 @@ _UniffiLib.uniffi_prolly_bindings_checksum_func_versioned_value_require_schema.r
 _UniffiLib.uniffi_prolly_bindings_checksum_func_versioned_value_to_bytes.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_func_versioned_value_to_bytes.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_conflictvisitorcallback_visit.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_conflictvisitorcallback_visit.restype = ctypes.c_uint16
 _UniffiLib.uniffi_prolly_bindings_checksum_method_crdtresolvercallback_resolve.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_crdtresolvercallback_resolve.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_diffvisitorcallback_visit.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_diffvisitorcallback_visit.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_entryvisitorcallback_visit.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_entryvisitorcallback_visit.restype = ctypes.c_uint16
 _UniffiLib.uniffi_prolly_bindings_checksum_method_hoststorecallback_get.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_hoststorecallback_get.restype = ctypes.c_uint16
@@ -4106,6 +4295,27 @@ _UniffiLib.uniffi_prolly_bindings_checksum_method_prollyengine_reset_metrics.res
 _UniffiLib.uniffi_prolly_bindings_checksum_method_prollyengine_reverse_page.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_prollyengine_reverse_page.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollyengine_scan_conflicts.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollyengine_scan_conflicts.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollyengine_scan_diff.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollyengine_scan_diff.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollyengine_scan_prefix.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollyengine_scan_prefix.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollyengine_scan_prefix_reverse.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollyengine_scan_prefix_reverse.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollyengine_scan_range.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollyengine_scan_range.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollyengine_scan_range_diff.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollyengine_scan_range_diff.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollyengine_scan_range_reverse.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_prollyengine_scan_range_reverse.restype = ctypes.c_uint16
 _UniffiLib.uniffi_prolly_bindings_checksum_method_prollyengine_stats_diff.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_prollyengine_stats_diff.restype = ctypes.c_uint16
@@ -5419,138 +5629,6 @@ class _UniffiFfiConverterTypeCacheStatsRecord(_UniffiConverterRustBuffer):
         _UniffiFfiConverterUInt64.write(value.cached_bytes, buf)
         _UniffiFfiConverterUInt64.write(value.pinned_nodes, buf)
         _UniffiFfiConverterUInt64.write(value.pinned_bytes, buf)
-
-@dataclass
-class WriteStatsRecord:
-    def __init__(self, *, input_mutations:int, effective_mutations:int, entries_streamed:int, nodes_read:int, nodes_written:int, nodes_reused:int, bytes_read:int, bytes_written:int, resync_distance_entries:int, resync_distance_nodes:int, used_key_stable_fast_path:bool, used_batched_value_update_path:bool):
-        self.input_mutations = input_mutations
-        self.effective_mutations = effective_mutations
-        self.entries_streamed = entries_streamed
-        self.nodes_read = nodes_read
-        self.nodes_written = nodes_written
-        self.nodes_reused = nodes_reused
-        self.bytes_read = bytes_read
-        self.bytes_written = bytes_written
-        self.resync_distance_entries = resync_distance_entries
-        self.resync_distance_nodes = resync_distance_nodes
-        self.used_key_stable_fast_path = used_key_stable_fast_path
-        self.used_batched_value_update_path = used_batched_value_update_path
-
-
-
-
-    def __str__(self):
-        return "WriteStatsRecord(input_mutations={}, effective_mutations={}, entries_streamed={}, nodes_read={}, nodes_written={}, nodes_reused={}, bytes_read={}, bytes_written={}, resync_distance_entries={}, resync_distance_nodes={}, used_key_stable_fast_path={}, used_batched_value_update_path={})".format(self.input_mutations, self.effective_mutations, self.entries_streamed, self.nodes_read, self.nodes_written, self.nodes_reused, self.bytes_read, self.bytes_written, self.resync_distance_entries, self.resync_distance_nodes, self.used_key_stable_fast_path, self.used_batched_value_update_path)
-    def __eq__(self, other):
-        if self.input_mutations != other.input_mutations:
-            return False
-        if self.effective_mutations != other.effective_mutations:
-            return False
-        if self.entries_streamed != other.entries_streamed:
-            return False
-        if self.nodes_read != other.nodes_read:
-            return False
-        if self.nodes_written != other.nodes_written:
-            return False
-        if self.nodes_reused != other.nodes_reused:
-            return False
-        if self.bytes_read != other.bytes_read:
-            return False
-        if self.bytes_written != other.bytes_written:
-            return False
-        if self.resync_distance_entries != other.resync_distance_entries:
-            return False
-        if self.resync_distance_nodes != other.resync_distance_nodes:
-            return False
-        if self.used_key_stable_fast_path != other.used_key_stable_fast_path:
-            return False
-        if self.used_batched_value_update_path != other.used_batched_value_update_path:
-            return False
-        return True
-
-class _UniffiFfiConverterTypeWriteStatsRecord(_UniffiConverterRustBuffer):
-    @staticmethod
-    def read(buf):
-        return WriteStatsRecord(
-            input_mutations=_UniffiFfiConverterUInt64.read(buf),
-            effective_mutations=_UniffiFfiConverterUInt64.read(buf),
-            entries_streamed=_UniffiFfiConverterUInt64.read(buf),
-            nodes_read=_UniffiFfiConverterUInt64.read(buf),
-            nodes_written=_UniffiFfiConverterUInt64.read(buf),
-            nodes_reused=_UniffiFfiConverterUInt64.read(buf),
-            bytes_read=_UniffiFfiConverterUInt64.read(buf),
-            bytes_written=_UniffiFfiConverterUInt64.read(buf),
-            resync_distance_entries=_UniffiFfiConverterUInt64.read(buf),
-            resync_distance_nodes=_UniffiFfiConverterUInt64.read(buf),
-            used_key_stable_fast_path=_UniffiFfiConverterBoolean.read(buf),
-            used_batched_value_update_path=_UniffiFfiConverterBoolean.read(buf),
-        )
-
-    @staticmethod
-    def check_lower(value):
-        _UniffiFfiConverterUInt64.check_lower(value.input_mutations)
-        _UniffiFfiConverterUInt64.check_lower(value.effective_mutations)
-        _UniffiFfiConverterUInt64.check_lower(value.entries_streamed)
-        _UniffiFfiConverterUInt64.check_lower(value.nodes_read)
-        _UniffiFfiConverterUInt64.check_lower(value.nodes_written)
-        _UniffiFfiConverterUInt64.check_lower(value.nodes_reused)
-        _UniffiFfiConverterUInt64.check_lower(value.bytes_read)
-        _UniffiFfiConverterUInt64.check_lower(value.bytes_written)
-        _UniffiFfiConverterUInt64.check_lower(value.resync_distance_entries)
-        _UniffiFfiConverterUInt64.check_lower(value.resync_distance_nodes)
-        _UniffiFfiConverterBoolean.check_lower(value.used_key_stable_fast_path)
-        _UniffiFfiConverterBoolean.check_lower(value.used_batched_value_update_path)
-
-    @staticmethod
-    def write(value, buf):
-        _UniffiFfiConverterUInt64.write(value.input_mutations, buf)
-        _UniffiFfiConverterUInt64.write(value.effective_mutations, buf)
-        _UniffiFfiConverterUInt64.write(value.entries_streamed, buf)
-        _UniffiFfiConverterUInt64.write(value.nodes_read, buf)
-        _UniffiFfiConverterUInt64.write(value.nodes_written, buf)
-        _UniffiFfiConverterUInt64.write(value.nodes_reused, buf)
-        _UniffiFfiConverterUInt64.write(value.bytes_read, buf)
-        _UniffiFfiConverterUInt64.write(value.bytes_written, buf)
-        _UniffiFfiConverterUInt64.write(value.resync_distance_entries, buf)
-        _UniffiFfiConverterUInt64.write(value.resync_distance_nodes, buf)
-        _UniffiFfiConverterBoolean.write(value.used_key_stable_fast_path, buf)
-        _UniffiFfiConverterBoolean.write(value.used_batched_value_update_path, buf)
-
-@dataclass
-class WriteResultRecord:
-    def __init__(self, *, tree:TreeRecord, stats:WriteStatsRecord):
-        self.tree = tree
-        self.stats = stats
-
-
-
-
-    def __str__(self):
-        return "WriteResultRecord(tree={}, stats={})".format(self.tree, self.stats)
-    def __eq__(self, other):
-        if self.tree != other.tree:
-            return False
-        if self.stats != other.stats:
-            return False
-        return True
-
-class _UniffiFfiConverterTypeWriteResultRecord(_UniffiConverterRustBuffer):
-    @staticmethod
-    def read(buf):
-        return WriteResultRecord(
-            tree=_UniffiFfiConverterTypeTreeRecord.read(buf),
-            stats=_UniffiFfiConverterTypeWriteStatsRecord.read(buf),
-        )
-
-    @staticmethod
-    def check_lower(value):
-        _UniffiFfiConverterTypeTreeRecord.check_lower(value.tree)
-        _UniffiFfiConverterTypeWriteStatsRecord.check_lower(value.stats)
-
-    @staticmethod
-    def write(value, buf):
-        _UniffiFfiConverterTypeTreeRecord.write(value.tree, buf)
-        _UniffiFfiConverterTypeWriteStatsRecord.write(value.stats, buf)
 
 @dataclass
 class ChangedSpanRecord:
@@ -9427,6 +9505,49 @@ class _UniffiFfiConverterTypeReversePageRecord(_UniffiConverterRustBuffer):
         _UniffiFfiConverterOptionalTypeReverseCursorRecord.write(value.next_cursor, buf)
 
 @dataclass
+class ScanOutcomeRecord:
+    """
+    Result of a streaming read operation.
+
+    Foreign-language callbacks receive owned byte arrays because Rust borrows
+    cannot cross an FFI boundary. The native traversal remains borrowed and
+    copies each record only when it is delivered to the callback.
+"""
+    def __init__(self, *, visited:int, stopped:bool):
+        self.visited = visited
+        self.stopped = stopped
+
+
+
+
+    def __str__(self):
+        return "ScanOutcomeRecord(visited={}, stopped={})".format(self.visited, self.stopped)
+    def __eq__(self, other):
+        if self.visited != other.visited:
+            return False
+        if self.stopped != other.stopped:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeScanOutcomeRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return ScanOutcomeRecord(
+            visited=_UniffiFfiConverterUInt64.read(buf),
+            stopped=_UniffiFfiConverterBoolean.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterUInt64.check_lower(value.visited)
+        _UniffiFfiConverterBoolean.check_lower(value.stopped)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterUInt64.write(value.visited, buf)
+        _UniffiFfiConverterBoolean.write(value.stopped, buf)
+
+@dataclass
 class SnapshotBundleNodeRecord:
     def __init__(self, *, cid:bytes, bytes:bytes):
         self.cid = cid
@@ -11704,6 +11825,138 @@ class _UniffiFfiConverterTypeVersionedValueRecord(_UniffiConverterRustBuffer):
         _UniffiFfiConverterTypeEncodingRecord.write(value.encoding, buf)
         _UniffiFfiConverterBytes.write(value.payload, buf)
 
+@dataclass
+class WriteStatsRecord:
+    def __init__(self, *, input_mutations:int, effective_mutations:int, entries_streamed:int, nodes_read:int, nodes_written:int, nodes_reused:int, bytes_read:int, bytes_written:int, resync_distance_entries:int, resync_distance_nodes:int, used_key_stable_fast_path:bool, used_batched_value_update_path:bool):
+        self.input_mutations = input_mutations
+        self.effective_mutations = effective_mutations
+        self.entries_streamed = entries_streamed
+        self.nodes_read = nodes_read
+        self.nodes_written = nodes_written
+        self.nodes_reused = nodes_reused
+        self.bytes_read = bytes_read
+        self.bytes_written = bytes_written
+        self.resync_distance_entries = resync_distance_entries
+        self.resync_distance_nodes = resync_distance_nodes
+        self.used_key_stable_fast_path = used_key_stable_fast_path
+        self.used_batched_value_update_path = used_batched_value_update_path
+
+
+
+
+    def __str__(self):
+        return "WriteStatsRecord(input_mutations={}, effective_mutations={}, entries_streamed={}, nodes_read={}, nodes_written={}, nodes_reused={}, bytes_read={}, bytes_written={}, resync_distance_entries={}, resync_distance_nodes={}, used_key_stable_fast_path={}, used_batched_value_update_path={})".format(self.input_mutations, self.effective_mutations, self.entries_streamed, self.nodes_read, self.nodes_written, self.nodes_reused, self.bytes_read, self.bytes_written, self.resync_distance_entries, self.resync_distance_nodes, self.used_key_stable_fast_path, self.used_batched_value_update_path)
+    def __eq__(self, other):
+        if self.input_mutations != other.input_mutations:
+            return False
+        if self.effective_mutations != other.effective_mutations:
+            return False
+        if self.entries_streamed != other.entries_streamed:
+            return False
+        if self.nodes_read != other.nodes_read:
+            return False
+        if self.nodes_written != other.nodes_written:
+            return False
+        if self.nodes_reused != other.nodes_reused:
+            return False
+        if self.bytes_read != other.bytes_read:
+            return False
+        if self.bytes_written != other.bytes_written:
+            return False
+        if self.resync_distance_entries != other.resync_distance_entries:
+            return False
+        if self.resync_distance_nodes != other.resync_distance_nodes:
+            return False
+        if self.used_key_stable_fast_path != other.used_key_stable_fast_path:
+            return False
+        if self.used_batched_value_update_path != other.used_batched_value_update_path:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeWriteStatsRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return WriteStatsRecord(
+            input_mutations=_UniffiFfiConverterUInt64.read(buf),
+            effective_mutations=_UniffiFfiConverterUInt64.read(buf),
+            entries_streamed=_UniffiFfiConverterUInt64.read(buf),
+            nodes_read=_UniffiFfiConverterUInt64.read(buf),
+            nodes_written=_UniffiFfiConverterUInt64.read(buf),
+            nodes_reused=_UniffiFfiConverterUInt64.read(buf),
+            bytes_read=_UniffiFfiConverterUInt64.read(buf),
+            bytes_written=_UniffiFfiConverterUInt64.read(buf),
+            resync_distance_entries=_UniffiFfiConverterUInt64.read(buf),
+            resync_distance_nodes=_UniffiFfiConverterUInt64.read(buf),
+            used_key_stable_fast_path=_UniffiFfiConverterBoolean.read(buf),
+            used_batched_value_update_path=_UniffiFfiConverterBoolean.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterUInt64.check_lower(value.input_mutations)
+        _UniffiFfiConverterUInt64.check_lower(value.effective_mutations)
+        _UniffiFfiConverterUInt64.check_lower(value.entries_streamed)
+        _UniffiFfiConverterUInt64.check_lower(value.nodes_read)
+        _UniffiFfiConverterUInt64.check_lower(value.nodes_written)
+        _UniffiFfiConverterUInt64.check_lower(value.nodes_reused)
+        _UniffiFfiConverterUInt64.check_lower(value.bytes_read)
+        _UniffiFfiConverterUInt64.check_lower(value.bytes_written)
+        _UniffiFfiConverterUInt64.check_lower(value.resync_distance_entries)
+        _UniffiFfiConverterUInt64.check_lower(value.resync_distance_nodes)
+        _UniffiFfiConverterBoolean.check_lower(value.used_key_stable_fast_path)
+        _UniffiFfiConverterBoolean.check_lower(value.used_batched_value_update_path)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterUInt64.write(value.input_mutations, buf)
+        _UniffiFfiConverterUInt64.write(value.effective_mutations, buf)
+        _UniffiFfiConverterUInt64.write(value.entries_streamed, buf)
+        _UniffiFfiConverterUInt64.write(value.nodes_read, buf)
+        _UniffiFfiConverterUInt64.write(value.nodes_written, buf)
+        _UniffiFfiConverterUInt64.write(value.nodes_reused, buf)
+        _UniffiFfiConverterUInt64.write(value.bytes_read, buf)
+        _UniffiFfiConverterUInt64.write(value.bytes_written, buf)
+        _UniffiFfiConverterUInt64.write(value.resync_distance_entries, buf)
+        _UniffiFfiConverterUInt64.write(value.resync_distance_nodes, buf)
+        _UniffiFfiConverterBoolean.write(value.used_key_stable_fast_path, buf)
+        _UniffiFfiConverterBoolean.write(value.used_batched_value_update_path, buf)
+
+@dataclass
+class WriteResultRecord:
+    def __init__(self, *, tree:TreeRecord, stats:WriteStatsRecord):
+        self.tree = tree
+        self.stats = stats
+
+
+
+
+    def __str__(self):
+        return "WriteResultRecord(tree={}, stats={})".format(self.tree, self.stats)
+    def __eq__(self, other):
+        if self.tree != other.tree:
+            return False
+        if self.stats != other.stats:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeWriteResultRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return WriteResultRecord(
+            tree=_UniffiFfiConverterTypeTreeRecord.read(buf),
+            stats=_UniffiFfiConverterTypeWriteStatsRecord.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterTypeTreeRecord.check_lower(value.tree)
+        _UniffiFfiConverterTypeWriteStatsRecord.check_lower(value.stats)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterTypeTreeRecord.write(value.tree, buf)
+        _UniffiFfiConverterTypeWriteStatsRecord.write(value.stats, buf)
+
 
 
 # ProllyBindingError
@@ -11905,6 +12158,141 @@ class _UniffiFfiConverterTypeProllyBindingError(_UniffiConverterRustBuffer):
             _UniffiFfiConverterString.write(value.reason, buf)
 
 
+class ConflictVisitorCallback():
+
+    def visit(self, conflict: ConflictRecord) -> bool:
+        """
+        Return `true` to continue or `false` to stop after this conflict.
+"""
+        raise NotImplementedError
+
+class ConflictVisitorCallbackImpl(ConflictVisitorCallback):
+
+    _handle: ctypes.c_uint64
+
+    def __init__(self, *args, **kwargs):
+        raise ValueError("This class has no default constructor")
+
+    def __del__(self):
+        # In case of partial initialization of instances.
+        handle = getattr(self, "_handle", None)
+        if handle is not None:
+            _uniffi_rust_call(_UniffiLib.uniffi_prolly_bindings_fn_free_conflictvisitorcallback, handle)
+
+    def _uniffi_clone_handle(self):
+        return _uniffi_rust_call(_UniffiLib.uniffi_prolly_bindings_fn_clone_conflictvisitorcallback, self._handle)
+
+    # Used by alternative constructors or any methods which return this type.
+    @classmethod
+    def _uniffi_make_instance(cls, handle):
+        # Lightly yucky way to bypass the usual __init__ logic
+        # and just create a new instance with the required handle.
+        inst = cls.__new__(cls)
+        inst._handle = handle
+        return inst
+    def visit(self, conflict: ConflictRecord) -> bool:
+        """
+        Return `true` to continue or `false` to stop after this conflict.
+"""
+
+        _UniffiFfiConverterTypeConflictRecord.check_lower(conflict)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeConflictRecord.lower(conflict),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterBoolean.lift
+        _uniffi_error_converter = None
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_conflictvisitorcallback_visit,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+
+
+
+
+# Put all the bits inside a class to keep the top-level namespace clean
+class _UniffiTraitImplConflictVisitorCallbackImpl:
+    # For each method, generate a callback function to pass to Rust
+
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_CONFLICT_VISITOR_CALLBACK_METHOD0
+    def visit(
+            uniffi_handle,
+            conflict,
+            uniffi_out_return,
+            uniffi_call_status_ptr,
+        ):
+        uniffi_obj = _UniffiFfiConverterTypeConflictVisitorCallback._handle_map.get(uniffi_handle)
+        def make_call():
+            uniffi_args = (_UniffiFfiConverterTypeConflictRecord.lift(conflict), )
+            uniffi_method = uniffi_obj.visit
+            return uniffi_method(*uniffi_args)
+        def write_return_value(v):
+            uniffi_out_return[0] = _UniffiFfiConverterBoolean.lower(v)
+        _uniffi_trait_interface_call(
+                uniffi_call_status_ptr.contents,
+                make_call,
+                write_return_value,
+        )
+
+    @_UNIFFI_CALLBACK_INTERFACE_FREE_PROLLY_CONFLICT_VISITOR_CALLBACK
+    def _uniffi_free(uniffi_handle):
+        _UniffiFfiConverterTypeConflictVisitorCallback._handle_map.remove(uniffi_handle)
+
+    @_UNIFFI_CALLBACK_INTERFACE_CLONE_PROLLY_CONFLICT_VISITOR_CALLBACK
+    def _uniffi_clone(uniffi_handle):
+        return _UniffiFfiConverterTypeConflictVisitorCallback._handle_map.clone(uniffi_handle)
+
+    # Generate the FFI VTable.  This has a field for each callback interface method.
+    _uniffi_vtable = _UniffiVTableCallbackInterfaceProllyConflictVisitorCallback(
+        _uniffi_free,
+        _uniffi_clone,
+        visit,
+    )
+    # Send Rust a pointer to the VTable.  Note: this means we need to keep the struct alive forever,
+    # or else bad things will happen when Rust tries to access it.
+    _UniffiLib.uniffi_prolly_bindings_fn_init_callback_vtable_conflictvisitorcallback(ctypes.byref(_uniffi_vtable))
+
+class _UniffiFfiConverterTypeConflictVisitorCallback:
+    _handle_map = _UniffiHandleMap()
+
+    @staticmethod
+    def lift(value: int):
+        if (value & 1) == 0:
+            # Rust-generated handle, construct a new class that uses the handle to implement the
+            # interface
+            return ConflictVisitorCallbackImpl._uniffi_make_instance(value)
+        else:
+            # Python-generated handle, get the object from the handle map
+            return _UniffiFfiConverterTypeConflictVisitorCallback._handle_map.remove(value)
+
+    @staticmethod
+    def check_lower(value: ConflictVisitorCallback):
+        if not isinstance(value, ConflictVisitorCallback):
+            raise TypeError("Expected ConflictVisitorCallback subclass, {} found".format(type(value).__name__))
+
+    @staticmethod
+    def lower(value: ConflictVisitorCallback):
+         if isinstance(value, ConflictVisitorCallbackImpl):
+            # Rust-implementated object.  Clone the handle and return it
+            return value._uniffi_clone_handle()
+         else:
+            # Python-implementated object, generate a new vtable handle and return that.
+            return _UniffiFfiConverterTypeConflictVisitorCallback._handle_map.insert(value)
+
+    @classmethod
+    def read(cls, buf: _UniffiRustBuffer):
+        ptr = buf.read_u64()
+        if ptr == 0:
+            raise InternalError("Raw handle value was null")
+        return cls.lift(ptr)
+
+    @classmethod
+    def write(cls, value: ConflictVisitorCallback, buf: _UniffiRustBuffer):
+        buf.write_u64(cls.lower(value))
+
+
 class CrdtResolverCallback():
 
     def resolve(self, conflict: ConflictRecord) -> CrdtResolutionRecord:
@@ -12031,6 +12419,276 @@ class _UniffiFfiConverterTypeCrdtResolverCallback:
 
     @classmethod
     def write(cls, value: CrdtResolverCallback, buf: _UniffiRustBuffer):
+        buf.write_u64(cls.lower(value))
+
+
+class DiffVisitorCallback():
+
+    def visit(self, diff: DiffRecord) -> bool:
+        """
+        Return `true` to continue or `false` to stop after this diff.
+"""
+        raise NotImplementedError
+
+class DiffVisitorCallbackImpl(DiffVisitorCallback):
+
+    _handle: ctypes.c_uint64
+
+    def __init__(self, *args, **kwargs):
+        raise ValueError("This class has no default constructor")
+
+    def __del__(self):
+        # In case of partial initialization of instances.
+        handle = getattr(self, "_handle", None)
+        if handle is not None:
+            _uniffi_rust_call(_UniffiLib.uniffi_prolly_bindings_fn_free_diffvisitorcallback, handle)
+
+    def _uniffi_clone_handle(self):
+        return _uniffi_rust_call(_UniffiLib.uniffi_prolly_bindings_fn_clone_diffvisitorcallback, self._handle)
+
+    # Used by alternative constructors or any methods which return this type.
+    @classmethod
+    def _uniffi_make_instance(cls, handle):
+        # Lightly yucky way to bypass the usual __init__ logic
+        # and just create a new instance with the required handle.
+        inst = cls.__new__(cls)
+        inst._handle = handle
+        return inst
+    def visit(self, diff: DiffRecord) -> bool:
+        """
+        Return `true` to continue or `false` to stop after this diff.
+"""
+
+        _UniffiFfiConverterTypeDiffRecord.check_lower(diff)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeDiffRecord.lower(diff),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterBoolean.lift
+        _uniffi_error_converter = None
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_diffvisitorcallback_visit,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+
+
+
+
+# Put all the bits inside a class to keep the top-level namespace clean
+class _UniffiTraitImplDiffVisitorCallbackImpl:
+    # For each method, generate a callback function to pass to Rust
+
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_DIFF_VISITOR_CALLBACK_METHOD0
+    def visit(
+            uniffi_handle,
+            diff,
+            uniffi_out_return,
+            uniffi_call_status_ptr,
+        ):
+        uniffi_obj = _UniffiFfiConverterTypeDiffVisitorCallback._handle_map.get(uniffi_handle)
+        def make_call():
+            uniffi_args = (_UniffiFfiConverterTypeDiffRecord.lift(diff), )
+            uniffi_method = uniffi_obj.visit
+            return uniffi_method(*uniffi_args)
+        def write_return_value(v):
+            uniffi_out_return[0] = _UniffiFfiConverterBoolean.lower(v)
+        _uniffi_trait_interface_call(
+                uniffi_call_status_ptr.contents,
+                make_call,
+                write_return_value,
+        )
+
+    @_UNIFFI_CALLBACK_INTERFACE_FREE_PROLLY_DIFF_VISITOR_CALLBACK
+    def _uniffi_free(uniffi_handle):
+        _UniffiFfiConverterTypeDiffVisitorCallback._handle_map.remove(uniffi_handle)
+
+    @_UNIFFI_CALLBACK_INTERFACE_CLONE_PROLLY_DIFF_VISITOR_CALLBACK
+    def _uniffi_clone(uniffi_handle):
+        return _UniffiFfiConverterTypeDiffVisitorCallback._handle_map.clone(uniffi_handle)
+
+    # Generate the FFI VTable.  This has a field for each callback interface method.
+    _uniffi_vtable = _UniffiVTableCallbackInterfaceProllyDiffVisitorCallback(
+        _uniffi_free,
+        _uniffi_clone,
+        visit,
+    )
+    # Send Rust a pointer to the VTable.  Note: this means we need to keep the struct alive forever,
+    # or else bad things will happen when Rust tries to access it.
+    _UniffiLib.uniffi_prolly_bindings_fn_init_callback_vtable_diffvisitorcallback(ctypes.byref(_uniffi_vtable))
+
+class _UniffiFfiConverterTypeDiffVisitorCallback:
+    _handle_map = _UniffiHandleMap()
+
+    @staticmethod
+    def lift(value: int):
+        if (value & 1) == 0:
+            # Rust-generated handle, construct a new class that uses the handle to implement the
+            # interface
+            return DiffVisitorCallbackImpl._uniffi_make_instance(value)
+        else:
+            # Python-generated handle, get the object from the handle map
+            return _UniffiFfiConverterTypeDiffVisitorCallback._handle_map.remove(value)
+
+    @staticmethod
+    def check_lower(value: DiffVisitorCallback):
+        if not isinstance(value, DiffVisitorCallback):
+            raise TypeError("Expected DiffVisitorCallback subclass, {} found".format(type(value).__name__))
+
+    @staticmethod
+    def lower(value: DiffVisitorCallback):
+         if isinstance(value, DiffVisitorCallbackImpl):
+            # Rust-implementated object.  Clone the handle and return it
+            return value._uniffi_clone_handle()
+         else:
+            # Python-implementated object, generate a new vtable handle and return that.
+            return _UniffiFfiConverterTypeDiffVisitorCallback._handle_map.insert(value)
+
+    @classmethod
+    def read(cls, buf: _UniffiRustBuffer):
+        ptr = buf.read_u64()
+        if ptr == 0:
+            raise InternalError("Raw handle value was null")
+        return cls.lift(ptr)
+
+    @classmethod
+    def write(cls, value: DiffVisitorCallback, buf: _UniffiRustBuffer):
+        buf.write_u64(cls.lower(value))
+
+
+class EntryVisitorCallback():
+
+    def visit(self, entry: EntryRecord) -> bool:
+        """
+        Return `true` to continue or `false` to stop after this entry.
+"""
+        raise NotImplementedError
+
+class EntryVisitorCallbackImpl(EntryVisitorCallback):
+
+    _handle: ctypes.c_uint64
+
+    def __init__(self, *args, **kwargs):
+        raise ValueError("This class has no default constructor")
+
+    def __del__(self):
+        # In case of partial initialization of instances.
+        handle = getattr(self, "_handle", None)
+        if handle is not None:
+            _uniffi_rust_call(_UniffiLib.uniffi_prolly_bindings_fn_free_entryvisitorcallback, handle)
+
+    def _uniffi_clone_handle(self):
+        return _uniffi_rust_call(_UniffiLib.uniffi_prolly_bindings_fn_clone_entryvisitorcallback, self._handle)
+
+    # Used by alternative constructors or any methods which return this type.
+    @classmethod
+    def _uniffi_make_instance(cls, handle):
+        # Lightly yucky way to bypass the usual __init__ logic
+        # and just create a new instance with the required handle.
+        inst = cls.__new__(cls)
+        inst._handle = handle
+        return inst
+    def visit(self, entry: EntryRecord) -> bool:
+        """
+        Return `true` to continue or `false` to stop after this entry.
+"""
+
+        _UniffiFfiConverterTypeEntryRecord.check_lower(entry)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeEntryRecord.lower(entry),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterBoolean.lift
+        _uniffi_error_converter = None
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_entryvisitorcallback_visit,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+
+
+
+
+# Put all the bits inside a class to keep the top-level namespace clean
+class _UniffiTraitImplEntryVisitorCallbackImpl:
+    # For each method, generate a callback function to pass to Rust
+
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_ENTRY_VISITOR_CALLBACK_METHOD0
+    def visit(
+            uniffi_handle,
+            entry,
+            uniffi_out_return,
+            uniffi_call_status_ptr,
+        ):
+        uniffi_obj = _UniffiFfiConverterTypeEntryVisitorCallback._handle_map.get(uniffi_handle)
+        def make_call():
+            uniffi_args = (_UniffiFfiConverterTypeEntryRecord.lift(entry), )
+            uniffi_method = uniffi_obj.visit
+            return uniffi_method(*uniffi_args)
+        def write_return_value(v):
+            uniffi_out_return[0] = _UniffiFfiConverterBoolean.lower(v)
+        _uniffi_trait_interface_call(
+                uniffi_call_status_ptr.contents,
+                make_call,
+                write_return_value,
+        )
+
+    @_UNIFFI_CALLBACK_INTERFACE_FREE_PROLLY_ENTRY_VISITOR_CALLBACK
+    def _uniffi_free(uniffi_handle):
+        _UniffiFfiConverterTypeEntryVisitorCallback._handle_map.remove(uniffi_handle)
+
+    @_UNIFFI_CALLBACK_INTERFACE_CLONE_PROLLY_ENTRY_VISITOR_CALLBACK
+    def _uniffi_clone(uniffi_handle):
+        return _UniffiFfiConverterTypeEntryVisitorCallback._handle_map.clone(uniffi_handle)
+
+    # Generate the FFI VTable.  This has a field for each callback interface method.
+    _uniffi_vtable = _UniffiVTableCallbackInterfaceProllyEntryVisitorCallback(
+        _uniffi_free,
+        _uniffi_clone,
+        visit,
+    )
+    # Send Rust a pointer to the VTable.  Note: this means we need to keep the struct alive forever,
+    # or else bad things will happen when Rust tries to access it.
+    _UniffiLib.uniffi_prolly_bindings_fn_init_callback_vtable_entryvisitorcallback(ctypes.byref(_uniffi_vtable))
+
+class _UniffiFfiConverterTypeEntryVisitorCallback:
+    _handle_map = _UniffiHandleMap()
+
+    @staticmethod
+    def lift(value: int):
+        if (value & 1) == 0:
+            # Rust-generated handle, construct a new class that uses the handle to implement the
+            # interface
+            return EntryVisitorCallbackImpl._uniffi_make_instance(value)
+        else:
+            # Python-generated handle, get the object from the handle map
+            return _UniffiFfiConverterTypeEntryVisitorCallback._handle_map.remove(value)
+
+    @staticmethod
+    def check_lower(value: EntryVisitorCallback):
+        if not isinstance(value, EntryVisitorCallback):
+            raise TypeError("Expected EntryVisitorCallback subclass, {} found".format(type(value).__name__))
+
+    @staticmethod
+    def lower(value: EntryVisitorCallback):
+         if isinstance(value, EntryVisitorCallbackImpl):
+            # Rust-implementated object.  Clone the handle and return it
+            return value._uniffi_clone_handle()
+         else:
+            # Python-implementated object, generate a new vtable handle and return that.
+            return _UniffiFfiConverterTypeEntryVisitorCallback._handle_map.insert(value)
+
+    @classmethod
+    def read(cls, buf: _UniffiRustBuffer):
+        ptr = buf.read_u64()
+        if ptr == 0:
+            raise InternalError("Raw handle value was null")
+        return cls.lift(ptr)
+
+    @classmethod
+    def write(cls, value: EntryVisitorCallback, buf: _UniffiRustBuffer):
         buf.write_u64(cls.lower(value))
 
 class _UniffiFfiConverterSequenceTypeMutationRecord(_UniffiConverterRustBuffer):
@@ -13841,6 +14499,41 @@ class ProllyEngineProtocol(typing.Protocol):
     def reset_metrics(self, ) -> None:
         raise NotImplementedError
     def reverse_page(self, tree: TreeRecord,cursor: typing.Optional[ReverseCursorRecord],start: bytes,limit: int) -> ReversePageRecord:
+        raise NotImplementedError
+    def scan_conflicts(self, base: TreeRecord,left: TreeRecord,right: TreeRecord,visitor: ConflictVisitorCallback) -> ScanOutcomeRecord:
+        """
+        Stream genuine three-way conflicts without allocating a complete list.
+"""
+        raise NotImplementedError
+    def scan_diff(self, base: TreeRecord,other: TreeRecord,visitor: DiffVisitorCallback) -> ScanOutcomeRecord:
+        """
+        Stream structural differences without first allocating a complete list.
+"""
+        raise NotImplementedError
+    def scan_prefix(self, tree: TreeRecord,prefix: bytes,visitor: EntryVisitorCallback) -> ScanOutcomeRecord:
+        """
+        Stream all entries with `prefix` through the borrowed Rust traversal.
+"""
+        raise NotImplementedError
+    def scan_prefix_reverse(self, tree: TreeRecord,prefix: bytes,visitor: EntryVisitorCallback) -> ScanOutcomeRecord:
+        """
+        Stream a prefix in descending key order.
+"""
+        raise NotImplementedError
+    def scan_range(self, tree: TreeRecord,start: bytes,range_end: typing.Optional[bytes],visitor: EntryVisitorCallback) -> ScanOutcomeRecord:
+        """
+        Stream a half-open range through the borrowed Rust traversal.
+"""
+        raise NotImplementedError
+    def scan_range_diff(self, base: TreeRecord,other: TreeRecord,start: bytes,range_end: typing.Optional[bytes],visitor: DiffVisitorCallback) -> ScanOutcomeRecord:
+        """
+        Stream structural differences whose keys fall in `[start, end)`.
+"""
+        raise NotImplementedError
+    def scan_range_reverse(self, tree: TreeRecord,start: bytes,range_end: typing.Optional[bytes],visitor: EntryVisitorCallback) -> ScanOutcomeRecord:
+        """
+        Stream a half-open range in descending key order.
+"""
         raise NotImplementedError
     def stats_diff(self, before: TreeRecord,after: TreeRecord) -> StatsComparisonRecord:
         raise NotImplementedError
@@ -16004,6 +16697,189 @@ class ProllyEngine(ProllyEngineProtocol):
             *_uniffi_lowered_args,
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
+    def scan_conflicts(self, base: TreeRecord,left: TreeRecord,right: TreeRecord,visitor: ConflictVisitorCallback) -> ScanOutcomeRecord:
+        """
+        Stream genuine three-way conflicts without allocating a complete list.
+"""
+
+        _UniffiFfiConverterTypeTreeRecord.check_lower(base)
+
+        _UniffiFfiConverterTypeTreeRecord.check_lower(left)
+
+        _UniffiFfiConverterTypeTreeRecord.check_lower(right)
+
+        _UniffiFfiConverterTypeConflictVisitorCallback.check_lower(visitor)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeTreeRecord.lower(base),
+            _UniffiFfiConverterTypeTreeRecord.lower(left),
+            _UniffiFfiConverterTypeTreeRecord.lower(right),
+            _UniffiFfiConverterTypeConflictVisitorCallback.lower(visitor),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeScanOutcomeRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_scan_conflicts,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def scan_diff(self, base: TreeRecord,other: TreeRecord,visitor: DiffVisitorCallback) -> ScanOutcomeRecord:
+        """
+        Stream structural differences without first allocating a complete list.
+"""
+
+        _UniffiFfiConverterTypeTreeRecord.check_lower(base)
+
+        _UniffiFfiConverterTypeTreeRecord.check_lower(other)
+
+        _UniffiFfiConverterTypeDiffVisitorCallback.check_lower(visitor)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeTreeRecord.lower(base),
+            _UniffiFfiConverterTypeTreeRecord.lower(other),
+            _UniffiFfiConverterTypeDiffVisitorCallback.lower(visitor),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeScanOutcomeRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_scan_diff,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def scan_prefix(self, tree: TreeRecord,prefix: bytes,visitor: EntryVisitorCallback) -> ScanOutcomeRecord:
+        """
+        Stream all entries with `prefix` through the borrowed Rust traversal.
+"""
+
+        _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
+
+        _UniffiFfiConverterBytes.check_lower(prefix)
+
+        _UniffiFfiConverterTypeEntryVisitorCallback.check_lower(visitor)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeTreeRecord.lower(tree),
+            _UniffiFfiConverterBytes.lower(prefix),
+            _UniffiFfiConverterTypeEntryVisitorCallback.lower(visitor),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeScanOutcomeRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_scan_prefix,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def scan_prefix_reverse(self, tree: TreeRecord,prefix: bytes,visitor: EntryVisitorCallback) -> ScanOutcomeRecord:
+        """
+        Stream a prefix in descending key order.
+"""
+
+        _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
+
+        _UniffiFfiConverterBytes.check_lower(prefix)
+
+        _UniffiFfiConverterTypeEntryVisitorCallback.check_lower(visitor)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeTreeRecord.lower(tree),
+            _UniffiFfiConverterBytes.lower(prefix),
+            _UniffiFfiConverterTypeEntryVisitorCallback.lower(visitor),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeScanOutcomeRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_scan_prefix_reverse,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def scan_range(self, tree: TreeRecord,start: bytes,range_end: typing.Optional[bytes],visitor: EntryVisitorCallback) -> ScanOutcomeRecord:
+        """
+        Stream a half-open range through the borrowed Rust traversal.
+"""
+
+        _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
+
+        _UniffiFfiConverterBytes.check_lower(start)
+
+        _UniffiFfiConverterOptionalBytes.check_lower(range_end)
+
+        _UniffiFfiConverterTypeEntryVisitorCallback.check_lower(visitor)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeTreeRecord.lower(tree),
+            _UniffiFfiConverterBytes.lower(start),
+            _UniffiFfiConverterOptionalBytes.lower(range_end),
+            _UniffiFfiConverterTypeEntryVisitorCallback.lower(visitor),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeScanOutcomeRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_scan_range,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def scan_range_diff(self, base: TreeRecord,other: TreeRecord,start: bytes,range_end: typing.Optional[bytes],visitor: DiffVisitorCallback) -> ScanOutcomeRecord:
+        """
+        Stream structural differences whose keys fall in `[start, end)`.
+"""
+
+        _UniffiFfiConverterTypeTreeRecord.check_lower(base)
+
+        _UniffiFfiConverterTypeTreeRecord.check_lower(other)
+
+        _UniffiFfiConverterBytes.check_lower(start)
+
+        _UniffiFfiConverterOptionalBytes.check_lower(range_end)
+
+        _UniffiFfiConverterTypeDiffVisitorCallback.check_lower(visitor)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeTreeRecord.lower(base),
+            _UniffiFfiConverterTypeTreeRecord.lower(other),
+            _UniffiFfiConverterBytes.lower(start),
+            _UniffiFfiConverterOptionalBytes.lower(range_end),
+            _UniffiFfiConverterTypeDiffVisitorCallback.lower(visitor),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeScanOutcomeRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_scan_range_diff,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def scan_range_reverse(self, tree: TreeRecord,start: bytes,range_end: typing.Optional[bytes],visitor: EntryVisitorCallback) -> ScanOutcomeRecord:
+        """
+        Stream a half-open range in descending key order.
+"""
+
+        _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
+
+        _UniffiFfiConverterBytes.check_lower(start)
+
+        _UniffiFfiConverterOptionalBytes.check_lower(range_end)
+
+        _UniffiFfiConverterTypeEntryVisitorCallback.check_lower(visitor)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeTreeRecord.lower(tree),
+            _UniffiFfiConverterBytes.lower(start),
+            _UniffiFfiConverterOptionalBytes.lower(range_end),
+            _UniffiFfiConverterTypeEntryVisitorCallback.lower(visitor),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeScanOutcomeRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_scan_range_reverse,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
     def stats_diff(self, before: TreeRecord,after: TreeRecord) -> StatsComparisonRecord:
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(before)
@@ -18149,8 +19025,6 @@ __all__ = [
     "BlobGcPlanRecord",
     "BlobGcSweepRecord",
     "CacheStatsRecord",
-    "WriteStatsRecord",
-    "WriteResultRecord",
     "ChangedSpanRecord",
     "ChangedSpanHintRecord",
     "ConflictRecord",
@@ -18208,6 +19082,7 @@ __all__ = [
     "ResolutionRecord",
     "ReverseCursorRecord",
     "ReversePageRecord",
+    "ScanOutcomeRecord",
     "SnapshotBundleNodeRecord",
     "SnapshotBundleRecord",
     "SnapshotBundleSummaryRecord",
@@ -18237,6 +19112,8 @@ __all__ = [
     "TreeDebugViewRecord",
     "ValueRefRecord",
     "VersionedValueRecord",
+    "WriteStatsRecord",
+    "WriteResultRecord",
     "authenticated_proof_envelope_from_bytes",
     "authenticated_proof_envelope_to_bytes",
     "blob_ref_validate_bytes",
@@ -18360,8 +19237,14 @@ __all__ = [
     "versioned_value_matches_schema",
     "versioned_value_require_schema",
     "versioned_value_to_bytes",
+    "ConflictVisitorCallbackImpl",
+    "ConflictVisitorCallback",
     "CrdtResolverCallbackImpl",
     "CrdtResolverCallback",
+    "DiffVisitorCallbackImpl",
+    "DiffVisitorCallback",
+    "EntryVisitorCallbackImpl",
+    "EntryVisitorCallback",
     "HostStoreCallbackImpl",
     "HostStoreCallback",
     "MergeResolverCallbackImpl",

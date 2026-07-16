@@ -8,6 +8,15 @@ export interface NativeEntryRecord {
   value: Uint8Array;
 }
 
+export interface NativeScanOutcomeRecord {
+  visited: string;
+  stopped: boolean;
+}
+
+export type NativeEntryVisitor = (entry: NativeEntryRecord) => boolean;
+export type NativeDiffVisitor = (diff: NativeDiffRecord) => boolean;
+export type NativeConflictVisitor = (conflict: NativeConflictRecord) => boolean;
+
 export interface NativeDiffRecord {
   kind: string;
   key: Uint8Array;
@@ -918,6 +927,28 @@ export interface NativeProllyEngine {
   upperBound(tree: NativeTreeRecord, key: Uint8Array): NativeEntryRecord | null;
   range(tree: NativeTreeRecord, start: Uint8Array, end?: Uint8Array | null): NativeEntryRecord[];
   prefix(tree: NativeTreeRecord, prefix: Uint8Array): NativeEntryRecord[];
+  scanRange(
+    tree: NativeTreeRecord,
+    start: Uint8Array,
+    end: Uint8Array | null | undefined,
+    visitor: NativeEntryVisitor,
+  ): NativeScanOutcomeRecord;
+  scanPrefix(
+    tree: NativeTreeRecord,
+    prefix: Uint8Array,
+    visitor: NativeEntryVisitor,
+  ): NativeScanOutcomeRecord;
+  scanRangeReverse(
+    tree: NativeTreeRecord,
+    start: Uint8Array,
+    end: Uint8Array | null | undefined,
+    visitor: NativeEntryVisitor,
+  ): NativeScanOutcomeRecord;
+  scanPrefixReverse(
+    tree: NativeTreeRecord,
+    prefix: Uint8Array,
+    visitor: NativeEntryVisitor,
+  ): NativeScanOutcomeRecord;
   prefixPage(
     tree: NativeTreeRecord,
     prefix: Uint8Array,
@@ -961,6 +992,18 @@ export interface NativeProllyEngine {
     start: Uint8Array,
     end?: Uint8Array | null,
   ): NativeDiffRecord[];
+  scanDiff(
+    base: NativeTreeRecord,
+    other: NativeTreeRecord,
+    visitor: NativeDiffVisitor,
+  ): NativeScanOutcomeRecord;
+  scanRangeDiff(
+    base: NativeTreeRecord,
+    other: NativeTreeRecord,
+    start: Uint8Array,
+    end: Uint8Array | null | undefined,
+    visitor: NativeDiffVisitor,
+  ): NativeScanOutcomeRecord;
   diffFromCursor(
     base: NativeTreeRecord,
     other: NativeTreeRecord,
@@ -981,6 +1024,12 @@ export interface NativeProllyEngine {
     cursor?: NativeRangeCursorRecord | null,
     limit?: string,
   ): NativeConflictPageRecord;
+  scanConflicts(
+    base: NativeTreeRecord,
+    left: NativeTreeRecord,
+    right: NativeTreeRecord,
+    visitor: NativeConflictVisitor,
+  ): NativeScanOutcomeRecord;
   merge(
     base: NativeTreeRecord,
     left: NativeTreeRecord,

@@ -1,0 +1,235 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1200" viewBox="0 0 1800 1200" role="img" aria-labelledby="title desc">
+  <title id="title">10 million key Rust Prolly versus Go Prolly report</title>
+  <desc id="desc">One-page benchmark report comparing the Rust Prolly and Go Prolly implementations across point reads, full scans, writes, memory, and the measured Rust read mechanisms.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#07111f"/>
+      <stop offset="1" stop-color="#101b31"/>
+    </linearGradient>
+    <linearGradient id="rustGlow" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ff7a45"/>
+      <stop offset="1" stop-color="#ffb454"/>
+    </linearGradient>
+    <linearGradient id="greenGlow" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#28d7a1"/>
+      <stop offset="1" stop-color="#67e8b9"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="12" stdDeviation="18" flood-color="#000" flood-opacity="0.28"/>
+    </filter>
+    <style>
+      text { font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .title { font-size: 48px; font-weight: 800; letter-spacing: -1.5px; fill: #f7fbff; }
+      .subtitle { font-size: 20px; font-weight: 500; fill: #9fb0c9; }
+      .section { font-size: 24px; font-weight: 750; fill: #f7fbff; }
+      .smallcaps { font-size: 13px; font-weight: 800; letter-spacing: 1.6px; fill: #7f94b3; }
+      .label { font-size: 16px; font-weight: 650; fill: #dce7f6; }
+      .body { font-size: 15px; font-weight: 500; fill: #aebed3; }
+      .tiny { font-size: 13px; font-weight: 500; fill: #899db9; }
+      .number { font-size: 30px; font-weight: 800; fill: #f8fbff; }
+      .speed { font-size: 18px; font-weight: 800; fill: #43dfad; }
+      .mono { font-family: "SFMono-Regular", Consolas, monospace; }
+    </style>
+  </defs>
+
+  <rect width="1800" height="1200" fill="url(#bg)"/>
+  <circle cx="1450" cy="-120" r="520" fill="#14345b" opacity="0.28"/>
+  <circle cx="90" cy="1130" r="340" fill="#173c45" opacity="0.20"/>
+
+  <!-- Header -->
+  <text id="titleText" x="60" y="78" class="smallcaps" fill="#ff9a62">VERIFIED PERFORMANCE REPORT · 2026-07-16</text>
+  <text x="60" y="132" class="title">10 MILLION KEYS: RUST PROLLY vs GO PROLLY</text>
+  <text x="60" y="164" class="subtitle">Three-run medians · one worker · in-memory store · identical logical keys and values · lower ns/op is better</text>
+
+  <g transform="translate(1428 48)" filter="url(#shadow)">
+    <rect width="312" height="104" rx="18" fill="#102941" stroke="#2c5d78"/>
+    <text x="24" y="31" class="smallcaps" fill="#70ebbc">10M RESULT</text>
+    <text x="24" y="66" font-size="29" font-weight="850" fill="#f7fbff">18 / 18 RUST WINS</text>
+    <text x="24" y="89" class="tiny">6 workloads × 3 operations</text>
+  </g>
+
+  <!-- Left performance panel -->
+  <g filter="url(#shadow)">
+    <rect x="50" y="195" width="810" height="770" rx="24" fill="#0d192b" stroke="#263850"/>
+  </g>
+  <text x="80" y="239" class="section">How both trees behave at 10M</text>
+  <text x="80" y="266" class="body">Exact median speedup. Every cell favors Rust; the margin depends strongly on locality and operation.</text>
+
+  <!-- Table -->
+  <rect x="75" y="292" width="760" height="50" rx="10" fill="#13243a"/>
+  <text x="94" y="323" class="smallcaps">WORKLOAD</text>
+  <text x="385" y="323" class="smallcaps" text-anchor="middle">POINT READ</text>
+  <text x="575" y="323" class="smallcaps" text-anchor="middle">FULL SCAN</text>
+  <text x="750" y="323" class="smallcaps" text-anchor="middle">WRITE</text>
+
+  <g>
+    <rect x="75" y="351" width="760" height="52" rx="8" fill="#101e31"/>
+    <rect x="75" y="407" width="760" height="52" rx="8" fill="#0b1728"/>
+    <rect x="75" y="463" width="760" height="52" rx="8" fill="#101e31"/>
+    <rect x="75" y="519" width="760" height="52" rx="8" fill="#0b1728"/>
+    <rect x="75" y="575" width="760" height="52" rx="8" fill="#101e31"/>
+    <rect x="75" y="631" width="760" height="52" rx="8" fill="#0b1728"/>
+
+    <rect x="83" y="361" width="5" height="32" rx="2" fill="#5b7c9d"/>
+    <rect x="83" y="417" width="5" height="32" rx="2" fill="#5b7c9d"/>
+    <rect x="83" y="473" width="5" height="32" rx="2" fill="#5b7c9d"/>
+    <rect x="83" y="529" width="5" height="32" rx="2" fill="#ff8b52"/>
+    <rect x="83" y="585" width="5" height="32" rx="2" fill="#ff8b52"/>
+    <rect x="83" y="641" width="5" height="32" rx="2" fill="#ff8b52"/>
+
+    <text x="100" y="383" class="label">Fresh · append</text>
+    <text x="100" y="439" class="label">Fresh · random</text>
+    <text x="100" y="495" class="label">Fresh · clustered</text>
+    <text x="100" y="551" class="label">Mutation · append</text>
+    <text x="100" y="607" class="label">Mutation · random</text>
+    <text x="100" y="663" class="label">Mutation · clustered</text>
+
+    <text x="385" y="383" class="speed" text-anchor="middle">1.84×</text>
+    <text x="385" y="439" class="speed" text-anchor="middle">1.68×</text>
+    <text x="385" y="495" class="speed" text-anchor="middle">1.87×</text>
+    <text x="385" y="551" class="speed" text-anchor="middle">5.21×</text>
+    <text x="385" y="607" class="speed" text-anchor="middle">2.28×</text>
+    <text x="385" y="663" class="speed" text-anchor="middle">5.75×</text>
+
+    <text x="575" y="383" class="speed" text-anchor="middle">6.75×</text>
+    <text x="575" y="439" class="speed" text-anchor="middle">6.67×</text>
+    <text x="575" y="495" class="speed" text-anchor="middle">6.77×</text>
+    <text x="575" y="551" class="speed" text-anchor="middle">6.61×</text>
+    <text x="575" y="607" class="speed" text-anchor="middle">6.75×</text>
+    <text x="575" y="663" class="speed" text-anchor="middle">6.62×</text>
+
+    <text x="750" y="383" class="speed" text-anchor="middle">52.14×</text>
+    <text x="750" y="439" class="speed" text-anchor="middle">12.21×</text>
+    <text x="750" y="495" class="speed" text-anchor="middle">19.88×</text>
+    <text x="750" y="551" class="speed" text-anchor="middle">17.38×</text>
+    <text x="750" y="607" class="speed" text-anchor="middle">1.99×</text>
+    <text x="750" y="663" class="speed" text-anchor="middle">10.04×</text>
+  </g>
+
+  <!-- KPI cards -->
+  <g>
+    <rect x="75" y="712" width="235" height="220" rx="18" fill="#122139" stroke="#263e59"/>
+    <text x="95" y="744" class="smallcaps">POINT READ</text>
+    <text x="95" y="786" class="number">1.68–5.75×</text>
+    <text x="95" y="813" class="body">Rust faster</text>
+    <line x1="95" y1="833" x2="290" y2="833" stroke="#2a3e57"/>
+    <text x="95" y="860" class="tiny">Weakest: fresh random</text>
+    <text x="95" y="883" class="label mono">968 vs 1,626 ns</text>
+    <text x="95" y="910" class="tiny">Below the universal 2× target</text>
+
+    <rect x="325" y="712" width="235" height="220" rx="18" fill="#122139" stroke="#263e59"/>
+    <text x="345" y="744" class="smallcaps">FULL SCAN</text>
+    <text x="345" y="786" class="number">6.61–6.77×</text>
+    <text x="345" y="813" class="body">Rust faster</text>
+    <line x1="345" y1="833" x2="540" y2="833" stroke="#2a3e57"/>
+    <text x="345" y="860" class="tiny">Rust across all rows</text>
+    <text x="345" y="883" class="label mono">5.96–6.28 ns/row</text>
+    <text x="345" y="910" class="tiny">Go: 40.19–41.53 ns/row</text>
+
+    <rect x="575" y="712" width="260" height="220" rx="18" fill="#122139" stroke="#263e59"/>
+    <text x="595" y="744" class="smallcaps">WRITE</text>
+    <text x="595" y="786" class="number">1.99–52.14×</text>
+    <text x="595" y="813" class="body">Rust faster at 10M</text>
+    <line x1="595" y1="833" x2="815" y2="833" stroke="#2a3e57"/>
+    <text x="595" y="860" class="tiny">Weakest: mutation random</text>
+    <text x="595" y="883" class="label mono">3,097 vs 6,151 ns</text>
+    <text x="595" y="910" class="tiny">Default product encodings differ</text>
+  </g>
+
+  <!-- Right mechanism panel -->
+  <g filter="url(#shadow)">
+    <rect x="890" y="195" width="860" height="770" rx="24" fill="#0d192b" stroke="#263850"/>
+  </g>
+  <text x="920" y="239" class="section">Mechanisms in the measured Rust binary</text>
+  <text x="920" y="266" class="body">Implemented together; this benchmark does not isolate each mechanism's individual contribution.</text>
+
+  <g>
+    <rect x="920" y="300" width="370" height="150" rx="18" fill="#122139" stroke="#36506e"/>
+    <circle cx="951" cy="331" r="15" fill="url(#rustGlow)"/>
+    <text x="981" y="338" class="label">1 · Packed immutable ReadNode</text>
+    <text x="947" y="373" class="body">Retains encoded <tspan class="mono">Arc&lt;[u8]&gt;</tspan> once</text>
+    <text x="947" y="400" class="body">Validated compact offsets borrow key/value slices</text>
+    <text x="947" y="427" class="body">Prefix keys rebuild once into one contiguous arena</text>
+
+    <rect x="1350" y="300" width="370" height="150" rx="18" fill="#122139" stroke="#36506e"/>
+    <circle cx="1381" cy="331" r="15" fill="url(#greenGlow)"/>
+    <text x="1411" y="338" class="label">2 · Less work per key comparison</text>
+    <text x="1377" y="373" class="body">Common-prefix gate rejects out-of-range queries</text>
+    <text x="1377" y="400" class="body">64-bit key-order word before full byte compare</text>
+    <text x="1377" y="427" class="body">Binary search only dereferences bytes on ties</text>
+
+    <path d="M1298 375 L1340 375" stroke="#4f6887" stroke-width="3"/>
+    <path d="M1331 367 L1340 375 L1331 383" fill="none" stroke="#4f6887" stroke-width="3"/>
+
+    <rect x="920" y="480" width="370" height="165" rx="18" fill="#122139" stroke="#36506e"/>
+    <circle cx="951" cy="511" r="15" fill="url(#greenGlow)"/>
+    <text x="981" y="518" class="label">3 · Bounded ReadSession locality</text>
+    <text x="947" y="553" class="body">Root handle retained: no repeated root lookup</text>
+    <text x="947" y="580" class="body">4,096-slot, 4-way internal route-node table</text>
+    <text x="947" y="607" class="body">Recent-leaf shortcut for clustered keys</text>
+    <text x="947" y="632" class="tiny">Adaptive: disabled after 8 misses on random access</text>
+
+    <rect x="1350" y="480" width="370" height="165" rx="18" fill="#122139" stroke="#36506e"/>
+    <circle cx="1381" cy="511" r="15" fill="url(#rustGlow)"/>
+    <text x="1411" y="518" class="label">4 · Borrowed point and scan traversal</text>
+    <text x="1377" y="553" class="body"><tspan class="mono">get_with</tspan> lends <tspan class="mono">&amp;[u8]</tspan> in callback scope</text>
+    <text x="1377" y="580" class="body"><tspan class="mono">scan_range</tspan> emits borrowed <tspan class="mono">EntryRef</tspan></text>
+    <text x="1377" y="607" class="body">Traversal stack retains nodes; no per-row clone</text>
+    <text x="1377" y="632" class="tiny">Owned APIs clone only at compatibility boundaries</text>
+
+    <path d="M1298 562 L1340 562" stroke="#4f6887" stroke-width="3"/>
+    <path d="M1331 554 L1340 562 L1331 570" fill="none" stroke="#4f6887" stroke-width="3"/>
+    <path d="M1105 458 L1105 470" stroke="#4f6887" stroke-width="3"/>
+    <path d="M1097 462 L1105 470 L1113 462" fill="none" stroke="#4f6887" stroke-width="3"/>
+    <path d="M1535 458 L1535 470" stroke="#4f6887" stroke-width="3"/>
+    <path d="M1527 462 L1535 470 L1543 462" fill="none" stroke="#4f6887" stroke-width="3"/>
+  </g>
+
+  <!-- Correctness foundation -->
+  <rect x="920" y="675" width="800" height="92" rx="16" fill="#102b2d" stroke="#28605a"/>
+  <text x="943" y="705" class="smallcaps" fill="#6ce9bb">CORRECTNESS FOUNDATION · NON-NEGOTIABLE</text>
+  <text x="943" y="735" class="body" fill="#c9eee2">Immutable retained bytes keep borrows valid · callback lifetimes prevent escape · packed nodes validate offsets and ordering</text>
+  <text x="943" y="758" class="tiny">Owned wrappers remain byte-equivalent; async visitors never carry a borrow across an await.</text>
+
+  <!-- Pattern-to-behavior interpretation -->
+  <rect x="920" y="792" width="800" height="140" rx="18" fill="#13243a" stroke="#36506e"/>
+  <text x="943" y="824" class="smallcaps" fill="#8fb4dc">PATTERN → OBSERVED BEHAVIOR</text>
+  <circle cx="948" cy="851" r="4" fill="#4bdda9"/>
+  <text x="963" y="856" class="body">Full scans stay at 6.61–6.77×: sequential retained-node traversal emits borrowed rows.</text>
+  <circle cx="948" cy="879" r="4" fill="#4bdda9"/>
+  <text x="963" y="884" class="body">Mutation append/clustered reads reach 5.21×/5.75×, consistent with session and leaf locality.</text>
+  <circle cx="948" cy="907" r="4" fill="#ff9e8c"/>
+  <text x="963" y="912" class="body">Fresh-random reads stop at 1.68×; mutation-random RSS is Rust 6.37 vs Go 6.16 GiB.</text>
+
+  <!-- Workload glossary -->
+  <rect x="50" y="995" width="1700" height="150" rx="22" fill="#101b2e" stroke="#2a3b54"/>
+  <text x="78" y="1026" class="smallcaps">WORKLOAD PATTERN · IDENTICAL RUST/GO INPUT PER ROW, DIFFERENT ARRIVAL OR UPDATE ORDER</text>
+
+  <rect x="75" y="1042" width="295" height="78" rx="13" fill="#13243a"/>
+  <text x="94" y="1069" class="label">Fresh</text>
+  <text x="94" y="1093" class="tiny">Build from empty to 10M final keys.</text>
+  <text x="94" y="1112" class="tiny">All three orders end with identical records.</text>
+
+  <rect x="385" y="1042" width="405" height="78" rx="13" fill="#2a2029"/>
+  <text x="404" y="1069" class="label">Mutation</text>
+  <text x="404" y="1093" class="tiny">Start at 10M, then apply 3M writes (30%).</text>
+  <text x="404" y="1112" class="tiny">Random/clustered: 1.5M inserts + 1.5M updates.</text>
+
+  <rect x="805" y="1042" width="285" height="78" rx="13" fill="#13243a"/>
+  <text x="824" y="1069" class="label">Append</text>
+  <text x="824" y="1093" class="tiny">Ascending fresh keys; mutation keys</text>
+  <text x="824" y="1112" class="tiny">are all new and above the maximum.</text>
+
+  <rect x="1105" y="1042" width="285" height="78" rx="13" fill="#13243a"/>
+  <text x="1124" y="1069" class="label">Random</text>
+  <text x="1124" y="1093" class="tiny">Deterministic global permutation:</text>
+  <text x="1124" y="1112" class="tiny">minimal arrival-order locality.</text>
+
+  <rect x="1405" y="1042" width="320" height="78" rx="13" fill="#13243a"/>
+  <text x="1424" y="1069" class="label">Clustered</text>
+  <text x="1424" y="1093" class="tiny">Permuted 1,000-key groups:</text>
+  <text x="1424" y="1112" class="tiny">locality inside each shuffled cluster.</text>
+
+  <text x="60" y="1180" class="tiny mono">Rust impl b087770d79b5+src.b85a0408b624 · Go impl 6b2372c7d4de+runner.0eeaa05ba605 · Apple M2 Max / 32 GiB</text>
+  <text x="1740" y="1180" class="tiny" text-anchor="end">Source: prolly-rust-go-performance-report-2026-07-16.md</text>
+</svg>

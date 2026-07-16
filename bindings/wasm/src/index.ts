@@ -3,6 +3,15 @@ export interface WasmEntryRecord {
   value: Uint8Array;
 }
 
+export interface WasmScanOutcomeRecord {
+  visited: string;
+  stopped: boolean;
+}
+
+export type WasmEntryVisitor = (entry: WasmEntryRecord) => boolean;
+export type WasmDiffVisitor = (diff: WasmDiffRecord) => boolean;
+export type WasmConflictVisitor = (conflict: WasmConflictRecord) => boolean;
+
 export type WasmOptionalEntryRecord = WasmEntryRecord | null;
 
 export interface WasmMutationRecord {
@@ -518,6 +527,13 @@ export interface WasmProllyEngineInstance
     | "prefixPage"
     | "prefixReversePage"
     | "reversePage"
+    | "scanRange"
+    | "scanPrefix"
+    | "scanRangeReverse"
+    | "scanPrefixReverse"
+    | "scanDiff"
+    | "scanRangeDiff"
+    | "scanConflicts"
   > {
   beginTransaction(): WasmTransactionInstance;
   firstEntry(tree: WasmTree): WasmOptionalEntryRecord;
@@ -555,6 +571,46 @@ export interface WasmProllyEngineInstance
     start: Uint8Array,
     limit: number,
   ): WasmReversePageRecord;
+  scanRange(
+    tree: WasmTree,
+    start: Uint8Array,
+    end: Uint8Array | null | undefined,
+    visitor: WasmEntryVisitor,
+  ): WasmScanOutcomeRecord;
+  scanPrefix(
+    tree: WasmTree,
+    prefix: Uint8Array,
+    visitor: WasmEntryVisitor,
+  ): WasmScanOutcomeRecord;
+  scanRangeReverse(
+    tree: WasmTree,
+    start: Uint8Array,
+    end: Uint8Array | null | undefined,
+    visitor: WasmEntryVisitor,
+  ): WasmScanOutcomeRecord;
+  scanPrefixReverse(
+    tree: WasmTree,
+    prefix: Uint8Array,
+    visitor: WasmEntryVisitor,
+  ): WasmScanOutcomeRecord;
+  scanDiff(
+    base: WasmTree,
+    other: WasmTree,
+    visitor: WasmDiffVisitor,
+  ): WasmScanOutcomeRecord;
+  scanRangeDiff(
+    base: WasmTree,
+    other: WasmTree,
+    start: Uint8Array,
+    end: Uint8Array | null | undefined,
+    visitor: WasmDiffVisitor,
+  ): WasmScanOutcomeRecord;
+  scanConflicts(
+    base: WasmTree,
+    left: WasmTree,
+    right: WasmTree,
+    visitor: WasmConflictVisitor,
+  ): WasmScanOutcomeRecord;
 }
 
 export interface WasmProllyEngineConstructor {

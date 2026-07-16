@@ -53,30 +53,24 @@ The comparison intentionally uses each implementation's default encoding and
 chunking configuration. It measures the products presented to callers, not a
 forced common wire format.
 
-## Verified zero-copy run (2026-07-16)
+## Verified final zero-copy run (2026-07-16)
 
-The final runs used identical binary hashes across every requested size:
+The complete final matrix reran every requested size three times with identical
+binary hashes. See the
+[detailed performance report](prolly-rust-go-performance-report-2026-07-16.md)
+for the full 90-row matrix, repetition stability, peak RSS, provenance, and
+limitations.
 
-- 10K, 50K, and 1M (three repetitions):
-  `performance-results/zero-copy-10k-50k-1m-final-provenance/`
-- 5M and 10M (one complete repetition; exact ratios are provisional):
-  `performance-results/zero-copy-5m-10m-final-provenance/`
+For the 10M behavior and the measured Rust read-path mechanisms in one visual,
+see the [10M one-page report](prolly-10m-one-page-report.md).
 
-Across all 90 scenarios Rust won 82 and Dolt Go won 8. Rust won every range
-scan (30/30), with measured scan speedups from 2.97x through 6.50x. Point reads
-split 23/30 for Rust and 7/30 for Dolt:
+Across the 90 scenario-operation medians, Rust won 88 and Dolt Go won 2. Rust
+won all point-read (30/30) and full-range-scan (30/30) groups. Point-read
+speedups range from 1.68x to 5.75x with a 3.16x geometric mean; all 90 paired
+point-read repetitions exceed 1.5x. Full-scan speedups range from 3.41x to
+6.77x with a 4.98x geometric mean.
 
-- 10K: Rust won all point workloads, 1.42x–2.18x;
-- 50K: Rust won all point workloads, 1.07x–1.89x;
-- 1M: locality-heavy mutation append/clustered reached 1.59x–1.95x, while
-  fresh/random cases were near parity or slower;
-- 5M and 10M: Rust reached 1.58x–2.15x for mutation append/clustered and
-  1.11x–1.16x for mutation random, while Dolt won every fresh point workload
-  by 1.16x–1.28x.
-
-These results do not establish the requested 1.5x–2x point-read target for a
-large random working set. They show that callback-scoped result borrowing and
-session-local routing solve allocation/locality overhead, while decoded
-`Vec<Vec<u8>>` nodes and their cache footprint dominate at 1M–10M. The next
-point-read optimization must therefore evaluate the packed `ReadNode` phase in
-the zero-copy architecture design rather than further enlarging session caches.
+The remaining exceptions are explicit. Dolt Go wins random 30%-mutation writes
+at 10K and 50K, and Rust's peak process memory is higher for random mutation at
+1M, 5M, and 10M. Seven fresh large-tree point-read medians remain below the
+universal 2x target, although all remain above 1.5x.

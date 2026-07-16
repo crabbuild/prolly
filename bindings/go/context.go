@@ -268,6 +268,30 @@ func (e *Engine) PrefixContext(ctx context.Context, tree Tree, prefix []byte) ([
 	})
 }
 
+func (e *Engine) ScanRangeContext(ctx context.Context, tree Tree, start []byte, end []byte, visitor EntryVisitor) (ScanOutcome, error) {
+	return contextValue(ctx, func() (ScanOutcome, error) {
+		return e.ScanRange(tree, start, end, visitor)
+	})
+}
+
+func (e *Engine) ScanPrefixContext(ctx context.Context, tree Tree, prefix []byte, visitor EntryVisitor) (ScanOutcome, error) {
+	return contextValue(ctx, func() (ScanOutcome, error) {
+		return e.ScanPrefix(tree, prefix, visitor)
+	})
+}
+
+func (e *Engine) ScanRangeReverseContext(ctx context.Context, tree Tree, start []byte, end []byte, visitor EntryVisitor) (ScanOutcome, error) {
+	return contextValue(ctx, func() (ScanOutcome, error) {
+		return e.ScanRangeReverse(tree, start, end, visitor)
+	})
+}
+
+func (e *Engine) ScanPrefixReverseContext(ctx context.Context, tree Tree, prefix []byte, visitor EntryVisitor) (ScanOutcome, error) {
+	return contextValue(ctx, func() (ScanOutcome, error) {
+		return e.ScanPrefixReverse(tree, prefix, visitor)
+	})
+}
+
 func (e *Engine) PrefixPageContext(ctx context.Context, tree Tree, prefix []byte, cursor *RangeCursor, limit uint64) (RangePage, error) {
 	return contextValue(ctx, func() (RangePage, error) {
 		return e.PrefixPage(tree, prefix, cursor, limit)
@@ -322,6 +346,18 @@ func (e *Engine) RangeDiffContext(ctx context.Context, base Tree, other Tree, st
 	})
 }
 
+func (e *Engine) ScanDiffContext(ctx context.Context, base Tree, other Tree, visitor DiffVisitor) (ScanOutcome, error) {
+	return contextValue(ctx, func() (ScanOutcome, error) {
+		return e.ScanDiff(base, other, visitor)
+	})
+}
+
+func (e *Engine) ScanRangeDiffContext(ctx context.Context, base Tree, other Tree, start []byte, end []byte, visitor DiffVisitor) (ScanOutcome, error) {
+	return contextValue(ctx, func() (ScanOutcome, error) {
+		return e.ScanRangeDiff(base, other, start, end, visitor)
+	})
+}
+
 func (e *Engine) DiffFromCursorContext(ctx context.Context, base Tree, other Tree, cursor *RangeCursor, end []byte) ([]Diff, error) {
 	return contextValue(ctx, func() ([]Diff, error) {
 		return e.DiffFromCursor(base, other, cursor, end)
@@ -337,6 +373,12 @@ func (e *Engine) DiffPageContext(ctx context.Context, base Tree, other Tree, cur
 func (e *Engine) ConflictPageContext(ctx context.Context, base Tree, left Tree, right Tree, cursor *RangeCursor, limit uint64) (ConflictPage, error) {
 	return contextValue(ctx, func() (ConflictPage, error) {
 		return e.ConflictPage(base, left, right, cursor, limit)
+	})
+}
+
+func (e *Engine) ScanConflictsContext(ctx context.Context, base Tree, left Tree, right Tree, visitor ConflictVisitor) (ScanOutcome, error) {
+	return contextValue(ctx, func() (ScanOutcome, error) {
+		return e.ScanConflicts(base, left, right, visitor)
 	})
 }
 

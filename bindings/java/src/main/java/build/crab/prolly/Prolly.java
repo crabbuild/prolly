@@ -914,6 +914,48 @@ public final class Prolly implements AutoCloseable {
                 .toList();
     }
 
+    public ScanOutcome scanRange(
+            TreeRecord tree,
+            byte[] start,
+            Optional<byte[]> end,
+            EntryScanVisitor visitor) throws ProllyBindingException {
+        Objects.requireNonNull(visitor);
+        return scanOutcome(engine.scanRange(
+                tree,
+                start.clone(),
+                end.map(byte[]::clone).orElse(null),
+                record -> visitor.visit(entry(record))));
+    }
+
+    public ScanOutcome scanPrefix(
+            TreeRecord tree,
+            byte[] prefix,
+            EntryScanVisitor visitor) throws ProllyBindingException {
+        Objects.requireNonNull(visitor);
+        return scanOutcome(engine.scanPrefix(tree, prefix.clone(), record -> visitor.visit(entry(record))));
+    }
+
+    public ScanOutcome scanRangeReverse(
+            TreeRecord tree,
+            byte[] start,
+            Optional<byte[]> end,
+            EntryScanVisitor visitor) throws ProllyBindingException {
+        Objects.requireNonNull(visitor);
+        return scanOutcome(engine.scanRangeReverse(
+                tree,
+                start.clone(),
+                end.map(byte[]::clone).orElse(null),
+                record -> visitor.visit(entry(record))));
+    }
+
+    public ScanOutcome scanPrefixReverse(
+            TreeRecord tree,
+            byte[] prefix,
+            EntryScanVisitor visitor) throws ProllyBindingException {
+        Objects.requireNonNull(visitor);
+        return scanOutcome(engine.scanPrefixReverse(tree, prefix.clone(), record -> visitor.visit(entry(record))));
+    }
+
     public List<Entry> rangeAfter(TreeRecord tree, byte[] afterKey, Optional<byte[]> end)
             throws ProllyBindingException {
         return engine.rangeAfter(tree, afterKey.clone(), end.map(byte[]::clone).orElse(null))
@@ -963,6 +1005,29 @@ public final class Prolly implements AutoCloseable {
         return engine.rangeDiff(base, other, start.clone(), end.map(byte[]::clone).orElse(null));
     }
 
+    public ScanOutcome scanDiff(
+            TreeRecord base,
+            TreeRecord other,
+            DiffScanVisitor visitor) throws ProllyBindingException {
+        Objects.requireNonNull(visitor);
+        return scanOutcome(engine.scanDiff(base, other, visitor::visit));
+    }
+
+    public ScanOutcome scanRangeDiff(
+            TreeRecord base,
+            TreeRecord other,
+            byte[] start,
+            Optional<byte[]> end,
+            DiffScanVisitor visitor) throws ProllyBindingException {
+        Objects.requireNonNull(visitor);
+        return scanOutcome(engine.scanRangeDiff(
+                base,
+                other,
+                start.clone(),
+                end.map(byte[]::clone).orElse(null),
+                visitor::visit));
+    }
+
     public List<DiffRecord> diffFromCursor(
             TreeRecord base,
             TreeRecord other,
@@ -997,6 +1062,15 @@ public final class Prolly implements AutoCloseable {
             RangeCursorRecord cursor,
             long limit) throws ProllyBindingException {
         return ProllyJavaAdapters.conflictPage(engine, base, left, right, cursor, limit);
+    }
+
+    public ScanOutcome scanConflicts(
+            TreeRecord base,
+            TreeRecord left,
+            TreeRecord right,
+            ConflictScanVisitor visitor) throws ProllyBindingException {
+        Objects.requireNonNull(visitor);
+        return scanOutcome(engine.scanConflicts(base, left, right, visitor::visit));
     }
 
     public TreeRecord merge(TreeRecord base, TreeRecord left, TreeRecord right, String resolver)
@@ -1438,6 +1512,10 @@ public final class Prolly implements AutoCloseable {
 
     private static Entry entry(EntryRecord record) {
         return new Entry(record.getKey(), record.getValue());
+    }
+
+    private static ScanOutcome scanOutcome(ScanOutcomeRecord record) {
+        return new ScanOutcome(ProllyJavaAdapters.scanOutcomeVisited(record), record.getStopped());
     }
 
     private static SnapshotNamespaceRecord cloneSnapshotNamespace(SnapshotNamespaceRecord namespace) {

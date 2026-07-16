@@ -63,6 +63,29 @@ the portable data formats that bindings need to exchange.
 - Cursor-resumed diffs and diff pages
 - Typed structural diff cursors with JSON compatibility
 - Paged three-way conflict inspection
+- Callback scans for forward/reverse ranges and prefixes, structural/ranged
+  diffs, and genuine three-way conflicts, including visitor-controlled early
+  termination and `{ visited, stopped }` outcomes
+
+### Borrowed reads at language boundaries
+
+Rust borrows never escape into a foreign runtime. UniFFI, Node-API, and WASM
+perform traversal against packed retained nodes and copy each entry, diff, or
+conflict exactly when invoking the host callback. This removes the eager
+whole-result allocation and keeps callback lifetimes safe, but it is not a
+claim of zero-copy transfer into the host language. Existing `range`, `prefix`,
+and `diff` methods remain owned compatibility APIs.
+
+Existing point-read signatures also remain unchanged: a foreign runtime must
+own the returned value, so `get` performs one boundary copy after the native
+packed-node lookup. There is no foreign `get_with` callback because it would
+add a host callback round trip without eliminating that required transfer.
+
+Go's manual cgo binding implements the same visitor contract over 1,024-record
+cursor pages. It keeps peak memory bounded and does not retain Go pointers in
+Rust; unlike the other native bindings, it currently pays one bounded page
+allocation per crossing. Records delivered by every binding are host-owned and
+may safely be retained after the callback returns.
 
 ### Merge and resolver behavior
 

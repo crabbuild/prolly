@@ -15,7 +15,10 @@ import {
   type NativeCrdtResolver,
   type NativeDiffPageRecord,
   type NativeDiffRecord,
+  type NativeDiffVisitor,
   type NativeEntryRecord,
+  type NativeEntryVisitor,
+  type NativeConflictVisitor,
   type NativeGcPlanRecord,
   type NativeGcReachabilityRecord,
   type NativeGcSweepRecord,
@@ -44,6 +47,7 @@ import {
   type NativeRangeProofRecord,
   type NativeReverseCursorRecord,
   type NativeReversePageRecord,
+  type NativeScanOutcomeRecord,
   type NativeSnapshotNamespaceRecord,
   type NativeSnapshotBundleRecord,
   type NativeSnapshotRecord,
@@ -331,6 +335,40 @@ export class AsyncProllyEngine {
     return defer(() => this.inner.prefix(tree, prefix));
   }
 
+  scanRange(
+    tree: NativeTreeRecord,
+    start: Uint8Array,
+    end: Uint8Array | null | undefined,
+    visitor: NativeEntryVisitor,
+  ): Promise<NativeScanOutcomeRecord> {
+    return defer(() => this.inner.scanRange(tree, start, end, visitor));
+  }
+
+  scanPrefix(
+    tree: NativeTreeRecord,
+    prefix: Uint8Array,
+    visitor: NativeEntryVisitor,
+  ): Promise<NativeScanOutcomeRecord> {
+    return defer(() => this.inner.scanPrefix(tree, prefix, visitor));
+  }
+
+  scanRangeReverse(
+    tree: NativeTreeRecord,
+    start: Uint8Array,
+    end: Uint8Array | null | undefined,
+    visitor: NativeEntryVisitor,
+  ): Promise<NativeScanOutcomeRecord> {
+    return defer(() => this.inner.scanRangeReverse(tree, start, end, visitor));
+  }
+
+  scanPrefixReverse(
+    tree: NativeTreeRecord,
+    prefix: Uint8Array,
+    visitor: NativeEntryVisitor,
+  ): Promise<NativeScanOutcomeRecord> {
+    return defer(() => this.inner.scanPrefixReverse(tree, prefix, visitor));
+  }
+
   prefixPage(
     tree: NativeTreeRecord,
     prefix: Uint8Array,
@@ -417,6 +455,24 @@ export class AsyncProllyEngine {
     return defer(() => this.inner.rangeDiff(base, other, start, end));
   }
 
+  scanDiff(
+    base: NativeTreeRecord,
+    other: NativeTreeRecord,
+    visitor: NativeDiffVisitor,
+  ): Promise<NativeScanOutcomeRecord> {
+    return defer(() => this.inner.scanDiff(base, other, visitor));
+  }
+
+  scanRangeDiff(
+    base: NativeTreeRecord,
+    other: NativeTreeRecord,
+    start: Uint8Array,
+    end: Uint8Array | null | undefined,
+    visitor: NativeDiffVisitor,
+  ): Promise<NativeScanOutcomeRecord> {
+    return defer(() => this.inner.scanRangeDiff(base, other, start, end, visitor));
+  }
+
   diffFromCursor(
     base: NativeTreeRecord,
     other: NativeTreeRecord,
@@ -444,6 +500,15 @@ export class AsyncProllyEngine {
     limit = "1024",
   ): Promise<NativeConflictPageRecord> {
     return defer(() => this.inner.conflictPage(base, left, right, cursor, limit));
+  }
+
+  scanConflicts(
+    base: NativeTreeRecord,
+    left: NativeTreeRecord,
+    right: NativeTreeRecord,
+    visitor: NativeConflictVisitor,
+  ): Promise<NativeScanOutcomeRecord> {
+    return defer(() => this.inner.scanConflicts(base, left, right, visitor));
   }
 
   merge(
