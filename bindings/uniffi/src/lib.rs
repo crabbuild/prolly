@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, HashMap};
+use std::ops::ControlFlow;
 use std::sync::{Arc, Mutex};
 
 use prolly::{
@@ -218,6 +219,23 @@ pub struct SnapshotBundleVerificationRecord {
 pub struct EntryRecord {
     pub key: Vec<u8>,
     pub value: Vec<u8>,
+}
+
+/// Result of a streaming read operation.
+///
+/// Foreign-language callbacks receive owned byte arrays because Rust borrows
+/// cannot cross an FFI boundary. The native traversal remains borrowed and
+/// copies each record only when it is delivered to the callback.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct ScanOutcomeRecord {
+    pub visited: u64,
+    pub stopped: bool,
+}
+
+#[uniffi::export(with_foreign)]
+pub trait EntryVisitorCallback: Send + Sync {
+    /// Return `true` to continue or `false` to stop after this entry.
+    fn visit(&self, entry: EntryRecord) -> bool;
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, uniffi::Enum)]
@@ -541,6 +559,12 @@ pub struct DiffRecord {
     pub new_value: Option<Vec<u8>>,
 }
 
+#[uniffi::export(with_foreign)]
+pub trait DiffVisitorCallback: Send + Sync {
+    /// Return `true` to continue or `false` to stop after this diff.
+    fn visit(&self, diff: DiffRecord) -> bool;
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
 pub struct RangeCursorRecord {
     pub after_key: Option<Vec<u8>>,
@@ -584,6 +608,12 @@ pub struct ConflictRecord {
     pub base: Option<Vec<u8>>,
     pub left: Option<Vec<u8>>,
     pub right: Option<Vec<u8>>,
+}
+
+#[uniffi::export(with_foreign)]
+pub trait ConflictVisitorCallback: Send + Sync {
+    /// Return `true` to continue or `false` to stop after this conflict.
+    fn visit(&self, conflict: ConflictRecord) -> bool;
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Enum)]
@@ -2429,6 +2459,80 @@ impl ProllyEngine {
         })
     }
 
+    /// Stream a half-open range through the borrowed Rust traversal.
+    pub fn scan_range(
+        &self,
+        tree: TreeRecord,
+        start: Vec<u8>,
+        range_end: Option<Vec<u8>>,
+        visitor: Arc<dyn EntryVisitorCallback>,
+    ) -> Result<ScanOutcomeRecord, ProllyBindingError> {
+        let tree = tree.try_into()?;
+        with_engine!(self, engine, {
+            engine
+                .scan_range_until(&tree, &start, range_end.as_deref(), |entry| {
+                    visitor_flow(visitor.visit(borrowed_entry_record(entry)))
+                })
+                .map(scan_outcome_record)
+                .map_err(Into::into)
+        })
+    }
+
+    /// Stream all entries with `prefix` through the borrowed Rust traversal.
+    pub fn scan_prefix(
+        &self,
+        tree: TreeRecord,
+        prefix: Vec<u8>,
+        visitor: Arc<dyn EntryVisitorCallback>,
+    ) -> Result<ScanOutcomeRecord, ProllyBindingError> {
+        let tree = tree.try_into()?;
+        with_engine!(self, engine, {
+            engine
+                .scan_prefix_until(&tree, &prefix, |entry| {
+                    visitor_flow(visitor.visit(borrowed_entry_record(entry)))
+                })
+                .map(scan_outcome_record)
+                .map_err(Into::into)
+        })
+    }
+
+    /// Stream a half-open range in descending key order.
+    pub fn scan_range_reverse(
+        &self,
+        tree: TreeRecord,
+        start: Vec<u8>,
+        range_end: Option<Vec<u8>>,
+        visitor: Arc<dyn EntryVisitorCallback>,
+    ) -> Result<ScanOutcomeRecord, ProllyBindingError> {
+        let tree = tree.try_into()?;
+        with_engine!(self, engine, {
+            engine
+                .scan_range_reverse_until(&tree, &start, range_end.as_deref(), |entry| {
+                    visitor_flow(visitor.visit(borrowed_entry_record(entry)))
+                })
+                .map(scan_outcome_record)
+                .map_err(Into::into)
+        })
+    }
+
+    /// Stream a prefix in descending key order.
+    pub fn scan_prefix_reverse(
+        &self,
+        tree: TreeRecord,
+        prefix: Vec<u8>,
+        visitor: Arc<dyn EntryVisitorCallback>,
+    ) -> Result<ScanOutcomeRecord, ProllyBindingError> {
+        let tree = tree.try_into()?;
+        with_engine!(self, engine, {
+            engine
+                .scan_prefix_reverse_until(&tree, &prefix, |entry| {
+                    visitor_flow(visitor.visit(borrowed_entry_record(entry)))
+                })
+                .map(scan_outcome_record)
+                .map_err(Into::into)
+        })
+    }
+
     pub fn prefix(
         &self,
         tree: TreeRecord,
@@ -2626,6 +2730,67 @@ impl ProllyEngine {
                 .into_iter()
                 .map(DiffRecord::try_from)
                 .collect()
+        })
+    }
+
+    /// Stream structural differences without first allocating a complete list.
+    pub fn scan_diff(
+        &self,
+        base: TreeRecord,
+        other: TreeRecord,
+        visitor: Arc<dyn DiffVisitorCallback>,
+    ) -> Result<ScanOutcomeRecord, ProllyBindingError> {
+        let base = base.try_into()?;
+        let other = other.try_into()?;
+        with_engine!(self, engine, {
+            engine
+                .scan_diff_until(&base, &other, |diff| {
+                    visitor_flow(visitor.visit(borrowed_diff_record(diff)))
+                })
+                .map(scan_outcome_record)
+                .map_err(Into::into)
+        })
+    }
+
+    /// Stream structural differences whose keys fall in `[start, end)`.
+    pub fn scan_range_diff(
+        &self,
+        base: TreeRecord,
+        other: TreeRecord,
+        start: Vec<u8>,
+        range_end: Option<Vec<u8>>,
+        visitor: Arc<dyn DiffVisitorCallback>,
+    ) -> Result<ScanOutcomeRecord, ProllyBindingError> {
+        let base = base.try_into()?;
+        let other = other.try_into()?;
+        with_engine!(self, engine, {
+            engine
+                .scan_range_diff_until(&base, &other, &start, range_end.as_deref(), |diff| {
+                    visitor_flow(visitor.visit(borrowed_diff_record(diff)))
+                })
+                .map(scan_outcome_record)
+                .map_err(Into::into)
+        })
+    }
+
+    /// Stream genuine three-way conflicts without allocating a complete list.
+    pub fn scan_conflicts(
+        &self,
+        base: TreeRecord,
+        left: TreeRecord,
+        right: TreeRecord,
+        visitor: Arc<dyn ConflictVisitorCallback>,
+    ) -> Result<ScanOutcomeRecord, ProllyBindingError> {
+        let base = base.try_into()?;
+        let left = left.try_into()?;
+        let right = right.try_into()?;
+        with_engine!(self, engine, {
+            engine
+                .scan_conflicts_until(&base, &left, &right, |conflict| {
+                    visitor_flow(visitor.visit(borrowed_conflict_record(conflict)))
+                })
+                .map(scan_outcome_record)
+                .map_err(Into::into)
         })
     }
 
@@ -3708,6 +3873,155 @@ impl ProllyEngine {
 }
 
 impl ProllyEngine {
+    pub fn scan_range_with_host_visitor<F>(
+        &self,
+        tree: TreeRecord,
+        start: Vec<u8>,
+        range_end: Option<Vec<u8>>,
+        mut visitor: F,
+    ) -> Result<ScanOutcomeRecord, ProllyBindingError>
+    where
+        F: FnMut(EntryRecord) -> bool,
+    {
+        let tree = tree.try_into()?;
+        with_engine!(self, engine, {
+            engine
+                .scan_range_until(&tree, &start, range_end.as_deref(), |entry| {
+                    visitor_flow(visitor(borrowed_entry_record(entry)))
+                })
+                .map(scan_outcome_record)
+                .map_err(Into::into)
+        })
+    }
+
+    pub fn scan_prefix_with_host_visitor<F>(
+        &self,
+        tree: TreeRecord,
+        prefix: Vec<u8>,
+        mut visitor: F,
+    ) -> Result<ScanOutcomeRecord, ProllyBindingError>
+    where
+        F: FnMut(EntryRecord) -> bool,
+    {
+        let tree = tree.try_into()?;
+        with_engine!(self, engine, {
+            engine
+                .scan_prefix_until(&tree, &prefix, |entry| {
+                    visitor_flow(visitor(borrowed_entry_record(entry)))
+                })
+                .map(scan_outcome_record)
+                .map_err(Into::into)
+        })
+    }
+
+    pub fn scan_range_reverse_with_host_visitor<F>(
+        &self,
+        tree: TreeRecord,
+        start: Vec<u8>,
+        range_end: Option<Vec<u8>>,
+        mut visitor: F,
+    ) -> Result<ScanOutcomeRecord, ProllyBindingError>
+    where
+        F: FnMut(EntryRecord) -> bool,
+    {
+        let tree = tree.try_into()?;
+        with_engine!(self, engine, {
+            engine
+                .scan_range_reverse_until(&tree, &start, range_end.as_deref(), |entry| {
+                    visitor_flow(visitor(borrowed_entry_record(entry)))
+                })
+                .map(scan_outcome_record)
+                .map_err(Into::into)
+        })
+    }
+
+    pub fn scan_prefix_reverse_with_host_visitor<F>(
+        &self,
+        tree: TreeRecord,
+        prefix: Vec<u8>,
+        mut visitor: F,
+    ) -> Result<ScanOutcomeRecord, ProllyBindingError>
+    where
+        F: FnMut(EntryRecord) -> bool,
+    {
+        let tree = tree.try_into()?;
+        with_engine!(self, engine, {
+            engine
+                .scan_prefix_reverse_until(&tree, &prefix, |entry| {
+                    visitor_flow(visitor(borrowed_entry_record(entry)))
+                })
+                .map(scan_outcome_record)
+                .map_err(Into::into)
+        })
+    }
+
+    pub fn scan_diff_with_host_visitor<F>(
+        &self,
+        base: TreeRecord,
+        other: TreeRecord,
+        mut visitor: F,
+    ) -> Result<ScanOutcomeRecord, ProllyBindingError>
+    where
+        F: FnMut(DiffRecord) -> bool,
+    {
+        let base = base.try_into()?;
+        let other = other.try_into()?;
+        with_engine!(self, engine, {
+            engine
+                .scan_diff_until(&base, &other, |diff| {
+                    visitor_flow(visitor(borrowed_diff_record(diff)))
+                })
+                .map(scan_outcome_record)
+                .map_err(Into::into)
+        })
+    }
+
+    pub fn scan_range_diff_with_host_visitor<F>(
+        &self,
+        base: TreeRecord,
+        other: TreeRecord,
+        start: Vec<u8>,
+        range_end: Option<Vec<u8>>,
+        mut visitor: F,
+    ) -> Result<ScanOutcomeRecord, ProllyBindingError>
+    where
+        F: FnMut(DiffRecord) -> bool,
+    {
+        let base = base.try_into()?;
+        let other = other.try_into()?;
+        with_engine!(self, engine, {
+            engine
+                .scan_range_diff_until(&base, &other, &start, range_end.as_deref(), |diff| {
+                    visitor_flow(visitor(borrowed_diff_record(diff)))
+                })
+                .map(scan_outcome_record)
+                .map_err(Into::into)
+        })
+    }
+
+    pub fn scan_conflicts_with_host_visitor<F>(
+        &self,
+        base: TreeRecord,
+        left: TreeRecord,
+        right: TreeRecord,
+        mut visitor: F,
+    ) -> Result<ScanOutcomeRecord, ProllyBindingError>
+    where
+        F: FnMut(ConflictRecord) -> bool,
+    {
+        let base = base.try_into()?;
+        let left = left.try_into()?;
+        let right = right.try_into()?;
+        with_engine!(self, engine, {
+            engine
+                .scan_conflicts_until(&base, &left, &right, |conflict| {
+                    visitor_flow(visitor(borrowed_conflict_record(conflict)))
+                })
+                .map(scan_outcome_record)
+                .map_err(Into::into)
+        })
+    }
+
     pub fn merge_with_host_resolver<F>(
         &self,
         base: TreeRecord,
@@ -5900,6 +6214,63 @@ fn entry_record((key, value): (Vec<u8>, Vec<u8>)) -> EntryRecord {
     EntryRecord { key, value }
 }
 
+fn borrowed_entry_record(entry: prolly::EntryRef<'_>) -> EntryRecord {
+    EntryRecord {
+        key: entry.key().to_vec(),
+        value: entry.value().to_vec(),
+    }
+}
+
+fn borrowed_diff_record(diff: prolly::DiffRef<'_>) -> DiffRecord {
+    match diff {
+        prolly::DiffRef::Added { key, value } => DiffRecord {
+            kind: DiffKind::Added,
+            key: key.to_vec(),
+            value: Some(value.to_vec()),
+            old_value: None,
+            new_value: None,
+        },
+        prolly::DiffRef::Removed { key, value } => DiffRecord {
+            kind: DiffKind::Removed,
+            key: key.to_vec(),
+            value: Some(value.to_vec()),
+            old_value: None,
+            new_value: None,
+        },
+        prolly::DiffRef::Changed { key, old, new } => DiffRecord {
+            kind: DiffKind::Changed,
+            key: key.to_vec(),
+            value: None,
+            old_value: Some(old.to_vec()),
+            new_value: Some(new.to_vec()),
+        },
+    }
+}
+
+fn borrowed_conflict_record(conflict: prolly::ConflictRef<'_>) -> ConflictRecord {
+    ConflictRecord {
+        key: conflict.key.to_vec(),
+        base: conflict.base.map(<[u8]>::to_vec),
+        left: conflict.left.map(<[u8]>::to_vec),
+        right: conflict.right.map(<[u8]>::to_vec),
+    }
+}
+
+fn visitor_flow(should_continue: bool) -> ControlFlow<()> {
+    if should_continue {
+        ControlFlow::Continue(())
+    } else {
+        ControlFlow::Break(())
+    }
+}
+
+fn scan_outcome_record(outcome: prolly::ScanOutcome<()>) -> ScanOutcomeRecord {
+    ScanOutcomeRecord {
+        visited: outcome.visited,
+        stopped: outcome.break_value.is_some(),
+    }
+}
+
 impl From<Conflict> for ConflictRecord {
     fn from(value: Conflict) -> Self {
         Self::from(&value)
@@ -7124,6 +7495,41 @@ mod tests {
         }
     }
 
+    struct EntryCollector {
+        entries: Mutex<Vec<EntryRecord>>,
+        limit: usize,
+    }
+
+    impl EntryVisitorCallback for EntryCollector {
+        fn visit(&self, entry: EntryRecord) -> bool {
+            let mut entries = self.entries.lock().unwrap();
+            entries.push(entry);
+            entries.len() < self.limit
+        }
+    }
+
+    struct DiffCollector {
+        diffs: Mutex<Vec<DiffRecord>>,
+    }
+
+    impl DiffVisitorCallback for DiffCollector {
+        fn visit(&self, diff: DiffRecord) -> bool {
+            self.diffs.lock().unwrap().push(diff);
+            true
+        }
+    }
+
+    struct ConflictCollector {
+        conflicts: Mutex<Vec<ConflictRecord>>,
+    }
+
+    impl ConflictVisitorCallback for ConflictCollector {
+        fn visit(&self, conflict: ConflictRecord) -> bool {
+            self.conflicts.lock().unwrap().push(conflict);
+            true
+        }
+    }
+
     type TestHintMap = BTreeMap<(Vec<u8>, Vec<u8>), Vec<u8>>;
 
     #[derive(Default)]
@@ -7311,6 +7717,83 @@ mod tests {
 
         let other = engine.delete(tree.clone(), b"a".to_vec()).unwrap();
         assert_eq!(engine.diff(tree, other).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn streaming_reads_preserve_order_support_early_stop_and_cover_diff_conflicts() {
+        let engine = ProllyEngine::memory(default_config()).unwrap();
+        let base = engine
+            .build_from_sorted_entries(
+                [b"a", b"b", b"c", b"d"]
+                    .into_iter()
+                    .map(|key| entry(key, key))
+                    .collect(),
+            )
+            .unwrap();
+
+        let forward = Arc::new(EntryCollector {
+            entries: Mutex::new(Vec::new()),
+            limit: 2,
+        });
+        let outcome = engine
+            .scan_range(base.clone(), b"b".to_vec(), None, forward.clone())
+            .unwrap();
+        assert_eq!(outcome.visited, 2);
+        assert!(outcome.stopped);
+        assert_eq!(
+            forward
+                .entries
+                .lock()
+                .unwrap()
+                .iter()
+                .map(|entry| entry.key.clone())
+                .collect::<Vec<_>>(),
+            vec![b"b".to_vec(), b"c".to_vec()]
+        );
+
+        let reverse = Arc::new(EntryCollector {
+            entries: Mutex::new(Vec::new()),
+            limit: usize::MAX,
+        });
+        let outcome = engine
+            .scan_prefix_reverse(base.clone(), Vec::new(), reverse.clone())
+            .unwrap();
+        assert_eq!(outcome.visited, 4);
+        assert!(!outcome.stopped);
+        assert_eq!(
+            reverse
+                .entries
+                .lock()
+                .unwrap()
+                .iter()
+                .map(|entry| entry.key.clone())
+                .collect::<Vec<_>>(),
+            vec![b"d".to_vec(), b"c".to_vec(), b"b".to_vec(), b"a".to_vec()]
+        );
+
+        let left = engine
+            .put(base.clone(), b"b".to_vec(), b"left".to_vec())
+            .unwrap();
+        let right = engine
+            .put(base.clone(), b"b".to_vec(), b"right".to_vec())
+            .unwrap();
+        let diffs = Arc::new(DiffCollector {
+            diffs: Mutex::new(Vec::new()),
+        });
+        let outcome = engine
+            .scan_range_diff(base.clone(), right.clone(), Vec::new(), None, diffs.clone())
+            .unwrap();
+        assert_eq!(outcome.visited, 1);
+        assert_eq!(diffs.diffs.lock().unwrap()[0].kind, DiffKind::Changed);
+
+        let conflicts = Arc::new(ConflictCollector {
+            conflicts: Mutex::new(Vec::new()),
+        });
+        let outcome = engine
+            .scan_conflicts(base, left, right, conflicts.clone())
+            .unwrap();
+        assert_eq!(outcome.visited, 1);
+        assert_eq!(conflicts.conflicts.lock().unwrap()[0].key, b"b".to_vec());
     }
 
     #[test]

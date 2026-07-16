@@ -90,6 +90,52 @@ test("wasm deleteRange uses raw-byte half-open bounds", { skip: !generatedPresen
   ]);
 });
 
+test("wasm streaming visitors preserve order, early stop, diffs, and conflicts", { skip: !generatedPresent }, () => {
+  assert.ifError(runtimeError);
+  assert.ok(wasm);
+  const engine = wasm.WasmProllyEngine.memory();
+  let base = engine.create();
+  for (const key of ["a", "b", "c", "d"]) base = engine.put(base, utf8(key), utf8(key));
+
+  const keys: string[] = [];
+  const rangeOutcome = engine.scanRange(base, utf8("b"), null, (entry: any) => {
+    keys.push(Buffer.from(entry.key).toString());
+    return keys.length < 2;
+  });
+  assert.deepEqual(keys, ["b", "c"]);
+  assert.deepEqual(rangeOutcome, { visited: "2", stopped: true });
+
+  const reverse: string[] = [];
+  const reverseOutcome = engine.scanPrefixReverse(base, utf8(""), (entry: any) => {
+    reverse.push(Buffer.from(entry.key).toString());
+    return true;
+  });
+  assert.deepEqual(reverse, ["d", "c", "b", "a"]);
+  assert.deepEqual(reverseOutcome, { visited: "4", stopped: false });
+
+  const left = engine.put(base, utf8("b"), utf8("left"));
+  const right = engine.put(base, utf8("b"), utf8("right"));
+  const kinds: string[] = [];
+  assert.equal(engine.scanDiff(base, right, (diff: any) => {
+    kinds.push(diff.kind);
+    return true;
+  }).visited, "1");
+  assert.deepEqual(kinds, ["changed"]);
+
+  const conflictKeys: string[] = [];
+  assert.equal(engine.scanConflicts(base, left, right, (conflict: any) => {
+    conflictKeys.push(Buffer.from(conflict.key).toString());
+    return true;
+  }).visited, "1");
+  assert.deepEqual(conflictKeys, ["b"]);
+  assert.throws(
+    () => engine.scanRange(base, utf8(""), null, () => {
+      throw new Error("visitor failed");
+    }),
+    /visitor failed/,
+  );
+});
+
 test("wasm fixtures decode, build, and query through Rust memory engine", { skip: !generatedPresent }, () => {
   assert.ifError(runtimeError);
   assert.ok(wasm);

@@ -115,6 +115,61 @@ test("async native deleteRange delegates with half-open bounds", { skip: native 
   assert.deepEqual((await engine.range(withStats.tree, Buffer.alloc(0), null)).map((entry) => text(entry.key)), ["a", "e", "f"]);
 });
 
+test("streaming read visitors preserve order and stop without materializing results", { skip: native === null }, async () => {
+  assert.ok(native);
+  const engine = await AsyncProllyEngine.fromNative(native.NativeProllyEngine.memory());
+  const empty = await engine.create();
+  const base = await engine.buildFromSortedEntries(
+    ["a", "b", "c", "d"].map((key) => ({ key: bytes(key), value: bytes(key) })),
+  );
+
+  const keys: string[] = [];
+  const rangeOutcome = await engine.scanRange(base, bytes("b"), null, (entry) => {
+    keys.push(text(entry.key) ?? "");
+    return keys.length < 2;
+  });
+  assert.deepEqual(keys, ["b", "c"]);
+  assert.deepEqual(rangeOutcome, { visited: "2", stopped: true });
+
+  const reverse: string[] = [];
+  const reverseOutcome = await engine.scanPrefixReverse(base, Buffer.alloc(0), (entry) => {
+    reverse.push(text(entry.key) ?? "");
+    return true;
+  });
+  assert.deepEqual(reverse, ["d", "c", "b", "a"]);
+  assert.deepEqual(reverseOutcome, { visited: "4", stopped: false });
+
+  const left = await engine.put(base, bytes("b"), bytes("left"));
+  const right = await engine.put(base, bytes("b"), bytes("right"));
+  const kinds: string[] = [];
+  assert.equal(
+    (await engine.scanDiff(base, right, (diff) => {
+      kinds.push(diff.kind);
+      return true;
+    })).visited,
+    "1",
+  );
+  assert.deepEqual(kinds, ["changed"]);
+
+  const conflictKeys: string[] = [];
+  assert.equal(
+    (await engine.scanConflicts(base, left, right, (conflict) => {
+      conflictKeys.push(text(conflict.key) ?? "");
+      return true;
+    })).visited,
+    "1",
+  );
+  assert.deepEqual(conflictKeys, ["b"]);
+  assert.equal(text(await engine.get(empty, bytes("missing"))), null);
+
+  await assert.rejects(
+    engine.scanRange(base, Buffer.alloc(0), null, () => {
+      throw new Error("visitor failed");
+    }),
+    /visitor failed/,
+  );
+});
+
 test("async native wrapper covers advanced engine and blob APIs", { skip: native === null }, async () => {
   assert.ok(native);
   const engine = await AsyncProllyEngine.fromNative(native.NativeProllyEngine.memory());

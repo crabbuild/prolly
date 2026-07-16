@@ -103,7 +103,7 @@ use prolly_bindings::{
     RangeProofVerificationRecord as BindingRangeProofVerificationRecord,
     ResolutionKind as BindingResolutionKind, ResolutionRecord as BindingResolutionRecord,
     ReverseCursorRecord, ReversePageRecord as BindingReversePageRecord,
-    RootManifestRecord as BindingRootManifestRecord,
+    RootManifestRecord as BindingRootManifestRecord, ScanOutcomeRecord as BindingScanOutcomeRecord,
     SnapshotBundleNodeRecord as BindingSnapshotBundleNodeRecord,
     SnapshotBundleRecord as BindingSnapshotBundleRecord,
     SnapshotBundleSummaryRecord as BindingSnapshotBundleSummaryRecord,
@@ -135,6 +135,12 @@ pub struct NodeTreeRecord {
 pub struct NodeEntryRecord {
     pub key: Buffer,
     pub value: Buffer,
+}
+
+#[napi(object)]
+pub struct NodeScanOutcomeRecord {
+    pub visited: String,
+    pub stopped: bool,
 }
 
 #[napi(object)]
@@ -2179,6 +2185,102 @@ impl NativeProllyEngine {
         Ok(entries.into_iter().map(Into::into).collect())
     }
 
+    #[napi(
+        js_name = "scanRange",
+        ts_args_type = "tree: NodeTreeRecord, start: Buffer, end: Buffer | null | undefined, visitor: (entry: NodeEntryRecord) => boolean"
+    )]
+    pub fn scan_range(
+        &self,
+        env: Env,
+        tree: NodeTreeRecord,
+        start: Buffer,
+        end: Option<Buffer>,
+        visitor: NodeEntryVisitorFunction,
+    ) -> Result<NodeScanOutcomeRecord> {
+        let callback_error = Arc::new(Mutex::new(None));
+        let outcome = self.inner.scan_range_with_host_visitor(
+            tree.into_tree(self.config.clone()),
+            start.to_vec(),
+            end.map(|value| value.to_vec()),
+            js_entry_visitor(env, visitor, Arc::clone(&callback_error)),
+        );
+        if let Some(error) = take_callback_error(&callback_error) {
+            return Err(error);
+        }
+        outcome.map(Into::into).map_err(to_napi_error)
+    }
+
+    #[napi(
+        js_name = "scanPrefix",
+        ts_args_type = "tree: NodeTreeRecord, prefix: Buffer, visitor: (entry: NodeEntryRecord) => boolean"
+    )]
+    pub fn scan_prefix(
+        &self,
+        env: Env,
+        tree: NodeTreeRecord,
+        prefix: Buffer,
+        visitor: NodeEntryVisitorFunction,
+    ) -> Result<NodeScanOutcomeRecord> {
+        let callback_error = Arc::new(Mutex::new(None));
+        let outcome = self.inner.scan_prefix_with_host_visitor(
+            tree.into_tree(self.config.clone()),
+            prefix.to_vec(),
+            js_entry_visitor(env, visitor, Arc::clone(&callback_error)),
+        );
+        if let Some(error) = take_callback_error(&callback_error) {
+            return Err(error);
+        }
+        outcome.map(Into::into).map_err(to_napi_error)
+    }
+
+    #[napi(
+        js_name = "scanRangeReverse",
+        ts_args_type = "tree: NodeTreeRecord, start: Buffer, end: Buffer | null | undefined, visitor: (entry: NodeEntryRecord) => boolean"
+    )]
+    pub fn scan_range_reverse(
+        &self,
+        env: Env,
+        tree: NodeTreeRecord,
+        start: Buffer,
+        end: Option<Buffer>,
+        visitor: NodeEntryVisitorFunction,
+    ) -> Result<NodeScanOutcomeRecord> {
+        let callback_error = Arc::new(Mutex::new(None));
+        let outcome = self.inner.scan_range_reverse_with_host_visitor(
+            tree.into_tree(self.config.clone()),
+            start.to_vec(),
+            end.map(|value| value.to_vec()),
+            js_entry_visitor(env, visitor, Arc::clone(&callback_error)),
+        );
+        if let Some(error) = take_callback_error(&callback_error) {
+            return Err(error);
+        }
+        outcome.map(Into::into).map_err(to_napi_error)
+    }
+
+    #[napi(
+        js_name = "scanPrefixReverse",
+        ts_args_type = "tree: NodeTreeRecord, prefix: Buffer, visitor: (entry: NodeEntryRecord) => boolean"
+    )]
+    pub fn scan_prefix_reverse(
+        &self,
+        env: Env,
+        tree: NodeTreeRecord,
+        prefix: Buffer,
+        visitor: NodeEntryVisitorFunction,
+    ) -> Result<NodeScanOutcomeRecord> {
+        let callback_error = Arc::new(Mutex::new(None));
+        let outcome = self.inner.scan_prefix_reverse_with_host_visitor(
+            tree.into_tree(self.config.clone()),
+            prefix.to_vec(),
+            js_entry_visitor(env, visitor, Arc::clone(&callback_error)),
+        );
+        if let Some(error) = take_callback_error(&callback_error) {
+            return Err(error);
+        }
+        outcome.map(Into::into).map_err(to_napi_error)
+    }
+
     #[napi(js_name = "prefixPage")]
     pub fn prefix_page(
         &self,
@@ -2350,6 +2452,56 @@ impl NativeProllyEngine {
         Ok(diffs.into_iter().map(Into::into).collect())
     }
 
+    #[napi(
+        js_name = "scanDiff",
+        ts_args_type = "base: NodeTreeRecord, other: NodeTreeRecord, visitor: (diff: NodeDiffRecord) => boolean"
+    )]
+    pub fn scan_diff(
+        &self,
+        env: Env,
+        base: NodeTreeRecord,
+        other: NodeTreeRecord,
+        visitor: NodeDiffVisitorFunction,
+    ) -> Result<NodeScanOutcomeRecord> {
+        let callback_error = Arc::new(Mutex::new(None));
+        let outcome = self.inner.scan_diff_with_host_visitor(
+            base.into_tree(self.config.clone()),
+            other.into_tree(self.config.clone()),
+            js_diff_visitor(env, visitor, Arc::clone(&callback_error)),
+        );
+        if let Some(error) = take_callback_error(&callback_error) {
+            return Err(error);
+        }
+        outcome.map(Into::into).map_err(to_napi_error)
+    }
+
+    #[napi(
+        js_name = "scanRangeDiff",
+        ts_args_type = "base: NodeTreeRecord, other: NodeTreeRecord, start: Buffer, end: Buffer | null | undefined, visitor: (diff: NodeDiffRecord) => boolean"
+    )]
+    pub fn scan_range_diff(
+        &self,
+        env: Env,
+        base: NodeTreeRecord,
+        other: NodeTreeRecord,
+        start: Buffer,
+        end: Option<Buffer>,
+        visitor: NodeDiffVisitorFunction,
+    ) -> Result<NodeScanOutcomeRecord> {
+        let callback_error = Arc::new(Mutex::new(None));
+        let outcome = self.inner.scan_range_diff_with_host_visitor(
+            base.into_tree(self.config.clone()),
+            other.into_tree(self.config.clone()),
+            start.to_vec(),
+            end.map(|value| value.to_vec()),
+            js_diff_visitor(env, visitor, Arc::clone(&callback_error)),
+        );
+        if let Some(error) = take_callback_error(&callback_error) {
+            return Err(error);
+        }
+        outcome.map(Into::into).map_err(to_napi_error)
+    }
+
     #[napi(js_name = "diffFromCursor")]
     pub fn diff_from_cursor(
         &self,
@@ -2414,6 +2566,31 @@ impl NativeProllyEngine {
             )
             .map_err(to_napi_error)?;
         Ok(page.into())
+    }
+
+    #[napi(
+        js_name = "scanConflicts",
+        ts_args_type = "base: NodeTreeRecord, left: NodeTreeRecord, right: NodeTreeRecord, visitor: (conflict: NodeConflictRecord) => boolean"
+    )]
+    pub fn scan_conflicts(
+        &self,
+        env: Env,
+        base: NodeTreeRecord,
+        left: NodeTreeRecord,
+        right: NodeTreeRecord,
+        visitor: NodeConflictVisitorFunction,
+    ) -> Result<NodeScanOutcomeRecord> {
+        let callback_error = Arc::new(Mutex::new(None));
+        let outcome = self.inner.scan_conflicts_with_host_visitor(
+            base.into_tree(self.config.clone()),
+            left.into_tree(self.config.clone()),
+            right.into_tree(self.config.clone()),
+            js_conflict_visitor(env, visitor, Arc::clone(&callback_error)),
+        );
+        if let Some(error) = take_callback_error(&callback_error) {
+            return Err(error);
+        }
+        outcome.map(Into::into).map_err(to_napi_error)
     }
 
     #[napi]
@@ -3443,6 +3620,15 @@ impl From<BindingEntryRecord> for NodeEntryRecord {
         Self {
             key: Buffer::from(entry.key),
             value: Buffer::from(entry.value),
+        }
+    }
+}
+
+impl From<BindingScanOutcomeRecord> for NodeScanOutcomeRecord {
+    fn from(outcome: BindingScanOutcomeRecord) -> Self {
+        Self {
+            visited: outcome.visited.to_string(),
+            stopped: outcome.stopped,
         }
     }
 }
@@ -5861,6 +6047,64 @@ pub fn tombstone_compaction_mutation_native(
 
 type NodeResolverFunction = FunctionRef<NodeConflictRecord, NodeResolutionRecord>;
 type NodeCrdtResolverFunction = FunctionRef<NodeConflictRecord, NodeCrdtResolutionRecord>;
+type NodeEntryVisitorFunction = FunctionRef<NodeEntryRecord, bool>;
+type NodeDiffVisitorFunction = FunctionRef<NodeDiffRecord, bool>;
+type NodeConflictVisitorFunction = FunctionRef<NodeConflictRecord, bool>;
+
+fn js_entry_visitor(
+    env: Env,
+    visitor: NodeEntryVisitorFunction,
+    callback_error: Arc<Mutex<Option<String>>>,
+) -> impl FnMut(BindingEntryRecord) -> bool {
+    move |entry| js_visit(&env, &visitor, entry.into(), &callback_error)
+}
+
+fn js_diff_visitor(
+    env: Env,
+    visitor: NodeDiffVisitorFunction,
+    callback_error: Arc<Mutex<Option<String>>>,
+) -> impl FnMut(BindingDiffRecord) -> bool {
+    move |diff| js_visit(&env, &visitor, diff.into(), &callback_error)
+}
+
+fn js_conflict_visitor(
+    env: Env,
+    visitor: NodeConflictVisitorFunction,
+    callback_error: Arc<Mutex<Option<String>>>,
+) -> impl FnMut(BindingConflictRecord) -> bool {
+    move |conflict| js_visit(&env, &visitor, conflict.into(), &callback_error)
+}
+
+fn js_visit<Arg>(
+    env: &Env,
+    visitor: &FunctionRef<Arg, bool>,
+    value: Arg,
+    callback_error: &Arc<Mutex<Option<String>>>,
+) -> bool
+where
+    Arg: JsValuesTupleIntoVec,
+{
+    if callback_error
+        .lock()
+        .map(|guard| guard.is_some())
+        .unwrap_or(true)
+    {
+        return false;
+    }
+    let result = visitor
+        .borrow_back(env)
+        .map_err(|error| error.to_string())
+        .and_then(|function| function.call(value).map_err(|error| error.to_string()));
+    match result {
+        Ok(should_continue) => should_continue,
+        Err(error) => {
+            if let Ok(mut guard) = callback_error.lock() {
+                *guard = Some(error);
+            }
+            false
+        }
+    }
+}
 
 fn js_resolver(
     env: Env,

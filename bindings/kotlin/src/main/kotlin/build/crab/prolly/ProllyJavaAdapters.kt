@@ -108,6 +108,9 @@ object ProllyJavaAdapters {
         engine.prefix(tree, prefix)
 
     @JvmStatic
+    fun scanOutcomeVisited(record: ScanOutcomeRecord): Long = record.visited.toLong()
+
+    @JvmStatic
     fun prefixPage(
         engine: ProllyEngine,
         tree: TreeRecord,

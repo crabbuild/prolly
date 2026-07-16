@@ -243,9 +243,30 @@ typedef void (*UniffiForeignFutureCompleteVoid)(uint64_t, UniffiForeignFutureRes
     );
 
 #endif
+#ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_CONFLICT_VISITOR_CALLBACK_METHOD0
+#define UNIFFI_FFIDEF_CALLBACK_INTERFACE_CONFLICT_VISITOR_CALLBACK_METHOD0
+typedef void (*UniffiCallbackInterfaceConflictVisitorCallbackMethod0)(uint64_t, RustBuffer, int8_t* _Nonnull,
+        RustCallStatus *_Nonnull uniffiCallStatus
+    );
+
+#endif
 #ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_CRDT_RESOLVER_CALLBACK_METHOD0
 #define UNIFFI_FFIDEF_CALLBACK_INTERFACE_CRDT_RESOLVER_CALLBACK_METHOD0
 typedef void (*UniffiCallbackInterfaceCrdtResolverCallbackMethod0)(uint64_t, RustBuffer, RustBuffer* _Nonnull,
+        RustCallStatus *_Nonnull uniffiCallStatus
+    );
+
+#endif
+#ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_DIFF_VISITOR_CALLBACK_METHOD0
+#define UNIFFI_FFIDEF_CALLBACK_INTERFACE_DIFF_VISITOR_CALLBACK_METHOD0
+typedef void (*UniffiCallbackInterfaceDiffVisitorCallbackMethod0)(uint64_t, RustBuffer, int8_t* _Nonnull,
+        RustCallStatus *_Nonnull uniffiCallStatus
+    );
+
+#endif
+#ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_ENTRY_VISITOR_CALLBACK_METHOD0
+#define UNIFFI_FFIDEF_CALLBACK_INTERFACE_ENTRY_VISITOR_CALLBACK_METHOD0
+typedef void (*UniffiCallbackInterfaceEntryVisitorCallbackMethod0)(uint64_t, RustBuffer, int8_t* _Nonnull,
         RustCallStatus *_Nonnull uniffiCallStatus
     );
 
@@ -362,6 +383,15 @@ typedef void (*UniffiCallbackInterfaceMergeResolverCallbackMethod0)(uint64_t, Ru
     );
 
 #endif
+#ifndef UNIFFI_FFIDEF_V_TABLE_CALLBACK_INTERFACE_CONFLICT_VISITOR_CALLBACK
+#define UNIFFI_FFIDEF_V_TABLE_CALLBACK_INTERFACE_CONFLICT_VISITOR_CALLBACK
+typedef struct UniffiVTableCallbackInterfaceConflictVisitorCallback {
+    UniffiCallbackInterfaceFree _Nonnull uniffiFree;
+    UniffiCallbackInterfaceClone _Nonnull uniffiClone;
+    UniffiCallbackInterfaceConflictVisitorCallbackMethod0 _Nonnull visit;
+} UniffiVTableCallbackInterfaceConflictVisitorCallback;
+
+#endif
 #ifndef UNIFFI_FFIDEF_V_TABLE_CALLBACK_INTERFACE_CRDT_RESOLVER_CALLBACK
 #define UNIFFI_FFIDEF_V_TABLE_CALLBACK_INTERFACE_CRDT_RESOLVER_CALLBACK
 typedef struct UniffiVTableCallbackInterfaceCrdtResolverCallback {
@@ -369,6 +399,24 @@ typedef struct UniffiVTableCallbackInterfaceCrdtResolverCallback {
     UniffiCallbackInterfaceClone _Nonnull uniffiClone;
     UniffiCallbackInterfaceCrdtResolverCallbackMethod0 _Nonnull resolve;
 } UniffiVTableCallbackInterfaceCrdtResolverCallback;
+
+#endif
+#ifndef UNIFFI_FFIDEF_V_TABLE_CALLBACK_INTERFACE_DIFF_VISITOR_CALLBACK
+#define UNIFFI_FFIDEF_V_TABLE_CALLBACK_INTERFACE_DIFF_VISITOR_CALLBACK
+typedef struct UniffiVTableCallbackInterfaceDiffVisitorCallback {
+    UniffiCallbackInterfaceFree _Nonnull uniffiFree;
+    UniffiCallbackInterfaceClone _Nonnull uniffiClone;
+    UniffiCallbackInterfaceDiffVisitorCallbackMethod0 _Nonnull visit;
+} UniffiVTableCallbackInterfaceDiffVisitorCallback;
+
+#endif
+#ifndef UNIFFI_FFIDEF_V_TABLE_CALLBACK_INTERFACE_ENTRY_VISITOR_CALLBACK
+#define UNIFFI_FFIDEF_V_TABLE_CALLBACK_INTERFACE_ENTRY_VISITOR_CALLBACK
+typedef struct UniffiVTableCallbackInterfaceEntryVisitorCallback {
+    UniffiCallbackInterfaceFree _Nonnull uniffiFree;
+    UniffiCallbackInterfaceClone _Nonnull uniffiClone;
+    UniffiCallbackInterfaceEntryVisitorCallbackMethod0 _Nonnull visit;
+} UniffiVTableCallbackInterfaceEntryVisitorCallback;
 
 #endif
 #ifndef UNIFFI_FFIDEF_V_TABLE_CALLBACK_INTERFACE_HOST_STORE_CALLBACK
@@ -403,6 +451,26 @@ typedef struct UniffiVTableCallbackInterfaceMergeResolverCallback {
 } UniffiVTableCallbackInterfaceMergeResolverCallback;
 
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_CLONE_CONFLICTVISITORCALLBACK
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_CLONE_CONFLICTVISITORCALLBACK
+uint64_t uniffi_prolly_bindings_fn_clone_conflictvisitorcallback(uint64_t handle, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FREE_CONFLICTVISITORCALLBACK
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FREE_CONFLICTVISITORCALLBACK
+void uniffi_prolly_bindings_fn_free_conflictvisitorcallback(uint64_t handle, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_INIT_CALLBACK_VTABLE_CONFLICTVISITORCALLBACK
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_INIT_CALLBACK_VTABLE_CONFLICTVISITORCALLBACK
+void uniffi_prolly_bindings_fn_init_callback_vtable_conflictvisitorcallback(const UniffiVTableCallbackInterfaceConflictVisitorCallback* _Nonnull vtable
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_CONFLICTVISITORCALLBACK_VISIT
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_CONFLICTVISITORCALLBACK_VISIT
+int8_t uniffi_prolly_bindings_fn_method_conflictvisitorcallback_visit(uint64_t ptr, RustBuffer conflict, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_CLONE_CRDTRESOLVERCALLBACK
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_CLONE_CRDTRESOLVERCALLBACK
 uint64_t uniffi_prolly_bindings_fn_clone_crdtresolvercallback(uint64_t handle, RustCallStatus *_Nonnull out_status
@@ -421,6 +489,46 @@ void uniffi_prolly_bindings_fn_init_callback_vtable_crdtresolvercallback(const U
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_CRDTRESOLVERCALLBACK_RESOLVE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_CRDTRESOLVERCALLBACK_RESOLVE
 RustBuffer uniffi_prolly_bindings_fn_method_crdtresolvercallback_resolve(uint64_t ptr, RustBuffer conflict, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_CLONE_DIFFVISITORCALLBACK
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_CLONE_DIFFVISITORCALLBACK
+uint64_t uniffi_prolly_bindings_fn_clone_diffvisitorcallback(uint64_t handle, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FREE_DIFFVISITORCALLBACK
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FREE_DIFFVISITORCALLBACK
+void uniffi_prolly_bindings_fn_free_diffvisitorcallback(uint64_t handle, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_INIT_CALLBACK_VTABLE_DIFFVISITORCALLBACK
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_INIT_CALLBACK_VTABLE_DIFFVISITORCALLBACK
+void uniffi_prolly_bindings_fn_init_callback_vtable_diffvisitorcallback(const UniffiVTableCallbackInterfaceDiffVisitorCallback* _Nonnull vtable
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_DIFFVISITORCALLBACK_VISIT
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_DIFFVISITORCALLBACK_VISIT
+int8_t uniffi_prolly_bindings_fn_method_diffvisitorcallback_visit(uint64_t ptr, RustBuffer diff, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_CLONE_ENTRYVISITORCALLBACK
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_CLONE_ENTRYVISITORCALLBACK
+uint64_t uniffi_prolly_bindings_fn_clone_entryvisitorcallback(uint64_t handle, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FREE_ENTRYVISITORCALLBACK
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FREE_ENTRYVISITORCALLBACK
+void uniffi_prolly_bindings_fn_free_entryvisitorcallback(uint64_t handle, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_INIT_CALLBACK_VTABLE_ENTRYVISITORCALLBACK
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_INIT_CALLBACK_VTABLE_ENTRYVISITORCALLBACK
+void uniffi_prolly_bindings_fn_init_callback_vtable_entryvisitorcallback(const UniffiVTableCallbackInterfaceEntryVisitorCallback* _Nonnull vtable
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_ENTRYVISITORCALLBACK_VISIT
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_ENTRYVISITORCALLBACK_VISIT
+int8_t uniffi_prolly_bindings_fn_method_entryvisitorcallback_visit(uint64_t ptr, RustBuffer entry, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_CLONE_HOSTSTORECALLBACK
@@ -1193,6 +1301,41 @@ void uniffi_prolly_bindings_fn_method_prollyengine_reset_metrics(uint64_t ptr, R
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_PROLLYENGINE_REVERSE_PAGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_PROLLYENGINE_REVERSE_PAGE
 RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_reverse_page(uint64_t ptr, RustBuffer tree, RustBuffer cursor, RustBuffer start, uint64_t limit, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_PROLLYENGINE_SCAN_CONFLICTS
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_PROLLYENGINE_SCAN_CONFLICTS
+RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_scan_conflicts(uint64_t ptr, RustBuffer base, RustBuffer left, RustBuffer right, uint64_t visitor, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_PROLLYENGINE_SCAN_DIFF
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_PROLLYENGINE_SCAN_DIFF
+RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_scan_diff(uint64_t ptr, RustBuffer base, RustBuffer other, uint64_t visitor, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_PROLLYENGINE_SCAN_PREFIX
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_PROLLYENGINE_SCAN_PREFIX
+RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_scan_prefix(uint64_t ptr, RustBuffer tree, RustBuffer prefix, uint64_t visitor, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_PROLLYENGINE_SCAN_PREFIX_REVERSE
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_PROLLYENGINE_SCAN_PREFIX_REVERSE
+RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_scan_prefix_reverse(uint64_t ptr, RustBuffer tree, RustBuffer prefix, uint64_t visitor, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_PROLLYENGINE_SCAN_RANGE
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_PROLLYENGINE_SCAN_RANGE
+RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_scan_range(uint64_t ptr, RustBuffer tree, RustBuffer start, RustBuffer range_end, uint64_t visitor, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_PROLLYENGINE_SCAN_RANGE_DIFF
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_PROLLYENGINE_SCAN_RANGE_DIFF
+RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_scan_range_diff(uint64_t ptr, RustBuffer base, RustBuffer other, RustBuffer start, RustBuffer range_end, uint64_t visitor, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_PROLLYENGINE_SCAN_RANGE_REVERSE
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_PROLLYENGINE_SCAN_RANGE_REVERSE
+RustBuffer uniffi_prolly_bindings_fn_method_prollyengine_scan_range_reverse(uint64_t ptr, RustBuffer tree, RustBuffer start, RustBuffer range_end, uint64_t visitor, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_PROLLYENGINE_STATS_DIFF
@@ -2944,9 +3087,27 @@ uint16_t uniffi_prolly_bindings_checksum_func_versioned_value_to_bytes(void
 
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_CONFLICTVISITORCALLBACK_VISIT
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_CONFLICTVISITORCALLBACK_VISIT
+uint16_t uniffi_prolly_bindings_checksum_method_conflictvisitorcallback_visit(void
+
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_CRDTRESOLVERCALLBACK_RESOLVE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_CRDTRESOLVERCALLBACK_RESOLVE
 uint16_t uniffi_prolly_bindings_checksum_method_crdtresolvercallback_resolve(void
+
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_DIFFVISITORCALLBACK_VISIT
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_DIFFVISITORCALLBACK_VISIT
+uint16_t uniffi_prolly_bindings_checksum_method_diffvisitorcallback_visit(void
+
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ENTRYVISITORCALLBACK_VISIT
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ENTRYVISITORCALLBACK_VISIT
+uint16_t uniffi_prolly_bindings_checksum_method_entryvisitorcallback_visit(void
 
 );
 #endif
@@ -3751,6 +3912,48 @@ uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_reset_metrics(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_REVERSE_PAGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_REVERSE_PAGE
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_reverse_page(void
+
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_SCAN_CONFLICTS
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_SCAN_CONFLICTS
+uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_scan_conflicts(void
+
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_SCAN_DIFF
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_SCAN_DIFF
+uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_scan_diff(void
+
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_SCAN_PREFIX
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_SCAN_PREFIX
+uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_scan_prefix(void
+
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_SCAN_PREFIX_REVERSE
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_SCAN_PREFIX_REVERSE
+uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_scan_prefix_reverse(void
+
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_SCAN_RANGE
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_SCAN_RANGE
+uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_scan_range(void
+
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_SCAN_RANGE_DIFF
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_SCAN_RANGE_DIFF
+uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_scan_range_diff(void
+
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_SCAN_RANGE_REVERSE
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_SCAN_RANGE_REVERSE
+uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_scan_range_reverse(void
 
 );
 #endif

@@ -1,6 +1,7 @@
+use std::ops::ControlFlow;
 use std::sync::Arc;
 
-use js_sys::{Array, Object, Reflect, Uint8Array};
+use js_sys::{Array, Function, Object, Reflect, Uint8Array};
 use prolly::{
     is_boundary_config as core_is_boundary_config, AuthenticatedProofEnvelope, BatchApplyResult,
     BatchApplyStats, Cid, Config, Conflict, Diff, DiffPageProof, Encoding, Error, KeyProof,
@@ -738,6 +739,90 @@ impl WasmProllyEngine {
         collect_entries(entries)
     }
 
+    #[wasm_bindgen(js_name = scanRange)]
+    pub fn scan_range(
+        &self,
+        tree: &WasmTree,
+        start: Uint8Array,
+        end: Option<Uint8Array>,
+        visitor: &Function,
+    ) -> Result<Object, JsValue> {
+        let start = start.to_vec();
+        let end = end.map(|value| value.to_vec());
+        let mut callback_error = None;
+        let outcome = self
+            .inner
+            .scan_range_until(&tree.inner, &start, end.as_deref(), |entry| {
+                let result = borrowed_entry_object(entry.key(), entry.value())
+                    .and_then(|value| call_scan_visitor(visitor, value));
+                scan_callback_flow(result, &mut callback_error)
+            })
+            .map_err(js_error)?;
+        callback_error.map_or_else(|| scan_outcome_to_object(outcome), Err)
+    }
+
+    #[wasm_bindgen(js_name = scanPrefix)]
+    pub fn scan_prefix(
+        &self,
+        tree: &WasmTree,
+        prefix: Uint8Array,
+        visitor: &Function,
+    ) -> Result<Object, JsValue> {
+        let prefix = prefix.to_vec();
+        let mut callback_error = None;
+        let outcome = self
+            .inner
+            .scan_prefix_until(&tree.inner, &prefix, |entry| {
+                let result = borrowed_entry_object(entry.key(), entry.value())
+                    .and_then(|value| call_scan_visitor(visitor, value));
+                scan_callback_flow(result, &mut callback_error)
+            })
+            .map_err(js_error)?;
+        callback_error.map_or_else(|| scan_outcome_to_object(outcome), Err)
+    }
+
+    #[wasm_bindgen(js_name = scanRangeReverse)]
+    pub fn scan_range_reverse(
+        &self,
+        tree: &WasmTree,
+        start: Uint8Array,
+        end: Option<Uint8Array>,
+        visitor: &Function,
+    ) -> Result<Object, JsValue> {
+        let start = start.to_vec();
+        let end = end.map(|value| value.to_vec());
+        let mut callback_error = None;
+        let outcome = self
+            .inner
+            .scan_range_reverse_until(&tree.inner, &start, end.as_deref(), |entry| {
+                let result = borrowed_entry_object(entry.key(), entry.value())
+                    .and_then(|value| call_scan_visitor(visitor, value));
+                scan_callback_flow(result, &mut callback_error)
+            })
+            .map_err(js_error)?;
+        callback_error.map_or_else(|| scan_outcome_to_object(outcome), Err)
+    }
+
+    #[wasm_bindgen(js_name = scanPrefixReverse)]
+    pub fn scan_prefix_reverse(
+        &self,
+        tree: &WasmTree,
+        prefix: Uint8Array,
+        visitor: &Function,
+    ) -> Result<Object, JsValue> {
+        let prefix = prefix.to_vec();
+        let mut callback_error = None;
+        let outcome = self
+            .inner
+            .scan_prefix_reverse_until(&tree.inner, &prefix, |entry| {
+                let result = borrowed_entry_object(entry.key(), entry.value())
+                    .and_then(|value| call_scan_visitor(visitor, value));
+                scan_callback_flow(result, &mut callback_error)
+            })
+            .map_err(js_error)?;
+        callback_error.map_or_else(|| scan_outcome_to_object(outcome), Err)
+    }
+
     #[wasm_bindgen(js_name = prefixPage)]
     pub fn prefix_page(
         &self,
@@ -907,6 +992,48 @@ impl WasmProllyEngine {
             .range_diff(&base.inner, &other.inner, &start, end.as_deref())
             .map_err(js_error)?;
         diffs_to_array(diffs)
+    }
+
+    #[wasm_bindgen(js_name = scanDiff)]
+    pub fn scan_diff(
+        &self,
+        base: &WasmTree,
+        other: &WasmTree,
+        visitor: &Function,
+    ) -> Result<Object, JsValue> {
+        let mut callback_error = None;
+        let outcome = self
+            .inner
+            .scan_diff_until(&base.inner, &other.inner, |diff| {
+                let result = borrowed_diff_to_object(diff)
+                    .and_then(|value| call_scan_visitor(visitor, value));
+                scan_callback_flow(result, &mut callback_error)
+            })
+            .map_err(js_error)?;
+        callback_error.map_or_else(|| scan_outcome_to_object(outcome), Err)
+    }
+
+    #[wasm_bindgen(js_name = scanRangeDiff)]
+    pub fn scan_range_diff(
+        &self,
+        base: &WasmTree,
+        other: &WasmTree,
+        start: Uint8Array,
+        end: Option<Uint8Array>,
+        visitor: &Function,
+    ) -> Result<Object, JsValue> {
+        let start = start.to_vec();
+        let end = end.map(|value| value.to_vec());
+        let mut callback_error = None;
+        let outcome = self
+            .inner
+            .scan_range_diff_until(&base.inner, &other.inner, &start, end.as_deref(), |diff| {
+                let result = borrowed_diff_to_object(diff)
+                    .and_then(|value| call_scan_visitor(visitor, value));
+                scan_callback_flow(result, &mut callback_error)
+            })
+            .map_err(js_error)?;
+        callback_error.map_or_else(|| scan_outcome_to_object(outcome), Err)
     }
 
     #[wasm_bindgen(js_name = diffFromCursor)]
@@ -1166,6 +1293,26 @@ impl WasmProllyEngine {
         };
         Reflect::set(&object, &"nextCursor".into(), &next_cursor)?;
         Ok(object)
+    }
+
+    #[wasm_bindgen(js_name = scanConflicts)]
+    pub fn scan_conflicts(
+        &self,
+        base: &WasmTree,
+        left: &WasmTree,
+        right: &WasmTree,
+        visitor: &Function,
+    ) -> Result<Object, JsValue> {
+        let mut callback_error = None;
+        let outcome = self
+            .inner
+            .scan_conflicts_until(&base.inner, &left.inner, &right.inner, |conflict| {
+                let result = borrowed_conflict_to_object(conflict)
+                    .and_then(|value| call_scan_visitor(visitor, value));
+                scan_callback_flow(result, &mut callback_error)
+            })
+            .map_err(js_error)?;
+        callback_error.map_or_else(|| scan_outcome_to_object(outcome), Err)
     }
 
     #[wasm_bindgen(js_name = collectStatsJson)]
@@ -2964,16 +3111,91 @@ fn range_bounds_to_object(start: Vec<u8>, end: Option<Vec<u8>>) -> Result<Object
 }
 
 fn entry_object(key: Vec<u8>, value: Vec<u8>) -> Result<Object, JsValue> {
+    borrowed_entry_object(&key, &value)
+}
+
+fn borrowed_entry_object(key: &[u8], value: &[u8]) -> Result<Object, JsValue> {
+    let object = Object::new();
+    Reflect::set(&object, &"key".into(), &Uint8Array::from(key).into())?;
+    Reflect::set(&object, &"value".into(), &Uint8Array::from(value).into())?;
+    Ok(object)
+}
+
+fn borrowed_diff_to_object(diff: prolly::DiffRef<'_>) -> Result<Object, JsValue> {
+    let object = Object::new();
+    match diff {
+        prolly::DiffRef::Added { key, value } => {
+            Reflect::set(&object, &"kind".into(), &"added".into())?;
+            Reflect::set(&object, &"key".into(), &Uint8Array::from(key).into())?;
+            Reflect::set(&object, &"value".into(), &Uint8Array::from(value).into())?;
+        }
+        prolly::DiffRef::Removed { key, value } => {
+            Reflect::set(&object, &"kind".into(), &"removed".into())?;
+            Reflect::set(&object, &"key".into(), &Uint8Array::from(key).into())?;
+            Reflect::set(&object, &"value".into(), &Uint8Array::from(value).into())?;
+        }
+        prolly::DiffRef::Changed { key, old, new } => {
+            Reflect::set(&object, &"kind".into(), &"changed".into())?;
+            Reflect::set(&object, &"key".into(), &Uint8Array::from(key).into())?;
+            Reflect::set(&object, &"old".into(), &Uint8Array::from(old).into())?;
+            Reflect::set(&object, &"newValue".into(), &Uint8Array::from(new).into())?;
+        }
+    }
+    Ok(object)
+}
+
+fn borrowed_conflict_to_object(conflict: prolly::ConflictRef<'_>) -> Result<Object, JsValue> {
     let object = Object::new();
     Reflect::set(
         &object,
         &"key".into(),
-        &Uint8Array::from(key.as_slice()).into(),
+        &Uint8Array::from(conflict.key).into(),
+    )?;
+    for (name, value) in [
+        ("base", conflict.base),
+        ("left", conflict.left),
+        ("right", conflict.right),
+    ] {
+        let value = value
+            .map(|bytes| Uint8Array::from(bytes).into())
+            .unwrap_or(JsValue::NULL);
+        Reflect::set(&object, &name.into(), &value)?;
+    }
+    Ok(object)
+}
+
+fn call_scan_visitor(visitor: &Function, value: Object) -> Result<bool, JsValue> {
+    visitor
+        .call1(&JsValue::UNDEFINED, &value.into())?
+        .as_bool()
+        .ok_or_else(|| JsValue::from_str("scan visitor must return a boolean"))
+}
+
+fn scan_callback_flow(
+    result: Result<bool, JsValue>,
+    callback_error: &mut Option<JsValue>,
+) -> ControlFlow<()> {
+    match result {
+        Ok(true) => ControlFlow::Continue(()),
+        Ok(false) => ControlFlow::Break(()),
+        Err(error) => {
+            *callback_error = Some(error);
+            ControlFlow::Break(())
+        }
+    }
+}
+
+fn scan_outcome_to_object(outcome: prolly::ScanOutcome<()>) -> Result<Object, JsValue> {
+    let object = Object::new();
+    Reflect::set(
+        &object,
+        &"visited".into(),
+        &JsValue::from_str(&outcome.visited.to_string()),
     )?;
     Reflect::set(
         &object,
-        &"value".into(),
-        &Uint8Array::from(value.as_slice()).into(),
+        &"stopped".into(),
+        &JsValue::from_bool(outcome.break_value.is_some()),
     )?;
     Ok(object)
 }

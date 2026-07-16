@@ -22,6 +22,8 @@ It also exports:
 - blob stores, large-value offload, value refs, blob refs, and versioned values;
 - portable snapshot bundles and store-independent proof bundles;
 - performance hints for exact keys, prefixes, and half-open ranges.
+- streaming visitors for forward/reverse range and prefix scans, structural
+  diffs, ranged diffs, and three-way conflicts.
 
 Language packages live in sibling directories such as
 `bindings/python`, `bindings/node`, `bindings/go`, and `bindings/java`.
@@ -83,6 +85,13 @@ Host stores, merge resolvers, and CRDT resolvers cross from Rust into a host
 language. Callback APIs should be small, deterministic, and explicit about
 failure. Do not design callback flows that require chatty round trips for common
 operations when a batched API can carry the same data.
+
+Read visitors return `true` to continue and `false` to stop. The returned
+`ScanOutcomeRecord` includes the stopping record in `visited`. Native traversal
+borrows packed node bytes, while the FFI facade creates one owned record for
+each callback because Rust references cannot safely cross the boundary. The
+visitor prevents eager collection of the entire result; it does not make the
+host-language byte array itself zero-copy.
 
 When adding callbacks, update language tests for at least one happy path and one
 failure path. Callback failures are where many binding bugs appear first.

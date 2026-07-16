@@ -32,6 +32,48 @@ class ProllySmokeTest {
     }
 
     @Test
+    void streamingVisitorsPreserveOrderAndEarlyStop() throws Exception {
+        Prolly.useLocalDebugLibrary();
+        try (Prolly prolly = Prolly.memory()) {
+            TreeRecord base = prolly.create();
+            for (String key : List.of("a", "b", "c", "d")) {
+                base = prolly.put(base, key.getBytes(), key.getBytes());
+            }
+
+            List<String> keys = new ArrayList<>();
+            ScanOutcome range = prolly.scanRange(base, "b".getBytes(), Optional.empty(), entry -> {
+                keys.add(new String(entry.key()));
+                return keys.size() < 2;
+            });
+            assertEquals(List.of("b", "c"), keys);
+            assertEquals(new ScanOutcome(2, true), range);
+
+            List<String> reverse = new ArrayList<>();
+            ScanOutcome reverseOutcome = prolly.scanPrefixReverse(base, new byte[0], entry -> {
+                reverse.add(new String(entry.key()));
+                return true;
+            });
+            assertEquals(List.of("d", "c", "b", "a"), reverse);
+            assertEquals(new ScanOutcome(4, false), reverseOutcome);
+
+            TreeRecord left = prolly.put(base, "b".getBytes(), "left".getBytes());
+            TreeRecord right = prolly.put(base, "b".getBytes(), "right".getBytes());
+            List<String> kinds = new ArrayList<>();
+            assertEquals(1, prolly.scanDiff(base, right, diff -> {
+                kinds.add(diff.getKind().name().toLowerCase());
+                return true;
+            }).visited());
+            assertEquals(List.of("changed"), kinds);
+            List<String> conflicts = new ArrayList<>();
+            assertEquals(1, prolly.scanConflicts(base, left, right, conflict -> {
+                conflicts.add(new String(conflict.getKey()));
+                return true;
+            }).visited());
+            assertEquals(List.of("b"), conflicts);
+        }
+    }
+
+    @Test
     void memoryEngineDeleteRangeUsesHalfOpenBounds() throws Exception {
         Prolly.useLocalDebugLibrary();
         try (Prolly prolly = Prolly.memory()) {

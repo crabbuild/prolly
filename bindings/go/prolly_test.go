@@ -369,6 +369,74 @@ func TestMemoryEngineCrudAndRange(t *testing.T) {
 	}
 }
 
+func TestStreamingVisitorsPreserveOrderAndEarlyStop(t *testing.T) {
+	engine, err := OpenMemory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer engine.Close()
+
+	base, err := engine.Create()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"a", "b", "c", "d"} {
+		base, err = engine.Put(base, []byte(key), []byte(key))
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var keys []string
+	outcome, err := engine.ScanRange(base, []byte("b"), nil, func(entry Entry) bool {
+		keys = append(keys, string(entry.Key))
+		return len(keys) < 2
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(keys, []string{"b", "c"}) || outcome != (ScanOutcome{Visited: 2, Stopped: true}) {
+		t.Fatalf("range scan keys=%v outcome=%+v", keys, outcome)
+	}
+
+	var reverse []string
+	outcome, err = engine.ScanPrefixReverse(base, nil, func(entry Entry) bool {
+		reverse = append(reverse, string(entry.Key))
+		return true
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(reverse, []string{"d", "c", "b", "a"}) || outcome != (ScanOutcome{Visited: 4}) {
+		t.Fatalf("reverse scan keys=%v outcome=%+v", reverse, outcome)
+	}
+
+	left, err := engine.Put(base, []byte("b"), []byte("left"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	right, err := engine.Put(base, []byte("b"), []byte("right"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var kinds []string
+	outcome, err = engine.ScanDiff(base, right, func(diff Diff) bool {
+		kinds = append(kinds, diff.Kind)
+		return true
+	})
+	if err != nil || outcome.Visited != 1 || !reflect.DeepEqual(kinds, []string{"changed"}) {
+		t.Fatalf("diff scan kinds=%v outcome=%+v err=%v", kinds, outcome, err)
+	}
+	var conflicts []string
+	outcome, err = engine.ScanConflicts(base, left, right, func(conflict Conflict) bool {
+		conflicts = append(conflicts, string(conflict.Key))
+		return true
+	})
+	if err != nil || outcome.Visited != 1 || !reflect.DeepEqual(conflicts, []string{"b"}) {
+		t.Fatalf("conflict scan keys=%v outcome=%+v err=%v", conflicts, outcome, err)
+	}
+}
+
 func TestMemoryEngineDeleteRangeUsesHalfOpenBounds(t *testing.T) {
 	engine, err := OpenMemory()
 	if err != nil {

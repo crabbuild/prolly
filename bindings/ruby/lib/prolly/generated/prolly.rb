@@ -366,56 +366,6 @@ end
     end
   end
 
-  # The Record type WriteResultRecord.
-
-  def self.check_lower_TypeWriteResultRecord(v)
-    RustBuffer.check_lower_TypeTreeRecord(v.tree)
-    RustBuffer.check_lower_TypeWriteStatsRecord(v.stats)
-  end
-
-  def self.alloc_from_TypeWriteResultRecord(v)
-    RustBuffer.allocWithBuilder do |builder|
-      builder.write_TypeWriteResultRecord(v)
-      return builder.finalize
-    end
-  end
-
-  def consumeIntoTypeWriteResultRecord
-    consumeWithStream do |stream|
-      return stream.readTypeWriteResultRecord
-    end
-  end
-
-  # The Record type WriteStatsRecord.
-
-  def self.check_lower_TypeWriteStatsRecord(v)
-
-
-
-
-
-
-
-
-
-
-
-
-  end
-
-  def self.alloc_from_TypeWriteStatsRecord(v)
-    RustBuffer.allocWithBuilder do |builder|
-      builder.write_TypeWriteStatsRecord(v)
-      return builder.finalize
-    end
-  end
-
-  def consumeIntoTypeWriteStatsRecord
-    consumeWithStream do |stream|
-      return stream.readTypeWriteStatsRecord
-    end
-  end
-
   # The Record type ChangedSpanHintRecord.
 
   def self.check_lower_TypeChangedSpanHintRecord(v)
@@ -1771,6 +1721,26 @@ end
     end
   end
 
+  # The Record type ScanOutcomeRecord.
+
+  def self.check_lower_TypeScanOutcomeRecord(v)
+
+
+  end
+
+  def self.alloc_from_TypeScanOutcomeRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeScanOutcomeRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeScanOutcomeRecord
+    consumeWithStream do |stream|
+      return stream.readTypeScanOutcomeRecord
+    end
+  end
+
   # The Record type SnapshotBundleNodeRecord.
 
   def self.check_lower_TypeSnapshotBundleNodeRecord(v)
@@ -2485,6 +2455,56 @@ end
   def consumeIntoTypeVersionedValueRecord
     consumeWithStream do |stream|
       return stream.readTypeVersionedValueRecord
+    end
+  end
+
+  # The Record type WriteResultRecord.
+
+  def self.check_lower_TypeWriteResultRecord(v)
+    RustBuffer.check_lower_TypeTreeRecord(v.tree)
+    RustBuffer.check_lower_TypeWriteStatsRecord(v.stats)
+  end
+
+  def self.alloc_from_TypeWriteResultRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeWriteResultRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeWriteResultRecord
+    consumeWithStream do |stream|
+      return stream.readTypeWriteResultRecord
+    end
+  end
+
+  # The Record type WriteStatsRecord.
+
+  def self.check_lower_TypeWriteStatsRecord(v)
+
+
+
+
+
+
+
+
+
+
+
+
+  end
+
+  def self.alloc_from_TypeWriteStatsRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeWriteStatsRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeWriteStatsRecord
+    consumeWithStream do |stream|
+      return stream.readTypeWriteStatsRecord
     end
   end
 
@@ -3977,11 +3997,32 @@ class RustBufferStream
     read(size).force_encoding(Encoding::BINARY)
   end
 
+  # The Object type ConflictVisitorCallback.
+
+  def readTypeConflictVisitorCallback
+    handle = unpack_from 8, 'Q>'
+    return ConflictVisitorCallback.uniffi_allocate(handle)
+  end
+
   # The Object type CrdtResolverCallback.
 
   def readTypeCrdtResolverCallback
     handle = unpack_from 8, 'Q>'
     return CrdtResolverCallback.uniffi_allocate(handle)
+  end
+
+  # The Object type DiffVisitorCallback.
+
+  def readTypeDiffVisitorCallback
+    handle = unpack_from 8, 'Q>'
+    return DiffVisitorCallback.uniffi_allocate(handle)
+  end
+
+  # The Object type EntryVisitorCallback.
+
+  def readTypeEntryVisitorCallback
+    handle = unpack_from 8, 'Q>'
+    return EntryVisitorCallback.uniffi_allocate(handle)
   end
 
   # The Object type HostStoreCallback.
@@ -4153,34 +4194,6 @@ class RustBufferStream
       cached_bytes: readU64,
       pinned_nodes: readU64,
       pinned_bytes: readU64
-    )
-  end
-
-  # The Record type WriteResultRecord.
-
-  def readTypeWriteResultRecord
-    WriteResultRecord.new(
-      tree: readTypeTreeRecord,
-      stats: readTypeWriteStatsRecord
-    )
-  end
-
-  # The Record type WriteStatsRecord.
-
-  def readTypeWriteStatsRecord
-    WriteStatsRecord.new(
-      input_mutations: readU64,
-      effective_mutations: readU64,
-      entries_streamed: readU64,
-      nodes_read: readU64,
-      nodes_written: readU64,
-      nodes_reused: readU64,
-      bytes_read: readU64,
-      bytes_written: readU64,
-      resync_distance_entries: readU64,
-      resync_distance_nodes: readU64,
-      used_key_stable_fast_path: readBool,
-      used_batched_value_update_path: readBool
     )
   end
 
@@ -4857,6 +4870,15 @@ class RustBufferStream
     )
   end
 
+  # The Record type ScanOutcomeRecord.
+
+  def readTypeScanOutcomeRecord
+    ScanOutcomeRecord.new(
+      visited: readU64,
+      stopped: readBool
+    )
+  end
+
   # The Record type SnapshotBundleNodeRecord.
 
   def readTypeSnapshotBundleNodeRecord
@@ -5241,6 +5263,34 @@ class RustBufferStream
       version: readU64,
       encoding: readTypeEncodingRecord,
       payload: readBytes
+    )
+  end
+
+  # The Record type WriteResultRecord.
+
+  def readTypeWriteResultRecord
+    WriteResultRecord.new(
+      tree: readTypeTreeRecord,
+      stats: readTypeWriteStatsRecord
+    )
+  end
+
+  # The Record type WriteStatsRecord.
+
+  def readTypeWriteStatsRecord
+    WriteStatsRecord.new(
+      input_mutations: readU64,
+      effective_mutations: readU64,
+      entries_streamed: readU64,
+      nodes_read: readU64,
+      nodes_written: readU64,
+      nodes_reused: readU64,
+      bytes_read: readU64,
+      bytes_written: readU64,
+      resync_distance_entries: readU64,
+      resync_distance_nodes: readU64,
+      used_key_stable_fast_path: readBool,
+      used_batched_value_update_path: readBool
     )
   end
 
@@ -6564,10 +6614,31 @@ class RustBufferBuilder
     write v
   end
 
+  # The Object type ConflictVisitorCallback.
+
+  def write_TypeConflictVisitorCallback(obj)
+    handle = ConflictVisitorCallback.uniffi_lower obj
+    pack_into(8, 'Q>', handle)
+  end
+
   # The Object type CrdtResolverCallback.
 
   def write_TypeCrdtResolverCallback(obj)
     handle = CrdtResolverCallback.uniffi_lower obj
+    pack_into(8, 'Q>', handle)
+  end
+
+  # The Object type DiffVisitorCallback.
+
+  def write_TypeDiffVisitorCallback(obj)
+    handle = DiffVisitorCallback.uniffi_lower obj
+    pack_into(8, 'Q>', handle)
+  end
+
+  # The Object type EntryVisitorCallback.
+
+  def write_TypeEntryVisitorCallback(obj)
+    handle = EntryVisitorCallback.uniffi_lower obj
     pack_into(8, 'Q>', handle)
   end
 
@@ -6721,30 +6792,6 @@ class RustBufferBuilder
     self.write_U64(v.cached_bytes)
     self.write_U64(v.pinned_nodes)
     self.write_U64(v.pinned_bytes)
-  end
-
-  # The Record type WriteResultRecord.
-
-  def write_TypeWriteResultRecord(v)
-    self.write_TypeTreeRecord(v.tree)
-    self.write_TypeWriteStatsRecord(v.stats)
-  end
-
-  # The Record type WriteStatsRecord.
-
-  def write_TypeWriteStatsRecord(v)
-    self.write_U64(v.input_mutations)
-    self.write_U64(v.effective_mutations)
-    self.write_U64(v.entries_streamed)
-    self.write_U64(v.nodes_read)
-    self.write_U64(v.nodes_written)
-    self.write_U64(v.nodes_reused)
-    self.write_U64(v.bytes_read)
-    self.write_U64(v.bytes_written)
-    self.write_U64(v.resync_distance_entries)
-    self.write_U64(v.resync_distance_nodes)
-    self.write_Bool(v.used_key_stable_fast_path)
-    self.write_Bool(v.used_batched_value_update_path)
   end
 
   # The Record type ChangedSpanHintRecord.
@@ -7296,6 +7343,13 @@ class RustBufferBuilder
     self.write_Optionalu64(v.updated_at_millis)
   end
 
+  # The Record type ScanOutcomeRecord.
+
+  def write_TypeScanOutcomeRecord(v)
+    self.write_U64(v.visited)
+    self.write_Bool(v.stopped)
+  end
+
   # The Record type SnapshotBundleNodeRecord.
 
   def write_TypeSnapshotBundleNodeRecord(v)
@@ -7621,6 +7675,30 @@ class RustBufferBuilder
     self.write_U64(v.version)
     self.write_TypeEncodingRecord(v.encoding)
     self.write_Bytes(v.payload)
+  end
+
+  # The Record type WriteResultRecord.
+
+  def write_TypeWriteResultRecord(v)
+    self.write_TypeTreeRecord(v.tree)
+    self.write_TypeWriteStatsRecord(v.stats)
+  end
+
+  # The Record type WriteStatsRecord.
+
+  def write_TypeWriteStatsRecord(v)
+    self.write_U64(v.input_mutations)
+    self.write_U64(v.effective_mutations)
+    self.write_U64(v.entries_streamed)
+    self.write_U64(v.nodes_read)
+    self.write_U64(v.nodes_written)
+    self.write_U64(v.nodes_reused)
+    self.write_U64(v.bytes_read)
+    self.write_U64(v.bytes_written)
+    self.write_U64(v.resync_distance_entries)
+    self.write_U64(v.resync_distance_nodes)
+    self.write_Bool(v.used_key_stable_fast_path)
+    self.write_Bool(v.used_batched_value_update_path)
   end
 
   # The Enum type CrdtDeletePolicyKind.
@@ -8541,6 +8619,18 @@ module UniFFILib
   ffi_lib ENV.fetch('PROLLY_BINDINGS_LIBRARY', 'prolly_bindings')
 
 
+  attach_function :uniffi_prolly_bindings_fn_clone_conflictvisitorcallback,
+    [:uint64, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_free_conflictvisitorcallback,
+    [:uint64, RustCallStatus.by_ref],
+    :void
+  attach_function :uniffi_prolly_bindings_fn_init_callback_vtable_conflictvisitorcallback,
+    [:pointer, RustCallStatus.by_ref],
+    :void
+  attach_function :uniffi_prolly_bindings_fn_method_conflictvisitorcallback_visit,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    :int8
   attach_function :uniffi_prolly_bindings_fn_clone_crdtresolvercallback,
     [:uint64, RustCallStatus.by_ref],
     :uint64
@@ -8553,6 +8643,30 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_fn_method_crdtresolvercallback_resolve,
     [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_clone_diffvisitorcallback,
+    [:uint64, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_free_diffvisitorcallback,
+    [:uint64, RustCallStatus.by_ref],
+    :void
+  attach_function :uniffi_prolly_bindings_fn_init_callback_vtable_diffvisitorcallback,
+    [:pointer, RustCallStatus.by_ref],
+    :void
+  attach_function :uniffi_prolly_bindings_fn_method_diffvisitorcallback_visit,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    :int8
+  attach_function :uniffi_prolly_bindings_fn_clone_entryvisitorcallback,
+    [:uint64, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_free_entryvisitorcallback,
+    [:uint64, RustCallStatus.by_ref],
+    :void
+  attach_function :uniffi_prolly_bindings_fn_init_callback_vtable_entryvisitorcallback,
+    [:pointer, RustCallStatus.by_ref],
+    :void
+  attach_function :uniffi_prolly_bindings_fn_method_entryvisitorcallback_visit,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    :int8
   attach_function :uniffi_prolly_bindings_fn_clone_hoststorecallback,
     [:uint64, RustCallStatus.by_ref],
     :uint64
@@ -9013,6 +9127,27 @@ module UniFFILib
     [:uint64, RustCallStatus.by_ref],
     :void
   attach_function :uniffi_prolly_bindings_fn_method_prollyengine_reverse_page,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_prollyengine_scan_conflicts,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_prollyengine_scan_diff,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_prollyengine_scan_prefix,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_prollyengine_scan_prefix_reverse,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_prollyengine_scan_range,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_prollyengine_scan_range_diff,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_prollyengine_scan_range_reverse,
     [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
     RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_method_prollyengine_stats_diff,
@@ -9837,7 +9972,16 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_checksum_func_versioned_value_to_bytes,
     [RustCallStatus.by_ref],
     :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_conflictvisitorcallback_visit,
+    [RustCallStatus.by_ref],
+    :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_crdtresolvercallback_resolve,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_diffvisitorcallback_visit,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_entryvisitorcallback_visit,
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_hoststorecallback_get,
@@ -10240,6 +10384,27 @@ module UniFFILib
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_reverse_page,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_scan_conflicts,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_scan_diff,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_scan_prefix,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_scan_prefix_reverse,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_scan_range,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_scan_range_diff,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_scan_range_reverse,
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_stats_diff,
@@ -10930,88 +11095,6 @@ class CacheStatsRecord
       return false
     end
     if @pinned_bytes != other.pinned_bytes
-      return false
-    end
-
-    true
-  end
-end
-
-  # Record type WriteResultRecord
-class WriteResultRecord
-  attr_reader :tree, :stats
-
-  def initialize(tree:, stats:)
-    @tree = tree
-    @stats = stats
-  end
-
-  def ==(other)
-    if @tree != other.tree
-      return false
-    end
-    if @stats != other.stats
-      return false
-    end
-
-    true
-  end
-end
-
-  # Record type WriteStatsRecord
-class WriteStatsRecord
-  attr_reader :input_mutations, :effective_mutations, :entries_streamed, :nodes_read, :nodes_written, :nodes_reused, :bytes_read, :bytes_written, :resync_distance_entries, :resync_distance_nodes, :used_key_stable_fast_path, :used_batched_value_update_path
-
-  def initialize(input_mutations:, effective_mutations:, entries_streamed:, nodes_read:, nodes_written:, nodes_reused:, bytes_read:, bytes_written:, resync_distance_entries:, resync_distance_nodes:, used_key_stable_fast_path:, used_batched_value_update_path:)
-    @input_mutations = input_mutations
-    @effective_mutations = effective_mutations
-    @entries_streamed = entries_streamed
-    @nodes_read = nodes_read
-    @nodes_written = nodes_written
-    @nodes_reused = nodes_reused
-    @bytes_read = bytes_read
-    @bytes_written = bytes_written
-    @resync_distance_entries = resync_distance_entries
-    @resync_distance_nodes = resync_distance_nodes
-    @used_key_stable_fast_path = used_key_stable_fast_path
-    @used_batched_value_update_path = used_batched_value_update_path
-  end
-
-  def ==(other)
-    if @input_mutations != other.input_mutations
-      return false
-    end
-    if @effective_mutations != other.effective_mutations
-      return false
-    end
-    if @entries_streamed != other.entries_streamed
-      return false
-    end
-    if @nodes_read != other.nodes_read
-      return false
-    end
-    if @nodes_written != other.nodes_written
-      return false
-    end
-    if @nodes_reused != other.nodes_reused
-      return false
-    end
-    if @bytes_read != other.bytes_read
-      return false
-    end
-    if @bytes_written != other.bytes_written
-      return false
-    end
-    if @resync_distance_entries != other.resync_distance_entries
-      return false
-    end
-    if @resync_distance_nodes != other.resync_distance_nodes
-      return false
-    end
-    if @used_key_stable_fast_path != other.used_key_stable_fast_path
-      return false
-    end
-    if @used_batched_value_update_path != other.used_batched_value_update_path
       return false
     end
 
@@ -12781,6 +12864,27 @@ class RootManifestRecord
   end
 end
 
+  # Record type ScanOutcomeRecord
+class ScanOutcomeRecord
+  attr_reader :visited, :stopped
+
+  def initialize(visited:, stopped:)
+    @visited = visited
+    @stopped = stopped
+  end
+
+  def ==(other)
+    if @visited != other.visited
+      return false
+    end
+    if @stopped != other.stopped
+      return false
+    end
+
+    true
+  end
+end
+
   # Record type SnapshotBundleNodeRecord
 class SnapshotBundleNodeRecord
   attr_reader :cid, :bytes
@@ -13872,6 +13976,88 @@ class VersionedValueRecord
       return false
     end
     if @payload != other.payload
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type WriteResultRecord
+class WriteResultRecord
+  attr_reader :tree, :stats
+
+  def initialize(tree:, stats:)
+    @tree = tree
+    @stats = stats
+  end
+
+  def ==(other)
+    if @tree != other.tree
+      return false
+    end
+    if @stats != other.stats
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type WriteStatsRecord
+class WriteStatsRecord
+  attr_reader :input_mutations, :effective_mutations, :entries_streamed, :nodes_read, :nodes_written, :nodes_reused, :bytes_read, :bytes_written, :resync_distance_entries, :resync_distance_nodes, :used_key_stable_fast_path, :used_batched_value_update_path
+
+  def initialize(input_mutations:, effective_mutations:, entries_streamed:, nodes_read:, nodes_written:, nodes_reused:, bytes_read:, bytes_written:, resync_distance_entries:, resync_distance_nodes:, used_key_stable_fast_path:, used_batched_value_update_path:)
+    @input_mutations = input_mutations
+    @effective_mutations = effective_mutations
+    @entries_streamed = entries_streamed
+    @nodes_read = nodes_read
+    @nodes_written = nodes_written
+    @nodes_reused = nodes_reused
+    @bytes_read = bytes_read
+    @bytes_written = bytes_written
+    @resync_distance_entries = resync_distance_entries
+    @resync_distance_nodes = resync_distance_nodes
+    @used_key_stable_fast_path = used_key_stable_fast_path
+    @used_batched_value_update_path = used_batched_value_update_path
+  end
+
+  def ==(other)
+    if @input_mutations != other.input_mutations
+      return false
+    end
+    if @effective_mutations != other.effective_mutations
+      return false
+    end
+    if @entries_streamed != other.entries_streamed
+      return false
+    end
+    if @nodes_read != other.nodes_read
+      return false
+    end
+    if @nodes_written != other.nodes_written
+      return false
+    end
+    if @nodes_reused != other.nodes_reused
+      return false
+    end
+    if @bytes_read != other.bytes_read
+      return false
+    end
+    if @bytes_written != other.bytes_written
+      return false
+    end
+    if @resync_distance_entries != other.resync_distance_entries
+      return false
+    end
+    if @resync_distance_nodes != other.resync_distance_nodes
+      return false
+    end
+    if @used_key_stable_fast_path != other.used_key_stable_fast_path
+      return false
+    end
+    if @used_batched_value_update_path != other.used_batched_value_update_path
       return false
     end
 
@@ -15458,6 +15644,60 @@ end
 
 
 
+  class ConflictVisitorCallback
+
+  # A private helper for initializing instances of the class from a raw handle,
+  # bypassing any initialization logic and ensuring they are GC'd properly.
+  def self.uniffi_allocate(handle)
+    inst = allocate
+    inst.instance_variable_set :@handle, handle
+    ObjectSpace.define_finalizer(inst, uniffi_define_finalizer_by_handle(handle, inst.object_id))
+    return inst
+  end
+
+  # A private helper for registering an object finalizer.
+  # N.B. it's important that this does not capture a reference
+  # to the actual instance, only its underlying handle.
+  def self.uniffi_define_finalizer_by_handle(handle, object_id)
+    Proc.new do |_id|
+      Prolly.rust_call(
+        :uniffi_prolly_bindings_fn_free_conflictvisitorcallback,
+        handle
+      )
+    end
+  end
+
+  # A private helper for lowering instances into a raw handle.
+  # This does an explicit typecheck, because accidentally lowering a different type of
+  # object in a place where this type is expected, could lead to memory unsafety.
+  def self.uniffi_check_lower(inst)
+    if not inst.is_a? self
+      raise TypeError.new "Expected a ConflictVisitorCallback instance, got #{inst}"
+    end
+  end
+
+  def uniffi_clone_handle()
+    return Prolly.rust_call(
+      :uniffi_prolly_bindings_fn_clone_conflictvisitorcallback,
+      @handle
+    )
+  end
+
+  def self.uniffi_lower(inst)
+    return inst.uniffi_clone_handle()
+  end
+
+
+
+  def visit(conflict)
+        conflict = conflict
+        RustBuffer.check_lower_TypeConflictRecord(conflict)
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_conflictvisitorcallback_visit,uniffi_clone_handle(),RustBuffer.alloc_from_TypeConflictRecord(conflict))
+    return 1 == result
+  end
+
+end
+
   class CrdtResolverCallback
 
   # A private helper for initializing instances of the class from a raw handle,
@@ -15508,6 +15748,114 @@ end
         RustBuffer.check_lower_TypeConflictRecord(conflict)
     result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_crdtresolvercallback_resolve,uniffi_clone_handle(),RustBuffer.alloc_from_TypeConflictRecord(conflict))
     return result.consumeIntoTypeCrdtResolutionRecord
+  end
+
+end
+
+  class DiffVisitorCallback
+
+  # A private helper for initializing instances of the class from a raw handle,
+  # bypassing any initialization logic and ensuring they are GC'd properly.
+  def self.uniffi_allocate(handle)
+    inst = allocate
+    inst.instance_variable_set :@handle, handle
+    ObjectSpace.define_finalizer(inst, uniffi_define_finalizer_by_handle(handle, inst.object_id))
+    return inst
+  end
+
+  # A private helper for registering an object finalizer.
+  # N.B. it's important that this does not capture a reference
+  # to the actual instance, only its underlying handle.
+  def self.uniffi_define_finalizer_by_handle(handle, object_id)
+    Proc.new do |_id|
+      Prolly.rust_call(
+        :uniffi_prolly_bindings_fn_free_diffvisitorcallback,
+        handle
+      )
+    end
+  end
+
+  # A private helper for lowering instances into a raw handle.
+  # This does an explicit typecheck, because accidentally lowering a different type of
+  # object in a place where this type is expected, could lead to memory unsafety.
+  def self.uniffi_check_lower(inst)
+    if not inst.is_a? self
+      raise TypeError.new "Expected a DiffVisitorCallback instance, got #{inst}"
+    end
+  end
+
+  def uniffi_clone_handle()
+    return Prolly.rust_call(
+      :uniffi_prolly_bindings_fn_clone_diffvisitorcallback,
+      @handle
+    )
+  end
+
+  def self.uniffi_lower(inst)
+    return inst.uniffi_clone_handle()
+  end
+
+
+
+  def visit(diff)
+        diff = diff
+        RustBuffer.check_lower_TypeDiffRecord(diff)
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_diffvisitorcallback_visit,uniffi_clone_handle(),RustBuffer.alloc_from_TypeDiffRecord(diff))
+    return 1 == result
+  end
+
+end
+
+  class EntryVisitorCallback
+
+  # A private helper for initializing instances of the class from a raw handle,
+  # bypassing any initialization logic and ensuring they are GC'd properly.
+  def self.uniffi_allocate(handle)
+    inst = allocate
+    inst.instance_variable_set :@handle, handle
+    ObjectSpace.define_finalizer(inst, uniffi_define_finalizer_by_handle(handle, inst.object_id))
+    return inst
+  end
+
+  # A private helper for registering an object finalizer.
+  # N.B. it's important that this does not capture a reference
+  # to the actual instance, only its underlying handle.
+  def self.uniffi_define_finalizer_by_handle(handle, object_id)
+    Proc.new do |_id|
+      Prolly.rust_call(
+        :uniffi_prolly_bindings_fn_free_entryvisitorcallback,
+        handle
+      )
+    end
+  end
+
+  # A private helper for lowering instances into a raw handle.
+  # This does an explicit typecheck, because accidentally lowering a different type of
+  # object in a place where this type is expected, could lead to memory unsafety.
+  def self.uniffi_check_lower(inst)
+    if not inst.is_a? self
+      raise TypeError.new "Expected a EntryVisitorCallback instance, got #{inst}"
+    end
+  end
+
+  def uniffi_clone_handle()
+    return Prolly.rust_call(
+      :uniffi_prolly_bindings_fn_clone_entryvisitorcallback,
+      @handle
+    )
+  end
+
+  def self.uniffi_lower(inst)
+    return inst.uniffi_clone_handle()
+  end
+
+
+
+  def visit(entry)
+        entry = entry
+        RustBuffer.check_lower_TypeEntryRecord(entry)
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_entryvisitorcallback_visit,uniffi_clone_handle(),RustBuffer.alloc_from_TypeEntryRecord(entry))
+    return 1 == result
   end
 
 end
@@ -16931,6 +17279,86 @@ end
 
     result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_reverse_page,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.alloc_from_OptionalTypeReverseCursorRecord(cursor),RustBuffer.allocFromBytes(start),limit)
     return result.consumeIntoTypeReversePageRecord
+  end
+  def scan_conflicts(base, left, right, visitor)
+        base = base
+        RustBuffer.check_lower_TypeTreeRecord(base)
+        left = left
+        RustBuffer.check_lower_TypeTreeRecord(left)
+        right = right
+        RustBuffer.check_lower_TypeTreeRecord(right)
+        visitor = visitor
+        (ConflictVisitorCallback.uniffi_check_lower visitor)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_scan_conflicts,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(base),RustBuffer.alloc_from_TypeTreeRecord(left),RustBuffer.alloc_from_TypeTreeRecord(right),(ConflictVisitorCallback.uniffi_lower visitor))
+    return result.consumeIntoTypeScanOutcomeRecord
+  end
+  def scan_diff(base, other, visitor)
+        base = base
+        RustBuffer.check_lower_TypeTreeRecord(base)
+        other = other
+        RustBuffer.check_lower_TypeTreeRecord(other)
+        visitor = visitor
+        (DiffVisitorCallback.uniffi_check_lower visitor)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_scan_diff,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(base),RustBuffer.alloc_from_TypeTreeRecord(other),(DiffVisitorCallback.uniffi_lower visitor))
+    return result.consumeIntoTypeScanOutcomeRecord
+  end
+  def scan_prefix(tree, prefix, visitor)
+        tree = tree
+        RustBuffer.check_lower_TypeTreeRecord(tree)
+        prefix = Prolly::uniffi_bytes(prefix)
+
+        visitor = visitor
+        (EntryVisitorCallback.uniffi_check_lower visitor)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_scan_prefix,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.allocFromBytes(prefix),(EntryVisitorCallback.uniffi_lower visitor))
+    return result.consumeIntoTypeScanOutcomeRecord
+  end
+  def scan_prefix_reverse(tree, prefix, visitor)
+        tree = tree
+        RustBuffer.check_lower_TypeTreeRecord(tree)
+        prefix = Prolly::uniffi_bytes(prefix)
+
+        visitor = visitor
+        (EntryVisitorCallback.uniffi_check_lower visitor)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_scan_prefix_reverse,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.allocFromBytes(prefix),(EntryVisitorCallback.uniffi_lower visitor))
+    return result.consumeIntoTypeScanOutcomeRecord
+  end
+  def scan_range(tree, start, range_end, visitor)
+        tree = tree
+        RustBuffer.check_lower_TypeTreeRecord(tree)
+        start = Prolly::uniffi_bytes(start)
+
+        range_end = (range_end ? Prolly::uniffi_bytes(range_end) : nil)
+        RustBuffer.check_lower_Optionalbytes(range_end)
+        visitor = visitor
+        (EntryVisitorCallback.uniffi_check_lower visitor)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_scan_range,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.allocFromBytes(start),RustBuffer.alloc_from_Optionalbytes(range_end),(EntryVisitorCallback.uniffi_lower visitor))
+    return result.consumeIntoTypeScanOutcomeRecord
+  end
+  def scan_range_diff(base, other, start, range_end, visitor)
+        base = base
+        RustBuffer.check_lower_TypeTreeRecord(base)
+        other = other
+        RustBuffer.check_lower_TypeTreeRecord(other)
+        start = Prolly::uniffi_bytes(start)
+
+        range_end = (range_end ? Prolly::uniffi_bytes(range_end) : nil)
+        RustBuffer.check_lower_Optionalbytes(range_end)
+        visitor = visitor
+        (DiffVisitorCallback.uniffi_check_lower visitor)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_scan_range_diff,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(base),RustBuffer.alloc_from_TypeTreeRecord(other),RustBuffer.allocFromBytes(start),RustBuffer.alloc_from_Optionalbytes(range_end),(DiffVisitorCallback.uniffi_lower visitor))
+    return result.consumeIntoTypeScanOutcomeRecord
+  end
+  def scan_range_reverse(tree, start, range_end, visitor)
+        tree = tree
+        RustBuffer.check_lower_TypeTreeRecord(tree)
+        start = Prolly::uniffi_bytes(start)
+
+        range_end = (range_end ? Prolly::uniffi_bytes(range_end) : nil)
+        RustBuffer.check_lower_Optionalbytes(range_end)
+        visitor = visitor
+        (EntryVisitorCallback.uniffi_check_lower visitor)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_scan_range_reverse,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.allocFromBytes(start),RustBuffer.alloc_from_Optionalbytes(range_end),(EntryVisitorCallback.uniffi_lower visitor))
+    return result.consumeIntoTypeScanOutcomeRecord
   end
   def stats_diff(before, after)
         before = before

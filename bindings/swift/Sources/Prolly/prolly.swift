@@ -604,6 +604,199 @@ fileprivate struct FfiConverterData: FfiConverterRustBuffer {
 
 
 
+public protocol ConflictVisitorCallback: AnyObject, Sendable {
+
+    /**
+     * Return `true` to continue or `false` to stop after this conflict.
+     */
+    func visit(conflict: ConflictRecord)  -> Bool
+
+}
+open class ConflictVisitorCallbackImpl: ConflictVisitorCallback, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_prolly_bindings_fn_clone_conflictvisitorcallback(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_prolly_bindings_fn_free_conflictvisitorcallback(handle, $0) }
+    }
+
+
+
+
+    /**
+     * Return `true` to continue or `false` to stop after this conflict.
+     */
+open func visit(conflict: ConflictRecord) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_method_conflictvisitorcallback_visit(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeConflictRecord_lower(conflict),$0
+    )
+})
+}
+
+
+
+}
+
+
+
+// Put the implementation in a struct so we don't pollute the top-level namespace
+fileprivate struct UniffiCallbackInterfaceConflictVisitorCallback {
+
+    // Create the VTable using a series of closures.
+    // Swift automatically converts these into C callback functions.
+    //
+    // This creates 1-element array, since this seems to be the only way to construct a const
+    // pointer that we can pass to the Rust code.
+    static let vtable: [UniffiVTableCallbackInterfaceConflictVisitorCallback] = [UniffiVTableCallbackInterfaceConflictVisitorCallback(
+        uniffiFree: { (uniffiHandle: UInt64) -> () in
+            do {
+                try FfiConverterTypeConflictVisitorCallback.handleMap.remove(handle: uniffiHandle)
+            } catch {
+                print("Uniffi callback interface ConflictVisitorCallback: handle missing in uniffiFree")
+            }
+        },
+        uniffiClone: { (uniffiHandle: UInt64) -> UInt64 in
+            do {
+                return try FfiConverterTypeConflictVisitorCallback.handleMap.clone(handle: uniffiHandle)
+            } catch {
+                fatalError("Uniffi callback interface ConflictVisitorCallback: handle missing in uniffiClone")
+            }
+        },
+        visit: { (
+            uniffiHandle: UInt64,
+            conflict: RustBuffer,
+            uniffiOutReturn: UnsafeMutablePointer<Int8>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> Bool in
+                guard let uniffiObj = try? FfiConverterTypeConflictVisitorCallback.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.visit(
+                     conflict: try FfiConverterTypeConflictRecord_lift(conflict)
+                )
+            }
+
+
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterBool.lower($0) }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        }
+    )]
+}
+
+private func uniffiCallbackInitConflictVisitorCallback() {
+    uniffi_prolly_bindings_fn_init_callback_vtable_conflictvisitorcallback(UniffiCallbackInterfaceConflictVisitorCallback.vtable)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeConflictVisitorCallback: FfiConverter {
+    fileprivate static let handleMap = UniffiHandleMap<ConflictVisitorCallback>()
+
+    typealias FfiType = UInt64
+    typealias SwiftType = ConflictVisitorCallback
+
+    public static func lift(_ handle: UInt64) throws -> ConflictVisitorCallback {
+        if ((handle & 1) == 0) {
+            // Rust-generated handle, construct a new class that uses the handle to implement the
+            // interface
+            return ConflictVisitorCallbackImpl(unsafeFromHandle: handle)
+        } else {
+            // Swift-generated handle, get the object from the handle map
+            return try handleMap.remove(handle: handle)
+        }
+    }
+
+    public static func lower(_ value: ConflictVisitorCallback) -> UInt64 {
+         if let rustImpl = value as? ConflictVisitorCallbackImpl {
+             // Rust-implemented object.  Clone the handle and return it
+            return rustImpl.uniffiCloneHandle()
+         } else {
+            // Swift object, generate a new vtable handle and return that.
+            return handleMap.insert(obj: value)
+         }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ConflictVisitorCallback {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: ConflictVisitorCallback, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeConflictVisitorCallback_lift(_ handle: UInt64) throws -> ConflictVisitorCallback {
+    return try FfiConverterTypeConflictVisitorCallback.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeConflictVisitorCallback_lower(_ value: ConflictVisitorCallback) -> UInt64 {
+    return FfiConverterTypeConflictVisitorCallback.lower(value)
+}
+
+
+
+
+
+
 public protocol CrdtResolverCallback: AnyObject, Sendable {
 
     func resolve(conflict: ConflictRecord)  -> CrdtResolutionRecord
@@ -784,6 +977,392 @@ public func FfiConverterTypeCrdtResolverCallback_lift(_ handle: UInt64) throws -
 #endif
 public func FfiConverterTypeCrdtResolverCallback_lower(_ value: CrdtResolverCallback) -> UInt64 {
     return FfiConverterTypeCrdtResolverCallback.lower(value)
+}
+
+
+
+
+
+
+public protocol DiffVisitorCallback: AnyObject, Sendable {
+
+    /**
+     * Return `true` to continue or `false` to stop after this diff.
+     */
+    func visit(diff: DiffRecord)  -> Bool
+
+}
+open class DiffVisitorCallbackImpl: DiffVisitorCallback, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_prolly_bindings_fn_clone_diffvisitorcallback(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_prolly_bindings_fn_free_diffvisitorcallback(handle, $0) }
+    }
+
+
+
+
+    /**
+     * Return `true` to continue or `false` to stop after this diff.
+     */
+open func visit(diff: DiffRecord) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_method_diffvisitorcallback_visit(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeDiffRecord_lower(diff),$0
+    )
+})
+}
+
+
+
+}
+
+
+
+// Put the implementation in a struct so we don't pollute the top-level namespace
+fileprivate struct UniffiCallbackInterfaceDiffVisitorCallback {
+
+    // Create the VTable using a series of closures.
+    // Swift automatically converts these into C callback functions.
+    //
+    // This creates 1-element array, since this seems to be the only way to construct a const
+    // pointer that we can pass to the Rust code.
+    static let vtable: [UniffiVTableCallbackInterfaceDiffVisitorCallback] = [UniffiVTableCallbackInterfaceDiffVisitorCallback(
+        uniffiFree: { (uniffiHandle: UInt64) -> () in
+            do {
+                try FfiConverterTypeDiffVisitorCallback.handleMap.remove(handle: uniffiHandle)
+            } catch {
+                print("Uniffi callback interface DiffVisitorCallback: handle missing in uniffiFree")
+            }
+        },
+        uniffiClone: { (uniffiHandle: UInt64) -> UInt64 in
+            do {
+                return try FfiConverterTypeDiffVisitorCallback.handleMap.clone(handle: uniffiHandle)
+            } catch {
+                fatalError("Uniffi callback interface DiffVisitorCallback: handle missing in uniffiClone")
+            }
+        },
+        visit: { (
+            uniffiHandle: UInt64,
+            diff: RustBuffer,
+            uniffiOutReturn: UnsafeMutablePointer<Int8>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> Bool in
+                guard let uniffiObj = try? FfiConverterTypeDiffVisitorCallback.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.visit(
+                     diff: try FfiConverterTypeDiffRecord_lift(diff)
+                )
+            }
+
+
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterBool.lower($0) }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        }
+    )]
+}
+
+private func uniffiCallbackInitDiffVisitorCallback() {
+    uniffi_prolly_bindings_fn_init_callback_vtable_diffvisitorcallback(UniffiCallbackInterfaceDiffVisitorCallback.vtable)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDiffVisitorCallback: FfiConverter {
+    fileprivate static let handleMap = UniffiHandleMap<DiffVisitorCallback>()
+
+    typealias FfiType = UInt64
+    typealias SwiftType = DiffVisitorCallback
+
+    public static func lift(_ handle: UInt64) throws -> DiffVisitorCallback {
+        if ((handle & 1) == 0) {
+            // Rust-generated handle, construct a new class that uses the handle to implement the
+            // interface
+            return DiffVisitorCallbackImpl(unsafeFromHandle: handle)
+        } else {
+            // Swift-generated handle, get the object from the handle map
+            return try handleMap.remove(handle: handle)
+        }
+    }
+
+    public static func lower(_ value: DiffVisitorCallback) -> UInt64 {
+         if let rustImpl = value as? DiffVisitorCallbackImpl {
+             // Rust-implemented object.  Clone the handle and return it
+            return rustImpl.uniffiCloneHandle()
+         } else {
+            // Swift object, generate a new vtable handle and return that.
+            return handleMap.insert(obj: value)
+         }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DiffVisitorCallback {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: DiffVisitorCallback, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDiffVisitorCallback_lift(_ handle: UInt64) throws -> DiffVisitorCallback {
+    return try FfiConverterTypeDiffVisitorCallback.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDiffVisitorCallback_lower(_ value: DiffVisitorCallback) -> UInt64 {
+    return FfiConverterTypeDiffVisitorCallback.lower(value)
+}
+
+
+
+
+
+
+public protocol EntryVisitorCallback: AnyObject, Sendable {
+
+    /**
+     * Return `true` to continue or `false` to stop after this entry.
+     */
+    func visit(entry: EntryRecord)  -> Bool
+
+}
+open class EntryVisitorCallbackImpl: EntryVisitorCallback, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_prolly_bindings_fn_clone_entryvisitorcallback(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_prolly_bindings_fn_free_entryvisitorcallback(handle, $0) }
+    }
+
+
+
+
+    /**
+     * Return `true` to continue or `false` to stop after this entry.
+     */
+open func visit(entry: EntryRecord) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_method_entryvisitorcallback_visit(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeEntryRecord_lower(entry),$0
+    )
+})
+}
+
+
+
+}
+
+
+
+// Put the implementation in a struct so we don't pollute the top-level namespace
+fileprivate struct UniffiCallbackInterfaceEntryVisitorCallback {
+
+    // Create the VTable using a series of closures.
+    // Swift automatically converts these into C callback functions.
+    //
+    // This creates 1-element array, since this seems to be the only way to construct a const
+    // pointer that we can pass to the Rust code.
+    static let vtable: [UniffiVTableCallbackInterfaceEntryVisitorCallback] = [UniffiVTableCallbackInterfaceEntryVisitorCallback(
+        uniffiFree: { (uniffiHandle: UInt64) -> () in
+            do {
+                try FfiConverterTypeEntryVisitorCallback.handleMap.remove(handle: uniffiHandle)
+            } catch {
+                print("Uniffi callback interface EntryVisitorCallback: handle missing in uniffiFree")
+            }
+        },
+        uniffiClone: { (uniffiHandle: UInt64) -> UInt64 in
+            do {
+                return try FfiConverterTypeEntryVisitorCallback.handleMap.clone(handle: uniffiHandle)
+            } catch {
+                fatalError("Uniffi callback interface EntryVisitorCallback: handle missing in uniffiClone")
+            }
+        },
+        visit: { (
+            uniffiHandle: UInt64,
+            entry: RustBuffer,
+            uniffiOutReturn: UnsafeMutablePointer<Int8>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> Bool in
+                guard let uniffiObj = try? FfiConverterTypeEntryVisitorCallback.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.visit(
+                     entry: try FfiConverterTypeEntryRecord_lift(entry)
+                )
+            }
+
+
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterBool.lower($0) }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        }
+    )]
+}
+
+private func uniffiCallbackInitEntryVisitorCallback() {
+    uniffi_prolly_bindings_fn_init_callback_vtable_entryvisitorcallback(UniffiCallbackInterfaceEntryVisitorCallback.vtable)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeEntryVisitorCallback: FfiConverter {
+    fileprivate static let handleMap = UniffiHandleMap<EntryVisitorCallback>()
+
+    typealias FfiType = UInt64
+    typealias SwiftType = EntryVisitorCallback
+
+    public static func lift(_ handle: UInt64) throws -> EntryVisitorCallback {
+        if ((handle & 1) == 0) {
+            // Rust-generated handle, construct a new class that uses the handle to implement the
+            // interface
+            return EntryVisitorCallbackImpl(unsafeFromHandle: handle)
+        } else {
+            // Swift-generated handle, get the object from the handle map
+            return try handleMap.remove(handle: handle)
+        }
+    }
+
+    public static func lower(_ value: EntryVisitorCallback) -> UInt64 {
+         if let rustImpl = value as? EntryVisitorCallbackImpl {
+             // Rust-implemented object.  Clone the handle and return it
+            return rustImpl.uniffiCloneHandle()
+         } else {
+            // Swift object, generate a new vtable handle and return that.
+            return handleMap.insert(obj: value)
+         }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> EntryVisitorCallback {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: EntryVisitorCallback, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeEntryVisitorCallback_lift(_ handle: UInt64) throws -> EntryVisitorCallback {
+    return try FfiConverterTypeEntryVisitorCallback.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeEntryVisitorCallback_lower(_ value: EntryVisitorCallback) -> UInt64 {
+    return FfiConverterTypeEntryVisitorCallback.lower(value)
 }
 
 
@@ -2260,6 +2839,41 @@ public protocol ProllyEngineProtocol: AnyObject, Sendable {
 
     func reversePage(tree: TreeRecord, cursor: ReverseCursorRecord?, start: Data, limit: UInt64) throws  -> ReversePageRecord
 
+    /**
+     * Stream genuine three-way conflicts without allocating a complete list.
+     */
+    func scanConflicts(base: TreeRecord, left: TreeRecord, right: TreeRecord, visitor: ConflictVisitorCallback) throws  -> ScanOutcomeRecord
+
+    /**
+     * Stream structural differences without first allocating a complete list.
+     */
+    func scanDiff(base: TreeRecord, other: TreeRecord, visitor: DiffVisitorCallback) throws  -> ScanOutcomeRecord
+
+    /**
+     * Stream all entries with `prefix` through the borrowed Rust traversal.
+     */
+    func scanPrefix(tree: TreeRecord, prefix: Data, visitor: EntryVisitorCallback) throws  -> ScanOutcomeRecord
+
+    /**
+     * Stream a prefix in descending key order.
+     */
+    func scanPrefixReverse(tree: TreeRecord, prefix: Data, visitor: EntryVisitorCallback) throws  -> ScanOutcomeRecord
+
+    /**
+     * Stream a half-open range through the borrowed Rust traversal.
+     */
+    func scanRange(tree: TreeRecord, start: Data, rangeEnd: Data?, visitor: EntryVisitorCallback) throws  -> ScanOutcomeRecord
+
+    /**
+     * Stream structural differences whose keys fall in `[start, end)`.
+     */
+    func scanRangeDiff(base: TreeRecord, other: TreeRecord, start: Data, rangeEnd: Data?, visitor: DiffVisitorCallback) throws  -> ScanOutcomeRecord
+
+    /**
+     * Stream a half-open range in descending key order.
+     */
+    func scanRangeReverse(tree: TreeRecord, start: Data, rangeEnd: Data?, visitor: EntryVisitorCallback) throws  -> ScanOutcomeRecord
+
     func statsDiff(before: TreeRecord, after: TreeRecord) throws  -> StatsComparisonRecord
 
     func statsDiffJson(before: TreeRecord, after: TreeRecord) throws  -> JsonDocumentRecord
@@ -3468,6 +4082,109 @@ open func reversePage(tree: TreeRecord, cursor: ReverseCursorRecord?, start: Dat
 })
 }
 
+    /**
+     * Stream genuine three-way conflicts without allocating a complete list.
+     */
+open func scanConflicts(base: TreeRecord, left: TreeRecord, right: TreeRecord, visitor: ConflictVisitorCallback)throws  -> ScanOutcomeRecord  {
+    return try  FfiConverterTypeScanOutcomeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_prollyengine_scan_conflicts(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeTreeRecord_lower(base),
+        FfiConverterTypeTreeRecord_lower(left),
+        FfiConverterTypeTreeRecord_lower(right),
+        FfiConverterTypeConflictVisitorCallback_lower(visitor),$0
+    )
+})
+}
+
+    /**
+     * Stream structural differences without first allocating a complete list.
+     */
+open func scanDiff(base: TreeRecord, other: TreeRecord, visitor: DiffVisitorCallback)throws  -> ScanOutcomeRecord  {
+    return try  FfiConverterTypeScanOutcomeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_prollyengine_scan_diff(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeTreeRecord_lower(base),
+        FfiConverterTypeTreeRecord_lower(other),
+        FfiConverterTypeDiffVisitorCallback_lower(visitor),$0
+    )
+})
+}
+
+    /**
+     * Stream all entries with `prefix` through the borrowed Rust traversal.
+     */
+open func scanPrefix(tree: TreeRecord, prefix: Data, visitor: EntryVisitorCallback)throws  -> ScanOutcomeRecord  {
+    return try  FfiConverterTypeScanOutcomeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_prollyengine_scan_prefix(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeTreeRecord_lower(tree),
+        FfiConverterData.lower(prefix),
+        FfiConverterTypeEntryVisitorCallback_lower(visitor),$0
+    )
+})
+}
+
+    /**
+     * Stream a prefix in descending key order.
+     */
+open func scanPrefixReverse(tree: TreeRecord, prefix: Data, visitor: EntryVisitorCallback)throws  -> ScanOutcomeRecord  {
+    return try  FfiConverterTypeScanOutcomeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_prollyengine_scan_prefix_reverse(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeTreeRecord_lower(tree),
+        FfiConverterData.lower(prefix),
+        FfiConverterTypeEntryVisitorCallback_lower(visitor),$0
+    )
+})
+}
+
+    /**
+     * Stream a half-open range through the borrowed Rust traversal.
+     */
+open func scanRange(tree: TreeRecord, start: Data, rangeEnd: Data?, visitor: EntryVisitorCallback)throws  -> ScanOutcomeRecord  {
+    return try  FfiConverterTypeScanOutcomeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_prollyengine_scan_range(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeTreeRecord_lower(tree),
+        FfiConverterData.lower(start),
+        FfiConverterOptionData.lower(rangeEnd),
+        FfiConverterTypeEntryVisitorCallback_lower(visitor),$0
+    )
+})
+}
+
+    /**
+     * Stream structural differences whose keys fall in `[start, end)`.
+     */
+open func scanRangeDiff(base: TreeRecord, other: TreeRecord, start: Data, rangeEnd: Data?, visitor: DiffVisitorCallback)throws  -> ScanOutcomeRecord  {
+    return try  FfiConverterTypeScanOutcomeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_prollyengine_scan_range_diff(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeTreeRecord_lower(base),
+        FfiConverterTypeTreeRecord_lower(other),
+        FfiConverterData.lower(start),
+        FfiConverterOptionData.lower(rangeEnd),
+        FfiConverterTypeDiffVisitorCallback_lower(visitor),$0
+    )
+})
+}
+
+    /**
+     * Stream a half-open range in descending key order.
+     */
+open func scanRangeReverse(tree: TreeRecord, start: Data, rangeEnd: Data?, visitor: EntryVisitorCallback)throws  -> ScanOutcomeRecord  {
+    return try  FfiConverterTypeScanOutcomeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_prollyengine_scan_range_reverse(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeTreeRecord_lower(tree),
+        FfiConverterData.lower(start),
+        FfiConverterOptionData.lower(rangeEnd),
+        FfiConverterTypeEntryVisitorCallback_lower(visitor),$0
+    )
+})
+}
+
 open func statsDiff(before: TreeRecord, after: TreeRecord)throws  -> StatsComparisonRecord  {
     return try  FfiConverterTypeStatsComparisonRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_stats_diff(
@@ -4553,154 +5270,6 @@ public func FfiConverterTypeCacheStatsRecord_lift(_ buf: RustBuffer) throws -> C
 #endif
 public func FfiConverterTypeCacheStatsRecord_lower(_ value: CacheStatsRecord) -> RustBuffer {
     return FfiConverterTypeCacheStatsRecord.lower(value)
-}
-
-
-public struct WriteResultRecord: Equatable, Hashable {
-    public var tree: TreeRecord
-    public var stats: WriteStatsRecord
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(tree: TreeRecord, stats: WriteStatsRecord) {
-        self.tree = tree
-        self.stats = stats
-    }
-
-
-
-
-}
-
-#if compiler(>=6)
-extension WriteResultRecord: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeWriteResultRecord: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WriteResultRecord {
-        return
-            try WriteResultRecord(
-                tree: FfiConverterTypeTreeRecord.read(from: &buf),
-                stats: FfiConverterTypeWriteStatsRecord.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: WriteResultRecord, into buf: inout [UInt8]) {
-        FfiConverterTypeTreeRecord.write(value.tree, into: &buf)
-        FfiConverterTypeWriteStatsRecord.write(value.stats, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeWriteResultRecord_lift(_ buf: RustBuffer) throws -> WriteResultRecord {
-    return try FfiConverterTypeWriteResultRecord.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeWriteResultRecord_lower(_ value: WriteResultRecord) -> RustBuffer {
-    return FfiConverterTypeWriteResultRecord.lower(value)
-}
-
-
-public struct WriteStatsRecord: Equatable, Hashable {
-    public var inputMutations: UInt64
-    public var effectiveMutations: UInt64
-    public var entriesStreamed: UInt64
-    public var nodesRead: UInt64
-    public var nodesWritten: UInt64
-    public var nodesReused: UInt64
-    public var bytesRead: UInt64
-    public var bytesWritten: UInt64
-    public var resyncDistanceEntries: UInt64
-    public var resyncDistanceNodes: UInt64
-    public var usedKeyStableFastPath: Bool
-    public var usedBatchedValueUpdatePath: Bool
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(inputMutations: UInt64, effectiveMutations: UInt64, entriesStreamed: UInt64, nodesRead: UInt64, nodesWritten: UInt64, nodesReused: UInt64, bytesRead: UInt64, bytesWritten: UInt64, resyncDistanceEntries: UInt64, resyncDistanceNodes: UInt64, usedKeyStableFastPath: Bool, usedBatchedValueUpdatePath: Bool) {
-        self.inputMutations = inputMutations
-        self.effectiveMutations = effectiveMutations
-        self.entriesStreamed = entriesStreamed
-        self.nodesRead = nodesRead
-        self.nodesWritten = nodesWritten
-        self.nodesReused = nodesReused
-        self.bytesRead = bytesRead
-        self.bytesWritten = bytesWritten
-        self.resyncDistanceEntries = resyncDistanceEntries
-        self.resyncDistanceNodes = resyncDistanceNodes
-        self.usedKeyStableFastPath = usedKeyStableFastPath
-        self.usedBatchedValueUpdatePath = usedBatchedValueUpdatePath
-    }
-
-
-
-
-}
-
-#if compiler(>=6)
-extension WriteStatsRecord: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeWriteStatsRecord: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WriteStatsRecord {
-        return
-            try WriteStatsRecord(
-                inputMutations: FfiConverterUInt64.read(from: &buf),
-                effectiveMutations: FfiConverterUInt64.read(from: &buf),
-                entriesStreamed: FfiConverterUInt64.read(from: &buf),
-                nodesRead: FfiConverterUInt64.read(from: &buf),
-                nodesWritten: FfiConverterUInt64.read(from: &buf),
-                nodesReused: FfiConverterUInt64.read(from: &buf),
-                bytesRead: FfiConverterUInt64.read(from: &buf),
-                bytesWritten: FfiConverterUInt64.read(from: &buf),
-                resyncDistanceEntries: FfiConverterUInt64.read(from: &buf),
-                resyncDistanceNodes: FfiConverterUInt64.read(from: &buf),
-                usedKeyStableFastPath: FfiConverterBool.read(from: &buf),
-                usedBatchedValueUpdatePath: FfiConverterBool.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: WriteStatsRecord, into buf: inout [UInt8]) {
-        FfiConverterUInt64.write(value.inputMutations, into: &buf)
-        FfiConverterUInt64.write(value.effectiveMutations, into: &buf)
-        FfiConverterUInt64.write(value.entriesStreamed, into: &buf)
-        FfiConverterUInt64.write(value.nodesRead, into: &buf)
-        FfiConverterUInt64.write(value.nodesWritten, into: &buf)
-        FfiConverterUInt64.write(value.nodesReused, into: &buf)
-        FfiConverterUInt64.write(value.bytesRead, into: &buf)
-        FfiConverterUInt64.write(value.bytesWritten, into: &buf)
-        FfiConverterUInt64.write(value.resyncDistanceEntries, into: &buf)
-        FfiConverterUInt64.write(value.resyncDistanceNodes, into: &buf)
-        FfiConverterBool.write(value.usedKeyStableFastPath, into: &buf)
-        FfiConverterBool.write(value.usedBatchedValueUpdatePath, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeWriteStatsRecord_lift(_ buf: RustBuffer) throws -> WriteStatsRecord {
-    return try FfiConverterTypeWriteStatsRecord.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeWriteStatsRecord_lower(_ value: WriteStatsRecord) -> RustBuffer {
-    return FfiConverterTypeWriteStatsRecord.lower(value)
 }
 
 
@@ -8512,6 +9081,67 @@ public func FfiConverterTypeRootManifestRecord_lower(_ value: RootManifestRecord
 }
 
 
+/**
+ * Result of a streaming read operation.
+ *
+ * Foreign-language callbacks receive owned byte arrays because Rust borrows
+ * cannot cross an FFI boundary. The native traversal remains borrowed and
+ * copies each record only when it is delivered to the callback.
+ */
+public struct ScanOutcomeRecord: Equatable, Hashable {
+    public var visited: UInt64
+    public var stopped: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(visited: UInt64, stopped: Bool) {
+        self.visited = visited
+        self.stopped = stopped
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension ScanOutcomeRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeScanOutcomeRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ScanOutcomeRecord {
+        return
+            try ScanOutcomeRecord(
+                visited: FfiConverterUInt64.read(from: &buf),
+                stopped: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ScanOutcomeRecord, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.visited, into: &buf)
+        FfiConverterBool.write(value.stopped, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeScanOutcomeRecord_lift(_ buf: RustBuffer) throws -> ScanOutcomeRecord {
+    return try FfiConverterTypeScanOutcomeRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeScanOutcomeRecord_lower(_ value: ScanOutcomeRecord) -> RustBuffer {
+    return FfiConverterTypeScanOutcomeRecord.lower(value)
+}
+
+
 public struct SnapshotBundleNodeRecord: Equatable, Hashable {
     public var cid: Data
     public var bytes: Data
@@ -10597,6 +11227,154 @@ public func FfiConverterTypeVersionedValueRecord_lift(_ buf: RustBuffer) throws 
 #endif
 public func FfiConverterTypeVersionedValueRecord_lower(_ value: VersionedValueRecord) -> RustBuffer {
     return FfiConverterTypeVersionedValueRecord.lower(value)
+}
+
+
+public struct WriteResultRecord: Equatable, Hashable {
+    public var tree: TreeRecord
+    public var stats: WriteStatsRecord
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(tree: TreeRecord, stats: WriteStatsRecord) {
+        self.tree = tree
+        self.stats = stats
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension WriteResultRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeWriteResultRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WriteResultRecord {
+        return
+            try WriteResultRecord(
+                tree: FfiConverterTypeTreeRecord.read(from: &buf),
+                stats: FfiConverterTypeWriteStatsRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: WriteResultRecord, into buf: inout [UInt8]) {
+        FfiConverterTypeTreeRecord.write(value.tree, into: &buf)
+        FfiConverterTypeWriteStatsRecord.write(value.stats, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWriteResultRecord_lift(_ buf: RustBuffer) throws -> WriteResultRecord {
+    return try FfiConverterTypeWriteResultRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWriteResultRecord_lower(_ value: WriteResultRecord) -> RustBuffer {
+    return FfiConverterTypeWriteResultRecord.lower(value)
+}
+
+
+public struct WriteStatsRecord: Equatable, Hashable {
+    public var inputMutations: UInt64
+    public var effectiveMutations: UInt64
+    public var entriesStreamed: UInt64
+    public var nodesRead: UInt64
+    public var nodesWritten: UInt64
+    public var nodesReused: UInt64
+    public var bytesRead: UInt64
+    public var bytesWritten: UInt64
+    public var resyncDistanceEntries: UInt64
+    public var resyncDistanceNodes: UInt64
+    public var usedKeyStableFastPath: Bool
+    public var usedBatchedValueUpdatePath: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(inputMutations: UInt64, effectiveMutations: UInt64, entriesStreamed: UInt64, nodesRead: UInt64, nodesWritten: UInt64, nodesReused: UInt64, bytesRead: UInt64, bytesWritten: UInt64, resyncDistanceEntries: UInt64, resyncDistanceNodes: UInt64, usedKeyStableFastPath: Bool, usedBatchedValueUpdatePath: Bool) {
+        self.inputMutations = inputMutations
+        self.effectiveMutations = effectiveMutations
+        self.entriesStreamed = entriesStreamed
+        self.nodesRead = nodesRead
+        self.nodesWritten = nodesWritten
+        self.nodesReused = nodesReused
+        self.bytesRead = bytesRead
+        self.bytesWritten = bytesWritten
+        self.resyncDistanceEntries = resyncDistanceEntries
+        self.resyncDistanceNodes = resyncDistanceNodes
+        self.usedKeyStableFastPath = usedKeyStableFastPath
+        self.usedBatchedValueUpdatePath = usedBatchedValueUpdatePath
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension WriteStatsRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeWriteStatsRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WriteStatsRecord {
+        return
+            try WriteStatsRecord(
+                inputMutations: FfiConverterUInt64.read(from: &buf),
+                effectiveMutations: FfiConverterUInt64.read(from: &buf),
+                entriesStreamed: FfiConverterUInt64.read(from: &buf),
+                nodesRead: FfiConverterUInt64.read(from: &buf),
+                nodesWritten: FfiConverterUInt64.read(from: &buf),
+                nodesReused: FfiConverterUInt64.read(from: &buf),
+                bytesRead: FfiConverterUInt64.read(from: &buf),
+                bytesWritten: FfiConverterUInt64.read(from: &buf),
+                resyncDistanceEntries: FfiConverterUInt64.read(from: &buf),
+                resyncDistanceNodes: FfiConverterUInt64.read(from: &buf),
+                usedKeyStableFastPath: FfiConverterBool.read(from: &buf),
+                usedBatchedValueUpdatePath: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: WriteStatsRecord, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.inputMutations, into: &buf)
+        FfiConverterUInt64.write(value.effectiveMutations, into: &buf)
+        FfiConverterUInt64.write(value.entriesStreamed, into: &buf)
+        FfiConverterUInt64.write(value.nodesRead, into: &buf)
+        FfiConverterUInt64.write(value.nodesWritten, into: &buf)
+        FfiConverterUInt64.write(value.nodesReused, into: &buf)
+        FfiConverterUInt64.write(value.bytesRead, into: &buf)
+        FfiConverterUInt64.write(value.bytesWritten, into: &buf)
+        FfiConverterUInt64.write(value.resyncDistanceEntries, into: &buf)
+        FfiConverterUInt64.write(value.resyncDistanceNodes, into: &buf)
+        FfiConverterBool.write(value.usedKeyStableFastPath, into: &buf)
+        FfiConverterBool.write(value.usedBatchedValueUpdatePath, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWriteStatsRecord_lift(_ buf: RustBuffer) throws -> WriteStatsRecord {
+    return try FfiConverterTypeWriteStatsRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWriteStatsRecord_lower(_ value: WriteStatsRecord) -> RustBuffer {
+    return FfiConverterTypeWriteStatsRecord.lower(value)
 }
 
 // Note that we don't yet support `indirect` for enums.
@@ -14641,7 +15419,16 @@ private let initializationResult: InitializationResult = {
     if (uniffi_prolly_bindings_checksum_func_versioned_value_to_bytes() != 30630) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_prolly_bindings_checksum_method_conflictvisitorcallback_visit() != 1459) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_prolly_bindings_checksum_method_crdtresolvercallback_resolve() != 61599) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_diffvisitorcallback_visit() != 12838) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_entryvisitorcallback_visit() != 30875) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_hoststorecallback_get() != 14064) {
@@ -15046,6 +15833,27 @@ private let initializationResult: InitializationResult = {
     if (uniffi_prolly_bindings_checksum_method_prollyengine_reverse_page() != 38329) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_prolly_bindings_checksum_method_prollyengine_scan_conflicts() != 1796) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_prollyengine_scan_diff() != 27332) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_prollyengine_scan_prefix() != 14307) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_prollyengine_scan_prefix_reverse() != 64065) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_prollyengine_scan_range() != 54396) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_prollyengine_scan_range_diff() != 54182) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_prollyengine_scan_range_reverse() != 50504) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_prolly_bindings_checksum_method_prollyengine_stats_diff() != 34349) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -15137,7 +15945,10 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
 
+    uniffiCallbackInitConflictVisitorCallback()
     uniffiCallbackInitCrdtResolverCallback()
+    uniffiCallbackInitDiffVisitorCallback()
+    uniffiCallbackInitEntryVisitorCallback()
     uniffiCallbackInitHostStoreCallback()
     uniffiCallbackInitMergeResolverCallback()
     return InitializationResult.ok

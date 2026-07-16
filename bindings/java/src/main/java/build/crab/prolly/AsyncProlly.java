@@ -260,6 +260,26 @@ public final class AsyncProlly implements AutoCloseable {
         return supply(() -> inner.range(tree, start, end));
     }
 
+    public CompletableFuture<ScanOutcome> scanRange(
+            TreeRecord tree, byte[] start, Optional<byte[]> end, EntryScanVisitor visitor) {
+        return supply(() -> inner.scanRange(tree, start, end, visitor));
+    }
+
+    public CompletableFuture<ScanOutcome> scanPrefix(
+            TreeRecord tree, byte[] prefix, EntryScanVisitor visitor) {
+        return supply(() -> inner.scanPrefix(tree, prefix, visitor));
+    }
+
+    public CompletableFuture<ScanOutcome> scanRangeReverse(
+            TreeRecord tree, byte[] start, Optional<byte[]> end, EntryScanVisitor visitor) {
+        return supply(() -> inner.scanRangeReverse(tree, start, end, visitor));
+    }
+
+    public CompletableFuture<ScanOutcome> scanPrefixReverse(
+            TreeRecord tree, byte[] prefix, EntryScanVisitor visitor) {
+        return supply(() -> inner.scanPrefixReverse(tree, prefix, visitor));
+    }
+
     public CompletableFuture<List<Entry>> rangeAfter(TreeRecord tree, byte[] afterKey, Optional<byte[]> end) {
         return supply(() -> inner.rangeAfter(tree, afterKey, end));
     }
@@ -300,6 +320,20 @@ public final class AsyncProlly implements AutoCloseable {
         return supply(() -> inner.rangeDiff(base, other, start, end));
     }
 
+    public CompletableFuture<ScanOutcome> scanDiff(
+            TreeRecord base, TreeRecord other, DiffScanVisitor visitor) {
+        return supply(() -> inner.scanDiff(base, other, visitor));
+    }
+
+    public CompletableFuture<ScanOutcome> scanRangeDiff(
+            TreeRecord base,
+            TreeRecord other,
+            byte[] start,
+            Optional<byte[]> end,
+            DiffScanVisitor visitor) {
+        return supply(() -> inner.scanRangeDiff(base, other, start, end, visitor));
+    }
+
     public CompletableFuture<List<DiffRecord>> diffFromCursor(
             TreeRecord base,
             TreeRecord other,
@@ -324,6 +358,14 @@ public final class AsyncProlly implements AutoCloseable {
             RangeCursorRecord cursor,
             long limit) {
         return supply(() -> inner.conflictPage(base, left, right, cursor, limit));
+    }
+
+    public CompletableFuture<ScanOutcome> scanConflicts(
+            TreeRecord base,
+            TreeRecord left,
+            TreeRecord right,
+            ConflictScanVisitor visitor) {
+        return supply(() -> inner.scanConflicts(base, left, right, visitor));
     }
 
     public CompletableFuture<TreeRecord> merge(TreeRecord base, TreeRecord left, TreeRecord right, String resolver) {
