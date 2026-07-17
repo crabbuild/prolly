@@ -76,6 +76,28 @@ class PortableParityTest < Minitest::Test
     end
   end
 
+  def test_versioned_batch_cas_and_pinned_point_reads
+    Prolly::Engine.memory.use do |engine|
+      versioned = engine.versioned_map('versioned-cas'.b)
+      versioned.initialize_map
+      first = versioned.apply([
+        Prolly::MutationRecord.new(kind: Prolly::MutationKind::UPSERT, key: 'a'.b, value: 'one'.b),
+        Prolly::MutationRecord.new(kind: Prolly::MutationKind::UPSERT, key: 'b'.b, value: 'two'.b)
+      ])
+      assert versioned.contains?('a'.b)
+      assert_equal ['one'.b, nil], versioned.get_many(['a'.b, 'missing'.b])
+      applied = versioned.put_if(first.id, 'a'.b, 'updated'.b)
+      assert_equal Prolly::MapUpdateKind::APPLIED, applied.kind
+      assert_equal Prolly::MapUpdateKind::CONFLICT, versioned.delete_if(first.id, 'b'.b).kind
+      assert_equal ['one'.b, 'two'.b], versioned.get_many_at(first.id, ['a'.b, 'b'.b])
+      assert_equal 'one'.b, versioned.get_at(first.id, 'a'.b)
+      result = versioned.apply_if(applied.current.id, [
+        Prolly::MutationRecord.new(kind: Prolly::MutationKind::DELETE, key: 'b'.b, value: nil)
+      ])
+      assert_equal Prolly::MapUpdateKind::APPLIED, result.kind
+    end
+  end
+
   def test_proofs_sessions_and_maintenance_are_application_facing
     Prolly::Engine.memory.use do |engine|
       versioned = engine.versioned_map('proofs'.b)

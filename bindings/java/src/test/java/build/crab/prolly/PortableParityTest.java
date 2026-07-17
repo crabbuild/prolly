@@ -10,6 +10,8 @@ import build.crab.prolly.javaapi.IndexEntry;
 import build.crab.prolly.javaapi.IndexProjection;
 import build.crab.prolly.javaapi.IndexedMutation;
 import build.crab.prolly.javaapi.IndexedUpdateKind;
+import build.crab.prolly.javaapi.MapMutation;
+import build.crab.prolly.javaapi.MapUpdateKind;
 import build.crab.prolly.javaapi.ProximityRecord;
 import build.crab.prolly.javaapi.ProximityMutation;
 import build.crab.prolly.javaapi.Proofs;
@@ -245,6 +247,29 @@ class PortableParityTest {
                 assertArrayEquals(first.id(), historical.version().id());
                 assertArrayEquals(bytes("v1"), historical.get(bytes("k")).orElseThrow());
             }
+        }
+    }
+
+    @Test
+    void versionedMapExposesOwnedBatchCasAndVersionPinnedPointReads() {
+        Prolly.useLocalDebugLibrary();
+        try (Engine engine = Engine.memory(); var map = engine.versionedMap(bytes("versioned-cas"))) {
+            map.initialize();
+            var first = map.apply(List.of(
+                    MapMutation.upsert(bytes("a"), bytes("one")),
+                    MapMutation.upsert(bytes("b"), bytes("two"))));
+            assertTrue(map.containsKey(bytes("a")));
+            assertArrayEquals(bytes("one"), map.getMany(List.of(bytes("a"), bytes("missing"))).get(0).orElseThrow());
+            assertTrue(map.getMany(List.of(bytes("missing"))).get(0).isEmpty());
+            var applied = map.putIf(first.id(), bytes("a"), bytes("updated"));
+            assertEquals(MapUpdateKind.APPLIED, applied.kind());
+            assertEquals(MapUpdateKind.CONFLICT, map.deleteIf(first.id(), bytes("b")).kind());
+            var historical = map.getManyAt(first.id(), List.of(bytes("a"), bytes("b")));
+            assertArrayEquals(bytes("one"), historical.get(0).orElseThrow());
+            assertArrayEquals(bytes("two"), historical.get(1).orElseThrow());
+            assertArrayEquals(bytes("one"), map.getAt(first.id(), bytes("a")).orElseThrow());
+            assertEquals(MapUpdateKind.APPLIED,
+                    map.applyIf(applied.current().id(), List.of(MapMutation.delete(bytes("b")))).kind());
         }
     }
 

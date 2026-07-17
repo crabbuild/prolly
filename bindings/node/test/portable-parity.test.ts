@@ -103,6 +103,31 @@ test("versioned maps expose identity and historical snapshot lifecycle", async (
   }
 });
 
+test("versioned maps expose owned batch CAS and version-pinned point reads", async () => {
+  const engine = await Engine.memory();
+  try {
+    const map = engine.versionedMap(bytes("versioned-cas"));
+    await map.initialize();
+    const first = await map.apply([
+      { kind: "upsert", key: bytes("a"), value: bytes("one") },
+      { kind: "upsert", key: bytes("b"), value: bytes("two") },
+    ]);
+    assert.equal(await map.containsKey(bytes("a")), true);
+    assert.deepEqual((await map.getMany([bytes("a"), bytes("missing")])).map((value) => value == null ? undefined : Buffer.from(value).toString()), ["one", undefined]);
+    const applied = await map.putIf(first.id, bytes("a"), bytes("updated"));
+    assert.equal(applied.kind, "applied");
+    const conflict = await map.deleteIf(first.id, bytes("b"));
+    assert.equal(conflict.kind, "conflict");
+    const values = await map.getManyAt(first.id, [bytes("a"), bytes("b")]);
+    assert.deepEqual(values.map((value) => Buffer.from(value ?? []).toString()), ["one", "two"]);
+    assert.equal(Buffer.from(await map.getAt(first.id, bytes("a")) ?? []).toString(), "one");
+    const batch = await map.applyIf(applied.current!.id, [{ kind: "delete", key: bytes("b") }]);
+    assert.equal(batch.kind, "applied");
+  } finally {
+    engine.close();
+  }
+});
+
 test("proofs, retained sessions, and maintenance stay native", async () => {
   const engine = await Engine.memory();
   try {

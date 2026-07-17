@@ -11,12 +11,12 @@ use prolly_bindings::{
     IndexMatchRecord, IndexPageRecord, IndexProjectionRecord, IndexVerificationRecord,
     IndexedMapHealthRecord, IndexedMapMetricsRecord, IndexedRetentionRecord,
     IndexedSnapshotIdRecord, IndexedSourceRecord, IndexedUpdateKind, IndexedUpdateRecord,
-    IndexedVersionRecord, KeyProofRecord, MapVersionRecord, ProllyBindingError, ProllyReadSession,
-    ProximityConfigRecord, ProximityMembershipProofRecord, ProximityMutationRecord,
-    ProximityMutationStatsRecord, ProximityNeighborRecord, ProximityRecordRecord,
-    ProximitySearchClaimKindRecord, ProximitySearchResultRecord, ProximityStructuralProofRecord,
-    ProximityVerificationRecord, SearchBackendRecord, SearchCompletionRecord,
-    SecondaryIndexExtractorCallback,
+    IndexedVersionRecord, KeyProofRecord, MapUpdateKind, MapUpdateRecord, MapVersionRecord,
+    ProllyBindingError, ProllyReadSession, ProximityConfigRecord, ProximityMembershipProofRecord,
+    ProximityMutationRecord, ProximityMutationStatsRecord, ProximityNeighborRecord,
+    ProximityRecordRecord, ProximitySearchClaimKindRecord, ProximitySearchResultRecord,
+    ProximityStructuralProofRecord, ProximityVerificationRecord, SearchBackendRecord,
+    SearchCompletionRecord, SecondaryIndexExtractorCallback,
 };
 use std::sync::Arc;
 
@@ -35,6 +35,28 @@ impl From<MapVersionRecord> for NodePortableMapVersion {
             tree: value.tree.into(),
             created_at_millis: value.created_at_millis.map(|value| value.to_string()),
             is_head: value.is_head,
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NodePortableMapUpdate {
+    pub kind: String,
+    pub previous: Option<Buffer>,
+    pub current: Option<NodePortableMapVersion>,
+}
+
+impl From<MapUpdateRecord> for NodePortableMapUpdate {
+    fn from(value: MapUpdateRecord) -> Self {
+        let kind = match value.kind {
+            MapUpdateKind::Applied => "applied",
+            MapUpdateKind::Unchanged => "unchanged",
+            MapUpdateKind::Conflict => "conflict",
+        };
+        Self {
+            kind: kind.to_string(),
+            previous: value.previous.map(Buffer::from),
+            current: value.current.map(Into::into),
         }
     }
 }
@@ -679,10 +701,109 @@ impl NativePortableVersionedMap {
             .map_err(to_napi_error)
     }
 
+    #[napi(js_name = "containsKey")]
+    pub fn contains_key(&self, key: Buffer) -> Result<bool> {
+        self.inner.contains_key(key.to_vec()).map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "getMany")]
+    pub fn get_many(&self, keys: Vec<Buffer>) -> Result<Vec<Option<Buffer>>> {
+        self.inner
+            .get_many(keys.into_iter().map(|value| value.to_vec()).collect())
+            .map(|values| {
+                values
+                    .into_iter()
+                    .map(|value| value.map(Buffer::from))
+                    .collect()
+            })
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "getAt")]
+    pub fn get_at(&self, id: Buffer, key: Buffer) -> Result<Option<Buffer>> {
+        self.inner
+            .get_at(id.to_vec(), key.to_vec())
+            .map(|value| value.map(Buffer::from))
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "getManyAt")]
+    pub fn get_many_at(&self, id: Buffer, keys: Vec<Buffer>) -> Result<Vec<Option<Buffer>>> {
+        self.inner
+            .get_many_at(
+                id.to_vec(),
+                keys.into_iter().map(|value| value.to_vec()).collect(),
+            )
+            .map(|values| {
+                values
+                    .into_iter()
+                    .map(|value| value.map(Buffer::from))
+                    .collect()
+            })
+            .map_err(to_napi_error)
+    }
+
     #[napi]
     pub fn put(&self, key: Buffer, value: Buffer) -> Result<NodePortableMapVersion> {
         self.inner
             .put(key.to_vec(), value.to_vec())
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi]
+    pub fn apply(&self, mutations: Vec<NodeMutationRecord>) -> Result<NodePortableMapVersion> {
+        let mutations = mutations
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect::<Result<Vec<_>>>()?;
+        self.inner
+            .apply(mutations)
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "applyIf")]
+    pub fn apply_if(
+        &self,
+        expected: Option<Buffer>,
+        mutations: Vec<NodeMutationRecord>,
+    ) -> Result<NodePortableMapUpdate> {
+        let mutations = mutations
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect::<Result<Vec<_>>>()?;
+        self.inner
+            .apply_if(expected.map(|value| value.to_vec()), mutations)
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "putIf")]
+    pub fn put_if(
+        &self,
+        expected: Option<Buffer>,
+        key: Buffer,
+        value: Buffer,
+    ) -> Result<NodePortableMapUpdate> {
+        self.inner
+            .put_if(
+                expected.map(|value| value.to_vec()),
+                key.to_vec(),
+                value.to_vec(),
+            )
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "deleteIf")]
+    pub fn delete_if(
+        &self,
+        expected: Option<Buffer>,
+        key: Buffer,
+    ) -> Result<NodePortableMapUpdate> {
+        self.inner
+            .delete_if(expected.map(|value| value.to_vec()), key.to_vec())
             .map(Into::into)
             .map_err(to_napi_error)
     }

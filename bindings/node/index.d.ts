@@ -9,6 +9,11 @@ export interface NodePortableMapVersion {
   createdAtMillis?: string
   isHead: boolean
 }
+export interface NodePortableMapUpdate {
+  kind: string
+  previous?: Buffer
+  current?: NodePortableMapVersion
+}
 export interface NodePortableIndexEntry {
   term: Buffer
   projection?: Buffer
@@ -894,7 +899,15 @@ export declare class NativePortableVersionedMap {
   version(id: Buffer): NodePortableMapVersion | null
   versions(): Array<NodePortableMapVersion>
   get(key: Buffer): Buffer | null
+  containsKey(key: Buffer): boolean
+  getMany(keys: Array<Buffer>): Array<Buffer | undefined | null>
+  getAt(id: Buffer, key: Buffer): Buffer | null
+  getManyAt(id: Buffer, keys: Array<Buffer>): Array<Buffer | undefined | null>
   put(key: Buffer, value: Buffer): NodePortableMapVersion
+  apply(mutations: Array<NodeMutationRecord>): NodePortableMapVersion
+  applyIf(expected: Buffer | undefined | null, mutations: Array<NodeMutationRecord>): NodePortableMapUpdate
+  putIf(expected: Buffer | undefined | null, key: Buffer, value: Buffer): NodePortableMapUpdate
+  deleteIf(expected: Buffer | undefined | null, key: Buffer): NodePortableMapUpdate
   delete(key: Buffer): NodePortableMapVersion
   snapshot(): NativePortableMapSnapshot | null
   snapshotAt(id: Buffer): NativePortableMapSnapshot | null

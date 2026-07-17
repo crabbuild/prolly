@@ -911,12 +911,40 @@ export interface WasmMapVersion {
   isHead: boolean;
 }
 
+export interface WasmMapMutation {
+  kind: "upsert" | "delete";
+  key: Uint8Array;
+  value?: Uint8Array;
+}
+
+export interface WasmMapUpdate {
+  kind: "applied" | "unchanged" | "conflict";
+  previous?: Uint8Array;
+  current?: WasmMapVersion;
+}
+
 function wasmMapVersion(value: any): WasmMapVersion {
   return {
     id: value.id,
     createdAtMillis: value.createdAtMillis == null ? undefined : BigInt(value.createdAtMillis),
     isHead: value.isHead,
   };
+}
+
+function wasmMapUpdate(value: any): WasmMapUpdate {
+  return {
+    kind: value.kind,
+    previous: value.previous ?? undefined,
+    current: value.current == null ? undefined : wasmMapVersion(value.current),
+  };
+}
+
+function ownedWasmMutations(mutations: readonly WasmMapMutation[]): WasmMapMutation[] {
+  return mutations.map((mutation) => ({
+    kind: mutation.kind,
+    key: ownedPortableBytes(mutation.key),
+    value: mutation.value == null ? undefined : ownedPortableBytes(mutation.value),
+  }));
 }
 
 export class WasmVersionedMap implements Disposable {
@@ -961,9 +989,46 @@ export class WasmVersionedMap implements Disposable {
     const native = this.#open(); key = ownedPortableBytes(key);
     return portablePromise(signal, () => native.get(key) ?? undefined);
   }
+  containsKey(key: Uint8Array, signal?: AbortSignal): Promise<boolean> {
+    const native = this.#open(); key = ownedPortableBytes(key);
+    return portablePromise(signal, () => native.containsKey(key));
+  }
+  getMany(keys: readonly Uint8Array[], signal?: AbortSignal): Promise<Array<Uint8Array | undefined>> {
+    const native = this.#open(); const owned = keys.map(ownedPortableBytes);
+    return portablePromise(signal, () => native.getMany(owned).map((value: Uint8Array | null) => value ?? undefined));
+  }
+  getAt(id: Uint8Array, key: Uint8Array, signal?: AbortSignal): Promise<Uint8Array | undefined> {
+    const native = this.#open(); id = ownedPortableBytes(id); key = ownedPortableBytes(key);
+    return portablePromise(signal, () => native.getAt(id, key) ?? undefined);
+  }
+  getManyAt(id: Uint8Array, keys: readonly Uint8Array[], signal?: AbortSignal): Promise<Array<Uint8Array | undefined>> {
+    const native = this.#open(); id = ownedPortableBytes(id); const owned = keys.map(ownedPortableBytes);
+    return portablePromise(signal, () => native.getManyAt(id, owned).map((value: Uint8Array | null) => value ?? undefined));
+  }
   put(key: Uint8Array, value: Uint8Array, signal?: AbortSignal): Promise<WasmMapVersion> {
     const native = this.#open(); key = ownedPortableBytes(key); value = ownedPortableBytes(value);
     return portablePromise(signal, () => wasmMapVersion(native.put(key, value)));
+  }
+  apply(mutations: readonly WasmMapMutation[], signal?: AbortSignal): Promise<WasmMapVersion> {
+    const native = this.#open(); const owned = ownedWasmMutations(mutations);
+    return portablePromise(signal, () => wasmMapVersion(native.apply(owned)));
+  }
+  applyIf(expected: Uint8Array | undefined, mutations: readonly WasmMapMutation[], signal?: AbortSignal): Promise<WasmMapUpdate> {
+    const native = this.#open();
+    const ownedExpected = expected == null ? undefined : ownedPortableBytes(expected);
+    const owned = ownedWasmMutations(mutations);
+    return portablePromise(signal, () => wasmMapUpdate(native.applyIf(ownedExpected, owned)));
+  }
+  putIf(expected: Uint8Array | undefined, key: Uint8Array, value: Uint8Array, signal?: AbortSignal): Promise<WasmMapUpdate> {
+    const native = this.#open();
+    const ownedExpected = expected == null ? undefined : ownedPortableBytes(expected);
+    key = ownedPortableBytes(key); value = ownedPortableBytes(value);
+    return portablePromise(signal, () => wasmMapUpdate(native.putIf(ownedExpected, key, value)));
+  }
+  deleteIf(expected: Uint8Array | undefined, key: Uint8Array, signal?: AbortSignal): Promise<WasmMapUpdate> {
+    const native = this.#open();
+    const ownedExpected = expected == null ? undefined : ownedPortableBytes(expected); key = ownedPortableBytes(key);
+    return portablePromise(signal, () => wasmMapUpdate(native.deleteIf(ownedExpected, key)));
   }
   delete(key: Uint8Array, signal?: AbortSignal): Promise<WasmMapVersion> {
     const native = this.#open(); key = ownedPortableBytes(key);

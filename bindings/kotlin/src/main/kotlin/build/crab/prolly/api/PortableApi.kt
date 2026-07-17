@@ -80,7 +80,19 @@ class VersionedMap(internal val native: BindingVersionedMap) : AutoCloseable {
     fun headId() = native.headId()
     fun version(id: ByteArray) = native.version(id.copyOf())
     fun get(key: ByteArray) = native.get(key.copyOf())
+    fun containsKey(key: ByteArray) = native.containsKey(key.copyOf())
+    fun getMany(keys: List<ByteArray>) = native.getMany(keys.map(ByteArray::copyOf))
+    fun getAt(id: ByteArray, key: ByteArray) = native.getAt(id.copyOf(), key.copyOf())
+    fun getManyAt(id: ByteArray, keys: List<ByteArray>) =
+        native.getManyAt(id.copyOf(), keys.map(ByteArray::copyOf))
     fun put(key: ByteArray, value: ByteArray) = native.put(key.copyOf(), value.copyOf())
+    fun apply(mutations: List<MutationRecord>) = native.apply(mutations.map(::ownedMutation))
+    fun applyIf(expected: ByteArray?, mutations: List<MutationRecord>) =
+        native.applyIf(expected?.copyOf(), mutations.map(::ownedMutation))
+    fun putIf(expected: ByteArray?, key: ByteArray, value: ByteArray) =
+        native.putIf(expected?.copyOf(), key.copyOf(), value.copyOf())
+    fun deleteIf(expected: ByteArray?, key: ByteArray) =
+        native.deleteIf(expected?.copyOf(), key.copyOf())
     fun delete(key: ByteArray) = native.delete(key.copyOf())
     fun snapshot() = native.snapshot()?.let(::MapSnapshot)
     fun snapshotAt(id: ByteArray) = native.snapshotAt(id.copyOf())?.let(::MapSnapshot)
@@ -100,6 +112,10 @@ class VersionedMap(internal val native: BindingVersionedMap) : AutoCloseable {
         }
     override fun close() = native.close()
 }
+
+private fun ownedMutation(mutation: MutationRecord) = MutationRecord(
+    mutation.kind, mutation.key.copyOf(), mutation.value?.copyOf(),
+)
 
 class MapSnapshot(internal val native: BindingMapSnapshot) : AutoCloseable {
     val id: ByteArray get() = native.id()

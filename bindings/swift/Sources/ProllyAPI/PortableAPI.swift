@@ -112,8 +112,36 @@ public final class VersionedMap: @unchecked Sendable {
     }
     public func versions() throws -> [MapVersionRecord] { try open { try native.versions() } }
     public func get(_ key: Data) throws -> Data? { try open { try native.get(key: Data(key)) } }
+    public func contains(_ key: Data) throws -> Bool {
+        try open { try native.containsKey(key: Data(key)) }
+    }
+    public func getMany(_ keys: [Data]) throws -> [Data?] {
+        try open { try native.getMany(keys: keys.map { Data($0) }) }
+    }
+    public func get(at id: Data, key: Data) throws -> Data? {
+        try open { try native.getAt(id: Data(id), key: Data(key)) }
+    }
+    public func getMany(at id: Data, keys: [Data]) throws -> [Data?] {
+        try open { try native.getManyAt(id: Data(id), keys: keys.map { Data($0) }) }
+    }
     public func put(_ key: Data, value: Data) throws -> MapVersionRecord {
         try open { try native.put(key: Data(key), value: Data(value)) }
+    }
+    public func apply(_ mutations: [MutationRecord]) throws -> MapVersionRecord {
+        try open { try native.apply(mutations: mutations.map(ownedMutation)) }
+    }
+    public func applyIf(expected: Data?, mutations: [MutationRecord]) throws -> MapUpdateRecord {
+        try open {
+            try native.applyIf(expected: expected.map { Data($0) }, mutations: mutations.map(ownedMutation))
+        }
+    }
+    public func putIf(expected: Data?, key: Data, value: Data) throws -> MapUpdateRecord {
+        try open {
+            try native.putIf(expected: expected.map { Data($0) }, key: Data(key), value: Data(value))
+        }
+    }
+    public func deleteIf(expected: Data?, key: Data) throws -> MapUpdateRecord {
+        try open { try native.deleteIf(expected: expected.map { Data($0) }, key: Data(key)) }
     }
     public func delete(_ key: Data) throws -> MapVersionRecord {
         try open { try native.delete(key: Data(key)) }
@@ -150,6 +178,14 @@ public final class VersionedMap: @unchecked Sendable {
         if closed { throw PortableAPIError.closed("VersionedMap") }
         return try body()
     }
+}
+
+private func ownedMutation(_ mutation: MutationRecord) -> MutationRecord {
+    MutationRecord(
+        kind: mutation.kind,
+        key: Data(mutation.key),
+        value: mutation.value.map { Data($0) }
+    )
 }
 
 public final class MapSnapshot: @unchecked Sendable {

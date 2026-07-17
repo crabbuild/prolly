@@ -1,7 +1,7 @@
 use super::{js_error, optional_bytes, WasmProllyEngine};
 use crate::page::set_bytes;
-use js_sys::{Object, Reflect, Uint8Array};
-use prolly::{KeyProof, MapVersionId, OwnedReadSession};
+use js_sys::{Array, Object, Reflect, Uint8Array};
+use prolly::{KeyProof, MapVersionId, OwnedReadSession, VersionedMapUpdate};
 use std::sync::Arc;
 use wasm_bindgen::prelude::*;
 
@@ -79,12 +79,131 @@ impl WasmVersionedMap {
             .map_err(js_error)
     }
 
+    #[wasm_bindgen(js_name = containsKey)]
+    pub fn contains_key(&self, key: Uint8Array) -> Result<bool, JsValue> {
+        self.engine
+            .versioned_map(&self.id)
+            .get(&key.to_vec())
+            .map(|value| value.is_some())
+            .map_err(js_error)
+    }
+
+    #[wasm_bindgen(js_name = getMany)]
+    pub fn get_many(&self, keys: Array) -> Result<Array, JsValue> {
+        let keys = keys
+            .iter()
+            .map(|value| Uint8Array::new(&value).to_vec())
+            .collect::<Vec<_>>();
+        let values = self
+            .engine
+            .versioned_map(&self.id)
+            .get_many(&keys)
+            .map_err(js_error)?;
+        let result = Array::new();
+        for value in values {
+            result.push(&optional_bytes(value));
+        }
+        Ok(result)
+    }
+
+    #[wasm_bindgen(js_name = getAt)]
+    pub fn get_at(&self, id: Uint8Array, key: Uint8Array) -> Result<JsValue, JsValue> {
+        let id = MapVersionId::from_bytes(&id.to_vec()).map_err(js_error)?;
+        self.engine
+            .versioned_map(&self.id)
+            .get_at(&id, &key.to_vec())
+            .map(optional_bytes)
+            .map_err(js_error)
+    }
+
+    #[wasm_bindgen(js_name = getManyAt)]
+    pub fn get_many_at(&self, id: Uint8Array, keys: Array) -> Result<Array, JsValue> {
+        let id = MapVersionId::from_bytes(&id.to_vec()).map_err(js_error)?;
+        let keys = keys
+            .iter()
+            .map(|value| Uint8Array::new(&value).to_vec())
+            .collect::<Vec<_>>();
+        let values = self
+            .engine
+            .versioned_map(&self.id)
+            .get_many_at(&id, &keys)
+            .map_err(js_error)?;
+        let result = Array::new();
+        for value in values {
+            result.push(&optional_bytes(value));
+        }
+        Ok(result)
+    }
+
     pub fn put(&self, key: Uint8Array, value: Uint8Array) -> Result<Object, JsValue> {
         self.engine
             .versioned_map(&self.id)
             .put(key.to_vec(), value.to_vec())
             .map_err(js_error)
             .and_then(map_version_object)
+    }
+
+    pub fn apply(&self, mutations: Array) -> Result<Object, JsValue> {
+        self.engine
+            .versioned_map(&self.id)
+            .apply(crate::indexed::mutations_from_array(&mutations)?)
+            .map_err(js_error)
+            .and_then(map_version_object)
+    }
+
+    #[wasm_bindgen(js_name = applyIf)]
+    pub fn apply_if(
+        &self,
+        expected: Option<Uint8Array>,
+        mutations: Array,
+    ) -> Result<Object, JsValue> {
+        let expected = expected
+            .map(|value| MapVersionId::from_bytes(&value.to_vec()))
+            .transpose()
+            .map_err(js_error)?;
+        self.engine
+            .versioned_map(&self.id)
+            .apply_if(
+                expected.as_ref(),
+                crate::indexed::mutations_from_array(&mutations)?,
+            )
+            .map_err(js_error)
+            .and_then(map_update_object)
+    }
+
+    #[wasm_bindgen(js_name = putIf)]
+    pub fn put_if(
+        &self,
+        expected: Option<Uint8Array>,
+        key: Uint8Array,
+        value: Uint8Array,
+    ) -> Result<Object, JsValue> {
+        let expected = expected
+            .map(|value| MapVersionId::from_bytes(&value.to_vec()))
+            .transpose()
+            .map_err(js_error)?;
+        self.engine
+            .versioned_map(&self.id)
+            .put_if(expected.as_ref(), key.to_vec(), value.to_vec())
+            .map_err(js_error)
+            .and_then(map_update_object)
+    }
+
+    #[wasm_bindgen(js_name = deleteIf)]
+    pub fn delete_if(
+        &self,
+        expected: Option<Uint8Array>,
+        key: Uint8Array,
+    ) -> Result<Object, JsValue> {
+        let expected = expected
+            .map(|value| MapVersionId::from_bytes(&value.to_vec()))
+            .transpose()
+            .map_err(js_error)?;
+        self.engine
+            .versioned_map(&self.id)
+            .delete_if(expected.as_ref(), key.to_vec())
+            .map_err(js_error)
+            .and_then(map_update_object)
     }
 
     pub fn delete(&self, key: Uint8Array) -> Result<Object, JsValue> {
@@ -292,5 +411,27 @@ fn map_version_object(version: prolly::MapVersion) -> Result<Object, JsValue> {
         &"isHead".into(),
         &JsValue::from_bool(version.is_head),
     )?;
+    Ok(object)
+}
+
+fn map_update_object(update: VersionedMapUpdate) -> Result<Object, JsValue> {
+    let object = Object::new();
+    let (kind, previous, current) = match update {
+        VersionedMapUpdate::Applied { previous, current } => (
+            "applied",
+            previous.map(|value| value.into_cid().0.to_vec()),
+            Some(current),
+        ),
+        VersionedMapUpdate::Unchanged { current } => ("unchanged", None, current),
+        VersionedMapUpdate::Conflict { current } => ("conflict", None, current),
+    };
+    Reflect::set(&object, &"kind".into(), &kind.into())?;
+    Reflect::set(&object, &"previous".into(), &optional_bytes(previous))?;
+    let current = current
+        .map(map_version_object)
+        .transpose()?
+        .map(JsValue::from)
+        .unwrap_or(JsValue::UNDEFINED);
+    Reflect::set(&object, &"current".into(), &current)?;
     Ok(object)
 }

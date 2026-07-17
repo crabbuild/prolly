@@ -48,8 +48,48 @@ public final class VersionedMap implements AutoCloseable {
         return Optional.ofNullable(value == null ? null : value.clone());
     }
 
+    public boolean containsKey(byte[] key) { return open().containsKey(key.clone()); }
+
+    public List<Optional<byte[]>> getMany(List<byte[]> keys) {
+        return open().getMany(keys.stream().map(byte[]::clone).toList()).stream()
+                .map(value -> Optional.ofNullable(value == null ? null : value.clone()))
+                .toList();
+    }
+
+    public Optional<byte[]> getAt(byte[] id, byte[] key) {
+        byte[] value = open().getAt(id.clone(), key.clone());
+        return Optional.ofNullable(value == null ? null : value.clone());
+    }
+
+    public List<Optional<byte[]>> getManyAt(byte[] id, List<byte[]> keys) {
+        return open().getManyAt(id.clone(), keys.stream().map(byte[]::clone).toList()).stream()
+                .map(value -> Optional.ofNullable(value == null ? null : value.clone()))
+                .toList();
+    }
+
     public MapVersion put(byte[] key, byte[] value) {
         return MapVersion.fromNative(open().put(key.clone(), value.clone()));
+    }
+
+    public MapVersion apply(List<MapMutation> mutations) {
+        return MapVersion.fromNative(build.crab.prolly.api.JavaPortableBridge.applyVersioned(
+                open(), mutations.stream().map(MapMutation::toBridge).toList()));
+    }
+
+    public MapUpdate applyIf(byte[] expected, List<MapMutation> mutations) {
+        return MapUpdate.fromBridge(build.crab.prolly.api.JavaPortableBridge.applyVersionedIf(
+                open(), expected == null ? null : expected.clone(),
+                mutations.stream().map(MapMutation::toBridge).toList()));
+    }
+
+    public MapUpdate putIf(byte[] expected, byte[] key, byte[] value) {
+        return MapUpdate.fromBridge(build.crab.prolly.api.JavaPortableBridge.putVersionedIf(
+                open(), expected == null ? null : expected.clone(), key.clone(), value.clone()));
+    }
+
+    public MapUpdate deleteIf(byte[] expected, byte[] key) {
+        return MapUpdate.fromBridge(build.crab.prolly.api.JavaPortableBridge.deleteVersionedIf(
+                open(), expected == null ? null : expected.clone(), key.clone()));
     }
 
     public MapVersion delete(byte[] key) {

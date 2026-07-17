@@ -202,7 +202,15 @@ module Prolly
     def id = open! { @native.id }
     def ensure_index(name) = open! { @native.ensure_index(name.b) }
     def get(key) = open! { @native.get(key.b) }
+    def contains?(key) = open! { @native.contains_key(key.b) }
+    def get_many(keys) = open! { @native.get_many(keys.map(&:b)) }
+    def get_at(id, key) = open! { @native.get_at(id.b, key.b) }
+    def get_many_at(id, keys) = open! { @native.get_many_at(id.b, keys.map(&:b)) }
     def put(key, value) = open! { @native.put(key.b, value.b) }
+    def apply(mutations) = open! { @native.apply(owned_mutations(mutations)) }
+    def apply_if(expected, mutations) = open! { @native.apply_if(expected&.b, owned_mutations(mutations)) }
+    def put_if(expected, key, value) = open! { @native.put_if(expected&.b, key.b, value.b) }
+    def delete_if(expected, key) = open! { @native.delete_if(expected&.b, key.b) }
     def apply(mutations) = open! { @native.apply(mutations) }
     def apply_if(expected_source, mutations) = open! { @native.apply_if(expected_source&.b, mutations) }
     def delete(key) = open! { @native.delete(key.b) }
@@ -221,6 +229,14 @@ module Prolly
     def close = @closed = true
 
     private
+
+    def owned_mutations(mutations)
+      mutations.map do |mutation|
+        MutationRecord.new(
+          kind: mutation.kind, key: mutation.key.b.dup, value: mutation.value&.b&.dup
+        )
+      end
+    end
 
     def open!
       raise 'indexed map is closed' if @closed

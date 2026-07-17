@@ -103,6 +103,26 @@ class PortableParityTests(unittest.TestCase):
                 self.assertEqual(historical.version.id, first.id)
                 self.assertEqual(historical.get(b"k"), b"v1")
 
+    def test_versioned_batch_cas_and_pinned_point_reads(self):
+        with Engine.memory() as engine:
+            versioned = engine.versioned_map(b"versioned-cas")
+            versioned.initialize()
+            first = versioned.apply([
+                MutationRecord(kind=MutationKind.UPSERT, key=b"a", value=b"one"),
+                MutationRecord(kind=MutationKind.UPSERT, key=b"b", value=b"two"),
+            ])
+            self.assertTrue(versioned.contains(b"a"))
+            self.assertEqual(versioned.get_many([b"a", b"missing"]), [b"one", None])
+            applied = versioned.put_if(first.id, b"a", b"updated")
+            self.assertEqual(applied.kind.name, "APPLIED")
+            self.assertEqual(versioned.delete_if(first.id, b"b").kind.name, "CONFLICT")
+            self.assertEqual(versioned.get_many_at(first.id, [b"a", b"b"]), [b"one", b"two"])
+            self.assertEqual(versioned.get_at(first.id, b"a"), b"one")
+            result = versioned.apply_if(applied.current.id, [
+                MutationRecord(kind=MutationKind.DELETE, key=b"b", value=None)
+            ])
+            self.assertEqual(result.kind.name, "APPLIED")
+
     def test_proofs_sessions_and_maintenance_are_application_facing(self):
         with Engine.memory() as engine:
             versioned = engine.versioned_map(b"proofs")

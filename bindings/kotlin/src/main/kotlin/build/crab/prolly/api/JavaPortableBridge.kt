@@ -21,6 +21,8 @@ import build.crab.prolly.ProximityStructuralProofRecord
 import build.crab.prolly.ProximityStructuralVerificationRecord
 import build.crab.prolly.IndexedMapMetricsRecord
 import build.crab.prolly.MapCatalogVerificationRecord
+import build.crab.prolly.MapUpdateRecord
+import build.crab.prolly.MapVersionRecord
 import build.crab.prolly.MutationKind
 import build.crab.prolly.MutationRecord
 import build.crab.prolly.ProximityVerificationRecord
@@ -33,6 +35,18 @@ data class JavaIndexedMutation(
     val kind: String,
     val key: ByteArray,
     val value: ByteArray?,
+)
+
+data class JavaMapMutation(
+    val kind: String,
+    val key: ByteArray,
+    val value: ByteArray?,
+)
+
+data class JavaMapUpdate(
+    val kind: String,
+    val previous: ByteArray?,
+    val current: MapVersionRecord?,
 )
 
 data class JavaIndexedVersion(
@@ -138,6 +152,10 @@ data class JavaIndexedSource(
 
 private fun IndexedVersionRecord.toJava() = JavaIndexedVersion(
     sourceVersion, catalogVersion, indexCount.toLong(),
+)
+
+private fun MapUpdateRecord.toJava() = JavaMapUpdate(
+    kind.name.lowercase(), previous, current,
 )
 
 private fun IndexBuildResultRecord.toJava() = JavaIndexBuildResult(
@@ -259,6 +277,41 @@ private fun ProximityVerificationRecord.toJava() = JavaProximityVerification(
 object JavaPortableBridge {
     @JvmStatic
     fun memory(): Engine = Engine.memory()
+
+    private fun JavaMapMutation.toNative(): MutationRecord {
+        val mutationKind = when (kind) {
+            "upsert" -> MutationKind.UPSERT
+            "delete" -> MutationKind.DELETE
+            else -> throw IllegalArgumentException("unknown map mutation kind: $kind")
+        }
+        return MutationRecord(mutationKind, key.copyOf(), value?.copyOf())
+    }
+
+    @JvmStatic
+    fun applyVersioned(map: VersionedMap, mutations: List<JavaMapMutation>): MapVersionRecord =
+        map.apply(mutations.map { it.toNative() })
+
+    @JvmStatic
+    fun applyVersionedIf(
+        map: VersionedMap,
+        expected: ByteArray?,
+        mutations: List<JavaMapMutation>,
+    ): JavaMapUpdate = map.applyIf(expected?.copyOf(), mutations.map { it.toNative() }).toJava()
+
+    @JvmStatic
+    fun putVersionedIf(
+        map: VersionedMap,
+        expected: ByteArray?,
+        key: ByteArray,
+        value: ByteArray,
+    ): JavaMapUpdate = map.putIf(expected?.copyOf(), key.copyOf(), value.copyOf()).toJava()
+
+    @JvmStatic
+    fun deleteVersionedIf(
+        map: VersionedMap,
+        expected: ByteArray?,
+        key: ByteArray,
+    ): JavaMapUpdate = map.deleteIf(expected?.copyOf(), key.copyOf()).toJava()
 
     @JvmStatic
     fun register(

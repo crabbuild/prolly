@@ -55,6 +55,39 @@ final class PortableParityTests: XCTestCase {
         }
     }
 
+    func testVersionedBatchCASAndPinnedPointReads() throws {
+        try Engine.withMemory { engine in
+            let versioned = try engine.versionedMap(Data("versioned-cas".utf8))
+            _ = try versioned.initialize()
+            let first = try versioned.apply([
+                MutationRecord(kind: .upsert, key: Data("a".utf8), value: Data("one".utf8)),
+                MutationRecord(kind: .upsert, key: Data("b".utf8), value: Data("two".utf8)),
+            ])
+            XCTAssertTrue(try versioned.contains(Data("a".utf8)))
+            XCTAssertEqual(try versioned.getMany([Data("a".utf8), Data("missing".utf8)])[0], Data("one".utf8))
+            XCTAssertNil(try versioned.getMany([Data("missing".utf8)])[0])
+            let applied = try versioned.putIf(
+                expected: first.id, key: Data("a".utf8), value: Data("updated".utf8)
+            )
+            XCTAssertEqual(applied.kind, .applied)
+            XCTAssertEqual(
+                try versioned.deleteIf(expected: first.id, key: Data("b".utf8)).kind,
+                .conflict
+            )
+            let historical = try versioned.getMany(
+                at: first.id, keys: [Data("a".utf8), Data("b".utf8)]
+            )
+            XCTAssertEqual(historical[0], Data("one".utf8))
+            XCTAssertEqual(historical[1], Data("two".utf8))
+            XCTAssertEqual(try versioned.get(at: first.id, key: Data("a".utf8)), Data("one".utf8))
+            let batch = try versioned.applyIf(
+                expected: try XCTUnwrap(applied.current).id,
+                mutations: [MutationRecord(kind: .delete, key: Data("b".utf8), value: nil)]
+            )
+            XCTAssertEqual(batch.kind, .applied)
+        }
+    }
+
     func testProofsSessionsAndMaintenanceAreApplicationFacing() throws {
         try Engine.withMemory { engine in
             let versioned = try engine.versionedMap(Data("proofs".utf8))

@@ -248,6 +248,56 @@ func TestPortableVersionedSnapshotLifecycle(t *testing.T) {
 	}
 }
 
+func TestPortableVersionedBatchCASAndPinnedPointReads(t *testing.T) {
+	engine, err := OpenMemory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer engine.Close()
+	versioned, err := engine.VersionedMap([]byte("versioned-cas"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer versioned.Close()
+	if _, err := versioned.Initialize(); err != nil {
+		t.Fatal(err)
+	}
+	first, err := versioned.Apply([]Mutation{
+		UpsertMutation([]byte("a"), []byte("one")),
+		UpsertMutation([]byte("b"), []byte("two")),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if contains, err := versioned.ContainsKey([]byte("a")); err != nil || !contains {
+		t.Fatalf("contains = %v, %v", contains, err)
+	}
+	values, err := versioned.GetMany([][]byte{[]byte("a"), []byte("missing")})
+	if err != nil || !bytes.Equal(values[0], []byte("one")) || values[1] != nil {
+		t.Fatalf("get many = %#v, %v", values, err)
+	}
+	applied, err := versioned.PutIf(first.ID, []byte("a"), []byte("updated"))
+	if err != nil || applied.Kind != MapUpdateApplied || applied.Current == nil {
+		t.Fatalf("put if = %#v, %v", applied, err)
+	}
+	conflict, err := versioned.DeleteIf(first.ID, []byte("b"))
+	if err != nil || conflict.Kind != MapUpdateConflict {
+		t.Fatalf("delete conflict = %#v, %v", conflict, err)
+	}
+	values, err = versioned.GetManyAt(first.ID, [][]byte{[]byte("a"), []byte("b")})
+	if err != nil || !bytes.Equal(values[0], []byte("one")) || !bytes.Equal(values[1], []byte("two")) {
+		t.Fatalf("historical get many = %#v, %v", values, err)
+	}
+	value, ok, err := versioned.GetAt(first.ID, []byte("a"))
+	if err != nil || !ok || !bytes.Equal(value, []byte("one")) {
+		t.Fatalf("historical get = %q, %v, %v", value, ok, err)
+	}
+	batch, err := versioned.ApplyIf(applied.Current.ID, []Mutation{DeleteMutation([]byte("b"))})
+	if err != nil || batch.Kind != MapUpdateApplied {
+		t.Fatalf("apply if = %#v, %v", batch, err)
+	}
+}
+
 func TestPortableProofSessionAndMaintenance(t *testing.T) {
 	engine, err := OpenMemory()
 	if err != nil {

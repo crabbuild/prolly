@@ -94,6 +94,17 @@ class Engine(_Scoped):
         return ProximityMap(self._inner.load_proximity_map(bytes(descriptor)))
 
 
+def _owned_mutations(mutations):
+    return [
+        _native.MutationRecord(
+            kind=mutation.kind,
+            key=bytes(mutation.key),
+            value=None if mutation.value is None else bytes(mutation.value),
+        )
+        for mutation in mutations
+    ]
+
+
 class VersionedMap(_Scoped):
     def __init__(self, inner: _native.BindingVersionedMap):
         super().__init__()
@@ -140,6 +151,14 @@ class VersionedMap(_Scoped):
         self._open()
         return self._inner.get_many([bytes(key) for key in keys])
 
+    def get_at(self, version_id: bytes, key: bytes):
+        self._open()
+        return self._inner.get_at(bytes(version_id), bytes(key))
+
+    def get_many_at(self, version_id: bytes, keys: Iterable[bytes]):
+        self._open()
+        return self._inner.get_many_at(bytes(version_id), [bytes(key) for key in keys])
+
     def put(self, key: bytes, value: bytes):
         self._open()
         return self._inner.put(bytes(key), bytes(value))
@@ -150,7 +169,25 @@ class VersionedMap(_Scoped):
 
     def apply(self, mutations):
         self._open()
-        return self._inner.apply(mutations)
+        return self._inner.apply(_owned_mutations(mutations))
+
+    def apply_if(self, expected: bytes | None, mutations):
+        self._open()
+        return self._inner.apply_if(
+            None if expected is None else bytes(expected), _owned_mutations(mutations)
+        )
+
+    def put_if(self, expected: bytes | None, key: bytes, value: bytes):
+        self._open()
+        return self._inner.put_if(
+            None if expected is None else bytes(expected), bytes(key), bytes(value)
+        )
+
+    def delete_if(self, expected: bytes | None, key: bytes):
+        self._open()
+        return self._inner.delete_if(
+            None if expected is None else bytes(expected), bytes(key)
+        )
 
     def snapshot(self) -> "MapSnapshot | None":
         self._open()

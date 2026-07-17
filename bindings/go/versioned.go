@@ -17,6 +17,20 @@ type MapVersion struct {
 	IsHead          bool
 }
 
+type MapUpdateKind string
+
+const (
+	MapUpdateApplied   MapUpdateKind = "applied"
+	MapUpdateUnchanged MapUpdateKind = "unchanged"
+	MapUpdateConflict  MapUpdateKind = "conflict"
+)
+
+type MapUpdate struct {
+	Kind     MapUpdateKind
+	Previous []byte
+	Current  *MapVersion
+}
+
 type VersionedMap struct {
 	handle uint64
 	closed atomic.Bool
@@ -179,6 +193,62 @@ func (m *VersionedMap) Get(key []byte) ([]byte, bool, error) {
 	return value, ok, decoder.done()
 }
 
+func (m *VersionedMap) ContainsKey(key []byte) (bool, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return false, err
+	}
+	defer unlock()
+	return ffiVersionedContainsKey(handle, append([]byte(nil), key...))
+}
+
+func (m *VersionedMap) GetMany(keys [][]byte) ([][]byte, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	owned := cloneByteSlices(keys)
+	raw, err := ffiVersionedGetMany(handle, owned)
+	if err != nil {
+		return nil, err
+	}
+	values, _, err := decodeOptionalByteArraySequence(raw)
+	return values, err
+}
+
+func (m *VersionedMap) GetAt(id, key []byte) ([]byte, bool, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return nil, false, err
+	}
+	defer unlock()
+	raw, err := ffiVersionedGetAt(handle, append([]byte(nil), id...), append([]byte(nil), key...))
+	if err != nil {
+		return nil, false, err
+	}
+	d := byteDecoder{data: raw}
+	value, ok, err := d.readOptionalByteArray()
+	if err != nil {
+		return nil, false, err
+	}
+	return value, ok, d.done()
+}
+
+func (m *VersionedMap) GetManyAt(id []byte, keys [][]byte) ([][]byte, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	raw, err := ffiVersionedGetManyAt(handle, append([]byte(nil), id...), cloneByteSlices(keys))
+	if err != nil {
+		return nil, err
+	}
+	values, _, err := decodeOptionalByteArraySequence(raw)
+	return values, err
+}
+
 func (m *VersionedMap) Put(key, value []byte) (MapVersion, error) {
 	handle, unlock, err := m.withHandle()
 	if err != nil {
@@ -190,6 +260,66 @@ func (m *VersionedMap) Put(key, value []byte) (MapVersion, error) {
 		return MapVersion{}, err
 	}
 	return decodePortableMapVersion(raw)
+}
+
+func (m *VersionedMap) Apply(mutations []Mutation) (MapVersion, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return MapVersion{}, err
+	}
+	defer unlock()
+	encoded, err := encodeMutations(cloneMutations(mutations))
+	if err != nil {
+		return MapVersion{}, err
+	}
+	raw, err := ffiVersionedApply(handle, encoded)
+	if err != nil {
+		return MapVersion{}, err
+	}
+	return decodePortableMapVersion(raw)
+}
+
+func (m *VersionedMap) ApplyIf(expected []byte, mutations []Mutation) (MapUpdate, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return MapUpdate{}, err
+	}
+	defer unlock()
+	encoded, err := encodeMutations(cloneMutations(mutations))
+	if err != nil {
+		return MapUpdate{}, err
+	}
+	raw, err := ffiVersionedApplyIf(handle, append([]byte(nil), expected...), encoded)
+	if err != nil {
+		return MapUpdate{}, err
+	}
+	return decodePortableMapUpdate(raw)
+}
+
+func (m *VersionedMap) PutIf(expected, key, value []byte) (MapUpdate, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return MapUpdate{}, err
+	}
+	defer unlock()
+	raw, err := ffiVersionedPutIf(handle, append([]byte(nil), expected...), append([]byte(nil), key...), append([]byte(nil), value...))
+	if err != nil {
+		return MapUpdate{}, err
+	}
+	return decodePortableMapUpdate(raw)
+}
+
+func (m *VersionedMap) DeleteIf(expected, key []byte) (MapUpdate, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return MapUpdate{}, err
+	}
+	defer unlock()
+	raw, err := ffiVersionedDeleteIf(handle, append([]byte(nil), expected...), append([]byte(nil), key...))
+	if err != nil {
+		return MapUpdate{}, err
+	}
+	return decodePortableMapUpdate(raw)
 }
 
 func (m *VersionedMap) Delete(key []byte) (MapVersion, error) {
@@ -454,4 +584,62 @@ func decodePortableMapVersions(raw []byte) ([]MapVersion, error) {
 		versions = append(versions, version)
 	}
 	return versions, decoder.done()
+}
+
+func decodePortableMapUpdate(raw []byte) (MapUpdate, error) {
+	d := byteDecoder{data: raw}
+	kind, err := d.readInt32()
+	if err != nil {
+		return MapUpdate{}, err
+	}
+	var result MapUpdate
+	switch kind {
+	case 1:
+		result.Kind = MapUpdateApplied
+	case 2:
+		result.Kind = MapUpdateUnchanged
+	case 3:
+		result.Kind = MapUpdateConflict
+	default:
+		return MapUpdate{}, errors.New("invalid map update kind")
+	}
+	previous, present, err := d.readOptionalByteArray()
+	if err != nil {
+		return MapUpdate{}, err
+	}
+	if present {
+		result.Previous = previous
+	}
+	presentByte, err := d.readByte()
+	if err != nil {
+		return MapUpdate{}, err
+	}
+	if presentByte != 0 {
+		current, err := readPortableMapVersion(&d)
+		if err != nil {
+			return MapUpdate{}, err
+		}
+		result.Current = &current
+	}
+	return result, d.done()
+}
+
+func cloneByteSlices(values [][]byte) [][]byte {
+	owned := make([][]byte, len(values))
+	for index, value := range values {
+		owned[index] = append([]byte(nil), value...)
+	}
+	return owned
+}
+
+func cloneMutations(values []Mutation) []Mutation {
+	owned := make([]Mutation, len(values))
+	for index, value := range values {
+		owned[index] = Mutation{
+			Kind:  value.Kind,
+			Key:   append([]byte(nil), value.Key...),
+			Value: append([]byte(nil), value.Value...),
+		}
+	}
+	return owned
 }

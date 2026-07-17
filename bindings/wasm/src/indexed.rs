@@ -1007,7 +1007,7 @@ fn set_version_array(
     Ok(())
 }
 
-fn mutations_from_array(values: &Array) -> Result<Vec<Mutation>, JsValue> {
+pub(crate) fn mutations_from_array(values: &Array) -> Result<Vec<Mutation>, JsValue> {
     values
         .iter()
         .map(|value| {

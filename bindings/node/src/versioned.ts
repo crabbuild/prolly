@@ -7,6 +7,18 @@ export interface MapVersion {
   isHead: boolean;
 }
 
+export interface MapMutation {
+  kind: "upsert" | "delete";
+  key: Uint8Array;
+  value?: Uint8Array;
+}
+
+export interface MapUpdate {
+  kind: "applied" | "unchanged" | "conflict";
+  previous?: Uint8Array;
+  current?: MapVersion;
+}
+
 interface NativeMapVersion {
   id: Uint8Array;
   tree: unknown;
@@ -23,13 +35,27 @@ interface NativeVersionedMap {
   version(id: Uint8Array): NativeMapVersion | null;
   versions(): NativeMapVersion[];
   get(key: Uint8Array): Uint8Array | null;
+  containsKey(key: Uint8Array): boolean;
+  getMany(keys: Uint8Array[]): Array<Uint8Array | null>;
+  getAt(id: Uint8Array, key: Uint8Array): Uint8Array | null;
+  getManyAt(id: Uint8Array, keys: Uint8Array[]): Array<Uint8Array | null>;
   put(key: Uint8Array, value: Uint8Array): NativeMapVersion;
+  apply(mutations: MapMutation[]): NativeMapVersion;
+  applyIf(expected: Uint8Array | null, mutations: MapMutation[]): NativeMapUpdate;
+  putIf(expected: Uint8Array | null, key: Uint8Array, value: Uint8Array): NativeMapUpdate;
+  deleteIf(expected: Uint8Array | null, key: Uint8Array): NativeMapUpdate;
   delete(key: Uint8Array): NativeMapVersion;
   snapshot(): NativeMapSnapshot | null;
   snapshotAt(id: Uint8Array): NativeMapSnapshot | null;
   backup(): Uint8Array;
   verifyCatalog(): NativeMaintenanceSummary;
   planGc(): NativeMaintenanceSummary;
+}
+
+interface NativeMapUpdate {
+  kind: "applied" | "unchanged" | "conflict";
+  previous?: Uint8Array;
+  current?: NativeMapVersion;
 }
 
 interface NativeMaintenanceSummary { itemCount: string; byteCount: string; }
@@ -60,6 +86,22 @@ function mapVersion(value: NativeMapVersion): MapVersion {
     createdAtMillis: value.createdAtMillis == null ? undefined : BigInt(value.createdAtMillis),
     isHead: value.isHead,
   };
+}
+
+function mapUpdate(value: NativeMapUpdate): MapUpdate {
+  return {
+    kind: value.kind,
+    previous: value.previous,
+    current: value.current == null ? undefined : mapVersion(value.current),
+  };
+}
+
+function ownedMutations(mutations: readonly MapMutation[]): MapMutation[] {
+  return mutations.map((mutation) => ({
+    kind: mutation.kind,
+    key: ownedBytes(mutation.key),
+    value: mutation.value == null ? undefined : ownedBytes(mutation.value),
+  }));
 }
 
 export class VersionedMap implements Disposable {
@@ -118,11 +160,56 @@ export class VersionedMap implements Disposable {
     return nativePromise(signal, () => native.get(key) ?? undefined);
   }
 
+  containsKey(key: Uint8Array, signal?: AbortSignal): Promise<boolean> {
+    const native = this.#open(); key = ownedBytes(key);
+    return nativePromise(signal, () => native.containsKey(key));
+  }
+
+  getMany(keys: readonly Uint8Array[], signal?: AbortSignal): Promise<Array<Uint8Array | undefined>> {
+    const native = this.#open(); const owned = keys.map(ownedBytes);
+    return nativePromise(signal, () => native.getMany(owned).map((value) => value ?? undefined));
+  }
+
+  getAt(id: Uint8Array, key: Uint8Array, signal?: AbortSignal): Promise<Uint8Array | undefined> {
+    const native = this.#open(); id = ownedBytes(id); key = ownedBytes(key);
+    return nativePromise(signal, () => native.getAt(id, key) ?? undefined);
+  }
+
+  getManyAt(id: Uint8Array, keys: readonly Uint8Array[], signal?: AbortSignal): Promise<Array<Uint8Array | undefined>> {
+    const native = this.#open(); id = ownedBytes(id); const owned = keys.map(ownedBytes);
+    return nativePromise(signal, () => native.getManyAt(id, owned).map((value) => value ?? undefined));
+  }
+
   put(key: Uint8Array, value: Uint8Array, signal?: AbortSignal): Promise<MapVersion> {
     const native = this.#open();
     key = ownedBytes(key);
     value = ownedBytes(value);
     return nativePromise(signal, () => mapVersion(native.put(key, value)));
+  }
+
+  apply(mutations: readonly MapMutation[], signal?: AbortSignal): Promise<MapVersion> {
+    const native = this.#open(); const owned = ownedMutations(mutations);
+    return nativePromise(signal, () => mapVersion(native.apply(owned)));
+  }
+
+  applyIf(expected: Uint8Array | undefined, mutations: readonly MapMutation[], signal?: AbortSignal): Promise<MapUpdate> {
+    const native = this.#open();
+    const ownedExpected = expected == null ? null : ownedBytes(expected);
+    const owned = ownedMutations(mutations);
+    return nativePromise(signal, () => mapUpdate(native.applyIf(ownedExpected, owned)));
+  }
+
+  putIf(expected: Uint8Array | undefined, key: Uint8Array, value: Uint8Array, signal?: AbortSignal): Promise<MapUpdate> {
+    const native = this.#open();
+    const ownedExpected = expected == null ? null : ownedBytes(expected);
+    key = ownedBytes(key); value = ownedBytes(value);
+    return nativePromise(signal, () => mapUpdate(native.putIf(ownedExpected, key, value)));
+  }
+
+  deleteIf(expected: Uint8Array | undefined, key: Uint8Array, signal?: AbortSignal): Promise<MapUpdate> {
+    const native = this.#open();
+    const ownedExpected = expected == null ? null : ownedBytes(expected); key = ownedBytes(key);
+    return nativePromise(signal, () => mapUpdate(native.deleteIf(ownedExpected, key)));
   }
 
   delete(key: Uint8Array, signal?: AbortSignal): Promise<MapVersion> {
