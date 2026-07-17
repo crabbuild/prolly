@@ -124,7 +124,7 @@ test("WASM proofs, retained sessions, and maintenance stay in Rust", { skip: !ge
   const indexed = engine.indexedMap(bytes("indexed-maintenance"), registry);
   const version: any = await indexed.put(bytes("k"), bytes("term"));
   await indexed.ensureIndex(bytes("by_value"));
-  assert.equal(indexed.verifyIndex(bytes("by_value"), version.sourceVersion), true);
+  assert.equal(indexed.verifyIndex(bytes("by_value"), version.sourceVersion).valid, true);
   assert.ok(indexed.metrics().buildAttempts >= 1n);
   assert.ok(indexed.exportCurrent().byteLength > 0);
 
@@ -137,5 +137,73 @@ test("WASM proofs, retained sessions, and maintenance stay in Rust", { skip: !ge
   const verifiedSearch = searchProof.verify(proximity.descriptor());
   assert.equal(Buffer.from(verifiedSearch.result.neighbors[0].key).toString(), "p");
   assert.ok(verifiedSearch.replayedEvents > 0n);
+  engine.close();
+});
+
+test("WASM indexed maps expose batch CAS and historical snapshots", { skip: !generatedPresent }, async () => {
+  const engine = api.Engine.memory(wasm);
+  const registry = engine.indexRegistry();
+  registry.register({ name: bytes("by_value"), generation: 1n, extractorId: "value-v1", projection: "all",
+    extract: (_key: Uint8Array, value: Uint8Array) => [{ term: Uint8Array.from(value) }] });
+  const indexed = engine.indexedMap(bytes("indexed-lifecycle"), registry);
+  assert.equal(Buffer.from(indexed.id()).toString(), "indexed-lifecycle");
+  const first = await indexed.apply([
+    { kind: "upsert", key: bytes("u1"), value: bytes("red") },
+    { kind: "upsert", key: bytes("u2"), value: bytes("red") },
+  ]);
+  await indexed.ensureIndex(bytes("by_value"));
+  const firstSnapshot = await indexed.snapshot();
+  const firstId = firstSnapshot.id();
+  assert.deepEqual(firstId.sourceVersion, first.sourceVersion);
+  const applied = await indexed.applyIf(first.sourceVersion, [
+    { kind: "upsert", key: bytes("u3"), value: bytes("blue") },
+  ]);
+  assert.equal(applied.kind, "applied");
+  const conflict = await indexed.applyIf(first.sourceVersion, [
+    { kind: "delete", key: bytes("u1") },
+  ]);
+  assert.equal(conflict.kind, "conflict");
+  const historical = await indexed.snapshotAt(first.sourceVersion);
+  assert.deepEqual(historical.id().sourceVersion, firstId.sourceVersion);
+  const reopened = await indexed.snapshotById(firstId);
+  assert.deepEqual(reopened.id(), firstId);
+  engine.close();
+});
+
+test("WASM indexed maintenance and every bounded page direction are complete", { skip: !generatedPresent }, async () => {
+  const engine = api.Engine.memory(wasm);
+  const registry = engine.indexRegistry();
+  registry.register({ name: bytes("by_value"), generation: 1n, extractorId: "value-v1", projection: "all",
+    extract: (_key: Uint8Array, value: Uint8Array) => [{ term: Uint8Array.from(value) }] });
+  const indexed = engine.indexedMap(bytes("indexed-records"), registry);
+  const version = await indexed.apply([
+    { kind: "upsert", key: bytes("u1"), value: bytes("red") },
+    { kind: "upsert", key: bytes("u2"), value: bytes("red") },
+    { kind: "upsert", key: bytes("u3"), value: bytes("rose") },
+  ]);
+  await indexed.ensureIndex(bytes("by_value"));
+  assert.equal(Buffer.from(indexed.health().sourceMapId).toString(), "indexed-records");
+  assert.equal(indexed.verifyIndex(bytes("by_value"), version.sourceVersion).valid, true);
+  assert.equal(indexed.verifyAll(version.sourceVersion).length, 1);
+  assert.equal(indexed.repairIndex(bytes("by_value"), version.sourceVersion).canonical, true);
+  assert.ok(indexed.metrics().buildAttempts >= 1n);
+
+  const index = (await indexed.snapshot()).index(bytes("by_value"));
+  assert.equal(Buffer.from(index.name()).toString(), "by_value");
+  assert.equal((await index.prefix(bytes("r"))).length, 3);
+  assert.equal((await index.range(bytes("red"), bytes("s"))).length, 3);
+  assert.equal(Buffer.from((await index.exactPage(bytes("red"), undefined, 1n)).matches[0].primaryKey).toString(), "u1");
+  assert.equal(Buffer.from((await index.exactReversePage(bytes("red"), undefined, 1n)).matches[0].primaryKey).toString(), "u2");
+  assert.equal(Buffer.from((await index.prefixPage(bytes("r"), undefined, 1n)).matches[0].primaryKey).toString(), "u1");
+  assert.equal(Buffer.from((await index.prefixReversePage(bytes("r"), undefined, 1n)).matches[0].primaryKey).toString(), "u3");
+  assert.equal(Buffer.from((await index.rangePage(bytes("red"), bytes("s"), undefined, 1n)).matches[0].primaryKey).toString(), "u1");
+  assert.equal(Buffer.from((await index.rangeReversePage(bytes("red"), bytes("s"), undefined, 1n)).matches[0].primaryKey).toString(), "u3");
+
+  const bundle = indexed.exportCurrent();
+  const next = await indexed.put(bytes("u4"), bytes("blue"));
+  assert.deepEqual((await indexed.importCurrent(bundle, next.sourceVersion)).sourceVersion, version.sourceVersion);
+  assert.ok(indexed.keepLast(1n).retainedSourceVersions.length >= 1);
+  await indexed.deactivateIndex(bytes("by_value"));
+  assert.equal(indexed.health().activeIndexes.length, 0);
   engine.close();
 });

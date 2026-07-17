@@ -670,6 +670,88 @@ export interface PortableIndexRegistration {
   extract(primaryKey: Uint8Array, sourceValue: Uint8Array): PortableIndexEntry[];
 }
 
+export interface PortableIndexedVersion {
+  sourceVersion: Uint8Array;
+  catalogVersion?: Uint8Array;
+  indexCount: bigint;
+}
+
+export interface PortableIndexBuildResult {
+  sourceVersion: Uint8Array;
+  indexVersion: Uint8Array;
+  catalogVersion: Uint8Array;
+  generation: bigint;
+  entries: bigint;
+  attempts: bigint;
+  activated: boolean;
+}
+
+export type PortableIndexedMutation =
+  | { kind: "upsert"; key: Uint8Array; value: Uint8Array }
+  | { kind: "delete"; key: Uint8Array };
+
+export interface PortableIndexedUpdate {
+  kind: "applied" | "unchanged" | "conflict";
+  previousSourceVersion?: Uint8Array;
+  current?: PortableIndexedVersion;
+}
+
+export interface PortableIndexedSnapshotId {
+  sourceVersion: Uint8Array;
+  catalogVersion: Uint8Array;
+}
+
+export interface PortableIndexVerification {
+  name: Uint8Array;
+  sourceVersion: Uint8Array;
+  expectedIndexVersion: Uint8Array;
+  actualIndexVersion: Uint8Array;
+  expectedEntries: bigint;
+  actualEntries: bigint;
+  semanticDifferences: bigint;
+  valid: boolean;
+  canonical: boolean;
+}
+
+export interface PortableIndexedMapHealth {
+  sourceMapId: Uint8Array;
+  sourceVersion?: Uint8Array;
+  catalogVersion?: Uint8Array;
+  activeIndexes: Array<{
+    name: Uint8Array; generation: bigint; fingerprint: Uint8Array;
+    projection: "keys_only" | "include" | "all";
+    indexMapId: Uint8Array; indexVersion: Uint8Array;
+  }>;
+  supportsTransactions: boolean;
+}
+
+export interface PortableIndexedMapMetrics {
+  normalizedSourceMutations: bigint;
+  recordsExtracted: bigint;
+  termsEmitted: bigint;
+  projectedBytes: bigint;
+  physicalUpserts: bigint;
+  physicalDeletes: bigint;
+  unchangedEmissionsSkipped: bigint;
+  sourceNodesWritten: bigint;
+  indexNodesWritten: bigint;
+  catalogNodesWritten: bigint;
+  retries: bigint;
+  buildAttempts: bigint;
+  verificationOutcomes: bigint;
+  retainedRoots: bigint;
+}
+
+export interface PortableIndexedRetention {
+  retainedSourceVersions: Uint8Array[];
+  removedSourceVersions: Uint8Array[];
+  retainedIndexVersions: Uint8Array[];
+  removedIndexVersions: Uint8Array[];
+  removedCatalogVersions: Uint8Array[];
+  removedCheckpointRecords: bigint;
+  removedNamedRoots: Uint8Array[];
+}
+
 export interface PortableIndexMatch {
   term: Uint8Array;
   primaryKey: Uint8Array;
@@ -678,6 +760,16 @@ export interface PortableIndexMatch {
 
 export interface PortableIndexedSource extends PortableIndexMatch {
   sourceValue: Uint8Array;
+}
+
+export interface PortableIndexPage {
+  matches: PortableIndexMatch[];
+  nextCursor?: Uint8Array;
+}
+
+export interface PortableIndexPageOptions {
+  pageSize?: number;
+  signal?: AbortSignal;
 }
 
 export interface PortableProximityRecord {
@@ -919,6 +1011,39 @@ export class WasmIndexRegistry implements Disposable {
   [Symbol.dispose](): void { this.close(); }
 }
 
+function portableIndexedVersion(value: any): PortableIndexedVersion {
+  return {
+    sourceVersion: value.sourceVersion,
+    catalogVersion: value.catalogVersion,
+    indexCount: BigInt(value.indexCount),
+  };
+}
+
+function portableIndexedUpdate(value: any): PortableIndexedUpdate {
+  return {
+    kind: value.kind,
+    previousSourceVersion: value.previousSourceVersion,
+    current: value.current == null ? undefined : portableIndexedVersion(value.current),
+  };
+}
+
+function portableIndexVerification(value: any): PortableIndexVerification {
+  return {
+    name: value.name, sourceVersion: value.sourceVersion,
+    expectedIndexVersion: value.expectedIndexVersion, actualIndexVersion: value.actualIndexVersion,
+    expectedEntries: BigInt(value.expectedEntries), actualEntries: BigInt(value.actualEntries),
+    semanticDifferences: BigInt(value.semanticDifferences), valid: value.valid, canonical: value.canonical,
+  };
+}
+
+function ownPortableIndexedMutations(mutations: readonly PortableIndexedMutation[]) {
+  return mutations.map((mutation) => ({
+    kind: mutation.kind,
+    key: ownedPortableBytes(mutation.key),
+    value: mutation.kind === "upsert" ? ownedPortableBytes(mutation.value) : undefined,
+  }));
+}
+
 export class WasmIndexedMap implements Disposable {
   #native?: any;
   constructor(native: any) { this.#native = native; }
@@ -926,34 +1051,100 @@ export class WasmIndexedMap implements Disposable {
     if (this.#native == null) throw new Error("WASM indexed map is closed");
     return this.#native;
   }
+  id(): Uint8Array { return this.#open().id(); }
   get(key: Uint8Array, signal?: AbortSignal): Promise<Uint8Array | undefined> {
     const native = this.#open(); key = ownedPortableBytes(key);
     return portablePromise(signal, () => native.get(key) ?? undefined);
   }
-  put(key: Uint8Array, value: Uint8Array, signal?: AbortSignal): Promise<unknown> {
+  put(key: Uint8Array, value: Uint8Array, signal?: AbortSignal): Promise<PortableIndexedVersion> {
     const native = this.#open(); key = ownedPortableBytes(key); value = ownedPortableBytes(value);
-    return portablePromise(signal, () => native.put(key, value));
+    return portablePromise(signal, () => portableIndexedVersion(native.put(key, value)));
   }
-  delete(key: Uint8Array, signal?: AbortSignal): Promise<unknown> {
+  apply(mutations: readonly PortableIndexedMutation[], signal?: AbortSignal): Promise<PortableIndexedVersion> {
+    const native = this.#open(); const owned = ownPortableIndexedMutations(mutations);
+    return portablePromise(signal, () => portableIndexedVersion(native.apply(owned)));
+  }
+  applyIf(expectedSource: Uint8Array | undefined, mutations: readonly PortableIndexedMutation[], signal?: AbortSignal): Promise<PortableIndexedUpdate> {
+    const native = this.#open();
+    expectedSource = expectedSource == null ? undefined : ownedPortableBytes(expectedSource);
+    const owned = ownPortableIndexedMutations(mutations);
+    return portablePromise(signal, () => portableIndexedUpdate(native.applyIf(expectedSource, owned)));
+  }
+  delete(key: Uint8Array, signal?: AbortSignal): Promise<PortableIndexedVersion> {
     const native = this.#open(); key = ownedPortableBytes(key);
-    return portablePromise(signal, () => native.delete(key));
+    return portablePromise(signal, () => portableIndexedVersion(native.delete(key)));
   }
-  ensureIndex(name: Uint8Array, signal?: AbortSignal): Promise<unknown> {
+  ensureIndex(name: Uint8Array, signal?: AbortSignal): Promise<PortableIndexBuildResult> {
     const native = this.#open(); name = ownedPortableBytes(name);
-    return portablePromise(signal, () => native.ensureIndex(name));
+    return portablePromise(signal, () => {
+      const value = native.ensureIndex(name);
+      return {
+        sourceVersion: value.sourceVersion, indexVersion: value.indexVersion,
+        catalogVersion: value.catalogVersion, generation: BigInt(value.generation),
+        entries: BigInt(value.entries), attempts: BigInt(value.attempts), activated: value.activated,
+      };
+    });
   }
   snapshot(signal?: AbortSignal): Promise<WasmIndexedSnapshot> {
     const native = this.#open();
     return portablePromise(signal, () => new WasmIndexedSnapshot(native.snapshot()));
   }
-  metrics(): { buildAttempts: bigint; projectedBytes: bigint } {
-    const value = this.#open().metrics();
-    return { buildAttempts: BigInt(value.buildAttempts), projectedBytes: BigInt(value.projectedBytes) };
+  snapshotAt(sourceVersion: Uint8Array, signal?: AbortSignal): Promise<WasmIndexedSnapshot> {
+    const native = this.#open(); sourceVersion = ownedPortableBytes(sourceVersion);
+    return portablePromise(signal, () => new WasmIndexedSnapshot(native.snapshotAt(sourceVersion)));
   }
-  verifyIndex(name: Uint8Array, sourceVersion: Uint8Array): boolean {
-    return this.#open().verifyIndex(ownedPortableBytes(name), ownedPortableBytes(sourceVersion));
+  snapshotById(id: PortableIndexedSnapshotId, signal?: AbortSignal): Promise<WasmIndexedSnapshot> {
+    const native = this.#open();
+    const source = ownedPortableBytes(id.sourceVersion);
+    const catalog = ownedPortableBytes(id.catalogVersion);
+    return portablePromise(signal, () => new WasmIndexedSnapshot(native.snapshotById(source, catalog)));
+  }
+  health(): PortableIndexedMapHealth {
+    const value = this.#open().health();
+    return {
+      sourceMapId: value.sourceMapId, sourceVersion: value.sourceVersion,
+      catalogVersion: value.catalogVersion, supportsTransactions: value.supportsTransactions,
+      activeIndexes: value.activeIndexes.map((index: any) => ({
+        name: index.name, generation: BigInt(index.generation), fingerprint: index.fingerprint,
+        projection: index.projection, indexMapId: index.indexMapId, indexVersion: index.indexVersion,
+      })),
+    };
+  }
+  metrics(): PortableIndexedMapMetrics {
+    const value = this.#open().metrics();
+    return Object.fromEntries(Object.entries(value).map(([key, count]) => [key, BigInt(count as string)])) as unknown as PortableIndexedMapMetrics;
+  }
+  verifyIndex(name: Uint8Array, sourceVersion: Uint8Array): PortableIndexVerification {
+    return portableIndexVerification(this.#open().verifyIndex(ownedPortableBytes(name), ownedPortableBytes(sourceVersion)));
+  }
+  verifyAll(sourceVersion: Uint8Array): PortableIndexVerification[] {
+    return this.#open().verifyAll(ownedPortableBytes(sourceVersion)).map(portableIndexVerification);
+  }
+  repairIndex(name: Uint8Array, sourceVersion: Uint8Array): PortableIndexVerification {
+    return portableIndexVerification(this.#open().repairIndex(ownedPortableBytes(name), ownedPortableBytes(sourceVersion)));
+  }
+  deactivateIndex(name: Uint8Array, signal?: AbortSignal): Promise<PortableIndexedVersion> {
+    const native = this.#open(); name = ownedPortableBytes(name);
+    return portablePromise(signal, () => portableIndexedVersion(native.deactivateIndex(name)));
   }
   exportCurrent(): Uint8Array { return this.#open().exportCurrent(); }
+  importCurrent(bundle: Uint8Array, expectedSource?: Uint8Array, signal?: AbortSignal): Promise<PortableIndexedVersion> {
+    const native = this.#open(); bundle = ownedPortableBytes(bundle);
+    expectedSource = expectedSource == null ? undefined : ownedPortableBytes(expectedSource);
+    return portablePromise(signal, () => portableIndexedVersion(native.importCurrent(bundle, expectedSource)));
+  }
+  keepLast(count: bigint): PortableIndexedRetention {
+    const value = this.#open().keepLast(count);
+    return {
+      retainedSourceVersions: value.retainedSourceVersions,
+      removedSourceVersions: value.removedSourceVersions,
+      retainedIndexVersions: value.retainedIndexVersions,
+      removedIndexVersions: value.removedIndexVersions,
+      removedCatalogVersions: value.removedCatalogVersions,
+      removedCheckpointRecords: BigInt(value.removedCheckpointRecords),
+      removedNamedRoots: value.removedNamedRoots,
+    };
+  }
   close(): void { this.#native?.free?.(); this.#native = undefined; }
   [Symbol.dispose](): void { this.close(); }
 }
@@ -961,9 +1152,13 @@ export class WasmIndexedMap implements Disposable {
 export class WasmIndexedSnapshot implements Disposable {
   #native?: any;
   constructor(native: any) { this.#native = native; }
-  index(name: Uint8Array): WasmSecondaryIndex {
+  #open(): any {
     if (this.#native == null) throw new Error("WASM indexed snapshot is closed");
-    return new WasmSecondaryIndex(this.#native.index(ownedPortableBytes(name)));
+    return this.#native;
+  }
+  id(): PortableIndexedSnapshotId { return this.#open().id(); }
+  index(name: Uint8Array): WasmSecondaryIndex {
+    return new WasmSecondaryIndex(this.#open().index(ownedPortableBytes(name)));
   }
   close(): void { this.#native?.free?.(); this.#native = undefined; }
   [Symbol.dispose](): void { this.close(); }
@@ -976,30 +1171,113 @@ export class WasmSecondaryIndex implements Disposable {
     if (this.#native == null) throw new Error("WASM secondary index is closed");
     return this.#native;
   }
+  name(): Uint8Array { return this.#open().name(); }
   exact(term: Uint8Array, signal?: AbortSignal): Promise<PortableIndexMatch[]> {
     const native = this.#open(); term = ownedPortableBytes(term);
     return portablePromise(signal, () => native.exact(term));
   }
+  prefix(prefix: Uint8Array, signal?: AbortSignal): Promise<PortableIndexMatch[]> {
+    const native = this.#open(); prefix = ownedPortableBytes(prefix);
+    return portablePromise(signal, () => native.prefix(prefix));
+  }
+  range(start: Uint8Array, end?: Uint8Array, signal?: AbortSignal): Promise<PortableIndexMatch[]> {
+    const native = this.#open(); start = ownedPortableBytes(start);
+    end = end == null ? undefined : ownedPortableBytes(end);
+    return portablePromise(signal, () => native.range(start, end));
+  }
   records(term: Uint8Array, signal?: AbortSignal): Promise<PortableIndexedSource[]> {
     const native = this.#open(); term = ownedPortableBytes(term);
     return portablePromise(signal, () => native.records(term));
+  }
+  exactPage(term: Uint8Array, cursor: Uint8Array | undefined, limit: bigint, signal?: AbortSignal): Promise<PortableIndexPage> {
+    const native = this.#open(); term = ownedPortableBytes(term);
+    cursor = cursor == null ? undefined : ownedPortableBytes(cursor);
+    return portablePromise(signal, () => native.exactPage(term, cursor, limit));
+  }
+  exactReversePage(term: Uint8Array, cursor: Uint8Array | undefined, limit: bigint, signal?: AbortSignal): Promise<PortableIndexPage> {
+    const native = this.#open(); term = ownedPortableBytes(term);
+    cursor = cursor == null ? undefined : ownedPortableBytes(cursor);
+    return portablePromise(signal, () => native.exactReversePage(term, cursor, limit));
+  }
+  prefixPage(prefix: Uint8Array, cursor: Uint8Array | undefined, limit: bigint, signal?: AbortSignal): Promise<PortableIndexPage> {
+    const native = this.#open(); prefix = ownedPortableBytes(prefix);
+    cursor = cursor == null ? undefined : ownedPortableBytes(cursor);
+    return portablePromise(signal, () => native.prefixPage(prefix, cursor, limit));
+  }
+  prefixReversePage(prefix: Uint8Array, cursor: Uint8Array | undefined, limit: bigint, signal?: AbortSignal): Promise<PortableIndexPage> {
+    const native = this.#open(); prefix = ownedPortableBytes(prefix);
+    cursor = cursor == null ? undefined : ownedPortableBytes(cursor);
+    return portablePromise(signal, () => native.prefixReversePage(prefix, cursor, limit));
+  }
+  rangePage(start: Uint8Array, end: Uint8Array | undefined, cursor: Uint8Array | undefined, limit: bigint, signal?: AbortSignal): Promise<PortableIndexPage> {
+    const native = this.#open(); start = ownedPortableBytes(start);
+    end = end == null ? undefined : ownedPortableBytes(end);
+    cursor = cursor == null ? undefined : ownedPortableBytes(cursor);
+    return portablePromise(signal, () => native.rangePage(start, end, cursor, limit));
+  }
+  rangeReversePage(start: Uint8Array, end: Uint8Array | undefined, cursor: Uint8Array | undefined, limit: bigint, signal?: AbortSignal): Promise<PortableIndexPage> {
+    const native = this.#open(); start = ownedPortableBytes(start);
+    end = end == null ? undefined : ownedPortableBytes(end);
+    cursor = cursor == null ? undefined : ownedPortableBytes(cursor);
+    return portablePromise(signal, () => native.rangeReversePage(start, end, cursor, limit));
+  }
+  async *#pages(
+    next: (cursor: Uint8Array | undefined, limit: bigint) => Promise<PortableIndexPage>,
+    options: PortableIndexPageOptions,
+  ): AsyncIterable<PortableIndexMatch[]> {
+    const pageSize = options.pageSize ?? 256;
+    if (!Number.isSafeInteger(pageSize) || pageSize <= 0) {
+      throw new RangeError("WASM index pageSize must be a positive safe integer");
+    }
+    let cursor: Uint8Array | undefined;
+    do {
+      const page = await next(cursor, BigInt(pageSize));
+      yield page.matches;
+      cursor = page.nextCursor;
+    } while (cursor != null);
+  }
+  exactPages(term: Uint8Array, options: PortableIndexPageOptions = {}): AsyncIterable<PortableIndexMatch[]> {
+    term = ownedPortableBytes(term);
+    return this.#pages((cursor, limit) => this.exactPage(term, cursor, limit, options.signal), options);
+  }
+  exactReversePages(term: Uint8Array, options: PortableIndexPageOptions = {}): AsyncIterable<PortableIndexMatch[]> {
+    term = ownedPortableBytes(term);
+    return this.#pages((cursor, limit) => this.exactReversePage(term, cursor, limit, options.signal), options);
+  }
+  prefixPages(prefix: Uint8Array, options: PortableIndexPageOptions = {}): AsyncIterable<PortableIndexMatch[]> {
+    prefix = ownedPortableBytes(prefix);
+    return this.#pages((cursor, limit) => this.prefixPage(prefix, cursor, limit, options.signal), options);
+  }
+  prefixReversePages(prefix: Uint8Array, options: PortableIndexPageOptions = {}): AsyncIterable<PortableIndexMatch[]> {
+    prefix = ownedPortableBytes(prefix);
+    return this.#pages((cursor, limit) => this.prefixReversePage(prefix, cursor, limit, options.signal), options);
+  }
+  rangePages(start: Uint8Array, end?: Uint8Array, options: PortableIndexPageOptions = {}): AsyncIterable<PortableIndexMatch[]> {
+    start = ownedPortableBytes(start); end = end == null ? undefined : ownedPortableBytes(end);
+    return this.#pages((cursor, limit) => this.rangePage(start, end, cursor, limit, options.signal), options);
+  }
+  rangeReversePages(start: Uint8Array, end?: Uint8Array, options: PortableIndexPageOptions = {}): AsyncIterable<PortableIndexMatch[]> {
+    start = ownedPortableBytes(start); end = end == null ? undefined : ownedPortableBytes(end);
+    return this.#pages((cursor, limit) => this.rangeReversePage(start, end, cursor, limit, options.signal), options);
   }
   async exactView(
     term: Uint8Array,
     visit: (row: PortableIndexMatch) => boolean | void,
     signal?: AbortSignal,
   ): Promise<void> {
-    for (const row of await this.exact(term, signal)) {
-      const scope = { alive: true };
-      try {
-        if (visit({
-          term: scopedPortableBytes(row.term, scope),
-          primaryKey: scopedPortableBytes(row.primaryKey, scope),
-          projection: row.projection == null
-            ? undefined : scopedPortableBytes(row.projection, scope),
-        }) === false) return;
-      } finally {
-        scope.alive = false;
+    for await (const rows of this.exactPages(term, { signal })) {
+      for (const row of rows) {
+        const scope = { alive: true };
+        try {
+          if (visit({
+            term: scopedPortableBytes(row.term, scope),
+            primaryKey: scopedPortableBytes(row.primaryKey, scope),
+            projection: row.projection == null
+              ? undefined : scopedPortableBytes(row.projection, scope),
+          }) === false) return;
+        } finally {
+          scope.alive = false;
+        }
       }
     }
   }

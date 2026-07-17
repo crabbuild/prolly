@@ -5,9 +5,16 @@ public final class IndexedSnapshot implements AutoCloseable {
     IndexedSnapshot(build.crab.prolly.api.IndexedSnapshot nativeSnapshot) {
         this.nativeSnapshot = nativeSnapshot;
     }
-    public SecondaryIndex index(byte[] name) {
+    private build.crab.prolly.api.IndexedSnapshot open() {
         if (nativeSnapshot == null) throw new IllegalStateException("indexed snapshot is closed");
-        return new SecondaryIndex(nativeSnapshot.index(name.clone()));
+        return nativeSnapshot;
+    }
+    public IndexedSnapshotId id() {
+        return IndexedSnapshotId.fromNative(
+                build.crab.prolly.api.JavaPortableBridge.snapshotId(open()));
+    }
+    public SecondaryIndex index(byte[] name) {
+        return new SecondaryIndex(open().index(name.clone()));
     }
     @Override public void close() {
         if (nativeSnapshot != null) { nativeSnapshot.close(); nativeSnapshot = null; }

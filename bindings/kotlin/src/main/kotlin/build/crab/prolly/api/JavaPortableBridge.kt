@@ -1,6 +1,16 @@
 package build.crab.prolly.api
 
 import build.crab.prolly.IndexProjectionRecord
+import build.crab.prolly.IndexBuildResultRecord
+import build.crab.prolly.IndexMatchRecord
+import build.crab.prolly.IndexPageRecord
+import build.crab.prolly.IndexVerificationRecord
+import build.crab.prolly.IndexedMapHealthRecord
+import build.crab.prolly.IndexedRetentionRecord
+import build.crab.prolly.IndexedSnapshotIdRecord
+import build.crab.prolly.IndexedSourceRecord
+import build.crab.prolly.IndexedUpdateRecord
+import build.crab.prolly.IndexedVersionRecord
 import build.crab.prolly.KeyProofRecord
 import build.crab.prolly.KeyProofVerificationRecord
 import build.crab.prolly.ProximityMembershipProofRecord
@@ -11,11 +21,172 @@ import build.crab.prolly.ProximityStructuralProofRecord
 import build.crab.prolly.ProximityStructuralVerificationRecord
 import build.crab.prolly.IndexedMapMetricsRecord
 import build.crab.prolly.MapCatalogVerificationRecord
+import build.crab.prolly.MutationKind
+import build.crab.prolly.MutationRecord
 import build.crab.prolly.ProximityVerificationRecord
 import build.crab.prolly.TreeStatsRecord
 import build.crab.prolly.ProximitySearchResultRecord
 import build.crab.prolly.ProximitySearchVerificationRecord
 import build.crab.prolly.SecondaryIndexExtractorCallback
+
+data class JavaIndexedMutation(
+    val kind: String,
+    val key: ByteArray,
+    val value: ByteArray?,
+)
+
+data class JavaIndexedVersion(
+    val sourceVersion: ByteArray,
+    val catalogVersion: ByteArray?,
+    val indexCount: Long,
+)
+
+data class JavaIndexBuildResult(
+    val sourceVersion: ByteArray,
+    val indexVersion: ByteArray,
+    val catalogVersion: ByteArray,
+    val generation: Long,
+    val entries: Long,
+    val attempts: Long,
+    val activated: Boolean,
+)
+
+data class JavaIndexedUpdate(
+    val kind: String,
+    val previousSourceVersion: ByteArray?,
+    val current: JavaIndexedVersion?,
+)
+
+data class JavaIndexedSnapshotId(
+    val sourceVersion: ByteArray,
+    val catalogVersion: ByteArray,
+)
+
+data class JavaActiveIndexHealth(
+    val name: ByteArray,
+    val generation: Long,
+    val fingerprint: ByteArray,
+    val projection: String,
+    val indexMapId: ByteArray,
+    val indexVersion: ByteArray,
+)
+
+data class JavaIndexedMapHealth(
+    val sourceMapId: ByteArray,
+    val sourceVersion: ByteArray?,
+    val catalogVersion: ByteArray?,
+    val activeIndexes: List<JavaActiveIndexHealth>,
+    val supportsTransactions: Boolean,
+)
+
+data class JavaIndexVerification(
+    val name: ByteArray,
+    val sourceVersion: ByteArray,
+    val expectedIndexVersion: ByteArray,
+    val actualIndexVersion: ByteArray,
+    val expectedEntries: Long,
+    val actualEntries: Long,
+    val semanticDifferences: Long,
+    val valid: Boolean,
+    val canonical: Boolean,
+)
+
+data class JavaIndexedMapMetrics(
+    val normalizedSourceMutations: Long,
+    val recordsExtracted: Long,
+    val termsEmitted: Long,
+    val projectedBytes: Long,
+    val physicalUpserts: Long,
+    val physicalDeletes: Long,
+    val unchangedEmissionsSkipped: Long,
+    val sourceNodesWritten: Long,
+    val indexNodesWritten: Long,
+    val catalogNodesWritten: Long,
+    val retries: Long,
+    val buildAttempts: Long,
+    val verificationOutcomes: Long,
+    val retainedRoots: Long,
+)
+
+data class JavaIndexedRetention(
+    val retainedSourceVersions: List<ByteArray>,
+    val removedSourceVersions: List<ByteArray>,
+    val retainedIndexVersions: List<ByteArray>,
+    val removedIndexVersions: List<ByteArray>,
+    val removedCatalogVersions: List<ByteArray>,
+    val removedCheckpointRecords: Long,
+    val removedNamedRoots: List<ByteArray>,
+)
+
+data class JavaIndexMatch(
+    val term: ByteArray,
+    val primaryKey: ByteArray,
+    val projection: ByteArray?,
+)
+
+data class JavaIndexPage(
+    val matches: List<JavaIndexMatch>,
+    val nextCursor: ByteArray?,
+)
+
+data class JavaIndexedSource(
+    val term: ByteArray,
+    val primaryKey: ByteArray,
+    val projection: ByteArray?,
+    val sourceValue: ByteArray,
+)
+
+private fun IndexedVersionRecord.toJava() = JavaIndexedVersion(
+    sourceVersion, catalogVersion, indexCount.toLong(),
+)
+
+private fun IndexBuildResultRecord.toJava() = JavaIndexBuildResult(
+    sourceVersion, indexVersion, catalogVersion, generation.toLong(), entries.toLong(),
+    attempts.toLong(), activated,
+)
+
+private fun IndexedUpdateRecord.toJava() = JavaIndexedUpdate(
+    kind.name.lowercase(), previousSourceVersion, current?.toJava(),
+)
+
+private fun IndexedSnapshotIdRecord.toJava() = JavaIndexedSnapshotId(sourceVersion, catalogVersion)
+
+private fun IndexedMapHealthRecord.toJava() = JavaIndexedMapHealth(
+    sourceMapId, sourceVersion, catalogVersion,
+    activeIndexes.map {
+        JavaActiveIndexHealth(
+            it.name, it.generation.toLong(), it.fingerprint, it.projection.name.lowercase(),
+            it.indexMapId, it.indexVersion,
+        )
+    },
+    supportsTransactions,
+)
+
+private fun IndexVerificationRecord.toJava() = JavaIndexVerification(
+    name, sourceVersion, expectedIndexVersion, actualIndexVersion, expectedEntries.toLong(),
+    actualEntries.toLong(), semanticDifferences.toLong(), valid, canonical,
+)
+
+private fun IndexedMapMetricsRecord.toJava() = JavaIndexedMapMetrics(
+    normalizedSourceMutations.toLong(), recordsExtracted.toLong(), termsEmitted.toLong(),
+    projectedBytes.toLong(), physicalUpserts.toLong(), physicalDeletes.toLong(),
+    unchangedEmissionsSkipped.toLong(), sourceNodesWritten.toLong(), indexNodesWritten.toLong(),
+    catalogNodesWritten.toLong(), retries.toLong(), buildAttempts.toLong(),
+    verificationOutcomes.toLong(), retainedRoots.toLong(),
+)
+
+private fun IndexedRetentionRecord.toJava() = JavaIndexedRetention(
+    retainedSourceVersions, removedSourceVersions, retainedIndexVersions, removedIndexVersions,
+    removedCatalogVersions, removedCheckpointRecords.toLong(), removedNamedRoots,
+)
+
+private fun IndexMatchRecord.toJava() = JavaIndexMatch(term, primaryKey, projection)
+
+private fun IndexPageRecord.toJava() = JavaIndexPage(matches.map(IndexMatchRecord::toJava), nextCursor)
+
+private fun IndexedSourceRecord.toJava() = JavaIndexedSource(
+    term, primaryKey, projection, sourceValue,
+)
 
 data class JavaProximityMutationResult(
     val map: ProximityMap,
@@ -137,11 +308,143 @@ object JavaPortableBridge {
     fun openIndexExact(index: SecondaryIndex, term: ByteArray, limit: Int): PackedIndexPage =
         PackedPages.openIndexExact(index.native.fastHandle(), term.copyOf(), limit.toUInt())
 
+    private fun JavaIndexedMutation.toNative(): MutationRecord {
+        val mutationKind = when (kind) {
+            "upsert" -> MutationKind.UPSERT
+            "delete" -> MutationKind.DELETE
+            else -> throw IllegalArgumentException("unknown indexed mutation kind: $kind")
+        }
+        return MutationRecord(mutationKind, key.copyOf(), value?.copyOf())
+    }
+
+    @JvmStatic
+    fun indexedId(map: IndexedMap): ByteArray = map.id.copyOf()
+
+    @JvmStatic
+    fun putIndexed(map: IndexedMap, key: ByteArray, value: ByteArray): JavaIndexedVersion =
+        map.put(key.copyOf(), value.copyOf()).toJava()
+
+    @JvmStatic
+    fun deleteIndexed(map: IndexedMap, key: ByteArray): JavaIndexedVersion =
+        map.delete(key.copyOf()).toJava()
+
+    @JvmStatic
+    fun ensureIndex(map: IndexedMap, name: ByteArray): JavaIndexBuildResult =
+        map.ensureIndex(name.copyOf()).toJava()
+
+    @JvmStatic
+    fun applyIndexed(map: IndexedMap, mutations: List<JavaIndexedMutation>): JavaIndexedVersion =
+        map.apply(mutations.map { it.toNative() }).toJava()
+
+    @JvmStatic
+    fun applyIndexedIf(
+        map: IndexedMap,
+        expectedSource: ByteArray?,
+        mutations: List<JavaIndexedMutation>,
+    ): JavaIndexedUpdate = map.applyIf(
+        expectedSource?.copyOf(), mutations.map { it.toNative() },
+    ).toJava()
+
+    @JvmStatic
+    fun snapshotId(snapshot: IndexedSnapshot): JavaIndexedSnapshotId = snapshot.id.toJava()
+
+    @JvmStatic
+    fun snapshotAt(map: IndexedMap, sourceVersion: ByteArray): IndexedSnapshot =
+        map.snapshotAt(sourceVersion.copyOf())
+
+    @JvmStatic
+    fun snapshotById(map: IndexedMap, id: JavaIndexedSnapshotId): IndexedSnapshot =
+        map.snapshotById(IndexedSnapshotIdRecord(id.sourceVersion.copyOf(), id.catalogVersion.copyOf()))
+
+    @JvmStatic
+    fun indexedHealth(map: IndexedMap): JavaIndexedMapHealth = map.health().toJava()
+
+    @JvmStatic
+    fun indexedMetrics(map: IndexedMap): JavaIndexedMapMetrics = map.metrics().toJava()
+
+    @JvmStatic
+    fun verifyIndex(map: IndexedMap, name: ByteArray, sourceVersion: ByteArray): JavaIndexVerification =
+        map.verifyIndex(name.copyOf(), sourceVersion.copyOf()).toJava()
+
+    @JvmStatic
+    fun verifyAll(map: IndexedMap, sourceVersion: ByteArray): List<JavaIndexVerification> =
+        map.verifyAll(sourceVersion.copyOf()).map(IndexVerificationRecord::toJava)
+
+    @JvmStatic
+    fun repairIndex(map: IndexedMap, name: ByteArray, sourceVersion: ByteArray): JavaIndexVerification =
+        map.repairIndex(name.copyOf(), sourceVersion.copyOf()).toJava()
+
+    @JvmStatic
+    fun deactivateIndex(map: IndexedMap, name: ByteArray): JavaIndexedVersion =
+        map.deactivateIndex(name.copyOf()).toJava()
+
+    @JvmStatic
+    fun importCurrent(map: IndexedMap, bundle: ByteArray, expectedSource: ByteArray?): JavaIndexedVersion =
+        map.importCurrent(bundle.copyOf(), expectedSource?.copyOf()).toJava()
+
+    @JvmStatic
+    fun indexName(index: SecondaryIndex): ByteArray = index.name.copyOf()
+
+    @JvmStatic
+    fun indexExact(index: SecondaryIndex, term: ByteArray): List<JavaIndexMatch> =
+        index.exact(term.copyOf()).map(IndexMatchRecord::toJava)
+
+    @JvmStatic
+    fun indexPrefix(index: SecondaryIndex, prefix: ByteArray): List<JavaIndexMatch> =
+        index.prefix(prefix.copyOf()).map(IndexMatchRecord::toJava)
+
+    @JvmStatic
+    fun indexRange(index: SecondaryIndex, start: ByteArray, end: ByteArray?): List<JavaIndexMatch> =
+        index.range(start.copyOf(), end?.copyOf()).map(IndexMatchRecord::toJava)
+
+    @JvmStatic
+    fun indexRecords(index: SecondaryIndex, term: ByteArray): List<JavaIndexedSource> =
+        index.records(term.copyOf()).map(IndexedSourceRecord::toJava)
+
+    @JvmStatic
+    fun indexExactPage(index: SecondaryIndex, term: ByteArray, cursor: ByteArray?, limit: Long): JavaIndexPage =
+        index.exactPage(term.copyOf(), cursor?.copyOf(), limit.toULong()).toJava()
+
+    @JvmStatic
+    fun indexExactReversePage(index: SecondaryIndex, term: ByteArray, cursor: ByteArray?, limit: Long): JavaIndexPage =
+        index.exactReversePage(term.copyOf(), cursor?.copyOf(), limit.toULong()).toJava()
+
+    @JvmStatic
+    fun indexPrefixPage(index: SecondaryIndex, prefix: ByteArray, cursor: ByteArray?, limit: Long): JavaIndexPage =
+        index.prefixPage(prefix.copyOf(), cursor?.copyOf(), limit.toULong()).toJava()
+
+    @JvmStatic
+    fun indexPrefixReversePage(index: SecondaryIndex, prefix: ByteArray, cursor: ByteArray?, limit: Long): JavaIndexPage =
+        index.prefixReversePage(prefix.copyOf(), cursor?.copyOf(), limit.toULong()).toJava()
+
+    @JvmStatic
+    fun indexRangePage(
+        index: SecondaryIndex,
+        start: ByteArray,
+        end: ByteArray?,
+        cursor: ByteArray?,
+        limit: Long,
+    ): JavaIndexPage = index.rangePage(
+        start.copyOf(), end?.copyOf(), cursor?.copyOf(), limit.toULong(),
+    ).toJava()
+
+    @JvmStatic
+    fun indexRangeReversePage(
+        index: SecondaryIndex,
+        start: ByteArray,
+        end: ByteArray?,
+        cursor: ByteArray?,
+        limit: Long,
+    ): JavaIndexPage = index.rangeReversePage(
+        start.copyOf(), end?.copyOf(), cursor?.copyOf(), limit.toULong(),
+    ).toJava()
+
     @JvmStatic
     fun keepLast(map: VersionedMap, count: Long) = map.keepLast(count.toULong())
 
     @JvmStatic
-    fun keepLast(map: IndexedMap, count: Long) = map.keepLast(count.toULong())
+    fun keepLast(map: IndexedMap, count: Long): JavaIndexedRetention =
+        map.keepLast(count.toULong()).toJava()
 
     @JvmStatic
     fun proveStructure(map: ProximityMap) = map.proveStructure()

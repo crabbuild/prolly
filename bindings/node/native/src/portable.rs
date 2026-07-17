@@ -1,19 +1,22 @@
-use super::{to_napi_error, NativeProllyEngine, NodeTreeRecord};
+use super::{to_napi_error, NativeProllyEngine, NodeMutationRecord, NodeTreeRecord};
 use napi::bindgen_prelude::{Buffer, Env, Error, Float32Array, FunctionRef, Result, Status};
 use napi_derive::napi;
 use prolly_bindings::{
     default_content_graph_limits, default_proximity_config, exact_proximity_search_request,
     verify_key_proof, verify_proximity_membership_proof, verify_proximity_structure_proof,
-    BindingIndexRegistry, BindingIndexedMap, BindingIndexedSnapshot, BindingMapSnapshot,
-    BindingProximityMap, BindingProximityReadSession, BindingProximitySearchProof,
-    BindingSecondaryIndexSnapshot, BindingVersionedMap, DistanceMetricRecord,
-    ExactProximityRecordRecord, IndexBuildResultRecord, IndexEntryRecord, IndexMatchRecord,
-    IndexPageRecord, IndexProjectionRecord, IndexedSourceRecord, IndexedVersionRecord,
-    KeyProofRecord, MapVersionRecord, ProllyBindingError, ProllyReadSession, ProximityConfigRecord,
-    ProximityMembershipProofRecord, ProximityMutationRecord, ProximityMutationStatsRecord,
-    ProximityNeighborRecord, ProximityRecordRecord, ProximitySearchClaimKindRecord,
-    ProximitySearchResultRecord, ProximityStructuralProofRecord, ProximityVerificationRecord,
-    SearchBackendRecord, SearchCompletionRecord, SecondaryIndexExtractorCallback,
+    ActiveIndexHealthRecord, BindingIndexRegistry, BindingIndexedMap, BindingIndexedSnapshot,
+    BindingMapSnapshot, BindingProximityMap, BindingProximityReadSession,
+    BindingProximitySearchProof, BindingSecondaryIndexSnapshot, BindingVersionedMap,
+    DistanceMetricRecord, ExactProximityRecordRecord, IndexBuildResultRecord, IndexEntryRecord,
+    IndexMatchRecord, IndexPageRecord, IndexProjectionRecord, IndexVerificationRecord,
+    IndexedMapHealthRecord, IndexedMapMetricsRecord, IndexedRetentionRecord,
+    IndexedSnapshotIdRecord, IndexedSourceRecord, IndexedUpdateKind, IndexedUpdateRecord,
+    IndexedVersionRecord, KeyProofRecord, MapVersionRecord, ProllyBindingError, ProllyReadSession,
+    ProximityConfigRecord, ProximityMembershipProofRecord, ProximityMutationRecord,
+    ProximityMutationStatsRecord, ProximityNeighborRecord, ProximityRecordRecord,
+    ProximitySearchClaimKindRecord, ProximitySearchResultRecord, ProximityStructuralProofRecord,
+    ProximityVerificationRecord, SearchBackendRecord, SearchCompletionRecord,
+    SecondaryIndexExtractorCallback,
 };
 use std::sync::Arc;
 
@@ -66,6 +69,52 @@ impl From<IndexedVersionRecord> for NodePortableIndexedVersion {
 }
 
 #[napi(object)]
+pub struct NodePortableIndexedSnapshotId {
+    pub source_version: Buffer,
+    pub catalog_version: Buffer,
+}
+
+impl From<IndexedSnapshotIdRecord> for NodePortableIndexedSnapshotId {
+    fn from(value: IndexedSnapshotIdRecord) -> Self {
+        Self {
+            source_version: Buffer::from(value.source_version),
+            catalog_version: Buffer::from(value.catalog_version),
+        }
+    }
+}
+
+impl From<NodePortableIndexedSnapshotId> for IndexedSnapshotIdRecord {
+    fn from(value: NodePortableIndexedSnapshotId) -> Self {
+        Self {
+            source_version: value.source_version.to_vec(),
+            catalog_version: value.catalog_version.to_vec(),
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NodePortableIndexedUpdate {
+    pub kind: String,
+    pub previous_source_version: Option<Buffer>,
+    pub current: Option<NodePortableIndexedVersion>,
+}
+
+impl From<IndexedUpdateRecord> for NodePortableIndexedUpdate {
+    fn from(value: IndexedUpdateRecord) -> Self {
+        let kind = match value.kind {
+            IndexedUpdateKind::Applied => "applied",
+            IndexedUpdateKind::Unchanged => "unchanged",
+            IndexedUpdateKind::Conflict => "conflict",
+        };
+        Self {
+            kind: kind.to_string(),
+            previous_source_version: value.previous_source_version.map(Buffer::from),
+            current: value.current.map(Into::into),
+        }
+    }
+}
+
+#[napi(object)]
 pub struct NodePortableIndexBuildResult {
     pub source_version: Buffer,
     pub index_version: Buffer,
@@ -86,6 +135,153 @@ impl From<IndexBuildResultRecord> for NodePortableIndexBuildResult {
             entries: value.entries.to_string(),
             attempts: value.attempts.to_string(),
             activated: value.activated,
+        }
+    }
+}
+
+fn index_projection_name(value: IndexProjectionRecord) -> String {
+    match value {
+        IndexProjectionRecord::KeysOnly => "keys_only",
+        IndexProjectionRecord::Include => "include",
+        IndexProjectionRecord::All => "all",
+    }
+    .to_string()
+}
+
+#[napi(object)]
+pub struct NodePortableActiveIndexHealth {
+    pub name: Buffer,
+    pub generation: String,
+    pub fingerprint: Buffer,
+    pub projection: String,
+    pub index_map_id: Buffer,
+    pub index_version: Buffer,
+}
+
+impl From<ActiveIndexHealthRecord> for NodePortableActiveIndexHealth {
+    fn from(value: ActiveIndexHealthRecord) -> Self {
+        Self {
+            name: Buffer::from(value.name),
+            generation: value.generation.to_string(),
+            fingerprint: Buffer::from(value.fingerprint),
+            projection: index_projection_name(value.projection),
+            index_map_id: Buffer::from(value.index_map_id),
+            index_version: Buffer::from(value.index_version),
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NodePortableIndexedMapHealth {
+    pub source_map_id: Buffer,
+    pub source_version: Option<Buffer>,
+    pub catalog_version: Option<Buffer>,
+    pub active_indexes: Vec<NodePortableActiveIndexHealth>,
+    pub supports_transactions: bool,
+}
+
+impl From<IndexedMapHealthRecord> for NodePortableIndexedMapHealth {
+    fn from(value: IndexedMapHealthRecord) -> Self {
+        Self {
+            source_map_id: Buffer::from(value.source_map_id),
+            source_version: value.source_version.map(Buffer::from),
+            catalog_version: value.catalog_version.map(Buffer::from),
+            active_indexes: value.active_indexes.into_iter().map(Into::into).collect(),
+            supports_transactions: value.supports_transactions,
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NodePortableIndexVerification {
+    pub name: Buffer,
+    pub source_version: Buffer,
+    pub expected_index_version: Buffer,
+    pub actual_index_version: Buffer,
+    pub expected_entries: String,
+    pub actual_entries: String,
+    pub semantic_differences: String,
+    pub valid: bool,
+    pub canonical: bool,
+}
+
+impl From<IndexVerificationRecord> for NodePortableIndexVerification {
+    fn from(value: IndexVerificationRecord) -> Self {
+        Self {
+            name: Buffer::from(value.name),
+            source_version: Buffer::from(value.source_version),
+            expected_index_version: Buffer::from(value.expected_index_version),
+            actual_index_version: Buffer::from(value.actual_index_version),
+            expected_entries: value.expected_entries.to_string(),
+            actual_entries: value.actual_entries.to_string(),
+            semantic_differences: value.semantic_differences.to_string(),
+            valid: value.valid,
+            canonical: value.canonical,
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NodePortableIndexedMapMetrics {
+    pub normalized_source_mutations: String,
+    pub records_extracted: String,
+    pub terms_emitted: String,
+    pub projected_bytes: String,
+    pub physical_upserts: String,
+    pub physical_deletes: String,
+    pub unchanged_emissions_skipped: String,
+    pub source_nodes_written: String,
+    pub index_nodes_written: String,
+    pub catalog_nodes_written: String,
+    pub retries: String,
+    pub build_attempts: String,
+    pub verification_outcomes: String,
+    pub retained_roots: String,
+}
+
+impl From<IndexedMapMetricsRecord> for NodePortableIndexedMapMetrics {
+    fn from(value: IndexedMapMetricsRecord) -> Self {
+        Self {
+            normalized_source_mutations: value.normalized_source_mutations.to_string(),
+            records_extracted: value.records_extracted.to_string(),
+            terms_emitted: value.terms_emitted.to_string(),
+            projected_bytes: value.projected_bytes.to_string(),
+            physical_upserts: value.physical_upserts.to_string(),
+            physical_deletes: value.physical_deletes.to_string(),
+            unchanged_emissions_skipped: value.unchanged_emissions_skipped.to_string(),
+            source_nodes_written: value.source_nodes_written.to_string(),
+            index_nodes_written: value.index_nodes_written.to_string(),
+            catalog_nodes_written: value.catalog_nodes_written.to_string(),
+            retries: value.retries.to_string(),
+            build_attempts: value.build_attempts.to_string(),
+            verification_outcomes: value.verification_outcomes.to_string(),
+            retained_roots: value.retained_roots.to_string(),
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NodePortableIndexedRetention {
+    pub retained_source_versions: Vec<Buffer>,
+    pub removed_source_versions: Vec<Buffer>,
+    pub retained_index_versions: Vec<Buffer>,
+    pub removed_index_versions: Vec<Buffer>,
+    pub removed_catalog_versions: Vec<Buffer>,
+    pub removed_checkpoint_records: String,
+    pub removed_named_roots: Vec<Buffer>,
+}
+
+impl From<IndexedRetentionRecord> for NodePortableIndexedRetention {
+    fn from(value: IndexedRetentionRecord) -> Self {
+        let buffers = |items: Vec<Vec<u8>>| items.into_iter().map(Buffer::from).collect();
+        Self {
+            retained_source_versions: buffers(value.retained_source_versions),
+            removed_source_versions: buffers(value.removed_source_versions),
+            retained_index_versions: buffers(value.retained_index_versions),
+            removed_index_versions: buffers(value.removed_index_versions),
+            removed_catalog_versions: buffers(value.removed_catalog_versions),
+            removed_checkpoint_records: value.removed_checkpoint_records.to_string(),
+            removed_named_roots: buffers(value.removed_named_roots),
         }
     }
 }
@@ -653,6 +849,11 @@ pub struct NativePortableIndexedMap {
 #[napi]
 impl NativePortableIndexedMap {
     #[napi]
+    pub fn id(&self) -> Buffer {
+        Buffer::from(self.inner.id())
+    }
+
+    #[napi]
     pub fn get(&self, key: Buffer) -> Result<Option<Buffer>> {
         self.inner
             .get(key.to_vec())
@@ -664,6 +865,34 @@ impl NativePortableIndexedMap {
     pub fn put(&self, key: Buffer, value: Buffer) -> Result<NodePortableIndexedVersion> {
         self.inner
             .put(key.to_vec(), value.to_vec())
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi]
+    pub fn apply(&self, mutations: Vec<NodeMutationRecord>) -> Result<NodePortableIndexedVersion> {
+        let mutations = mutations
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect::<Result<Vec<_>>>()?;
+        self.inner
+            .apply(mutations)
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "applyIf")]
+    pub fn apply_if(
+        &self,
+        expected_source: Option<Buffer>,
+        mutations: Vec<NodeMutationRecord>,
+    ) -> Result<NodePortableIndexedUpdate> {
+        let mutations = mutations
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect::<Result<Vec<_>>>()?;
+        self.inner
+            .apply_if(expected_source.map(|value| value.to_vec()), mutations)
             .map(Into::into)
             .map_err(to_napi_error)
     }
@@ -692,22 +921,72 @@ impl NativePortableIndexedMap {
             .map_err(to_napi_error)
     }
 
-    #[napi]
-    pub fn metrics(&self) -> Result<NodePortableMaintenanceSummary> {
+    #[napi(js_name = "snapshotAt")]
+    pub fn snapshot_at(&self, source_version: Buffer) -> Result<NativePortableIndexedSnapshot> {
         self.inner
-            .metrics()
-            .map(|value| NodePortableMaintenanceSummary {
-                item_count: value.build_attempts.to_string(),
-                byte_count: value.projected_bytes.to_string(),
-            })
+            .snapshot_at(source_version.to_vec())
+            .map(|inner| NativePortableIndexedSnapshot { inner })
             .map_err(to_napi_error)
     }
 
+    #[napi(js_name = "snapshotById")]
+    pub fn snapshot_by_id(
+        &self,
+        snapshot_id: NodePortableIndexedSnapshotId,
+    ) -> Result<NativePortableIndexedSnapshot> {
+        self.inner
+            .snapshot_by_id(snapshot_id.into())
+            .map(|inner| NativePortableIndexedSnapshot { inner })
+            .map_err(to_napi_error)
+    }
+
+    #[napi]
+    pub fn health(&self) -> Result<NodePortableIndexedMapHealth> {
+        self.inner.health().map(Into::into).map_err(to_napi_error)
+    }
+
+    #[napi]
+    pub fn metrics(&self) -> Result<NodePortableIndexedMapMetrics> {
+        self.inner.metrics().map(Into::into).map_err(to_napi_error)
+    }
+
     #[napi(js_name = "verifyIndex")]
-    pub fn verify_index(&self, name: Buffer, source_version: Buffer) -> Result<bool> {
+    pub fn verify_index(
+        &self,
+        name: Buffer,
+        source_version: Buffer,
+    ) -> Result<NodePortableIndexVerification> {
         self.inner
             .verify_index(name.to_vec(), source_version.to_vec())
-            .map(|value| value.valid)
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "verifyAll")]
+    pub fn verify_all(&self, source_version: Buffer) -> Result<Vec<NodePortableIndexVerification>> {
+        self.inner
+            .verify_all(source_version.to_vec())
+            .map(|items| items.into_iter().map(Into::into).collect())
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "repairIndex")]
+    pub fn repair_index(
+        &self,
+        name: Buffer,
+        source_version: Buffer,
+    ) -> Result<NodePortableIndexVerification> {
+        self.inner
+            .repair_index(name.to_vec(), source_version.to_vec())
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "deactivateIndex")]
+    pub fn deactivate_index(&self, name: Buffer) -> Result<NodePortableIndexedVersion> {
+        self.inner
+            .deactivate_index(name.to_vec())
+            .map(Into::into)
             .map_err(to_napi_error)
     }
 
@@ -719,14 +998,26 @@ impl NativePortableIndexedMap {
             .map_err(to_napi_error)
     }
 
+    #[napi(js_name = "importCurrent")]
+    pub fn import_current(
+        &self,
+        bundle: Buffer,
+        expected_source: Option<Buffer>,
+    ) -> Result<NodePortableIndexedVersion> {
+        self.inner
+            .import_current(bundle.to_vec(), expected_source.map(|value| value.to_vec()))
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
     #[napi(js_name = "keepLast")]
-    pub fn keep_last(&self, count: String) -> Result<String> {
+    pub fn keep_last(&self, count: String) -> Result<NodePortableIndexedRetention> {
         let count = count
             .parse::<u64>()
             .map_err(|error| Error::new(Status::InvalidArg, error.to_string()))?;
         self.inner
             .keep_last(count)
-            .map(|value| value.retained_source_versions.len().to_string())
+            .map(Into::into)
             .map_err(to_napi_error)
     }
 }
@@ -738,6 +1029,11 @@ pub struct NativePortableIndexedSnapshot {
 
 #[napi]
 impl NativePortableIndexedSnapshot {
+    #[napi]
+    pub fn id(&self) -> NodePortableIndexedSnapshotId {
+        self.inner.id().into()
+    }
+
     #[napi]
     pub fn index(&self, name: Buffer) -> Result<NativePortableSecondaryIndex> {
         self.inner
@@ -754,6 +1050,16 @@ pub struct NativePortableSecondaryIndex {
 
 #[napi]
 impl NativePortableSecondaryIndex {
+    #[napi]
+    pub fn name(&self) -> Buffer {
+        Buffer::from(self.inner.name())
+    }
+
+    #[napi(js_name = "fastHandle")]
+    pub fn fast_handle(&self) -> String {
+        self.inner.fast_handle().to_string()
+    }
+
     #[napi]
     pub fn exact(&self, term: Buffer) -> Result<Vec<NodePortableIndexMatch>> {
         self.inner
@@ -801,6 +1107,94 @@ impl NativePortableSecondaryIndex {
             .map(Into::into)
             .map_err(to_napi_error)
     }
+
+    #[napi(js_name = "exactReversePage")]
+    pub fn exact_reverse_page(
+        &self,
+        term: Buffer,
+        cursor: Option<Buffer>,
+        limit: String,
+    ) -> Result<NodePortableIndexPage> {
+        let limit = parse_index_page_limit(&limit)?;
+        self.inner
+            .exact_reverse_page(term.to_vec(), cursor.map(|value| value.to_vec()), limit)
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "prefixPage")]
+    pub fn prefix_page(
+        &self,
+        prefix: Buffer,
+        cursor: Option<Buffer>,
+        limit: String,
+    ) -> Result<NodePortableIndexPage> {
+        let limit = parse_index_page_limit(&limit)?;
+        self.inner
+            .prefix_page(prefix.to_vec(), cursor.map(|value| value.to_vec()), limit)
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "prefixReversePage")]
+    pub fn prefix_reverse_page(
+        &self,
+        prefix: Buffer,
+        cursor: Option<Buffer>,
+        limit: String,
+    ) -> Result<NodePortableIndexPage> {
+        let limit = parse_index_page_limit(&limit)?;
+        self.inner
+            .prefix_reverse_page(prefix.to_vec(), cursor.map(|value| value.to_vec()), limit)
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "rangePage")]
+    pub fn range_page(
+        &self,
+        start: Buffer,
+        end: Option<Buffer>,
+        cursor: Option<Buffer>,
+        limit: String,
+    ) -> Result<NodePortableIndexPage> {
+        let limit = parse_index_page_limit(&limit)?;
+        self.inner
+            .range_page(
+                start.to_vec(),
+                end.map(|value| value.to_vec()),
+                cursor.map(|value| value.to_vec()),
+                limit,
+            )
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "rangeReversePage")]
+    pub fn range_reverse_page(
+        &self,
+        start: Buffer,
+        end: Option<Buffer>,
+        cursor: Option<Buffer>,
+        limit: String,
+    ) -> Result<NodePortableIndexPage> {
+        let limit = parse_index_page_limit(&limit)?;
+        self.inner
+            .range_reverse_page(
+                start.to_vec(),
+                end.map(|value| value.to_vec()),
+                cursor.map(|value| value.to_vec()),
+                limit,
+            )
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+}
+
+fn parse_index_page_limit(limit: &str) -> Result<u64> {
+    limit
+        .parse::<u64>()
+        .map_err(|error| Error::new(Status::InvalidArg, format!("invalid page limit: {error}")))
 }
 
 #[napi]

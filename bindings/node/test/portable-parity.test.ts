@@ -105,10 +105,10 @@ test("proofs, retained sessions, and maintenance stay native", async () => {
     const indexed = engine.indexedMap(bytes("indexed-maintenance"), registry);
     const version = await indexed.put(bytes("k"), bytes("term"));
     await indexed.ensureIndex(bytes("by_value"));
-    assert.equal(indexed.verifyIndex(bytes("by_value"), version.sourceVersion), true);
+    assert.equal(indexed.verifyIndex(bytes("by_value"), version.sourceVersion).valid, true);
     assert.ok(indexed.metrics().buildAttempts >= 1n);
     assert.ok(indexed.exportCurrent().byteLength > 0);
-    assert.ok(indexed.keepLast(1n) >= 1n);
+    assert.ok(indexed.keepLast(1n).retainedSourceVersions.length >= 1);
 
     const proximity = await engine.buildProximity(2, [
       { key: bytes("p"), vector: new Float32Array([0, 0]), value: bytes("payload") },
@@ -131,6 +131,123 @@ test("proofs, retained sessions, and maintenance stay native", async () => {
     assert.equal(Buffer.from(verifiedSearch.result.neighbors[0]!.key).toString(), "p");
     assert.ok(verifiedSearch.replayedEvents > 0n);
     searchProof.close();
+  } finally {
+    engine.close();
+  }
+});
+
+test("indexed maps expose batch CAS and historical snapshot lifecycle", async () => {
+  const engine = await Engine.memory();
+  try {
+    const registry = engine.indexRegistry();
+    registry.register({
+      name: bytes("by_value"), generation: 1n, extractorId: "value-v1", projection: "all",
+      extract: (_key, value) => [{ term: Buffer.from(value) }],
+    });
+    const indexed = engine.indexedMap(bytes("indexed-lifecycle"), registry);
+    assert.equal(Buffer.from(indexed.id()).toString(), "indexed-lifecycle");
+
+    const first = await indexed.apply([
+      { kind: "upsert", key: bytes("u1"), value: bytes("red") },
+      { kind: "upsert", key: bytes("u2"), value: bytes("red") },
+    ]);
+    await indexed.ensureIndex(bytes("by_value"));
+    const firstSnapshot = await indexed.snapshot();
+    const firstSnapshotId = firstSnapshot.id();
+    assert.deepEqual(firstSnapshotId.sourceVersion, first.sourceVersion);
+
+    const applied = await indexed.applyIf(first.sourceVersion, [
+      { kind: "upsert", key: bytes("u3"), value: bytes("blue") },
+    ]);
+    assert.equal(applied.kind, "applied");
+    assert.ok(applied.current);
+    const conflict = await indexed.applyIf(first.sourceVersion, [
+      { kind: "delete", key: bytes("u1") },
+    ]);
+    assert.equal(conflict.kind, "conflict");
+
+    const historical = await indexed.snapshotAt(first.sourceVersion);
+    assert.deepEqual(historical.id().sourceVersion, firstSnapshotId.sourceVersion);
+    const reopened = await indexed.snapshotById(firstSnapshotId);
+    assert.deepEqual(reopened.id(), firstSnapshotId);
+  } finally {
+    engine.close();
+  }
+});
+
+test("indexed maintenance returns complete portable records", async () => {
+  const engine = await Engine.memory();
+  try {
+    const registry = engine.indexRegistry();
+    registry.register({
+      name: bytes("by_value"), generation: 1n, extractorId: "value-v1", projection: "all",
+      extract: (_key, value) => [{ term: Buffer.from(value) }],
+    });
+    const indexed = engine.indexedMap(bytes("indexed-records"), registry);
+    const version = await indexed.put(bytes("u1"), bytes("red"));
+    await indexed.ensureIndex(bytes("by_value"));
+
+    const health = indexed.health();
+    assert.equal(Buffer.from(health.sourceMapId).toString(), "indexed-records");
+    assert.equal(health.activeIndexes.length, 1);
+    assert.equal(health.activeIndexes[0]!.generation, 1n);
+    const verification = indexed.verifyIndex(bytes("by_value"), version.sourceVersion);
+    assert.equal(verification.valid, true);
+    assert.equal(verification.canonical, true);
+    assert.equal(indexed.verifyAll(version.sourceVersion).length, 1);
+    assert.equal(indexed.repairIndex(bytes("by_value"), version.sourceVersion).valid, true);
+    assert.ok(indexed.metrics().buildAttempts >= 1n);
+
+    const bundle = indexed.exportCurrent();
+    const next = await indexed.put(bytes("u2"), bytes("blue"));
+    const imported = await indexed.importCurrent(bundle, next.sourceVersion);
+    assert.deepEqual(imported.sourceVersion, version.sourceVersion);
+    const retained = indexed.keepLast(1n);
+    assert.ok(retained.retainedSourceVersions.length >= 1);
+    await indexed.deactivateIndex(bytes("by_value"));
+    assert.equal(indexed.health().activeIndexes.length, 0);
+  } finally {
+    engine.close();
+  }
+});
+
+test("secondary indexes expose identity and every bounded page direction", async () => {
+  const engine = await Engine.memory();
+  try {
+    const registry = engine.indexRegistry();
+    registry.register({
+      name: bytes("by_value"), generation: 1n, extractorId: "value-v1", projection: "all",
+      extract: (_key, value) => [{ term: Buffer.from(value) }],
+    });
+    const indexed = engine.indexedMap(bytes("indexed-pages"), registry);
+    await indexed.apply([
+      { kind: "upsert", key: bytes("u1"), value: bytes("red") },
+      { kind: "upsert", key: bytes("u2"), value: bytes("red") },
+      { kind: "upsert", key: bytes("u3"), value: bytes("rose") },
+    ]);
+    await indexed.ensureIndex(bytes("by_value"));
+    const index = (await indexed.snapshot()).index(bytes("by_value"));
+    assert.equal(Buffer.from(index.name()).toString(), "by_value");
+
+    const keys = async (pages: AsyncIterable<readonly { primaryKey: Uint8Array }[]>) => {
+      const result: string[] = [];
+      for await (const page of pages) {
+        result.push(...page.map((row) => Buffer.from(row.primaryKey).toString()));
+      }
+      return result;
+    };
+    assert.deepEqual(await keys(index.exactPages(bytes("red"), { pageSize: 1 })), ["u1", "u2"]);
+    assert.deepEqual(await keys(index.exactReversePages(bytes("red"), { pageSize: 1 })), ["u2", "u1"]);
+    assert.deepEqual(await keys(index.prefixPages(bytes("r"), { pageSize: 1 })), ["u1", "u2", "u3"]);
+    assert.deepEqual(await keys(index.prefixReversePages(bytes("r"), { pageSize: 1 })), ["u3", "u2", "u1"]);
+    assert.deepEqual(await keys(index.rangePages(bytes("red"), bytes("s"), { pageSize: 1 })), ["u1", "u2", "u3"]);
+    assert.deepEqual(await keys(index.rangeReversePages(bytes("red"), bytes("s"), { pageSize: 1 })), ["u3", "u2", "u1"]);
+    assert.equal(Buffer.from((await index.exactPage(bytes("red"), undefined, 1n)).matches[0]!.primaryKey).toString(), "u1");
+    assert.equal(Buffer.from((await index.exactReversePage(bytes("red"), undefined, 1n)).matches[0]!.primaryKey).toString(), "u2");
+    assert.equal(Buffer.from((await index.prefixPage(bytes("r"), undefined, 1n)).matches[0]!.primaryKey).toString(), "u1");
+    assert.equal(Buffer.from((await index.prefixReversePage(bytes("r"), undefined, 1n)).matches[0]!.primaryKey).toString(), "u3");
+    assert.equal(Buffer.from((await index.rangePage(bytes("red"), bytes("s"), undefined, 1n)).matches[0]!.primaryKey).toString(), "u1");
+    assert.equal(Buffer.from((await index.rangeReversePage(bytes("red"), bytes("s"), undefined, 1n)).matches[0]!.primaryKey).toString(), "u3");
   } finally {
     engine.close();
   }

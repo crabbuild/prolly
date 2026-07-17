@@ -94,23 +94,43 @@ extern void uniffi_prolly_bindings_fn_method_bindingindexregistry_register(uint6
 
 extern uint64_t uniffi_prolly_bindings_fn_clone_bindingindexedmap(uint64_t ptr, RustCallStatus *out_err);
 extern void uniffi_prolly_bindings_fn_free_bindingindexedmap(uint64_t ptr, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingindexedmap_id(uint64_t ptr, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingindexedmap_apply(uint64_t ptr, RustBuffer mutations, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingindexedmap_apply_if(uint64_t ptr, RustBuffer expected_source, RustBuffer mutations, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingindexedmap_put(uint64_t ptr, RustBuffer key, RustBuffer value, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingindexedmap_delete(uint64_t ptr, RustBuffer key, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingindexedmap_get(uint64_t ptr, RustBuffer key, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingindexedmap_ensure_index(uint64_t ptr, RustBuffer name, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingindexedmap_health(uint64_t ptr, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingindexedmap_repair_index(uint64_t ptr, RustBuffer name, RustBuffer source_version, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingindexedmap_deactivate_index(uint64_t ptr, RustBuffer name, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingindexedmap_export_current(uint64_t ptr, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingindexedmap_import_current(uint64_t ptr, RustBuffer bundle, RustBuffer expected_source, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingindexedmap_keep_last(uint64_t ptr, uint64_t count, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingindexedmap_metrics(uint64_t ptr, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingindexedmap_verify_all(uint64_t ptr, RustBuffer source_version, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingindexedmap_verify_index(uint64_t ptr, RustBuffer name, RustBuffer source_version, RustCallStatus *out_err);
 extern uint64_t uniffi_prolly_bindings_fn_method_bindingindexedmap_snapshot(uint64_t ptr, RustCallStatus *out_err);
+extern uint64_t uniffi_prolly_bindings_fn_method_bindingindexedmap_snapshot_at(uint64_t ptr, RustBuffer source_version, RustCallStatus *out_err);
+extern uint64_t uniffi_prolly_bindings_fn_method_bindingindexedmap_snapshot_by_id(uint64_t ptr, RustBuffer snapshot_id, RustCallStatus *out_err);
 
 extern uint64_t uniffi_prolly_bindings_fn_clone_bindingindexedsnapshot(uint64_t ptr, RustCallStatus *out_err);
 extern void uniffi_prolly_bindings_fn_free_bindingindexedsnapshot(uint64_t ptr, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingindexedsnapshot_id(uint64_t ptr, RustCallStatus *out_err);
 extern uint64_t uniffi_prolly_bindings_fn_method_bindingindexedsnapshot_index(uint64_t ptr, RustBuffer name, RustCallStatus *out_err);
 
 extern uint64_t uniffi_prolly_bindings_fn_clone_bindingsecondaryindexsnapshot(uint64_t ptr, RustCallStatus *out_err);
 extern void uniffi_prolly_bindings_fn_free_bindingsecondaryindexsnapshot(uint64_t ptr, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_name(uint64_t ptr, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_exact(uint64_t ptr, RustBuffer term, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_prefix(uint64_t ptr, RustBuffer prefix, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_range(uint64_t ptr, RustBuffer start, RustBuffer range_end, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_exact_page(uint64_t ptr, RustBuffer term, RustBuffer cursor, uint64_t limit, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_exact_reverse_page(uint64_t ptr, RustBuffer term, RustBuffer cursor, uint64_t limit, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_prefix_page(uint64_t ptr, RustBuffer prefix, RustBuffer cursor, uint64_t limit, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_prefix_reverse_page(uint64_t ptr, RustBuffer prefix, RustBuffer cursor, uint64_t limit, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_range_page(uint64_t ptr, RustBuffer start, RustBuffer range_end, RustBuffer cursor, uint64_t limit, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_range_reverse_page(uint64_t ptr, RustBuffer start, RustBuffer range_end, RustBuffer cursor, uint64_t limit, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_records(uint64_t ptr, RustBuffer term, RustCallStatus *out_err);
 extern uint64_t uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_fast_handle(uint64_t ptr, RustCallStatus *out_err);
 
@@ -603,6 +623,57 @@ func ffiFreeIndexRegistry(handle uint64) {
 	C.uniffi_prolly_bindings_fn_free_bindingindexregistry(C.uint64_t(handle), &status)
 }
 
+func ffiIndexedMapID(handle uint64) ([]byte, error) {
+	clone, err := portableCloneIndexedMap(handle)
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingindexedmap_id(clone, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiIndexedMapApply(handle uint64, mutations []byte) ([]byte, error) {
+	clone, err := portableCloneIndexedMap(handle)
+	if err != nil {
+		return nil, err
+	}
+	mutationsBuf, err := portableInput(mutations)
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingindexedmap_apply(clone, mutationsBuf, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiIndexedMapApplyIf(handle uint64, expectedSource, mutations []byte) ([]byte, error) {
+	clone, err := portableCloneIndexedMap(handle)
+	if err != nil {
+		return nil, err
+	}
+	expectedBuf, err := portableInput(encodeOptionalByteArray(expectedSource))
+	if err != nil {
+		return nil, err
+	}
+	mutationsBuf, err := portableInput(mutations)
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingindexedmap_apply_if(clone, expectedBuf, mutationsBuf, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
 func ffiIndexedMapPut(handle uint64, key, value []byte) ([]byte, error) {
 	clone, err := portableCloneIndexedMap(handle)
 	if err != nil {
@@ -675,6 +746,57 @@ func ffiIndexedMapEnsureIndex(handle uint64, name []byte) ([]byte, error) {
 	return portableTakeBuffer(buf), nil
 }
 
+func ffiIndexedMapHealth(handle uint64) ([]byte, error) {
+	clone, err := portableCloneIndexedMap(handle)
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingindexedmap_health(clone, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiIndexedMapRepairIndex(handle uint64, name, sourceVersion []byte) ([]byte, error) {
+	clone, err := portableCloneIndexedMap(handle)
+	if err != nil {
+		return nil, err
+	}
+	nameBuf, err := portableInput(encodeByteArray(name))
+	if err != nil {
+		return nil, err
+	}
+	versionBuf, err := portableInput(encodeByteArray(sourceVersion))
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingindexedmap_repair_index(clone, nameBuf, versionBuf, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiIndexedMapDeactivateIndex(handle uint64, name []byte) ([]byte, error) {
+	clone, err := portableCloneIndexedMap(handle)
+	if err != nil {
+		return nil, err
+	}
+	nameBuf, err := portableInput(encodeByteArray(name))
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingindexedmap_deactivate_index(clone, nameBuf, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
 func ffiIndexedMapSnapshot(handle uint64) (uint64, error) {
 	clone, err := portableCloneIndexedMap(handle)
 	if err != nil {
@@ -685,6 +807,34 @@ func ffiIndexedMapSnapshot(handle uint64) (uint64, error) {
 	return uint64(result), portableStatusError(&status)
 }
 
+func ffiIndexedMapSnapshotAt(handle uint64, sourceVersion []byte) (uint64, error) {
+	clone, err := portableCloneIndexedMap(handle)
+	if err != nil {
+		return 0, err
+	}
+	versionBuf, err := portableInput(encodeByteArray(sourceVersion))
+	if err != nil {
+		return 0, err
+	}
+	var status C.RustCallStatus
+	result := C.uniffi_prolly_bindings_fn_method_bindingindexedmap_snapshot_at(clone, versionBuf, &status)
+	return uint64(result), portableStatusError(&status)
+}
+
+func ffiIndexedMapSnapshotByID(handle uint64, snapshotID []byte) (uint64, error) {
+	clone, err := portableCloneIndexedMap(handle)
+	if err != nil {
+		return 0, err
+	}
+	idBuf, err := portableInput(snapshotID)
+	if err != nil {
+		return 0, err
+	}
+	var status C.RustCallStatus
+	result := C.uniffi_prolly_bindings_fn_method_bindingindexedmap_snapshot_by_id(clone, idBuf, &status)
+	return uint64(result), portableStatusError(&status)
+}
+
 func ffiIndexedMapExportCurrent(handle uint64) ([]byte, error) {
 	clone, err := portableCloneIndexedMap(handle)
 	if err != nil {
@@ -692,6 +842,27 @@ func ffiIndexedMapExportCurrent(handle uint64) ([]byte, error) {
 	}
 	var status C.RustCallStatus
 	buf := C.uniffi_prolly_bindings_fn_method_bindingindexedmap_export_current(clone, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiIndexedMapImportCurrent(handle uint64, bundle, expectedSource []byte) ([]byte, error) {
+	clone, err := portableCloneIndexedMap(handle)
+	if err != nil {
+		return nil, err
+	}
+	bundleBuf, err := portableInput(encodeByteArray(bundle))
+	if err != nil {
+		return nil, err
+	}
+	expectedBuf, err := portableInput(encodeOptionalByteArray(expectedSource))
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingindexedmap_import_current(clone, bundleBuf, expectedBuf, &status)
 	if err := portableStatusError(&status); err != nil {
 		return nil, err
 	}
@@ -775,6 +946,19 @@ func ffiFreeSecondaryIndex(handle uint64) {
 	C.uniffi_prolly_bindings_fn_free_bindingsecondaryindexsnapshot(C.uint64_t(handle), &status)
 }
 
+func ffiIndexedSnapshotID(handle uint64) ([]byte, error) {
+	clone, err := portableCloneIndexedSnapshot(handle)
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingindexedsnapshot_id(clone, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
 func ffiIndexedSnapshotIndex(handle uint64, name []byte) (uint64, error) {
 	clone, err := portableCloneIndexedSnapshot(handle)
 	if err != nil {
@@ -787,6 +971,151 @@ func ffiIndexedSnapshotIndex(handle uint64, name []byte) (uint64, error) {
 	var status C.RustCallStatus
 	result := C.uniffi_prolly_bindings_fn_method_bindingindexedsnapshot_index(clone, nameBuf, &status)
 	return uint64(result), portableStatusError(&status)
+}
+
+func ffiSecondaryIndexName(handle uint64) ([]byte, error) {
+	clone, err := portableCloneSecondaryIndex(handle)
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_name(clone, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiSecondaryIndexUnary(handle uint64, value []byte, call func(C.uint64_t, C.RustBuffer, *C.RustCallStatus) C.RustBuffer) ([]byte, error) {
+	clone, err := portableCloneSecondaryIndex(handle)
+	if err != nil {
+		return nil, err
+	}
+	valueBuf, err := portableInput(encodeByteArray(value))
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := call(clone, valueBuf, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiSecondaryIndexExact(handle uint64, term []byte) ([]byte, error) {
+	return ffiSecondaryIndexUnary(handle, term, func(clone C.uint64_t, value C.RustBuffer, status *C.RustCallStatus) C.RustBuffer {
+		return C.uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_exact(clone, value, status)
+	})
+}
+
+func ffiSecondaryIndexPrefix(handle uint64, prefix []byte) ([]byte, error) {
+	return ffiSecondaryIndexUnary(handle, prefix, func(clone C.uint64_t, value C.RustBuffer, status *C.RustCallStatus) C.RustBuffer {
+		return C.uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_prefix(clone, value, status)
+	})
+}
+
+func ffiSecondaryIndexRange(handle uint64, start, end []byte) ([]byte, error) {
+	clone, err := portableCloneSecondaryIndex(handle)
+	if err != nil {
+		return nil, err
+	}
+	startBuf, err := portableInput(encodeByteArray(start))
+	if err != nil {
+		return nil, err
+	}
+	endBuf, err := portableInput(encodeOptionalByteArray(end))
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_range(clone, startBuf, endBuf, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+type secondaryIndexPageCall func(C.uint64_t, C.RustBuffer, C.RustBuffer, C.uint64_t, *C.RustCallStatus) C.RustBuffer
+
+func ffiSecondaryIndexPage(handle uint64, key, cursor []byte, limit uint64, call secondaryIndexPageCall) ([]byte, error) {
+	clone, err := portableCloneSecondaryIndex(handle)
+	if err != nil {
+		return nil, err
+	}
+	keyBuf, err := portableInput(encodeByteArray(key))
+	if err != nil {
+		return nil, err
+	}
+	cursorBuf, err := portableInput(encodeOptionalByteArray(cursor))
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := call(clone, keyBuf, cursorBuf, C.uint64_t(limit), &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiSecondaryIndexExactPage(handle uint64, term, cursor []byte, limit uint64, reverse bool) ([]byte, error) {
+	if reverse {
+		return ffiSecondaryIndexPage(handle, term, cursor, limit, func(clone C.uint64_t, key, cursor C.RustBuffer, limit C.uint64_t, status *C.RustCallStatus) C.RustBuffer {
+			return C.uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_exact_reverse_page(clone, key, cursor, limit, status)
+		})
+	}
+	return ffiSecondaryIndexPage(handle, term, cursor, limit, func(clone C.uint64_t, key, cursor C.RustBuffer, limit C.uint64_t, status *C.RustCallStatus) C.RustBuffer {
+		return C.uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_exact_page(clone, key, cursor, limit, status)
+	})
+}
+
+func ffiSecondaryIndexPrefixPage(handle uint64, prefix, cursor []byte, limit uint64, reverse bool) ([]byte, error) {
+	if reverse {
+		return ffiSecondaryIndexPage(handle, prefix, cursor, limit, func(clone C.uint64_t, key, cursor C.RustBuffer, limit C.uint64_t, status *C.RustCallStatus) C.RustBuffer {
+			return C.uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_prefix_reverse_page(clone, key, cursor, limit, status)
+		})
+	}
+	return ffiSecondaryIndexPage(handle, prefix, cursor, limit, func(clone C.uint64_t, key, cursor C.RustBuffer, limit C.uint64_t, status *C.RustCallStatus) C.RustBuffer {
+		return C.uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_prefix_page(clone, key, cursor, limit, status)
+	})
+}
+
+type secondaryIndexRangePageCall func(C.uint64_t, C.RustBuffer, C.RustBuffer, C.RustBuffer, C.uint64_t, *C.RustCallStatus) C.RustBuffer
+
+func ffiSecondaryIndexRangePage(handle uint64, start, end, cursor []byte, limit uint64, reverse bool) ([]byte, error) {
+	clone, err := portableCloneSecondaryIndex(handle)
+	if err != nil {
+		return nil, err
+	}
+	startBuf, err := portableInput(encodeByteArray(start))
+	if err != nil {
+		return nil, err
+	}
+	endBuf, err := portableInput(encodeOptionalByteArray(end))
+	if err != nil {
+		return nil, err
+	}
+	cursorBuf, err := portableInput(encodeOptionalByteArray(cursor))
+	if err != nil {
+		return nil, err
+	}
+	var call secondaryIndexRangePageCall
+	if reverse {
+		call = func(clone C.uint64_t, start, end, cursor C.RustBuffer, limit C.uint64_t, status *C.RustCallStatus) C.RustBuffer {
+			return C.uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_range_reverse_page(clone, start, end, cursor, limit, status)
+		}
+	} else {
+		call = func(clone C.uint64_t, start, end, cursor C.RustBuffer, limit C.uint64_t, status *C.RustCallStatus) C.RustBuffer {
+			return C.uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_range_page(clone, start, end, cursor, limit, status)
+		}
+	}
+	var status C.RustCallStatus
+	buf := call(clone, startBuf, endBuf, cursorBuf, C.uint64_t(limit), &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
 }
 
 func ffiSecondaryIndexRecords(handle uint64, term []byte) ([]byte, error) {

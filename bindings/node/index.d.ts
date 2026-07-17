@@ -22,6 +22,15 @@ export interface NodePortableIndexedVersion {
   catalogVersion?: Buffer
   indexCount: string
 }
+export interface NodePortableIndexedSnapshotId {
+  sourceVersion: Buffer
+  catalogVersion: Buffer
+}
+export interface NodePortableIndexedUpdate {
+  kind: string
+  previousSourceVersion?: Buffer
+  current?: NodePortableIndexedVersion
+}
 export interface NodePortableIndexBuildResult {
   sourceVersion: Buffer
   indexVersion: Buffer
@@ -30,6 +39,57 @@ export interface NodePortableIndexBuildResult {
   entries: string
   attempts: string
   activated: boolean
+}
+export interface NodePortableActiveIndexHealth {
+  name: Buffer
+  generation: string
+  fingerprint: Buffer
+  projection: string
+  indexMapId: Buffer
+  indexVersion: Buffer
+}
+export interface NodePortableIndexedMapHealth {
+  sourceMapId: Buffer
+  sourceVersion?: Buffer
+  catalogVersion?: Buffer
+  activeIndexes: Array<NodePortableActiveIndexHealth>
+  supportsTransactions: boolean
+}
+export interface NodePortableIndexVerification {
+  name: Buffer
+  sourceVersion: Buffer
+  expectedIndexVersion: Buffer
+  actualIndexVersion: Buffer
+  expectedEntries: string
+  actualEntries: string
+  semanticDifferences: string
+  valid: boolean
+  canonical: boolean
+}
+export interface NodePortableIndexedMapMetrics {
+  normalizedSourceMutations: string
+  recordsExtracted: string
+  termsEmitted: string
+  projectedBytes: string
+  physicalUpserts: string
+  physicalDeletes: string
+  unchangedEmissionsSkipped: string
+  sourceNodesWritten: string
+  indexNodesWritten: string
+  catalogNodesWritten: string
+  retries: string
+  buildAttempts: string
+  verificationOutcomes: string
+  retainedRoots: string
+}
+export interface NodePortableIndexedRetention {
+  retainedSourceVersions: Array<Buffer>
+  removedSourceVersions: Array<Buffer>
+  retainedIndexVersions: Array<Buffer>
+  removedIndexVersions: Array<Buffer>
+  removedCatalogVersions: Array<Buffer>
+  removedCheckpointRecords: string
+  removedNamedRoots: Array<Buffer>
 }
 export interface NodePortableIndexMatch {
   term: Buffer
@@ -853,25 +913,43 @@ export declare class NativePortableIndexRegistry {
   register(name: Buffer, generation: string, extractorId: string, projection: string, extractor: NodePortableIndexExtractor): void
 }
 export declare class NativePortableIndexedMap {
+  id(): Buffer
   get(key: Buffer): Buffer | null
   put(key: Buffer, value: Buffer): NodePortableIndexedVersion
+  apply(mutations: Array<NodeMutationRecord>): NodePortableIndexedVersion
+  applyIf(expectedSource: Buffer | undefined | null, mutations: Array<NodeMutationRecord>): NodePortableIndexedUpdate
   delete(key: Buffer): NodePortableIndexedVersion
   ensureIndex(name: Buffer): NodePortableIndexBuildResult
   snapshot(): NativePortableIndexedSnapshot
-  metrics(): NodePortableMaintenanceSummary
-  verifyIndex(name: Buffer, sourceVersion: Buffer): boolean
+  snapshotAt(sourceVersion: Buffer): NativePortableIndexedSnapshot
+  snapshotById(snapshotId: NodePortableIndexedSnapshotId): NativePortableIndexedSnapshot
+  health(): NodePortableIndexedMapHealth
+  metrics(): NodePortableIndexedMapMetrics
+  verifyIndex(name: Buffer, sourceVersion: Buffer): NodePortableIndexVerification
+  verifyAll(sourceVersion: Buffer): Array<NodePortableIndexVerification>
+  repairIndex(name: Buffer, sourceVersion: Buffer): NodePortableIndexVerification
+  deactivateIndex(name: Buffer): NodePortableIndexedVersion
   exportCurrent(): Buffer
-  keepLast(count: string): string
+  importCurrent(bundle: Buffer, expectedSource?: Buffer | undefined | null): NodePortableIndexedVersion
+  keepLast(count: string): NodePortableIndexedRetention
 }
 export declare class NativePortableIndexedSnapshot {
+  id(): NodePortableIndexedSnapshotId
   index(name: Buffer): NativePortableSecondaryIndex
 }
 export declare class NativePortableSecondaryIndex {
+  name(): Buffer
+  fastHandle(): string
   exact(term: Buffer): Array<NodePortableIndexMatch>
   prefix(prefix: Buffer): Array<NodePortableIndexMatch>
   range(start: Buffer, end?: Buffer | undefined | null): Array<NodePortableIndexMatch>
   records(term: Buffer): Array<NodePortableIndexedSource>
   exactPage(term: Buffer, cursor: Buffer | undefined | null, limit: string): NodePortableIndexPage
+  exactReversePage(term: Buffer, cursor: Buffer | undefined | null, limit: string): NodePortableIndexPage
+  prefixPage(prefix: Buffer, cursor: Buffer | undefined | null, limit: string): NodePortableIndexPage
+  prefixReversePage(prefix: Buffer, cursor: Buffer | undefined | null, limit: string): NodePortableIndexPage
+  rangePage(start: Buffer, end: Buffer | undefined | null, cursor: Buffer | undefined | null, limit: string): NodePortableIndexPage
+  rangeReversePage(start: Buffer, end: Buffer | undefined | null, cursor: Buffer | undefined | null, limit: string): NodePortableIndexPage
 }
 export declare class NativePortableProximityMap {
   read(): NativePortableProximityReadSession

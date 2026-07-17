@@ -8,6 +8,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import build.crab.prolly.javaapi.Engine;
 import build.crab.prolly.javaapi.IndexEntry;
 import build.crab.prolly.javaapi.IndexProjection;
+import build.crab.prolly.javaapi.IndexedMutation;
+import build.crab.prolly.javaapi.IndexedUpdateKind;
 import build.crab.prolly.javaapi.ProximityRecord;
 import build.crab.prolly.javaapi.ProximityMutation;
 import build.crab.prolly.javaapi.Proofs;
@@ -101,10 +103,10 @@ class PortableParityTest {
                 try (var indexed = engine.indexedMap(bytes("indexed-maintenance"), registry)) {
                     var version = indexed.put(bytes("k"), bytes("term"));
                     indexed.ensureIndex(bytes("by_value"));
-                    assertTrue(indexed.verifyIndex(bytes("by_value"), version.sourceVersion()).getValid());
+                    assertTrue(indexed.verifyIndex(bytes("by_value"), version.sourceVersion()).valid());
                     assertTrue(indexed.buildAttempts() >= 1);
                     assertFalse(indexed.exportCurrent().length == 0);
-                    assertFalse(indexed.keepLast(1).getRetainedSourceVersions().isEmpty());
+                    assertFalse(indexed.keepLast(1).retainedSourceVersions().isEmpty());
                 }
             }
 
@@ -131,6 +133,95 @@ class PortableParityTest {
                             verifiedSearch.getResult().getNeighbors().get(0).getKey());
                     assertTrue(searchProof.replayedEvents(verifiedSearch) > 0);
                 }
+            }
+        }
+    }
+
+    @Test
+    void indexedBatchCasAndHistoricalSnapshotsAreJavaNative() throws Exception {
+        Prolly.useLocalDebugLibrary();
+        try (Engine engine = Engine.memory(); var registry = engine.indexRegistry()) {
+            registry.register(bytes("by_value"), 1, "value-v1", IndexProjection.ALL,
+                    (key, value) -> List.of(new IndexEntry(value, null)));
+            try (var indexed = engine.indexedMap(bytes("indexed-lifecycle"), registry)) {
+                assertArrayEquals(bytes("indexed-lifecycle"), indexed.id());
+                var first = indexed.apply(List.of(
+                        IndexedMutation.upsert(bytes("u1"), bytes("red")),
+                        IndexedMutation.upsert(bytes("u2"), bytes("red"))));
+                indexed.ensureIndex(bytes("by_value"));
+                try (var firstSnapshot = indexed.snapshot()) {
+                    var firstId = firstSnapshot.id();
+                    assertArrayEquals(first.sourceVersion(), firstId.sourceVersion());
+                    var applied = indexed.applyIf(first.sourceVersion(), List.of(
+                            IndexedMutation.upsert(bytes("u3"), bytes("blue"))));
+                    assertEquals(IndexedUpdateKind.APPLIED, applied.kind());
+                    assertTrue(applied.current().isPresent());
+                    var conflict = indexed.applyIf(first.sourceVersion(), List.of(
+                            IndexedMutation.delete(bytes("u1"))));
+                    assertEquals(IndexedUpdateKind.CONFLICT, conflict.kind());
+                    try (var historical = indexed.snapshotAt(first.sourceVersion());
+                         var reopened = indexed.snapshotById(firstId)) {
+                        assertArrayEquals(firstId.sourceVersion(), historical.id().sourceVersion());
+                        assertArrayEquals(firstId.catalogVersion(), reopened.id().catalogVersion());
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    void indexedMaintenanceAndOwnedPagesExposeCompleteJavaRecords() throws Exception {
+        Prolly.useLocalDebugLibrary();
+        try (Engine engine = Engine.memory(); var registry = engine.indexRegistry()) {
+            registry.register(bytes("by_value"), 1, "value-v1", IndexProjection.ALL,
+                    (key, value) -> List.of(new IndexEntry(value, null)));
+            try (var indexed = engine.indexedMap(bytes("indexed-records"), registry)) {
+                var version = indexed.apply(List.of(
+                        IndexedMutation.upsert(bytes("u1"), bytes("red")),
+                        IndexedMutation.upsert(bytes("u2"), bytes("red")),
+                        IndexedMutation.upsert(bytes("u3"), bytes("rose"))));
+                indexed.ensureIndex(bytes("by_value"));
+                assertArrayEquals(bytes("indexed-records"), indexed.health().sourceMapId());
+                assertEquals(1, indexed.health().activeIndexes().size());
+                assertTrue(indexed.repairIndex(bytes("by_value"), version.sourceVersion()).valid());
+                assertTrue(indexed.metrics().buildAttempts() >= 1);
+
+                try (var snapshot = indexed.snapshot(); var index = snapshot.index(bytes("by_value"))) {
+                    assertArrayEquals(bytes("by_value"), index.name());
+                    assertEquals(2, index.exact(bytes("red")).size());
+                    assertEquals(3, index.prefix(bytes("r")).size());
+                    assertEquals(3, index.range(bytes("red"), bytes("s")).size());
+                    assertArrayEquals(bytes("u1"), index.exactPage(bytes("red"), null, 1).matches().get(0).primaryKey());
+                    assertArrayEquals(bytes("u2"), index.exactReversePage(bytes("red"), null, 1).matches().get(0).primaryKey());
+                    assertArrayEquals(bytes("u1"), index.prefixPage(bytes("r"), null, 1).matches().get(0).primaryKey());
+                    assertArrayEquals(bytes("u3"), index.prefixReversePage(bytes("r"), null, 1).matches().get(0).primaryKey());
+                    assertArrayEquals(bytes("u1"), index.rangePage(bytes("red"), bytes("s"), null, 1).matches().get(0).primaryKey());
+                    assertArrayEquals(bytes("u3"), index.rangeReversePage(bytes("red"), bytes("s"), null, 1).matches().get(0).primaryKey());
+                }
+
+                byte[] bundle = indexed.exportCurrent();
+                var next = indexed.put(bytes("u4"), bytes("blue"));
+                assertArrayEquals(version.sourceVersion(), indexed.importCurrent(bundle, next.sourceVersion()).sourceVersion());
+                assertFalse(indexed.keepLast(1).retainedSourceVersions().isEmpty());
+                indexed.deactivateIndex(bytes("by_value"));
+                assertTrue(indexed.health().activeIndexes().isEmpty());
+            }
+        }
+    }
+
+    @Test
+    void indexedCompletableFutureOwnsBatchInputsBeforeScheduling() throws Exception {
+        Prolly.useLocalDebugLibrary();
+        try (Engine engine = Engine.memory(); var registry = engine.indexRegistry()) {
+            registry.register(bytes("by_value"), 1, "value-v1", IndexProjection.ALL,
+                    (key, value) -> List.of(new IndexEntry(value, null)));
+            try (var indexed = engine.indexedMap(bytes("indexed-async"), registry)) {
+                var mutation = IndexedMutation.upsert(bytes("original-key"), bytes("original-value"));
+                var future = indexed.applyAsync(List.of(mutation));
+                mutation.key()[0] = 'x';
+                mutation.value()[0] = 'x';
+                future.get();
+                assertArrayEquals(bytes("original-value"), indexed.get(bytes("original-key")).orElseThrow());
             }
         }
     }

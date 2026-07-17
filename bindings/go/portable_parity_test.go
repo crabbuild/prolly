@@ -282,6 +282,220 @@ func TestPortableIndexedProofAndMaintenance(t *testing.T) {
 	}
 }
 
+func TestPortableIndexedBatchCASAndHistoricalSnapshots(t *testing.T) {
+	engine, err := OpenMemory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer engine.Close()
+	registry, err := NewIndexRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer registry.Close()
+	if err := registry.Register(
+		[]byte("by_value"), 1, "value-v1", IndexProjectionAll, nil,
+		IndexExtractorFunc(func(_ []byte, value []byte) ([]IndexEntry, error) {
+			return []IndexEntry{{Term: bytes.Clone(value)}}, nil
+		}),
+	); err != nil {
+		t.Fatal(err)
+	}
+	indexed, err := engine.IndexedMap([]byte("indexed-lifecycle"), registry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer indexed.Close()
+	if id, err := indexed.ID(); err != nil || !bytes.Equal(id, []byte("indexed-lifecycle")) {
+		t.Fatalf("id = %q, %v", id, err)
+	}
+	first, err := indexed.Apply([]Mutation{
+		UpsertMutation([]byte("u1"), []byte("red")),
+		UpsertMutation([]byte("u2"), []byte("red")),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := indexed.EnsureIndex([]byte("by_value")); err != nil {
+		t.Fatal(err)
+	}
+	firstSnapshot, err := indexed.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer firstSnapshot.Close()
+	firstID, err := firstSnapshot.ID()
+	if err != nil || !bytes.Equal(firstID.SourceVersion, first.SourceVersion) {
+		t.Fatalf("first snapshot id = %+v, %v", firstID, err)
+	}
+	applied, err := indexed.ApplyIf(first.SourceVersion, []Mutation{
+		UpsertMutation([]byte("u3"), []byte("blue")),
+	})
+	if err != nil || applied.Kind != IndexedUpdateApplied || applied.Current == nil {
+		t.Fatalf("applied = %+v, %v", applied, err)
+	}
+	conflict, err := indexed.ApplyIf(first.SourceVersion, []Mutation{
+		DeleteMutation([]byte("u1")),
+	})
+	if err != nil || conflict.Kind != IndexedUpdateConflict {
+		t.Fatalf("conflict = %+v, %v", conflict, err)
+	}
+	historical, err := indexed.SnapshotAt(first.SourceVersion)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer historical.Close()
+	historicalID, err := historical.ID()
+	if err != nil || !bytes.Equal(historicalID.SourceVersion, firstID.SourceVersion) {
+		t.Fatalf("historical id = %+v, %v", historicalID, err)
+	}
+	reopened, err := indexed.SnapshotByID(firstID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	reopenedID, err := reopened.ID()
+	if err != nil || !bytes.Equal(reopenedID.CatalogVersion, firstID.CatalogVersion) {
+		t.Fatalf("reopened id = %+v, %v", reopenedID, err)
+	}
+}
+
+func TestPortableIndexedCompleteMaintenanceRecords(t *testing.T) {
+	engine, err := OpenMemory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer engine.Close()
+	registry, err := NewIndexRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer registry.Close()
+	if err := registry.Register(
+		[]byte("by_value"), 1, "value-v1", IndexProjectionAll, nil,
+		IndexExtractorFunc(func(_ []byte, value []byte) ([]IndexEntry, error) {
+			return []IndexEntry{{Term: bytes.Clone(value)}}, nil
+		}),
+	); err != nil {
+		t.Fatal(err)
+	}
+	indexed, err := engine.IndexedMap([]byte("indexed-records"), registry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer indexed.Close()
+	version, err := indexed.Put([]byte("u1"), []byte("red"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := indexed.EnsureIndex([]byte("by_value")); err != nil {
+		t.Fatal(err)
+	}
+	health, err := indexed.Health()
+	if err != nil || !bytes.Equal(health.SourceMapID, []byte("indexed-records")) || len(health.ActiveIndexes) != 1 {
+		t.Fatalf("health = %+v, %v", health, err)
+	}
+	repaired, err := indexed.RepairIndex([]byte("by_value"), version.SourceVersion)
+	if err != nil || !repaired.Valid || !repaired.Canonical {
+		t.Fatalf("repair = %+v, %v", repaired, err)
+	}
+	bundle, err := indexed.ExportCurrent()
+	if err != nil {
+		t.Fatal(err)
+	}
+	next, err := indexed.Put([]byte("u2"), []byte("blue"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	imported, err := indexed.ImportCurrent(bundle, next.SourceVersion)
+	if err != nil || !bytes.Equal(imported.SourceVersion, version.SourceVersion) {
+		t.Fatalf("imported = %+v, %v", imported, err)
+	}
+	if _, err := indexed.DeactivateIndex([]byte("by_value")); err != nil {
+		t.Fatal(err)
+	}
+	health, err = indexed.Health()
+	if err != nil || len(health.ActiveIndexes) != 0 {
+		t.Fatalf("deactivated health = %+v, %v", health, err)
+	}
+}
+
+func TestPortableSecondaryIndexOwnedPagesCoverEveryDirection(t *testing.T) {
+	engine, err := OpenMemory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer engine.Close()
+	registry, err := NewIndexRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer registry.Close()
+	if err := registry.Register(
+		[]byte("by_value"), 1, "value-v1", IndexProjectionAll, nil,
+		IndexExtractorFunc(func(_ []byte, value []byte) ([]IndexEntry, error) {
+			return []IndexEntry{{Term: bytes.Clone(value)}}, nil
+		}),
+	); err != nil {
+		t.Fatal(err)
+	}
+	indexed, err := engine.IndexedMap([]byte("indexed-pages"), registry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer indexed.Close()
+	if _, err := indexed.Apply([]Mutation{
+		UpsertMutation([]byte("u1"), []byte("red")),
+		UpsertMutation([]byte("u2"), []byte("red")),
+		UpsertMutation([]byte("u3"), []byte("rose")),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := indexed.EnsureIndex([]byte("by_value")); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := indexed.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer snapshot.Close()
+	index, err := snapshot.Index([]byte("by_value"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer index.Close()
+	if name, err := index.Name(); err != nil || !bytes.Equal(name, []byte("by_value")) {
+		t.Fatalf("name = %q, %v", name, err)
+	}
+	checkPage := func(name, want string, page IndexPage, err error) {
+		t.Helper()
+		if err != nil || len(page.Matches) != 1 || !bytes.Equal(page.Matches[0].PrimaryKey, []byte(want)) {
+			t.Fatalf("%s page = %+v, %v", name, page, err)
+		}
+	}
+	page, pageErr := index.ExactPage([]byte("red"), nil, 1)
+	checkPage("exact", "u1", page, pageErr)
+	page, pageErr = index.ExactReversePage([]byte("red"), nil, 1)
+	checkPage("exact reverse", "u2", page, pageErr)
+	page, pageErr = index.PrefixPage([]byte("r"), nil, 1)
+	checkPage("prefix", "u1", page, pageErr)
+	page, pageErr = index.PrefixReversePage([]byte("r"), nil, 1)
+	checkPage("prefix reverse", "u3", page, pageErr)
+	page, pageErr = index.RangePage([]byte("red"), []byte("s"), nil, 1)
+	checkPage("range", "u1", page, pageErr)
+	page, pageErr = index.RangeReversePage([]byte("red"), []byte("s"), nil, 1)
+	checkPage("range reverse", "u3", page, pageErr)
+	if rows, err := index.Exact([]byte("red")); err != nil || len(rows) != 2 {
+		t.Fatalf("exact = %+v, %v", rows, err)
+	}
+	if rows, err := index.Prefix([]byte("r")); err != nil || len(rows) != 3 {
+		t.Fatalf("prefix = %+v, %v", rows, err)
+	}
+	if rows, err := index.Range([]byte("red"), []byte("s")); err != nil || len(rows) != 3 {
+		t.Fatalf("range = %+v, %v", rows, err)
+	}
+}
+
 func TestPortableProximityProofAndMaintenance(t *testing.T) {
 	engine, err := OpenMemory()
 	if err != nil {

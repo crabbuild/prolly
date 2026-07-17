@@ -139,6 +139,25 @@ type IndexedVersion struct {
 	IndexCount     uint64
 }
 
+type IndexedSnapshotID struct {
+	SourceVersion  []byte
+	CatalogVersion []byte
+}
+
+type IndexedUpdateKind int32
+
+const (
+	IndexedUpdateApplied   IndexedUpdateKind = 1
+	IndexedUpdateUnchanged IndexedUpdateKind = 2
+	IndexedUpdateConflict  IndexedUpdateKind = 3
+)
+
+type IndexedUpdate struct {
+	Kind                  IndexedUpdateKind
+	PreviousSourceVersion []byte
+	Current               *IndexedVersion
+}
+
 type IndexBuildResult struct {
 	SourceVersion  []byte
 	IndexVersion   []byte
@@ -159,6 +178,23 @@ type IndexVerification struct {
 	SemanticDifferences  uint64
 	Valid                bool
 	Canonical            bool
+}
+
+type ActiveIndexHealth struct {
+	Name         []byte
+	Generation   uint64
+	Fingerprint  []byte
+	Projection   IndexProjection
+	IndexMapID   []byte
+	IndexVersion []byte
+}
+
+type IndexedMapHealth struct {
+	SourceMapID          []byte
+	SourceVersion        []byte
+	CatalogVersion       []byte
+	ActiveIndexes        []ActiveIndexHealth
+	SupportsTransactions bool
 }
 
 type IndexedMapMetrics struct {
@@ -233,6 +269,58 @@ func (m *IndexedMap) withHandle() (uint64, func(), error) {
 	return m.handle, m.mu.RUnlock, nil
 }
 
+func (m *IndexedMap) ID() ([]byte, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	raw, err := ffiIndexedMapID(handle)
+	if err != nil {
+		return nil, err
+	}
+	d := byteDecoder{data: raw}
+	id, err := d.readByteArray()
+	if err != nil {
+		return nil, err
+	}
+	return id, d.done()
+}
+
+func (m *IndexedMap) Apply(mutations []Mutation) (IndexedVersion, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return IndexedVersion{}, err
+	}
+	defer unlock()
+	encoded, err := encodeMutations(mutations)
+	if err != nil {
+		return IndexedVersion{}, err
+	}
+	raw, err := ffiIndexedMapApply(handle, encoded)
+	if err != nil {
+		return IndexedVersion{}, err
+	}
+	return decodeIndexedVersion(raw)
+}
+
+func (m *IndexedMap) ApplyIf(expectedSource []byte, mutations []Mutation) (IndexedUpdate, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return IndexedUpdate{}, err
+	}
+	defer unlock()
+	encoded, err := encodeMutations(mutations)
+	if err != nil {
+		return IndexedUpdate{}, err
+	}
+	raw, err := ffiIndexedMapApplyIf(handle, append([]byte(nil), expectedSource...), encoded)
+	if err != nil {
+		return IndexedUpdate{}, err
+	}
+	return decodeIndexedUpdate(raw)
+}
+
 func (m *IndexedMap) Put(key, value []byte) (IndexedVersion, error) {
 	handle, unlock, err := m.withHandle()
 	if err != nil {
@@ -287,6 +375,19 @@ func (m *IndexedMap) EnsureIndex(name []byte) (IndexBuildResult, error) {
 	return decodeIndexBuildResult(raw)
 }
 
+func (m *IndexedMap) Health() (IndexedMapHealth, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return IndexedMapHealth{}, err
+	}
+	defer unlock()
+	raw, err := ffiIndexedMapHealth(handle)
+	if err != nil {
+		return IndexedMapHealth{}, err
+	}
+	return decodeIndexedMapHealth(raw)
+}
+
 func (m *IndexedMap) VerifyIndex(name, sourceVersion []byte) (IndexVerification, error) {
 	handle, unlock, err := m.withHandle()
 	if err != nil {
@@ -311,6 +412,32 @@ func (m *IndexedMap) VerifyAll(sourceVersion []byte) ([]IndexVerification, error
 		return nil, err
 	}
 	return decodeIndexVerifications(raw)
+}
+
+func (m *IndexedMap) RepairIndex(name, sourceVersion []byte) (IndexVerification, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return IndexVerification{}, err
+	}
+	defer unlock()
+	raw, err := ffiIndexedMapRepairIndex(handle, append([]byte(nil), name...), append([]byte(nil), sourceVersion...))
+	if err != nil {
+		return IndexVerification{}, err
+	}
+	return decodeIndexVerification(raw)
+}
+
+func (m *IndexedMap) DeactivateIndex(name []byte) (IndexedVersion, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return IndexedVersion{}, err
+	}
+	defer unlock()
+	raw, err := ffiIndexedMapDeactivateIndex(handle, append([]byte(nil), name...))
+	if err != nil {
+		return IndexedVersion{}, err
+	}
+	return decodeIndexedVersion(raw)
 }
 
 func (m *IndexedMap) Metrics() (IndexedMapMetrics, error) {
@@ -344,6 +471,19 @@ func (m *IndexedMap) ExportCurrent() ([]byte, error) {
 	return bundle, d.done()
 }
 
+func (m *IndexedMap) ImportCurrent(bundle, expectedSource []byte) (IndexedVersion, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return IndexedVersion{}, err
+	}
+	defer unlock()
+	raw, err := ffiIndexedMapImportCurrent(handle, append([]byte(nil), bundle...), append([]byte(nil), expectedSource...))
+	if err != nil {
+		return IndexedVersion{}, err
+	}
+	return decodeIndexedVersion(raw)
+}
+
 func (m *IndexedMap) KeepLast(count uint64) (IndexedRetention, error) {
 	handle, unlock, err := m.withHandle()
 	if err != nil {
@@ -366,15 +506,45 @@ func (m *IndexedMap) Snapshot() (*IndexedSnapshot, error) {
 	if err != nil {
 		return nil, err
 	}
-	result := &IndexedSnapshot{handle: snapshot}
-	runtime.SetFinalizer(result, (*IndexedSnapshot).Close)
-	return result, nil
+	return adoptIndexedSnapshot(snapshot), nil
+}
+
+func (m *IndexedMap) SnapshotAt(sourceVersion []byte) (*IndexedSnapshot, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	snapshot, err := ffiIndexedMapSnapshotAt(handle, append([]byte(nil), sourceVersion...))
+	if err != nil {
+		return nil, err
+	}
+	return adoptIndexedSnapshot(snapshot), nil
+}
+
+func (m *IndexedMap) SnapshotByID(id IndexedSnapshotID) (*IndexedSnapshot, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	snapshot, err := ffiIndexedMapSnapshotByID(handle, encodeIndexedSnapshotID(id))
+	if err != nil {
+		return nil, err
+	}
+	return adoptIndexedSnapshot(snapshot), nil
 }
 
 type IndexedSnapshot struct {
 	handle uint64
 	closed atomic.Bool
 	mu     sync.RWMutex
+}
+
+func adoptIndexedSnapshot(handle uint64) *IndexedSnapshot {
+	result := &IndexedSnapshot{handle: handle}
+	runtime.SetFinalizer(result, (*IndexedSnapshot).Close)
+	return result
 }
 
 func (s *IndexedSnapshot) Close() {
@@ -399,6 +569,19 @@ func (s *IndexedSnapshot) withHandle() (uint64, func(), error) {
 		return 0, nil, errors.New("indexed snapshot is closed")
 	}
 	return s.handle, s.mu.RUnlock, nil
+}
+
+func (s *IndexedSnapshot) ID() (IndexedSnapshotID, error) {
+	handle, unlock, err := s.withHandle()
+	if err != nil {
+		return IndexedSnapshotID{}, err
+	}
+	defer unlock()
+	raw, err := ffiIndexedSnapshotID(handle)
+	if err != nil {
+		return IndexedSnapshotID{}, err
+	}
+	return decodeIndexedSnapshotID(raw)
 }
 func (s *IndexedSnapshot) Index(name []byte) (*SecondaryIndex, error) {
 	handle, unlock, err := s.withHandle()
@@ -452,6 +635,123 @@ func (i *SecondaryIndex) withHandle() (uint64, uint64, func(), error) {
 	return i.handle, i.fast, i.mu.RUnlock, nil
 }
 
+type IndexMatch struct {
+	Term       []byte
+	PrimaryKey []byte
+	Projection []byte
+}
+
+type IndexPage struct {
+	Matches    []IndexMatch
+	NextCursor []byte
+}
+
+func (i *SecondaryIndex) Name() ([]byte, error) {
+	handle, _, unlock, err := i.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	raw, err := ffiSecondaryIndexName(handle)
+	if err != nil {
+		return nil, err
+	}
+	d := byteDecoder{data: raw}
+	name, err := d.readByteArray()
+	if err != nil {
+		return nil, err
+	}
+	return name, d.done()
+}
+
+func (i *SecondaryIndex) Exact(term []byte) ([]IndexMatch, error) {
+	handle, _, unlock, err := i.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	raw, err := ffiSecondaryIndexExact(handle, append([]byte(nil), term...))
+	if err != nil {
+		return nil, err
+	}
+	return decodeIndexMatches(raw)
+}
+
+func (i *SecondaryIndex) Prefix(prefix []byte) ([]IndexMatch, error) {
+	handle, _, unlock, err := i.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	raw, err := ffiSecondaryIndexPrefix(handle, append([]byte(nil), prefix...))
+	if err != nil {
+		return nil, err
+	}
+	return decodeIndexMatches(raw)
+}
+
+func (i *SecondaryIndex) Range(start, end []byte) ([]IndexMatch, error) {
+	handle, _, unlock, err := i.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	raw, err := ffiSecondaryIndexRange(handle, append([]byte(nil), start...), append([]byte(nil), end...))
+	if err != nil {
+		return nil, err
+	}
+	return decodeIndexMatches(raw)
+}
+
+func (i *SecondaryIndex) ExactPage(term, cursor []byte, limit uint64) (IndexPage, error) {
+	return i.page(func(handle uint64) ([]byte, error) {
+		return ffiSecondaryIndexExactPage(handle, append([]byte(nil), term...), append([]byte(nil), cursor...), limit, false)
+	})
+}
+
+func (i *SecondaryIndex) ExactReversePage(term, cursor []byte, limit uint64) (IndexPage, error) {
+	return i.page(func(handle uint64) ([]byte, error) {
+		return ffiSecondaryIndexExactPage(handle, append([]byte(nil), term...), append([]byte(nil), cursor...), limit, true)
+	})
+}
+
+func (i *SecondaryIndex) PrefixPage(prefix, cursor []byte, limit uint64) (IndexPage, error) {
+	return i.page(func(handle uint64) ([]byte, error) {
+		return ffiSecondaryIndexPrefixPage(handle, append([]byte(nil), prefix...), append([]byte(nil), cursor...), limit, false)
+	})
+}
+
+func (i *SecondaryIndex) PrefixReversePage(prefix, cursor []byte, limit uint64) (IndexPage, error) {
+	return i.page(func(handle uint64) ([]byte, error) {
+		return ffiSecondaryIndexPrefixPage(handle, append([]byte(nil), prefix...), append([]byte(nil), cursor...), limit, true)
+	})
+}
+
+func (i *SecondaryIndex) RangePage(start, end, cursor []byte, limit uint64) (IndexPage, error) {
+	return i.page(func(handle uint64) ([]byte, error) {
+		return ffiSecondaryIndexRangePage(handle, append([]byte(nil), start...), append([]byte(nil), end...), append([]byte(nil), cursor...), limit, false)
+	})
+}
+
+func (i *SecondaryIndex) RangeReversePage(start, end, cursor []byte, limit uint64) (IndexPage, error) {
+	return i.page(func(handle uint64) ([]byte, error) {
+		return ffiSecondaryIndexRangePage(handle, append([]byte(nil), start...), append([]byte(nil), end...), append([]byte(nil), cursor...), limit, true)
+	})
+}
+
+func (i *SecondaryIndex) page(call func(uint64) ([]byte, error)) (IndexPage, error) {
+	handle, _, unlock, err := i.withHandle()
+	if err != nil {
+		return IndexPage{}, err
+	}
+	defer unlock()
+	raw, err := call(handle)
+	if err != nil {
+		return IndexPage{}, err
+	}
+	return decodeIndexPage(raw)
+}
+
 type IndexedSourceRecord struct {
 	Term        []byte
 	PrimaryKey  []byte
@@ -472,8 +772,7 @@ func (i *SecondaryIndex) Records(term []byte) ([]IndexedSourceRecord, error) {
 	return decodeIndexedSourceRecords(raw)
 }
 
-func decodeIndexedVersion(raw []byte) (IndexedVersion, error) {
-	d := byteDecoder{data: raw}
+func decodeIndexedVersionFrom(d *byteDecoder) (IndexedVersion, error) {
 	source, err := d.readByteArray()
 	if err != nil {
 		return IndexedVersion{}, err
@@ -486,7 +785,64 @@ func decodeIndexedVersion(raw []byte) (IndexedVersion, error) {
 	if err != nil {
 		return IndexedVersion{}, err
 	}
-	return IndexedVersion{source, catalog, count}, d.done()
+	return IndexedVersion{source, catalog, count}, nil
+}
+
+func decodeIndexedVersion(raw []byte) (IndexedVersion, error) {
+	d := byteDecoder{data: raw}
+	value, err := decodeIndexedVersionFrom(&d)
+	if err != nil {
+		return IndexedVersion{}, err
+	}
+	return value, d.done()
+}
+
+func decodeIndexedUpdate(raw []byte) (IndexedUpdate, error) {
+	d := byteDecoder{data: raw}
+	kind, err := d.readInt32()
+	if err != nil || kind < int32(IndexedUpdateApplied) || kind > int32(IndexedUpdateConflict) {
+		if err == nil {
+			err = errors.New("invalid indexed update kind")
+		}
+		return IndexedUpdate{}, err
+	}
+	previous, _, err := d.readOptionalByteArray()
+	if err != nil {
+		return IndexedUpdate{}, err
+	}
+	present, err := d.readByte()
+	if err != nil {
+		return IndexedUpdate{}, err
+	}
+	var current *IndexedVersion
+	if present != 0 {
+		value, err := decodeIndexedVersionFrom(&d)
+		if err != nil {
+			return IndexedUpdate{}, err
+		}
+		current = &value
+	}
+	return IndexedUpdate{IndexedUpdateKind(kind), previous, current}, d.done()
+}
+
+func encodeIndexedSnapshotID(id IndexedSnapshotID) []byte {
+	var out bytes.Buffer
+	encodeByteArrayInto(&out, id.SourceVersion)
+	encodeByteArrayInto(&out, id.CatalogVersion)
+	return out.Bytes()
+}
+
+func decodeIndexedSnapshotID(raw []byte) (IndexedSnapshotID, error) {
+	d := byteDecoder{data: raw}
+	source, err := d.readByteArray()
+	if err != nil {
+		return IndexedSnapshotID{}, err
+	}
+	catalog, err := d.readByteArray()
+	if err != nil {
+		return IndexedSnapshotID{}, err
+	}
+	return IndexedSnapshotID{source, catalog}, d.done()
 }
 func decodeIndexBuildResult(raw []byte) (IndexBuildResult, error) {
 	d := byteDecoder{data: raw}
@@ -519,6 +875,67 @@ func decodeIndexBuildResult(raw []byte) (IndexBuildResult, error) {
 		return IndexBuildResult{}, err
 	}
 	return IndexBuildResult{source, index, catalog, generation, entries, attempts, activated}, d.done()
+}
+
+func decodeActiveIndexHealth(d *byteDecoder) (ActiveIndexHealth, error) {
+	var value ActiveIndexHealth
+	var err error
+	if value.Name, err = d.readByteArray(); err != nil {
+		return value, err
+	}
+	if value.Generation, err = d.readUint64(); err != nil {
+		return value, err
+	}
+	if value.Fingerprint, err = d.readByteArray(); err != nil {
+		return value, err
+	}
+	projection, err := d.readInt32()
+	if err != nil || projection < int32(IndexProjectionKeysOnly) || projection > int32(IndexProjectionAll) {
+		if err == nil {
+			err = errors.New("invalid index projection")
+		}
+		return value, err
+	}
+	value.Projection = IndexProjection(projection)
+	if value.IndexMapID, err = d.readByteArray(); err != nil {
+		return value, err
+	}
+	value.IndexVersion, err = d.readByteArray()
+	return value, err
+}
+
+func decodeIndexedMapHealth(raw []byte) (IndexedMapHealth, error) {
+	d := byteDecoder{data: raw}
+	var value IndexedMapHealth
+	var err error
+	if value.SourceMapID, err = d.readByteArray(); err != nil {
+		return value, err
+	}
+	if value.SourceVersion, _, err = d.readOptionalByteArray(); err != nil {
+		return value, err
+	}
+	if value.CatalogVersion, _, err = d.readOptionalByteArray(); err != nil {
+		return value, err
+	}
+	count, err := d.readInt32()
+	if err != nil || count < 0 {
+		if err == nil {
+			err = errors.New("negative active index count")
+		}
+		return value, err
+	}
+	value.ActiveIndexes = make([]ActiveIndexHealth, 0, count)
+	for range count {
+		index, err := decodeActiveIndexHealth(&d)
+		if err != nil {
+			return value, err
+		}
+		value.ActiveIndexes = append(value.ActiveIndexes, index)
+	}
+	if value.SupportsTransactions, err = d.readBool(); err != nil {
+		return value, err
+	}
+	return value, d.done()
 }
 
 func decodeIndexVerificationFrom(d *byteDecoder) (IndexVerification, error) {
@@ -631,6 +1048,64 @@ func decodeIndexedRetention(raw []byte) (IndexedRetention, error) {
 	}
 	return result, d.done()
 }
+
+func decodeIndexMatch(d *byteDecoder) (IndexMatch, error) {
+	term, err := d.readByteArray()
+	if err != nil {
+		return IndexMatch{}, err
+	}
+	key, err := d.readByteArray()
+	if err != nil {
+		return IndexMatch{}, err
+	}
+	projection, _, err := d.readOptionalByteArray()
+	if err != nil {
+		return IndexMatch{}, err
+	}
+	return IndexMatch{term, key, projection}, nil
+}
+
+func decodeIndexMatchesFrom(d *byteDecoder) ([]IndexMatch, error) {
+	count, err := d.readInt32()
+	if err != nil || count < 0 {
+		if err == nil {
+			err = errors.New("negative index match count")
+		}
+		return nil, err
+	}
+	rows := make([]IndexMatch, 0, count)
+	for range count {
+		row, err := decodeIndexMatch(d)
+		if err != nil {
+			return nil, err
+		}
+		rows = append(rows, row)
+	}
+	return rows, nil
+}
+
+func decodeIndexMatches(raw []byte) ([]IndexMatch, error) {
+	d := byteDecoder{data: raw}
+	rows, err := decodeIndexMatchesFrom(&d)
+	if err != nil {
+		return nil, err
+	}
+	return rows, d.done()
+}
+
+func decodeIndexPage(raw []byte) (IndexPage, error) {
+	d := byteDecoder{data: raw}
+	matches, err := decodeIndexMatchesFrom(&d)
+	if err != nil {
+		return IndexPage{}, err
+	}
+	cursor, _, err := d.readOptionalByteArray()
+	if err != nil {
+		return IndexPage{}, err
+	}
+	return IndexPage{matches, cursor}, d.done()
+}
+
 func decodeIndexedSourceRecords(raw []byte) ([]IndexedSourceRecord, error) {
 	d := byteDecoder{data: raw}
 	count, err := d.readInt32()
