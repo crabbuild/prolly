@@ -17,6 +17,11 @@ use wasm_bindgen::JsCast;
 type WasmEngine = Prolly<Arc<MemStore>>;
 type WasmTransactionInner = OwnedProllyTransaction<Arc<MemStore>>;
 
+mod domain;
+mod indexed;
+mod page;
+mod proximity;
+
 #[wasm_bindgen(js_name = WasmConfig)]
 #[derive(Clone)]
 pub struct WasmConfig {
@@ -400,7 +405,7 @@ impl WasmReverseCursor {
 
 #[wasm_bindgen(js_name = WasmProllyEngine)]
 pub struct WasmProllyEngine {
-    inner: WasmEngine,
+    inner: Arc<WasmEngine>,
 }
 
 #[wasm_bindgen(js_class = WasmProllyEngine)]
@@ -414,7 +419,7 @@ impl WasmProllyEngine {
     pub fn memory_with_config(config: WasmConfig) -> WasmProllyEngine {
         let store = Arc::new(MemStore::new());
         Self {
-            inner: Prolly::new(store, config.inner),
+            inner: Arc::new(Prolly::new(store, config.inner)),
         }
     }
 

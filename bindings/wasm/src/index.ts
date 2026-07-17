@@ -635,3 +635,306 @@ export async function loadProllyWasm(
   await module.default();
   return module;
 }
+
+type PortableNative = Record<string, any>;
+
+function ownedPortableBytes(value: Uint8Array): Uint8Array {
+  return Uint8Array.from(value);
+}
+
+function portableAbortError(): Error {
+  const error = new Error("prolly WASM operation aborted");
+  error.name = "AbortError";
+  return error;
+}
+
+async function portablePromise<T>(signal: AbortSignal | undefined, operation: () => T): Promise<T> {
+  if (signal?.aborted) throw portableAbortError();
+  await Promise.resolve();
+  if (signal?.aborted) throw portableAbortError();
+  const result = operation();
+  if (signal?.aborted) throw portableAbortError();
+  return result;
+}
+
+export interface PortableIndexEntry {
+  term: Uint8Array;
+  projection?: Uint8Array;
+}
+
+export interface PortableIndexRegistration {
+  name: Uint8Array;
+  generation: bigint;
+  extractorId: string;
+  projection: "keys_only" | "include" | "all";
+  extract(primaryKey: Uint8Array, sourceValue: Uint8Array): PortableIndexEntry[];
+}
+
+export interface PortableIndexMatch {
+  term: Uint8Array;
+  primaryKey: Uint8Array;
+  projection?: Uint8Array;
+}
+
+export interface PortableIndexedSource extends PortableIndexMatch {
+  sourceValue: Uint8Array;
+}
+
+export interface PortableProximityRecord {
+  key: Uint8Array;
+  vector: Float32Array;
+  value?: Uint8Array;
+}
+
+export interface PortableSearchRequest {
+  vector: Float32Array;
+  topK: number;
+  policy: "exact";
+  signal?: AbortSignal;
+}
+
+export interface PortableSearchResult {
+  neighbors: Array<{ key: Uint8Array; value: Uint8Array; distance: number }>;
+  completion: string;
+  backend: string;
+}
+
+export class WasmViewExpiredError extends Error {
+  constructor() {
+    super("scoped WASM view has expired");
+    this.name = "WasmViewExpiredError";
+  }
+}
+
+function scopedPortableBytes(value: Uint8Array, scope: { alive: boolean }): Uint8Array {
+  return new Proxy(value, {
+    get(target, property) {
+      if (!scope.alive) throw new WasmViewExpiredError();
+      const member = Reflect.get(target, property, target);
+      return typeof member === "function" ? member.bind(target) : member;
+    },
+    set() { throw new TypeError("scoped WASM views are read-only"); },
+  });
+}
+
+export class Engine implements Disposable {
+  #module?: PortableNative;
+  #native?: any;
+
+  private constructor(module: PortableNative, native: any) {
+    this.#module = module;
+    this.#native = native;
+  }
+
+  static memory(module: PortableNative): Engine {
+    return new Engine(module, module.WasmProllyEngine.memory());
+  }
+
+  static file(_module: PortableNative, _path: string): never {
+    throw new Error("filesystem engines are unsupported in WASM");
+  }
+
+  static sqlite(_module: PortableNative, _path: string): never {
+    throw new Error("SQLite engines are unsupported in WASM");
+  }
+
+  #open(): any {
+    if (this.#native == null) throw new Error("WASM engine is closed");
+    return this.#native;
+  }
+
+  versionedMap(id: Uint8Array): WasmVersionedMap {
+    return new WasmVersionedMap(this.#open().versionedMap(ownedPortableBytes(id)));
+  }
+
+  indexRegistry(): WasmIndexRegistry {
+    return new WasmIndexRegistry(this.#open().indexRegistry());
+  }
+
+  indexedMap(id: Uint8Array, registry: WasmIndexRegistry): WasmIndexedMap {
+    return new WasmIndexedMap(
+      this.#open().indexedMap(ownedPortableBytes(id), registry.nativeHandle()),
+    );
+  }
+
+  buildProximity(
+    dimensions: number,
+    records: PortableProximityRecord[],
+    signal?: AbortSignal,
+  ): Promise<WasmProximityMap> {
+    const native = this.#open();
+    const owned = records.map((record) => ({
+      key: ownedPortableBytes(record.key),
+      vector: new Float32Array(record.vector),
+      value: ownedPortableBytes(record.value ?? new Uint8Array()),
+    }));
+    return portablePromise(signal, () =>
+      new WasmProximityMap(native.buildProximity(dimensions, owned)));
+  }
+
+  close(): void {
+    this.#native?.free?.();
+    this.#native = undefined;
+    this.#module = undefined;
+  }
+
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class WasmVersionedMap implements Disposable {
+  #native?: any;
+  constructor(native: any) { this.#native = native; }
+  #open(): any {
+    if (this.#native == null) throw new Error("WASM versioned map is closed");
+    return this.#native;
+  }
+  initialize(signal?: AbortSignal): Promise<unknown> {
+    const native = this.#open();
+    return portablePromise(signal, () => native.initialize());
+  }
+  get(key: Uint8Array, signal?: AbortSignal): Promise<Uint8Array | undefined> {
+    const native = this.#open(); key = ownedPortableBytes(key);
+    return portablePromise(signal, () => native.get(key) ?? undefined);
+  }
+  put(key: Uint8Array, value: Uint8Array, signal?: AbortSignal): Promise<unknown> {
+    const native = this.#open(); key = ownedPortableBytes(key); value = ownedPortableBytes(value);
+    return portablePromise(signal, () => native.put(key, value));
+  }
+  delete(key: Uint8Array, signal?: AbortSignal): Promise<unknown> {
+    const native = this.#open(); key = ownedPortableBytes(key);
+    return portablePromise(signal, () => native.delete(key));
+  }
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class WasmIndexRegistry implements Disposable {
+  #native?: any;
+  constructor(native: any) { this.#native = native; }
+  nativeHandle(): any {
+    if (this.#native == null) throw new Error("WASM index registry is closed");
+    return this.#native;
+  }
+  register(registration: PortableIndexRegistration): void {
+    this.nativeHandle().register(
+      ownedPortableBytes(registration.name), registration.generation,
+      registration.extractorId, registration.projection,
+      (key: Uint8Array, value: Uint8Array) => registration.extract(key, value).map((entry) => ({
+        term: ownedPortableBytes(entry.term),
+        projection: entry.projection == null ? undefined : ownedPortableBytes(entry.projection),
+      })),
+    );
+  }
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class WasmIndexedMap implements Disposable {
+  #native?: any;
+  constructor(native: any) { this.#native = native; }
+  #open(): any {
+    if (this.#native == null) throw new Error("WASM indexed map is closed");
+    return this.#native;
+  }
+  get(key: Uint8Array, signal?: AbortSignal): Promise<Uint8Array | undefined> {
+    const native = this.#open(); key = ownedPortableBytes(key);
+    return portablePromise(signal, () => native.get(key) ?? undefined);
+  }
+  put(key: Uint8Array, value: Uint8Array, signal?: AbortSignal): Promise<unknown> {
+    const native = this.#open(); key = ownedPortableBytes(key); value = ownedPortableBytes(value);
+    return portablePromise(signal, () => native.put(key, value));
+  }
+  delete(key: Uint8Array, signal?: AbortSignal): Promise<unknown> {
+    const native = this.#open(); key = ownedPortableBytes(key);
+    return portablePromise(signal, () => native.delete(key));
+  }
+  ensureIndex(name: Uint8Array, signal?: AbortSignal): Promise<unknown> {
+    const native = this.#open(); name = ownedPortableBytes(name);
+    return portablePromise(signal, () => native.ensureIndex(name));
+  }
+  snapshot(signal?: AbortSignal): Promise<WasmIndexedSnapshot> {
+    const native = this.#open();
+    return portablePromise(signal, () => new WasmIndexedSnapshot(native.snapshot()));
+  }
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class WasmIndexedSnapshot implements Disposable {
+  #native?: any;
+  constructor(native: any) { this.#native = native; }
+  index(name: Uint8Array): WasmSecondaryIndex {
+    if (this.#native == null) throw new Error("WASM indexed snapshot is closed");
+    return new WasmSecondaryIndex(this.#native.index(ownedPortableBytes(name)));
+  }
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class WasmSecondaryIndex implements Disposable {
+  #native?: any;
+  constructor(native: any) { this.#native = native; }
+  #open(): any {
+    if (this.#native == null) throw new Error("WASM secondary index is closed");
+    return this.#native;
+  }
+  exact(term: Uint8Array, signal?: AbortSignal): Promise<PortableIndexMatch[]> {
+    const native = this.#open(); term = ownedPortableBytes(term);
+    return portablePromise(signal, () => native.exact(term));
+  }
+  records(term: Uint8Array, signal?: AbortSignal): Promise<PortableIndexedSource[]> {
+    const native = this.#open(); term = ownedPortableBytes(term);
+    return portablePromise(signal, () => native.records(term));
+  }
+  async exactView(
+    term: Uint8Array,
+    visit: (row: PortableIndexMatch) => boolean | void,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    for (const row of await this.exact(term, signal)) {
+      const scope = { alive: true };
+      try {
+        if (visit({
+          term: scopedPortableBytes(row.term, scope),
+          primaryKey: scopedPortableBytes(row.primaryKey, scope),
+          projection: row.projection == null
+            ? undefined : scopedPortableBytes(row.projection, scope),
+        }) === false) return;
+      } finally {
+        scope.alive = false;
+      }
+    }
+  }
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class WasmProximityMap implements Disposable {
+  #native?: any;
+  constructor(native: any) { this.#native = native; }
+  nativeHandle(): any {
+    if (this.#native == null) throw new Error("WASM proximity map is closed");
+    return this.#native;
+  }
+  read(): WasmProximityReadSession {
+    return new WasmProximityReadSession(this.nativeHandle().read());
+  }
+  search(request: PortableSearchRequest): Promise<PortableSearchResult> {
+    return this.read().search(request);
+  }
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class WasmProximityReadSession implements Disposable {
+  #native?: any;
+  constructor(native: any) { this.#native = native; }
+  search(request: PortableSearchRequest): Promise<PortableSearchResult> {
+    if (this.#native == null) return Promise.reject(new Error("WASM proximity session is closed"));
+    const native = this.#native;
+    const vector = new Float32Array(request.vector);
+    return portablePromise(request.signal, () => native.search(vector, request.topK));
+  }
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
