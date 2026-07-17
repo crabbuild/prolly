@@ -10,6 +10,7 @@ import build.crab.prolly.BindingProximityReadSession
 import build.crab.prolly.BindingProximitySearchProof
 import build.crab.prolly.BindingSecondaryIndexSnapshot
 import build.crab.prolly.BindingVersionedMap
+import build.crab.prolly.BindingVersionedTransaction
 import build.crab.prolly.BindingMapSnapshot
 import build.crab.prolly.ConfigRecord
 import build.crab.prolly.ContentGraphLimitsRecord
@@ -52,6 +53,7 @@ class Engine private constructor(internal val native: ProllyEngine) : AutoClosea
     }
 
     fun versionedMap(id: ByteArray) = VersionedMap(native.versionedMap(id.copyOf()))
+    fun beginVersionedTransaction() = VersionedTransaction(native.beginVersionedTransaction())
 
     fun indexRegistry() = IndexRegistry(BindingIndexRegistry())
 
@@ -124,6 +126,22 @@ class VersionedMap(internal val native: BindingVersionedMap) : AutoCloseable {
             }
         }
     override fun close() = native.close()
+}
+
+class VersionedTransaction(internal var native: BindingVersionedTransaction?) : AutoCloseable {
+    private fun open() = native ?: error("versioned transaction is completed")
+    fun head(mapId: ByteArray) = open().head(mapId.copyOf())
+    fun get(mapId: ByteArray, key: ByteArray) = open().get(mapId.copyOf(), key.copyOf())
+    fun apply(mapId: ByteArray, mutations: List<MutationRecord>) =
+        open().apply(mapId.copyOf(), mutations.map(::ownedMutation))
+    fun applyIf(mapId: ByteArray, expected: ByteArray?, mutations: List<MutationRecord>) =
+        open().applyIf(mapId.copyOf(), expected?.copyOf(), mutations.map(::ownedMutation))
+    fun put(mapId: ByteArray, key: ByteArray, value: ByteArray) =
+        open().put(mapId.copyOf(), key.copyOf(), value.copyOf())
+    fun delete(mapId: ByteArray, key: ByteArray) = open().delete(mapId.copyOf(), key.copyOf())
+    fun commit() = open().commit().also { close() }
+    fun rollback() = open().rollback().also { close() }
+    override fun close() { native?.close(); native = null }
 }
 
 class MapComparison(internal val native: BindingMapComparison) : AutoCloseable {

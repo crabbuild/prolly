@@ -202,6 +202,65 @@ func TestPortableVersionedSubscriptionResumesAndPollsOwnedDiffs(t *testing.T) {
 	}
 }
 
+func TestPortableMultiMapTransactionsAreAtomicAndReadStagedValues(t *testing.T) {
+	config, err := DefaultConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine, err := NewMemoryEngine(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer engine.Close()
+	tx, err := engine.BeginVersionedTransaction()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = tx.Put([]byte("a"), []byte("k"), []byte("one")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = tx.Put([]byte("b"), []byte("k"), []byte("two")); err != nil {
+		t.Fatal(err)
+	}
+	value, ok, err := tx.Get([]byte("a"), []byte("k"))
+	if err != nil || !ok || !bytes.Equal(value, []byte("one")) {
+		t.Fatalf("staged get = %q, %v, %v", value, ok, err)
+	}
+	committed, err := tx.Commit()
+	if err != nil || !committed.Applied || len(committed.Versions) != 2 {
+		t.Fatalf("commit = %+v, %v", committed, err)
+	}
+	for mapID, expected := range map[string]string{"a": "one", "b": "two"} {
+		managed, err := engine.VersionedMap([]byte(mapID))
+		if err != nil {
+			t.Fatal(err)
+		}
+		value, ok, err := managed.Get([]byte("k"))
+		managed.Close()
+		if err != nil || !ok || !bytes.Equal(value, []byte(expected)) {
+			t.Fatalf("%s = %q, %v, %v", mapID, value, ok, err)
+		}
+	}
+	rolledBack, err := engine.BeginVersionedTransaction()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = rolledBack.Put([]byte("a"), []byte("discard"), []byte("x")); err != nil {
+		t.Fatal(err)
+	}
+	if err = rolledBack.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+	a, err := engine.VersionedMap([]byte("a"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+	if _, ok, err = a.Get([]byte("discard")); err != nil || ok {
+		t.Fatalf("rolled-back value exists: %v, %v", ok, err)
+	}
+}
+
 func TestPortableContextCancellation(t *testing.T) {
 	engine, err := OpenMemory()
 	if err != nil {

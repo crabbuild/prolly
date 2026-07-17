@@ -286,5 +286,27 @@ class PortableParityTest {
         }
     }
 
+    @Test
+    fun multiMapTransactionsAreAtomicAndReadStagedValues() {
+        ProllyNative.useLocalDebugLibrary()
+        Engine.memory().use { engine ->
+            engine.beginVersionedTransaction().use { tx ->
+                tx.put("a".bytes(), "k".bytes(), "one".bytes())
+                tx.put("b".bytes(), "k".bytes(), "two".bytes())
+                assertArrayEquals("one".bytes(), tx.get("a".bytes(), "k".bytes()))
+                val committed = tx.commit()
+                assertEquals(true, committed.applied)
+                assertEquals(2, committed.versions.size)
+            }
+            engine.versionedMap("a".bytes()).use { assertArrayEquals("one".bytes(), it.get("k".bytes())) }
+            engine.versionedMap("b".bytes()).use { assertArrayEquals("two".bytes(), it.get("k".bytes())) }
+            engine.beginVersionedTransaction().use { tx ->
+                tx.put("a".bytes(), "discard".bytes(), "x".bytes())
+                tx.rollback()
+            }
+            engine.versionedMap("a".bytes()).use { assertEquals(null, it.get("discard".bytes())) }
+        }
+    }
+
     private fun String.bytes() = encodeToByteArray()
 }

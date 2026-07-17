@@ -52,6 +52,10 @@ public final class Engine: @unchecked Sendable {
         try checkOpen()
         return VersionedMap(native: try native.versionedMap(id: Data(id)))
     }
+    public func beginVersionedTransaction() throws -> VersionedTransaction {
+        try checkOpen()
+        return VersionedTransaction(native: try native.beginVersionedTransaction())
+    }
 
     public func indexRegistry() throws -> IndexRegistry {
         try checkOpen()
@@ -190,6 +194,38 @@ public final class VersionedMap: @unchecked Sendable {
         if closed { throw PortableAPIError.closed("VersionedMap") }
         return try body()
     }
+}
+
+public final class VersionedTransaction: @unchecked Sendable {
+    private var native: BindingVersionedTransaction?
+    init(native: BindingVersionedTransaction) { self.native = native }
+    private func open() throws -> BindingVersionedTransaction {
+        guard let native else { throw PortableAPIError.closed("VersionedTransaction") }
+        return native
+    }
+    public func head(mapID: Data) throws -> MapVersionRecord? { try open().head(mapId: Data(mapID)) }
+    public func get(mapID: Data, key: Data) throws -> Data? {
+        try open().get(mapId: Data(mapID), key: Data(key))
+    }
+    public func apply(mapID: Data, mutations: [MutationRecord]) throws -> MapVersionRecord {
+        try open().apply(mapId: Data(mapID), mutations: mutations.map(ownedMutation))
+    }
+    public func applyIf(mapID: Data, expected: Data?, mutations: [MutationRecord]) throws -> MapUpdateRecord {
+        try open().applyIf(mapId: Data(mapID), expected: expected.map { Data($0) }, mutations: mutations.map(ownedMutation))
+    }
+    public func put(mapID: Data, key: Data, value: Data) throws -> MapVersionRecord {
+        try open().put(mapId: Data(mapID), key: Data(key), value: Data(value))
+    }
+    public func delete(mapID: Data, key: Data) throws -> MapVersionRecord {
+        try open().delete(mapId: Data(mapID), key: Data(key))
+    }
+    public func commit() throws -> VersionedTransactionCommitRecord {
+        let result = try open().commit()
+        close()
+        return result
+    }
+    public func rollback() throws { try open().rollback(); close() }
+    public func close() { native = nil }
 }
 
 public final class MapComparison: @unchecked Sendable {

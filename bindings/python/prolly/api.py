@@ -63,6 +63,10 @@ class Engine(_Scoped):
         self._open()
         return VersionedMap(self._inner.versioned_map(bytes(map_id)))
 
+    def begin_versioned_transaction(self) -> "VersionedTransaction":
+        self._open()
+        return VersionedTransaction(self._inner.begin_versioned_transaction())
+
     def index_registry(self) -> "IndexRegistry":
         self._open()
         return IndexRegistry(_native.BindingIndexRegistry())
@@ -260,6 +264,50 @@ class VersionedMap(_Scoped):
             return await asyncio.to_thread(self._inner.put, copied_key, copied_value)
 
         return run()
+
+
+class VersionedTransaction(_Scoped):
+    def __init__(self, inner: _native.BindingVersionedTransaction):
+        super().__init__()
+        self._inner = inner
+
+    def head(self, map_id: bytes):
+        self._open()
+        return self._inner.head(bytes(map_id))
+
+    def get(self, map_id: bytes, key: bytes):
+        self._open()
+        return self._inner.get(bytes(map_id), bytes(key))
+
+    def apply(self, map_id: bytes, mutations):
+        self._open()
+        return self._inner.apply(bytes(map_id), _owned_mutations(mutations))
+
+    def apply_if(self, map_id: bytes, expected: bytes | None, mutations):
+        self._open()
+        return self._inner.apply_if(
+            bytes(map_id), None if expected is None else bytes(expected),
+            _owned_mutations(mutations),
+        )
+
+    def put(self, map_id: bytes, key: bytes, value: bytes):
+        self._open()
+        return self._inner.put(bytes(map_id), bytes(key), bytes(value))
+
+    def delete(self, map_id: bytes, key: bytes):
+        self._open()
+        return self._inner.delete(bytes(map_id), bytes(key))
+
+    def commit(self):
+        self._open()
+        result = self._inner.commit()
+        self.close()
+        return result
+
+    def rollback(self) -> None:
+        self._open()
+        self._inner.rollback()
+        self.close()
 
 
 class MapComparison(_Scoped):
@@ -796,6 +844,7 @@ __all__ = [
     "ReadSession",
     "ScanOutcome",
     "VersionedMap",
+    "VersionedTransaction",
     "verify_key_proof",
     "verify_proximity_membership_proof",
     "verify_proximity_structure_proof",

@@ -14,4 +14,11 @@ public record MapUpdate(
                 value.getPrevious(),
                 value.getCurrent() == null ? null : MapVersion.fromNative(value.getCurrent()));
     }
+
+    static MapUpdate fromNative(build.crab.prolly.MapUpdateRecord value) {
+        return new MapUpdate(
+                MapUpdateKind.valueOf(value.getKind().name()),
+                value.getPrevious(),
+                value.getCurrent() == null ? null : MapVersion.fromNative(value.getCurrent()));
+    }
 }

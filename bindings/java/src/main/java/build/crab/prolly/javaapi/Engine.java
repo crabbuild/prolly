@@ -24,6 +24,10 @@ public final class Engine implements AutoCloseable {
         return new VersionedMap(open().versionedMap(id.clone()));
     }
 
+    public VersionedTransaction beginVersionedTransaction() {
+        return new VersionedTransaction(open().beginVersionedTransaction());
+    }
+
     public IndexRegistry indexRegistry() {
         return new IndexRegistry(open().indexRegistry());
     }

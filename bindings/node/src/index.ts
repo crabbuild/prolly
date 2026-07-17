@@ -3,12 +3,12 @@ import { loadNative } from "./native.ts";
 import { IndexRegistry, IndexedMap } from "./indexed.ts";
 import { nativePromise, ownedBytes } from "./packed.ts";
 import { ownProximityRecords, ProximityMap, type ProximityRecord } from "./proximity.ts";
-import { VersionedMap } from "./versioned.ts";
+import { VersionedMap, VersionedTransaction } from "./versioned.ts";
 
 export { IndexRegistry, IndexedMap } from "./indexed.ts";
 export { ViewExpiredError } from "./packed.ts";
 export { exactSearch, ProximityMap, ProximityReadSession } from "./proximity.ts";
-export { MapComparison, MapSubscription, VersionedMap } from "./versioned.ts";
+export { MapComparison, MapSubscription, VersionedMap, VersionedTransaction } from "./versioned.ts";
 export { RemoteAsyncProllyEngine } from "./remote-async.ts";
 export * from "./remote-store.ts";
 export type * from "./indexed.ts";
@@ -43,6 +43,10 @@ export class Engine implements Disposable {
 
   versionedMap(id: Uint8Array): VersionedMap {
     return new VersionedMap(this.#open().versionedMap(ownedBytes(id)));
+  }
+
+  beginVersionedTransaction(): VersionedTransaction {
+    return new VersionedTransaction(this.#open().beginVersionedTransaction());
   }
 
   indexRegistry(): IndexRegistry {

@@ -23,4 +23,10 @@ public record MapMutation(Kind kind, byte[] key, byte[] value) {
         return new build.crab.prolly.api.JavaMapMutation(
                 kind.name().toLowerCase(), key.clone(), value == null ? null : value.clone());
     }
+
+    build.crab.prolly.MutationRecord toNative() {
+        return new build.crab.prolly.MutationRecord(
+                build.crab.prolly.MutationKind.valueOf(kind.name()),
+                key.clone(), value == null ? null : value.clone());
+    }
 }

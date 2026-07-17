@@ -274,4 +274,21 @@ final class PortableParityTests: XCTestCase {
             subscription.close()
         }
     }
+    func testMultiMapTransactionsAreAtomicAndReadStagedValues() throws {
+        try Engine.withMemory { engine in
+            let tx = try engine.beginVersionedTransaction()
+            _ = try tx.put(mapID: Data("a".utf8), key: Data("k".utf8), value: Data("one".utf8))
+            _ = try tx.put(mapID: Data("b".utf8), key: Data("k".utf8), value: Data("two".utf8))
+            XCTAssertEqual(try tx.get(mapID: Data("a".utf8), key: Data("k".utf8)), Data("one".utf8))
+            let committed = try tx.commit()
+            XCTAssertTrue(committed.applied)
+            XCTAssertEqual(committed.versions.count, 2)
+            XCTAssertEqual(try engine.versionedMap(Data("a".utf8)).get(Data("k".utf8)), Data("one".utf8))
+            XCTAssertEqual(try engine.versionedMap(Data("b".utf8)).get(Data("k".utf8)), Data("two".utf8))
+            let rolledBack = try engine.beginVersionedTransaction()
+            _ = try rolledBack.put(mapID: Data("a".utf8), key: Data("discard".utf8), value: Data("x".utf8))
+            try rolledBack.rollback()
+            XCTAssertNil(try engine.versionedMap(Data("a".utf8)).get(Data("discard".utf8)))
+        }
+    }
 }

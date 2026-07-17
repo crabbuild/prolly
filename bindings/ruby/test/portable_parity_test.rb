@@ -266,4 +266,23 @@ class PortableParityTest < Minitest::Test
       subscription.close
     end
   end
+
+
+  def test_multi_map_transactions_are_atomic_and_read_staged_values
+    Prolly::Engine.memory.use do |engine|
+      tx = engine.begin_versioned_transaction
+      tx.put('a'.b, 'k'.b, 'one'.b)
+      tx.put('b'.b, 'k'.b, 'two'.b)
+      assert_equal 'one'.b, tx.get('a'.b, 'k'.b)
+      committed = tx.commit
+      assert committed.applied
+      assert_equal 2, committed.versions.size
+      assert_equal 'one'.b, engine.versioned_map('a'.b).get('k'.b)
+      assert_equal 'two'.b, engine.versioned_map('b'.b).get('k'.b)
+      rolled_back = engine.begin_versioned_transaction
+      rolled_back.put('a'.b, 'discard'.b, 'x'.b)
+      rolled_back.rollback
+      assert_nil engine.versioned_map('a'.b).get('discard'.b)
+    end
+  end
 end
