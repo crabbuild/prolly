@@ -11,6 +11,9 @@ const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
 
 const sharedProviders = ["sqlite", "postgresql", "mysql", "redis", "dynamodb", "cosmosdb", "spanner"];
 const nodeProviders = [...sharedProviders, "pglite"];
+const rubyProviders = ["sqlite", "postgresql", "mysql", "redis", "dynamodb", "spanner"];
+const swiftProviders = ["sqlite", "postgresql", "mysql", "redis", "dynamodb"];
+const browserProviders = ["indexeddb", "opfs", "pglite"];
 const expectedSdks = {
   node: {
     sqlite: ["better-sqlite3", "12.11.1"],
@@ -30,6 +33,23 @@ const expectedSdks = {
     dynamodb: ["software.amazon.awssdk:dynamodb", "2.48.2"],
     cosmosdb: ["com.azure:azure-cosmos", "4.81.0"],
     spanner: ["com.google.cloud:google-cloud-spanner", "6.119.0"],
+  },
+  python: {
+    sqlite: ["sqlite3", "stdlib"], postgresql: ["psycopg", "3.3.4"], mysql: ["aiomysql", "0.3.2"],
+    redis: ["redis", "8.0.1"], dynamodb: ["aioboto3", "15.5.0"], cosmosdb: ["azure-cosmos", "4.16.1"],
+    spanner: ["google-cloud-spanner", "3.69.0"],
+  },
+  ruby: {
+    sqlite: ["sqlite3", "2.9.5"], postgresql: ["pg", "1.6.3"], mysql: ["mysql2", "0.5.7"],
+    redis: ["redis", "5.4.1"], dynamodb: ["aws-sdk-dynamodb", "1.169.0"], spanner: ["google-cloud-spanner", "2.36.0"],
+  },
+  swift: {
+    sqlite: ["CSQLite", "system"], postgresql: ["PostgresNIO", "1.27.0"], mysql: ["MySQLNIO", "1.8.0"],
+    redis: ["RediStack", "1.6.2"], dynamodb: ["SotoDynamoDB", "7.8.0"],
+  },
+  browser: {
+    indexeddb: ["IndexedDB", "browser-native"], opfs: ["Origin Private File System", "browser-native"],
+    pglite: ["@electric-sql/pglite", "0.5.4"],
   },
 };
 expectedSdks.java = expectedSdks.kotlin;
@@ -54,6 +74,10 @@ function requireSupported(language, providers) {
     if (!cell) fail(`missing ${language}/${provider}`);
     if (cell.status !== "supported") fail(`${language}/${provider} must be supported`);
   }
+}
+
+function requireUnsupported(language, providers) {
+  for (const provider of providers) if (manifest.languages?.[language]?.[provider]?.status !== "unsupported") fail(`${language}/${provider} must be explicitly unsupported`);
 }
 
 function verifyCell(language, provider, cell) {
@@ -95,6 +119,12 @@ requireSupported("node", nodeProviders);
 requireSupported("kotlin", sharedProviders);
 requireSupported("java", sharedProviders);
 requireSupported("go", sharedProviders);
+requireSupported("python", sharedProviders);
+requireSupported("ruby", rubyProviders);
+requireSupported("swift", swiftProviders);
+requireSupported("browser", browserProviders);
+requireUnsupported("ruby", ["cosmosdb"]);
+requireUnsupported("swift", ["cosmosdb", "spanner"]);
 
 for (const [language, providers] of Object.entries(manifest.languages ?? {})) {
   for (const [provider, cell] of Object.entries(providers)) verifyCell(language, provider, cell);
@@ -135,13 +165,43 @@ for (const language of ["kotlin", "java"]) {
   }
 }
 
+const providerDirectories = { postgresql: "postgres" };
+for (const provider of sharedProviders) {
+  const directory = providerDirectories[provider] ?? provider;
+  const cell = manifest.languages.python[provider];
+  const project = readFileSync(join(root, `bindings/python/stores/${directory}/pyproject.toml`), "utf8");
+  if (!project.includes(`name = "${cell.module}"`)) fail(`Python ${provider} project has the wrong package name`);
+  if (provider !== "sqlite" && !project.includes(`${cell.sdk_module}`) || provider !== "sqlite" && !project.includes(`==${cell.sdk_version}`)) fail(`Python ${provider} project does not pin ${cell.sdk_module}@${cell.sdk_version}`);
+}
+
+for (const provider of rubyProviders) {
+  const directory = providerDirectories[provider] ?? provider;
+  const cell = manifest.languages.ruby[provider];
+  const gemspec = readFileSync(join(root, `bindings/ruby/stores/${directory}/prolly-store-${directory}.gemspec`), "utf8");
+  if (!gemspec.includes(`spec.name = '${cell.module}'`) || !gemspec.includes(`'${cell.sdk_module}', '= ${cell.sdk_version}'`)) fail(`Ruby ${provider} gemspec disagrees with the manifest`);
+}
+
+const swiftPackage = readFileSync(join(root, "bindings/swift/Package.swift"), "utf8");
+for (const provider of swiftProviders) {
+  const cell = manifest.languages.swift[provider];
+  if (!swiftPackage.includes(`name: "${cell.module}"`)) fail(`Swift ${provider} product is missing`);
+  if (cell.sdk_version !== "system" && (!swiftPackage.includes(`name: "${cell.sdk_module}"`) || !swiftPackage.includes(`exact: "${cell.sdk_version}"`))) fail(`Swift ${provider} SDK pin disagrees with the manifest`);
+}
+
+for (const provider of browserProviders) {
+  const cell = manifest.languages.browser[provider];
+  const packageJson = JSON.parse(readFileSync(join(root, `bindings/wasm/stores/${provider}/package.json`), "utf8"));
+  if (packageJson.name !== cell.module) fail(`Browser ${provider} package has the wrong name`);
+  if (provider === "pglite" && packageJson.dependencies?.[cell.sdk_module] !== cell.sdk_version) fail(`Browser PGlite package does not pin ${cell.sdk_module}@${cell.sdk_version}`);
+}
+
 const forbiddenCoreDependencies = [
   "better-sqlite3", "@electric-sql/pglite", "@aws-sdk/client-dynamodb", "@azure/cosmos", "@google-cloud/spanner",
   "<artifactId>sqlite-jdbc</artifactId>", "<artifactId>postgresql</artifactId>", "<artifactId>mysql-connector-j</artifactId>",
   "<artifactId>lettuce-core</artifactId>", "<artifactId>dynamodb</artifactId>", "<artifactId>azure-cosmos</artifactId>",
   "<artifactId>google-cloud-spanner</artifactId>",
 ];
-const coreFiles = ["bindings/node/package.json", "bindings/kotlin/pom.xml", "bindings/java/pom.xml"];
+const coreFiles = ["bindings/node/package.json", "bindings/kotlin/pom.xml", "bindings/java/pom.xml", "bindings/python/pyproject.toml", "bindings/ruby/prolly.gemspec", "bindings/wasm/package.json"];
 for (const path of coreFiles) {
   const content = readFileSync(join(root, path), "utf8");
   for (const dependency of forbiddenCoreDependencies) {
@@ -149,4 +209,4 @@ for (const path of coreFiles) {
   }
 }
 
-console.log(`store compatibility manifest valid: ${nodeProviders.length} Node, ${sharedProviders.length} Kotlin, ${sharedProviders.length} Java, and ${sharedProviders.length} Go providers`);
+console.log(`store compatibility manifest valid: ${nodeProviders.length} Node, ${sharedProviders.length} Kotlin, ${sharedProviders.length} Java, ${sharedProviders.length} Go, ${sharedProviders.length} Python, ${rubyProviders.length} Ruby, ${swiftProviders.length} Swift, and ${browserProviders.length} browser providers`);
