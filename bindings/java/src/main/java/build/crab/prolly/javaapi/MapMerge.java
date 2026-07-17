@@ -3,6 +3,7 @@ package build.crab.prolly.javaapi;
 import build.crab.prolly.ConflictPageRecord;
 import build.crab.prolly.RangeCursorRecord;
 import build.crab.prolly.TreeRecord;
+import build.crab.prolly.api.JavaPortableBridge;
 
 /** Three-way merge pinned to a concrete base, head, and candidate. */
 public final class MapMerge implements AutoCloseable {
@@ -18,7 +19,7 @@ public final class MapMerge implements AutoCloseable {
     public TreeRecord merge(String resolver) { return open().merge(resolver); }
     public TreeRecord merge() { return merge(null); }
     public ConflictPageRecord conflictPage(RangeCursorRecord cursor, long limit) {
-        return open().conflictPage(cursor, limit);
+        return JavaPortableBridge.conflictPage(open(), cursor, limit);
     }
     public MapUpdate publish(String resolver) { return MapUpdate.fromNative(open().publish(resolver)); }
     public MapUpdate publish() { return publish(null); }

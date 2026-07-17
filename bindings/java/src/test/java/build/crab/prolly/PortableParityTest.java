@@ -29,6 +29,39 @@ import org.junit.jupiter.api.Test;
 
 class PortableParityTest {
     @Test
+    void richProximitySearchPreservesPolicyFilterStatsSessionAndProof() throws Exception {
+        Prolly.useLocalDebugLibrary();
+        try (Engine engine = Engine.memory();
+             var proximity = engine.buildProximity(2, List.of(
+                     new ProximityRecord(bytes("a"), new float[] {0, 0}, bytes("alpha")),
+                     new ProximityRecord(bytes("ab"), new float[] {1, 0}, bytes("alphabet")),
+                     new ProximityRecord(bytes("b"), new float[] {0.1f, 0}, bytes("beta"))))) {
+            var request = SearchRequest.fixedBudget(
+                    new float[] {0, 0},
+                    3,
+                    new SearchRequest.SearchBudget(1_000L, 1_000_000L, 1_000L, 1_000L),
+                    SearchRequest.SearchFilter.prefix(bytes("a")),
+                    SearchRequest.Kernel.SCALAR_DETERMINISTIC,
+                    SearchRequest.Backend.AUTO);
+
+            var result = proximity.search(request);
+            assertEquals(List.of("a", "ab"), result.neighbors().stream()
+                    .map(neighbor -> new String(neighbor.key(), StandardCharsets.UTF_8)).toList());
+            assertTrue(result.stats().distanceEvaluations() > 0);
+            assertTrue(result.planFormatVersion() > 0);
+            try (var session = proximity.read()) {
+                assertEquals(List.of("a", "ab"), session.search(request).neighbors().stream()
+                        .map(neighbor -> new String(neighbor.key(), StandardCharsets.UTF_8)).toList());
+            }
+            try (var proof = proximity.proveSearch(request)) {
+                assertEquals(List.of("a", "ab"), proof.verify(proximity.descriptor())
+                        .getResult().getNeighbors().stream()
+                        .map(neighbor -> new String(neighbor.getKey(), StandardCharsets.UTF_8)).toList());
+            }
+        }
+    }
+
+    @Test
     void versionedBulkPublicationUsesNativePerformancePaths() {
         Prolly.useLocalDebugLibrary();
         try (Engine engine = Engine.memory(); var map = engine.versionedMap(bytes("bulk-publication"))) {
@@ -178,7 +211,7 @@ class PortableParityTest {
             }
             assertTrue(versioned.catalogVersionCount() >= 2);
             assertFalse(versioned.backup().length == 0);
-            assertFalse(versioned.planGc().getReachability().getLiveCids().isEmpty());
+            assertFalse(versioned.planGc().reachability().liveCids().isEmpty());
 
             try (var registry = engine.indexRegistry()) {
                 registry.register(bytes("by_value"), 1, "value-v1", IndexProjection.ALL,
