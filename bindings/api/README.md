@@ -13,7 +13,7 @@ coverage.
 Run from the repository root:
 
 ~~~sh
-cargo +nightly rustdoc --lib -- \
+cargo +nightly rustdoc --lib --features async-store -- \
   -Z unstable-options \
   --output-format json
 python3 scripts/binding_api_inventory.py generate
@@ -24,6 +24,10 @@ Generation preserves reviewed entries and adds new Rust symbols with status
 planned. It removes symbols that are no longer in the public Rust inventory.
 Review every added or removed operation in the same change that updates the
 Rust API.
+
+The manifest records the Rust feature set used for extraction. The checker
+also requires feature-gated async sentinel types, so rustdoc generated without
+`async-store` cannot silently pass the inventory gate.
 
 The normal check command proves inventory completeness: no current Rust symbol
 is missing from the contract, no removed symbol remains, and every entry has a

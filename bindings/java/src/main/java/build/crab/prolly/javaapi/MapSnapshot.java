@@ -2,6 +2,7 @@ package build.crab.prolly.javaapi;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 import build.crab.prolly.EntryRecord;
 import build.crab.prolly.RangeCursorRecord;
@@ -84,6 +85,52 @@ public final class MapSnapshot implements AutoCloseable {
     }
     public build.crab.prolly.SnapshotBundleRecord export() { return open().export(); }
     public ReadSession read() { return new ReadSession(open().read()); }
+
+    public CompletableFuture<Optional<byte[]>> getAsync(byte[] key) {
+        byte[] owned = key.clone();
+        return CompletableFuture.supplyAsync(() -> get(owned));
+    }
+    public CompletableFuture<List<Optional<byte[]>>> getManyAsync(List<byte[]> keys) {
+        var owned = keys.stream().map(byte[]::clone).toList();
+        return CompletableFuture.supplyAsync(() -> getMany(owned));
+    }
+    public CompletableFuture<List<EntryRecord>> rangeAsync(byte[] start, byte[] end) {
+        byte[] ownedStart = start.clone(); byte[] ownedEnd = end == null ? null : end.clone();
+        return CompletableFuture.supplyAsync(() -> range(ownedStart, ownedEnd));
+    }
+    public CompletableFuture<List<EntryRecord>> prefixAsync(byte[] prefix) {
+        byte[] owned = prefix.clone();
+        return CompletableFuture.supplyAsync(() -> prefix(owned));
+    }
+    public CompletableFuture<RangePageRecord> rangePageAsync(
+            RangeCursorRecord cursor, byte[] end, long limit) {
+        byte[] ownedEnd = end == null ? null : end.clone();
+        return CompletableFuture.supplyAsync(() -> rangePage(cursor, ownedEnd, limit));
+    }
+    public CompletableFuture<RangePageRecord> prefixPageAsync(
+            byte[] prefix, RangeCursorRecord cursor, long limit) {
+        byte[] owned = prefix.clone();
+        return CompletableFuture.supplyAsync(() -> prefixPage(owned, cursor, limit));
+    }
+    public CompletableFuture<build.crab.prolly.KeyProofRecord> proveKeyAsync(byte[] key) {
+        byte[] owned = key.clone();
+        return CompletableFuture.supplyAsync(() -> proveKey(owned));
+    }
+    public CompletableFuture<build.crab.prolly.MultiKeyProofRecord> proveKeysAsync(List<byte[]> keys) {
+        var owned = keys.stream().map(byte[]::clone).toList();
+        return CompletableFuture.supplyAsync(() -> proveKeys(owned));
+    }
+    public CompletableFuture<RangeProofRecord> proveRangeAsync(byte[] start, byte[] end) {
+        byte[] ownedStart = start.clone(); byte[] ownedEnd = end == null ? null : end.clone();
+        return CompletableFuture.supplyAsync(() -> proveRange(ownedStart, ownedEnd));
+    }
+    public CompletableFuture<RangeProofRecord> provePrefixAsync(byte[] prefix) {
+        byte[] owned = prefix.clone();
+        return CompletableFuture.supplyAsync(() -> provePrefix(owned));
+    }
+    public CompletableFuture<build.crab.prolly.TreeStatsRecord> statsAsync() {
+        return CompletableFuture.supplyAsync(this::stats);
+    }
 
     @Override public void close() {
         if (nativeSnapshot != null) { nativeSnapshot.close(); nativeSnapshot = null; }

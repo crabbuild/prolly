@@ -7,10 +7,26 @@ from scripts.binding_api_inventory import (
     check_manifest,
     extract_public_api,
     generate_manifest,
+    missing_feature_sentinels,
 )
 
 
 class ManifestCheckTests(unittest.TestCase):
+    def test_inventory_requires_async_store_feature_provenance(self) -> None:
+        result = check_manifest(
+            rust_items=set(),
+            manifest={
+                "schema_version": 2,
+                "rust_features": [],
+                "operations": [],
+            },
+            release=False,
+            required_rust_features=("async-store",),
+        )
+
+        self.assertEqual(result.incomplete, ("<manifest.rust_features>",))
+        self.assertFalse(result.ok)
+
     def test_missing_rust_symbol_fails(self) -> None:
         result = check_manifest(
             rust_items={
@@ -161,6 +177,15 @@ class ManifestCheckTests(unittest.TestCase):
 
 
 class RustdocExtractionTests(unittest.TestCase):
+    def test_async_feature_requires_async_public_api_sentinels(self) -> None:
+        self.assertEqual(
+            missing_feature_sentinels(
+                {"prolly::AsyncProlly"},
+                ("async-store",),
+            ),
+            ("prolly::AsyncVersionedMap",),
+        )
+
     def test_extracts_public_root_item_and_associated_function(self) -> None:
         rustdoc = {
             "root": 1,
@@ -258,9 +283,10 @@ class RustdocExtractionTests(unittest.TestCase):
 
     def test_generation_is_idempotent_when_inventory_is_unchanged(self) -> None:
         previous = {
-            "schema_version": 1,
+            "schema_version": 2,
             "generated_at": "2026-07-16T00:00:00+00:00",
             "rustdoc_format_version": 57,
+            "rust_features": [],
             "languages": ["python"],
             "operations": [
                 {

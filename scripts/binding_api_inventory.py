@@ -30,7 +30,14 @@ CLASSIFICATIONS = (
     "rust-language-only",
 )
 STATUSES = ("planned", "implemented")
-MANIFEST_SCHEMA_VERSION = 1
+MANIFEST_SCHEMA_VERSION = 2
+REQUIRED_RUST_FEATURES = ("async-store",)
+FEATURE_SENTINELS = {
+    "async-store": (
+        "prolly::AsyncProlly",
+        "prolly::AsyncVersionedMap",
+    ),
+}
 
 
 @dataclass(frozen=True)
@@ -218,6 +225,7 @@ def check_manifest(
     rust_items: set[str],
     manifest: dict[str, Any],
     release: bool,
+    required_rust_features: tuple[str, ...] = (),
 ) -> CheckResult:
     entries = manifest.get("operations")
     if not isinstance(entries, list):
@@ -242,6 +250,14 @@ def check_manifest(
     missing = tuple(sorted(rust_items - operations.keys()))
     stale = tuple(sorted(operations.keys() - rust_items))
     incomplete = set(malformed) | duplicates
+    if required_rust_features:
+        if manifest.get("schema_version") != MANIFEST_SCHEMA_VERSION:
+            incomplete.add("<manifest.schema_version>")
+        features = manifest.get("rust_features")
+        if not isinstance(features, list) or set(features) != set(
+            required_rust_features
+        ):
+            incomplete.add("<manifest.rust_features>")
     for name in rust_items & operations.keys():
         entry = operations[name]
         if entry.get("classification") not in CLASSIFICATIONS:
@@ -302,6 +318,7 @@ def generate_manifest(
     rust_items: Iterable[str],
     previous: dict[str, Any] | None,
     rustdoc_format_version: int | None,
+    rust_features: tuple[str, ...] = (),
 ) -> dict[str, Any]:
     rust_names = sorted(set(rust_items))
     prior_entries = {
@@ -317,6 +334,7 @@ def generate_manifest(
         previous is not None
         and set(prior_entries) == set(rust_names)
         and previous.get("rustdoc_format_version") == rustdoc_format_version
+        and previous.get("rust_features") == list(rust_features)
     )
     generated_at = (
         previous.get("generated_at")
@@ -327,6 +345,7 @@ def generate_manifest(
         "schema_version": MANIFEST_SCHEMA_VERSION,
         "generated_at": generated_at,
         "rustdoc_format_version": rustdoc_format_version,
+        "rust_features": list(rust_features),
         "languages": list(LANGUAGES),
         "operations": operations,
     }
@@ -372,6 +391,20 @@ def _print_result(result: CheckResult) -> None:
             print(f"{label}: {value}", file=sys.stderr)
 
 
+def missing_feature_sentinels(
+    rust_items: set[str],
+    rust_features: tuple[str, ...],
+) -> tuple[str, ...]:
+    """Return feature-gated symbols absent from the supplied rustdoc inventory."""
+
+    return tuple(
+        sentinel
+        for feature in rust_features
+        for sentinel in FEATURE_SENTINELS.get(feature, ())
+        if sentinel not in rust_items
+    )
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=("generate", "check"))
@@ -389,19 +422,31 @@ def main(argv: list[str] | None = None) -> int:
     if not rustdoc_path.exists():
         print(
             "rustdoc JSON is missing; run "
-            "cargo +nightly rustdoc --lib -- -Z unstable-options --output-format json",
+            "cargo +nightly rustdoc --lib --features async-store -- "
+            "-Z unstable-options --output-format json",
             file=sys.stderr,
         )
         return 2
 
     rustdoc = _load_json(rustdoc_path)
     rust_items = extract_public_api(rustdoc)
+    missing_sentinels = missing_feature_sentinels(rust_items, REQUIRED_RUST_FEATURES)
+    if missing_sentinels:
+        for sentinel in missing_sentinels:
+            print(f"missing feature-gated symbol: {sentinel}", file=sys.stderr)
+        print(
+            "regenerate rustdoc JSON with: cargo +nightly rustdoc --lib "
+            "--features async-store -- -Z unstable-options --output-format json",
+            file=sys.stderr,
+        )
+        return 2
     if args.command == "generate":
         previous = _load_json(manifest_path) if manifest_path.exists() else None
         manifest = generate_manifest(
             rust_items,
             previous,
             rustdoc.get("format_version"),
+            REQUIRED_RUST_FEATURES,
         )
         _write_json(manifest_path, manifest)
         print(f"wrote {len(rust_items)} operations to {manifest_path}")
@@ -410,7 +455,12 @@ def main(argv: list[str] | None = None) -> int:
     if not manifest_path.exists():
         print(f"manifest is missing: {manifest_path}", file=sys.stderr)
         return 2
-    result = check_manifest(rust_items, _load_json(manifest_path), args.release)
+    result = check_manifest(
+        rust_items,
+        _load_json(manifest_path),
+        args.release,
+        REQUIRED_RUST_FEATURES,
+    )
     if not result.ok:
         _print_result(result)
         return 1

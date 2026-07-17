@@ -1137,6 +1137,11 @@ func TestPortableAsyncWrappersCopyInputsBeforeHandoff(t *testing.T) {
 	if _, err := versioned.Initialize(); err != nil {
 		t.Fatal(err)
 	}
+	subscription, err := versioned.SubscribeAsync(context.Background()).Await(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer subscription.Close()
 
 	key := []byte("original-key")
 	value := []byte("original-value")
@@ -1149,6 +1154,22 @@ func TestPortableAsyncWrappersCopyInputsBeforeHandoff(t *testing.T) {
 	got, ok, err := versioned.Get([]byte("original-key"))
 	if err != nil || !ok || !bytes.Equal(got, []byte("original-value")) {
 		t.Fatalf("async put get = %q, %v, %v", got, ok, err)
+	}
+	head, err := versioned.HeadAsync(context.Background()).Await(context.Background())
+	if err != nil || head == nil {
+		t.Fatalf("async head = %#v, %v", head, err)
+	}
+	snapshot, err := versioned.SnapshotAtAsync(context.Background(), head.ID).Await(context.Background())
+	if err != nil || snapshot == nil {
+		t.Fatalf("async snapshot = %#v, %v", snapshot, err)
+	}
+	defer snapshot.Close()
+	read, err := snapshot.GetAsync(context.Background(), []byte("original-key")).Await(context.Background())
+	if err != nil || !read.Found || !bytes.Equal(read.Value, []byte("original-value")) {
+		t.Fatalf("async snapshot get = %#v, %v", read, err)
+	}
+	if event, err := subscription.PollAsync(context.Background()).Await(context.Background()); err != nil || event == nil {
+		t.Fatalf("async subscription poll = %#v, %v", event, err)
 	}
 
 	cancelled, cancel := context.WithCancel(context.Background())

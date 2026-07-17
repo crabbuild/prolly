@@ -434,6 +434,27 @@ class PortableParityTests(unittest.TestCase):
 
         asyncio.run(run())
 
+    def test_application_versioned_async_surface(self):
+        async def run():
+            with Engine.memory() as engine:
+                versioned = engine.versioned_map(b"async-surface")
+                initial = await versioned.initialize_async()
+                subscription = await versioned.subscribe_async()
+                updated = await versioned.put_async(b"k", b"v")
+                self.assertEqual((await versioned.head_async()).id, updated.id)
+                self.assertEqual(await versioned.get_async(b"k"), b"v")
+                snapshot = await versioned.snapshot_at_async(updated.id)
+                self.assertEqual(await snapshot.get_async(b"k"), b"v")
+                self.assertTrue(verify_key_proof(await snapshot.prove_key_async(b"k")).valid)
+                event = await subscription.poll_async()
+                self.assertEqual(event.previous, initial.id)
+                snapshot.close()
+                subscription.close()
+
+        import asyncio
+
+        asyncio.run(run())
+
     def test_proximity_async_wrapper_uses_native_cooperative_cancellation(self):
         async def run():
             with Engine.memory() as engine:
