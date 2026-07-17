@@ -103,7 +103,7 @@ git commit -m "feat(bindings): classify strict parity audit debt"
 - Modify: `bindings/api/README.md`
 - Modify: `bindings/api/parity.json`
 
-- [ ] **Step 1: Add failing validation tests for reviewed classifications**
+- [x] **Step 1: Add failing validation tests for reviewed classifications**
 
 Require every release-complete `idiomatic`, `rust-language-only`, or `platform-excluded` entry to contain a non-empty `rationale`, a non-empty `docs` list, and `reviewed: true`. Require `rust-language-only` entries to map all eight languages and include a runtime ownership/behavior test. Require platform exclusions to be individual, non-empty reasons and allow only the documented WASM runtime constraints.
 
@@ -122,13 +122,13 @@ Also test that a shared equivalence ID is rejected if absent from `idiomatic-equ
 }
 ```
 
-- [ ] **Step 2: Run tests and verify strict policy failures**
+- [x] **Step 2: Run tests and verify strict policy failures**
 
 Run: `python3 -m unittest scripts.tests.test_binding_api_inventory -v`
 
 Expected: FAIL until equivalence validation and rationale checks exist.
 
-- [ ] **Step 3: Implement the equivalence catalog and validator**
+- [x] **Step 3: Implement the equivalence catalog and validator**
 
 Create reviewed equivalence records for these Rust abstraction families:
 
@@ -141,9 +141,9 @@ Create reviewed equivalence records for these Rust abstraction families:
 
 Load the catalog in the CLI and pass it to release validation. Equivalence records provide policy and shared evidence only; they must not synthesize per-entry language symbols or change a planned entry to implemented.
 
-- [ ] **Step 4: Classify Rust-only abstractions owner by owner**
+- [x] **Step 4: Classify Rust-only abstractions owner by owner**
 
-For every row reported as `unreviewed_rust_abstraction`, inspect its Rust definition and runtime semantics. Update its manifest entry with the correct classification, all eight concrete language symbols or patterns, `equivalence`, `rationale`, `docs`, tests, performance tier, and `reviewed: true`. Use `idiomatic` whenever runtime behavior remains; reserve `rust-language-only` for compile-time-only machinery.
+For every row reported as `unreviewed_rust_abstraction`, inspect its Rust definition and runtime semantics. Update its manifest entry with the correct classification, `equivalence`, `rationale`, `docs`, performance tier, and `reviewed: true`. Use `idiomatic` whenever runtime behavior remains; reserve `rust-language-only` for compile-time-only machinery. Add concrete language symbols and tests only when verified; otherwise preserve `planned` so the row becomes `reviewed_incomplete` and is handled by the application-gap/evidence pass.
 
 After each owner batch run:
 
@@ -155,7 +155,7 @@ python3 -m unittest scripts.tests.test_binding_api_inventory -v
 
 The `unreviewed_rust_abstraction` count must reach zero without adding blanket exclusions.
 
-- [ ] **Step 5: Commit the reviewed abstraction classifications**
+- [x] **Step 5: Commit the reviewed abstraction classifications**
 
 ```sh
 git add scripts/binding_api_inventory.py scripts/tests/test_binding_api_inventory.py bindings/api/idiomatic-equivalents.json bindings/api/parity.json bindings/api/classification-audit.json bindings/api/README.md
