@@ -10,11 +10,13 @@ from typing import Any, Callable, Generic, Iterable, Protocol, Sequence, TypeVar
 from .packed import (
     EntryView,
     NeighborView,
+    ProximityRecordView,
     ScanOutcome,
     ScopedBytes,
     ValueRefView,
     decode_value_ref_view,
     proximity_search_view,
+    proximity_point_read_view,
     point_read_view,
     scan_range_view,
 )
@@ -1383,6 +1385,10 @@ class ProximityMap(_Scoped):
         self._open()
         return self._inner.get(bytes(key))
 
+    def get_view(self, key: bytes, visit: Callable[[ProximityRecordView], V]) -> tuple[bool, V | None]:
+        self._open()
+        return proximity_point_read_view(self._inner.fast_handle(), key, visit)
+
     def contains(self, key: bytes) -> bool:
         self._open()
         return self._inner.contains_key(bytes(key))
@@ -2144,6 +2150,10 @@ class ProximityReadSession(_Scoped):
         self._open()
         return self._inner.get(bytes(key))
 
+    def get_view(self, key: bytes, visit: Callable[[ProximityRecordView], V]) -> tuple[bool, V | None]:
+        self._open()
+        return proximity_point_read_view(self._inner.fast_handle(), key, visit)
+
     def contains(self, key: bytes) -> bool:
         self._open()
         return self._inner.contains_key(bytes(key))
@@ -2295,6 +2305,7 @@ __all__ = [
     "ProximityMap",
     "ProximityCancellationToken",
     "ProximityReadSession",
+    "ProximityRecordView",
     "ProximityRecord",
     "ProximitySearchRuntime",
     "ProximitySearchRuntimePolicy",

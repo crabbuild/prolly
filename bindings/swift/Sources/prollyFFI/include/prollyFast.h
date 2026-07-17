@@ -63,6 +63,12 @@ ProllyFastValueLeaseResult prolly_fast_read_session_get_lease(
     size_t key_len
 );
 
+ProllyFastValueLeaseResult prolly_fast_proximity_get_lease(
+    uint64_t map_handle,
+    const uint8_t *key_ptr,
+    size_t key_len
+);
+
 void prolly_fast_value_release(uint64_t lease_handle);
 
 #endif

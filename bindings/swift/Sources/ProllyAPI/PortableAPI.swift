@@ -1297,6 +1297,27 @@ public enum ValueRefView {
     case blob(cid: Data, length: UInt64)
 }
 
+public struct ProximityVectorView: RandomAccessCollection {
+    public typealias Index = Int
+    public typealias Element = Float
+    private let bytes: ScopedBytes
+    fileprivate init(bytes: ScopedBytes) { self.bytes = bytes }
+    public var startIndex: Int { 0 }
+    public var endIndex: Int { bytes.count / 4 }
+    public subscript(position: Int) -> Float {
+        precondition(position >= 0 && position < endIndex)
+        let offset = position * 4
+        let bits = UInt32(bytes[offset]) | UInt32(bytes[offset + 1]) << 8 |
+            UInt32(bytes[offset + 2]) << 16 | UInt32(bytes[offset + 3]) << 24
+        return Float(bitPattern: bits)
+    }
+}
+
+public struct ProximityRecordView {
+    public let vector: ProximityVectorView
+    public let value: ScopedBytes
+}
+
 /// Read-only native page views valid only until the scan callback returns.
 public struct ReadEntryView {
     public let key: ScopedBytes
@@ -1351,6 +1372,70 @@ private func withReadValueView(
     )
     try body(ScopedBytes(page: value, offset: 0, count: value.count, scope: scope))
     return true
+}
+
+private func withProximityRecordView(
+    handle: UInt64,
+    key: Data,
+    _ body: (ProximityRecordView) throws -> Void
+) throws -> Bool {
+    let result = key.withUnsafeBytes { buffer in
+        prolly_fast_proximity_get_lease(
+            handle, buffer.bindMemory(to: UInt8.self).baseAddress, buffer.count
+        )
+    }
+    guard result.status == 0 else {
+        throw PortableAPIError.packedPage("native retained proximity read failed with status \(result.status)")
+    }
+    guard result.found != 0 else {
+        if result.lease_handle != 0 { prolly_fast_value_release(result.lease_handle) }
+        guard result.lease_handle == 0 else {
+            throw PortableAPIError.packedPage("missing proximity read returned a value lease")
+        }
+        return false
+    }
+    guard result.lease_handle != 0, result.data_len <= UInt64(Int.max),
+          result.data_len >= 8, result.data_ptr != nil else {
+        if result.lease_handle != 0 { prolly_fast_value_release(result.lease_handle) }
+        throw PortableAPIError.packedPage("native proximity read returned an invalid value lease")
+    }
+    defer { prolly_fast_value_release(result.lease_handle) }
+    let page = UnsafeRawBufferPointer(start: result.data_ptr.map(UnsafeRawPointer.init), count: Int(result.data_len))
+    guard Array(page.prefix(6)) == [0x50, 0x52, 0x56, 0x52, 2, 1] else {
+        throw PortableAPIError.packedPage("invalid retained proximity record header")
+    }
+    let (dimensions, vectorStart) = try readProximityVarint(page, from: 6)
+    guard dimensions <= UInt64(Int.max / 4) else {
+        throw PortableAPIError.packedPage("proximity dimensions exceed this platform")
+    }
+    let vectorBytes = Int(dimensions) * 4
+    guard vectorStart + vectorBytes <= page.count else {
+        throw PortableAPIError.packedPage("retained proximity vector is truncated")
+    }
+    let (valueLength, valueStart) = try readProximityVarint(page, from: vectorStart + vectorBytes)
+    guard valueLength <= UInt64(Int.max), valueStart + Int(valueLength) == page.count else {
+        throw PortableAPIError.packedPage("retained proximity value length is invalid")
+    }
+    let scope = PageScope()
+    defer { scope.alive = false }
+    let vector = ScopedBytes(page: page, offset: vectorStart, count: vectorBytes, scope: scope)
+    let value = ScopedBytes(page: page, offset: valueStart, count: Int(valueLength), scope: scope)
+    try body(ProximityRecordView(vector: ProximityVectorView(bytes: vector), value: value))
+    return true
+}
+
+private func readProximityVarint(
+    _ bytes: UnsafeRawBufferPointer, from start: Int
+) throws -> (UInt64, Int) {
+    var value: UInt64 = 0, shift: UInt64 = 0, offset = start
+    while offset < bytes.count && shift < 64 {
+        let byte = bytes[offset]
+        offset += 1
+        value |= UInt64(byte & 0x7f) << shift
+        if byte & 0x80 == 0 { return (value, offset) }
+        shift += 7
+    }
+    throw PortableAPIError.packedPage("invalid proximity record varint")
 }
 
 private func decodeValueRefView(_ value: ScopedBytes) throws -> ValueRefView {
@@ -1637,6 +1722,11 @@ public final class ProximityMap: @unchecked Sendable {
         AcceleratorCatalog(native: try native.loadAcceleratorCatalog(manifest: Data(manifest)))
     }
     public func get(_ key: Data) throws -> ExactProximityRecordRecord? { try native.get(key: Data(key)) }
+    public func withRecordView(
+        _ key: Data, _ body: (ProximityRecordView) throws -> Void
+    ) throws -> Bool {
+        try withProximityRecordView(handle: native.fastHandle(), key: Data(key), body)
+    }
     public func contains(_ key: Data) throws -> Bool { try native.containsKey(key: Data(key)) }
     public func search(_ request: ProximitySearchRequestRecord) throws -> ProximitySearchResultRecord {
         let session = try read()
@@ -2105,6 +2195,12 @@ public final class ProximityReadSession: @unchecked Sendable {
     private var closed = false
     init(native: BindingProximityReadSession) { self.native = native }
     public func get(_ key: Data) throws -> ExactProximityRecordRecord? { try native.get(key: Data(key)) }
+    public func withRecordView(
+        _ key: Data, _ body: (ProximityRecordView) throws -> Void
+    ) throws -> Bool {
+        guard !closed else { throw PortableAPIError.closed("proximity read session") }
+        return try withProximityRecordView(handle: native.fastHandle(), key: Data(key), body)
+    }
     public func contains(_ key: Data) throws -> Bool { try native.containsKey(key: Data(key)) }
     public func search(_ request: ProximitySearchRequestRecord) throws -> ProximitySearchResultRecord {
         guard !closed else { throw PortableAPIError.closed("proximity read session") }

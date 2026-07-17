@@ -833,6 +833,8 @@ class ProximityMap(internal val native: BindingProximityMap) : AutoCloseable {
     fun loadAcceleratorCatalog(manifest: ByteArray) =
         AcceleratorCatalog(native.loadAcceleratorCatalog(manifest.copyOf()))
     fun get(key: ByteArray) = native.get(key.copyOf())
+    fun getView(key: ByteArray, block: (ProximityRecordView) -> Unit) =
+        PackedPages.withProximityRecord(native.fastHandle(), key.copyOf(), block)
     fun containsKey(key: ByteArray) = native.containsKey(key.copyOf())
     fun search(request: ProximitySearchRequestRecord): ProximitySearchResultRecord =
         read().use { it.search(request) }
@@ -1074,6 +1076,8 @@ class AcceleratorCatalog(internal val native: BindingAcceleratorCatalog) : AutoC
 
 class ProximityReadSession(internal val native: BindingProximityReadSession) : AutoCloseable {
     fun get(key: ByteArray) = native.get(key.copyOf())
+    fun getView(key: ByteArray, block: (ProximityRecordView) -> Unit) =
+        PackedPages.withProximityRecord(native.fastHandle(), key.copyOf(), block)
     fun containsKey(key: ByteArray) = native.containsKey(key.copyOf())
     fun search(request: ProximitySearchRequestRecord): ProximitySearchResultRecord =
         native.search(ownedSearchRequest(request))

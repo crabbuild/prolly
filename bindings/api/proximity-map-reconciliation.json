@@ -52,10 +52,27 @@
       "rationale": "Hosts build through Engine factories, dispatch accelerated searches through typed accelerator/catalog handles, and represent the Rust tree as an opaque ProximityMap with descriptor/config/count accessors."
     },
     {
-      "state": "confirmed-performance-gap",
+      "state": "bound-idiomatic",
       "rust": [
         "prolly::ProximityMap::build_with_parallelism",
-        "prolly::ProximityMap::get_with",
+        "prolly::ProximityMap::get_with"
+      ],
+      "evidence": [
+        "bindings/uniffi/src/fast_abi.rs#prolly_fast_proximity_get_lease",
+        "bindings/python/prolly/api.py#ProximityMap.get_view",
+        "bindings/go/proximity.go#ProximityMap.GetView",
+        "bindings/node/src/proximity.ts#ProximityMap.withRecordView",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#ProximityMap.getView",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/ProximityMap.java#getView",
+        "bindings/ruby/lib/prolly/api.rb#ProximityMap.get_view",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#ProximityMap.withRecordView",
+        "bindings/wasm/src/index.ts#WasmProximityMap.withRecordView"
+      ],
+      "rationale": "Every host exposes explicit build worker selection and a callback-scoped, retained-leaf exact record view. Native hosts use the shared PRVR lease ABI; WASM borrows the same immutable leaf in linear memory and explicitly rejects worker counts above one on its single-thread target."
+    },
+    {
+      "state": "confirmed-performance-gap",
+      "rust": [
         "prolly::ProximityMap::scan_records_range_until"
       ],
       "evidence": [
@@ -65,7 +82,7 @@
         "bindings/java/src/main/java/build/crab/prolly/javaapi/ProximityMap.java",
         "bindings/wasm/src/index.ts"
       ],
-      "rationale": "Explicit build parallelism is not portable to four hosts, exact get lacks a callback-scoped vector/value lease, and the seekable half-open zero-copy record scan is not exposed consistently."
+      "rationale": "The seekable half-open zero-copy record scan is not yet exposed consistently; Ruby has an unbounded leased scan view and the shared ABI has cursor pages, but all hosts still need explicit start/end bounds and early-stop parity."
     }
   ]
 }

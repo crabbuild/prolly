@@ -21469,15 +21469,19 @@
       "audience": "application",
       "audience_rationale": "prolly::ProximityMap::build_with_parallelism has runtime behavior in the requested proximity-map application domain and requires direct or idiomatic host evidence.",
       "reviewed": true,
-      "reconciliation": "confirmed-performance-gap",
+      "reconciliation": "bound-idiomatic",
       "reconciliation_evidence": [
-        "src/prolly/proximity/map.rs",
-        "bindings/go/proximity.go",
-        "bindings/node/src/proximity.ts",
-        "bindings/java/src/main/java/build/crab/prolly/javaapi/ProximityMap.java",
-        "bindings/wasm/src/index.ts"
+        "bindings/uniffi/src/fast_abi.rs#prolly_fast_proximity_get_lease",
+        "bindings/python/prolly/api.py#ProximityMap.get_view",
+        "bindings/go/proximity.go#ProximityMap.GetView",
+        "bindings/node/src/proximity.ts#ProximityMap.withRecordView",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#ProximityMap.getView",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/ProximityMap.java#getView",
+        "bindings/ruby/lib/prolly/api.rb#ProximityMap.get_view",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#ProximityMap.withRecordView",
+        "bindings/wasm/src/index.ts#WasmProximityMap.withRecordView"
       ],
-      "reconciliation_rationale": "Explicit build parallelism is not portable to four hosts, exact get lacks a callback-scoped vector/value lease, and the seekable half-open zero-copy record scan is not exposed consistently."
+      "reconciliation_rationale": "Every host exposes explicit build worker selection and a callback-scoped, retained-leaf exact record view. Native hosts use the shared PRVR lease ABI; WASM borrows the same immutable leaf in linear memory and explicitly rejects worker counts above one on its single-thread target."
     },
     {
       "rust": "prolly::ProximityMap::clear_content_cache",
@@ -21606,15 +21610,19 @@
       "audience": "application",
       "audience_rationale": "prolly::ProximityMap::get_with has runtime behavior in the requested proximity-map application domain and requires direct or idiomatic host evidence.",
       "reviewed": true,
-      "reconciliation": "confirmed-performance-gap",
+      "reconciliation": "bound-idiomatic",
       "reconciliation_evidence": [
-        "src/prolly/proximity/map.rs",
-        "bindings/go/proximity.go",
-        "bindings/node/src/proximity.ts",
-        "bindings/java/src/main/java/build/crab/prolly/javaapi/ProximityMap.java",
-        "bindings/wasm/src/index.ts"
+        "bindings/uniffi/src/fast_abi.rs#prolly_fast_proximity_get_lease",
+        "bindings/python/prolly/api.py#ProximityMap.get_view",
+        "bindings/go/proximity.go#ProximityMap.GetView",
+        "bindings/node/src/proximity.ts#ProximityMap.withRecordView",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#ProximityMap.getView",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/ProximityMap.java#getView",
+        "bindings/ruby/lib/prolly/api.rb#ProximityMap.get_view",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#ProximityMap.withRecordView",
+        "bindings/wasm/src/index.ts#WasmProximityMap.withRecordView"
       ],
-      "reconciliation_rationale": "Explicit build parallelism is not portable to four hosts, exact get lacks a callback-scoped vector/value lease, and the seekable half-open zero-copy record scan is not exposed consistently."
+      "reconciliation_rationale": "Every host exposes explicit build worker selection and a callback-scoped, retained-leaf exact record view. Native hosts use the shared PRVR lease ABI; WASM borrows the same immutable leaf in linear memory and explicitly rejects worker counts above one on its single-thread target."
     },
     {
       "rust": "prolly::ProximityMap::load",
@@ -21942,7 +21950,7 @@
         "bindings/java/src/main/java/build/crab/prolly/javaapi/ProximityMap.java",
         "bindings/wasm/src/index.ts"
       ],
-      "reconciliation_rationale": "Explicit build parallelism is not portable to four hosts, exact get lacks a callback-scoped vector/value lease, and the seekable half-open zero-copy record scan is not exposed consistently."
+      "reconciliation_rationale": "The seekable half-open zero-copy record scan is not yet exposed consistently; Ruby has an unbounded leased scan view and the shared ABI has cursor pages, but all hosts still need explicit start/end bounds and early-stop parity."
     },
     {
       "rust": "prolly::ProximityMap::scan_records_until",

@@ -1141,7 +1141,13 @@ object JavaPortableBridge {
         engine: Engine,
         dimensions: Int,
         records: List<ProximityRecord>,
-    ): ProximityMap = engine.buildProximity(dimensions.toUInt(), records)
+        threads: Long? = null,
+    ): ProximityMap {
+        require(threads == null || threads > 0) { "proximity build threads must be positive" }
+        return engine.buildProximity(
+            dimensions = dimensions.toUInt(), records = records, threads = threads?.toULong(),
+        )
+    }
 
     @JvmStatic
     fun defaultProximitySearchRuntimePolicy(): JavaProximitySearchRuntimePolicy =

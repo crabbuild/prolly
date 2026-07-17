@@ -1082,6 +1082,14 @@ impl<'manager, 'tree, S: Store> ReadSession<'manager, 'tree, S> {
         }
     }
 
+    /// Retain the packed leaf containing a value beyond this borrowed
+    /// session's next traversal. Native adapters release the returned lease
+    /// after their synchronous callback completes.
+    pub fn get_lease(&mut self, key: &[u8]) -> Result<Option<OwnedValueLease>, Error> {
+        self.get_handle(key)
+            .map(|handle| handle.map(|handle| OwnedValueLease { handle }))
+    }
+
     /// Retain the packed leaf location for a bounded internal consumer.
     ///
     /// Public callers use `get_with`; this handle exists for algorithms that

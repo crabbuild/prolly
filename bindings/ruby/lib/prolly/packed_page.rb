@@ -45,6 +45,9 @@ module Prolly
     UniFFILib.attach_function :prolly_fast_read_session_get_lease,
                               [:uint64, :pointer, :size_t],
                               FastValueLeaseResult.by_value
+    UniFFILib.attach_function :prolly_fast_proximity_get_lease,
+                              [:uint64, :pointer, :size_t],
+                              FastValueLeaseResult.by_value
     UniFFILib.attach_function :prolly_fast_value_release, [:uint64], :void
 
     class Scope
@@ -163,6 +166,52 @@ module Prolly
         raise 'missing point read returned a value lease'
       end
       [false, nil]
+    end
+
+    def proximity_point_read_view(map_handle, key)
+      raise ArgumentError, 'proximity record visitor block is required' unless block_given?
+
+      key = key.b
+      result = UniFFILib.prolly_fast_proximity_get_lease(map_handle, memory_for(key), key.bytesize)
+      raise "native retained proximity read failed with status #{result[:status]}" unless result[:status].zero?
+      if result[:found].zero?
+        raise 'missing proximity read returned a value lease' unless result[:lease_handle].zero?
+        return [false, nil]
+      end
+      lease = result[:lease_handle]
+      pointer = result[:data_ptr]
+      length = result[:data_len]
+      raise 'native proximity read returned an invalid value lease' if lease.zero? || pointer.null? || length < 8
+      scope = Scope.new
+      begin
+        raise 'invalid retained proximity record header' unless pointer.get_bytes(0, 6) == "PRVR\x02\x01".b
+        dimensions, vector_start = read_varint(pointer, 6, length)
+        vector_bytes = dimensions * 4
+        raise 'retained proximity vector is truncated' if vector_start + vector_bytes > length
+        value_length, value_start = read_varint(pointer, vector_start + vector_bytes, length)
+        raise 'retained proximity value length is invalid' unless value_start + value_length == length
+        view = ProximityRecordView.new(
+          vector: VectorView.new(pointer, vector_start, vector_bytes, scope),
+          value: FieldView.new(pointer, value_start, value_length, scope)
+        )
+        [true, yield(view)]
+      ensure
+        scope.close
+        UniFFILib.prolly_fast_value_release(lease)
+      end
+    end
+
+    def read_varint(pointer, offset, length)
+      value = 0
+      shift = 0
+      while offset < length && shift < 64
+        byte = pointer.get_uint8(offset)
+        offset += 1
+        value |= (byte & 0x7f) << shift
+        return [value, offset] if (byte & 0x80).zero?
+        shift += 7
+      end
+      raise 'invalid proximity record varint'
     end
 
     def value_ref_view(session_handle, key)

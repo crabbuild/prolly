@@ -216,6 +216,7 @@ extern uint32_t prolly_fast_abi_version(void);
 extern uint64_t prolly_fast_abi_capabilities(void);
 extern ProllyFastCopyResult prolly_fast_read_session_get_into(uint64_t session, const uint8_t *key_ptr, size_t key_len, uint8_t *out_ptr, size_t out_capacity);
 extern ProllyFastValueLeaseResult prolly_fast_read_session_get_lease(uint64_t session, const uint8_t *key_ptr, size_t key_len);
+extern ProllyFastValueLeaseResult prolly_fast_proximity_get_lease(uint64_t map, const uint8_t *key_ptr, size_t key_len);
 extern ProllyFastPageResult prolly_fast_read_session_get_many_page(uint64_t session, const uint8_t *input_ptr, size_t input_len, uint32_t key_count);
 extern ProllyFastCopyResult prolly_fast_read_session_last_error_into(uint64_t session, uint8_t *out_ptr, size_t out_capacity);
 extern ProllyFastPageResult prolly_fast_read_session_scan_page(uint64_t session, const uint8_t *start_ptr, size_t start_len, const uint8_t *end_ptr, size_t end_len, uint8_t has_end, const uint8_t *after_ptr, size_t after_len, uint8_t has_after, uint32_t max_records, uint64_t max_arena_bytes);
@@ -2170,6 +2171,45 @@ func (s *ReadSession) GetView(key []byte, visitor func([]byte)) (bool, error) {
 	}
 	visitor(value)
 	runtime.KeepAlive(value)
+	return true, nil
+}
+
+func withFastProximityValue(
+	fast uint64, key []byte, visitor func([]byte) error,
+) (bool, error) {
+	result := C.prolly_fast_proximity_get_lease(
+		C.uint64_t(fast), bytePointer(key), C.size_t(len(key)),
+	)
+	runtime.KeepAlive(key)
+	if int32(result.status) != fastStatusOK {
+		return false, fmt.Errorf("native retained proximity read failed with status %d", result.status)
+	}
+	if result.found == 0 {
+		if result.lease_handle != 0 {
+			C.prolly_fast_value_release(result.lease_handle)
+			return false, errors.New("missing proximity read returned a value lease")
+		}
+		return false, nil
+	}
+	dataLen := uint64(result.data_len)
+	if dataLen > uint64(^uint(0)>>1) || result.lease_handle == 0 ||
+		(dataLen != 0 && result.data_ptr == nil) {
+		if result.lease_handle != 0 {
+			C.prolly_fast_value_release(result.lease_handle)
+		}
+		return false, errors.New("native proximity read returned an invalid value lease")
+	}
+	defer C.prolly_fast_value_release(result.lease_handle)
+	var raw []byte
+	if dataLen == 0 {
+		raw = []byte{}
+	} else {
+		raw = unsafe.Slice((*byte)(unsafe.Pointer(result.data_ptr)), int(dataLen))
+	}
+	if err := visitor(raw); err != nil {
+		return false, err
+	}
+	runtime.KeepAlive(raw)
 	return true, nil
 }
 

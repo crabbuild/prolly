@@ -2,7 +2,7 @@ use super::super::builder::BatchBuilder;
 use super::super::cid::Cid;
 use super::super::config::Config;
 use super::super::error::{Error, Mutation as TreeMutation};
-use super::super::read::{ReadSession, ScanOutcome};
+use super::super::read::{OwnedValueLease, ReadSession, ScanOutcome};
 use super::super::splice::{splice, SpliceStats};
 use super::super::store::Store;
 use super::super::Prolly;
@@ -61,6 +61,17 @@ impl<S: Store> ProximityReadSession<'_, S> {
                 }))
             })?
             .transpose()
+    }
+
+    /// Retain the immutable packed leaf containing one encoded exact record.
+    /// Native adapters validate the record before exposing callback-scoped
+    /// vector and value views over this lease.
+    pub fn get_lease(&mut self, key: &[u8]) -> Result<Option<OwnedValueLease>, Error> {
+        let lease = self.directory.get_lease(key)?;
+        if let Some(lease) = &lease {
+            StoredRecordRef::decode(lease.as_bytes()?, self.dimensions)?;
+        }
+        Ok(lease)
     }
 
     pub fn contains_key(&mut self, key: &[u8]) -> Result<bool, Error> {
@@ -2005,6 +2016,30 @@ mod tests {
         )
         .unwrap();
         (store, map)
+    }
+
+    #[test]
+    fn exact_read_lease_retains_and_validates_the_stored_record() {
+        let store = Arc::new(MemStore::new());
+        let map = ProximityMap::build(
+            store,
+            ProximityConfig::new(2),
+            [ProximityRecord {
+                key: b"key".to_vec(),
+                vector: vec![1.0, 2.0],
+                value: b"value".to_vec(),
+            }],
+        )
+        .unwrap();
+        let mut read = map.read().unwrap();
+        let lease = read.get_lease(b"key").unwrap().unwrap();
+        let stored = StoredRecordRef::decode(lease.as_bytes().unwrap(), 2).unwrap();
+        assert_eq!(
+            ProximityVectorRef::from_encoded(stored.vector).to_vec(),
+            vec![1.0, 2.0]
+        );
+        assert_eq!(stored.value, b"value");
+        assert!(read.get_lease(b"missing").unwrap().is_none());
     }
 
     #[test]

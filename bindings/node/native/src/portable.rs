@@ -110,6 +110,11 @@ extern "C" {
         key_ptr: *const u8,
         key_len: usize,
     ) -> NodeFastValueLeaseResult;
+    fn prolly_fast_proximity_get_lease(
+        map_handle: u64,
+        key_ptr: *const u8,
+        key_len: usize,
+    ) -> NodeFastValueLeaseResult;
     fn prolly_fast_value_release(lease_handle: u64);
 }
 
@@ -135,6 +140,72 @@ impl Drop for NodeFastValueGuard {
     fn drop(&mut self) {
         unsafe { prolly_fast_value_release(self.0) };
     }
+}
+
+fn with_proximity_record_view(
+    env: Env,
+    map_handle: u64,
+    key: &Buffer,
+    visit: FunctionRef<JsObject, ()>,
+) -> Result<bool> {
+    if map_handle == 0 {
+        return Err(Error::new(
+            Status::GenericFailure,
+            "native proximity handle is closed",
+        ));
+    }
+    let result = unsafe { prolly_fast_proximity_get_lease(map_handle, key.as_ptr(), key.len()) };
+    if result.status != 0 {
+        return Err(Error::new(
+            Status::GenericFailure,
+            format!(
+                "native retained proximity read failed with status {}",
+                result.status
+            ),
+        ));
+    }
+    if result.found == 0 {
+        if result.lease_handle != 0 {
+            unsafe { prolly_fast_value_release(result.lease_handle) };
+            return Err(Error::new(
+                Status::GenericFailure,
+                "missing proximity read returned a value lease",
+            ));
+        }
+        return Ok(false);
+    }
+    let length = usize::try_from(result.data_len).map_err(|_| {
+        Error::new(
+            Status::GenericFailure,
+            "proximity record exceeds the host address space",
+        )
+    })?;
+    if result.lease_handle == 0 || (length != 0 && result.data_ptr.is_null()) {
+        if result.lease_handle != 0 {
+            unsafe { prolly_fast_value_release(result.lease_handle) };
+        }
+        return Err(Error::new(
+            Status::GenericFailure,
+            "native proximity read returned an invalid value lease",
+        ));
+    }
+    let _lease = NodeFastValueGuard(result.lease_handle);
+    let argument = if length == 0 {
+        env.create_buffer(0)?.into_unknown().coerce_to_object()?
+    } else {
+        unsafe {
+            env.create_buffer_with_borrowed_data(
+                result.data_ptr.cast_mut(),
+                length,
+                (),
+                |(), _env| {},
+            )?
+        }
+        .into_unknown()
+        .coerce_to_object()?
+    };
+    visit.borrow_back(&env)?.call(argument)?;
+    Ok(true)
 }
 
 #[napi(object)]
@@ -4382,6 +4453,16 @@ impl NativePortableProximityMap {
             .map_err(to_napi_error)
     }
 
+    #[napi(js_name = "withRecordView")]
+    pub fn with_record_view(
+        &self,
+        env: Env,
+        key: Buffer,
+        visit: FunctionRef<JsObject, ()>,
+    ) -> Result<bool> {
+        with_proximity_record_view(env, self.inner.fast_handle(), &key, visit)
+    }
+
     #[napi]
     pub fn contains(&self, key: Buffer) -> Result<bool> {
         self.inner.contains_key(key.to_vec()).map_err(to_napi_error)
@@ -4616,6 +4697,16 @@ impl NativePortableProximityReadSession {
             .map_err(to_napi_error)
     }
 
+    #[napi(js_name = "withRecordView")]
+    pub fn with_record_view(
+        &self,
+        env: Env,
+        key: Buffer,
+        visit: FunctionRef<JsObject, ()>,
+    ) -> Result<bool> {
+        with_proximity_record_view(env, self.inner.fast_handle(), &key, visit)
+    }
+
     #[napi]
     pub fn contains(&self, key: Buffer) -> Result<bool> {
         self.inner.contains_key(key.to_vec()).map_err(to_napi_error)
@@ -4818,6 +4909,7 @@ impl NativeProllyEngine {
         &self,
         dimensions: u32,
         records: Vec<NodePortableProximityRecord>,
+        threads: u32,
     ) -> Result<NativePortableProximityMap> {
         let records = records
             .into_iter()
@@ -4828,7 +4920,11 @@ impl NativeProllyEngine {
             })
             .collect();
         self.inner
-            .build_proximity_map(default_proximity_config(dimensions), records, None)
+            .build_proximity_map(
+                default_proximity_config(dimensions),
+                records,
+                Some(u64::from(threads)),
+            )
             .map(|inner| NativePortableProximityMap { inner })
             .map_err(to_napi_error)
     }
