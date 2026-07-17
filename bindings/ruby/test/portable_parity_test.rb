@@ -4,6 +4,35 @@ require 'minitest/autorun'
 require 'prolly'
 
 class PortableParityTest < Minitest::Test
+  def test_retained_search_runtime_reuses_validated_content
+    Prolly::Engine.memory.use do |engine|
+      proximity = engine.build_proximity(
+        dimensions: 2,
+        records: 16.times.map do |index|
+          Prolly::ProximityRecord.new(
+            key: format('vector-%02d', index).b,
+            vector: [index.to_f, 0.0],
+            value: format('value-%02d', index).b
+          )
+        end
+      )
+      request = Prolly.exact_proximity_search_request([0.0, 0.0], 3)
+
+      engine.proximity_search_runtime.use do |runtime|
+        cold = proximity.search_with_runtime(request, runtime)
+        warm = proximity.search_with_runtime(request, runtime)
+        assert_operator cold.stats.physical_bytes_read, :>, 0
+        assert_equal 0, warm.stats.physical_bytes_read
+        assert_operator runtime.stats.physical_reads, :>, 0
+        assert_equal Prolly.default_proximity_search_runtime_policy, runtime.policy
+
+        runtime.clear
+        assert_operator proximity.search_with_runtime(request, runtime).stats.physical_bytes_read, :>, 0
+      end
+      proximity.close
+    end
+  end
+
   def test_composite_and_catalog_lifecycle_is_portable_and_bounded
     Prolly::Engine.memory.use do |engine|
       base = engine.build_proximity(

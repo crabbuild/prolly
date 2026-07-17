@@ -22,6 +22,11 @@ public final class HnswIndex implements AutoCloseable {
         return ProximityMap.fromNative(
                 JavaPortableBridge.hnswSearch(open(), map.open(), request.toNative()));
     }
+    public SearchResult searchWithRuntime(
+            ProximityMap map, SearchRequest request, ProximitySearchRuntime runtime) {
+        return ProximityMap.fromNative(JavaPortableBridge.hnswSearchWithRuntime(
+                open(), map.open(), request.toNative(), runtime.open()));
+    }
     public ProximitySearchProof proveSearch(ProximityMap map, SearchRequest request) {
         return new ProximitySearchProof(
                 JavaPortableBridge.hnswProveSearch(open(), map.open(), request.toNative()));

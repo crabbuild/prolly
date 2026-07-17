@@ -833,6 +833,29 @@ export interface PortableSearchResult {
   planFormatVersion: number;
 }
 
+export interface ProximitySearchRuntimePolicy {
+  maxEntries: bigint;
+  maxBytes: bigint;
+  authoritativeMaxBytes: bigint;
+  hnswMaxBytes: bigint;
+  pqMaxBytes: bigint;
+}
+
+export interface ProximitySearchRuntimeStats {
+  physicalReads: bigint;
+  physicalBytesRead: bigint;
+}
+
+export function defaultProximitySearchRuntimePolicy(): ProximitySearchRuntimePolicy {
+  return {
+    maxEntries: 16_384n,
+    maxBytes: 256n * 1024n * 1024n,
+    authoritativeMaxBytes: 128n * 1024n * 1024n,
+    hnswMaxBytes: 96n * 1024n * 1024n,
+    pqMaxBytes: 32n * 1024n * 1024n,
+  };
+}
+
 export interface PortableNeighborView {
   key: Uint8Array;
   value: Uint8Array;
@@ -1014,6 +1037,18 @@ function requireUnsignedBigInt(value: bigint, name: string): bigint {
     throw new RangeError(`${name} must fit an unsigned 64-bit integer`);
   }
   return value;
+}
+
+function ownProximitySearchRuntimePolicy(value: ProximitySearchRuntimePolicy): object {
+  return {
+    maxEntries: requireUnsignedBigInt(value.maxEntries, "maxEntries").toString(),
+    maxBytes: requireUnsignedBigInt(value.maxBytes, "maxBytes").toString(),
+    authoritativeMaxBytes: requireUnsignedBigInt(
+      value.authoritativeMaxBytes, "authoritativeMaxBytes",
+    ).toString(),
+    hnswMaxBytes: requireUnsignedBigInt(value.hnswMaxBytes, "hnswMaxBytes").toString(),
+    pqMaxBytes: requireUnsignedBigInt(value.pqMaxBytes, "pqMaxBytes").toString(),
+  };
 }
 
 function ownHnswConfig(value: HnswConfig | undefined): object {
@@ -1314,6 +1349,14 @@ export class Engine implements Disposable {
     }));
     return portablePromise(signal, () =>
       new WasmProximityMap(native.buildProximity(dimensions, owned), this.#module?.wasmMemory()));
+  }
+
+  proximitySearchRuntime(
+    policy: ProximitySearchRuntimePolicy = defaultProximitySearchRuntimePolicy(),
+  ): WasmProximitySearchRuntime {
+    return new WasmProximitySearchRuntime(
+      this.#open().proximitySearchRuntime(ownProximitySearchRuntimePolicy(policy)),
+    );
   }
 
   close(): void {
@@ -2370,6 +2413,35 @@ function wasmCompositeRebuildOutcome(result: any): CompositeBuildOrRebuildOutcom
   };
 }
 
+export class WasmProximitySearchRuntime implements Disposable {
+  #native?: any;
+  constructor(native: any) { this.#native = native; }
+  nativeHandle(): any {
+    if (this.#native == null) throw new Error("WASM proximity search runtime is closed");
+    return this.#native;
+  }
+  policy(): ProximitySearchRuntimePolicy {
+    const value = this.nativeHandle().policy();
+    return {
+      maxEntries: BigInt(value.maxEntries),
+      maxBytes: BigInt(value.maxBytes),
+      authoritativeMaxBytes: BigInt(value.authoritativeMaxBytes),
+      hnswMaxBytes: BigInt(value.hnswMaxBytes),
+      pqMaxBytes: BigInt(value.pqMaxBytes),
+    };
+  }
+  stats(): ProximitySearchRuntimeStats {
+    const value = this.nativeHandle().stats();
+    return {
+      physicalReads: BigInt(value.physicalReads),
+      physicalBytesRead: BigInt(value.physicalBytesRead),
+    };
+  }
+  clear(): void { this.nativeHandle().clear(); }
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
 export class WasmProximityMap implements Disposable {
   #native?: any;
   #memory?: WebAssembly.Memory;
@@ -2386,6 +2458,18 @@ export class WasmProximityMap implements Disposable {
   }
   search(request: PortableSearchRequest): Promise<PortableSearchResult> {
     return this.read().search(request);
+  }
+  searchWithRuntime(
+    request: PortableSearchRequest,
+    runtime: WasmProximitySearchRuntime,
+  ): Promise<PortableSearchResult> {
+    const native = this.nativeHandle();
+    const owned = ownPortableSearchRequest(request);
+    const nativeRuntime = runtime.nativeHandle();
+    return portablePromise(
+      request.signal,
+      () => native.searchWithRuntime(owned, nativeRuntime),
+    );
   }
   get(key: Uint8Array): { vector: Float32Array; value: Uint8Array } | undefined {
     return this.nativeHandle().get(ownedPortableBytes(key)) ?? undefined;
@@ -2564,6 +2648,20 @@ export class WasmHnswIndex implements Disposable {
     const owned = ownPortableSearchRequest(request);
     return portablePromise(request.signal, () => native.search(nativeMap, owned));
   }
+  searchWithRuntime(
+    map: WasmProximityMap,
+    request: PortableSearchRequest,
+    runtime: WasmProximitySearchRuntime,
+  ): Promise<PortableSearchResult> {
+    const native = this.#open();
+    const nativeMap = map.nativeHandle();
+    const owned = ownPortableSearchRequest(request);
+    const nativeRuntime = runtime.nativeHandle();
+    return portablePromise(
+      request.signal,
+      () => native.searchWithRuntime(nativeMap, owned, nativeRuntime),
+    );
+  }
   proveSearch(map: WasmProximityMap, request: PortableSearchRequest): WasmProximitySearchProof {
     return new WasmProximitySearchProof(
       this.#open().proveSearch(map.nativeHandle(), ownPortableSearchRequest(request)),
@@ -2607,6 +2705,20 @@ export class WasmProductQuantizer implements Disposable {
     const owned = ownPortableSearchRequest(request);
     return portablePromise(request.signal, () => native.search(nativeMap, owned));
   }
+  searchWithRuntime(
+    map: WasmProximityMap,
+    request: PortableSearchRequest,
+    runtime: WasmProximitySearchRuntime,
+  ): Promise<PortableSearchResult> {
+    const native = this.#open();
+    const nativeMap = map.nativeHandle();
+    const owned = ownPortableSearchRequest(request);
+    const nativeRuntime = runtime.nativeHandle();
+    return portablePromise(
+      request.signal,
+      () => native.searchWithRuntime(nativeMap, owned, nativeRuntime),
+    );
+  }
   proveSearch(map: WasmProximityMap, request: PortableSearchRequest): WasmProximitySearchProof {
     return new WasmProximitySearchProof(
       this.#open().proveSearch(map.nativeHandle(), ownPortableSearchRequest(request)),
@@ -2635,6 +2747,20 @@ export class WasmCompositeAccelerator implements Disposable {
     const native = this.nativeHandle(); const nativeMap = map.nativeHandle(); const owned = ownPortableSearchRequest(request);
     return portablePromise(request.signal, () => native.search(nativeMap, owned));
   }
+  searchWithRuntime(
+    map: WasmProximityMap,
+    request: PortableSearchRequest,
+    runtime: WasmProximitySearchRuntime,
+  ): Promise<PortableSearchResult> {
+    const native = this.nativeHandle();
+    const nativeMap = map.nativeHandle();
+    const owned = ownPortableSearchRequest(request);
+    const nativeRuntime = runtime.nativeHandle();
+    return portablePromise(
+      request.signal,
+      () => native.searchWithRuntime(nativeMap, owned, nativeRuntime),
+    );
+  }
   proveSearch(map: WasmProximityMap, request: PortableSearchRequest): WasmProximitySearchProof {
     return new WasmProximitySearchProof(this.nativeHandle().proveSearch(map.nativeHandle(), ownPortableSearchRequest(request)));
   }
@@ -2654,6 +2780,20 @@ export class WasmAcceleratorCatalog implements Disposable {
   search(map: WasmProximityMap, request: PortableSearchRequest): Promise<PortableSearchResult> {
     const native = this.#open(); const nativeMap = map.nativeHandle(); const owned = ownPortableSearchRequest(request);
     return portablePromise(request.signal, () => native.search(nativeMap, owned));
+  }
+  searchWithRuntime(
+    map: WasmProximityMap,
+    request: PortableSearchRequest,
+    runtime: WasmProximitySearchRuntime,
+  ): Promise<PortableSearchResult> {
+    const native = this.#open();
+    const nativeMap = map.nativeHandle();
+    const owned = ownPortableSearchRequest(request);
+    const nativeRuntime = runtime.nativeHandle();
+    return portablePromise(
+      request.signal,
+      () => native.searchWithRuntime(nativeMap, owned, nativeRuntime),
+    );
   }
   proveSearch(map: WasmProximityMap, request: PortableSearchRequest): WasmProximitySearchProof {
     return new WasmProximitySearchProof(this.#open().proveSearch(map.nativeHandle(), ownPortableSearchRequest(request)));
@@ -2764,6 +2904,21 @@ export class WasmProximityReadSession implements Disposable {
     const native = this.#native;
     const owned = ownPortableSearchRequest(request);
     return portablePromise(request.signal, () => native.search(owned));
+  }
+  searchWithRuntime(
+    request: PortableSearchRequest,
+    runtime: WasmProximitySearchRuntime,
+  ): Promise<PortableSearchResult> {
+    if (this.#native == null) {
+      return Promise.reject(new Error("WASM proximity session is closed"));
+    }
+    const native = this.#native;
+    const owned = ownPortableSearchRequest(request);
+    const nativeRuntime = runtime.nativeHandle();
+    return portablePromise(
+      request.signal,
+      () => native.searchWithRuntime(owned, nativeRuntime),
+    );
   }
   close(): void { this.#native?.free?.(); this.#native = undefined; this.#memory = undefined; }
   [Symbol.dispose](): void { this.close(); }

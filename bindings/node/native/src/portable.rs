@@ -13,13 +13,14 @@ use prolly_bindings::{
     default_composite_accelerator_config, default_composite_build_limits,
     default_composite_rebuild_options, default_content_graph_limits, default_hnsw_build_limits,
     default_hnsw_config, default_pq_build_limits, default_pq_config, default_proximity_config,
-    verify_key_proof, verify_multi_key_proof, verify_proximity_membership_proof,
-    verify_proximity_structure_proof, verify_range_page_proof, verify_range_proof,
-    AcceleratorCatalogEntryRecord, ActiveIndexHealthRecord, AdaptiveQualityRecord,
-    BindingAcceleratorCatalog, BindingCompositeAccelerator, BindingHnswIndex, BindingIndexRegistry,
-    BindingIndexedMap, BindingIndexedSnapshot, BindingMapComparison, BindingMapMerge,
-    BindingMapSnapshot, BindingMapSubscription, BindingProductQuantizer, BindingProximityMap,
-    BindingProximityReadSession, BindingProximitySearchProof, BindingSecondaryIndexSnapshot,
+    default_proximity_search_runtime_policy, verify_key_proof, verify_multi_key_proof,
+    verify_proximity_membership_proof, verify_proximity_structure_proof, verify_range_page_proof,
+    verify_range_proof, AcceleratorCatalogEntryRecord, ActiveIndexHealthRecord,
+    AdaptiveQualityRecord, BindingAcceleratorCatalog, BindingCompositeAccelerator,
+    BindingHnswIndex, BindingIndexRegistry, BindingIndexedMap, BindingIndexedSnapshot,
+    BindingMapComparison, BindingMapMerge, BindingMapSnapshot, BindingMapSubscription,
+    BindingProductQuantizer, BindingProximityMap, BindingProximityReadSession,
+    BindingProximitySearchProof, BindingProximitySearchRuntime, BindingSecondaryIndexSnapshot,
     BindingVersionedMap, BindingVersionedTransaction, CatalogAcceleratorKindRecord,
     CompositeAcceleratorConfigRecord, CompositeBaseKindRecord, CompositeBuildLimitsRecord,
     CompositeBuildOrRebuildKindRecord, CompositeBuildOrRebuildOutcomeRecord,
@@ -37,6 +38,7 @@ use prolly_bindings::{
     ProximityMembershipProofRecord, ProximityMutationRecord, ProximityMutationStatsRecord,
     ProximityNeighborRecord, ProximityRecordRecord, ProximityRecordVisitorCallback,
     ProximitySearchClaimKindRecord, ProximitySearchRequestRecord, ProximitySearchResultRecord,
+    ProximitySearchRuntimePolicyRecord, ProximitySearchRuntimeStatsRecord,
     ProximityStructuralProofRecord, ProximityVerificationRecord, QueryKernelRecord,
     RangeProofRecord, SearchBackendRecord, SearchBudgetRecord, SearchCompletionRecord,
     SearchPolicyKind, SecondaryIndexExtractorCallback, VersionPruneRecord,
@@ -1240,6 +1242,64 @@ pub struct NodePortableSearchStats {
     pub frontier_peak: String,
     pub candidate_handles_peak: String,
     pub candidate_retained_bytes_peak: String,
+}
+
+#[napi(object)]
+pub struct NodePortableProximitySearchRuntimePolicy {
+    pub max_entries: String,
+    pub max_bytes: String,
+    pub authoritative_max_bytes: String,
+    pub hnsw_max_bytes: String,
+    pub pq_max_bytes: String,
+}
+
+impl From<ProximitySearchRuntimePolicyRecord> for NodePortableProximitySearchRuntimePolicy {
+    fn from(value: ProximitySearchRuntimePolicyRecord) -> Self {
+        Self {
+            max_entries: value.max_entries.to_string(),
+            max_bytes: value.max_bytes.to_string(),
+            authoritative_max_bytes: value.authoritative_max_bytes.to_string(),
+            hnsw_max_bytes: value.hnsw_max_bytes.to_string(),
+            pq_max_bytes: value.pq_max_bytes.to_string(),
+        }
+    }
+}
+
+impl TryFrom<NodePortableProximitySearchRuntimePolicy> for ProximitySearchRuntimePolicyRecord {
+    type Error = Error;
+
+    fn try_from(value: NodePortableProximitySearchRuntimePolicy) -> Result<Self> {
+        Ok(Self {
+            max_entries: parse_u64(value.max_entries, "maxEntries")?,
+            max_bytes: parse_u64(value.max_bytes, "maxBytes")?,
+            authoritative_max_bytes: parse_u64(
+                value.authoritative_max_bytes,
+                "authoritativeMaxBytes",
+            )?,
+            hnsw_max_bytes: parse_u64(value.hnsw_max_bytes, "hnswMaxBytes")?,
+            pq_max_bytes: parse_u64(value.pq_max_bytes, "pqMaxBytes")?,
+        })
+    }
+}
+
+#[napi(object)]
+pub struct NodePortableProximitySearchRuntimeStats {
+    pub physical_reads: String,
+    pub physical_bytes_read: String,
+}
+
+impl From<ProximitySearchRuntimeStatsRecord> for NodePortableProximitySearchRuntimeStats {
+    fn from(value: ProximitySearchRuntimeStatsRecord) -> Self {
+        Self {
+            physical_reads: value.physical_reads.to_string(),
+            physical_bytes_read: value.physical_bytes_read.to_string(),
+        }
+    }
+}
+
+#[napi(js_name = "defaultProximitySearchRuntimePolicy")]
+pub fn node_default_proximity_search_runtime_policy() -> NodePortableProximitySearchRuntimePolicy {
+    default_proximity_search_runtime_policy().into()
 }
 
 impl From<ProximityNeighborRecord> for NodePortableNeighbor {
@@ -3104,6 +3164,29 @@ fn parse_index_page_limit(limit: &str) -> Result<u64> {
 }
 
 #[napi]
+pub struct NativePortableProximitySearchRuntime {
+    inner: Arc<BindingProximitySearchRuntime>,
+}
+
+#[napi]
+impl NativePortableProximitySearchRuntime {
+    #[napi]
+    pub fn policy(&self) -> NodePortableProximitySearchRuntimePolicy {
+        self.inner.policy().into()
+    }
+
+    #[napi]
+    pub fn stats(&self) -> NodePortableProximitySearchRuntimeStats {
+        self.inner.stats().into()
+    }
+
+    #[napi]
+    pub fn clear(&self) {
+        self.inner.clear();
+    }
+}
+
+#[napi]
 pub struct NativePortableHnswBuildResult {
     index: Arc<BindingHnswIndex>,
     stats: HnswBuildStatsRecord,
@@ -3159,6 +3242,23 @@ impl NativePortableHnswIndex {
     ) -> Result<NodePortableSearchResult> {
         self.inner
             .search(Arc::clone(&map.inner), request.try_into()?)
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "searchWithRuntime")]
+    pub fn search_with_runtime(
+        &self,
+        map: &NativePortableProximityMap,
+        request: NodePortableSearchRequest,
+        runtime: &NativePortableProximitySearchRuntime,
+    ) -> Result<NodePortableSearchResult> {
+        self.inner
+            .search_with_runtime(
+                Arc::clone(&map.inner),
+                request.try_into()?,
+                Arc::clone(&runtime.inner),
+            )
             .map(Into::into)
             .map_err(to_napi_error)
     }
@@ -3236,6 +3336,23 @@ impl NativePortableProductQuantizer {
     ) -> Result<NodePortableSearchResult> {
         self.inner
             .search(Arc::clone(&map.inner), request.try_into()?)
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "searchWithRuntime")]
+    pub fn search_with_runtime(
+        &self,
+        map: &NativePortableProximityMap,
+        request: NodePortableSearchRequest,
+        runtime: &NativePortableProximitySearchRuntime,
+    ) -> Result<NodePortableSearchResult> {
+        self.inner
+            .search_with_runtime(
+                Arc::clone(&map.inner),
+                request.try_into()?,
+                Arc::clone(&runtime.inner),
+            )
             .map(Into::into)
             .map_err(to_napi_error)
     }
@@ -3435,6 +3552,23 @@ impl NativePortableCompositeAccelerator {
             .map_err(to_napi_error)
     }
 
+    #[napi(js_name = "searchWithRuntime")]
+    pub fn search_with_runtime(
+        &self,
+        map: &NativePortableProximityMap,
+        request: NodePortableSearchRequest,
+        runtime: &NativePortableProximitySearchRuntime,
+    ) -> Result<NodePortableSearchResult> {
+        self.inner
+            .search_with_runtime(
+                Arc::clone(&map.inner),
+                request.try_into()?,
+                Arc::clone(&runtime.inner),
+            )
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
     #[napi(js_name = "proveSearch")]
     pub fn prove_search(
         &self,
@@ -3482,6 +3616,23 @@ impl NativePortableAcceleratorCatalog {
     ) -> Result<NodePortableSearchResult> {
         self.inner
             .search(Arc::clone(&map.inner), request.try_into()?)
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "searchWithRuntime")]
+    pub fn search_with_runtime(
+        &self,
+        map: &NativePortableProximityMap,
+        request: NodePortableSearchRequest,
+        runtime: &NativePortableProximitySearchRuntime,
+    ) -> Result<NodePortableSearchResult> {
+        self.inner
+            .search_with_runtime(
+                Arc::clone(&map.inner),
+                request.try_into()?,
+                Arc::clone(&runtime.inner),
+            )
             .map(Into::into)
             .map_err(to_napi_error)
     }
@@ -3798,6 +3949,18 @@ impl NativePortableProximityMap {
             .map_err(to_napi_error)
     }
 
+    #[napi(js_name = "searchWithRuntime")]
+    pub fn search_with_runtime(
+        &self,
+        request: NodePortableSearchRequest,
+        runtime: &NativePortableProximitySearchRuntime,
+    ) -> Result<NodePortableSearchResult> {
+        self.inner
+            .search_with_runtime(request.try_into()?, Arc::clone(&runtime.inner))
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
     #[napi]
     pub fn descriptor(&self) -> Buffer {
         Buffer::from(self.inner.descriptor())
@@ -3916,6 +4079,18 @@ impl NativePortableProximityReadSession {
     pub fn search(&self, request: NodePortableSearchRequest) -> Result<NodePortableSearchResult> {
         self.inner
             .search(request.try_into()?)
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "searchWithRuntime")]
+    pub fn search_with_runtime(
+        &self,
+        request: NodePortableSearchRequest,
+        runtime: &NativePortableProximitySearchRuntime,
+    ) -> Result<NodePortableSearchResult> {
+        self.inner
+            .search_with_runtime(request.try_into()?, Arc::clone(&runtime.inner))
             .map(Into::into)
             .map_err(to_napi_error)
     }
@@ -4077,6 +4252,21 @@ impl NativePortableProximitySearchProof {
 
 #[napi]
 impl NativeProllyEngine {
+    #[napi(js_name = "proximitySearchRuntime")]
+    pub fn portable_proximity_search_runtime(
+        &self,
+        policy: Option<NodePortableProximitySearchRuntimePolicy>,
+    ) -> Result<NativePortableProximitySearchRuntime> {
+        let policy = policy
+            .map(TryInto::try_into)
+            .transpose()?
+            .unwrap_or_else(default_proximity_search_runtime_policy);
+        self.inner
+            .proximity_search_runtime(policy)
+            .map(|inner| NativePortableProximitySearchRuntime { inner })
+            .map_err(to_napi_error)
+    }
+
     #[napi(js_name = "beginVersionedTransaction")]
     pub fn portable_begin_versioned_transaction(
         &self,

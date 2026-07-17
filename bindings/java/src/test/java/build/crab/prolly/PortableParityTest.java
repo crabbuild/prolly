@@ -33,6 +33,41 @@ import org.junit.jupiter.api.Test;
 
 class PortableParityTest {
     @Test
+    void retainedSearchRuntimeReusesValidatedContent() throws Exception {
+        Prolly.useLocalDebugLibrary();
+        var records = new ArrayList<ProximityRecord>();
+        for (int index = 0; index < 16; index++) {
+            records.add(new ProximityRecord(
+                    bytes(String.format("vector-%02d", index)),
+                    new float[] {index, 0},
+                    bytes(String.format("value-%02d", index))));
+        }
+        try (Engine engine = Engine.memory();
+             var proximity = engine.buildProximity(2, records);
+             var index = proximity.buildHnsw().index();
+             var runtime = engine.proximitySearchRuntime()) {
+            var request = SearchRequest.fixedBudget(
+                    new float[] {0, 0},
+                    3,
+                    SearchRequest.SearchBudget.unlimited(),
+                    SearchRequest.SearchFilter.all(),
+                    SearchRequest.Kernel.AUTO_DETERMINISTIC,
+                    SearchRequest.Backend.HNSW);
+            var cold = index.searchWithRuntime(proximity, request, runtime);
+            assertTrue(cold.stats().physicalBytesRead() > 0);
+            var coldStats = runtime.stats();
+            assertTrue(coldStats.physicalReads() > 0);
+            var warm = index.searchWithRuntime(proximity, request, runtime);
+            assertEquals(0, warm.stats().physicalBytesRead());
+            assertArrayEquals(cold.neighbors().get(0).key(), warm.neighbors().get(0).key());
+            assertEquals(coldStats, runtime.stats());
+            runtime.clear();
+            assertTrue(index.searchWithRuntime(proximity, request, runtime)
+                    .stats().physicalBytesRead() > 0);
+        }
+    }
+
+    @Test
     void productQuantizerLifecycleIsPortableAndBounded() throws Exception {
         Prolly.useLocalDebugLibrary();
         var records = new ArrayList<ProximityRecord>();

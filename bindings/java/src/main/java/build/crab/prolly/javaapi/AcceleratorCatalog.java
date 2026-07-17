@@ -25,6 +25,11 @@ public final class AcceleratorCatalog implements AutoCloseable {
         return ProximityMap.fromNative(
                 JavaPortableBridge.catalogSearch(open(), map.open(), request.toNative()));
     }
+    public SearchResult searchWithRuntime(
+            ProximityMap map, SearchRequest request, ProximitySearchRuntime runtime) {
+        return ProximityMap.fromNative(JavaPortableBridge.catalogSearchWithRuntime(
+                open(), map.open(), request.toNative(), runtime.open()));
+    }
     public ProximitySearchProof proveSearch(ProximityMap map, SearchRequest request) {
         return new ProximitySearchProof(
                 JavaPortableBridge.catalogProveSearch(open(), map.open(), request.toNative()));

@@ -208,10 +208,47 @@ module Prolly
       ProximityMap.new(@native.load_proximity_map(descriptor.b))
     end
 
+    def proximity_search_runtime(policy = Prolly.default_proximity_search_runtime_policy)
+      ensure_open
+      ProximitySearchRuntime.new(@native.proximity_search_runtime(policy))
+    end
+
     private
 
     def ensure_open
       raise 'engine is closed' if @closed
+    end
+  end
+
+  class ProximitySearchRuntime
+    def initialize(native)
+      @native = native
+      @closed = false
+    end
+
+    def policy = open! { @native.policy }
+    def stats = open! { @native.stats }
+    def clear = open! { @native.clear }
+    def close = @closed = true
+
+    def use
+      raise 'proximity search runtime is closed' if @closed
+      return self unless block_given?
+
+      begin
+        yield self
+      ensure
+        close
+      end
+    end
+
+    private
+
+    def native_for_search = open! { @native }
+
+    def open!
+      raise 'proximity search runtime is closed' if @closed
+      yield
     end
   end
 
@@ -691,6 +728,14 @@ module Prolly
       read.use { |session| session.search(request) }
     end
 
+    def search_with_runtime(request, runtime)
+      open! do
+        @native.search_with_runtime(
+          Prolly.owned_proximity_search_request(request), runtime.send(:native_for_search)
+        )
+      end
+    end
+
     def search_exact(query, k)
       read.use { |session| session.search_exact(query, k) }
     end
@@ -736,6 +781,14 @@ module Prolly
     def canonical? = open! { @native.is_canonical }
     def search(map, request)
       open! { @native.search(map.send(:native_for_accelerator), Prolly.owned_proximity_search_request(request)) }
+    end
+    def search_with_runtime(map, request, runtime)
+      open! do
+        @native.search_with_runtime(
+          map.send(:native_for_accelerator), Prolly.owned_proximity_search_request(request),
+          runtime.send(:native_for_search)
+        )
+      end
     end
     def prove_search(map, request, limits = Prolly.default_content_graph_limits)
       open! do
@@ -786,6 +839,14 @@ module Prolly
         @native.search(
           map.send(:native_for_accelerator),
           Prolly.owned_proximity_search_request(request)
+        )
+      end
+    end
+    def search_with_runtime(map, request, runtime)
+      open! do
+        @native.search_with_runtime(
+          map.send(:native_for_accelerator), Prolly.owned_proximity_search_request(request),
+          runtime.send(:native_for_search)
         )
       end
     end
@@ -844,6 +905,14 @@ module Prolly
         )
       end
     end
+    def search_with_runtime(map, request, runtime)
+      open! do
+        @native.search_with_runtime(
+          map.send(:native_for_accelerator), Prolly.owned_proximity_search_request(request),
+          runtime.send(:native_for_search)
+        )
+      end
+    end
     def prove_search(map, request, limits = Prolly.default_content_graph_limits)
       open! do
         ProximitySearchProof.new(
@@ -890,6 +959,14 @@ module Prolly
         )
       end
     end
+    def search_with_runtime(map, request, runtime)
+      open! do
+        @native.search_with_runtime(
+          map.send(:native_for_accelerator), Prolly.owned_proximity_search_request(request),
+          runtime.send(:native_for_search)
+        )
+      end
+    end
     def prove_search(map, request, limits = Prolly.default_content_graph_limits)
       open! do
         ProximitySearchProof.new(
@@ -928,6 +1005,13 @@ module Prolly
     def get(key) = open! { @native.get(key.b) }
     def contains?(key) = open! { @native.contains_key(key.b) }
     def search(request) = open! { @native.search(Prolly.owned_proximity_search_request(request)) }
+    def search_with_runtime(request, runtime)
+      open! do
+        @native.search_with_runtime(
+          Prolly.owned_proximity_search_request(request), runtime.send(:native_for_search)
+        )
+      end
+    end
     def search_exact(query, k) = search(Prolly.exact_proximity_search_request(query, k))
     def scan_records(&block)
       raise ArgumentError, 'scan_records requires a block' unless block

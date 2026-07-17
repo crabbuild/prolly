@@ -26,6 +26,11 @@ public final class ProductQuantizer implements AutoCloseable {
         return ProximityMap.fromNative(
                 JavaPortableBridge.pqSearch(open(), map.open(), request.toNative()));
     }
+    public SearchResult searchWithRuntime(
+            ProximityMap map, SearchRequest request, ProximitySearchRuntime runtime) {
+        return ProximityMap.fromNative(JavaPortableBridge.pqSearchWithRuntime(
+                open(), map.open(), request.toNative(), runtime.open()));
+    }
     public ProximitySearchProof proveSearch(ProximityMap map, SearchRequest request) {
         return new ProximitySearchProof(
                 JavaPortableBridge.pqProveSearch(open(), map.open(), request.toNative()));

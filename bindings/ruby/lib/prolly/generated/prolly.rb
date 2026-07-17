@@ -2747,6 +2747,49 @@ end
     end
   end
 
+  # The Record type ProximitySearchRuntimePolicyRecord.
+
+  def self.check_lower_TypeProximitySearchRuntimePolicyRecord(v)
+    
+    
+    
+    
+    
+  end
+
+  def self.alloc_from_TypeProximitySearchRuntimePolicyRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeProximitySearchRuntimePolicyRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeProximitySearchRuntimePolicyRecord
+    consumeWithStream do |stream|
+      return stream.readTypeProximitySearchRuntimePolicyRecord
+    end
+  end
+
+  # The Record type ProximitySearchRuntimeStatsRecord.
+
+  def self.check_lower_TypeProximitySearchRuntimeStatsRecord(v)
+    
+    
+  end
+
+  def self.alloc_from_TypeProximitySearchRuntimeStatsRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeProximitySearchRuntimeStatsRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeProximitySearchRuntimeStatsRecord
+    consumeWithStream do |stream|
+      return stream.readTypeProximitySearchRuntimeStatsRecord
+    end
+  end
+
   # The Record type ProximitySearchStatsRecord.
 
   def self.check_lower_TypeProximitySearchStatsRecord(v)
@@ -7010,6 +7053,13 @@ class RustBufferStream
     return BindingProximitySearchProof.uniffi_allocate(handle)
   end
 
+  # The Object type BindingProximitySearchRuntime.
+
+  def readTypeBindingProximitySearchRuntime
+    handle = unpack_from 8, 'Q>'
+    return BindingProximitySearchRuntime.uniffi_allocate(handle)
+  end
+
   # The Object type BindingSecondaryIndexSnapshot.
 
   def readTypeBindingSecondaryIndexSnapshot
@@ -8460,6 +8510,27 @@ class RustBufferStream
       completion: readTypeSearchCompletionRecord,
       backend: readTypeSearchBackendRecord,
       plan_format_version: readU8
+    )
+  end
+
+  # The Record type ProximitySearchRuntimePolicyRecord.
+
+  def readTypeProximitySearchRuntimePolicyRecord
+    ProximitySearchRuntimePolicyRecord.new(
+      max_entries: readU64,
+      max_bytes: readU64,
+      authoritative_max_bytes: readU64,
+      hnsw_max_bytes: readU64,
+      pq_max_bytes: readU64
+    )
+  end
+
+  # The Record type ProximitySearchRuntimeStatsRecord.
+
+  def readTypeProximitySearchRuntimeStatsRecord
+    ProximitySearchRuntimeStatsRecord.new(
+      physical_reads: readU64,
+      physical_bytes_read: readU64
     )
   end
 
@@ -11684,6 +11755,13 @@ class RustBufferBuilder
     pack_into(8, 'Q>', handle)
   end
 
+  # The Object type BindingProximitySearchRuntime.
+
+  def write_TypeBindingProximitySearchRuntime(obj)
+    handle = BindingProximitySearchRuntime.uniffi_lower obj
+    pack_into(8, 'Q>', handle)
+  end
+
   # The Object type BindingSecondaryIndexSnapshot.
 
   def write_TypeBindingSecondaryIndexSnapshot(obj)
@@ -12901,6 +12979,23 @@ class RustBufferBuilder
     self.write_TypeSearchCompletionRecord(v.completion)
     self.write_TypeSearchBackendRecord(v.backend)
     self.write_U8(v.plan_format_version)
+  end
+
+  # The Record type ProximitySearchRuntimePolicyRecord.
+
+  def write_TypeProximitySearchRuntimePolicyRecord(v)
+    self.write_U64(v.max_entries)
+    self.write_U64(v.max_bytes)
+    self.write_U64(v.authoritative_max_bytes)
+    self.write_U64(v.hnsw_max_bytes)
+    self.write_U64(v.pq_max_bytes)
+  end
+
+  # The Record type ProximitySearchRuntimeStatsRecord.
+
+  def write_TypeProximitySearchRuntimeStatsRecord(v)
+    self.write_U64(v.physical_reads)
+    self.write_U64(v.physical_bytes_read)
   end
 
   # The Record type ProximitySearchStatsRecord.
@@ -15515,6 +15610,9 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_fn_method_prollyengine_prove_range_page,
     [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
     RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_prollyengine_proximity_search_runtime,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
   attach_function :uniffi_prolly_bindings_fn_method_prollyengine_publish_changed_spans_hint,
     [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
     :int8
@@ -16013,6 +16111,9 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_search,
     [:uint64, :uint64, RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_search_with_runtime,
+    [:uint64, :uint64, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_source_descriptor,
     [:uint64, RustCallStatus.by_ref],
     RustBuffer.by_value
@@ -16049,6 +16150,9 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_search,
     [:uint64, :uint64, RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_search_with_runtime,
+    [:uint64, :uint64, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_shadow_count,
     [:uint64, RustCallStatus.by_ref],
     :uint64
@@ -16073,6 +16177,9 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_fn_method_bindinghnswindex_search,
     [:uint64, :uint64, RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindinghnswindex_search_with_runtime,
+    [:uint64, :uint64, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_method_bindinghnswindex_source_descriptor,
     [:uint64, RustCallStatus.by_ref],
     RustBuffer.by_value
@@ -16096,6 +16203,9 @@ module UniFFILib
     RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_method_bindingproductquantizer_search,
     [:uint64, :uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingproductquantizer_search_with_runtime,
+    [:uint64, :uint64, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
     RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_method_bindingproductquantizer_source_descriptor,
     [:uint64, RustCallStatus.by_ref],
@@ -16184,6 +16294,9 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_fn_method_bindingproximitymap_search,
     [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingproximitymap_search_with_runtime,
+    [:uint64, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_method_bindingproximitymap_verify,
     [:uint64, RustCallStatus.by_ref],
     RustBuffer.by_value
@@ -16208,6 +16321,9 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_fn_method_bindingproximityreadsession_search,
     [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingproximityreadsession_search_with_runtime,
+    [:uint64, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_clone_bindingproximitysearchproof,
     [:uint64, RustCallStatus.by_ref],
     :uint64
@@ -16219,6 +16335,21 @@ module UniFFILib
     RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_method_bindingproximitysearchproof_verify,
     [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_clone_bindingproximitysearchruntime,
+    [:uint64, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_free_bindingproximitysearchruntime,
+    [:uint64, RustCallStatus.by_ref],
+    :void
+  attach_function :uniffi_prolly_bindings_fn_method_bindingproximitysearchruntime_clear,
+    [:uint64, RustCallStatus.by_ref],
+    :void
+  attach_function :uniffi_prolly_bindings_fn_method_bindingproximitysearchruntime_policy,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingproximitysearchruntime_stats,
+    [:uint64, RustCallStatus.by_ref],
     RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_clone_proximityrecordvisitorcallback,
     [:uint64, RustCallStatus.by_ref],
@@ -17096,6 +17227,9 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_fn_func_default_proximity_config,
     [:uint32, RustCallStatus.by_ref],
     RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_func_default_proximity_search_runtime_policy,
+    [RustCallStatus.by_ref],
+    RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_func_exact_proximity_search_request,
     [RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
     RustBuffer.by_value
@@ -17516,6 +17650,9 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_checksum_func_default_proximity_config,
     [RustCallStatus.by_ref],
     :uint16
+  attach_function :uniffi_prolly_bindings_checksum_func_default_proximity_search_runtime_policy,
+    [RustCallStatus.by_ref],
+    :uint16
   attach_function :uniffi_prolly_bindings_checksum_func_exact_proximity_search_request,
     [RustCallStatus.by_ref],
     :uint16
@@ -17904,6 +18041,9 @@ module UniFFILib
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_prove_range_page,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_proximity_search_runtime,
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_publish_changed_spans_hint,
@@ -18323,6 +18463,9 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_search,
     [RustCallStatus.by_ref],
     :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_search_with_runtime,
+    [RustCallStatus.by_ref],
+    :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_source_descriptor,
     [RustCallStatus.by_ref],
     :uint16
@@ -18353,6 +18496,9 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_search,
     [RustCallStatus.by_ref],
     :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_search_with_runtime,
+    [RustCallStatus.by_ref],
+    :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_shadow_count,
     [RustCallStatus.by_ref],
     :uint16
@@ -18371,6 +18517,9 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_checksum_method_bindinghnswindex_search,
     [RustCallStatus.by_ref],
     :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindinghnswindex_search_with_runtime,
+    [RustCallStatus.by_ref],
+    :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_bindinghnswindex_source_descriptor,
     [RustCallStatus.by_ref],
     :uint16
@@ -18387,6 +18536,9 @@ module UniFFILib
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_bindingproductquantizer_search,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingproductquantizer_search_with_runtime,
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_bindingproductquantizer_source_descriptor,
@@ -18470,6 +18622,9 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_checksum_method_bindingproximitymap_search,
     [RustCallStatus.by_ref],
     :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingproximitymap_search_with_runtime,
+    [RustCallStatus.by_ref],
+    :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_bindingproximitymap_verify,
     [RustCallStatus.by_ref],
     :uint16
@@ -18488,10 +18643,22 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_search,
     [RustCallStatus.by_ref],
     :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_search_with_runtime,
+    [RustCallStatus.by_ref],
+    :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_bindingproximitysearchproof_source_descriptor,
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_bindingproximitysearchproof_verify,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingproximitysearchruntime_clear,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingproximitysearchruntime_policy,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingproximitysearchruntime_stats,
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_proximityrecordvisitorcallback_visit,
@@ -24723,6 +24890,60 @@ class ProximitySearchResultRecord
   end
 end
   
+  # Record type ProximitySearchRuntimePolicyRecord
+class ProximitySearchRuntimePolicyRecord
+  attr_reader :max_entries, :max_bytes, :authoritative_max_bytes, :hnsw_max_bytes, :pq_max_bytes
+
+  def initialize(max_entries:, max_bytes:, authoritative_max_bytes:, hnsw_max_bytes:, pq_max_bytes:)
+    @max_entries = max_entries
+    @max_bytes = max_bytes
+    @authoritative_max_bytes = authoritative_max_bytes
+    @hnsw_max_bytes = hnsw_max_bytes
+    @pq_max_bytes = pq_max_bytes
+  end
+
+  def ==(other)
+    if @max_entries != other.max_entries
+      return false
+    end
+    if @max_bytes != other.max_bytes
+      return false
+    end
+    if @authoritative_max_bytes != other.authoritative_max_bytes
+      return false
+    end
+    if @hnsw_max_bytes != other.hnsw_max_bytes
+      return false
+    end
+    if @pq_max_bytes != other.pq_max_bytes
+      return false
+    end
+
+    true
+  end
+end
+  
+  # Record type ProximitySearchRuntimeStatsRecord
+class ProximitySearchRuntimeStatsRecord
+  attr_reader :physical_reads, :physical_bytes_read
+
+  def initialize(physical_reads:, physical_bytes_read:)
+    @physical_reads = physical_reads
+    @physical_bytes_read = physical_bytes_read
+  end
+
+  def ==(other)
+    if @physical_reads != other.physical_reads
+      return false
+    end
+    if @physical_bytes_read != other.physical_bytes_read
+      return false
+    end
+
+    true
+  end
+end
+  
   # Record type ProximitySearchStatsRecord
 class ProximitySearchStatsRecord
   attr_reader :levels_visited, :nodes_read, :bytes_read, :physical_bytes_read, :committed_bytes, :distance_evaluations, :quantized_distance_evaluations, :reranked_candidates, :frontier_peak, :candidate_handles_peak, :candidate_retained_bytes_peak
@@ -26823,6 +27044,15 @@ end
   
   
 
+def self.default_proximity_search_runtime_policy()
+  result = Prolly.rust_call(:uniffi_prolly_bindings_fn_func_default_proximity_search_runtime_policy,)
+  return result.consumeIntoTypeProximitySearchRuntimePolicyRecord
+end
+
+
+  
+  
+
 def self.exact_proximity_search_request(query, k)
     query = query
     RustBuffer.check_lower_Sequencef32(query)
@@ -28382,6 +28612,12 @@ end
         
     result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_prove_range_page,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.alloc_from_OptionalTypeRangeCursorRecord(cursor),RustBuffer.alloc_from_Optionalbytes(range_end),limit)
     return result.consumeIntoTypeProvedRangePageRecord
+  end
+  def proximity_search_runtime(policy)
+        policy = policy
+        RustBuffer.check_lower_TypeProximitySearchRuntimePolicyRecord(policy)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_proximity_search_runtime,uniffi_clone_handle(),RustBuffer.alloc_from_TypeProximitySearchRuntimePolicyRecord(policy))
+    return BindingProximitySearchRuntime.uniffi_allocate(result)
   end
   def publish_changed_spans_hint(base, changed, spans)
         base = base
@@ -30020,6 +30256,16 @@ end
     result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_search,uniffi_clone_handle(),(BindingProximityMap.uniffi_lower map),RustBuffer.alloc_from_TypeProximitySearchRequestRecord(request))
     return result.consumeIntoTypeProximitySearchResultRecord
   end
+  def search_with_runtime(map, request, runtime)
+        map = map
+        (BindingProximityMap.uniffi_check_lower map)
+        request = request
+        RustBuffer.check_lower_TypeProximitySearchRequestRecord(request)
+        runtime = runtime
+        (BindingProximitySearchRuntime.uniffi_check_lower runtime)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_search_with_runtime,uniffi_clone_handle(),(BindingProximityMap.uniffi_lower map),RustBuffer.alloc_from_TypeProximitySearchRequestRecord(request),(BindingProximitySearchRuntime.uniffi_lower runtime))
+    return result.consumeIntoTypeProximitySearchResultRecord
+  end
   def source_descriptor()
     result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_source_descriptor,uniffi_clone_handle(),)
     return result.consumeIntoBytes
@@ -30118,6 +30364,16 @@ end
     result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_search,uniffi_clone_handle(),(BindingProximityMap.uniffi_lower map),RustBuffer.alloc_from_TypeProximitySearchRequestRecord(request))
     return result.consumeIntoTypeProximitySearchResultRecord
   end
+  def search_with_runtime(map, request, runtime)
+        map = map
+        (BindingProximityMap.uniffi_check_lower map)
+        request = request
+        RustBuffer.check_lower_TypeProximitySearchRequestRecord(request)
+        runtime = runtime
+        (BindingProximitySearchRuntime.uniffi_check_lower runtime)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_search_with_runtime,uniffi_clone_handle(),(BindingProximityMap.uniffi_lower map),RustBuffer.alloc_from_TypeProximitySearchRequestRecord(request),(BindingProximitySearchRuntime.uniffi_lower runtime))
+    return result.consumeIntoTypeProximitySearchResultRecord
+  end
   def shadow_count()
     result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_shadow_count,uniffi_clone_handle(),)
     return result.to_i
@@ -30200,6 +30456,16 @@ end
     result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindinghnswindex_search,uniffi_clone_handle(),(BindingProximityMap.uniffi_lower map),RustBuffer.alloc_from_TypeProximitySearchRequestRecord(request))
     return result.consumeIntoTypeProximitySearchResultRecord
   end
+  def search_with_runtime(map, request, runtime)
+        map = map
+        (BindingProximityMap.uniffi_check_lower map)
+        request = request
+        RustBuffer.check_lower_TypeProximitySearchRequestRecord(request)
+        runtime = runtime
+        (BindingProximitySearchRuntime.uniffi_check_lower runtime)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindinghnswindex_search_with_runtime,uniffi_clone_handle(),(BindingProximityMap.uniffi_lower map),RustBuffer.alloc_from_TypeProximitySearchRequestRecord(request),(BindingProximitySearchRuntime.uniffi_lower runtime))
+    return result.consumeIntoTypeProximitySearchResultRecord
+  end
   def source_descriptor()
     result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_bindinghnswindex_source_descriptor,uniffi_clone_handle(),)
     return result.consumeIntoBytes
@@ -30280,6 +30546,16 @@ end
         request = request
         RustBuffer.check_lower_TypeProximitySearchRequestRecord(request)
     result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingproductquantizer_search,uniffi_clone_handle(),(BindingProximityMap.uniffi_lower map),RustBuffer.alloc_from_TypeProximitySearchRequestRecord(request))
+    return result.consumeIntoTypeProximitySearchResultRecord
+  end
+  def search_with_runtime(map, request, runtime)
+        map = map
+        (BindingProximityMap.uniffi_check_lower map)
+        request = request
+        RustBuffer.check_lower_TypeProximitySearchRequestRecord(request)
+        runtime = runtime
+        (BindingProximitySearchRuntime.uniffi_check_lower runtime)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingproductquantizer_search_with_runtime,uniffi_clone_handle(),(BindingProximityMap.uniffi_lower map),RustBuffer.alloc_from_TypeProximitySearchRequestRecord(request),(BindingProximitySearchRuntime.uniffi_lower runtime))
     return result.consumeIntoTypeProximitySearchResultRecord
   end
   def source_descriptor()
@@ -30518,6 +30794,14 @@ end
     result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingproximitymap_search,uniffi_clone_handle(),RustBuffer.alloc_from_TypeProximitySearchRequestRecord(request))
     return result.consumeIntoTypeProximitySearchResultRecord
   end
+  def search_with_runtime(request, runtime)
+        request = request
+        RustBuffer.check_lower_TypeProximitySearchRequestRecord(request)
+        runtime = runtime
+        (BindingProximitySearchRuntime.uniffi_check_lower runtime)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingproximitymap_search_with_runtime,uniffi_clone_handle(),RustBuffer.alloc_from_TypeProximitySearchRequestRecord(request),(BindingProximitySearchRuntime.uniffi_lower runtime))
+    return result.consumeIntoTypeProximitySearchResultRecord
+  end
   def verify()
     result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingproximitymap_verify,uniffi_clone_handle(),)
     return result.consumeIntoTypeProximityVerificationRecord
@@ -30598,6 +30882,14 @@ end
     result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingproximityreadsession_search,uniffi_clone_handle(),RustBuffer.alloc_from_TypeProximitySearchRequestRecord(request))
     return result.consumeIntoTypeProximitySearchResultRecord
   end
+  def search_with_runtime(request, runtime)
+        request = request
+        RustBuffer.check_lower_TypeProximitySearchRequestRecord(request)
+        runtime = runtime
+        (BindingProximitySearchRuntime.uniffi_check_lower runtime)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingproximityreadsession_search_with_runtime,uniffi_clone_handle(),RustBuffer.alloc_from_TypeProximitySearchRequestRecord(request),(BindingProximitySearchRuntime.uniffi_lower runtime))
+    return result.consumeIntoTypeProximitySearchResultRecord
+  end
   
 end
   
@@ -30657,6 +30949,66 @@ end
         RustBuffer.check_lower_TypeContentGraphLimitsRecord(limits)
     result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingproximitysearchproof_verify,uniffi_clone_handle(),RustBuffer.alloc_from_Optionalbytes(expected_descriptor),RustBuffer.alloc_from_TypeContentGraphLimitsRecord(limits))
     return result.consumeIntoTypeProximitySearchVerificationRecord
+  end
+  
+end
+  
+  class BindingProximitySearchRuntime
+
+  # A private helper for initializing instances of the class from a raw handle,
+  # bypassing any initialization logic and ensuring they are GC'd properly.
+  def self.uniffi_allocate(handle)
+    inst = allocate
+    inst.instance_variable_set :@handle, handle
+    ObjectSpace.define_finalizer(inst, uniffi_define_finalizer_by_handle(handle, inst.object_id))
+    return inst
+  end
+
+  # A private helper for registering an object finalizer.
+  # N.B. it's important that this does not capture a reference
+  # to the actual instance, only its underlying handle.
+  def self.uniffi_define_finalizer_by_handle(handle, object_id)
+    Proc.new do |_id|
+      Prolly.rust_call(
+        :uniffi_prolly_bindings_fn_free_bindingproximitysearchruntime,
+        handle
+      )
+    end
+  end
+
+  # A private helper for lowering instances into a raw handle.
+  # This does an explicit typecheck, because accidentally lowering a different type of
+  # object in a place where this type is expected, could lead to memory unsafety.
+  def self.uniffi_check_lower(inst)
+    if not inst.is_a? self
+      raise TypeError.new "Expected a BindingProximitySearchRuntime instance, got #{inst}"
+    end
+  end
+
+  def uniffi_clone_handle()
+    return Prolly.rust_call(
+      :uniffi_prolly_bindings_fn_clone_bindingproximitysearchruntime,
+      @handle
+    )
+  end
+
+  def self.uniffi_lower(inst)
+    return inst.uniffi_clone_handle()
+  end
+
+  
+
+  def clear()
+      Prolly.rust_call(:uniffi_prolly_bindings_fn_method_bindingproximitysearchruntime_clear,uniffi_clone_handle(),)
+  end
+  
+  def policy()
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_bindingproximitysearchruntime_policy,uniffi_clone_handle(),)
+    return result.consumeIntoTypeProximitySearchRuntimePolicyRecord
+  end
+  def stats()
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_bindingproximitysearchruntime_stats,uniffi_clone_handle(),)
+    return result.consumeIntoTypeProximitySearchRuntimeStatsRecord
   end
   
 end

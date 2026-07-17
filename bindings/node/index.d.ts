@@ -308,6 +308,18 @@ export interface NodePortableSearchStats {
   candidateHandlesPeak: string
   candidateRetainedBytesPeak: string
 }
+export interface NodePortableProximitySearchRuntimePolicy {
+  maxEntries: string
+  maxBytes: string
+  authoritativeMaxBytes: string
+  hnswMaxBytes: string
+  pqMaxBytes: string
+}
+export interface NodePortableProximitySearchRuntimeStats {
+  physicalReads: string
+  physicalBytesRead: string
+}
+export declare function defaultProximitySearchRuntimePolicy(): NodePortableProximitySearchRuntimePolicy
 export interface NodePortableSearchResult {
   neighbors: Array<NodePortableNeighbor>
   stats: NodePortableSearchStats
@@ -1308,6 +1320,11 @@ export declare class NativePortableSecondaryIndex {
   rangePage(start: Buffer, end: Buffer | undefined | null, cursor: Buffer | undefined | null, limit: string): NodePortableIndexPage
   rangeReversePage(start: Buffer, end: Buffer | undefined | null, cursor: Buffer | undefined | null, limit: string): NodePortableIndexPage
 }
+export declare class NativePortableProximitySearchRuntime {
+  policy(): NodePortableProximitySearchRuntimePolicy
+  stats(): NodePortableProximitySearchRuntimeStats
+  clear(): void
+}
 export declare class NativePortableHnswBuildResult {
   index(): NativePortableHnswIndex
   stats(): NodePortableHnswBuildStats
@@ -1318,6 +1335,7 @@ export declare class NativePortableHnswIndex {
   config(): NodePortableHnswConfig
   isCanonical(): boolean
   search(map: NativePortableProximityMap, request: NodePortableSearchRequest): NodePortableSearchResult
+  searchWithRuntime(map: NativePortableProximityMap, request: NodePortableSearchRequest, runtime: NativePortableProximitySearchRuntime): NodePortableSearchResult
   proveSearch(map: NativePortableProximityMap, request: NodePortableSearchRequest): NativePortableProximitySearchProof
 }
 export declare class NativePortablePqBuildResult {
@@ -1330,6 +1348,7 @@ export declare class NativePortableProductQuantizer {
   config(): NodePortablePqConfig
   quality(): NodePortablePqQuality
   search(map: NativePortableProximityMap, request: NodePortableSearchRequest): NodePortableSearchResult
+  searchWithRuntime(map: NativePortableProximityMap, request: NodePortableSearchRequest, runtime: NativePortableProximitySearchRuntime): NodePortableSearchResult
   proveSearch(map: NativePortableProximityMap, request: NodePortableSearchRequest): NativePortableProximitySearchProof
 }
 export declare class NativePortableCompositeBuildResult {
@@ -1357,6 +1376,7 @@ export declare class NativePortableCompositeAccelerator {
   config(): NodePortableCompositeConfig
   buildStats(): NodePortableCompositeBuildStats
   search(map: NativePortableProximityMap, request: NodePortableSearchRequest): NodePortableSearchResult
+  searchWithRuntime(map: NativePortableProximityMap, request: NodePortableSearchRequest, runtime: NativePortableProximitySearchRuntime): NodePortableSearchResult
   proveSearch(map: NativePortableProximityMap, request: NodePortableSearchRequest): NativePortableProximitySearchProof
 }
 export declare class NativePortableAcceleratorCatalog {
@@ -1364,6 +1384,7 @@ export declare class NativePortableAcceleratorCatalog {
   sourceDescriptor(): Buffer
   entries(): Array<NodePortableCatalogEntry>
   search(map: NativePortableProximityMap, request: NodePortableSearchRequest): NodePortableSearchResult
+  searchWithRuntime(map: NativePortableProximityMap, request: NodePortableSearchRequest, runtime: NativePortableProximitySearchRuntime): NodePortableSearchResult
   proveSearch(map: NativePortableProximityMap, request: NodePortableSearchRequest): NativePortableProximitySearchProof
 }
 export declare class NativePortableProximityMap {
@@ -1385,6 +1406,7 @@ export declare class NativePortableProximityMap {
   contains(key: Buffer): boolean
   scanRecords(visitor: (record: NodePortableProximityRecord) => boolean): string
   search(request: NodePortableSearchRequest): NodePortableSearchResult
+  searchWithRuntime(request: NodePortableSearchRequest, runtime: NativePortableProximitySearchRuntime): NodePortableSearchResult
   descriptor(): Buffer
   verify(): NodePortableProximityVerification
   mutate(mutations: Array<NodePortableProximityMutation>): NodePortableProximityMutationResult
@@ -1398,6 +1420,7 @@ export declare class NativePortableProximityStructuralProof {
 }
 export declare class NativePortableProximityReadSession {
   search(request: NodePortableSearchRequest): NodePortableSearchResult
+  searchWithRuntime(request: NodePortableSearchRequest, runtime: NativePortableProximitySearchRuntime): NodePortableSearchResult
   get(key: Buffer): NodePortableExactProximityRecord | null
   contains(key: Buffer): boolean
   scanRecords(visitor: (record: NodePortableProximityRecord) => boolean): string
@@ -1472,6 +1495,7 @@ export declare class NativeProllyTransaction {
   rollback(): void
 }
 export declare class NativeProllyEngine {
+  proximitySearchRuntime(policy?: NodePortableProximitySearchRuntimePolicy | undefined | null): NativePortableProximitySearchRuntime
   beginVersionedTransaction(): NativePortableVersionedTransaction
   versionedMap(id: Buffer): NativePortableVersionedMap
   indexedMap(id: Buffer, registry: NativePortableIndexRegistry): NativePortableIndexedMap

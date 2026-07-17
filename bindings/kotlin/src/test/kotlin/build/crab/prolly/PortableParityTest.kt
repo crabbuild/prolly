@@ -16,6 +16,53 @@ import org.junit.jupiter.api.assertThrows
 
 class PortableParityTest {
     @Test
+    fun retainedSearchRuntimeReusesValidatedContent() {
+        ProllyNative.useLocalDebugLibrary()
+        Engine.memory().use { engine ->
+            engine.buildProximity(
+                2u,
+                (0 until 16).map { index ->
+                    ProximityRecord(
+                        "vector-%02d".format(index).bytes(),
+                        listOf(index.toFloat(), 0f),
+                        "value-%02d".format(index).bytes(),
+                    )
+                },
+            ).use { proximity ->
+                proximity.buildHnsw().index.use { index ->
+                    val request = exactProximitySearchRequest(listOf(0f, 0f), 3uL).copy(
+                        policy = SearchPolicyKind.FIXED_BUDGET,
+                        backend = SearchBackendRecord.HNSW,
+                    )
+                    engine.proximitySearchRuntime().use { runtime ->
+                        val cold = index.searchWithRuntime(proximity, request, runtime)
+                        assertEquals(true, cold.stats.physicalBytesRead > 0uL)
+                        val coldStats = runtime.stats
+                        assertEquals(true, coldStats.physicalReads > 0uL)
+                        val warm = index.searchWithRuntime(proximity, request, runtime)
+                        assertEquals(
+                            cold.neighbors.map { it.distance },
+                            warm.neighbors.map { it.distance },
+                        )
+                        cold.neighbors.zip(warm.neighbors).forEach { (left, right) ->
+                            assertArrayEquals(left.key, right.key)
+                            assertArrayEquals(left.value, right.value)
+                        }
+                        assertEquals(0uL, warm.stats.physicalBytesRead)
+                        assertEquals(coldStats, runtime.stats)
+                        runtime.clear()
+                        assertEquals(
+                            true,
+                            index.searchWithRuntime(proximity, request, runtime)
+                                .stats.physicalBytesRead > 0uL,
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
     fun compositeAndCatalogLifecycleIsPortableAndBounded() {
         ProllyNative.useLocalDebugLibrary()
         Engine.memory().use { engine ->

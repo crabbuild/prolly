@@ -43,6 +43,16 @@ public final class Engine implements AutoCloseable {
         return new ProximityMap(JavaPortableBridge.buildProximity(open(), dimensions, nativeRecords));
     }
 
+    public ProximitySearchRuntime proximitySearchRuntime() {
+        return proximitySearchRuntime(ProximitySearchRuntimePolicy.defaults());
+    }
+
+    public ProximitySearchRuntime proximitySearchRuntime(ProximitySearchRuntimePolicy policy) {
+        Objects.requireNonNull(policy, "policy");
+        return new ProximitySearchRuntime(
+                JavaPortableBridge.proximitySearchRuntime(open(), policy.toNative()));
+    }
+
     @Override
     public void close() {
         if (nativeEngine != null) {

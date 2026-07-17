@@ -4,6 +4,36 @@ import ProllyAPI
 import XCTest
 
 final class PortableParityTests: XCTestCase {
+    func testRetainedSearchRuntimeReusesValidatedContent() throws {
+        try Engine.withMemory { engine in
+            let proximity = try engine.buildProximity(
+                dimensions: 2,
+                records: (0..<16).map { index in
+                    ProximityRecord(
+                        key: Data(String(format: "vector-%02d", index).utf8),
+                        vector: [Float(index), 0],
+                        value: Data(String(format: "value-%02d", index).utf8)
+                    )
+                }
+            )
+            let request = exactProximitySearchRequest(query: [0, 0], k: 3)
+            let runtime = try engine.proximitySearchRuntime()
+            defer { runtime.close() }
+
+            let cold = try proximity.search(request, runtime: runtime)
+            let warm = try proximity.search(request, runtime: runtime)
+            XCTAssertGreaterThan(cold.stats.physicalBytesRead, 0)
+            XCTAssertEqual(warm.stats.physicalBytesRead, 0)
+            XCTAssertGreaterThan(try runtime.stats().physicalReads, 0)
+            XCTAssertEqual(try runtime.policy(), defaultProximitySearchRuntimePolicy())
+
+            try runtime.clear()
+            XCTAssertGreaterThan(
+                try proximity.search(request, runtime: runtime).stats.physicalBytesRead, 0
+            )
+        }
+    }
+
     func testCompositeAndCatalogLifecycleIsPortableAndBounded() throws {
         try Engine.withMemory { engine in
             let base = try engine.buildProximity(

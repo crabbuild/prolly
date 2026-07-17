@@ -139,8 +139,45 @@ public final class Engine: @unchecked Sendable {
         return ProximityMap(native: try native.loadProximityMap(descriptor: Data(descriptor)))
     }
 
+    public func proximitySearchRuntime(
+        policy: ProximitySearchRuntimePolicyRecord = defaultProximitySearchRuntimePolicy()
+    ) throws -> ProximitySearchRuntime {
+        try checkOpen()
+        return ProximitySearchRuntime(native: try native.proximitySearchRuntime(policy: policy))
+    }
+
     private func checkOpen() throws {
         if closed { throw PortableAPIError.closed("Engine") }
+    }
+}
+
+public final class ProximitySearchRuntime: @unchecked Sendable {
+    let native: BindingProximitySearchRuntime
+    private var closed = false
+
+    init(native: BindingProximitySearchRuntime) { self.native = native }
+
+    public func policy() throws -> ProximitySearchRuntimePolicyRecord {
+        try open { native.policy() }
+    }
+
+    public func stats() throws -> ProximitySearchRuntimeStatsRecord {
+        try open { native.stats() }
+    }
+
+    public func clear() throws {
+        try open { native.clear() }
+    }
+
+    public func close() { closed = true }
+
+    func checkedNative() throws -> BindingProximitySearchRuntime {
+        try open { native }
+    }
+
+    private func open<R>(_ body: () throws -> R) throws -> R {
+        if closed { throw PortableAPIError.closed("proximity search runtime") }
+        return try body()
     }
 }
 
@@ -1019,6 +1056,14 @@ public final class ProximityMap: @unchecked Sendable {
         defer { session.close() }
         return try session.search(request)
     }
+    public func search(
+        _ request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime
+    ) throws -> ProximitySearchResultRecord {
+        try native.searchWithRuntime(
+            request: ownedSearchRequest(request), runtime: runtime.checkedNative()
+        )
+    }
     public func searchExact(_ query: [Float], k: UInt64) throws -> ProximitySearchResultRecord {
         let session = try read()
         defer { session.close() }
@@ -1105,6 +1150,16 @@ public final class HnswIndex: @unchecked Sendable {
         guard !closed else { throw PortableAPIError.closed("HNSW index") }
         return try native.search(map: map.native, request: ownedSearchRequest(request))
     }
+    public func search(
+        _ map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime
+    ) throws -> ProximitySearchResultRecord {
+        guard !closed else { throw PortableAPIError.closed("HNSW index") }
+        return try native.searchWithRuntime(
+            map: map.native, request: ownedSearchRequest(request), runtime: runtime.checkedNative()
+        )
+    }
     public func proveSearch(
         _ map: ProximityMap,
         request: ProximitySearchRequestRecord,
@@ -1150,6 +1205,16 @@ public final class ProductQuantizer: @unchecked Sendable {
         guard !closed else { throw PortableAPIError.closed("product quantizer") }
         return try native.search(map: map.native, request: ownedSearchRequest(request))
     }
+    public func search(
+        _ map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime
+    ) throws -> ProximitySearchResultRecord {
+        guard !closed else { throw PortableAPIError.closed("product quantizer") }
+        return try native.searchWithRuntime(
+            map: map.native, request: ownedSearchRequest(request), runtime: runtime.checkedNative()
+        )
+    }
     public func proveSearch(
         _ map: ProximityMap,
         request: ProximitySearchRequestRecord,
@@ -1191,6 +1256,16 @@ public final class CompositeAccelerator: @unchecked Sendable {
         guard !closed else { throw PortableAPIError.closed("composite accelerator") }
         return try native.search(map: map.native, request: ownedSearchRequest(request))
     }
+    public func search(
+        _ map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime
+    ) throws -> ProximitySearchResultRecord {
+        guard !closed else { throw PortableAPIError.closed("composite accelerator") }
+        return try native.searchWithRuntime(
+            map: map.native, request: ownedSearchRequest(request), runtime: runtime.checkedNative()
+        )
+    }
     public func proveSearch(
         _ map: ProximityMap,
         request: ProximitySearchRequestRecord,
@@ -1218,6 +1293,16 @@ public final class AcceleratorCatalog: @unchecked Sendable {
     ) throws -> ProximitySearchResultRecord {
         guard !closed else { throw PortableAPIError.closed("accelerator catalog") }
         return try native.search(map: map.native, request: ownedSearchRequest(request))
+    }
+    public func search(
+        _ map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime
+    ) throws -> ProximitySearchResultRecord {
+        guard !closed else { throw PortableAPIError.closed("accelerator catalog") }
+        return try native.searchWithRuntime(
+            map: map.native, request: ownedSearchRequest(request), runtime: runtime.checkedNative()
+        )
     }
     public func proveSearch(
         _ map: ProximityMap,
@@ -1299,6 +1384,15 @@ public final class ProximityReadSession: @unchecked Sendable {
     public func search(_ request: ProximitySearchRequestRecord) throws -> ProximitySearchResultRecord {
         guard !closed else { throw PortableAPIError.closed("proximity read session") }
         return try native.search(request: ownedSearchRequest(request))
+    }
+    public func search(
+        _ request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime
+    ) throws -> ProximitySearchResultRecord {
+        guard !closed else { throw PortableAPIError.closed("proximity read session") }
+        return try native.searchWithRuntime(
+            request: ownedSearchRequest(request), runtime: runtime.checkedNative()
+        )
     }
 
     public func scanRecords(
