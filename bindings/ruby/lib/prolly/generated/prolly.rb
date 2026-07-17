@@ -368,6 +368,26 @@ end
     end
   end
 
+  # The Record type BytesListResultRecord.
+
+  def self.check_lower_TypeBytesListResultRecord(v)
+    RustBuffer.check_lower_Sequencebytes(v.values)
+    RustBuffer.check_lower_OptionalTypeStoreErrorRecord(v.error)
+  end
+
+  def self.alloc_from_TypeBytesListResultRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeBytesListResultRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeBytesListResultRecord
+    consumeWithStream do |stream|
+      return stream.readTypeBytesListResultRecord
+    end
+  end
+
   # The Record type CacheStatsRecord.
 
   def self.check_lower_TypeCacheStatsRecord(v)
@@ -1673,6 +1693,46 @@ end
     end
   end
 
+  # The Record type NamedBytesListResultRecord.
+
+  def self.check_lower_TypeNamedBytesListResultRecord(v)
+    RustBuffer.check_lower_SequenceTypeNamedBytesRecord(v.values)
+    RustBuffer.check_lower_OptionalTypeStoreErrorRecord(v.error)
+  end
+
+  def self.alloc_from_TypeNamedBytesListResultRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeNamedBytesListResultRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeNamedBytesListResultRecord
+    consumeWithStream do |stream|
+      return stream.readTypeNamedBytesListResultRecord
+    end
+  end
+
+  # The Record type NamedBytesRecord.
+
+  def self.check_lower_TypeNamedBytesRecord(v)
+
+
+  end
+
+  def self.alloc_from_TypeNamedBytesRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeNamedBytesRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeNamedBytesRecord
+    consumeWithStream do |stream|
+      return stream.readTypeNamedBytesRecord
+    end
+  end
+
   # The Record type NamedRootManifestRecord.
 
   def self.check_lower_TypeNamedRootManifestRecord(v)
@@ -1777,6 +1837,46 @@ end
     end
   end
 
+  # The Record type NodeEntryRecord.
+
+  def self.check_lower_TypeNodeEntryRecord(v)
+
+
+  end
+
+  def self.alloc_from_TypeNodeEntryRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeNodeEntryRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeNodeEntryRecord
+    consumeWithStream do |stream|
+      return stream.readTypeNodeEntryRecord
+    end
+  end
+
+  # The Record type NodeMutationRecord.
+
+  def self.check_lower_TypeNodeMutationRecord(v)
+
+    RustBuffer.check_lower_TypeOptionalBytesRecord(v.value)
+  end
+
+  def self.alloc_from_TypeNodeMutationRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeNodeMutationRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeNodeMutationRecord
+    consumeWithStream do |stream|
+      return stream.readTypeNodeMutationRecord
+    end
+  end
+
   # The Record type NodeRecord.
 
   def self.check_lower_TypeNodeRecord(v)
@@ -1803,6 +1903,66 @@ end
   def consumeIntoTypeNodeRecord
     consumeWithStream do |stream|
       return stream.readTypeNodeRecord
+    end
+  end
+
+  # The Record type OptionalBytesListResultRecord.
+
+  def self.check_lower_TypeOptionalBytesListResultRecord(v)
+    RustBuffer.check_lower_SequenceTypeOptionalBytesRecord(v.values)
+    RustBuffer.check_lower_OptionalTypeStoreErrorRecord(v.error)
+  end
+
+  def self.alloc_from_TypeOptionalBytesListResultRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeOptionalBytesListResultRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeOptionalBytesListResultRecord
+    consumeWithStream do |stream|
+      return stream.readTypeOptionalBytesListResultRecord
+    end
+  end
+
+  # The Record type OptionalBytesRecord.
+
+  def self.check_lower_TypeOptionalBytesRecord(v)
+
+
+  end
+
+  def self.alloc_from_TypeOptionalBytesRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeOptionalBytesRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeOptionalBytesRecord
+    consumeWithStream do |stream|
+      return stream.readTypeOptionalBytesRecord
+    end
+  end
+
+  # The Record type OptionalBytesResultRecord.
+
+  def self.check_lower_TypeOptionalBytesResultRecord(v)
+    RustBuffer.check_lower_TypeOptionalBytesRecord(v.value)
+    RustBuffer.check_lower_OptionalTypeStoreErrorRecord(v.error)
+  end
+
+  def self.alloc_from_TypeOptionalBytesResultRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeOptionalBytesResultRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeOptionalBytesResultRecord
+    consumeWithStream do |stream|
+      return stream.readTypeOptionalBytesResultRecord
     end
   end
 
@@ -2527,6 +2687,47 @@ end
     end
   end
 
+  # The Record type RootCasResultRecord.
+
+  def self.check_lower_TypeRootCasResultRecord(v)
+
+    RustBuffer.check_lower_TypeOptionalBytesRecord(v.current)
+    RustBuffer.check_lower_OptionalTypeStoreErrorRecord(v.error)
+  end
+
+  def self.alloc_from_TypeRootCasResultRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeRootCasResultRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeRootCasResultRecord
+    consumeWithStream do |stream|
+      return stream.readTypeRootCasResultRecord
+    end
+  end
+
+  # The Record type RootConditionRecord.
+
+  def self.check_lower_TypeRootConditionRecord(v)
+
+    RustBuffer.check_lower_TypeOptionalBytesRecord(v.expected)
+  end
+
+  def self.alloc_from_TypeRootConditionRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeRootConditionRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeRootConditionRecord
+    consumeWithStream do |stream|
+      return stream.readTypeRootConditionRecord
+    end
+  end
+
   # The Record type RootManifestRecord.
 
   def self.check_lower_TypeRootManifestRecord(v)
@@ -2545,6 +2746,26 @@ end
   def consumeIntoTypeRootManifestRecord
     consumeWithStream do |stream|
       return stream.readTypeRootManifestRecord
+    end
+  end
+
+  # The Record type RootWriteRecord.
+
+  def self.check_lower_TypeRootWriteRecord(v)
+
+    RustBuffer.check_lower_TypeOptionalBytesRecord(v.replacement)
+  end
+
+  def self.alloc_from_TypeRootWriteRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeRootWriteRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeRootWriteRecord
+    consumeWithStream do |stream|
+      return stream.readTypeRootWriteRecord
     end
   end
 
@@ -2881,6 +3102,142 @@ end
     end
   end
 
+  # The Record type StoreCapabilitiesRecord.
+
+  def self.check_lower_TypeStoreCapabilitiesRecord(v)
+
+
+
+
+
+
+
+
+
+  end
+
+  def self.alloc_from_TypeStoreCapabilitiesRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeStoreCapabilitiesRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeStoreCapabilitiesRecord
+    consumeWithStream do |stream|
+      return stream.readTypeStoreCapabilitiesRecord
+    end
+  end
+
+  # The Record type StoreDescriptorRecord.
+
+  def self.check_lower_TypeStoreDescriptorRecord(v)
+
+
+
+
+    RustBuffer.check_lower_TypeStoreCapabilitiesRecord(v.capabilities)
+    RustBuffer.check_lower_TypeStoreLimitsRecord(v.limits)
+  end
+
+  def self.alloc_from_TypeStoreDescriptorRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeStoreDescriptorRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeStoreDescriptorRecord
+    consumeWithStream do |stream|
+      return stream.readTypeStoreDescriptorRecord
+    end
+  end
+
+  # The Record type StoreDescriptorResultRecord.
+
+  def self.check_lower_TypeStoreDescriptorResultRecord(v)
+    RustBuffer.check_lower_OptionalTypeStoreDescriptorRecord(v.value)
+    RustBuffer.check_lower_OptionalTypeStoreErrorRecord(v.error)
+  end
+
+  def self.alloc_from_TypeStoreDescriptorResultRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeStoreDescriptorResultRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeStoreDescriptorResultRecord
+    consumeWithStream do |stream|
+      return stream.readTypeStoreDescriptorResultRecord
+    end
+  end
+
+  # The Record type StoreErrorRecord.
+
+  def self.check_lower_TypeStoreErrorRecord(v)
+
+
+
+    RustBuffer.check_lower_Optionalstring(v.provider_code)
+  end
+
+  def self.alloc_from_TypeStoreErrorRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeStoreErrorRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeStoreErrorRecord
+    consumeWithStream do |stream|
+      return stream.readTypeStoreErrorRecord
+    end
+  end
+
+  # The Record type StoreLimitsRecord.
+
+  def self.check_lower_TypeStoreLimitsRecord(v)
+    RustBuffer.check_lower_Optionalu32(v.max_batch_read_items)
+    RustBuffer.check_lower_Optionalu32(v.max_batch_write_items)
+    RustBuffer.check_lower_Optionalu32(v.max_transaction_operations)
+    RustBuffer.check_lower_Optionalu64(v.max_node_bytes)
+  end
+
+  def self.alloc_from_TypeStoreLimitsRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeStoreLimitsRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeStoreLimitsRecord
+    consumeWithStream do |stream|
+      return stream.readTypeStoreLimitsRecord
+    end
+  end
+
+  # The Record type StoreTransactionConflictRecord.
+
+  def self.check_lower_TypeStoreTransactionConflictRecord(v)
+
+    RustBuffer.check_lower_TypeOptionalBytesRecord(v.expected)
+    RustBuffer.check_lower_TypeOptionalBytesRecord(v.current)
+  end
+
+  def self.alloc_from_TypeStoreTransactionConflictRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeStoreTransactionConflictRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeStoreTransactionConflictRecord
+    consumeWithStream do |stream|
+      return stream.readTypeStoreTransactionConflictRecord
+    end
+  end
+
   # The Record type StructuralDiffCursorRecord.
 
   def self.check_lower_TypeStructuralDiffCursorRecord(v)
@@ -3027,6 +3384,27 @@ end
   def consumeIntoTypeTransactionConflictRecord
     consumeWithStream do |stream|
       return stream.readTypeTransactionConflictRecord
+    end
+  end
+
+  # The Record type TransactionResultRecord.
+
+  def self.check_lower_TypeTransactionResultRecord(v)
+
+    RustBuffer.check_lower_OptionalTypeStoreTransactionConflictRecord(v.conflict)
+    RustBuffer.check_lower_OptionalTypeStoreErrorRecord(v.error)
+  end
+
+  def self.alloc_from_TypeTransactionResultRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeTransactionResultRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeTransactionResultRecord
+    consumeWithStream do |stream|
+      return stream.readTypeTransactionResultRecord
     end
   end
 
@@ -3317,6 +3695,25 @@ end
   def consumeIntoTypeTypedContentObjectRecord
     consumeWithStream do |stream|
       return stream.readTypeTypedContentObjectRecord
+    end
+  end
+
+  # The Record type UnitResultRecord.
+
+  def self.check_lower_TypeUnitResultRecord(v)
+    RustBuffer.check_lower_OptionalTypeStoreErrorRecord(v.error)
+  end
+
+  def self.alloc_from_TypeUnitResultRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeUnitResultRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeUnitResultRecord
+    consumeWithStream do |stream|
+      return stream.readTypeUnitResultRecord
     end
   end
 
@@ -4551,6 +4948,69 @@ end
     end
   end
 
+  # The Optional<T> type for TypeStoreDescriptorRecord.
+
+  def self.check_lower_OptionalTypeStoreDescriptorRecord(v)
+    if not v.nil?
+      RustBuffer.check_lower_TypeStoreDescriptorRecord(v)
+    end
+  end
+
+  def self.alloc_from_OptionalTypeStoreDescriptorRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_OptionalTypeStoreDescriptorRecord(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoOptionalTypeStoreDescriptorRecord
+    consumeWithStream do |stream|
+      return stream.readOptionalTypeStoreDescriptorRecord
+    end
+  end
+
+  # The Optional<T> type for TypeStoreErrorRecord.
+
+  def self.check_lower_OptionalTypeStoreErrorRecord(v)
+    if not v.nil?
+      RustBuffer.check_lower_TypeStoreErrorRecord(v)
+    end
+  end
+
+  def self.alloc_from_OptionalTypeStoreErrorRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_OptionalTypeStoreErrorRecord(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoOptionalTypeStoreErrorRecord
+    consumeWithStream do |stream|
+      return stream.readOptionalTypeStoreErrorRecord
+    end
+  end
+
+  # The Optional<T> type for TypeStoreTransactionConflictRecord.
+
+  def self.check_lower_OptionalTypeStoreTransactionConflictRecord(v)
+    if not v.nil?
+      RustBuffer.check_lower_TypeStoreTransactionConflictRecord(v)
+    end
+  end
+
+  def self.alloc_from_OptionalTypeStoreTransactionConflictRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_OptionalTypeStoreTransactionConflictRecord(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoOptionalTypeStoreTransactionConflictRecord
+    consumeWithStream do |stream|
+      return stream.readOptionalTypeStoreTransactionConflictRecord
+    end
+  end
+
   # The Optional<T> type for TypeStructuralDiffCursorRecord.
 
   def self.check_lower_OptionalTypeStructuralDiffCursorRecord(v)
@@ -5181,6 +5641,27 @@ end
     end
   end
 
+  # The Sequence<T> type for TypeNamedBytesRecord.
+
+  def self.check_lower_SequenceTypeNamedBytesRecord(v)
+    v.each do |item|
+      RustBuffer.check_lower_TypeNamedBytesRecord(item)
+    end
+  end
+
+  def self.alloc_from_SequenceTypeNamedBytesRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_SequenceTypeNamedBytesRecord(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoSequenceTypeNamedBytesRecord
+    consumeWithStream do |stream|
+      return stream.readSequenceTypeNamedBytesRecord
+    end
+  end
+
   # The Sequence<T> type for TypeNamedRootManifestRecord.
 
   def self.check_lower_SequenceTypeNamedRootManifestRecord(v)
@@ -5223,6 +5704,48 @@ end
     end
   end
 
+  # The Sequence<T> type for TypeNodeEntryRecord.
+
+  def self.check_lower_SequenceTypeNodeEntryRecord(v)
+    v.each do |item|
+      RustBuffer.check_lower_TypeNodeEntryRecord(item)
+    end
+  end
+
+  def self.alloc_from_SequenceTypeNodeEntryRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_SequenceTypeNodeEntryRecord(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoSequenceTypeNodeEntryRecord
+    consumeWithStream do |stream|
+      return stream.readSequenceTypeNodeEntryRecord
+    end
+  end
+
+  # The Sequence<T> type for TypeNodeMutationRecord.
+
+  def self.check_lower_SequenceTypeNodeMutationRecord(v)
+    v.each do |item|
+      RustBuffer.check_lower_TypeNodeMutationRecord(item)
+    end
+  end
+
+  def self.alloc_from_SequenceTypeNodeMutationRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_SequenceTypeNodeMutationRecord(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoSequenceTypeNodeMutationRecord
+    consumeWithStream do |stream|
+      return stream.readSequenceTypeNodeMutationRecord
+    end
+  end
+
   # The Sequence<T> type for TypeNodeRecord.
 
   def self.check_lower_SequenceTypeNodeRecord(v)
@@ -5241,6 +5764,27 @@ end
   def consumeIntoSequenceTypeNodeRecord
     consumeWithStream do |stream|
       return stream.readSequenceTypeNodeRecord
+    end
+  end
+
+  # The Sequence<T> type for TypeOptionalBytesRecord.
+
+  def self.check_lower_SequenceTypeOptionalBytesRecord(v)
+    v.each do |item|
+      RustBuffer.check_lower_TypeOptionalBytesRecord(item)
+    end
+  end
+
+  def self.alloc_from_SequenceTypeOptionalBytesRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_SequenceTypeOptionalBytesRecord(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoSequenceTypeOptionalBytesRecord
+    consumeWithStream do |stream|
+      return stream.readSequenceTypeOptionalBytesRecord
     end
   end
 
@@ -5304,6 +5848,48 @@ end
   def consumeIntoSequenceTypeProximityRecordRecord
     consumeWithStream do |stream|
       return stream.readSequenceTypeProximityRecordRecord
+    end
+  end
+
+  # The Sequence<T> type for TypeRootConditionRecord.
+
+  def self.check_lower_SequenceTypeRootConditionRecord(v)
+    v.each do |item|
+      RustBuffer.check_lower_TypeRootConditionRecord(item)
+    end
+  end
+
+  def self.alloc_from_SequenceTypeRootConditionRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_SequenceTypeRootConditionRecord(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoSequenceTypeRootConditionRecord
+    consumeWithStream do |stream|
+      return stream.readSequenceTypeRootConditionRecord
+    end
+  end
+
+  # The Sequence<T> type for TypeRootWriteRecord.
+
+  def self.check_lower_SequenceTypeRootWriteRecord(v)
+    v.each do |item|
+      RustBuffer.check_lower_TypeRootWriteRecord(item)
+    end
+  end
+
+  def self.alloc_from_SequenceTypeRootWriteRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_SequenceTypeRootWriteRecord(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoSequenceTypeRootWriteRecord
+    consumeWithStream do |stream|
+      return stream.readSequenceTypeRootWriteRecord
     end
   end
 
@@ -5683,6 +6269,20 @@ class RustBufferStream
     read(size).force_encoding(Encoding::BINARY)
   end
 
+  # The Object type AsyncProllyEngine.
+
+  def readTypeAsyncProllyEngine
+    handle = unpack_from 8, 'Q>'
+    return AsyncProllyEngine.uniffi_allocate(handle)
+  end
+
+  # The Object type AsyncProllyTransaction.
+
+  def readTypeAsyncProllyTransaction
+    handle = unpack_from 8, 'Q>'
+    return AsyncProllyTransaction.uniffi_allocate(handle)
+  end
+
   # The Object type BindingIndexRegistry.
 
   def readTypeBindingIndexRegistry
@@ -5800,6 +6400,13 @@ class RustBufferStream
   def readTypeEntryVisitorCallback
     handle = unpack_from 8, 'Q>'
     return EntryVisitorCallback.uniffi_allocate(handle)
+  end
+
+  # The Object type ForeignRemoteStore.
+
+  def readTypeForeignRemoteStore
+    handle = unpack_from 8, 'Q>'
+    return ForeignRemoteStore.uniffi_allocate(handle)
   end
 
   # The Object type HostStoreCallback.
@@ -5994,6 +6601,15 @@ class RustBufferStream
     BlobRefRecord.new(
       cid: readBytes,
       len: readU64
+    )
+  end
+
+  # The Record type BytesListResultRecord.
+
+  def readTypeBytesListResultRecord
+    BytesListResultRecord.new(
+      values: readSequencebytes,
+      error: readOptionalTypeStoreErrorRecord
     )
   end
 
@@ -6653,6 +7269,24 @@ class RustBufferStream
     )
   end
 
+  # The Record type NamedBytesListResultRecord.
+
+  def readTypeNamedBytesListResultRecord
+    NamedBytesListResultRecord.new(
+      values: readSequenceTypeNamedBytesRecord,
+      error: readOptionalTypeStoreErrorRecord
+    )
+  end
+
+  # The Record type NamedBytesRecord.
+
+  def readTypeNamedBytesRecord
+    NamedBytesRecord.new(
+      name: readBytes,
+      value: readBytes
+    )
+  end
+
   # The Record type NamedRootManifestRecord.
 
   def readTypeNamedRootManifestRecord
@@ -6702,6 +7336,24 @@ class RustBufferStream
     )
   end
 
+  # The Record type NodeEntryRecord.
+
+  def readTypeNodeEntryRecord
+    NodeEntryRecord.new(
+      key: readBytes,
+      value: readBytes
+    )
+  end
+
+  # The Record type NodeMutationRecord.
+
+  def readTypeNodeMutationRecord
+    NodeMutationRecord.new(
+      key: readBytes,
+      value: readTypeOptionalBytesRecord
+    )
+  end
+
   # The Record type NodeRecord.
 
   def readTypeNodeRecord
@@ -6717,6 +7369,33 @@ class RustBufferStream
       hash_seed: readU64,
       encoding: readTypeEncodingRecord,
       format_bytes: readOptionalbytes
+    )
+  end
+
+  # The Record type OptionalBytesListResultRecord.
+
+  def readTypeOptionalBytesListResultRecord
+    OptionalBytesListResultRecord.new(
+      values: readSequenceTypeOptionalBytesRecord,
+      error: readOptionalTypeStoreErrorRecord
+    )
+  end
+
+  # The Record type OptionalBytesRecord.
+
+  def readTypeOptionalBytesRecord
+    OptionalBytesRecord.new(
+      present: readBool,
+      value: readBytes
+    )
+  end
+
+  # The Record type OptionalBytesResultRecord.
+
+  def readTypeOptionalBytesResultRecord
+    OptionalBytesResultRecord.new(
+      value: readTypeOptionalBytesRecord,
+      error: readOptionalTypeStoreErrorRecord
     )
   end
 
@@ -7089,6 +7768,25 @@ class RustBufferStream
     )
   end
 
+  # The Record type RootCasResultRecord.
+
+  def readTypeRootCasResultRecord
+    RootCasResultRecord.new(
+      applied: readBool,
+      current: readTypeOptionalBytesRecord,
+      error: readOptionalTypeStoreErrorRecord
+    )
+  end
+
+  # The Record type RootConditionRecord.
+
+  def readTypeRootConditionRecord
+    RootConditionRecord.new(
+      name: readBytes,
+      expected: readTypeOptionalBytesRecord
+    )
+  end
+
   # The Record type RootManifestRecord.
 
   def readTypeRootManifestRecord
@@ -7096,6 +7794,15 @@ class RustBufferStream
       tree: readTypeTreeRecord,
       created_at_millis: readOptionalu64,
       updated_at_millis: readOptionalu64
+    )
+  end
+
+  # The Record type RootWriteRecord.
+
+  def readTypeRootWriteRecord
+    RootWriteRecord.new(
+      name: readBytes,
+      replacement: readTypeOptionalBytesRecord
     )
   end
 
@@ -7289,6 +7996,76 @@ class RustBufferStream
     )
   end
 
+  # The Record type StoreCapabilitiesRecord.
+
+  def readTypeStoreCapabilitiesRecord
+    StoreCapabilitiesRecord.new(
+      native_batch_reads: readBool,
+      atomic_batch_writes: readBool,
+      node_scan: readBool,
+      hints: readBool,
+      atomic_nodes_and_hint: readBool,
+      root_scan: readBool,
+      root_compare_and_swap: readBool,
+      transactions: readBool,
+      read_parallelism: readU32
+    )
+  end
+
+  # The Record type StoreDescriptorRecord.
+
+  def readTypeStoreDescriptorRecord
+    StoreDescriptorRecord.new(
+      protocol_major: readU32,
+      adapter_name: readString,
+      provider: readString,
+      schema_version: readU32,
+      capabilities: readTypeStoreCapabilitiesRecord,
+      limits: readTypeStoreLimitsRecord
+    )
+  end
+
+  # The Record type StoreDescriptorResultRecord.
+
+  def readTypeStoreDescriptorResultRecord
+    StoreDescriptorResultRecord.new(
+      value: readOptionalTypeStoreDescriptorRecord,
+      error: readOptionalTypeStoreErrorRecord
+    )
+  end
+
+  # The Record type StoreErrorRecord.
+
+  def readTypeStoreErrorRecord
+    StoreErrorRecord.new(
+      code: readString,
+      message: readString,
+      retryable: readBool,
+      provider_code: readOptionalstring
+    )
+  end
+
+  # The Record type StoreLimitsRecord.
+
+  def readTypeStoreLimitsRecord
+    StoreLimitsRecord.new(
+      max_batch_read_items: readOptionalu32,
+      max_batch_write_items: readOptionalu32,
+      max_transaction_operations: readOptionalu32,
+      max_node_bytes: readOptionalu64
+    )
+  end
+
+  # The Record type StoreTransactionConflictRecord.
+
+  def readTypeStoreTransactionConflictRecord
+    StoreTransactionConflictRecord.new(
+      name: readBytes,
+      expected: readTypeOptionalBytesRecord,
+      current: readTypeOptionalBytesRecord
+    )
+  end
+
   # The Record type StructuralDiffCursorRecord.
 
   def readTypeStructuralDiffCursorRecord
@@ -7358,6 +8135,16 @@ class RustBufferStream
       name: readBytes,
       expected: readOptionalTypeRootManifestRecord,
       current: readOptionalTypeRootManifestRecord
+    )
+  end
+
+  # The Record type TransactionResultRecord.
+
+  def readTypeTransactionResultRecord
+    TransactionResultRecord.new(
+      applied: readBool,
+      conflict: readOptionalTypeStoreTransactionConflictRecord,
+      error: readOptionalTypeStoreErrorRecord
     )
   end
 
@@ -7516,6 +8303,14 @@ class RustBufferStream
       dimensions: readOptionalu32,
       bytes: readBytes,
       depth: readU64
+    )
+  end
+
+  # The Record type UnitResultRecord.
+
+  def readTypeUnitResultRecord
+    UnitResultRecord.new(
+      error: readOptionalTypeStoreErrorRecord
     )
   end
 
@@ -8713,6 +9508,48 @@ class RustBufferStream
     end
   end
 
+  # The Optional<T> type for TypeStoreDescriptorRecord.
+
+  def readOptionalTypeStoreDescriptorRecord
+    flag = unpack_from 1, 'c'
+
+    if flag == 0
+      return nil
+    elsif flag == 1
+      return readTypeStoreDescriptorRecord
+    else
+      raise InternalError, 'Unexpected flag byte for OptionalTypeStoreDescriptorRecord'
+    end
+  end
+
+  # The Optional<T> type for TypeStoreErrorRecord.
+
+  def readOptionalTypeStoreErrorRecord
+    flag = unpack_from 1, 'c'
+
+    if flag == 0
+      return nil
+    elsif flag == 1
+      return readTypeStoreErrorRecord
+    else
+      raise InternalError, 'Unexpected flag byte for OptionalTypeStoreErrorRecord'
+    end
+  end
+
+  # The Optional<T> type for TypeStoreTransactionConflictRecord.
+
+  def readOptionalTypeStoreTransactionConflictRecord
+    flag = unpack_from 1, 'c'
+
+    if flag == 0
+      return nil
+    elsif flag == 1
+      return readTypeStoreTransactionConflictRecord
+    else
+      raise InternalError, 'Unexpected flag byte for OptionalTypeStoreTransactionConflictRecord'
+    end
+  end
+
   # The Optional<T> type for TypeStructuralDiffCursorRecord.
 
   def readOptionalTypeStructuralDiffCursorRecord
@@ -9169,6 +10006,22 @@ class RustBufferStream
     items
   end
 
+  # The Sequence<T> type for TypeNamedBytesRecord.
+
+  def readSequenceTypeNamedBytesRecord
+    count = unpack_from 4, 'l>'
+
+    raise InternalError, 'Unexpected negative sequence length' if count.negative?
+
+    items = []
+
+    count.times do
+      items.append readTypeNamedBytesRecord
+    end
+
+    items
+  end
+
   # The Sequence<T> type for TypeNamedRootManifestRecord.
 
   def readSequenceTypeNamedRootManifestRecord
@@ -9201,6 +10054,38 @@ class RustBufferStream
     items
   end
 
+  # The Sequence<T> type for TypeNodeEntryRecord.
+
+  def readSequenceTypeNodeEntryRecord
+    count = unpack_from 4, 'l>'
+
+    raise InternalError, 'Unexpected negative sequence length' if count.negative?
+
+    items = []
+
+    count.times do
+      items.append readTypeNodeEntryRecord
+    end
+
+    items
+  end
+
+  # The Sequence<T> type for TypeNodeMutationRecord.
+
+  def readSequenceTypeNodeMutationRecord
+    count = unpack_from 4, 'l>'
+
+    raise InternalError, 'Unexpected negative sequence length' if count.negative?
+
+    items = []
+
+    count.times do
+      items.append readTypeNodeMutationRecord
+    end
+
+    items
+  end
+
   # The Sequence<T> type for TypeNodeRecord.
 
   def readSequenceTypeNodeRecord
@@ -9212,6 +10097,22 @@ class RustBufferStream
 
     count.times do
       items.append readTypeNodeRecord
+    end
+
+    items
+  end
+
+  # The Sequence<T> type for TypeOptionalBytesRecord.
+
+  def readSequenceTypeOptionalBytesRecord
+    count = unpack_from 4, 'l>'
+
+    raise InternalError, 'Unexpected negative sequence length' if count.negative?
+
+    items = []
+
+    count.times do
+      items.append readTypeOptionalBytesRecord
     end
 
     items
@@ -9260,6 +10161,38 @@ class RustBufferStream
 
     count.times do
       items.append readTypeProximityRecordRecord
+    end
+
+    items
+  end
+
+  # The Sequence<T> type for TypeRootConditionRecord.
+
+  def readSequenceTypeRootConditionRecord
+    count = unpack_from 4, 'l>'
+
+    raise InternalError, 'Unexpected negative sequence length' if count.negative?
+
+    items = []
+
+    count.times do
+      items.append readTypeRootConditionRecord
+    end
+
+    items
+  end
+
+  # The Sequence<T> type for TypeRootWriteRecord.
+
+  def readSequenceTypeRootWriteRecord
+    count = unpack_from 4, 'l>'
+
+    raise InternalError, 'Unexpected negative sequence length' if count.negative?
+
+    items = []
+
+    count.times do
+      items.append readTypeRootWriteRecord
     end
 
     items
@@ -9573,6 +10506,20 @@ class RustBufferBuilder
     write v
   end
 
+  # The Object type AsyncProllyEngine.
+
+  def write_TypeAsyncProllyEngine(obj)
+    handle = AsyncProllyEngine.uniffi_lower obj
+    pack_into(8, 'Q>', handle)
+  end
+
+  # The Object type AsyncProllyTransaction.
+
+  def write_TypeAsyncProllyTransaction(obj)
+    handle = AsyncProllyTransaction.uniffi_lower obj
+    pack_into(8, 'Q>', handle)
+  end
+
   # The Object type BindingIndexRegistry.
 
   def write_TypeBindingIndexRegistry(obj)
@@ -9689,6 +10636,13 @@ class RustBufferBuilder
 
   def write_TypeEntryVisitorCallback(obj)
     handle = EntryVisitorCallback.uniffi_lower obj
+    pack_into(8, 'Q>', handle)
+  end
+
+  # The Object type ForeignRemoteStore.
+
+  def write_TypeForeignRemoteStore(obj)
+    handle = ForeignRemoteStore.uniffi_lower obj
     pack_into(8, 'Q>', handle)
   end
 
@@ -9865,6 +10819,13 @@ class RustBufferBuilder
   def write_TypeBlobRefRecord(v)
     self.write_Bytes(v.cid)
     self.write_U64(v.len)
+  end
+
+  # The Record type BytesListResultRecord.
+
+  def write_TypeBytesListResultRecord(v)
+    self.write_Sequencebytes(v.values)
+    self.write_OptionalTypeStoreErrorRecord(v.error)
   end
 
   # The Record type CacheStatsRecord.
@@ -10405,6 +11366,20 @@ class RustBufferBuilder
     self.write_Optionalbytes(v.value)
   end
 
+  # The Record type NamedBytesListResultRecord.
+
+  def write_TypeNamedBytesListResultRecord(v)
+    self.write_SequenceTypeNamedBytesRecord(v.values)
+    self.write_OptionalTypeStoreErrorRecord(v.error)
+  end
+
+  # The Record type NamedBytesRecord.
+
+  def write_TypeNamedBytesRecord(v)
+    self.write_Bytes(v.name)
+    self.write_Bytes(v.value)
+  end
+
   # The Record type NamedRootManifestRecord.
 
   def write_TypeNamedRootManifestRecord(v)
@@ -10444,6 +11419,20 @@ class RustBufferBuilder
     self.write_OptionalTypeTreeRecord(v.current)
   end
 
+  # The Record type NodeEntryRecord.
+
+  def write_TypeNodeEntryRecord(v)
+    self.write_Bytes(v.key)
+    self.write_Bytes(v.value)
+  end
+
+  # The Record type NodeMutationRecord.
+
+  def write_TypeNodeMutationRecord(v)
+    self.write_Bytes(v.key)
+    self.write_TypeOptionalBytesRecord(v.value)
+  end
+
   # The Record type NodeRecord.
 
   def write_TypeNodeRecord(v)
@@ -10458,6 +11447,27 @@ class RustBufferBuilder
     self.write_U64(v.hash_seed)
     self.write_TypeEncodingRecord(v.encoding)
     self.write_Optionalbytes(v.format_bytes)
+  end
+
+  # The Record type OptionalBytesListResultRecord.
+
+  def write_TypeOptionalBytesListResultRecord(v)
+    self.write_SequenceTypeOptionalBytesRecord(v.values)
+    self.write_OptionalTypeStoreErrorRecord(v.error)
+  end
+
+  # The Record type OptionalBytesRecord.
+
+  def write_TypeOptionalBytesRecord(v)
+    self.write_Bool(v.present)
+    self.write_Bytes(v.value)
+  end
+
+  # The Record type OptionalBytesResultRecord.
+
+  def write_TypeOptionalBytesResultRecord(v)
+    self.write_TypeOptionalBytesRecord(v.value)
+    self.write_OptionalTypeStoreErrorRecord(v.error)
   end
 
   # The Record type ParallelConfigRecord.
@@ -10765,12 +11775,34 @@ class RustBufferBuilder
     self.write_OptionalTypeReverseCursorRecord(v.next_cursor)
   end
 
+  # The Record type RootCasResultRecord.
+
+  def write_TypeRootCasResultRecord(v)
+    self.write_Bool(v.applied)
+    self.write_TypeOptionalBytesRecord(v.current)
+    self.write_OptionalTypeStoreErrorRecord(v.error)
+  end
+
+  # The Record type RootConditionRecord.
+
+  def write_TypeRootConditionRecord(v)
+    self.write_Bytes(v.name)
+    self.write_TypeOptionalBytesRecord(v.expected)
+  end
+
   # The Record type RootManifestRecord.
 
   def write_TypeRootManifestRecord(v)
     self.write_TypeTreeRecord(v.tree)
     self.write_Optionalu64(v.created_at_millis)
     self.write_Optionalu64(v.updated_at_millis)
+  end
+
+  # The Record type RootWriteRecord.
+
+  def write_TypeRootWriteRecord(v)
+    self.write_Bytes(v.name)
+    self.write_TypeOptionalBytesRecord(v.replacement)
   end
 
   # The Record type ScanOutcomeRecord.
@@ -10937,6 +11969,64 @@ class RustBufferBuilder
     self.write_F64(v.total_values_size_bytes_pct)
   end
 
+  # The Record type StoreCapabilitiesRecord.
+
+  def write_TypeStoreCapabilitiesRecord(v)
+    self.write_Bool(v.native_batch_reads)
+    self.write_Bool(v.atomic_batch_writes)
+    self.write_Bool(v.node_scan)
+    self.write_Bool(v.hints)
+    self.write_Bool(v.atomic_nodes_and_hint)
+    self.write_Bool(v.root_scan)
+    self.write_Bool(v.root_compare_and_swap)
+    self.write_Bool(v.transactions)
+    self.write_U32(v.read_parallelism)
+  end
+
+  # The Record type StoreDescriptorRecord.
+
+  def write_TypeStoreDescriptorRecord(v)
+    self.write_U32(v.protocol_major)
+    self.write_String(v.adapter_name)
+    self.write_String(v.provider)
+    self.write_U32(v.schema_version)
+    self.write_TypeStoreCapabilitiesRecord(v.capabilities)
+    self.write_TypeStoreLimitsRecord(v.limits)
+  end
+
+  # The Record type StoreDescriptorResultRecord.
+
+  def write_TypeStoreDescriptorResultRecord(v)
+    self.write_OptionalTypeStoreDescriptorRecord(v.value)
+    self.write_OptionalTypeStoreErrorRecord(v.error)
+  end
+
+  # The Record type StoreErrorRecord.
+
+  def write_TypeStoreErrorRecord(v)
+    self.write_String(v.code)
+    self.write_String(v.message)
+    self.write_Bool(v.retryable)
+    self.write_Optionalstring(v.provider_code)
+  end
+
+  # The Record type StoreLimitsRecord.
+
+  def write_TypeStoreLimitsRecord(v)
+    self.write_Optionalu32(v.max_batch_read_items)
+    self.write_Optionalu32(v.max_batch_write_items)
+    self.write_Optionalu32(v.max_transaction_operations)
+    self.write_Optionalu64(v.max_node_bytes)
+  end
+
+  # The Record type StoreTransactionConflictRecord.
+
+  def write_TypeStoreTransactionConflictRecord(v)
+    self.write_Bytes(v.name)
+    self.write_TypeOptionalBytesRecord(v.expected)
+    self.write_TypeOptionalBytesRecord(v.current)
+  end
+
   # The Record type StructuralDiffCursorRecord.
 
   def write_TypeStructuralDiffCursorRecord(v)
@@ -10993,6 +12083,14 @@ class RustBufferBuilder
     self.write_Bytes(v.name)
     self.write_OptionalTypeRootManifestRecord(v.expected)
     self.write_OptionalTypeRootManifestRecord(v.current)
+  end
+
+  # The Record type TransactionResultRecord.
+
+  def write_TypeTransactionResultRecord(v)
+    self.write_Bool(v.applied)
+    self.write_OptionalTypeStoreTransactionConflictRecord(v.conflict)
+    self.write_OptionalTypeStoreErrorRecord(v.error)
   end
 
   # The Record type TransactionUpdateRecord.
@@ -11127,6 +12225,12 @@ class RustBufferBuilder
     self.write_Optionalu32(v.dimensions)
     self.write_Bytes(v.bytes)
     self.write_U64(v.depth)
+  end
+
+  # The Record type UnitResultRecord.
+
+  def write_TypeUnitResultRecord(v)
+    self.write_OptionalTypeStoreErrorRecord(v.error)
   end
 
   # The Record type ValueRefRecord.
@@ -11669,6 +12773,39 @@ class RustBufferBuilder
     end
   end
 
+  # The Optional<T> type for TypeStoreDescriptorRecord.
+
+  def write_OptionalTypeStoreDescriptorRecord(v)
+    if v.nil?
+      pack_into(1, 'c', 0)
+    else
+      pack_into(1, 'c', 1)
+      self.write_TypeStoreDescriptorRecord(v)
+    end
+  end
+
+  # The Optional<T> type for TypeStoreErrorRecord.
+
+  def write_OptionalTypeStoreErrorRecord(v)
+    if v.nil?
+      pack_into(1, 'c', 0)
+    else
+      pack_into(1, 'c', 1)
+      self.write_TypeStoreErrorRecord(v)
+    end
+  end
+
+  # The Optional<T> type for TypeStoreTransactionConflictRecord.
+
+  def write_OptionalTypeStoreTransactionConflictRecord(v)
+    if v.nil?
+      pack_into(1, 'c', 0)
+    else
+      pack_into(1, 'c', 1)
+      self.write_TypeStoreTransactionConflictRecord(v)
+    end
+  end
+
   # The Optional<T> type for TypeStructuralDiffCursorRecord.
 
   def write_OptionalTypeStructuralDiffCursorRecord(v)
@@ -11981,6 +13118,16 @@ class RustBufferBuilder
     end
   end
 
+  # The Sequence<T> type for TypeNamedBytesRecord.
+
+  def write_SequenceTypeNamedBytesRecord(items)
+    pack_into(4, 'l>', items.size)
+
+    items.each do |item|
+      self.write_TypeNamedBytesRecord(item)
+    end
+  end
+
   # The Sequence<T> type for TypeNamedRootManifestRecord.
 
   def write_SequenceTypeNamedRootManifestRecord(items)
@@ -12001,6 +13148,26 @@ class RustBufferBuilder
     end
   end
 
+  # The Sequence<T> type for TypeNodeEntryRecord.
+
+  def write_SequenceTypeNodeEntryRecord(items)
+    pack_into(4, 'l>', items.size)
+
+    items.each do |item|
+      self.write_TypeNodeEntryRecord(item)
+    end
+  end
+
+  # The Sequence<T> type for TypeNodeMutationRecord.
+
+  def write_SequenceTypeNodeMutationRecord(items)
+    pack_into(4, 'l>', items.size)
+
+    items.each do |item|
+      self.write_TypeNodeMutationRecord(item)
+    end
+  end
+
   # The Sequence<T> type for TypeNodeRecord.
 
   def write_SequenceTypeNodeRecord(items)
@@ -12008,6 +13175,16 @@ class RustBufferBuilder
 
     items.each do |item|
       self.write_TypeNodeRecord(item)
+    end
+  end
+
+  # The Sequence<T> type for TypeOptionalBytesRecord.
+
+  def write_SequenceTypeOptionalBytesRecord(items)
+    pack_into(4, 'l>', items.size)
+
+    items.each do |item|
+      self.write_TypeOptionalBytesRecord(item)
     end
   end
 
@@ -12038,6 +13215,26 @@ class RustBufferBuilder
 
     items.each do |item|
       self.write_TypeProximityRecordRecord(item)
+    end
+  end
+
+  # The Sequence<T> type for TypeRootConditionRecord.
+
+  def write_SequenceTypeRootConditionRecord(items)
+    pack_into(4, 'l>', items.size)
+
+    items.each do |item|
+      self.write_TypeRootConditionRecord(item)
+    end
+  end
+
+  # The Sequence<T> type for TypeRootWriteRecord.
+
+  def write_SequenceTypeRootWriteRecord(items)
+    pack_into(4, 'l>', items.size)
+
+    items.each do |item|
+      self.write_TypeRootWriteRecord(item)
     end
   end
 
@@ -13106,6 +14303,171 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_fn_method_prollytransaction_rollback,
     [:uint64, RustCallStatus.by_ref],
     :void
+  attach_function :uniffi_prolly_bindings_fn_clone_asyncprollyengine,
+    [:uint64, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_free_asyncprollyengine,
+    [:uint64, RustCallStatus.by_ref],
+    :void
+  attach_function :uniffi_prolly_bindings_fn_constructor_asyncprollyengine_new,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_asyncprollyengine_batch,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_asyncprollyengine_begin_transaction,
+    [:uint64, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_asyncprollyengine_collect_stats,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_asyncprollyengine_compare_and_swap_named_root,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_asyncprollyengine_create,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_asyncprollyengine_delete,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_asyncprollyengine_delete_named_root,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_asyncprollyengine_diff,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_asyncprollyengine_get,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_asyncprollyengine_get_many,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_asyncprollyengine_list_named_roots,
+    [:uint64, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_asyncprollyengine_load_named_root,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_asyncprollyengine_merge,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_asyncprollyengine_prefix,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_asyncprollyengine_publish_named_root,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_asyncprollyengine_publish_named_root_at_millis,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_asyncprollyengine_put,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_asyncprollyengine_range,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_asyncprollyengine_range_page,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_clone_asyncprollytransaction,
+    [:uint64, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_free_asyncprollytransaction,
+    [:uint64, RustCallStatus.by_ref],
+    :void
+  attach_function :uniffi_prolly_bindings_fn_method_asyncprollytransaction_batch,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_asyncprollytransaction_commit,
+    [:uint64, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_asyncprollytransaction_compare_and_swap_named_root,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_asyncprollytransaction_create,
+    [:uint64, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_asyncprollytransaction_delete,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_asyncprollytransaction_delete_named_root,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_asyncprollytransaction_get,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_asyncprollytransaction_load_named_root,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_asyncprollytransaction_publish_named_root,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_asyncprollytransaction_publish_named_root_at_millis,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_asyncprollytransaction_put,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_asyncprollytransaction_rollback,
+    [:uint64, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_clone_foreignremotestore,
+    [:uint64, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_free_foreignremotestore,
+    [:uint64, RustCallStatus.by_ref],
+    :void
+  attach_function :uniffi_prolly_bindings_fn_init_callback_vtable_foreignremotestore,
+    [:pointer, RustCallStatus.by_ref],
+    :void
+  attach_function :uniffi_prolly_bindings_fn_method_foreignremotestore_descriptor,
+    [:uint64, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_foreignremotestore_get_node,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_foreignremotestore_put_node,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_foreignremotestore_delete_node,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_foreignremotestore_batch_nodes,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_foreignremotestore_batch_get_nodes_ordered,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_foreignremotestore_list_node_cids,
+    [:uint64, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_foreignremotestore_get_hint,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_foreignremotestore_put_hint,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_foreignremotestore_batch_put_nodes_with_hint,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_foreignremotestore_get_root_manifest,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_foreignremotestore_put_root_manifest,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_foreignremotestore_delete_root_manifest,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_foreignremotestore_compare_and_swap_root_manifest,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_foreignremotestore_list_root_manifests,
+    [:uint64, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_foreignremotestore_commit_transaction,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
   attach_function :uniffi_prolly_bindings_fn_clone_bindingindexregistry,
     [:uint64, RustCallStatus.by_ref],
     :uint64
@@ -14186,6 +15548,9 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_fn_func_versioned_value_to_bytes,
     [RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_func_open_remote_prolly_engine,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
   attach_function :uniffi_prolly_bindings_fn_func_default_content_graph_limits,
     [RustCallStatus.by_ref],
     RustBuffer.by_value
@@ -14580,6 +15945,9 @@ module UniFFILib
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_func_versioned_value_to_bytes,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_func_open_remote_prolly_engine,
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_func_default_content_graph_limits,
@@ -15132,6 +16500,147 @@ module UniFFILib
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_prollytransaction_rollback,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_asyncprollyengine_batch,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_asyncprollyengine_begin_transaction,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_asyncprollyengine_collect_stats,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_asyncprollyengine_compare_and_swap_named_root,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_asyncprollyengine_create,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_asyncprollyengine_delete,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_asyncprollyengine_delete_named_root,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_asyncprollyengine_diff,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_asyncprollyengine_get,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_asyncprollyengine_get_many,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_asyncprollyengine_list_named_roots,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_asyncprollyengine_load_named_root,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_asyncprollyengine_merge,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_asyncprollyengine_prefix,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_asyncprollyengine_publish_named_root,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_asyncprollyengine_publish_named_root_at_millis,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_asyncprollyengine_put,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_asyncprollyengine_range,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_asyncprollyengine_range_page,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_asyncprollytransaction_batch,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_asyncprollytransaction_commit,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_asyncprollytransaction_compare_and_swap_named_root,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_asyncprollytransaction_create,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_asyncprollytransaction_delete,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_asyncprollytransaction_delete_named_root,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_asyncprollytransaction_get,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_asyncprollytransaction_load_named_root,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_asyncprollytransaction_publish_named_root,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_asyncprollytransaction_publish_named_root_at_millis,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_asyncprollytransaction_put,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_asyncprollytransaction_rollback,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_foreignremotestore_descriptor,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_foreignremotestore_get_node,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_foreignremotestore_put_node,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_foreignremotestore_delete_node,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_nodes,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_get_nodes_ordered,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_foreignremotestore_list_node_cids,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_foreignremotestore_get_hint,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_foreignremotestore_put_hint,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_put_nodes_with_hint,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_foreignremotestore_get_root_manifest,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_foreignremotestore_put_root_manifest,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_foreignremotestore_delete_root_manifest,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_foreignremotestore_compare_and_swap_root_manifest,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_foreignremotestore_list_root_manifests,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_foreignremotestore_commit_transaction,
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_bindingindexregistry_len,
@@ -15762,6 +17271,9 @@ module UniFFILib
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_constructor_prollyengine_sqlite_in_memory,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_constructor_asyncprollyengine_new,
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_constructor_bindingindexregistry_new,
@@ -19498,6 +21010,473 @@ class WriteStatsRecord
   end
 end
 
+  # Record type BytesListResultRecord
+class BytesListResultRecord
+  attr_reader :values, :error
+
+  def initialize(values:, error:)
+    @values = values
+    @error = error
+  end
+
+  def ==(other)
+    if @values != other.values
+      return false
+    end
+    if @error != other.error
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type NamedBytesListResultRecord
+class NamedBytesListResultRecord
+  attr_reader :values, :error
+
+  def initialize(values:, error:)
+    @values = values
+    @error = error
+  end
+
+  def ==(other)
+    if @values != other.values
+      return false
+    end
+    if @error != other.error
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type NamedBytesRecord
+class NamedBytesRecord
+  attr_reader :name, :value
+
+  def initialize(name:, value:)
+    @name = name
+    @value = value
+  end
+
+  def ==(other)
+    if @name != other.name
+      return false
+    end
+    if @value != other.value
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type NodeEntryRecord
+class NodeEntryRecord
+  attr_reader :key, :value
+
+  def initialize(key:, value:)
+    @key = key
+    @value = value
+  end
+
+  def ==(other)
+    if @key != other.key
+      return false
+    end
+    if @value != other.value
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type NodeMutationRecord
+class NodeMutationRecord
+  attr_reader :key, :value
+
+  def initialize(key:, value:)
+    @key = key
+    @value = value
+  end
+
+  def ==(other)
+    if @key != other.key
+      return false
+    end
+    if @value != other.value
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type OptionalBytesListResultRecord
+class OptionalBytesListResultRecord
+  attr_reader :values, :error
+
+  def initialize(values:, error:)
+    @values = values
+    @error = error
+  end
+
+  def ==(other)
+    if @values != other.values
+      return false
+    end
+    if @error != other.error
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type OptionalBytesRecord
+class OptionalBytesRecord
+  attr_reader :present, :value
+
+  def initialize(present:, value:)
+    @present = present
+    @value = value
+  end
+
+  def ==(other)
+    if @present != other.present
+      return false
+    end
+    if @value != other.value
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type OptionalBytesResultRecord
+class OptionalBytesResultRecord
+  attr_reader :value, :error
+
+  def initialize(value:, error:)
+    @value = value
+    @error = error
+  end
+
+  def ==(other)
+    if @value != other.value
+      return false
+    end
+    if @error != other.error
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type RootCasResultRecord
+class RootCasResultRecord
+  attr_reader :applied, :current, :error
+
+  def initialize(applied:, current:, error:)
+    @applied = applied
+    @current = current
+    @error = error
+  end
+
+  def ==(other)
+    if @applied != other.applied
+      return false
+    end
+    if @current != other.current
+      return false
+    end
+    if @error != other.error
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type RootConditionRecord
+class RootConditionRecord
+  attr_reader :name, :expected
+
+  def initialize(name:, expected:)
+    @name = name
+    @expected = expected
+  end
+
+  def ==(other)
+    if @name != other.name
+      return false
+    end
+    if @expected != other.expected
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type RootWriteRecord
+class RootWriteRecord
+  attr_reader :name, :replacement
+
+  def initialize(name:, replacement:)
+    @name = name
+    @replacement = replacement
+  end
+
+  def ==(other)
+    if @name != other.name
+      return false
+    end
+    if @replacement != other.replacement
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type StoreCapabilitiesRecord
+class StoreCapabilitiesRecord
+  attr_reader :native_batch_reads, :atomic_batch_writes, :node_scan, :hints, :atomic_nodes_and_hint, :root_scan, :root_compare_and_swap, :transactions, :read_parallelism
+
+  def initialize(native_batch_reads:, atomic_batch_writes:, node_scan:, hints:, atomic_nodes_and_hint:, root_scan:, root_compare_and_swap:, transactions:, read_parallelism:)
+    @native_batch_reads = native_batch_reads
+    @atomic_batch_writes = atomic_batch_writes
+    @node_scan = node_scan
+    @hints = hints
+    @atomic_nodes_and_hint = atomic_nodes_and_hint
+    @root_scan = root_scan
+    @root_compare_and_swap = root_compare_and_swap
+    @transactions = transactions
+    @read_parallelism = read_parallelism
+  end
+
+  def ==(other)
+    if @native_batch_reads != other.native_batch_reads
+      return false
+    end
+    if @atomic_batch_writes != other.atomic_batch_writes
+      return false
+    end
+    if @node_scan != other.node_scan
+      return false
+    end
+    if @hints != other.hints
+      return false
+    end
+    if @atomic_nodes_and_hint != other.atomic_nodes_and_hint
+      return false
+    end
+    if @root_scan != other.root_scan
+      return false
+    end
+    if @root_compare_and_swap != other.root_compare_and_swap
+      return false
+    end
+    if @transactions != other.transactions
+      return false
+    end
+    if @read_parallelism != other.read_parallelism
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type StoreDescriptorRecord
+class StoreDescriptorRecord
+  attr_reader :protocol_major, :adapter_name, :provider, :schema_version, :capabilities, :limits
+
+  def initialize(protocol_major:, adapter_name:, provider:, schema_version:, capabilities:, limits:)
+    @protocol_major = protocol_major
+    @adapter_name = adapter_name
+    @provider = provider
+    @schema_version = schema_version
+    @capabilities = capabilities
+    @limits = limits
+  end
+
+  def ==(other)
+    if @protocol_major != other.protocol_major
+      return false
+    end
+    if @adapter_name != other.adapter_name
+      return false
+    end
+    if @provider != other.provider
+      return false
+    end
+    if @schema_version != other.schema_version
+      return false
+    end
+    if @capabilities != other.capabilities
+      return false
+    end
+    if @limits != other.limits
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type StoreDescriptorResultRecord
+class StoreDescriptorResultRecord
+  attr_reader :value, :error
+
+  def initialize(value:, error:)
+    @value = value
+    @error = error
+  end
+
+  def ==(other)
+    if @value != other.value
+      return false
+    end
+    if @error != other.error
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type StoreErrorRecord
+class StoreErrorRecord
+  attr_reader :code, :message, :retryable, :provider_code
+
+  def initialize(code:, message:, retryable:, provider_code:)
+    @code = code
+    @message = message
+    @retryable = retryable
+    @provider_code = provider_code
+  end
+
+  def ==(other)
+    if @code != other.code
+      return false
+    end
+    if @message != other.message
+      return false
+    end
+    if @retryable != other.retryable
+      return false
+    end
+    if @provider_code != other.provider_code
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type StoreLimitsRecord
+class StoreLimitsRecord
+  attr_reader :max_batch_read_items, :max_batch_write_items, :max_transaction_operations, :max_node_bytes
+
+  def initialize(max_batch_read_items:, max_batch_write_items:, max_transaction_operations:, max_node_bytes:)
+    @max_batch_read_items = max_batch_read_items
+    @max_batch_write_items = max_batch_write_items
+    @max_transaction_operations = max_transaction_operations
+    @max_node_bytes = max_node_bytes
+  end
+
+  def ==(other)
+    if @max_batch_read_items != other.max_batch_read_items
+      return false
+    end
+    if @max_batch_write_items != other.max_batch_write_items
+      return false
+    end
+    if @max_transaction_operations != other.max_transaction_operations
+      return false
+    end
+    if @max_node_bytes != other.max_node_bytes
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type StoreTransactionConflictRecord
+class StoreTransactionConflictRecord
+  attr_reader :name, :expected, :current
+
+  def initialize(name:, expected:, current:)
+    @name = name
+    @expected = expected
+    @current = current
+  end
+
+  def ==(other)
+    if @name != other.name
+      return false
+    end
+    if @expected != other.expected
+      return false
+    end
+    if @current != other.current
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type TransactionResultRecord
+class TransactionResultRecord
+  attr_reader :applied, :conflict, :error
+
+  def initialize(applied:, conflict:, error:)
+    @applied = applied
+    @conflict = conflict
+    @error = error
+  end
+
+  def ==(other)
+    if @applied != other.applied
+      return false
+    end
+    if @conflict != other.conflict
+      return false
+    end
+    if @error != other.error
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type UnitResultRecord
+class UnitResultRecord
+  attr_reader :error
+
+  def initialize(error:)
+    @error = error
+  end
+
+  def ==(other)
+    if @error != other.error
+      return false
+    end
+
+    true
+  end
+end
+
   # Record type ActiveIndexHealthRecord
 class ActiveIndexHealthRecord
   attr_reader :name, :generation, :fingerprint, :projection, :index_map_id, :index_version
@@ -22467,6 +24446,21 @@ end
 
 
 
+def self.open_remote_prolly_engine(store, config)
+    store = store
+    (ForeignRemoteStore.uniffi_check_lower store)
+
+    config = config
+    RustBuffer.check_lower_TypeConfigRecord(config)
+
+  result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_func_open_remote_prolly_engine,(ForeignRemoteStore.uniffi_lower store),RustBuffer.alloc_from_TypeConfigRecord(config))
+  return AsyncProllyEngine.uniffi_allocate(result)
+end
+
+
+
+
+
 def self.default_content_graph_limits()
   result = Prolly.rust_call(:uniffi_prolly_bindings_fn_func_default_content_graph_limits,)
   return result.consumeIntoTypeContentGraphLimitsRecord
@@ -24602,6 +26596,509 @@ end
       Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollytransaction_rollback,uniffi_clone_handle(),)
   end
 
+
+end
+
+  class AsyncProllyEngine
+
+  # A private helper for initializing instances of the class from a raw handle,
+  # bypassing any initialization logic and ensuring they are GC'd properly.
+  def self.uniffi_allocate(handle)
+    inst = allocate
+    inst.instance_variable_set :@handle, handle
+    ObjectSpace.define_finalizer(inst, uniffi_define_finalizer_by_handle(handle, inst.object_id))
+    return inst
+  end
+
+  # A private helper for registering an object finalizer.
+  # N.B. it's important that this does not capture a reference
+  # to the actual instance, only its underlying handle.
+  def self.uniffi_define_finalizer_by_handle(handle, object_id)
+    Proc.new do |_id|
+      Prolly.rust_call(
+        :uniffi_prolly_bindings_fn_free_asyncprollyengine,
+        handle
+      )
+    end
+  end
+
+  # A private helper for lowering instances into a raw handle.
+  # This does an explicit typecheck, because accidentally lowering a different type of
+  # object in a place where this type is expected, could lead to memory unsafety.
+  def self.uniffi_check_lower(inst)
+    if not inst.is_a? self
+      raise TypeError.new "Expected a AsyncProllyEngine instance, got #{inst}"
+    end
+  end
+
+  def uniffi_clone_handle()
+    return Prolly.rust_call(
+      :uniffi_prolly_bindings_fn_clone_asyncprollyengine,
+      @handle
+    )
+  end
+
+  def self.uniffi_lower(inst)
+    return inst.uniffi_clone_handle()
+  end
+  def initialize(store, config)
+        store = store
+        (ForeignRemoteStore.uniffi_check_lower store)
+        config = config
+        RustBuffer.check_lower_TypeConfigRecord(config)
+    handle = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_constructor_asyncprollyengine_new,(ForeignRemoteStore.uniffi_lower store),RustBuffer.alloc_from_TypeConfigRecord(config))
+    @handle = handle
+    ObjectSpace.define_finalizer(self, self.class.uniffi_define_finalizer_by_handle(handle, self.object_id))
+  end
+
+
+
+  def batch(tree, mutations)
+        tree = tree
+        RustBuffer.check_lower_TypeTreeRecord(tree)
+        mutations = mutations
+        RustBuffer.check_lower_SequenceTypeMutationRecord(mutations)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_asyncprollyengine_batch,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.alloc_from_SequenceTypeMutationRecord(mutations))
+    return result.consumeIntoTypeTreeRecord
+  end
+  def begin_transaction()
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_asyncprollyengine_begin_transaction,uniffi_clone_handle(),)
+    return AsyncProllyTransaction.uniffi_allocate(result)
+  end
+  def collect_stats(tree)
+        tree = tree
+        RustBuffer.check_lower_TypeTreeRecord(tree)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_asyncprollyengine_collect_stats,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree))
+    return result.consumeIntoTypeTreeStatsRecord
+  end
+  def compare_and_swap_named_root(name, expected, replacement)
+        name = Prolly::uniffi_bytes(name)
+
+        expected = (expected ? expected : nil)
+        RustBuffer.check_lower_OptionalTypeTreeRecord(expected)
+        replacement = (replacement ? replacement : nil)
+        RustBuffer.check_lower_OptionalTypeTreeRecord(replacement)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_asyncprollyengine_compare_and_swap_named_root,uniffi_clone_handle(),RustBuffer.allocFromBytes(name),RustBuffer.alloc_from_OptionalTypeTreeRecord(expected),RustBuffer.alloc_from_OptionalTypeTreeRecord(replacement))
+    return result.consumeIntoTypeNamedRootUpdateRecord
+  end
+  def create()
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_asyncprollyengine_create,uniffi_clone_handle(),)
+    return result.consumeIntoTypeTreeRecord
+  end
+  def delete(tree, key)
+        tree = tree
+        RustBuffer.check_lower_TypeTreeRecord(tree)
+        key = Prolly::uniffi_bytes(key)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_asyncprollyengine_delete,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.allocFromBytes(key))
+    return result.consumeIntoTypeTreeRecord
+  end
+  def delete_named_root(name)
+        name = Prolly::uniffi_bytes(name)
+
+      Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_asyncprollyengine_delete_named_root,uniffi_clone_handle(),RustBuffer.allocFromBytes(name))
+  end
+
+  def diff(base, other)
+        base = base
+        RustBuffer.check_lower_TypeTreeRecord(base)
+        other = other
+        RustBuffer.check_lower_TypeTreeRecord(other)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_asyncprollyengine_diff,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(base),RustBuffer.alloc_from_TypeTreeRecord(other))
+    return result.consumeIntoSequenceTypeDiffRecord
+  end
+  def get(tree, key)
+        tree = tree
+        RustBuffer.check_lower_TypeTreeRecord(tree)
+        key = Prolly::uniffi_bytes(key)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_asyncprollyengine_get,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.allocFromBytes(key))
+    return result.consumeIntoOptionalbytes
+  end
+  def get_many(tree, keys)
+        tree = tree
+        RustBuffer.check_lower_TypeTreeRecord(tree)
+        keys = keys.map { |v| Prolly::uniffi_bytes(v) }
+        RustBuffer.check_lower_Sequencebytes(keys)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_asyncprollyengine_get_many,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.alloc_from_Sequencebytes(keys))
+    return result.consumeIntoSequenceOptionalbytes
+  end
+  def list_named_roots()
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_asyncprollyengine_list_named_roots,uniffi_clone_handle(),)
+    return result.consumeIntoSequenceTypeNamedRootRecord
+  end
+  def load_named_root(name)
+        name = Prolly::uniffi_bytes(name)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_asyncprollyengine_load_named_root,uniffi_clone_handle(),RustBuffer.allocFromBytes(name))
+    return result.consumeIntoOptionalTypeTreeRecord
+  end
+  def merge(base, left, right, resolver)
+        base = base
+        RustBuffer.check_lower_TypeTreeRecord(base)
+        left = left
+        RustBuffer.check_lower_TypeTreeRecord(left)
+        right = right
+        RustBuffer.check_lower_TypeTreeRecord(right)
+        resolver = (resolver ? Prolly::uniffi_utf8(resolver) : nil)
+        RustBuffer.check_lower_Optionalstring(resolver)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_asyncprollyengine_merge,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(base),RustBuffer.alloc_from_TypeTreeRecord(left),RustBuffer.alloc_from_TypeTreeRecord(right),RustBuffer.alloc_from_Optionalstring(resolver))
+    return result.consumeIntoTypeTreeRecord
+  end
+  def prefix(tree, prefix)
+        tree = tree
+        RustBuffer.check_lower_TypeTreeRecord(tree)
+        prefix = Prolly::uniffi_bytes(prefix)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_asyncprollyengine_prefix,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.allocFromBytes(prefix))
+    return result.consumeIntoSequenceTypeEntryRecord
+  end
+  def publish_named_root(name, tree)
+        name = Prolly::uniffi_bytes(name)
+
+        tree = tree
+        RustBuffer.check_lower_TypeTreeRecord(tree)
+      Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_asyncprollyengine_publish_named_root,uniffi_clone_handle(),RustBuffer.allocFromBytes(name),RustBuffer.alloc_from_TypeTreeRecord(tree))
+  end
+
+  def publish_named_root_at_millis(name, tree, timestamp_millis)
+        name = Prolly::uniffi_bytes(name)
+
+        tree = tree
+        RustBuffer.check_lower_TypeTreeRecord(tree)
+        timestamp_millis = Prolly::uniffi_in_range(timestamp_millis, "u64", 0, 2**64)
+
+      Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_asyncprollyengine_publish_named_root_at_millis,uniffi_clone_handle(),RustBuffer.allocFromBytes(name),RustBuffer.alloc_from_TypeTreeRecord(tree),timestamp_millis)
+  end
+
+  def put(tree, key, value)
+        tree = tree
+        RustBuffer.check_lower_TypeTreeRecord(tree)
+        key = Prolly::uniffi_bytes(key)
+
+        value = Prolly::uniffi_bytes(value)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_asyncprollyengine_put,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.allocFromBytes(key),RustBuffer.allocFromBytes(value))
+    return result.consumeIntoTypeTreeRecord
+  end
+  def range(tree, start, _end)
+        tree = tree
+        RustBuffer.check_lower_TypeTreeRecord(tree)
+        start = Prolly::uniffi_bytes(start)
+
+        _end = (_end ? Prolly::uniffi_bytes(_end) : nil)
+        RustBuffer.check_lower_Optionalbytes(_end)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_asyncprollyengine_range,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.allocFromBytes(start),RustBuffer.alloc_from_Optionalbytes(_end))
+    return result.consumeIntoSequenceTypeEntryRecord
+  end
+  def range_page(tree, cursor, _end, limit)
+        tree = tree
+        RustBuffer.check_lower_TypeTreeRecord(tree)
+        cursor = (cursor ? cursor : nil)
+        RustBuffer.check_lower_OptionalTypeRangeCursorRecord(cursor)
+        _end = (_end ? Prolly::uniffi_bytes(_end) : nil)
+        RustBuffer.check_lower_Optionalbytes(_end)
+        limit = Prolly::uniffi_in_range(limit, "u64", 0, 2**64)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_asyncprollyengine_range_page,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.alloc_from_OptionalTypeRangeCursorRecord(cursor),RustBuffer.alloc_from_Optionalbytes(_end),limit)
+    return result.consumeIntoTypeRangePageRecord
+  end
+
+end
+
+  class AsyncProllyTransaction
+
+  # A private helper for initializing instances of the class from a raw handle,
+  # bypassing any initialization logic and ensuring they are GC'd properly.
+  def self.uniffi_allocate(handle)
+    inst = allocate
+    inst.instance_variable_set :@handle, handle
+    ObjectSpace.define_finalizer(inst, uniffi_define_finalizer_by_handle(handle, inst.object_id))
+    return inst
+  end
+
+  # A private helper for registering an object finalizer.
+  # N.B. it's important that this does not capture a reference
+  # to the actual instance, only its underlying handle.
+  def self.uniffi_define_finalizer_by_handle(handle, object_id)
+    Proc.new do |_id|
+      Prolly.rust_call(
+        :uniffi_prolly_bindings_fn_free_asyncprollytransaction,
+        handle
+      )
+    end
+  end
+
+  # A private helper for lowering instances into a raw handle.
+  # This does an explicit typecheck, because accidentally lowering a different type of
+  # object in a place where this type is expected, could lead to memory unsafety.
+  def self.uniffi_check_lower(inst)
+    if not inst.is_a? self
+      raise TypeError.new "Expected a AsyncProllyTransaction instance, got #{inst}"
+    end
+  end
+
+  def uniffi_clone_handle()
+    return Prolly.rust_call(
+      :uniffi_prolly_bindings_fn_clone_asyncprollytransaction,
+      @handle
+    )
+  end
+
+  def self.uniffi_lower(inst)
+    return inst.uniffi_clone_handle()
+  end
+
+
+
+  def batch(tree, mutations)
+        tree = tree
+        RustBuffer.check_lower_TypeTreeRecord(tree)
+        mutations = mutations
+        RustBuffer.check_lower_SequenceTypeMutationRecord(mutations)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_asyncprollytransaction_batch,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.alloc_from_SequenceTypeMutationRecord(mutations))
+    return result.consumeIntoTypeTreeRecord
+  end
+  def commit()
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_asyncprollytransaction_commit,uniffi_clone_handle(),)
+    return result.consumeIntoTypeTransactionUpdateRecord
+  end
+  def compare_and_swap_named_root(name, expected, replacement)
+        name = Prolly::uniffi_bytes(name)
+
+        expected = (expected ? expected : nil)
+        RustBuffer.check_lower_OptionalTypeTreeRecord(expected)
+        replacement = (replacement ? replacement : nil)
+        RustBuffer.check_lower_OptionalTypeTreeRecord(replacement)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_asyncprollytransaction_compare_and_swap_named_root,uniffi_clone_handle(),RustBuffer.allocFromBytes(name),RustBuffer.alloc_from_OptionalTypeTreeRecord(expected),RustBuffer.alloc_from_OptionalTypeTreeRecord(replacement))
+    return result.consumeIntoTypeNamedRootUpdateRecord
+  end
+  def create()
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_asyncprollytransaction_create,uniffi_clone_handle(),)
+    return result.consumeIntoTypeTreeRecord
+  end
+  def delete(tree, key)
+        tree = tree
+        RustBuffer.check_lower_TypeTreeRecord(tree)
+        key = Prolly::uniffi_bytes(key)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_asyncprollytransaction_delete,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.allocFromBytes(key))
+    return result.consumeIntoTypeTreeRecord
+  end
+  def delete_named_root(name)
+        name = Prolly::uniffi_bytes(name)
+
+      Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_asyncprollytransaction_delete_named_root,uniffi_clone_handle(),RustBuffer.allocFromBytes(name))
+  end
+
+  def get(tree, key)
+        tree = tree
+        RustBuffer.check_lower_TypeTreeRecord(tree)
+        key = Prolly::uniffi_bytes(key)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_asyncprollytransaction_get,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.allocFromBytes(key))
+    return result.consumeIntoOptionalbytes
+  end
+  def load_named_root(name)
+        name = Prolly::uniffi_bytes(name)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_asyncprollytransaction_load_named_root,uniffi_clone_handle(),RustBuffer.allocFromBytes(name))
+    return result.consumeIntoOptionalTypeTreeRecord
+  end
+  def publish_named_root(name, tree)
+        name = Prolly::uniffi_bytes(name)
+
+        tree = tree
+        RustBuffer.check_lower_TypeTreeRecord(tree)
+      Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_asyncprollytransaction_publish_named_root,uniffi_clone_handle(),RustBuffer.allocFromBytes(name),RustBuffer.alloc_from_TypeTreeRecord(tree))
+  end
+
+  def publish_named_root_at_millis(name, tree, timestamp_millis)
+        name = Prolly::uniffi_bytes(name)
+
+        tree = tree
+        RustBuffer.check_lower_TypeTreeRecord(tree)
+        timestamp_millis = Prolly::uniffi_in_range(timestamp_millis, "u64", 0, 2**64)
+
+      Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_asyncprollytransaction_publish_named_root_at_millis,uniffi_clone_handle(),RustBuffer.allocFromBytes(name),RustBuffer.alloc_from_TypeTreeRecord(tree),timestamp_millis)
+  end
+
+  def put(tree, key, value)
+        tree = tree
+        RustBuffer.check_lower_TypeTreeRecord(tree)
+        key = Prolly::uniffi_bytes(key)
+
+        value = Prolly::uniffi_bytes(value)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_asyncprollytransaction_put,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.allocFromBytes(key),RustBuffer.allocFromBytes(value))
+    return result.consumeIntoTypeTreeRecord
+  end
+  def rollback()
+      Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_asyncprollytransaction_rollback,uniffi_clone_handle(),)
+  end
+
+
+end
+
+  class ForeignRemoteStore
+
+  # A private helper for initializing instances of the class from a raw handle,
+  # bypassing any initialization logic and ensuring they are GC'd properly.
+  def self.uniffi_allocate(handle)
+    inst = allocate
+    inst.instance_variable_set :@handle, handle
+    ObjectSpace.define_finalizer(inst, uniffi_define_finalizer_by_handle(handle, inst.object_id))
+    return inst
+  end
+
+  # A private helper for registering an object finalizer.
+  # N.B. it's important that this does not capture a reference
+  # to the actual instance, only its underlying handle.
+  def self.uniffi_define_finalizer_by_handle(handle, object_id)
+    Proc.new do |_id|
+      Prolly.rust_call(
+        :uniffi_prolly_bindings_fn_free_foreignremotestore,
+        handle
+      )
+    end
+  end
+
+  # A private helper for lowering instances into a raw handle.
+  # This does an explicit typecheck, because accidentally lowering a different type of
+  # object in a place where this type is expected, could lead to memory unsafety.
+  def self.uniffi_check_lower(inst)
+    if not inst.is_a? self
+      raise TypeError.new "Expected a ForeignRemoteStore instance, got #{inst}"
+    end
+  end
+
+  def uniffi_clone_handle()
+    return Prolly.rust_call(
+      :uniffi_prolly_bindings_fn_clone_foreignremotestore,
+      @handle
+    )
+  end
+
+  def self.uniffi_lower(inst)
+    return inst.uniffi_clone_handle()
+  end
+
+
+
+  def descriptor()
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_foreignremotestore_descriptor,uniffi_clone_handle(),)
+    return result.consumeIntoTypeStoreDescriptorResultRecord
+  end
+  def get_node(cid)
+        cid = Prolly::uniffi_bytes(cid)
+
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_foreignremotestore_get_node,uniffi_clone_handle(),RustBuffer.allocFromBytes(cid))
+    return result.consumeIntoTypeOptionalBytesResultRecord
+  end
+  def put_node(cid, value)
+        cid = Prolly::uniffi_bytes(cid)
+
+        value = Prolly::uniffi_bytes(value)
+
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_foreignremotestore_put_node,uniffi_clone_handle(),RustBuffer.allocFromBytes(cid),RustBuffer.allocFromBytes(value))
+    return result.consumeIntoTypeUnitResultRecord
+  end
+  def delete_node(cid)
+        cid = Prolly::uniffi_bytes(cid)
+
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_foreignremotestore_delete_node,uniffi_clone_handle(),RustBuffer.allocFromBytes(cid))
+    return result.consumeIntoTypeUnitResultRecord
+  end
+  def batch_nodes(ops)
+        ops = ops
+        RustBuffer.check_lower_SequenceTypeNodeMutationRecord(ops)
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_foreignremotestore_batch_nodes,uniffi_clone_handle(),RustBuffer.alloc_from_SequenceTypeNodeMutationRecord(ops))
+    return result.consumeIntoTypeUnitResultRecord
+  end
+  def batch_get_nodes_ordered(cids)
+        cids = cids.map { |v| Prolly::uniffi_bytes(v) }
+        RustBuffer.check_lower_Sequencebytes(cids)
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_foreignremotestore_batch_get_nodes_ordered,uniffi_clone_handle(),RustBuffer.alloc_from_Sequencebytes(cids))
+    return result.consumeIntoTypeOptionalBytesListResultRecord
+  end
+  def list_node_cids()
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_foreignremotestore_list_node_cids,uniffi_clone_handle(),)
+    return result.consumeIntoTypeBytesListResultRecord
+  end
+  def get_hint(namespace, key)
+        namespace = Prolly::uniffi_bytes(namespace)
+
+        key = Prolly::uniffi_bytes(key)
+
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_foreignremotestore_get_hint,uniffi_clone_handle(),RustBuffer.allocFromBytes(namespace),RustBuffer.allocFromBytes(key))
+    return result.consumeIntoTypeOptionalBytesResultRecord
+  end
+  def put_hint(namespace, key, value)
+        namespace = Prolly::uniffi_bytes(namespace)
+
+        key = Prolly::uniffi_bytes(key)
+
+        value = Prolly::uniffi_bytes(value)
+
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_foreignremotestore_put_hint,uniffi_clone_handle(),RustBuffer.allocFromBytes(namespace),RustBuffer.allocFromBytes(key),RustBuffer.allocFromBytes(value))
+    return result.consumeIntoTypeUnitResultRecord
+  end
+  def batch_put_nodes_with_hint(nodes, namespace, key, value)
+        nodes = nodes
+        RustBuffer.check_lower_SequenceTypeNodeEntryRecord(nodes)
+        namespace = Prolly::uniffi_bytes(namespace)
+
+        key = Prolly::uniffi_bytes(key)
+
+        value = Prolly::uniffi_bytes(value)
+
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_foreignremotestore_batch_put_nodes_with_hint,uniffi_clone_handle(),RustBuffer.alloc_from_SequenceTypeNodeEntryRecord(nodes),RustBuffer.allocFromBytes(namespace),RustBuffer.allocFromBytes(key),RustBuffer.allocFromBytes(value))
+    return result.consumeIntoTypeUnitResultRecord
+  end
+  def get_root_manifest(name)
+        name = Prolly::uniffi_bytes(name)
+
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_foreignremotestore_get_root_manifest,uniffi_clone_handle(),RustBuffer.allocFromBytes(name))
+    return result.consumeIntoTypeOptionalBytesResultRecord
+  end
+  def put_root_manifest(name, manifest)
+        name = Prolly::uniffi_bytes(name)
+
+        manifest = Prolly::uniffi_bytes(manifest)
+
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_foreignremotestore_put_root_manifest,uniffi_clone_handle(),RustBuffer.allocFromBytes(name),RustBuffer.allocFromBytes(manifest))
+    return result.consumeIntoTypeUnitResultRecord
+  end
+  def delete_root_manifest(name)
+        name = Prolly::uniffi_bytes(name)
+
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_foreignremotestore_delete_root_manifest,uniffi_clone_handle(),RustBuffer.allocFromBytes(name))
+    return result.consumeIntoTypeUnitResultRecord
+  end
+  def compare_and_swap_root_manifest(name, expected, new)
+        name = Prolly::uniffi_bytes(name)
+
+        expected = expected
+        RustBuffer.check_lower_TypeOptionalBytesRecord(expected)
+        new = new
+        RustBuffer.check_lower_TypeOptionalBytesRecord(new)
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_foreignremotestore_compare_and_swap_root_manifest,uniffi_clone_handle(),RustBuffer.allocFromBytes(name),RustBuffer.alloc_from_TypeOptionalBytesRecord(expected),RustBuffer.alloc_from_TypeOptionalBytesRecord(new))
+    return result.consumeIntoTypeRootCasResultRecord
+  end
+  def list_root_manifests()
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_foreignremotestore_list_root_manifests,uniffi_clone_handle(),)
+    return result.consumeIntoTypeNamedBytesListResultRecord
+  end
+  def commit_transaction(nodes, conditions, roots)
+        nodes = nodes
+        RustBuffer.check_lower_SequenceTypeNodeMutationRecord(nodes)
+        conditions = conditions
+        RustBuffer.check_lower_SequenceTypeRootConditionRecord(conditions)
+        roots = roots
+        RustBuffer.check_lower_SequenceTypeRootWriteRecord(roots)
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_foreignremotestore_commit_transaction,uniffi_clone_handle(),RustBuffer.alloc_from_SequenceTypeNodeMutationRecord(nodes),RustBuffer.alloc_from_SequenceTypeRootConditionRecord(conditions),RustBuffer.alloc_from_SequenceTypeRootWriteRecord(roots))
+    return result.consumeIntoTypeTransactionResultRecord
+  end
 
 end
 

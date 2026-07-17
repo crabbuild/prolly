@@ -26,6 +26,7 @@ import threading
 import itertools
 import traceback
 import typing
+import asyncio
 import platform
 
 
@@ -580,6 +581,8 @@ def _uniffi_check_api_checksums(lib):
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_func_node_to_bytes() != 56453:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_func_open_remote_prolly_engine() != 31371:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_func_parallel_config() != 49373:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_func_parallel_config_sequential() != 26170:
@@ -737,6 +740,70 @@ def _uniffi_check_api_checksums(lib):
     if lib.uniffi_prolly_bindings_checksum_func_versioned_value_require_schema() != 58319:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_func_versioned_value_to_bytes() != 30630:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_constructor_asyncprollyengine_new() != 15218:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_batch() != 40064:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_begin_transaction() != 28949:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_collect_stats() != 45715:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_compare_and_swap_named_root() != 38856:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_create() != 56360:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_delete() != 20300:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_delete_named_root() != 52828:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_diff() != 55207:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_get() != 12607:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_get_many() != 63418:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_list_named_roots() != 50340:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_load_named_root() != 318:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_merge() != 37178:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_prefix() != 9481:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_publish_named_root() != 18445:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_publish_named_root_at_millis() != 41009:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_put() != 37914:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_range() != 35865:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_range_page() != 22037:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_batch() != 13957:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_commit() != 47349:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_compare_and_swap_named_root() != 59033:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_create() != 32187:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_delete() != 36135:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_delete_named_root() != 47190:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_get() != 58160:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_load_named_root() != 28693:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_publish_named_root() != 19910:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_publish_named_root_at_millis() != 21635:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_put() != 10789:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_rollback() != 11506:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_constructor_bindingindexregistry_new() != 46129:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
@@ -1151,6 +1218,38 @@ def _uniffi_check_api_checksums(lib):
     if lib.uniffi_prolly_bindings_checksum_method_diffvisitorcallback_visit() != 12838:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_entryvisitorcallback_visit() != 30875:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_descriptor() != 37360:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_get_node() != 60045:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_put_node() != 45131:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_delete_node() != 20183:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_nodes() != 58441:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_get_nodes_ordered() != 19651:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_list_node_cids() != 19936:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_get_hint() != 47952:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_put_hint() != 29623:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_put_nodes_with_hint() != 26659:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_get_root_manifest() != 16335:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_put_root_manifest() != 37302:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_delete_root_manifest() != 46149:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_compare_and_swap_root_manifest() != 10430:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_list_root_manifests() != 17725:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_commit_transaction() != 90:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_hoststorecallback_get() != 14064:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
@@ -1785,6 +1884,26 @@ _UniffiLib.ffi_prolly_bindings_rust_future_free_void.argtypes = (
     ctypes.c_uint64,
 )
 _UniffiLib.ffi_prolly_bindings_rust_future_free_void.restype = None
+_UniffiLib.uniffi_prolly_bindings_fn_clone_asyncprollyengine.argtypes = (
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_clone_asyncprollyengine.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_free_asyncprollyengine.argtypes = (
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_free_asyncprollyengine.restype = None
+_UniffiLib.uniffi_prolly_bindings_fn_clone_asyncprollytransaction.argtypes = (
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_clone_asyncprollytransaction.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_free_asyncprollytransaction.argtypes = (
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_free_asyncprollytransaction.restype = None
 _UniffiLib.uniffi_prolly_bindings_fn_clone_bindingindexregistry.argtypes = (
     ctypes.c_uint64,
     ctypes.POINTER(_UniffiRustCallStatus),
@@ -1955,6 +2074,16 @@ _UniffiLib.uniffi_prolly_bindings_fn_free_entryvisitorcallback.argtypes = (
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UniffiLib.uniffi_prolly_bindings_fn_free_entryvisitorcallback.restype = None
+_UniffiLib.uniffi_prolly_bindings_fn_clone_foreignremotestore.argtypes = (
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_clone_foreignremotestore.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_free_foreignremotestore.argtypes = (
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_free_foreignremotestore.restype = None
 _UniffiLib.uniffi_prolly_bindings_fn_clone_hoststorecallback.argtypes = (
     ctypes.c_uint64,
     ctypes.POINTER(_UniffiRustCallStatus),
@@ -2113,6 +2242,74 @@ _UniffiLib.uniffi_prolly_bindings_fn_init_callback_vtable_entryvisitorcallback.a
     ctypes.POINTER(_UniffiVTableCallbackInterfaceProllyEntryVisitorCallback),
 )
 _UniffiLib.uniffi_prolly_bindings_fn_init_callback_vtable_entryvisitorcallback.restype = None
+class _UniffiForeignFutureResultRustBuffer(ctypes.Structure):
+    _fields_ = [
+        ("return_value", _UniffiRustBuffer),
+        ("call_status", _UniffiRustCallStatus),
+    ]
+_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiForeignFutureResultRustBuffer,
+)
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD0 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
+)
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD1 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
+)
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD2 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,_UniffiRustBuffer,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
+)
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD3 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
+)
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD4 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
+)
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD5 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
+)
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD6 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
+)
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD7 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,_UniffiRustBuffer,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
+)
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD8 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,_UniffiRustBuffer,_UniffiRustBuffer,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
+)
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD9 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,_UniffiRustBuffer,_UniffiRustBuffer,_UniffiRustBuffer,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
+)
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD10 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
+)
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD11 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,_UniffiRustBuffer,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
+)
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD12 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
+)
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD13 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,_UniffiRustBuffer,_UniffiRustBuffer,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
+)
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD14 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
+)
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD15 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,_UniffiRustBuffer,_UniffiRustBuffer,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
+)
+_UNIFFI_CALLBACK_INTERFACE_CLONE_PROLLY_FOREIGN_REMOTE_STORE = ctypes.CFUNCTYPE(ctypes.c_uint64,ctypes.c_uint64,
+)
+_UNIFFI_CALLBACK_INTERFACE_FREE_PROLLY_FOREIGN_REMOTE_STORE = ctypes.CFUNCTYPE(None,ctypes.c_uint64,
+)
+class _UniffiVTableCallbackInterfaceProllyForeignRemoteStore(ctypes.Structure):
+    _fields_ = [
+        ("uniffi_free", _UNIFFI_CALLBACK_INTERFACE_FREE_PROLLY_FOREIGN_REMOTE_STORE),
+        ("uniffi_clone", _UNIFFI_CALLBACK_INTERFACE_CLONE_PROLLY_FOREIGN_REMOTE_STORE),
+        ("descriptor", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD0),
+        ("get_node", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD1),
+        ("put_node", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD2),
+        ("delete_node", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD3),
+        ("batch_nodes", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD4),
+        ("batch_get_nodes_ordered", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD5),
+        ("list_node_cids", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD6),
+        ("get_hint", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD7),
+        ("put_hint", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD8),
+        ("batch_put_nodes_with_hint", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD9),
+        ("get_root_manifest", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD10),
+        ("put_root_manifest", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD11),
+        ("delete_root_manifest", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD12),
+        ("compare_and_swap_root_manifest", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD13),
+        ("list_root_manifests", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD14),
+        ("commit_transaction", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD15),
+    ]
+_UniffiLib.uniffi_prolly_bindings_fn_init_callback_vtable_foreignremotestore.argtypes = (
+    ctypes.POINTER(_UniffiVTableCallbackInterfaceProllyForeignRemoteStore),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_init_callback_vtable_foreignremotestore.restype = None
 _UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD0 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,ctypes.POINTER(_UniffiRustBuffer),
     ctypes.POINTER(_UniffiRustCallStatus),
 )
@@ -2486,6 +2683,11 @@ _UniffiLib.uniffi_prolly_bindings_fn_func_node_to_bytes.argtypes = (
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UniffiLib.uniffi_prolly_bindings_fn_func_node_to_bytes.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_func_open_remote_prolly_engine.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_func_open_remote_prolly_engine.restype = ctypes.c_uint64
 _UniffiLib.uniffi_prolly_bindings_fn_func_parallel_config.argtypes = (
     ctypes.c_uint64,
     ctypes.c_uint64,
@@ -2915,6 +3117,192 @@ _UniffiLib.uniffi_prolly_bindings_fn_func_versioned_value_to_bytes.argtypes = (
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UniffiLib.uniffi_prolly_bindings_fn_func_versioned_value_to_bytes.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_constructor_asyncprollyengine_new.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_constructor_asyncprollyengine_new.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_batch.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_batch.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_begin_transaction.argtypes = (
+    ctypes.c_uint64,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_begin_transaction.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_collect_stats.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_collect_stats.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_compare_and_swap_named_root.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_compare_and_swap_named_root.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_create.argtypes = (
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_create.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_delete.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_delete.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_delete_named_root.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_delete_named_root.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_diff.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_diff.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_get.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_get.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_get_many.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_get_many.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_list_named_roots.argtypes = (
+    ctypes.c_uint64,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_list_named_roots.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_load_named_root.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_load_named_root.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_merge.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_merge.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_prefix.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_prefix.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_publish_named_root.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_publish_named_root.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_publish_named_root_at_millis.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    ctypes.c_uint64,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_publish_named_root_at_millis.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_put.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_put.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_range.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_range.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_range_page.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    ctypes.c_uint64,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_range_page.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_batch.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_batch.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_commit.argtypes = (
+    ctypes.c_uint64,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_commit.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_compare_and_swap_named_root.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_compare_and_swap_named_root.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_create.argtypes = (
+    ctypes.c_uint64,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_create.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_delete.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_delete.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_delete_named_root.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_delete_named_root.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_get.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_get.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_load_named_root.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_load_named_root.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_publish_named_root.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_publish_named_root.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_publish_named_root_at_millis.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    ctypes.c_uint64,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_publish_named_root_at_millis.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_put.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_put.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_rollback.argtypes = (
+    ctypes.c_uint64,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_rollback.restype = ctypes.c_uint64
 _UniffiLib.uniffi_prolly_bindings_fn_constructor_bindingindexregistry_new.argtypes = (
     ctypes.POINTER(_UniffiRustCallStatus),
 )
@@ -4207,6 +4595,95 @@ _UniffiLib.uniffi_prolly_bindings_fn_method_entryvisitorcallback_visit.argtypes 
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UniffiLib.uniffi_prolly_bindings_fn_method_entryvisitorcallback_visit.restype = ctypes.c_int8
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_descriptor.argtypes = (
+    ctypes.c_uint64,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_descriptor.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_get_node.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_get_node.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_put_node.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_put_node.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_delete_node.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_delete_node.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_batch_nodes.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_batch_nodes.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_batch_get_nodes_ordered.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_batch_get_nodes_ordered.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_list_node_cids.argtypes = (
+    ctypes.c_uint64,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_list_node_cids.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_get_hint.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_get_hint.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_put_hint.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_put_hint.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_batch_put_nodes_with_hint.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_batch_put_nodes_with_hint.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_get_root_manifest.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_get_root_manifest.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_put_root_manifest.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_put_root_manifest.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_delete_root_manifest.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_delete_root_manifest.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_compare_and_swap_root_manifest.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_compare_and_swap_root_manifest.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_list_root_manifests.argtypes = (
+    ctypes.c_uint64,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_list_root_manifests.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_commit_transaction.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_commit_transaction.restype = ctypes.c_uint64
 _UniffiLib.uniffi_prolly_bindings_fn_method_hoststorecallback_get.argtypes = (
     ctypes.c_uint64,
     _UniffiRustBuffer,
@@ -5662,6 +6139,9 @@ _UniffiLib.uniffi_prolly_bindings_checksum_func_node_from_bytes.restype = ctypes
 _UniffiLib.uniffi_prolly_bindings_checksum_func_node_to_bytes.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_func_node_to_bytes.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_func_open_remote_prolly_engine.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_func_open_remote_prolly_engine.restype = ctypes.c_uint16
 _UniffiLib.uniffi_prolly_bindings_checksum_func_parallel_config.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_func_parallel_config.restype = ctypes.c_uint16
@@ -5899,6 +6379,102 @@ _UniffiLib.uniffi_prolly_bindings_checksum_func_versioned_value_require_schema.r
 _UniffiLib.uniffi_prolly_bindings_checksum_func_versioned_value_to_bytes.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_func_versioned_value_to_bytes.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_constructor_asyncprollyengine_new.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_constructor_asyncprollyengine_new.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_batch.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_batch.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_begin_transaction.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_begin_transaction.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_collect_stats.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_collect_stats.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_compare_and_swap_named_root.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_compare_and_swap_named_root.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_create.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_create.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_delete.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_delete.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_delete_named_root.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_delete_named_root.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_diff.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_diff.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_get.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_get.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_get_many.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_get_many.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_list_named_roots.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_list_named_roots.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_load_named_root.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_load_named_root.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_merge.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_merge.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_prefix.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_prefix.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_publish_named_root.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_publish_named_root.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_publish_named_root_at_millis.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_publish_named_root_at_millis.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_put.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_put.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_range.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_range.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_range_page.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_range_page.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_batch.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_batch.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_commit.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_commit.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_compare_and_swap_named_root.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_compare_and_swap_named_root.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_create.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_create.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_delete.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_delete.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_delete_named_root.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_delete_named_root.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_get.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_get.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_load_named_root.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_load_named_root.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_publish_named_root.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_publish_named_root.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_publish_named_root_at_millis.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_publish_named_root_at_millis.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_put.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_put.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_rollback.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_rollback.restype = ctypes.c_uint16
 _UniffiLib.uniffi_prolly_bindings_checksum_constructor_bindingindexregistry_new.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_constructor_bindingindexregistry_new.restype = ctypes.c_uint16
@@ -6520,6 +7096,54 @@ _UniffiLib.uniffi_prolly_bindings_checksum_method_diffvisitorcallback_visit.rest
 _UniffiLib.uniffi_prolly_bindings_checksum_method_entryvisitorcallback_visit.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_entryvisitorcallback_visit.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_descriptor.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_descriptor.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_get_node.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_get_node.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_put_node.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_put_node.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_delete_node.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_delete_node.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_nodes.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_nodes.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_get_nodes_ordered.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_get_nodes_ordered.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_list_node_cids.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_list_node_cids.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_get_hint.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_get_hint.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_put_hint.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_put_hint.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_put_nodes_with_hint.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_put_nodes_with_hint.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_get_root_manifest.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_get_root_manifest.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_put_root_manifest.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_put_root_manifest.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_delete_root_manifest.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_delete_root_manifest.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_compare_and_swap_root_manifest.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_compare_and_swap_root_manifest.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_list_root_manifests.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_list_root_manifests.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_commit_transaction.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_commit_transaction.restype = ctypes.c_uint16
 _UniffiLib.uniffi_prolly_bindings_checksum_method_hoststorecallback_get.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_hoststorecallback_get.restype = ctypes.c_uint16
@@ -7079,7 +7703,131 @@ _UniffiLib.uniffi_prolly_bindings_checksum_method_secondaryindexextractorcallbac
 _uniffi_check_contract_api_version(_UniffiLib)
 # _uniffi_check_api_checksums(_UniffiLib)
 
+# RustFuturePoll values
+_UNIFFI_RUST_FUTURE_POLL_READY = 0
+_UNIFFI_RUST_FUTURE_POLL_WAKE = 1
 
+# Stores futures for _uniffi_continuation_callback
+_UniffiContinuationHandleMap = _UniffiHandleMap()
+
+_UNIFFI_GLOBAL_EVENT_LOOP = None
+
+"""
+Set the event loop to use for async functions
+
+This is needed if some async functions run outside of the eventloop, for example:
+    - A non-eventloop thread is spawned, maybe from `EventLoop.run_in_executor` or maybe from the
+      Rust code spawning its own thread.
+    - The Rust code calls an async callback method from a sync callback function, using something
+      like `pollster` to block on the async call.
+
+In this case, we need an event loop to run the Python async function, but there's no eventloop set
+for the thread.  Use `uniffi_set_event_loop` to force an eventloop to be used in this case.
+"""
+def uniffi_set_event_loop(eventloop: asyncio.BaseEventLoop):
+    global _UNIFFI_GLOBAL_EVENT_LOOP
+    _UNIFFI_GLOBAL_EVENT_LOOP = eventloop
+
+def _uniffi_get_event_loop():
+    if _UNIFFI_GLOBAL_EVENT_LOOP is not None:
+        return _UNIFFI_GLOBAL_EVENT_LOOP
+    else:
+        return asyncio.get_running_loop()
+
+# Continuation callback for async functions
+# lift the return value or error and resolve the future, causing the async function to resume.
+@_UNIFFI_RUST_FUTURE_CONTINUATION_CALLBACK
+def _uniffi_continuation_callback(future_ptr, poll_code):
+    (eventloop, future) = _UniffiContinuationHandleMap.remove(future_ptr)
+    eventloop.call_soon_threadsafe(_uniffi_set_future_result, future, poll_code)
+
+def _uniffi_set_future_result(future, poll_code):
+    if not future.cancelled():
+        future.set_result(poll_code)
+
+async def _uniffi_rust_call_async(rust_future, ffi_poll, ffi_complete, ffi_free, lift_func, error_ffi_converter):
+    try:
+        eventloop = _uniffi_get_event_loop()
+
+        # Loop and poll until we see a _UNIFFI_RUST_FUTURE_POLL_READY value
+        while True:
+            future = eventloop.create_future()
+            ffi_poll(
+                rust_future,
+                _uniffi_continuation_callback,
+                _UniffiContinuationHandleMap.insert((eventloop, future)),
+            )
+            poll_code = await future
+            if poll_code == _UNIFFI_RUST_FUTURE_POLL_READY:
+                break
+
+        return lift_func(
+            _uniffi_rust_call_with_error(error_ffi_converter, ffi_complete, rust_future)
+        )
+    finally:
+        ffi_free(rust_future)
+def _uniffi_trait_interface_call_async(make_call, uniffi_out_dropped_callback, handle_success, handle_error):
+    async def make_call_and_call_callback():
+        # Note: it's important we call either `handle_success` or `handle_error` exactly once.  Each
+        # call consumes an Arc reference, which means there should be no possibility of a double
+        # call.  The following code is structured so that will will never call both `handle_success`
+        # and `handle_error`, even in the face of weird exceptions.
+        #
+        # In extreme circumstances we may not call either, for example if we fail to make the ctypes
+        # call to `handle_success`.  This means we will leak the Arc reference, which is better than
+        # double-freeing it.
+        try:
+            call_result = await make_call()
+        except Exception as e:
+            print("UniFFI: Unhandled exception in trait interface call", file=sys.stderr)
+            traceback.print_exc(file=sys.stderr)
+            handle_error(
+                _UniffiRustCallStatus.CALL_UNEXPECTED_ERROR,
+                _UniffiFfiConverterString.lower(repr(e)),
+            )
+        else:
+            handle_success(call_result)
+    eventloop = _uniffi_get_event_loop()
+    task = asyncio.run_coroutine_threadsafe(make_call_and_call_callback(), eventloop)
+    handle = _UNIFFI_FOREIGN_FUTURE_HANDLE_MAP.insert((eventloop, task))
+    uniffi_out_dropped_callback[0] = _UniffiForeignFutureDroppedCallbackStruct(handle, _uniffi_future_dropped_callback)
+
+def _uniffi_trait_interface_call_async_with_error(make_call, uniffi_out_dropped_callback, handle_success, handle_error, error_type, lower_error):
+    async def make_call_and_call_callback():
+        # See the note in _uniffi_trait_interface_call_async for details on `handle_success` and
+        # `handle_error`.
+        try:
+            try:
+                call_result = await make_call()
+            except error_type as e:
+                handle_error(
+                    _UniffiRustCallStatus.CALL_ERROR,
+                    lower_error(e),
+                )
+            else:
+                handle_success(call_result)
+        except Exception as e:
+            print("UniFFI: Unhandled exception in trait interface call", file=sys.stderr)
+            traceback.print_exc(file=sys.stderr)
+            handle_error(
+                _UniffiRustCallStatus.CALL_UNEXPECTED_ERROR,
+                _UniffiFfiConverterString.lower(repr(e)),
+            )
+    eventloop = _uniffi_get_event_loop()
+    task = asyncio.run_coroutine_threadsafe(make_call_and_call_callback(), eventloop)
+    handle = _UNIFFI_FOREIGN_FUTURE_HANDLE_MAP.insert((eventloop, task))
+    uniffi_out_dropped_callback[0] = _UniffiForeignFutureDroppedCallbackStruct(handle, _uniffi_future_dropped_callback)
+
+_UNIFFI_FOREIGN_FUTURE_HANDLE_MAP = _UniffiHandleMap()
+
+@_UNIFFI_FOREIGN_FUTURE_DROPPED_CALLBACK
+def _uniffi_future_dropped_callback(handle):
+    (eventloop, task) = _UNIFFI_FOREIGN_FUTURE_HANDLE_MAP.remove(handle)
+    eventloop.call_soon(_uniffi_cancel_task, task)
+
+def _uniffi_cancel_task(task):
+    if not task.done():
+        task.cancel()
 
 # Public interface members begin here.
 
@@ -8383,6 +9131,138 @@ class _UniffiFfiConverterTypeBlobGcSweepRecord(_UniffiConverterRustBuffer):
         _UniffiFfiConverterUInt64.write(value.deleted_blobs, buf)
         _UniffiFfiConverterUInt64.write(value.deleted_blob_bytes, buf)
 
+class _UniffiFfiConverterSequenceBytes(_UniffiConverterRustBuffer):
+    @classmethod
+    def check_lower(cls, value):
+        for item in value:
+            _UniffiFfiConverterBytes.check_lower(item)
+
+    @classmethod
+    def write(cls, value, buf):
+        items = len(value)
+        buf.write_i32(items)
+        for item in value:
+            _UniffiFfiConverterBytes.write(item, buf)
+
+    @classmethod
+    def read(cls, buf):
+        count = buf.read_i32()
+        if count < 0:
+            raise InternalError("Unexpected negative sequence length")
+
+        return [
+            _UniffiFfiConverterBytes.read(buf) for i in range(count)
+        ]
+
+@dataclass
+class StoreErrorRecord:
+    def __init__(self, *, code:str, message:str, retryable:bool, provider_code:typing.Optional[str]):
+        self.code = code
+        self.message = message
+        self.retryable = retryable
+        self.provider_code = provider_code
+
+
+
+
+    def __str__(self):
+        return "StoreErrorRecord(code={}, message={}, retryable={}, provider_code={})".format(self.code, self.message, self.retryable, self.provider_code)
+    def __eq__(self, other):
+        if self.code != other.code:
+            return False
+        if self.message != other.message:
+            return False
+        if self.retryable != other.retryable:
+            return False
+        if self.provider_code != other.provider_code:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeStoreErrorRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return StoreErrorRecord(
+            code=_UniffiFfiConverterString.read(buf),
+            message=_UniffiFfiConverterString.read(buf),
+            retryable=_UniffiFfiConverterBoolean.read(buf),
+            provider_code=_UniffiFfiConverterOptionalString.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterString.check_lower(value.code)
+        _UniffiFfiConverterString.check_lower(value.message)
+        _UniffiFfiConverterBoolean.check_lower(value.retryable)
+        _UniffiFfiConverterOptionalString.check_lower(value.provider_code)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterString.write(value.code, buf)
+        _UniffiFfiConverterString.write(value.message, buf)
+        _UniffiFfiConverterBoolean.write(value.retryable, buf)
+        _UniffiFfiConverterOptionalString.write(value.provider_code, buf)
+
+class _UniffiFfiConverterOptionalTypeStoreErrorRecord(_UniffiConverterRustBuffer):
+    @classmethod
+    def check_lower(cls, value):
+        if value is not None:
+            _UniffiFfiConverterTypeStoreErrorRecord.check_lower(value)
+
+    @classmethod
+    def write(cls, value, buf):
+        if value is None:
+            buf.write_u8(0)
+            return
+
+        buf.write_u8(1)
+        _UniffiFfiConverterTypeStoreErrorRecord.write(value, buf)
+
+    @classmethod
+    def read(cls, buf):
+        flag = buf.read_u8()
+        if flag == 0:
+            return None
+        elif flag == 1:
+            return _UniffiFfiConverterTypeStoreErrorRecord.read(buf)
+        else:
+            raise InternalError("Unexpected flag byte for optional type")
+
+@dataclass
+class BytesListResultRecord:
+    def __init__(self, *, values:typing.List[bytes], error:typing.Optional[StoreErrorRecord]):
+        self.values = values
+        self.error = error
+
+
+
+
+    def __str__(self):
+        return "BytesListResultRecord(values={}, error={})".format(self.values, self.error)
+    def __eq__(self, other):
+        if self.values != other.values:
+            return False
+        if self.error != other.error:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeBytesListResultRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return BytesListResultRecord(
+            values=_UniffiFfiConverterSequenceBytes.read(buf),
+            error=_UniffiFfiConverterOptionalTypeStoreErrorRecord.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterSequenceBytes.check_lower(value.values)
+        _UniffiFfiConverterOptionalTypeStoreErrorRecord.check_lower(value.error)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterSequenceBytes.write(value.values, buf)
+        _UniffiFfiConverterOptionalTypeStoreErrorRecord.write(value.error, buf)
+
 @dataclass
 class CacheStatsRecord:
     def __init__(self, *, cached_nodes:int, cached_bytes:int, pinned_nodes:int, pinned_bytes:int):
@@ -8991,29 +9871,6 @@ class _UniffiFfiConverterTypeCursorWindowRecord(_UniffiConverterRustBuffer):
         _UniffiFfiConverterBoolean.write(value.found, buf)
         _UniffiFfiConverterSequenceTypeEntryRecord.write(value.entries, buf)
         _UniffiFfiConverterOptionalTypeRangeCursorRecord.write(value.next_cursor, buf)
-
-class _UniffiFfiConverterSequenceBytes(_UniffiConverterRustBuffer):
-    @classmethod
-    def check_lower(cls, value):
-        for item in value:
-            _UniffiFfiConverterBytes.check_lower(item)
-
-    @classmethod
-    def write(cls, value, buf):
-        items = len(value)
-        buf.write_i32(items)
-        for item in value:
-            _UniffiFfiConverterBytes.write(item, buf)
-
-    @classmethod
-    def read(cls, buf):
-        count = buf.read_i32()
-        if count < 0:
-            raise InternalError("Unexpected negative sequence length")
-
-        return [
-            _UniffiFfiConverterBytes.read(buf) for i in range(count)
-        ]
 
 class _UniffiFfiConverterSequenceUInt64(_UniffiConverterRustBuffer):
     @classmethod
@@ -12649,6 +13506,101 @@ class _UniffiFfiConverterTypeMutationRecord(_UniffiConverterRustBuffer):
         _UniffiFfiConverterOptionalBytes.write(value.value, buf)
 
 @dataclass
+class NamedBytesRecord:
+    def __init__(self, *, name:bytes, value:bytes):
+        self.name = name
+        self.value = value
+
+
+
+
+    def __str__(self):
+        return "NamedBytesRecord(name={}, value={})".format(self.name, self.value)
+    def __eq__(self, other):
+        if self.name != other.name:
+            return False
+        if self.value != other.value:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeNamedBytesRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return NamedBytesRecord(
+            name=_UniffiFfiConverterBytes.read(buf),
+            value=_UniffiFfiConverterBytes.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterBytes.check_lower(value.name)
+        _UniffiFfiConverterBytes.check_lower(value.value)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterBytes.write(value.name, buf)
+        _UniffiFfiConverterBytes.write(value.value, buf)
+
+class _UniffiFfiConverterSequenceTypeNamedBytesRecord(_UniffiConverterRustBuffer):
+    @classmethod
+    def check_lower(cls, value):
+        for item in value:
+            _UniffiFfiConverterTypeNamedBytesRecord.check_lower(item)
+
+    @classmethod
+    def write(cls, value, buf):
+        items = len(value)
+        buf.write_i32(items)
+        for item in value:
+            _UniffiFfiConverterTypeNamedBytesRecord.write(item, buf)
+
+    @classmethod
+    def read(cls, buf):
+        count = buf.read_i32()
+        if count < 0:
+            raise InternalError("Unexpected negative sequence length")
+
+        return [
+            _UniffiFfiConverterTypeNamedBytesRecord.read(buf) for i in range(count)
+        ]
+
+@dataclass
+class NamedBytesListResultRecord:
+    def __init__(self, *, values:typing.List[NamedBytesRecord], error:typing.Optional[StoreErrorRecord]):
+        self.values = values
+        self.error = error
+
+
+
+
+    def __str__(self):
+        return "NamedBytesListResultRecord(values={}, error={})".format(self.values, self.error)
+    def __eq__(self, other):
+        if self.values != other.values:
+            return False
+        if self.error != other.error:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeNamedBytesListResultRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return NamedBytesListResultRecord(
+            values=_UniffiFfiConverterSequenceTypeNamedBytesRecord.read(buf),
+            error=_UniffiFfiConverterOptionalTypeStoreErrorRecord.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterSequenceTypeNamedBytesRecord.check_lower(value.values)
+        _UniffiFfiConverterOptionalTypeStoreErrorRecord.check_lower(value.error)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterSequenceTypeNamedBytesRecord.write(value.values, buf)
+        _UniffiFfiConverterOptionalTypeStoreErrorRecord.write(value.error, buf)
+
+@dataclass
 class NamedRootManifestRecord:
     def __init__(self, *, name:bytes, manifest:RootManifestRecord):
         self.name = name
@@ -12938,6 +13890,209 @@ class _UniffiFfiConverterTypeNamedRootUpdateRecord(_UniffiConverterRustBuffer):
         _UniffiFfiConverterBoolean.write(value.applied, buf)
         _UniffiFfiConverterBoolean.write(value.conflict, buf)
         _UniffiFfiConverterOptionalTypeTreeRecord.write(value.current, buf)
+
+@dataclass
+class NodeEntryRecord:
+    def __init__(self, *, key:bytes, value:bytes):
+        self.key = key
+        self.value = value
+
+
+
+
+    def __str__(self):
+        return "NodeEntryRecord(key={}, value={})".format(self.key, self.value)
+    def __eq__(self, other):
+        if self.key != other.key:
+            return False
+        if self.value != other.value:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeNodeEntryRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return NodeEntryRecord(
+            key=_UniffiFfiConverterBytes.read(buf),
+            value=_UniffiFfiConverterBytes.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterBytes.check_lower(value.key)
+        _UniffiFfiConverterBytes.check_lower(value.value)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterBytes.write(value.key, buf)
+        _UniffiFfiConverterBytes.write(value.value, buf)
+
+@dataclass
+class OptionalBytesRecord:
+    def __init__(self, *, present:bool, value:bytes):
+        self.present = present
+        self.value = value
+
+
+
+
+    def __str__(self):
+        return "OptionalBytesRecord(present={}, value={})".format(self.present, self.value)
+    def __eq__(self, other):
+        if self.present != other.present:
+            return False
+        if self.value != other.value:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeOptionalBytesRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return OptionalBytesRecord(
+            present=_UniffiFfiConverterBoolean.read(buf),
+            value=_UniffiFfiConverterBytes.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterBoolean.check_lower(value.present)
+        _UniffiFfiConverterBytes.check_lower(value.value)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterBoolean.write(value.present, buf)
+        _UniffiFfiConverterBytes.write(value.value, buf)
+
+@dataclass
+class NodeMutationRecord:
+    def __init__(self, *, key:bytes, value:OptionalBytesRecord):
+        self.key = key
+        self.value = value
+
+
+
+
+    def __str__(self):
+        return "NodeMutationRecord(key={}, value={})".format(self.key, self.value)
+    def __eq__(self, other):
+        if self.key != other.key:
+            return False
+        if self.value != other.value:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeNodeMutationRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return NodeMutationRecord(
+            key=_UniffiFfiConverterBytes.read(buf),
+            value=_UniffiFfiConverterTypeOptionalBytesRecord.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterBytes.check_lower(value.key)
+        _UniffiFfiConverterTypeOptionalBytesRecord.check_lower(value.value)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterBytes.write(value.key, buf)
+        _UniffiFfiConverterTypeOptionalBytesRecord.write(value.value, buf)
+
+class _UniffiFfiConverterSequenceTypeOptionalBytesRecord(_UniffiConverterRustBuffer):
+    @classmethod
+    def check_lower(cls, value):
+        for item in value:
+            _UniffiFfiConverterTypeOptionalBytesRecord.check_lower(item)
+
+    @classmethod
+    def write(cls, value, buf):
+        items = len(value)
+        buf.write_i32(items)
+        for item in value:
+            _UniffiFfiConverterTypeOptionalBytesRecord.write(item, buf)
+
+    @classmethod
+    def read(cls, buf):
+        count = buf.read_i32()
+        if count < 0:
+            raise InternalError("Unexpected negative sequence length")
+
+        return [
+            _UniffiFfiConverterTypeOptionalBytesRecord.read(buf) for i in range(count)
+        ]
+
+@dataclass
+class OptionalBytesListResultRecord:
+    def __init__(self, *, values:typing.List[OptionalBytesRecord], error:typing.Optional[StoreErrorRecord]):
+        self.values = values
+        self.error = error
+
+
+
+
+    def __str__(self):
+        return "OptionalBytesListResultRecord(values={}, error={})".format(self.values, self.error)
+    def __eq__(self, other):
+        if self.values != other.values:
+            return False
+        if self.error != other.error:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeOptionalBytesListResultRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return OptionalBytesListResultRecord(
+            values=_UniffiFfiConverterSequenceTypeOptionalBytesRecord.read(buf),
+            error=_UniffiFfiConverterOptionalTypeStoreErrorRecord.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterSequenceTypeOptionalBytesRecord.check_lower(value.values)
+        _UniffiFfiConverterOptionalTypeStoreErrorRecord.check_lower(value.error)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterSequenceTypeOptionalBytesRecord.write(value.values, buf)
+        _UniffiFfiConverterOptionalTypeStoreErrorRecord.write(value.error, buf)
+
+@dataclass
+class OptionalBytesResultRecord:
+    def __init__(self, *, value:OptionalBytesRecord, error:typing.Optional[StoreErrorRecord]):
+        self.value = value
+        self.error = error
+
+
+
+
+    def __str__(self):
+        return "OptionalBytesResultRecord(value={}, error={})".format(self.value, self.error)
+    def __eq__(self, other):
+        if self.value != other.value:
+            return False
+        if self.error != other.error:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeOptionalBytesResultRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return OptionalBytesResultRecord(
+            value=_UniffiFfiConverterTypeOptionalBytesRecord.read(buf),
+            error=_UniffiFfiConverterOptionalTypeStoreErrorRecord.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterTypeOptionalBytesRecord.check_lower(value.value)
+        _UniffiFfiConverterOptionalTypeStoreErrorRecord.check_lower(value.error)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterTypeOptionalBytesRecord.write(value.value, buf)
+        _UniffiFfiConverterOptionalTypeStoreErrorRecord.write(value.error, buf)
 
 @dataclass
 class ParallelConfigRecord:
@@ -16163,6 +17318,120 @@ class _UniffiFfiConverterTypeReversePageRecord(_UniffiConverterRustBuffer):
         _UniffiFfiConverterOptionalTypeReverseCursorRecord.write(value.next_cursor, buf)
 
 @dataclass
+class RootCasResultRecord:
+    def __init__(self, *, applied:bool, current:OptionalBytesRecord, error:typing.Optional[StoreErrorRecord]):
+        self.applied = applied
+        self.current = current
+        self.error = error
+
+
+
+
+    def __str__(self):
+        return "RootCasResultRecord(applied={}, current={}, error={})".format(self.applied, self.current, self.error)
+    def __eq__(self, other):
+        if self.applied != other.applied:
+            return False
+        if self.current != other.current:
+            return False
+        if self.error != other.error:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeRootCasResultRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return RootCasResultRecord(
+            applied=_UniffiFfiConverterBoolean.read(buf),
+            current=_UniffiFfiConverterTypeOptionalBytesRecord.read(buf),
+            error=_UniffiFfiConverterOptionalTypeStoreErrorRecord.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterBoolean.check_lower(value.applied)
+        _UniffiFfiConverterTypeOptionalBytesRecord.check_lower(value.current)
+        _UniffiFfiConverterOptionalTypeStoreErrorRecord.check_lower(value.error)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterBoolean.write(value.applied, buf)
+        _UniffiFfiConverterTypeOptionalBytesRecord.write(value.current, buf)
+        _UniffiFfiConverterOptionalTypeStoreErrorRecord.write(value.error, buf)
+
+@dataclass
+class RootConditionRecord:
+    def __init__(self, *, name:bytes, expected:OptionalBytesRecord):
+        self.name = name
+        self.expected = expected
+
+
+
+
+    def __str__(self):
+        return "RootConditionRecord(name={}, expected={})".format(self.name, self.expected)
+    def __eq__(self, other):
+        if self.name != other.name:
+            return False
+        if self.expected != other.expected:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeRootConditionRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return RootConditionRecord(
+            name=_UniffiFfiConverterBytes.read(buf),
+            expected=_UniffiFfiConverterTypeOptionalBytesRecord.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterBytes.check_lower(value.name)
+        _UniffiFfiConverterTypeOptionalBytesRecord.check_lower(value.expected)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterBytes.write(value.name, buf)
+        _UniffiFfiConverterTypeOptionalBytesRecord.write(value.expected, buf)
+
+@dataclass
+class RootWriteRecord:
+    def __init__(self, *, name:bytes, replacement:OptionalBytesRecord):
+        self.name = name
+        self.replacement = replacement
+
+
+
+
+    def __str__(self):
+        return "RootWriteRecord(name={}, replacement={})".format(self.name, self.replacement)
+    def __eq__(self, other):
+        if self.name != other.name:
+            return False
+        if self.replacement != other.replacement:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeRootWriteRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return RootWriteRecord(
+            name=_UniffiFfiConverterBytes.read(buf),
+            replacement=_UniffiFfiConverterTypeOptionalBytesRecord.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterBytes.check_lower(value.name)
+        _UniffiFfiConverterTypeOptionalBytesRecord.check_lower(value.replacement)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterBytes.write(value.name, buf)
+        _UniffiFfiConverterTypeOptionalBytesRecord.write(value.replacement, buf)
+
+@dataclass
 class ScanOutcomeRecord:
     """
     Result of a streaming read operation.
@@ -17471,6 +18740,295 @@ class _UniffiFfiConverterTypeStatsComparisonRecord(_UniffiConverterRustBuffer):
         _UniffiFfiConverterTypeStatsDiffRecord.write(value.absolute, buf)
         _UniffiFfiConverterTypeStatsPercentageChangeRecord.write(value.percentage, buf)
 
+@dataclass
+class StoreCapabilitiesRecord:
+    def __init__(self, *, native_batch_reads:bool, atomic_batch_writes:bool, node_scan:bool, hints:bool, atomic_nodes_and_hint:bool, root_scan:bool, root_compare_and_swap:bool, transactions:bool, read_parallelism:int):
+        self.native_batch_reads = native_batch_reads
+        self.atomic_batch_writes = atomic_batch_writes
+        self.node_scan = node_scan
+        self.hints = hints
+        self.atomic_nodes_and_hint = atomic_nodes_and_hint
+        self.root_scan = root_scan
+        self.root_compare_and_swap = root_compare_and_swap
+        self.transactions = transactions
+        self.read_parallelism = read_parallelism
+
+
+
+
+    def __str__(self):
+        return "StoreCapabilitiesRecord(native_batch_reads={}, atomic_batch_writes={}, node_scan={}, hints={}, atomic_nodes_and_hint={}, root_scan={}, root_compare_and_swap={}, transactions={}, read_parallelism={})".format(self.native_batch_reads, self.atomic_batch_writes, self.node_scan, self.hints, self.atomic_nodes_and_hint, self.root_scan, self.root_compare_and_swap, self.transactions, self.read_parallelism)
+    def __eq__(self, other):
+        if self.native_batch_reads != other.native_batch_reads:
+            return False
+        if self.atomic_batch_writes != other.atomic_batch_writes:
+            return False
+        if self.node_scan != other.node_scan:
+            return False
+        if self.hints != other.hints:
+            return False
+        if self.atomic_nodes_and_hint != other.atomic_nodes_and_hint:
+            return False
+        if self.root_scan != other.root_scan:
+            return False
+        if self.root_compare_and_swap != other.root_compare_and_swap:
+            return False
+        if self.transactions != other.transactions:
+            return False
+        if self.read_parallelism != other.read_parallelism:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeStoreCapabilitiesRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return StoreCapabilitiesRecord(
+            native_batch_reads=_UniffiFfiConverterBoolean.read(buf),
+            atomic_batch_writes=_UniffiFfiConverterBoolean.read(buf),
+            node_scan=_UniffiFfiConverterBoolean.read(buf),
+            hints=_UniffiFfiConverterBoolean.read(buf),
+            atomic_nodes_and_hint=_UniffiFfiConverterBoolean.read(buf),
+            root_scan=_UniffiFfiConverterBoolean.read(buf),
+            root_compare_and_swap=_UniffiFfiConverterBoolean.read(buf),
+            transactions=_UniffiFfiConverterBoolean.read(buf),
+            read_parallelism=_UniffiFfiConverterUInt32.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterBoolean.check_lower(value.native_batch_reads)
+        _UniffiFfiConverterBoolean.check_lower(value.atomic_batch_writes)
+        _UniffiFfiConverterBoolean.check_lower(value.node_scan)
+        _UniffiFfiConverterBoolean.check_lower(value.hints)
+        _UniffiFfiConverterBoolean.check_lower(value.atomic_nodes_and_hint)
+        _UniffiFfiConverterBoolean.check_lower(value.root_scan)
+        _UniffiFfiConverterBoolean.check_lower(value.root_compare_and_swap)
+        _UniffiFfiConverterBoolean.check_lower(value.transactions)
+        _UniffiFfiConverterUInt32.check_lower(value.read_parallelism)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterBoolean.write(value.native_batch_reads, buf)
+        _UniffiFfiConverterBoolean.write(value.atomic_batch_writes, buf)
+        _UniffiFfiConverterBoolean.write(value.node_scan, buf)
+        _UniffiFfiConverterBoolean.write(value.hints, buf)
+        _UniffiFfiConverterBoolean.write(value.atomic_nodes_and_hint, buf)
+        _UniffiFfiConverterBoolean.write(value.root_scan, buf)
+        _UniffiFfiConverterBoolean.write(value.root_compare_and_swap, buf)
+        _UniffiFfiConverterBoolean.write(value.transactions, buf)
+        _UniffiFfiConverterUInt32.write(value.read_parallelism, buf)
+
+@dataclass
+class StoreLimitsRecord:
+    def __init__(self, *, max_batch_read_items:typing.Optional[int], max_batch_write_items:typing.Optional[int], max_transaction_operations:typing.Optional[int], max_node_bytes:typing.Optional[int]):
+        self.max_batch_read_items = max_batch_read_items
+        self.max_batch_write_items = max_batch_write_items
+        self.max_transaction_operations = max_transaction_operations
+        self.max_node_bytes = max_node_bytes
+
+
+
+
+    def __str__(self):
+        return "StoreLimitsRecord(max_batch_read_items={}, max_batch_write_items={}, max_transaction_operations={}, max_node_bytes={})".format(self.max_batch_read_items, self.max_batch_write_items, self.max_transaction_operations, self.max_node_bytes)
+    def __eq__(self, other):
+        if self.max_batch_read_items != other.max_batch_read_items:
+            return False
+        if self.max_batch_write_items != other.max_batch_write_items:
+            return False
+        if self.max_transaction_operations != other.max_transaction_operations:
+            return False
+        if self.max_node_bytes != other.max_node_bytes:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeStoreLimitsRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return StoreLimitsRecord(
+            max_batch_read_items=_UniffiFfiConverterOptionalUInt32.read(buf),
+            max_batch_write_items=_UniffiFfiConverterOptionalUInt32.read(buf),
+            max_transaction_operations=_UniffiFfiConverterOptionalUInt32.read(buf),
+            max_node_bytes=_UniffiFfiConverterOptionalUInt64.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterOptionalUInt32.check_lower(value.max_batch_read_items)
+        _UniffiFfiConverterOptionalUInt32.check_lower(value.max_batch_write_items)
+        _UniffiFfiConverterOptionalUInt32.check_lower(value.max_transaction_operations)
+        _UniffiFfiConverterOptionalUInt64.check_lower(value.max_node_bytes)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterOptionalUInt32.write(value.max_batch_read_items, buf)
+        _UniffiFfiConverterOptionalUInt32.write(value.max_batch_write_items, buf)
+        _UniffiFfiConverterOptionalUInt32.write(value.max_transaction_operations, buf)
+        _UniffiFfiConverterOptionalUInt64.write(value.max_node_bytes, buf)
+
+@dataclass
+class StoreDescriptorRecord:
+    def __init__(self, *, protocol_major:int, adapter_name:str, provider:str, schema_version:int, capabilities:StoreCapabilitiesRecord, limits:StoreLimitsRecord):
+        self.protocol_major = protocol_major
+        self.adapter_name = adapter_name
+        self.provider = provider
+        self.schema_version = schema_version
+        self.capabilities = capabilities
+        self.limits = limits
+
+
+
+
+    def __str__(self):
+        return "StoreDescriptorRecord(protocol_major={}, adapter_name={}, provider={}, schema_version={}, capabilities={}, limits={})".format(self.protocol_major, self.adapter_name, self.provider, self.schema_version, self.capabilities, self.limits)
+    def __eq__(self, other):
+        if self.protocol_major != other.protocol_major:
+            return False
+        if self.adapter_name != other.adapter_name:
+            return False
+        if self.provider != other.provider:
+            return False
+        if self.schema_version != other.schema_version:
+            return False
+        if self.capabilities != other.capabilities:
+            return False
+        if self.limits != other.limits:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeStoreDescriptorRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return StoreDescriptorRecord(
+            protocol_major=_UniffiFfiConverterUInt32.read(buf),
+            adapter_name=_UniffiFfiConverterString.read(buf),
+            provider=_UniffiFfiConverterString.read(buf),
+            schema_version=_UniffiFfiConverterUInt32.read(buf),
+            capabilities=_UniffiFfiConverterTypeStoreCapabilitiesRecord.read(buf),
+            limits=_UniffiFfiConverterTypeStoreLimitsRecord.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterUInt32.check_lower(value.protocol_major)
+        _UniffiFfiConverterString.check_lower(value.adapter_name)
+        _UniffiFfiConverterString.check_lower(value.provider)
+        _UniffiFfiConverterUInt32.check_lower(value.schema_version)
+        _UniffiFfiConverterTypeStoreCapabilitiesRecord.check_lower(value.capabilities)
+        _UniffiFfiConverterTypeStoreLimitsRecord.check_lower(value.limits)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterUInt32.write(value.protocol_major, buf)
+        _UniffiFfiConverterString.write(value.adapter_name, buf)
+        _UniffiFfiConverterString.write(value.provider, buf)
+        _UniffiFfiConverterUInt32.write(value.schema_version, buf)
+        _UniffiFfiConverterTypeStoreCapabilitiesRecord.write(value.capabilities, buf)
+        _UniffiFfiConverterTypeStoreLimitsRecord.write(value.limits, buf)
+
+class _UniffiFfiConverterOptionalTypeStoreDescriptorRecord(_UniffiConverterRustBuffer):
+    @classmethod
+    def check_lower(cls, value):
+        if value is not None:
+            _UniffiFfiConverterTypeStoreDescriptorRecord.check_lower(value)
+
+    @classmethod
+    def write(cls, value, buf):
+        if value is None:
+            buf.write_u8(0)
+            return
+
+        buf.write_u8(1)
+        _UniffiFfiConverterTypeStoreDescriptorRecord.write(value, buf)
+
+    @classmethod
+    def read(cls, buf):
+        flag = buf.read_u8()
+        if flag == 0:
+            return None
+        elif flag == 1:
+            return _UniffiFfiConverterTypeStoreDescriptorRecord.read(buf)
+        else:
+            raise InternalError("Unexpected flag byte for optional type")
+
+@dataclass
+class StoreDescriptorResultRecord:
+    def __init__(self, *, value:typing.Optional[StoreDescriptorRecord], error:typing.Optional[StoreErrorRecord]):
+        self.value = value
+        self.error = error
+
+
+
+
+    def __str__(self):
+        return "StoreDescriptorResultRecord(value={}, error={})".format(self.value, self.error)
+    def __eq__(self, other):
+        if self.value != other.value:
+            return False
+        if self.error != other.error:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeStoreDescriptorResultRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return StoreDescriptorResultRecord(
+            value=_UniffiFfiConverterOptionalTypeStoreDescriptorRecord.read(buf),
+            error=_UniffiFfiConverterOptionalTypeStoreErrorRecord.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterOptionalTypeStoreDescriptorRecord.check_lower(value.value)
+        _UniffiFfiConverterOptionalTypeStoreErrorRecord.check_lower(value.error)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterOptionalTypeStoreDescriptorRecord.write(value.value, buf)
+        _UniffiFfiConverterOptionalTypeStoreErrorRecord.write(value.error, buf)
+
+@dataclass
+class StoreTransactionConflictRecord:
+    def __init__(self, *, name:bytes, expected:OptionalBytesRecord, current:OptionalBytesRecord):
+        self.name = name
+        self.expected = expected
+        self.current = current
+
+
+
+
+    def __str__(self):
+        return "StoreTransactionConflictRecord(name={}, expected={}, current={})".format(self.name, self.expected, self.current)
+    def __eq__(self, other):
+        if self.name != other.name:
+            return False
+        if self.expected != other.expected:
+            return False
+        if self.current != other.current:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeStoreTransactionConflictRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return StoreTransactionConflictRecord(
+            name=_UniffiFfiConverterBytes.read(buf),
+            expected=_UniffiFfiConverterTypeOptionalBytesRecord.read(buf),
+            current=_UniffiFfiConverterTypeOptionalBytesRecord.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterBytes.check_lower(value.name)
+        _UniffiFfiConverterTypeOptionalBytesRecord.check_lower(value.expected)
+        _UniffiFfiConverterTypeOptionalBytesRecord.check_lower(value.current)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterBytes.write(value.name, buf)
+        _UniffiFfiConverterTypeOptionalBytesRecord.write(value.expected, buf)
+        _UniffiFfiConverterTypeOptionalBytesRecord.write(value.current, buf)
+
 
 
 
@@ -17895,6 +19453,73 @@ class _UniffiFfiConverterTypeTransactionConflictRecord(_UniffiConverterRustBuffe
         _UniffiFfiConverterBytes.write(value.name, buf)
         _UniffiFfiConverterOptionalTypeRootManifestRecord.write(value.expected, buf)
         _UniffiFfiConverterOptionalTypeRootManifestRecord.write(value.current, buf)
+
+class _UniffiFfiConverterOptionalTypeStoreTransactionConflictRecord(_UniffiConverterRustBuffer):
+    @classmethod
+    def check_lower(cls, value):
+        if value is not None:
+            _UniffiFfiConverterTypeStoreTransactionConflictRecord.check_lower(value)
+
+    @classmethod
+    def write(cls, value, buf):
+        if value is None:
+            buf.write_u8(0)
+            return
+
+        buf.write_u8(1)
+        _UniffiFfiConverterTypeStoreTransactionConflictRecord.write(value, buf)
+
+    @classmethod
+    def read(cls, buf):
+        flag = buf.read_u8()
+        if flag == 0:
+            return None
+        elif flag == 1:
+            return _UniffiFfiConverterTypeStoreTransactionConflictRecord.read(buf)
+        else:
+            raise InternalError("Unexpected flag byte for optional type")
+
+@dataclass
+class TransactionResultRecord:
+    def __init__(self, *, applied:bool, conflict:typing.Optional[StoreTransactionConflictRecord], error:typing.Optional[StoreErrorRecord]):
+        self.applied = applied
+        self.conflict = conflict
+        self.error = error
+
+
+
+
+    def __str__(self):
+        return "TransactionResultRecord(applied={}, conflict={}, error={})".format(self.applied, self.conflict, self.error)
+    def __eq__(self, other):
+        if self.applied != other.applied:
+            return False
+        if self.conflict != other.conflict:
+            return False
+        if self.error != other.error:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeTransactionResultRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return TransactionResultRecord(
+            applied=_UniffiFfiConverterBoolean.read(buf),
+            conflict=_UniffiFfiConverterOptionalTypeStoreTransactionConflictRecord.read(buf),
+            error=_UniffiFfiConverterOptionalTypeStoreErrorRecord.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterBoolean.check_lower(value.applied)
+        _UniffiFfiConverterOptionalTypeStoreTransactionConflictRecord.check_lower(value.conflict)
+        _UniffiFfiConverterOptionalTypeStoreErrorRecord.check_lower(value.error)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterBoolean.write(value.applied, buf)
+        _UniffiFfiConverterOptionalTypeStoreTransactionConflictRecord.write(value.conflict, buf)
+        _UniffiFfiConverterOptionalTypeStoreErrorRecord.write(value.error, buf)
 
 class _UniffiFfiConverterOptionalTypeTransactionConflictRecord(_UniffiConverterRustBuffer):
     @classmethod
@@ -18433,6 +20058,36 @@ class _UniffiFfiConverterTypeTreeDebugViewRecord(_UniffiConverterRustBuffer):
     def write(value, buf):
         _UniffiFfiConverterSequenceTypeTreeDebugLevelRecord.write(value.levels, buf)
 
+@dataclass
+class UnitResultRecord:
+    def __init__(self, *, error:typing.Optional[StoreErrorRecord]):
+        self.error = error
+
+
+
+
+    def __str__(self):
+        return "UnitResultRecord(error={})".format(self.error)
+    def __eq__(self, other):
+        if self.error != other.error:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeUnitResultRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return UnitResultRecord(
+            error=_UniffiFfiConverterOptionalTypeStoreErrorRecord.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterOptionalTypeStoreErrorRecord.check_lower(value.error)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterOptionalTypeStoreErrorRecord.write(value.error, buf)
+
 
 
 
@@ -18863,6 +20518,806 @@ class _UniffiFfiConverterTypeWriteResultRecord(_UniffiConverterRustBuffer):
         _UniffiFfiConverterTypeTreeRecord.write(value.tree, buf)
         _UniffiFfiConverterTypeWriteStatsRecord.write(value.stats, buf)
 
+class _UniffiFfiConverterSequenceTypeMutationRecord(_UniffiConverterRustBuffer):
+    @classmethod
+    def check_lower(cls, value):
+        for item in value:
+            _UniffiFfiConverterTypeMutationRecord.check_lower(item)
+
+    @classmethod
+    def write(cls, value, buf):
+        items = len(value)
+        buf.write_i32(items)
+        for item in value:
+            _UniffiFfiConverterTypeMutationRecord.write(item, buf)
+
+    @classmethod
+    def read(cls, buf):
+        count = buf.read_i32()
+        if count < 0:
+            raise InternalError("Unexpected negative sequence length")
+
+        return [
+            _UniffiFfiConverterTypeMutationRecord.read(buf) for i in range(count)
+        ]
+
+
+class AsyncProllyTransactionProtocol(typing.Protocol):
+
+    async def batch(self, tree: TreeRecord,mutations: typing.List[MutationRecord]) -> TreeRecord:
+        raise NotImplementedError
+    async def commit(self, ) -> TransactionUpdateRecord:
+        raise NotImplementedError
+    async def compare_and_swap_named_root(self, name: bytes,expected: typing.Optional[TreeRecord],replacement: typing.Optional[TreeRecord]) -> NamedRootUpdateRecord:
+        raise NotImplementedError
+    async def create(self, ) -> TreeRecord:
+        raise NotImplementedError
+    async def delete(self, tree: TreeRecord,key: bytes) -> TreeRecord:
+        raise NotImplementedError
+    async def delete_named_root(self, name: bytes) -> None:
+        raise NotImplementedError
+    async def get(self, tree: TreeRecord,key: bytes) -> typing.Optional[bytes]:
+        raise NotImplementedError
+    async def load_named_root(self, name: bytes) -> typing.Optional[TreeRecord]:
+        raise NotImplementedError
+    async def publish_named_root(self, name: bytes,tree: TreeRecord) -> None:
+        raise NotImplementedError
+    async def publish_named_root_at_millis(self, name: bytes,tree: TreeRecord,timestamp_millis: int) -> None:
+        raise NotImplementedError
+    async def put(self, tree: TreeRecord,key: bytes,value: bytes) -> TreeRecord:
+        raise NotImplementedError
+    async def rollback(self, ) -> None:
+        raise NotImplementedError
+
+class AsyncProllyTransaction(AsyncProllyTransactionProtocol):
+
+    _handle: ctypes.c_uint64
+
+    def __init__(self, *args, **kwargs):
+        raise ValueError("This class has no default constructor")
+
+    def __del__(self):
+        # In case of partial initialization of instances.
+        handle = getattr(self, "_handle", None)
+        if handle is not None:
+            _uniffi_rust_call(_UniffiLib.uniffi_prolly_bindings_fn_free_asyncprollytransaction, handle)
+
+    def _uniffi_clone_handle(self):
+        return _uniffi_rust_call(_UniffiLib.uniffi_prolly_bindings_fn_clone_asyncprollytransaction, self._handle)
+
+    # Used by alternative constructors or any methods which return this type.
+    @classmethod
+    def _uniffi_make_instance(cls, handle):
+        # Lightly yucky way to bypass the usual __init__ logic
+        # and just create a new instance with the required handle.
+        inst = cls.__new__(cls)
+        inst._handle = handle
+        return inst
+    async def batch(self, tree: TreeRecord,mutations: typing.List[MutationRecord]) -> TreeRecord:
+
+        _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
+
+        _UniffiFfiConverterSequenceTypeMutationRecord.check_lower(mutations)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeTreeRecord.lower(tree),
+            _UniffiFfiConverterSequenceTypeMutationRecord.lower(mutations),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeTreeRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_batch(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def commit(self, ) -> TransactionUpdateRecord:
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeTransactionUpdateRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_commit(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def compare_and_swap_named_root(self, name: bytes,expected: typing.Optional[TreeRecord],replacement: typing.Optional[TreeRecord]) -> NamedRootUpdateRecord:
+
+        _UniffiFfiConverterBytes.check_lower(name)
+
+        _UniffiFfiConverterOptionalTypeTreeRecord.check_lower(expected)
+
+        _UniffiFfiConverterOptionalTypeTreeRecord.check_lower(replacement)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterBytes.lower(name),
+            _UniffiFfiConverterOptionalTypeTreeRecord.lower(expected),
+            _UniffiFfiConverterOptionalTypeTreeRecord.lower(replacement),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeNamedRootUpdateRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_compare_and_swap_named_root(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def create(self, ) -> TreeRecord:
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeTreeRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_create(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def delete(self, tree: TreeRecord,key: bytes) -> TreeRecord:
+
+        _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
+
+        _UniffiFfiConverterBytes.check_lower(key)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeTreeRecord.lower(tree),
+            _UniffiFfiConverterBytes.lower(key),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeTreeRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_delete(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def delete_named_root(self, name: bytes) -> None:
+
+        _UniffiFfiConverterBytes.check_lower(name)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterBytes.lower(name),
+        )
+        _uniffi_lift_return = lambda val: None
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_delete_named_root(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_void,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_void,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_void,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def get(self, tree: TreeRecord,key: bytes) -> typing.Optional[bytes]:
+
+        _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
+
+        _UniffiFfiConverterBytes.check_lower(key)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeTreeRecord.lower(tree),
+            _UniffiFfiConverterBytes.lower(key),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterOptionalBytes.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_get(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def load_named_root(self, name: bytes) -> typing.Optional[TreeRecord]:
+
+        _UniffiFfiConverterBytes.check_lower(name)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterBytes.lower(name),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterOptionalTypeTreeRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_load_named_root(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def publish_named_root(self, name: bytes,tree: TreeRecord) -> None:
+
+        _UniffiFfiConverterBytes.check_lower(name)
+
+        _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterBytes.lower(name),
+            _UniffiFfiConverterTypeTreeRecord.lower(tree),
+        )
+        _uniffi_lift_return = lambda val: None
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_publish_named_root(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_void,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_void,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_void,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def publish_named_root_at_millis(self, name: bytes,tree: TreeRecord,timestamp_millis: int) -> None:
+
+        _UniffiFfiConverterBytes.check_lower(name)
+
+        _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
+
+        _UniffiFfiConverterUInt64.check_lower(timestamp_millis)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterBytes.lower(name),
+            _UniffiFfiConverterTypeTreeRecord.lower(tree),
+            _UniffiFfiConverterUInt64.lower(timestamp_millis),
+        )
+        _uniffi_lift_return = lambda val: None
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_publish_named_root_at_millis(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_void,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_void,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_void,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def put(self, tree: TreeRecord,key: bytes,value: bytes) -> TreeRecord:
+
+        _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
+
+        _UniffiFfiConverterBytes.check_lower(key)
+
+        _UniffiFfiConverterBytes.check_lower(value)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeTreeRecord.lower(tree),
+            _UniffiFfiConverterBytes.lower(key),
+            _UniffiFfiConverterBytes.lower(value),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeTreeRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_put(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def rollback(self, ) -> None:
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+        )
+        _uniffi_lift_return = lambda val: None
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_rollback(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_void,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_void,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_void,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+
+
+
+
+
+class _UniffiFfiConverterTypeAsyncProllyTransaction:
+    @staticmethod
+    def lift(value: int) -> AsyncProllyTransaction:
+        return AsyncProllyTransaction._uniffi_make_instance(value)
+
+    @staticmethod
+    def check_lower(value: AsyncProllyTransaction):
+        if not isinstance(value, AsyncProllyTransaction):
+            raise TypeError("Expected AsyncProllyTransaction instance, {} found".format(type(value).__name__))
+
+    @staticmethod
+    def lower(value: AsyncProllyTransaction) -> ctypes.c_uint64:
+        return value._uniffi_clone_handle()
+
+    @classmethod
+    def read(cls, buf: _UniffiRustBuffer) -> AsyncProllyTransaction:
+        ptr = buf.read_u64()
+        if ptr == 0:
+            raise InternalError("Raw handle value was null")
+        return cls.lift(ptr)
+
+    @classmethod
+    def write(cls, value: AsyncProllyTransaction, buf: _UniffiRustBuffer):
+        buf.write_u64(cls.lower(value))
+
+
+class AsyncProllyEngineProtocol(typing.Protocol):
+
+    async def batch(self, tree: TreeRecord,mutations: typing.List[MutationRecord]) -> TreeRecord:
+        raise NotImplementedError
+    async def begin_transaction(self, ) -> AsyncProllyTransaction:
+        raise NotImplementedError
+    async def collect_stats(self, tree: TreeRecord) -> TreeStatsRecord:
+        raise NotImplementedError
+    async def compare_and_swap_named_root(self, name: bytes,expected: typing.Optional[TreeRecord],replacement: typing.Optional[TreeRecord]) -> NamedRootUpdateRecord:
+        raise NotImplementedError
+    def create(self, ) -> TreeRecord:
+        raise NotImplementedError
+    async def delete(self, tree: TreeRecord,key: bytes) -> TreeRecord:
+        raise NotImplementedError
+    async def delete_named_root(self, name: bytes) -> None:
+        raise NotImplementedError
+    async def diff(self, base: TreeRecord,other: TreeRecord) -> typing.List[DiffRecord]:
+        raise NotImplementedError
+    async def get(self, tree: TreeRecord,key: bytes) -> typing.Optional[bytes]:
+        raise NotImplementedError
+    async def get_many(self, tree: TreeRecord,keys: typing.List[bytes]) -> typing.List[typing.Optional[bytes]]:
+        raise NotImplementedError
+    async def list_named_roots(self, ) -> typing.List[NamedRootRecord]:
+        raise NotImplementedError
+    async def load_named_root(self, name: bytes) -> typing.Optional[TreeRecord]:
+        raise NotImplementedError
+    async def merge(self, base: TreeRecord,left: TreeRecord,right: TreeRecord,resolver: typing.Optional[str]) -> TreeRecord:
+        raise NotImplementedError
+    async def prefix(self, tree: TreeRecord,prefix: bytes) -> typing.List[EntryRecord]:
+        raise NotImplementedError
+    async def publish_named_root(self, name: bytes,tree: TreeRecord) -> None:
+        raise NotImplementedError
+    async def publish_named_root_at_millis(self, name: bytes,tree: TreeRecord,timestamp_millis: int) -> None:
+        raise NotImplementedError
+    async def put(self, tree: TreeRecord,key: bytes,value: bytes) -> TreeRecord:
+        raise NotImplementedError
+    async def range(self, tree: TreeRecord,start: bytes,end: typing.Optional[bytes]) -> typing.List[EntryRecord]:
+        raise NotImplementedError
+    async def range_page(self, tree: TreeRecord,cursor: typing.Optional[RangeCursorRecord],end: typing.Optional[bytes],limit: int) -> RangePageRecord:
+        raise NotImplementedError
+
+class AsyncProllyEngine(AsyncProllyEngineProtocol):
+
+    _handle: ctypes.c_uint64
+    def __init__(self, *args, **kw):
+        raise ValueError("async constructors not supported.")
+
+    def __del__(self):
+        # In case of partial initialization of instances.
+        handle = getattr(self, "_handle", None)
+        if handle is not None:
+            _uniffi_rust_call(_UniffiLib.uniffi_prolly_bindings_fn_free_asyncprollyengine, handle)
+
+    def _uniffi_clone_handle(self):
+        return _uniffi_rust_call(_UniffiLib.uniffi_prolly_bindings_fn_clone_asyncprollyengine, self._handle)
+
+    # Used by alternative constructors or any methods which return this type.
+    @classmethod
+    def _uniffi_make_instance(cls, handle):
+        # Lightly yucky way to bypass the usual __init__ logic
+        # and just create a new instance with the required handle.
+        inst = cls.__new__(cls)
+        inst._handle = handle
+        return inst
+    async def batch(self, tree: TreeRecord,mutations: typing.List[MutationRecord]) -> TreeRecord:
+
+        _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
+
+        _UniffiFfiConverterSequenceTypeMutationRecord.check_lower(mutations)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeTreeRecord.lower(tree),
+            _UniffiFfiConverterSequenceTypeMutationRecord.lower(mutations),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeTreeRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_batch(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def begin_transaction(self, ) -> AsyncProllyTransaction:
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeAsyncProllyTransaction.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_begin_transaction(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_u64,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_u64,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_u64,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def collect_stats(self, tree: TreeRecord) -> TreeStatsRecord:
+
+        _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeTreeRecord.lower(tree),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeTreeStatsRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_collect_stats(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def compare_and_swap_named_root(self, name: bytes,expected: typing.Optional[TreeRecord],replacement: typing.Optional[TreeRecord]) -> NamedRootUpdateRecord:
+
+        _UniffiFfiConverterBytes.check_lower(name)
+
+        _UniffiFfiConverterOptionalTypeTreeRecord.check_lower(expected)
+
+        _UniffiFfiConverterOptionalTypeTreeRecord.check_lower(replacement)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterBytes.lower(name),
+            _UniffiFfiConverterOptionalTypeTreeRecord.lower(expected),
+            _UniffiFfiConverterOptionalTypeTreeRecord.lower(replacement),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeNamedRootUpdateRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_compare_and_swap_named_root(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    def create(self, ) -> TreeRecord:
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeTreeRecord.lift
+        _uniffi_error_converter = None
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_create,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    async def delete(self, tree: TreeRecord,key: bytes) -> TreeRecord:
+
+        _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
+
+        _UniffiFfiConverterBytes.check_lower(key)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeTreeRecord.lower(tree),
+            _UniffiFfiConverterBytes.lower(key),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeTreeRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_delete(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def delete_named_root(self, name: bytes) -> None:
+
+        _UniffiFfiConverterBytes.check_lower(name)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterBytes.lower(name),
+        )
+        _uniffi_lift_return = lambda val: None
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_delete_named_root(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_void,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_void,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_void,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def diff(self, base: TreeRecord,other: TreeRecord) -> typing.List[DiffRecord]:
+
+        _UniffiFfiConverterTypeTreeRecord.check_lower(base)
+
+        _UniffiFfiConverterTypeTreeRecord.check_lower(other)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeTreeRecord.lower(base),
+            _UniffiFfiConverterTypeTreeRecord.lower(other),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterSequenceTypeDiffRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_diff(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def get(self, tree: TreeRecord,key: bytes) -> typing.Optional[bytes]:
+
+        _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
+
+        _UniffiFfiConverterBytes.check_lower(key)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeTreeRecord.lower(tree),
+            _UniffiFfiConverterBytes.lower(key),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterOptionalBytes.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_get(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def get_many(self, tree: TreeRecord,keys: typing.List[bytes]) -> typing.List[typing.Optional[bytes]]:
+
+        _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
+
+        _UniffiFfiConverterSequenceBytes.check_lower(keys)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeTreeRecord.lower(tree),
+            _UniffiFfiConverterSequenceBytes.lower(keys),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterSequenceOptionalBytes.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_get_many(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def list_named_roots(self, ) -> typing.List[NamedRootRecord]:
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterSequenceTypeNamedRootRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_list_named_roots(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def load_named_root(self, name: bytes) -> typing.Optional[TreeRecord]:
+
+        _UniffiFfiConverterBytes.check_lower(name)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterBytes.lower(name),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterOptionalTypeTreeRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_load_named_root(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def merge(self, base: TreeRecord,left: TreeRecord,right: TreeRecord,resolver: typing.Optional[str]) -> TreeRecord:
+
+        _UniffiFfiConverterTypeTreeRecord.check_lower(base)
+
+        _UniffiFfiConverterTypeTreeRecord.check_lower(left)
+
+        _UniffiFfiConverterTypeTreeRecord.check_lower(right)
+
+        _UniffiFfiConverterOptionalString.check_lower(resolver)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeTreeRecord.lower(base),
+            _UniffiFfiConverterTypeTreeRecord.lower(left),
+            _UniffiFfiConverterTypeTreeRecord.lower(right),
+            _UniffiFfiConverterOptionalString.lower(resolver),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeTreeRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_merge(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def prefix(self, tree: TreeRecord,prefix: bytes) -> typing.List[EntryRecord]:
+
+        _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
+
+        _UniffiFfiConverterBytes.check_lower(prefix)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeTreeRecord.lower(tree),
+            _UniffiFfiConverterBytes.lower(prefix),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterSequenceTypeEntryRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_prefix(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def publish_named_root(self, name: bytes,tree: TreeRecord) -> None:
+
+        _UniffiFfiConverterBytes.check_lower(name)
+
+        _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterBytes.lower(name),
+            _UniffiFfiConverterTypeTreeRecord.lower(tree),
+        )
+        _uniffi_lift_return = lambda val: None
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_publish_named_root(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_void,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_void,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_void,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def publish_named_root_at_millis(self, name: bytes,tree: TreeRecord,timestamp_millis: int) -> None:
+
+        _UniffiFfiConverterBytes.check_lower(name)
+
+        _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
+
+        _UniffiFfiConverterUInt64.check_lower(timestamp_millis)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterBytes.lower(name),
+            _UniffiFfiConverterTypeTreeRecord.lower(tree),
+            _UniffiFfiConverterUInt64.lower(timestamp_millis),
+        )
+        _uniffi_lift_return = lambda val: None
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_publish_named_root_at_millis(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_void,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_void,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_void,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def put(self, tree: TreeRecord,key: bytes,value: bytes) -> TreeRecord:
+
+        _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
+
+        _UniffiFfiConverterBytes.check_lower(key)
+
+        _UniffiFfiConverterBytes.check_lower(value)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeTreeRecord.lower(tree),
+            _UniffiFfiConverterBytes.lower(key),
+            _UniffiFfiConverterBytes.lower(value),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeTreeRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_put(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def range(self, tree: TreeRecord,start: bytes,end: typing.Optional[bytes]) -> typing.List[EntryRecord]:
+
+        _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
+
+        _UniffiFfiConverterBytes.check_lower(start)
+
+        _UniffiFfiConverterOptionalBytes.check_lower(end)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeTreeRecord.lower(tree),
+            _UniffiFfiConverterBytes.lower(start),
+            _UniffiFfiConverterOptionalBytes.lower(end),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterSequenceTypeEntryRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_range(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def range_page(self, tree: TreeRecord,cursor: typing.Optional[RangeCursorRecord],end: typing.Optional[bytes],limit: int) -> RangePageRecord:
+
+        _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
+
+        _UniffiFfiConverterOptionalTypeRangeCursorRecord.check_lower(cursor)
+
+        _UniffiFfiConverterOptionalBytes.check_lower(end)
+
+        _UniffiFfiConverterUInt64.check_lower(limit)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeTreeRecord.lower(tree),
+            _UniffiFfiConverterOptionalTypeRangeCursorRecord.lower(cursor),
+            _UniffiFfiConverterOptionalBytes.lower(end),
+            _UniffiFfiConverterUInt64.lower(limit),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeRangePageRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_range_page(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+
+
+
+
+
+class _UniffiFfiConverterTypeAsyncProllyEngine:
+    @staticmethod
+    def lift(value: int) -> AsyncProllyEngine:
+        return AsyncProllyEngine._uniffi_make_instance(value)
+
+    @staticmethod
+    def check_lower(value: AsyncProllyEngine):
+        if not isinstance(value, AsyncProllyEngine):
+            raise TypeError("Expected AsyncProllyEngine instance, {} found".format(type(value).__name__))
+
+    @staticmethod
+    def lower(value: AsyncProllyEngine) -> ctypes.c_uint64:
+        return value._uniffi_clone_handle()
+
+    @classmethod
+    def read(cls, buf: _UniffiRustBuffer) -> AsyncProllyEngine:
+        ptr = buf.read_u64()
+        if ptr == 0:
+            raise InternalError("Raw handle value was null")
+        return cls.lift(ptr)
+
+    @classmethod
+    def write(cls, value: AsyncProllyEngine, buf: _UniffiRustBuffer):
+        buf.write_u64(cls.lower(value))
+
 class _UniffiFfiConverterOptionalTypeSecondaryIndexLimitsRecord(_UniffiConverterRustBuffer):
     @classmethod
     def check_lower(cls, value):
@@ -19157,29 +21612,6 @@ class _UniffiFfiConverterTypeBindingIndexRegistry:
     @classmethod
     def write(cls, value: BindingIndexRegistry, buf: _UniffiRustBuffer):
         buf.write_u64(cls.lower(value))
-
-class _UniffiFfiConverterSequenceTypeMutationRecord(_UniffiConverterRustBuffer):
-    @classmethod
-    def check_lower(cls, value):
-        for item in value:
-            _UniffiFfiConverterTypeMutationRecord.check_lower(item)
-
-    @classmethod
-    def write(cls, value, buf):
-        items = len(value)
-        buf.write_i32(items)
-        for item in value:
-            _UniffiFfiConverterTypeMutationRecord.write(item, buf)
-
-    @classmethod
-    def read(cls, buf):
-        count = buf.read_i32()
-        if count < 0:
-            raise InternalError("Unexpected negative sequence length")
-
-        return [
-            _UniffiFfiConverterTypeMutationRecord.read(buf) for i in range(count)
-        ]
 
 class _UniffiFfiConverterSequenceTypeIndexedSourceRecord(_UniffiConverterRustBuffer):
     @classmethod
@@ -27705,6 +30137,1057 @@ class _UniffiFfiConverterTypeBindingMapSnapshot:
     def write(cls, value: BindingMapSnapshot, buf: _UniffiRustBuffer):
         buf.write_u64(cls.lower(value))
 
+class _UniffiFfiConverterSequenceTypeNodeMutationRecord(_UniffiConverterRustBuffer):
+    @classmethod
+    def check_lower(cls, value):
+        for item in value:
+            _UniffiFfiConverterTypeNodeMutationRecord.check_lower(item)
+
+    @classmethod
+    def write(cls, value, buf):
+        items = len(value)
+        buf.write_i32(items)
+        for item in value:
+            _UniffiFfiConverterTypeNodeMutationRecord.write(item, buf)
+
+    @classmethod
+    def read(cls, buf):
+        count = buf.read_i32()
+        if count < 0:
+            raise InternalError("Unexpected negative sequence length")
+
+        return [
+            _UniffiFfiConverterTypeNodeMutationRecord.read(buf) for i in range(count)
+        ]
+
+class _UniffiFfiConverterSequenceTypeNodeEntryRecord(_UniffiConverterRustBuffer):
+    @classmethod
+    def check_lower(cls, value):
+        for item in value:
+            _UniffiFfiConverterTypeNodeEntryRecord.check_lower(item)
+
+    @classmethod
+    def write(cls, value, buf):
+        items = len(value)
+        buf.write_i32(items)
+        for item in value:
+            _UniffiFfiConverterTypeNodeEntryRecord.write(item, buf)
+
+    @classmethod
+    def read(cls, buf):
+        count = buf.read_i32()
+        if count < 0:
+            raise InternalError("Unexpected negative sequence length")
+
+        return [
+            _UniffiFfiConverterTypeNodeEntryRecord.read(buf) for i in range(count)
+        ]
+
+class _UniffiFfiConverterSequenceTypeRootConditionRecord(_UniffiConverterRustBuffer):
+    @classmethod
+    def check_lower(cls, value):
+        for item in value:
+            _UniffiFfiConverterTypeRootConditionRecord.check_lower(item)
+
+    @classmethod
+    def write(cls, value, buf):
+        items = len(value)
+        buf.write_i32(items)
+        for item in value:
+            _UniffiFfiConverterTypeRootConditionRecord.write(item, buf)
+
+    @classmethod
+    def read(cls, buf):
+        count = buf.read_i32()
+        if count < 0:
+            raise InternalError("Unexpected negative sequence length")
+
+        return [
+            _UniffiFfiConverterTypeRootConditionRecord.read(buf) for i in range(count)
+        ]
+
+class _UniffiFfiConverterSequenceTypeRootWriteRecord(_UniffiConverterRustBuffer):
+    @classmethod
+    def check_lower(cls, value):
+        for item in value:
+            _UniffiFfiConverterTypeRootWriteRecord.check_lower(item)
+
+    @classmethod
+    def write(cls, value, buf):
+        items = len(value)
+        buf.write_i32(items)
+        for item in value:
+            _UniffiFfiConverterTypeRootWriteRecord.write(item, buf)
+
+    @classmethod
+    def read(cls, buf):
+        count = buf.read_i32()
+        if count < 0:
+            raise InternalError("Unexpected negative sequence length")
+
+        return [
+            _UniffiFfiConverterTypeRootWriteRecord.read(buf) for i in range(count)
+        ]
+
+
+class ForeignRemoteStore():
+
+    async def descriptor(self, ) -> StoreDescriptorResultRecord:
+        raise NotImplementedError
+    async def get_node(self, cid: bytes) -> OptionalBytesResultRecord:
+        raise NotImplementedError
+    async def put_node(self, cid: bytes,value: bytes) -> UnitResultRecord:
+        raise NotImplementedError
+    async def delete_node(self, cid: bytes) -> UnitResultRecord:
+        raise NotImplementedError
+    async def batch_nodes(self, ops: typing.List[NodeMutationRecord]) -> UnitResultRecord:
+        raise NotImplementedError
+    async def batch_get_nodes_ordered(self, cids: typing.List[bytes]) -> OptionalBytesListResultRecord:
+        raise NotImplementedError
+    async def list_node_cids(self, ) -> BytesListResultRecord:
+        raise NotImplementedError
+    async def get_hint(self, namespace: bytes,key: bytes) -> OptionalBytesResultRecord:
+        raise NotImplementedError
+    async def put_hint(self, namespace: bytes,key: bytes,value: bytes) -> UnitResultRecord:
+        raise NotImplementedError
+    async def batch_put_nodes_with_hint(self, nodes: typing.List[NodeEntryRecord],namespace: bytes,key: bytes,value: bytes) -> UnitResultRecord:
+        raise NotImplementedError
+    async def get_root_manifest(self, name: bytes) -> OptionalBytesResultRecord:
+        raise NotImplementedError
+    async def put_root_manifest(self, name: bytes,manifest: bytes) -> UnitResultRecord:
+        raise NotImplementedError
+    async def delete_root_manifest(self, name: bytes) -> UnitResultRecord:
+        raise NotImplementedError
+    async def compare_and_swap_root_manifest(self, name: bytes,expected: OptionalBytesRecord,new: OptionalBytesRecord) -> RootCasResultRecord:
+        raise NotImplementedError
+    async def list_root_manifests(self, ) -> NamedBytesListResultRecord:
+        raise NotImplementedError
+    async def commit_transaction(self, nodes: typing.List[NodeMutationRecord],conditions: typing.List[RootConditionRecord],roots: typing.List[RootWriteRecord]) -> TransactionResultRecord:
+        raise NotImplementedError
+
+class ForeignRemoteStoreImpl(ForeignRemoteStore):
+
+    _handle: ctypes.c_uint64
+
+    def __init__(self, *args, **kwargs):
+        raise ValueError("This class has no default constructor")
+
+    def __del__(self):
+        # In case of partial initialization of instances.
+        handle = getattr(self, "_handle", None)
+        if handle is not None:
+            _uniffi_rust_call(_UniffiLib.uniffi_prolly_bindings_fn_free_foreignremotestore, handle)
+
+    def _uniffi_clone_handle(self):
+        return _uniffi_rust_call(_UniffiLib.uniffi_prolly_bindings_fn_clone_foreignremotestore, self._handle)
+
+    # Used by alternative constructors or any methods which return this type.
+    @classmethod
+    def _uniffi_make_instance(cls, handle):
+        # Lightly yucky way to bypass the usual __init__ logic
+        # and just create a new instance with the required handle.
+        inst = cls.__new__(cls)
+        inst._handle = handle
+        return inst
+    async def descriptor(self, ) -> StoreDescriptorResultRecord:
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeStoreDescriptorResultRecord.lift
+        _uniffi_error_converter = None
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_descriptor(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def get_node(self, cid: bytes) -> OptionalBytesResultRecord:
+
+        _UniffiFfiConverterBytes.check_lower(cid)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterBytes.lower(cid),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeOptionalBytesResultRecord.lift
+        _uniffi_error_converter = None
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_get_node(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def put_node(self, cid: bytes,value: bytes) -> UnitResultRecord:
+
+        _UniffiFfiConverterBytes.check_lower(cid)
+
+        _UniffiFfiConverterBytes.check_lower(value)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterBytes.lower(cid),
+            _UniffiFfiConverterBytes.lower(value),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeUnitResultRecord.lift
+        _uniffi_error_converter = None
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_put_node(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def delete_node(self, cid: bytes) -> UnitResultRecord:
+
+        _UniffiFfiConverterBytes.check_lower(cid)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterBytes.lower(cid),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeUnitResultRecord.lift
+        _uniffi_error_converter = None
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_delete_node(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def batch_nodes(self, ops: typing.List[NodeMutationRecord]) -> UnitResultRecord:
+
+        _UniffiFfiConverterSequenceTypeNodeMutationRecord.check_lower(ops)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterSequenceTypeNodeMutationRecord.lower(ops),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeUnitResultRecord.lift
+        _uniffi_error_converter = None
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_batch_nodes(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def batch_get_nodes_ordered(self, cids: typing.List[bytes]) -> OptionalBytesListResultRecord:
+
+        _UniffiFfiConverterSequenceBytes.check_lower(cids)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterSequenceBytes.lower(cids),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeOptionalBytesListResultRecord.lift
+        _uniffi_error_converter = None
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_batch_get_nodes_ordered(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def list_node_cids(self, ) -> BytesListResultRecord:
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeBytesListResultRecord.lift
+        _uniffi_error_converter = None
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_list_node_cids(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def get_hint(self, namespace: bytes,key: bytes) -> OptionalBytesResultRecord:
+
+        _UniffiFfiConverterBytes.check_lower(namespace)
+
+        _UniffiFfiConverterBytes.check_lower(key)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterBytes.lower(namespace),
+            _UniffiFfiConverterBytes.lower(key),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeOptionalBytesResultRecord.lift
+        _uniffi_error_converter = None
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_get_hint(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def put_hint(self, namespace: bytes,key: bytes,value: bytes) -> UnitResultRecord:
+
+        _UniffiFfiConverterBytes.check_lower(namespace)
+
+        _UniffiFfiConverterBytes.check_lower(key)
+
+        _UniffiFfiConverterBytes.check_lower(value)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterBytes.lower(namespace),
+            _UniffiFfiConverterBytes.lower(key),
+            _UniffiFfiConverterBytes.lower(value),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeUnitResultRecord.lift
+        _uniffi_error_converter = None
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_put_hint(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def batch_put_nodes_with_hint(self, nodes: typing.List[NodeEntryRecord],namespace: bytes,key: bytes,value: bytes) -> UnitResultRecord:
+
+        _UniffiFfiConverterSequenceTypeNodeEntryRecord.check_lower(nodes)
+
+        _UniffiFfiConverterBytes.check_lower(namespace)
+
+        _UniffiFfiConverterBytes.check_lower(key)
+
+        _UniffiFfiConverterBytes.check_lower(value)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterSequenceTypeNodeEntryRecord.lower(nodes),
+            _UniffiFfiConverterBytes.lower(namespace),
+            _UniffiFfiConverterBytes.lower(key),
+            _UniffiFfiConverterBytes.lower(value),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeUnitResultRecord.lift
+        _uniffi_error_converter = None
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_batch_put_nodes_with_hint(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def get_root_manifest(self, name: bytes) -> OptionalBytesResultRecord:
+
+        _UniffiFfiConverterBytes.check_lower(name)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterBytes.lower(name),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeOptionalBytesResultRecord.lift
+        _uniffi_error_converter = None
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_get_root_manifest(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def put_root_manifest(self, name: bytes,manifest: bytes) -> UnitResultRecord:
+
+        _UniffiFfiConverterBytes.check_lower(name)
+
+        _UniffiFfiConverterBytes.check_lower(manifest)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterBytes.lower(name),
+            _UniffiFfiConverterBytes.lower(manifest),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeUnitResultRecord.lift
+        _uniffi_error_converter = None
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_put_root_manifest(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def delete_root_manifest(self, name: bytes) -> UnitResultRecord:
+
+        _UniffiFfiConverterBytes.check_lower(name)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterBytes.lower(name),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeUnitResultRecord.lift
+        _uniffi_error_converter = None
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_delete_root_manifest(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def compare_and_swap_root_manifest(self, name: bytes,expected: OptionalBytesRecord,new: OptionalBytesRecord) -> RootCasResultRecord:
+
+        _UniffiFfiConverterBytes.check_lower(name)
+
+        _UniffiFfiConverterTypeOptionalBytesRecord.check_lower(expected)
+
+        _UniffiFfiConverterTypeOptionalBytesRecord.check_lower(new)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterBytes.lower(name),
+            _UniffiFfiConverterTypeOptionalBytesRecord.lower(expected),
+            _UniffiFfiConverterTypeOptionalBytesRecord.lower(new),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeRootCasResultRecord.lift
+        _uniffi_error_converter = None
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_compare_and_swap_root_manifest(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def list_root_manifests(self, ) -> NamedBytesListResultRecord:
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeNamedBytesListResultRecord.lift
+        _uniffi_error_converter = None
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_list_root_manifests(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def commit_transaction(self, nodes: typing.List[NodeMutationRecord],conditions: typing.List[RootConditionRecord],roots: typing.List[RootWriteRecord]) -> TransactionResultRecord:
+
+        _UniffiFfiConverterSequenceTypeNodeMutationRecord.check_lower(nodes)
+
+        _UniffiFfiConverterSequenceTypeRootConditionRecord.check_lower(conditions)
+
+        _UniffiFfiConverterSequenceTypeRootWriteRecord.check_lower(roots)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterSequenceTypeNodeMutationRecord.lower(nodes),
+            _UniffiFfiConverterSequenceTypeRootConditionRecord.lower(conditions),
+            _UniffiFfiConverterSequenceTypeRootWriteRecord.lower(roots),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeTransactionResultRecord.lift
+        _uniffi_error_converter = None
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_commit_transaction(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+
+
+
+
+# Put all the bits inside a class to keep the top-level namespace clean
+class _UniffiTraitImplForeignRemoteStoreImpl:
+    # For each method, generate a callback function to pass to Rust
+
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD0
+    def descriptor(
+            uniffi_handle,
+            uniffi_future_callback,
+            uniffi_callback_data,
+            uniffi_out_dropped_callback,
+        ):
+        uniffi_obj = _UniffiFfiConverterTypeForeignRemoteStore._handle_map.get(uniffi_handle)
+        def make_call():
+            uniffi_args = ()
+            uniffi_method = uniffi_obj.descriptor
+            return uniffi_method(*uniffi_args)
+        def handle_success(return_value):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiFfiConverterTypeStoreDescriptorResultRecord.lower(return_value),
+                    _UniffiRustCallStatus.default()
+                )
+            )
+
+        def handle_error(status_code, rust_buffer):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiRustBuffer.default(),
+                    _UniffiRustCallStatus(status_code, rust_buffer),
+                )
+            )
+        _uniffi_trait_interface_call_async(make_call, uniffi_out_dropped_callback, handle_success, handle_error)
+
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD1
+    def get_node(
+            uniffi_handle,
+            cid,
+            uniffi_future_callback,
+            uniffi_callback_data,
+            uniffi_out_dropped_callback,
+        ):
+        uniffi_obj = _UniffiFfiConverterTypeForeignRemoteStore._handle_map.get(uniffi_handle)
+        def make_call():
+            uniffi_args = (_UniffiFfiConverterBytes.lift(cid), )
+            uniffi_method = uniffi_obj.get_node
+            return uniffi_method(*uniffi_args)
+        def handle_success(return_value):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiFfiConverterTypeOptionalBytesResultRecord.lower(return_value),
+                    _UniffiRustCallStatus.default()
+                )
+            )
+
+        def handle_error(status_code, rust_buffer):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiRustBuffer.default(),
+                    _UniffiRustCallStatus(status_code, rust_buffer),
+                )
+            )
+        _uniffi_trait_interface_call_async(make_call, uniffi_out_dropped_callback, handle_success, handle_error)
+
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD2
+    def put_node(
+            uniffi_handle,
+            cid,
+            value,
+            uniffi_future_callback,
+            uniffi_callback_data,
+            uniffi_out_dropped_callback,
+        ):
+        uniffi_obj = _UniffiFfiConverterTypeForeignRemoteStore._handle_map.get(uniffi_handle)
+        def make_call():
+            uniffi_args = (_UniffiFfiConverterBytes.lift(cid), _UniffiFfiConverterBytes.lift(value), )
+            uniffi_method = uniffi_obj.put_node
+            return uniffi_method(*uniffi_args)
+        def handle_success(return_value):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiFfiConverterTypeUnitResultRecord.lower(return_value),
+                    _UniffiRustCallStatus.default()
+                )
+            )
+
+        def handle_error(status_code, rust_buffer):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiRustBuffer.default(),
+                    _UniffiRustCallStatus(status_code, rust_buffer),
+                )
+            )
+        _uniffi_trait_interface_call_async(make_call, uniffi_out_dropped_callback, handle_success, handle_error)
+
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD3
+    def delete_node(
+            uniffi_handle,
+            cid,
+            uniffi_future_callback,
+            uniffi_callback_data,
+            uniffi_out_dropped_callback,
+        ):
+        uniffi_obj = _UniffiFfiConverterTypeForeignRemoteStore._handle_map.get(uniffi_handle)
+        def make_call():
+            uniffi_args = (_UniffiFfiConverterBytes.lift(cid), )
+            uniffi_method = uniffi_obj.delete_node
+            return uniffi_method(*uniffi_args)
+        def handle_success(return_value):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiFfiConverterTypeUnitResultRecord.lower(return_value),
+                    _UniffiRustCallStatus.default()
+                )
+            )
+
+        def handle_error(status_code, rust_buffer):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiRustBuffer.default(),
+                    _UniffiRustCallStatus(status_code, rust_buffer),
+                )
+            )
+        _uniffi_trait_interface_call_async(make_call, uniffi_out_dropped_callback, handle_success, handle_error)
+
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD4
+    def batch_nodes(
+            uniffi_handle,
+            ops,
+            uniffi_future_callback,
+            uniffi_callback_data,
+            uniffi_out_dropped_callback,
+        ):
+        uniffi_obj = _UniffiFfiConverterTypeForeignRemoteStore._handle_map.get(uniffi_handle)
+        def make_call():
+            uniffi_args = (_UniffiFfiConverterSequenceTypeNodeMutationRecord.lift(ops), )
+            uniffi_method = uniffi_obj.batch_nodes
+            return uniffi_method(*uniffi_args)
+        def handle_success(return_value):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiFfiConverterTypeUnitResultRecord.lower(return_value),
+                    _UniffiRustCallStatus.default()
+                )
+            )
+
+        def handle_error(status_code, rust_buffer):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiRustBuffer.default(),
+                    _UniffiRustCallStatus(status_code, rust_buffer),
+                )
+            )
+        _uniffi_trait_interface_call_async(make_call, uniffi_out_dropped_callback, handle_success, handle_error)
+
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD5
+    def batch_get_nodes_ordered(
+            uniffi_handle,
+            cids,
+            uniffi_future_callback,
+            uniffi_callback_data,
+            uniffi_out_dropped_callback,
+        ):
+        uniffi_obj = _UniffiFfiConverterTypeForeignRemoteStore._handle_map.get(uniffi_handle)
+        def make_call():
+            uniffi_args = (_UniffiFfiConverterSequenceBytes.lift(cids), )
+            uniffi_method = uniffi_obj.batch_get_nodes_ordered
+            return uniffi_method(*uniffi_args)
+        def handle_success(return_value):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiFfiConverterTypeOptionalBytesListResultRecord.lower(return_value),
+                    _UniffiRustCallStatus.default()
+                )
+            )
+
+        def handle_error(status_code, rust_buffer):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiRustBuffer.default(),
+                    _UniffiRustCallStatus(status_code, rust_buffer),
+                )
+            )
+        _uniffi_trait_interface_call_async(make_call, uniffi_out_dropped_callback, handle_success, handle_error)
+
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD6
+    def list_node_cids(
+            uniffi_handle,
+            uniffi_future_callback,
+            uniffi_callback_data,
+            uniffi_out_dropped_callback,
+        ):
+        uniffi_obj = _UniffiFfiConverterTypeForeignRemoteStore._handle_map.get(uniffi_handle)
+        def make_call():
+            uniffi_args = ()
+            uniffi_method = uniffi_obj.list_node_cids
+            return uniffi_method(*uniffi_args)
+        def handle_success(return_value):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiFfiConverterTypeBytesListResultRecord.lower(return_value),
+                    _UniffiRustCallStatus.default()
+                )
+            )
+
+        def handle_error(status_code, rust_buffer):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiRustBuffer.default(),
+                    _UniffiRustCallStatus(status_code, rust_buffer),
+                )
+            )
+        _uniffi_trait_interface_call_async(make_call, uniffi_out_dropped_callback, handle_success, handle_error)
+
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD7
+    def get_hint(
+            uniffi_handle,
+            namespace,
+            key,
+            uniffi_future_callback,
+            uniffi_callback_data,
+            uniffi_out_dropped_callback,
+        ):
+        uniffi_obj = _UniffiFfiConverterTypeForeignRemoteStore._handle_map.get(uniffi_handle)
+        def make_call():
+            uniffi_args = (_UniffiFfiConverterBytes.lift(namespace), _UniffiFfiConverterBytes.lift(key), )
+            uniffi_method = uniffi_obj.get_hint
+            return uniffi_method(*uniffi_args)
+        def handle_success(return_value):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiFfiConverterTypeOptionalBytesResultRecord.lower(return_value),
+                    _UniffiRustCallStatus.default()
+                )
+            )
+
+        def handle_error(status_code, rust_buffer):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiRustBuffer.default(),
+                    _UniffiRustCallStatus(status_code, rust_buffer),
+                )
+            )
+        _uniffi_trait_interface_call_async(make_call, uniffi_out_dropped_callback, handle_success, handle_error)
+
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD8
+    def put_hint(
+            uniffi_handle,
+            namespace,
+            key,
+            value,
+            uniffi_future_callback,
+            uniffi_callback_data,
+            uniffi_out_dropped_callback,
+        ):
+        uniffi_obj = _UniffiFfiConverterTypeForeignRemoteStore._handle_map.get(uniffi_handle)
+        def make_call():
+            uniffi_args = (_UniffiFfiConverterBytes.lift(namespace), _UniffiFfiConverterBytes.lift(key), _UniffiFfiConverterBytes.lift(value), )
+            uniffi_method = uniffi_obj.put_hint
+            return uniffi_method(*uniffi_args)
+        def handle_success(return_value):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiFfiConverterTypeUnitResultRecord.lower(return_value),
+                    _UniffiRustCallStatus.default()
+                )
+            )
+
+        def handle_error(status_code, rust_buffer):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiRustBuffer.default(),
+                    _UniffiRustCallStatus(status_code, rust_buffer),
+                )
+            )
+        _uniffi_trait_interface_call_async(make_call, uniffi_out_dropped_callback, handle_success, handle_error)
+
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD9
+    def batch_put_nodes_with_hint(
+            uniffi_handle,
+            nodes,
+            namespace,
+            key,
+            value,
+            uniffi_future_callback,
+            uniffi_callback_data,
+            uniffi_out_dropped_callback,
+        ):
+        uniffi_obj = _UniffiFfiConverterTypeForeignRemoteStore._handle_map.get(uniffi_handle)
+        def make_call():
+            uniffi_args = (_UniffiFfiConverterSequenceTypeNodeEntryRecord.lift(nodes), _UniffiFfiConverterBytes.lift(namespace), _UniffiFfiConverterBytes.lift(key), _UniffiFfiConverterBytes.lift(value), )
+            uniffi_method = uniffi_obj.batch_put_nodes_with_hint
+            return uniffi_method(*uniffi_args)
+        def handle_success(return_value):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiFfiConverterTypeUnitResultRecord.lower(return_value),
+                    _UniffiRustCallStatus.default()
+                )
+            )
+
+        def handle_error(status_code, rust_buffer):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiRustBuffer.default(),
+                    _UniffiRustCallStatus(status_code, rust_buffer),
+                )
+            )
+        _uniffi_trait_interface_call_async(make_call, uniffi_out_dropped_callback, handle_success, handle_error)
+
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD10
+    def get_root_manifest(
+            uniffi_handle,
+            name,
+            uniffi_future_callback,
+            uniffi_callback_data,
+            uniffi_out_dropped_callback,
+        ):
+        uniffi_obj = _UniffiFfiConverterTypeForeignRemoteStore._handle_map.get(uniffi_handle)
+        def make_call():
+            uniffi_args = (_UniffiFfiConverterBytes.lift(name), )
+            uniffi_method = uniffi_obj.get_root_manifest
+            return uniffi_method(*uniffi_args)
+        def handle_success(return_value):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiFfiConverterTypeOptionalBytesResultRecord.lower(return_value),
+                    _UniffiRustCallStatus.default()
+                )
+            )
+
+        def handle_error(status_code, rust_buffer):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiRustBuffer.default(),
+                    _UniffiRustCallStatus(status_code, rust_buffer),
+                )
+            )
+        _uniffi_trait_interface_call_async(make_call, uniffi_out_dropped_callback, handle_success, handle_error)
+
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD11
+    def put_root_manifest(
+            uniffi_handle,
+            name,
+            manifest,
+            uniffi_future_callback,
+            uniffi_callback_data,
+            uniffi_out_dropped_callback,
+        ):
+        uniffi_obj = _UniffiFfiConverterTypeForeignRemoteStore._handle_map.get(uniffi_handle)
+        def make_call():
+            uniffi_args = (_UniffiFfiConverterBytes.lift(name), _UniffiFfiConverterBytes.lift(manifest), )
+            uniffi_method = uniffi_obj.put_root_manifest
+            return uniffi_method(*uniffi_args)
+        def handle_success(return_value):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiFfiConverterTypeUnitResultRecord.lower(return_value),
+                    _UniffiRustCallStatus.default()
+                )
+            )
+
+        def handle_error(status_code, rust_buffer):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiRustBuffer.default(),
+                    _UniffiRustCallStatus(status_code, rust_buffer),
+                )
+            )
+        _uniffi_trait_interface_call_async(make_call, uniffi_out_dropped_callback, handle_success, handle_error)
+
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD12
+    def delete_root_manifest(
+            uniffi_handle,
+            name,
+            uniffi_future_callback,
+            uniffi_callback_data,
+            uniffi_out_dropped_callback,
+        ):
+        uniffi_obj = _UniffiFfiConverterTypeForeignRemoteStore._handle_map.get(uniffi_handle)
+        def make_call():
+            uniffi_args = (_UniffiFfiConverterBytes.lift(name), )
+            uniffi_method = uniffi_obj.delete_root_manifest
+            return uniffi_method(*uniffi_args)
+        def handle_success(return_value):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiFfiConverterTypeUnitResultRecord.lower(return_value),
+                    _UniffiRustCallStatus.default()
+                )
+            )
+
+        def handle_error(status_code, rust_buffer):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiRustBuffer.default(),
+                    _UniffiRustCallStatus(status_code, rust_buffer),
+                )
+            )
+        _uniffi_trait_interface_call_async(make_call, uniffi_out_dropped_callback, handle_success, handle_error)
+
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD13
+    def compare_and_swap_root_manifest(
+            uniffi_handle,
+            name,
+            expected,
+            new,
+            uniffi_future_callback,
+            uniffi_callback_data,
+            uniffi_out_dropped_callback,
+        ):
+        uniffi_obj = _UniffiFfiConverterTypeForeignRemoteStore._handle_map.get(uniffi_handle)
+        def make_call():
+            uniffi_args = (_UniffiFfiConverterBytes.lift(name), _UniffiFfiConverterTypeOptionalBytesRecord.lift(expected), _UniffiFfiConverterTypeOptionalBytesRecord.lift(new), )
+            uniffi_method = uniffi_obj.compare_and_swap_root_manifest
+            return uniffi_method(*uniffi_args)
+        def handle_success(return_value):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiFfiConverterTypeRootCasResultRecord.lower(return_value),
+                    _UniffiRustCallStatus.default()
+                )
+            )
+
+        def handle_error(status_code, rust_buffer):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiRustBuffer.default(),
+                    _UniffiRustCallStatus(status_code, rust_buffer),
+                )
+            )
+        _uniffi_trait_interface_call_async(make_call, uniffi_out_dropped_callback, handle_success, handle_error)
+
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD14
+    def list_root_manifests(
+            uniffi_handle,
+            uniffi_future_callback,
+            uniffi_callback_data,
+            uniffi_out_dropped_callback,
+        ):
+        uniffi_obj = _UniffiFfiConverterTypeForeignRemoteStore._handle_map.get(uniffi_handle)
+        def make_call():
+            uniffi_args = ()
+            uniffi_method = uniffi_obj.list_root_manifests
+            return uniffi_method(*uniffi_args)
+        def handle_success(return_value):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiFfiConverterTypeNamedBytesListResultRecord.lower(return_value),
+                    _UniffiRustCallStatus.default()
+                )
+            )
+
+        def handle_error(status_code, rust_buffer):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiRustBuffer.default(),
+                    _UniffiRustCallStatus(status_code, rust_buffer),
+                )
+            )
+        _uniffi_trait_interface_call_async(make_call, uniffi_out_dropped_callback, handle_success, handle_error)
+
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD15
+    def commit_transaction(
+            uniffi_handle,
+            nodes,
+            conditions,
+            roots,
+            uniffi_future_callback,
+            uniffi_callback_data,
+            uniffi_out_dropped_callback,
+        ):
+        uniffi_obj = _UniffiFfiConverterTypeForeignRemoteStore._handle_map.get(uniffi_handle)
+        def make_call():
+            uniffi_args = (_UniffiFfiConverterSequenceTypeNodeMutationRecord.lift(nodes), _UniffiFfiConverterSequenceTypeRootConditionRecord.lift(conditions), _UniffiFfiConverterSequenceTypeRootWriteRecord.lift(roots), )
+            uniffi_method = uniffi_obj.commit_transaction
+            return uniffi_method(*uniffi_args)
+        def handle_success(return_value):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiFfiConverterTypeTransactionResultRecord.lower(return_value),
+                    _UniffiRustCallStatus.default()
+                )
+            )
+
+        def handle_error(status_code, rust_buffer):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiRustBuffer.default(),
+                    _UniffiRustCallStatus(status_code, rust_buffer),
+                )
+            )
+        _uniffi_trait_interface_call_async(make_call, uniffi_out_dropped_callback, handle_success, handle_error)
+
+    @_UNIFFI_CALLBACK_INTERFACE_FREE_PROLLY_FOREIGN_REMOTE_STORE
+    def _uniffi_free(uniffi_handle):
+        _UniffiFfiConverterTypeForeignRemoteStore._handle_map.remove(uniffi_handle)
+
+    @_UNIFFI_CALLBACK_INTERFACE_CLONE_PROLLY_FOREIGN_REMOTE_STORE
+    def _uniffi_clone(uniffi_handle):
+        return _UniffiFfiConverterTypeForeignRemoteStore._handle_map.clone(uniffi_handle)
+
+    # Generate the FFI VTable.  This has a field for each callback interface method.
+    _uniffi_vtable = _UniffiVTableCallbackInterfaceProllyForeignRemoteStore(
+        _uniffi_free,
+        _uniffi_clone,
+        descriptor,
+        get_node,
+        put_node,
+        delete_node,
+        batch_nodes,
+        batch_get_nodes_ordered,
+        list_node_cids,
+        get_hint,
+        put_hint,
+        batch_put_nodes_with_hint,
+        get_root_manifest,
+        put_root_manifest,
+        delete_root_manifest,
+        compare_and_swap_root_manifest,
+        list_root_manifests,
+        commit_transaction,
+    )
+    # Send Rust a pointer to the VTable.  Note: this means we need to keep the struct alive forever,
+    # or else bad things will happen when Rust tries to access it.
+    _UniffiLib.uniffi_prolly_bindings_fn_init_callback_vtable_foreignremotestore(ctypes.byref(_uniffi_vtable))
+
+class _UniffiFfiConverterTypeForeignRemoteStore:
+    _handle_map = _UniffiHandleMap()
+
+    @staticmethod
+    def lift(value: int):
+        if (value & 1) == 0:
+            # Rust-generated handle, construct a new class that uses the handle to implement the
+            # interface
+            return ForeignRemoteStoreImpl._uniffi_make_instance(value)
+        else:
+            # Python-generated handle, get the object from the handle map
+            return _UniffiFfiConverterTypeForeignRemoteStore._handle_map.remove(value)
+
+    @staticmethod
+    def check_lower(value: ForeignRemoteStore):
+        if not isinstance(value, ForeignRemoteStore):
+            raise TypeError("Expected ForeignRemoteStore subclass, {} found".format(type(value).__name__))
+
+    @staticmethod
+    def lower(value: ForeignRemoteStore):
+         if isinstance(value, ForeignRemoteStoreImpl):
+            # Rust-implementated object.  Clone the handle and return it
+            return value._uniffi_clone_handle()
+         else:
+            # Python-implementated object, generate a new vtable handle and return that.
+            return _UniffiFfiConverterTypeForeignRemoteStore._handle_map.insert(value)
+
+    @classmethod
+    def read(cls, buf: _UniffiRustBuffer):
+        ptr = buf.read_u64()
+        if ptr == 0:
+            raise InternalError("Raw handle value was null")
+        return cls.lift(ptr)
+
+    @classmethod
+    def write(cls, value: ForeignRemoteStore, buf: _UniffiRustBuffer):
+        buf.write_u64(cls.lower(value))
+
 
 class HostStoreCallback():
 
@@ -29125,6 +32608,25 @@ def node_to_bytes(node: NodeRecord) -> bytes:
         *_uniffi_lowered_args,
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
+async def open_remote_prolly_engine(store: ForeignRemoteStore,config: ConfigRecord) -> AsyncProllyEngine:
+
+    _UniffiFfiConverterTypeForeignRemoteStore.check_lower(store)
+
+    _UniffiFfiConverterTypeConfigRecord.check_lower(config)
+    _uniffi_lowered_args = (
+        _UniffiFfiConverterTypeForeignRemoteStore.lower(store),
+        _UniffiFfiConverterTypeConfigRecord.lower(config),
+    )
+    _uniffi_lift_return = _UniffiFfiConverterTypeAsyncProllyEngine.lift
+    _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+    return await _uniffi_rust_call_async(
+        _UniffiLib.uniffi_prolly_bindings_fn_func_open_remote_prolly_engine(*_uniffi_lowered_args),
+        _UniffiLib.ffi_prolly_bindings_rust_future_poll_u64,
+        _UniffiLib.ffi_prolly_bindings_rust_future_complete_u64,
+        _UniffiLib.ffi_prolly_bindings_rust_future_free_u64,
+        _uniffi_lift_return,
+        _uniffi_error_converter,
+    )
 def parallel_config(max_threads: int,parallelism_threshold: int) -> ParallelConfigRecord:
 
     _UniffiFfiConverterUInt64.check_lower(max_threads)
@@ -30383,6 +33885,8 @@ __all__ = [
     "BlobGcReachabilityRecord",
     "BlobGcPlanRecord",
     "BlobGcSweepRecord",
+    "StoreErrorRecord",
+    "BytesListResultRecord",
     "CacheStatsRecord",
     "ChangedSpanRecord",
     "ChangedSpanHintRecord",
@@ -30443,11 +33947,18 @@ __all__ = [
     "MultiKeyProofRecord",
     "MultiKeyProofVerificationRecord",
     "MutationRecord",
+    "NamedBytesRecord",
+    "NamedBytesListResultRecord",
     "NamedRootManifestRecord",
     "NamedRootRecord",
     "NamedRootRetentionRecord",
     "NamedRootSelectionRecord",
     "NamedRootUpdateRecord",
+    "NodeEntryRecord",
+    "OptionalBytesRecord",
+    "NodeMutationRecord",
+    "OptionalBytesListResultRecord",
+    "OptionalBytesResultRecord",
     "ParallelConfigRecord",
     "ProvedDiffPageRecord",
     "RangePageRecord",
@@ -30478,6 +33989,9 @@ __all__ = [
     "ResolutionRecord",
     "ReverseCursorRecord",
     "ReversePageRecord",
+    "RootCasResultRecord",
+    "RootConditionRecord",
+    "RootWriteRecord",
     "ScanOutcomeRecord",
     "SecondaryIndexLimitsRecord",
     "SnapshotBundleNodeRecord",
@@ -30493,6 +34007,11 @@ __all__ = [
     "StatsDiffRecord",
     "StatsPercentageChangeRecord",
     "StatsComparisonRecord",
+    "StoreCapabilitiesRecord",
+    "StoreLimitsRecord",
+    "StoreDescriptorRecord",
+    "StoreDescriptorResultRecord",
+    "StoreTransactionConflictRecord",
     "StructuralDiffMarkerRecord",
     "StructuralDiffCursorRecord",
     "StructuralDiffPageRecord",
@@ -30500,6 +34019,7 @@ __all__ = [
     "TombstoneMetadataRecord",
     "TombstoneRecord",
     "TransactionConflictRecord",
+    "TransactionResultRecord",
     "TransactionUpdateRecord",
     "TreeDebugNodeRecord",
     "TreeDebugComparedNodeRecord",
@@ -30507,6 +34027,7 @@ __all__ = [
     "TreeDebugComparisonRecord",
     "TreeDebugLevelRecord",
     "TreeDebugViewRecord",
+    "UnitResultRecord",
     "ValueRefRecord",
     "VersionPruneRecord",
     "VersionedMapBatchResultRecord",
@@ -30563,6 +34084,7 @@ __all__ = [
     "node_cid",
     "node_from_bytes",
     "node_to_bytes",
+    "open_remote_prolly_engine",
     "parallel_config",
     "parallel_config_sequential",
     "prefix_end",
@@ -30650,6 +34172,10 @@ __all__ = [
     "BindingProximityReadSessionProtocol",
     "BindingProximityMap",
     "BindingProximityMapProtocol",
+    "AsyncProllyTransaction",
+    "AsyncProllyTransactionProtocol",
+    "AsyncProllyEngine",
+    "AsyncProllyEngineProtocol",
     "SecondaryIndexExtractorCallbackImpl",
     "SecondaryIndexExtractorCallback",
     "BindingIndexRegistry",
@@ -30692,6 +34218,8 @@ __all__ = [
     "ProllyEngineProtocol",
     "BindingMapSnapshot",
     "BindingMapSnapshotProtocol",
+    "ForeignRemoteStoreImpl",
+    "ForeignRemoteStore",
     "HostStoreCallbackImpl",
     "HostStoreCallback",
 ]

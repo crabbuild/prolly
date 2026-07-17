@@ -636,6 +636,814 @@ fileprivate struct FfiConverterData: FfiConverterRustBuffer {
 
 
 
+public protocol AsyncProllyEngineProtocol: AnyObject, Sendable {
+
+    func batch(tree: TreeRecord, mutations: [MutationRecord]) async throws  -> TreeRecord
+
+    func beginTransaction() async throws  -> AsyncProllyTransaction
+
+    func collectStats(tree: TreeRecord) async throws  -> TreeStatsRecord
+
+    func compareAndSwapNamedRoot(name: Data, expected: TreeRecord?, replacement: TreeRecord?) async throws  -> NamedRootUpdateRecord
+
+    func create()  -> TreeRecord
+
+    func delete(tree: TreeRecord, key: Data) async throws  -> TreeRecord
+
+    func deleteNamedRoot(name: Data) async throws
+
+    func diff(base: TreeRecord, other: TreeRecord) async throws  -> [DiffRecord]
+
+    func get(tree: TreeRecord, key: Data) async throws  -> Data?
+
+    func getMany(tree: TreeRecord, keys: [Data]) async throws  -> [Data?]
+
+    func listNamedRoots() async throws  -> [NamedRootRecord]
+
+    func loadNamedRoot(name: Data) async throws  -> TreeRecord?
+
+    func merge(base: TreeRecord, left: TreeRecord, right: TreeRecord, resolver: String?) async throws  -> TreeRecord
+
+    func prefix(tree: TreeRecord, prefix: Data) async throws  -> [EntryRecord]
+
+    func publishNamedRoot(name: Data, tree: TreeRecord) async throws
+
+    func publishNamedRootAtMillis(name: Data, tree: TreeRecord, timestampMillis: UInt64) async throws
+
+    func put(tree: TreeRecord, key: Data, value: Data) async throws  -> TreeRecord
+
+    func range(tree: TreeRecord, start: Data, end: Data?) async throws  -> [EntryRecord]
+
+    func rangePage(tree: TreeRecord, cursor: RangeCursorRecord?, end: Data?, limit: UInt64) async throws  -> RangePageRecord
+
+}
+open class AsyncProllyEngine: AsyncProllyEngineProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_prolly_bindings_fn_clone_asyncprollyengine(self.handle, $0) }
+    }
+public convenience init(store: ForeignRemoteStore, config: ConfigRecord)async throws  {
+    let handle =
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_constructor_asyncprollyengine_new(FfiConverterTypeForeignRemoteStore_lower(store),FfiConverterTypeConfigRecord_lower(config)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_u64,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_u64,
+            freeFunc: ffi_prolly_bindings_rust_future_free_u64,
+            liftFunc: FfiConverterTypeAsyncProllyEngine_lift,
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+
+        .uniffiCloneHandle()
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_prolly_bindings_fn_free_asyncprollyengine(handle, $0) }
+    }
+
+
+
+
+open func batch(tree: TreeRecord, mutations: [MutationRecord])async throws  -> TreeRecord  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollyengine_batch(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypeTreeRecord_lower(tree),FfiConverterSequenceTypeMutationRecord.lower(mutations)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeTreeRecord_lift,
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+
+open func beginTransaction()async throws  -> AsyncProllyTransaction  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollyengine_begin_transaction(
+                    self.uniffiCloneHandle()
+
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_u64,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_u64,
+            freeFunc: ffi_prolly_bindings_rust_future_free_u64,
+            liftFunc: FfiConverterTypeAsyncProllyTransaction_lift,
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+
+open func collectStats(tree: TreeRecord)async throws  -> TreeStatsRecord  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollyengine_collect_stats(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypeTreeRecord_lower(tree)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeTreeStatsRecord_lift,
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+
+open func compareAndSwapNamedRoot(name: Data, expected: TreeRecord?, replacement: TreeRecord?)async throws  -> NamedRootUpdateRecord  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollyengine_compare_and_swap_named_root(
+                    self.uniffiCloneHandle(),
+                    FfiConverterData.lower(name),FfiConverterOptionTypeTreeRecord.lower(expected),FfiConverterOptionTypeTreeRecord.lower(replacement)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeNamedRootUpdateRecord_lift,
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+
+open func create() -> TreeRecord  {
+    return try!  FfiConverterTypeTreeRecord_lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_method_asyncprollyengine_create(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func delete(tree: TreeRecord, key: Data)async throws  -> TreeRecord  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollyengine_delete(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypeTreeRecord_lower(tree),FfiConverterData.lower(key)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeTreeRecord_lift,
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+
+open func deleteNamedRoot(name: Data)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollyengine_delete_named_root(
+                    self.uniffiCloneHandle(),
+                    FfiConverterData.lower(name)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_void,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_void,
+            freeFunc: ffi_prolly_bindings_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+
+open func diff(base: TreeRecord, other: TreeRecord)async throws  -> [DiffRecord]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollyengine_diff(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypeTreeRecord_lower(base),FfiConverterTypeTreeRecord_lower(other)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypeDiffRecord.lift,
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+
+open func get(tree: TreeRecord, key: Data)async throws  -> Data?  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollyengine_get(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypeTreeRecord_lower(tree),FfiConverterData.lower(key)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterOptionData.lift,
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+
+open func getMany(tree: TreeRecord, keys: [Data])async throws  -> [Data?]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollyengine_get_many(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypeTreeRecord_lower(tree),FfiConverterSequenceData.lower(keys)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceOptionData.lift,
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+
+open func listNamedRoots()async throws  -> [NamedRootRecord]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollyengine_list_named_roots(
+                    self.uniffiCloneHandle()
+
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypeNamedRootRecord.lift,
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+
+open func loadNamedRoot(name: Data)async throws  -> TreeRecord?  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollyengine_load_named_root(
+                    self.uniffiCloneHandle(),
+                    FfiConverterData.lower(name)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterOptionTypeTreeRecord.lift,
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+
+open func merge(base: TreeRecord, left: TreeRecord, right: TreeRecord, resolver: String?)async throws  -> TreeRecord  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollyengine_merge(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypeTreeRecord_lower(base),FfiConverterTypeTreeRecord_lower(left),FfiConverterTypeTreeRecord_lower(right),FfiConverterOptionString.lower(resolver)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeTreeRecord_lift,
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+
+open func prefix(tree: TreeRecord, prefix: Data)async throws  -> [EntryRecord]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollyengine_prefix(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypeTreeRecord_lower(tree),FfiConverterData.lower(prefix)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypeEntryRecord.lift,
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+
+open func publishNamedRoot(name: Data, tree: TreeRecord)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollyengine_publish_named_root(
+                    self.uniffiCloneHandle(),
+                    FfiConverterData.lower(name),FfiConverterTypeTreeRecord_lower(tree)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_void,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_void,
+            freeFunc: ffi_prolly_bindings_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+
+open func publishNamedRootAtMillis(name: Data, tree: TreeRecord, timestampMillis: UInt64)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollyengine_publish_named_root_at_millis(
+                    self.uniffiCloneHandle(),
+                    FfiConverterData.lower(name),FfiConverterTypeTreeRecord_lower(tree),FfiConverterUInt64.lower(timestampMillis)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_void,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_void,
+            freeFunc: ffi_prolly_bindings_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+
+open func put(tree: TreeRecord, key: Data, value: Data)async throws  -> TreeRecord  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollyengine_put(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypeTreeRecord_lower(tree),FfiConverterData.lower(key),FfiConverterData.lower(value)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeTreeRecord_lift,
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+
+open func range(tree: TreeRecord, start: Data, end: Data?)async throws  -> [EntryRecord]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollyengine_range(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypeTreeRecord_lower(tree),FfiConverterData.lower(start),FfiConverterOptionData.lower(end)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypeEntryRecord.lift,
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+
+open func rangePage(tree: TreeRecord, cursor: RangeCursorRecord?, end: Data?, limit: UInt64)async throws  -> RangePageRecord  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollyengine_range_page(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypeTreeRecord_lower(tree),FfiConverterOptionTypeRangeCursorRecord.lower(cursor),FfiConverterOptionData.lower(end),FfiConverterUInt64.lower(limit)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeRangePageRecord_lift,
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+
+
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAsyncProllyEngine: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = AsyncProllyEngine
+
+    public static func lift(_ handle: UInt64) throws -> AsyncProllyEngine {
+        return AsyncProllyEngine(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: AsyncProllyEngine) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AsyncProllyEngine {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: AsyncProllyEngine, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAsyncProllyEngine_lift(_ handle: UInt64) throws -> AsyncProllyEngine {
+    return try FfiConverterTypeAsyncProllyEngine.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAsyncProllyEngine_lower(_ value: AsyncProllyEngine) -> UInt64 {
+    return FfiConverterTypeAsyncProllyEngine.lower(value)
+}
+
+
+
+
+
+
+public protocol AsyncProllyTransactionProtocol: AnyObject, Sendable {
+
+    func batch(tree: TreeRecord, mutations: [MutationRecord]) async throws  -> TreeRecord
+
+    func commit() async throws  -> TransactionUpdateRecord
+
+    func compareAndSwapNamedRoot(name: Data, expected: TreeRecord?, replacement: TreeRecord?) async throws  -> NamedRootUpdateRecord
+
+    func create() async throws  -> TreeRecord
+
+    func delete(tree: TreeRecord, key: Data) async throws  -> TreeRecord
+
+    func deleteNamedRoot(name: Data) async throws
+
+    func get(tree: TreeRecord, key: Data) async throws  -> Data?
+
+    func loadNamedRoot(name: Data) async throws  -> TreeRecord?
+
+    func publishNamedRoot(name: Data, tree: TreeRecord) async throws
+
+    func publishNamedRootAtMillis(name: Data, tree: TreeRecord, timestampMillis: UInt64) async throws
+
+    func put(tree: TreeRecord, key: Data, value: Data) async throws  -> TreeRecord
+
+    func rollback() async throws
+
+}
+open class AsyncProllyTransaction: AsyncProllyTransactionProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_prolly_bindings_fn_clone_asyncprollytransaction(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_prolly_bindings_fn_free_asyncprollytransaction(handle, $0) }
+    }
+
+
+
+
+open func batch(tree: TreeRecord, mutations: [MutationRecord])async throws  -> TreeRecord  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollytransaction_batch(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypeTreeRecord_lower(tree),FfiConverterSequenceTypeMutationRecord.lower(mutations)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeTreeRecord_lift,
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+
+open func commit()async throws  -> TransactionUpdateRecord  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollytransaction_commit(
+                    self.uniffiCloneHandle()
+
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeTransactionUpdateRecord_lift,
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+
+open func compareAndSwapNamedRoot(name: Data, expected: TreeRecord?, replacement: TreeRecord?)async throws  -> NamedRootUpdateRecord  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollytransaction_compare_and_swap_named_root(
+                    self.uniffiCloneHandle(),
+                    FfiConverterData.lower(name),FfiConverterOptionTypeTreeRecord.lower(expected),FfiConverterOptionTypeTreeRecord.lower(replacement)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeNamedRootUpdateRecord_lift,
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+
+open func create()async throws  -> TreeRecord  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollytransaction_create(
+                    self.uniffiCloneHandle()
+
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeTreeRecord_lift,
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+
+open func delete(tree: TreeRecord, key: Data)async throws  -> TreeRecord  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollytransaction_delete(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypeTreeRecord_lower(tree),FfiConverterData.lower(key)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeTreeRecord_lift,
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+
+open func deleteNamedRoot(name: Data)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollytransaction_delete_named_root(
+                    self.uniffiCloneHandle(),
+                    FfiConverterData.lower(name)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_void,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_void,
+            freeFunc: ffi_prolly_bindings_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+
+open func get(tree: TreeRecord, key: Data)async throws  -> Data?  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollytransaction_get(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypeTreeRecord_lower(tree),FfiConverterData.lower(key)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterOptionData.lift,
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+
+open func loadNamedRoot(name: Data)async throws  -> TreeRecord?  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollytransaction_load_named_root(
+                    self.uniffiCloneHandle(),
+                    FfiConverterData.lower(name)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterOptionTypeTreeRecord.lift,
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+
+open func publishNamedRoot(name: Data, tree: TreeRecord)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollytransaction_publish_named_root(
+                    self.uniffiCloneHandle(),
+                    FfiConverterData.lower(name),FfiConverterTypeTreeRecord_lower(tree)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_void,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_void,
+            freeFunc: ffi_prolly_bindings_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+
+open func publishNamedRootAtMillis(name: Data, tree: TreeRecord, timestampMillis: UInt64)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollytransaction_publish_named_root_at_millis(
+                    self.uniffiCloneHandle(),
+                    FfiConverterData.lower(name),FfiConverterTypeTreeRecord_lower(tree),FfiConverterUInt64.lower(timestampMillis)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_void,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_void,
+            freeFunc: ffi_prolly_bindings_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+
+open func put(tree: TreeRecord, key: Data, value: Data)async throws  -> TreeRecord  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollytransaction_put(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypeTreeRecord_lower(tree),FfiConverterData.lower(key),FfiConverterData.lower(value)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeTreeRecord_lift,
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+
+open func rollback()async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollytransaction_rollback(
+                    self.uniffiCloneHandle()
+
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_void,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_void,
+            freeFunc: ffi_prolly_bindings_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+
+
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAsyncProllyTransaction: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = AsyncProllyTransaction
+
+    public static func lift(_ handle: UInt64) throws -> AsyncProllyTransaction {
+        return AsyncProllyTransaction(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: AsyncProllyTransaction) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AsyncProllyTransaction {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: AsyncProllyTransaction, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAsyncProllyTransaction_lift(_ handle: UInt64) throws -> AsyncProllyTransaction {
+    return try FfiConverterTypeAsyncProllyTransaction.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAsyncProllyTransaction_lower(_ value: AsyncProllyTransaction) -> UInt64 {
+    return FfiConverterTypeAsyncProllyTransaction.lower(value)
+}
+
+
+
+
+
+
 public protocol BindingIndexRegistryProtocol: AnyObject, Sendable {
 
     func len() throws  -> UInt64
@@ -5101,6 +5909,1168 @@ public func FfiConverterTypeEntryVisitorCallback_lift(_ handle: UInt64) throws -
 #endif
 public func FfiConverterTypeEntryVisitorCallback_lower(_ value: EntryVisitorCallback) -> UInt64 {
     return FfiConverterTypeEntryVisitorCallback.lower(value)
+}
+
+
+
+
+
+
+public protocol ForeignRemoteStore: AnyObject, Sendable {
+
+    func descriptor() async  -> StoreDescriptorResultRecord
+
+    func getNode(cid: Data) async  -> OptionalBytesResultRecord
+
+    func putNode(cid: Data, value: Data) async  -> UnitResultRecord
+
+    func deleteNode(cid: Data) async  -> UnitResultRecord
+
+    func batchNodes(ops: [NodeMutationRecord]) async  -> UnitResultRecord
+
+    func batchGetNodesOrdered(cids: [Data]) async  -> OptionalBytesListResultRecord
+
+    func listNodeCids() async  -> BytesListResultRecord
+
+    func getHint(namespace: Data, key: Data) async  -> OptionalBytesResultRecord
+
+    func putHint(namespace: Data, key: Data, value: Data) async  -> UnitResultRecord
+
+    func batchPutNodesWithHint(nodes: [NodeEntryRecord], namespace: Data, key: Data, value: Data) async  -> UnitResultRecord
+
+    func getRootManifest(name: Data) async  -> OptionalBytesResultRecord
+
+    func putRootManifest(name: Data, manifest: Data) async  -> UnitResultRecord
+
+    func deleteRootManifest(name: Data) async  -> UnitResultRecord
+
+    func compareAndSwapRootManifest(name: Data, expected: OptionalBytesRecord, new: OptionalBytesRecord) async  -> RootCasResultRecord
+
+    func listRootManifests() async  -> NamedBytesListResultRecord
+
+    func commitTransaction(nodes: [NodeMutationRecord], conditions: [RootConditionRecord], roots: [RootWriteRecord]) async  -> TransactionResultRecord
+
+}
+open class ForeignRemoteStoreImpl: ForeignRemoteStore, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_prolly_bindings_fn_clone_foreignremotestore(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_prolly_bindings_fn_free_foreignremotestore(handle, $0) }
+    }
+
+
+
+
+open func descriptor()async  -> StoreDescriptorResultRecord  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_foreignremotestore_descriptor(
+                    self.uniffiCloneHandle()
+
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeStoreDescriptorResultRecord_lift,
+            errorHandler: nil
+
+        )
+}
+
+open func getNode(cid: Data)async  -> OptionalBytesResultRecord  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_foreignremotestore_get_node(
+                    self.uniffiCloneHandle(),
+                    FfiConverterData.lower(cid)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeOptionalBytesResultRecord_lift,
+            errorHandler: nil
+
+        )
+}
+
+open func putNode(cid: Data, value: Data)async  -> UnitResultRecord  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_foreignremotestore_put_node(
+                    self.uniffiCloneHandle(),
+                    FfiConverterData.lower(cid),FfiConverterData.lower(value)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeUnitResultRecord_lift,
+            errorHandler: nil
+
+        )
+}
+
+open func deleteNode(cid: Data)async  -> UnitResultRecord  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_foreignremotestore_delete_node(
+                    self.uniffiCloneHandle(),
+                    FfiConverterData.lower(cid)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeUnitResultRecord_lift,
+            errorHandler: nil
+
+        )
+}
+
+open func batchNodes(ops: [NodeMutationRecord])async  -> UnitResultRecord  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_foreignremotestore_batch_nodes(
+                    self.uniffiCloneHandle(),
+                    FfiConverterSequenceTypeNodeMutationRecord.lower(ops)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeUnitResultRecord_lift,
+            errorHandler: nil
+
+        )
+}
+
+open func batchGetNodesOrdered(cids: [Data])async  -> OptionalBytesListResultRecord  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_foreignremotestore_batch_get_nodes_ordered(
+                    self.uniffiCloneHandle(),
+                    FfiConverterSequenceData.lower(cids)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeOptionalBytesListResultRecord_lift,
+            errorHandler: nil
+
+        )
+}
+
+open func listNodeCids()async  -> BytesListResultRecord  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_foreignremotestore_list_node_cids(
+                    self.uniffiCloneHandle()
+
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeBytesListResultRecord_lift,
+            errorHandler: nil
+
+        )
+}
+
+open func getHint(namespace: Data, key: Data)async  -> OptionalBytesResultRecord  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_foreignremotestore_get_hint(
+                    self.uniffiCloneHandle(),
+                    FfiConverterData.lower(namespace),FfiConverterData.lower(key)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeOptionalBytesResultRecord_lift,
+            errorHandler: nil
+
+        )
+}
+
+open func putHint(namespace: Data, key: Data, value: Data)async  -> UnitResultRecord  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_foreignremotestore_put_hint(
+                    self.uniffiCloneHandle(),
+                    FfiConverterData.lower(namespace),FfiConverterData.lower(key),FfiConverterData.lower(value)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeUnitResultRecord_lift,
+            errorHandler: nil
+
+        )
+}
+
+open func batchPutNodesWithHint(nodes: [NodeEntryRecord], namespace: Data, key: Data, value: Data)async  -> UnitResultRecord  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_foreignremotestore_batch_put_nodes_with_hint(
+                    self.uniffiCloneHandle(),
+                    FfiConverterSequenceTypeNodeEntryRecord.lower(nodes),FfiConverterData.lower(namespace),FfiConverterData.lower(key),FfiConverterData.lower(value)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeUnitResultRecord_lift,
+            errorHandler: nil
+
+        )
+}
+
+open func getRootManifest(name: Data)async  -> OptionalBytesResultRecord  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_foreignremotestore_get_root_manifest(
+                    self.uniffiCloneHandle(),
+                    FfiConverterData.lower(name)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeOptionalBytesResultRecord_lift,
+            errorHandler: nil
+
+        )
+}
+
+open func putRootManifest(name: Data, manifest: Data)async  -> UnitResultRecord  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_foreignremotestore_put_root_manifest(
+                    self.uniffiCloneHandle(),
+                    FfiConverterData.lower(name),FfiConverterData.lower(manifest)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeUnitResultRecord_lift,
+            errorHandler: nil
+
+        )
+}
+
+open func deleteRootManifest(name: Data)async  -> UnitResultRecord  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_foreignremotestore_delete_root_manifest(
+                    self.uniffiCloneHandle(),
+                    FfiConverterData.lower(name)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeUnitResultRecord_lift,
+            errorHandler: nil
+
+        )
+}
+
+open func compareAndSwapRootManifest(name: Data, expected: OptionalBytesRecord, new: OptionalBytesRecord)async  -> RootCasResultRecord  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_foreignremotestore_compare_and_swap_root_manifest(
+                    self.uniffiCloneHandle(),
+                    FfiConverterData.lower(name),FfiConverterTypeOptionalBytesRecord_lower(expected),FfiConverterTypeOptionalBytesRecord_lower(new)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeRootCasResultRecord_lift,
+            errorHandler: nil
+
+        )
+}
+
+open func listRootManifests()async  -> NamedBytesListResultRecord  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_foreignremotestore_list_root_manifests(
+                    self.uniffiCloneHandle()
+
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeNamedBytesListResultRecord_lift,
+            errorHandler: nil
+
+        )
+}
+
+open func commitTransaction(nodes: [NodeMutationRecord], conditions: [RootConditionRecord], roots: [RootWriteRecord])async  -> TransactionResultRecord  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_foreignremotestore_commit_transaction(
+                    self.uniffiCloneHandle(),
+                    FfiConverterSequenceTypeNodeMutationRecord.lower(nodes),FfiConverterSequenceTypeRootConditionRecord.lower(conditions),FfiConverterSequenceTypeRootWriteRecord.lower(roots)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeTransactionResultRecord_lift,
+            errorHandler: nil
+
+        )
+}
+
+
+
+}
+
+
+
+// Put the implementation in a struct so we don't pollute the top-level namespace
+fileprivate struct UniffiCallbackInterfaceForeignRemoteStore {
+
+    // Create the VTable using a series of closures.
+    // Swift automatically converts these into C callback functions.
+    //
+    // This creates 1-element array, since this seems to be the only way to construct a const
+    // pointer that we can pass to the Rust code.
+    static let vtable: [UniffiVTableCallbackInterfaceForeignRemoteStore] = [UniffiVTableCallbackInterfaceForeignRemoteStore(
+        uniffiFree: { (uniffiHandle: UInt64) -> () in
+            do {
+                try FfiConverterTypeForeignRemoteStore.handleMap.remove(handle: uniffiHandle)
+            } catch {
+                print("Uniffi callback interface ForeignRemoteStore: handle missing in uniffiFree")
+            }
+        },
+        uniffiClone: { (uniffiHandle: UInt64) -> UInt64 in
+            do {
+                return try FfiConverterTypeForeignRemoteStore.handleMap.clone(handle: uniffiHandle)
+            } catch {
+                fatalError("Uniffi callback interface ForeignRemoteStore: handle missing in uniffiClone")
+            }
+        },
+        descriptor: { (
+            uniffiHandle: UInt64,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutDroppedCallback: UnsafeMutablePointer<UniffiForeignFutureDroppedCallbackStruct>
+        ) in
+            let makeCall = {
+                () async throws -> StoreDescriptorResultRecord in
+                guard let uniffiObj = try? FfiConverterTypeForeignRemoteStore.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return await uniffiObj.descriptor(
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: StoreDescriptorResultRecord) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: FfiConverterTypeStoreDescriptorResultRecord_lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            uniffiTraitInterfaceCallAsync(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                droppedCallback: uniffiOutDroppedCallback
+            )
+        },
+        getNode: { (
+            uniffiHandle: UInt64,
+            cid: RustBuffer,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutDroppedCallback: UnsafeMutablePointer<UniffiForeignFutureDroppedCallbackStruct>
+        ) in
+            let makeCall = {
+                () async throws -> OptionalBytesResultRecord in
+                guard let uniffiObj = try? FfiConverterTypeForeignRemoteStore.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return await uniffiObj.getNode(
+                     cid: try FfiConverterData.lift(cid)
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: OptionalBytesResultRecord) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: FfiConverterTypeOptionalBytesResultRecord_lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            uniffiTraitInterfaceCallAsync(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                droppedCallback: uniffiOutDroppedCallback
+            )
+        },
+        putNode: { (
+            uniffiHandle: UInt64,
+            cid: RustBuffer,
+            value: RustBuffer,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutDroppedCallback: UnsafeMutablePointer<UniffiForeignFutureDroppedCallbackStruct>
+        ) in
+            let makeCall = {
+                () async throws -> UnitResultRecord in
+                guard let uniffiObj = try? FfiConverterTypeForeignRemoteStore.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return await uniffiObj.putNode(
+                     cid: try FfiConverterData.lift(cid),
+                     value: try FfiConverterData.lift(value)
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: UnitResultRecord) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: FfiConverterTypeUnitResultRecord_lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            uniffiTraitInterfaceCallAsync(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                droppedCallback: uniffiOutDroppedCallback
+            )
+        },
+        deleteNode: { (
+            uniffiHandle: UInt64,
+            cid: RustBuffer,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutDroppedCallback: UnsafeMutablePointer<UniffiForeignFutureDroppedCallbackStruct>
+        ) in
+            let makeCall = {
+                () async throws -> UnitResultRecord in
+                guard let uniffiObj = try? FfiConverterTypeForeignRemoteStore.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return await uniffiObj.deleteNode(
+                     cid: try FfiConverterData.lift(cid)
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: UnitResultRecord) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: FfiConverterTypeUnitResultRecord_lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            uniffiTraitInterfaceCallAsync(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                droppedCallback: uniffiOutDroppedCallback
+            )
+        },
+        batchNodes: { (
+            uniffiHandle: UInt64,
+            ops: RustBuffer,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutDroppedCallback: UnsafeMutablePointer<UniffiForeignFutureDroppedCallbackStruct>
+        ) in
+            let makeCall = {
+                () async throws -> UnitResultRecord in
+                guard let uniffiObj = try? FfiConverterTypeForeignRemoteStore.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return await uniffiObj.batchNodes(
+                     ops: try FfiConverterSequenceTypeNodeMutationRecord.lift(ops)
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: UnitResultRecord) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: FfiConverterTypeUnitResultRecord_lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            uniffiTraitInterfaceCallAsync(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                droppedCallback: uniffiOutDroppedCallback
+            )
+        },
+        batchGetNodesOrdered: { (
+            uniffiHandle: UInt64,
+            cids: RustBuffer,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutDroppedCallback: UnsafeMutablePointer<UniffiForeignFutureDroppedCallbackStruct>
+        ) in
+            let makeCall = {
+                () async throws -> OptionalBytesListResultRecord in
+                guard let uniffiObj = try? FfiConverterTypeForeignRemoteStore.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return await uniffiObj.batchGetNodesOrdered(
+                     cids: try FfiConverterSequenceData.lift(cids)
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: OptionalBytesListResultRecord) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: FfiConverterTypeOptionalBytesListResultRecord_lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            uniffiTraitInterfaceCallAsync(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                droppedCallback: uniffiOutDroppedCallback
+            )
+        },
+        listNodeCids: { (
+            uniffiHandle: UInt64,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutDroppedCallback: UnsafeMutablePointer<UniffiForeignFutureDroppedCallbackStruct>
+        ) in
+            let makeCall = {
+                () async throws -> BytesListResultRecord in
+                guard let uniffiObj = try? FfiConverterTypeForeignRemoteStore.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return await uniffiObj.listNodeCids(
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: BytesListResultRecord) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: FfiConverterTypeBytesListResultRecord_lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            uniffiTraitInterfaceCallAsync(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                droppedCallback: uniffiOutDroppedCallback
+            )
+        },
+        getHint: { (
+            uniffiHandle: UInt64,
+            namespace: RustBuffer,
+            key: RustBuffer,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutDroppedCallback: UnsafeMutablePointer<UniffiForeignFutureDroppedCallbackStruct>
+        ) in
+            let makeCall = {
+                () async throws -> OptionalBytesResultRecord in
+                guard let uniffiObj = try? FfiConverterTypeForeignRemoteStore.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return await uniffiObj.getHint(
+                     namespace: try FfiConverterData.lift(namespace),
+                     key: try FfiConverterData.lift(key)
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: OptionalBytesResultRecord) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: FfiConverterTypeOptionalBytesResultRecord_lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            uniffiTraitInterfaceCallAsync(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                droppedCallback: uniffiOutDroppedCallback
+            )
+        },
+        putHint: { (
+            uniffiHandle: UInt64,
+            namespace: RustBuffer,
+            key: RustBuffer,
+            value: RustBuffer,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutDroppedCallback: UnsafeMutablePointer<UniffiForeignFutureDroppedCallbackStruct>
+        ) in
+            let makeCall = {
+                () async throws -> UnitResultRecord in
+                guard let uniffiObj = try? FfiConverterTypeForeignRemoteStore.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return await uniffiObj.putHint(
+                     namespace: try FfiConverterData.lift(namespace),
+                     key: try FfiConverterData.lift(key),
+                     value: try FfiConverterData.lift(value)
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: UnitResultRecord) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: FfiConverterTypeUnitResultRecord_lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            uniffiTraitInterfaceCallAsync(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                droppedCallback: uniffiOutDroppedCallback
+            )
+        },
+        batchPutNodesWithHint: { (
+            uniffiHandle: UInt64,
+            nodes: RustBuffer,
+            namespace: RustBuffer,
+            key: RustBuffer,
+            value: RustBuffer,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutDroppedCallback: UnsafeMutablePointer<UniffiForeignFutureDroppedCallbackStruct>
+        ) in
+            let makeCall = {
+                () async throws -> UnitResultRecord in
+                guard let uniffiObj = try? FfiConverterTypeForeignRemoteStore.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return await uniffiObj.batchPutNodesWithHint(
+                     nodes: try FfiConverterSequenceTypeNodeEntryRecord.lift(nodes),
+                     namespace: try FfiConverterData.lift(namespace),
+                     key: try FfiConverterData.lift(key),
+                     value: try FfiConverterData.lift(value)
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: UnitResultRecord) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: FfiConverterTypeUnitResultRecord_lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            uniffiTraitInterfaceCallAsync(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                droppedCallback: uniffiOutDroppedCallback
+            )
+        },
+        getRootManifest: { (
+            uniffiHandle: UInt64,
+            name: RustBuffer,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutDroppedCallback: UnsafeMutablePointer<UniffiForeignFutureDroppedCallbackStruct>
+        ) in
+            let makeCall = {
+                () async throws -> OptionalBytesResultRecord in
+                guard let uniffiObj = try? FfiConverterTypeForeignRemoteStore.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return await uniffiObj.getRootManifest(
+                     name: try FfiConverterData.lift(name)
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: OptionalBytesResultRecord) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: FfiConverterTypeOptionalBytesResultRecord_lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            uniffiTraitInterfaceCallAsync(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                droppedCallback: uniffiOutDroppedCallback
+            )
+        },
+        putRootManifest: { (
+            uniffiHandle: UInt64,
+            name: RustBuffer,
+            manifest: RustBuffer,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutDroppedCallback: UnsafeMutablePointer<UniffiForeignFutureDroppedCallbackStruct>
+        ) in
+            let makeCall = {
+                () async throws -> UnitResultRecord in
+                guard let uniffiObj = try? FfiConverterTypeForeignRemoteStore.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return await uniffiObj.putRootManifest(
+                     name: try FfiConverterData.lift(name),
+                     manifest: try FfiConverterData.lift(manifest)
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: UnitResultRecord) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: FfiConverterTypeUnitResultRecord_lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            uniffiTraitInterfaceCallAsync(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                droppedCallback: uniffiOutDroppedCallback
+            )
+        },
+        deleteRootManifest: { (
+            uniffiHandle: UInt64,
+            name: RustBuffer,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutDroppedCallback: UnsafeMutablePointer<UniffiForeignFutureDroppedCallbackStruct>
+        ) in
+            let makeCall = {
+                () async throws -> UnitResultRecord in
+                guard let uniffiObj = try? FfiConverterTypeForeignRemoteStore.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return await uniffiObj.deleteRootManifest(
+                     name: try FfiConverterData.lift(name)
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: UnitResultRecord) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: FfiConverterTypeUnitResultRecord_lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            uniffiTraitInterfaceCallAsync(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                droppedCallback: uniffiOutDroppedCallback
+            )
+        },
+        compareAndSwapRootManifest: { (
+            uniffiHandle: UInt64,
+            name: RustBuffer,
+            expected: RustBuffer,
+            new: RustBuffer,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutDroppedCallback: UnsafeMutablePointer<UniffiForeignFutureDroppedCallbackStruct>
+        ) in
+            let makeCall = {
+                () async throws -> RootCasResultRecord in
+                guard let uniffiObj = try? FfiConverterTypeForeignRemoteStore.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return await uniffiObj.compareAndSwapRootManifest(
+                     name: try FfiConverterData.lift(name),
+                     expected: try FfiConverterTypeOptionalBytesRecord_lift(expected),
+                     new: try FfiConverterTypeOptionalBytesRecord_lift(new)
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: RootCasResultRecord) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: FfiConverterTypeRootCasResultRecord_lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            uniffiTraitInterfaceCallAsync(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                droppedCallback: uniffiOutDroppedCallback
+            )
+        },
+        listRootManifests: { (
+            uniffiHandle: UInt64,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutDroppedCallback: UnsafeMutablePointer<UniffiForeignFutureDroppedCallbackStruct>
+        ) in
+            let makeCall = {
+                () async throws -> NamedBytesListResultRecord in
+                guard let uniffiObj = try? FfiConverterTypeForeignRemoteStore.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return await uniffiObj.listRootManifests(
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: NamedBytesListResultRecord) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: FfiConverterTypeNamedBytesListResultRecord_lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            uniffiTraitInterfaceCallAsync(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                droppedCallback: uniffiOutDroppedCallback
+            )
+        },
+        commitTransaction: { (
+            uniffiHandle: UInt64,
+            nodes: RustBuffer,
+            conditions: RustBuffer,
+            roots: RustBuffer,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutDroppedCallback: UnsafeMutablePointer<UniffiForeignFutureDroppedCallbackStruct>
+        ) in
+            let makeCall = {
+                () async throws -> TransactionResultRecord in
+                guard let uniffiObj = try? FfiConverterTypeForeignRemoteStore.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return await uniffiObj.commitTransaction(
+                     nodes: try FfiConverterSequenceTypeNodeMutationRecord.lift(nodes),
+                     conditions: try FfiConverterSequenceTypeRootConditionRecord.lift(conditions),
+                     roots: try FfiConverterSequenceTypeRootWriteRecord.lift(roots)
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: TransactionResultRecord) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: FfiConverterTypeTransactionResultRecord_lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            uniffiTraitInterfaceCallAsync(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                droppedCallback: uniffiOutDroppedCallback
+            )
+        }
+    )]
+}
+
+private func uniffiCallbackInitForeignRemoteStore() {
+    uniffi_prolly_bindings_fn_init_callback_vtable_foreignremotestore(UniffiCallbackInterfaceForeignRemoteStore.vtable)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeForeignRemoteStore: FfiConverter {
+    fileprivate static let handleMap = UniffiHandleMap<ForeignRemoteStore>()
+
+    typealias FfiType = UInt64
+    typealias SwiftType = ForeignRemoteStore
+
+    public static func lift(_ handle: UInt64) throws -> ForeignRemoteStore {
+        if ((handle & 1) == 0) {
+            // Rust-generated handle, construct a new class that uses the handle to implement the
+            // interface
+            return ForeignRemoteStoreImpl(unsafeFromHandle: handle)
+        } else {
+            // Swift-generated handle, get the object from the handle map
+            return try handleMap.remove(handle: handle)
+        }
+    }
+
+    public static func lower(_ value: ForeignRemoteStore) -> UInt64 {
+         if let rustImpl = value as? ForeignRemoteStoreImpl {
+             // Rust-implemented object.  Clone the handle and return it
+            return rustImpl.uniffiCloneHandle()
+         } else {
+            // Swift object, generate a new vtable handle and return that.
+            return handleMap.insert(obj: value)
+         }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ForeignRemoteStore {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: ForeignRemoteStore, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeForeignRemoteStore_lift(_ handle: UInt64) throws -> ForeignRemoteStore {
+    return try FfiConverterTypeForeignRemoteStore.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeForeignRemoteStore_lower(_ value: ForeignRemoteStore) -> UInt64 {
+    return FfiConverterTypeForeignRemoteStore.lower(value)
 }
 
 
@@ -9735,6 +11705,60 @@ public func FfiConverterTypeBlobRefRecord_lower(_ value: BlobRefRecord) -> RustB
 }
 
 
+public struct BytesListResultRecord: Equatable, Hashable {
+    public var values: [Data]
+    public var error: StoreErrorRecord?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(values: [Data], error: StoreErrorRecord?) {
+        self.values = values
+        self.error = error
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension BytesListResultRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBytesListResultRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BytesListResultRecord {
+        return
+            try BytesListResultRecord(
+                values: FfiConverterSequenceData.read(from: &buf),
+                error: FfiConverterOptionTypeStoreErrorRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BytesListResultRecord, into buf: inout [UInt8]) {
+        FfiConverterSequenceData.write(value.values, into: &buf)
+        FfiConverterOptionTypeStoreErrorRecord.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBytesListResultRecord_lift(_ buf: RustBuffer) throws -> BytesListResultRecord {
+    return try FfiConverterTypeBytesListResultRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBytesListResultRecord_lower(_ value: BytesListResultRecord) -> RustBuffer {
+    return FfiConverterTypeBytesListResultRecord.lower(value)
+}
+
+
 public struct CacheStatsRecord: Equatable, Hashable {
     public var cachedNodes: UInt64
     public var cachedBytes: UInt64
@@ -13448,6 +15472,114 @@ public func FfiConverterTypeMutationRecord_lower(_ value: MutationRecord) -> Rus
 }
 
 
+public struct NamedBytesListResultRecord: Equatable, Hashable {
+    public var values: [NamedBytesRecord]
+    public var error: StoreErrorRecord?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(values: [NamedBytesRecord], error: StoreErrorRecord?) {
+        self.values = values
+        self.error = error
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension NamedBytesListResultRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNamedBytesListResultRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NamedBytesListResultRecord {
+        return
+            try NamedBytesListResultRecord(
+                values: FfiConverterSequenceTypeNamedBytesRecord.read(from: &buf),
+                error: FfiConverterOptionTypeStoreErrorRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: NamedBytesListResultRecord, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeNamedBytesRecord.write(value.values, into: &buf)
+        FfiConverterOptionTypeStoreErrorRecord.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNamedBytesListResultRecord_lift(_ buf: RustBuffer) throws -> NamedBytesListResultRecord {
+    return try FfiConverterTypeNamedBytesListResultRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNamedBytesListResultRecord_lower(_ value: NamedBytesListResultRecord) -> RustBuffer {
+    return FfiConverterTypeNamedBytesListResultRecord.lower(value)
+}
+
+
+public struct NamedBytesRecord: Equatable, Hashable {
+    public var name: Data
+    public var value: Data
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(name: Data, value: Data) {
+        self.name = name
+        self.value = value
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension NamedBytesRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNamedBytesRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NamedBytesRecord {
+        return
+            try NamedBytesRecord(
+                name: FfiConverterData.read(from: &buf),
+                value: FfiConverterData.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: NamedBytesRecord, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.name, into: &buf)
+        FfiConverterData.write(value.value, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNamedBytesRecord_lift(_ buf: RustBuffer) throws -> NamedBytesRecord {
+    return try FfiConverterTypeNamedBytesRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNamedBytesRecord_lower(_ value: NamedBytesRecord) -> RustBuffer {
+    return FfiConverterTypeNamedBytesRecord.lower(value)
+}
+
+
 public struct NamedRootManifestRecord: Equatable, Hashable {
     public var name: Data
     public var manifest: RootManifestRecord
@@ -13734,6 +15866,114 @@ public func FfiConverterTypeNamedRootUpdateRecord_lower(_ value: NamedRootUpdate
 }
 
 
+public struct NodeEntryRecord: Equatable, Hashable {
+    public var key: Data
+    public var value: Data
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(key: Data, value: Data) {
+        self.key = key
+        self.value = value
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension NodeEntryRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNodeEntryRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NodeEntryRecord {
+        return
+            try NodeEntryRecord(
+                key: FfiConverterData.read(from: &buf),
+                value: FfiConverterData.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: NodeEntryRecord, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.key, into: &buf)
+        FfiConverterData.write(value.value, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNodeEntryRecord_lift(_ buf: RustBuffer) throws -> NodeEntryRecord {
+    return try FfiConverterTypeNodeEntryRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNodeEntryRecord_lower(_ value: NodeEntryRecord) -> RustBuffer {
+    return FfiConverterTypeNodeEntryRecord.lower(value)
+}
+
+
+public struct NodeMutationRecord: Equatable, Hashable {
+    public var key: Data
+    public var value: OptionalBytesRecord
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(key: Data, value: OptionalBytesRecord) {
+        self.key = key
+        self.value = value
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension NodeMutationRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNodeMutationRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NodeMutationRecord {
+        return
+            try NodeMutationRecord(
+                key: FfiConverterData.read(from: &buf),
+                value: FfiConverterTypeOptionalBytesRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: NodeMutationRecord, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.key, into: &buf)
+        FfiConverterTypeOptionalBytesRecord.write(value.value, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNodeMutationRecord_lift(_ buf: RustBuffer) throws -> NodeMutationRecord {
+    return try FfiConverterTypeNodeMutationRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNodeMutationRecord_lower(_ value: NodeMutationRecord) -> RustBuffer {
+    return FfiConverterTypeNodeMutationRecord.lower(value)
+}
+
+
 public struct NodeRecord: Equatable, Hashable {
     public var keys: [Data]
     public var vals: [Data]
@@ -13821,6 +16061,168 @@ public func FfiConverterTypeNodeRecord_lift(_ buf: RustBuffer) throws -> NodeRec
 #endif
 public func FfiConverterTypeNodeRecord_lower(_ value: NodeRecord) -> RustBuffer {
     return FfiConverterTypeNodeRecord.lower(value)
+}
+
+
+public struct OptionalBytesListResultRecord: Equatable, Hashable {
+    public var values: [OptionalBytesRecord]
+    public var error: StoreErrorRecord?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(values: [OptionalBytesRecord], error: StoreErrorRecord?) {
+        self.values = values
+        self.error = error
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension OptionalBytesListResultRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeOptionalBytesListResultRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OptionalBytesListResultRecord {
+        return
+            try OptionalBytesListResultRecord(
+                values: FfiConverterSequenceTypeOptionalBytesRecord.read(from: &buf),
+                error: FfiConverterOptionTypeStoreErrorRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: OptionalBytesListResultRecord, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeOptionalBytesRecord.write(value.values, into: &buf)
+        FfiConverterOptionTypeStoreErrorRecord.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOptionalBytesListResultRecord_lift(_ buf: RustBuffer) throws -> OptionalBytesListResultRecord {
+    return try FfiConverterTypeOptionalBytesListResultRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOptionalBytesListResultRecord_lower(_ value: OptionalBytesListResultRecord) -> RustBuffer {
+    return FfiConverterTypeOptionalBytesListResultRecord.lower(value)
+}
+
+
+public struct OptionalBytesRecord: Equatable, Hashable {
+    public var present: Bool
+    public var value: Data
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(present: Bool, value: Data) {
+        self.present = present
+        self.value = value
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension OptionalBytesRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeOptionalBytesRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OptionalBytesRecord {
+        return
+            try OptionalBytesRecord(
+                present: FfiConverterBool.read(from: &buf),
+                value: FfiConverterData.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: OptionalBytesRecord, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.present, into: &buf)
+        FfiConverterData.write(value.value, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOptionalBytesRecord_lift(_ buf: RustBuffer) throws -> OptionalBytesRecord {
+    return try FfiConverterTypeOptionalBytesRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOptionalBytesRecord_lower(_ value: OptionalBytesRecord) -> RustBuffer {
+    return FfiConverterTypeOptionalBytesRecord.lower(value)
+}
+
+
+public struct OptionalBytesResultRecord: Equatable, Hashable {
+    public var value: OptionalBytesRecord
+    public var error: StoreErrorRecord?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(value: OptionalBytesRecord, error: StoreErrorRecord?) {
+        self.value = value
+        self.error = error
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension OptionalBytesResultRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeOptionalBytesResultRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OptionalBytesResultRecord {
+        return
+            try OptionalBytesResultRecord(
+                value: FfiConverterTypeOptionalBytesRecord.read(from: &buf),
+                error: FfiConverterOptionTypeStoreErrorRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: OptionalBytesResultRecord, into buf: inout [UInt8]) {
+        FfiConverterTypeOptionalBytesRecord.write(value.value, into: &buf)
+        FfiConverterOptionTypeStoreErrorRecord.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOptionalBytesResultRecord_lift(_ buf: RustBuffer) throws -> OptionalBytesResultRecord {
+    return try FfiConverterTypeOptionalBytesResultRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOptionalBytesResultRecord_lower(_ value: OptionalBytesResultRecord) -> RustBuffer {
+    return FfiConverterTypeOptionalBytesResultRecord.lower(value)
 }
 
 
@@ -15876,6 +18278,118 @@ public func FfiConverterTypeReversePageRecord_lower(_ value: ReversePageRecord) 
 }
 
 
+public struct RootCasResultRecord: Equatable, Hashable {
+    public var applied: Bool
+    public var current: OptionalBytesRecord
+    public var error: StoreErrorRecord?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(applied: Bool, current: OptionalBytesRecord, error: StoreErrorRecord?) {
+        self.applied = applied
+        self.current = current
+        self.error = error
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension RootCasResultRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRootCasResultRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RootCasResultRecord {
+        return
+            try RootCasResultRecord(
+                applied: FfiConverterBool.read(from: &buf),
+                current: FfiConverterTypeOptionalBytesRecord.read(from: &buf),
+                error: FfiConverterOptionTypeStoreErrorRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RootCasResultRecord, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.applied, into: &buf)
+        FfiConverterTypeOptionalBytesRecord.write(value.current, into: &buf)
+        FfiConverterOptionTypeStoreErrorRecord.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRootCasResultRecord_lift(_ buf: RustBuffer) throws -> RootCasResultRecord {
+    return try FfiConverterTypeRootCasResultRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRootCasResultRecord_lower(_ value: RootCasResultRecord) -> RustBuffer {
+    return FfiConverterTypeRootCasResultRecord.lower(value)
+}
+
+
+public struct RootConditionRecord: Equatable, Hashable {
+    public var name: Data
+    public var expected: OptionalBytesRecord
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(name: Data, expected: OptionalBytesRecord) {
+        self.name = name
+        self.expected = expected
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension RootConditionRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRootConditionRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RootConditionRecord {
+        return
+            try RootConditionRecord(
+                name: FfiConverterData.read(from: &buf),
+                expected: FfiConverterTypeOptionalBytesRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RootConditionRecord, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.name, into: &buf)
+        FfiConverterTypeOptionalBytesRecord.write(value.expected, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRootConditionRecord_lift(_ buf: RustBuffer) throws -> RootConditionRecord {
+    return try FfiConverterTypeRootConditionRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRootConditionRecord_lower(_ value: RootConditionRecord) -> RustBuffer {
+    return FfiConverterTypeRootConditionRecord.lower(value)
+}
+
+
 public struct RootManifestRecord: Equatable, Hashable {
     public var tree: TreeRecord
     public var createdAtMillis: UInt64?
@@ -15931,6 +18445,60 @@ public func FfiConverterTypeRootManifestRecord_lift(_ buf: RustBuffer) throws ->
 #endif
 public func FfiConverterTypeRootManifestRecord_lower(_ value: RootManifestRecord) -> RustBuffer {
     return FfiConverterTypeRootManifestRecord.lower(value)
+}
+
+
+public struct RootWriteRecord: Equatable, Hashable {
+    public var name: Data
+    public var replacement: OptionalBytesRecord
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(name: Data, replacement: OptionalBytesRecord) {
+        self.name = name
+        self.replacement = replacement
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension RootWriteRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRootWriteRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RootWriteRecord {
+        return
+            try RootWriteRecord(
+                name: FfiConverterData.read(from: &buf),
+                replacement: FfiConverterTypeOptionalBytesRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RootWriteRecord, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.name, into: &buf)
+        FfiConverterTypeOptionalBytesRecord.write(value.replacement, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRootWriteRecord_lift(_ buf: RustBuffer) throws -> RootWriteRecord {
+    return try FfiConverterTypeRootWriteRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRootWriteRecord_lower(_ value: RootWriteRecord) -> RustBuffer {
+    return FfiConverterTypeRootWriteRecord.lower(value)
 }
 
 
@@ -16935,6 +19503,394 @@ public func FfiConverterTypeStatsPercentageChangeRecord_lower(_ value: StatsPerc
 }
 
 
+public struct StoreCapabilitiesRecord: Equatable, Hashable {
+    public var nativeBatchReads: Bool
+    public var atomicBatchWrites: Bool
+    public var nodeScan: Bool
+    public var hints: Bool
+    public var atomicNodesAndHint: Bool
+    public var rootScan: Bool
+    public var rootCompareAndSwap: Bool
+    public var transactions: Bool
+    public var readParallelism: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(nativeBatchReads: Bool, atomicBatchWrites: Bool, nodeScan: Bool, hints: Bool, atomicNodesAndHint: Bool, rootScan: Bool, rootCompareAndSwap: Bool, transactions: Bool, readParallelism: UInt32) {
+        self.nativeBatchReads = nativeBatchReads
+        self.atomicBatchWrites = atomicBatchWrites
+        self.nodeScan = nodeScan
+        self.hints = hints
+        self.atomicNodesAndHint = atomicNodesAndHint
+        self.rootScan = rootScan
+        self.rootCompareAndSwap = rootCompareAndSwap
+        self.transactions = transactions
+        self.readParallelism = readParallelism
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension StoreCapabilitiesRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeStoreCapabilitiesRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> StoreCapabilitiesRecord {
+        return
+            try StoreCapabilitiesRecord(
+                nativeBatchReads: FfiConverterBool.read(from: &buf),
+                atomicBatchWrites: FfiConverterBool.read(from: &buf),
+                nodeScan: FfiConverterBool.read(from: &buf),
+                hints: FfiConverterBool.read(from: &buf),
+                atomicNodesAndHint: FfiConverterBool.read(from: &buf),
+                rootScan: FfiConverterBool.read(from: &buf),
+                rootCompareAndSwap: FfiConverterBool.read(from: &buf),
+                transactions: FfiConverterBool.read(from: &buf),
+                readParallelism: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: StoreCapabilitiesRecord, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.nativeBatchReads, into: &buf)
+        FfiConverterBool.write(value.atomicBatchWrites, into: &buf)
+        FfiConverterBool.write(value.nodeScan, into: &buf)
+        FfiConverterBool.write(value.hints, into: &buf)
+        FfiConverterBool.write(value.atomicNodesAndHint, into: &buf)
+        FfiConverterBool.write(value.rootScan, into: &buf)
+        FfiConverterBool.write(value.rootCompareAndSwap, into: &buf)
+        FfiConverterBool.write(value.transactions, into: &buf)
+        FfiConverterUInt32.write(value.readParallelism, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStoreCapabilitiesRecord_lift(_ buf: RustBuffer) throws -> StoreCapabilitiesRecord {
+    return try FfiConverterTypeStoreCapabilitiesRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStoreCapabilitiesRecord_lower(_ value: StoreCapabilitiesRecord) -> RustBuffer {
+    return FfiConverterTypeStoreCapabilitiesRecord.lower(value)
+}
+
+
+public struct StoreDescriptorRecord: Equatable, Hashable {
+    public var protocolMajor: UInt32
+    public var adapterName: String
+    public var provider: String
+    public var schemaVersion: UInt32
+    public var capabilities: StoreCapabilitiesRecord
+    public var limits: StoreLimitsRecord
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(protocolMajor: UInt32, adapterName: String, provider: String, schemaVersion: UInt32, capabilities: StoreCapabilitiesRecord, limits: StoreLimitsRecord) {
+        self.protocolMajor = protocolMajor
+        self.adapterName = adapterName
+        self.provider = provider
+        self.schemaVersion = schemaVersion
+        self.capabilities = capabilities
+        self.limits = limits
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension StoreDescriptorRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeStoreDescriptorRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> StoreDescriptorRecord {
+        return
+            try StoreDescriptorRecord(
+                protocolMajor: FfiConverterUInt32.read(from: &buf),
+                adapterName: FfiConverterString.read(from: &buf),
+                provider: FfiConverterString.read(from: &buf),
+                schemaVersion: FfiConverterUInt32.read(from: &buf),
+                capabilities: FfiConverterTypeStoreCapabilitiesRecord.read(from: &buf),
+                limits: FfiConverterTypeStoreLimitsRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: StoreDescriptorRecord, into buf: inout [UInt8]) {
+        FfiConverterUInt32.write(value.protocolMajor, into: &buf)
+        FfiConverterString.write(value.adapterName, into: &buf)
+        FfiConverterString.write(value.provider, into: &buf)
+        FfiConverterUInt32.write(value.schemaVersion, into: &buf)
+        FfiConverterTypeStoreCapabilitiesRecord.write(value.capabilities, into: &buf)
+        FfiConverterTypeStoreLimitsRecord.write(value.limits, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStoreDescriptorRecord_lift(_ buf: RustBuffer) throws -> StoreDescriptorRecord {
+    return try FfiConverterTypeStoreDescriptorRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStoreDescriptorRecord_lower(_ value: StoreDescriptorRecord) -> RustBuffer {
+    return FfiConverterTypeStoreDescriptorRecord.lower(value)
+}
+
+
+public struct StoreDescriptorResultRecord: Equatable, Hashable {
+    public var value: StoreDescriptorRecord?
+    public var error: StoreErrorRecord?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(value: StoreDescriptorRecord?, error: StoreErrorRecord?) {
+        self.value = value
+        self.error = error
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension StoreDescriptorResultRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeStoreDescriptorResultRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> StoreDescriptorResultRecord {
+        return
+            try StoreDescriptorResultRecord(
+                value: FfiConverterOptionTypeStoreDescriptorRecord.read(from: &buf),
+                error: FfiConverterOptionTypeStoreErrorRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: StoreDescriptorResultRecord, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeStoreDescriptorRecord.write(value.value, into: &buf)
+        FfiConverterOptionTypeStoreErrorRecord.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStoreDescriptorResultRecord_lift(_ buf: RustBuffer) throws -> StoreDescriptorResultRecord {
+    return try FfiConverterTypeStoreDescriptorResultRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStoreDescriptorResultRecord_lower(_ value: StoreDescriptorResultRecord) -> RustBuffer {
+    return FfiConverterTypeStoreDescriptorResultRecord.lower(value)
+}
+
+
+public struct StoreErrorRecord: Equatable, Hashable {
+    public var code: String
+    public var message: String
+    public var retryable: Bool
+    public var providerCode: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(code: String, message: String, retryable: Bool, providerCode: String?) {
+        self.code = code
+        self.message = message
+        self.retryable = retryable
+        self.providerCode = providerCode
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension StoreErrorRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeStoreErrorRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> StoreErrorRecord {
+        return
+            try StoreErrorRecord(
+                code: FfiConverterString.read(from: &buf),
+                message: FfiConverterString.read(from: &buf),
+                retryable: FfiConverterBool.read(from: &buf),
+                providerCode: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: StoreErrorRecord, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.code, into: &buf)
+        FfiConverterString.write(value.message, into: &buf)
+        FfiConverterBool.write(value.retryable, into: &buf)
+        FfiConverterOptionString.write(value.providerCode, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStoreErrorRecord_lift(_ buf: RustBuffer) throws -> StoreErrorRecord {
+    return try FfiConverterTypeStoreErrorRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStoreErrorRecord_lower(_ value: StoreErrorRecord) -> RustBuffer {
+    return FfiConverterTypeStoreErrorRecord.lower(value)
+}
+
+
+public struct StoreLimitsRecord: Equatable, Hashable {
+    public var maxBatchReadItems: UInt32?
+    public var maxBatchWriteItems: UInt32?
+    public var maxTransactionOperations: UInt32?
+    public var maxNodeBytes: UInt64?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(maxBatchReadItems: UInt32?, maxBatchWriteItems: UInt32?, maxTransactionOperations: UInt32?, maxNodeBytes: UInt64?) {
+        self.maxBatchReadItems = maxBatchReadItems
+        self.maxBatchWriteItems = maxBatchWriteItems
+        self.maxTransactionOperations = maxTransactionOperations
+        self.maxNodeBytes = maxNodeBytes
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension StoreLimitsRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeStoreLimitsRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> StoreLimitsRecord {
+        return
+            try StoreLimitsRecord(
+                maxBatchReadItems: FfiConverterOptionUInt32.read(from: &buf),
+                maxBatchWriteItems: FfiConverterOptionUInt32.read(from: &buf),
+                maxTransactionOperations: FfiConverterOptionUInt32.read(from: &buf),
+                maxNodeBytes: FfiConverterOptionUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: StoreLimitsRecord, into buf: inout [UInt8]) {
+        FfiConverterOptionUInt32.write(value.maxBatchReadItems, into: &buf)
+        FfiConverterOptionUInt32.write(value.maxBatchWriteItems, into: &buf)
+        FfiConverterOptionUInt32.write(value.maxTransactionOperations, into: &buf)
+        FfiConverterOptionUInt64.write(value.maxNodeBytes, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStoreLimitsRecord_lift(_ buf: RustBuffer) throws -> StoreLimitsRecord {
+    return try FfiConverterTypeStoreLimitsRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStoreLimitsRecord_lower(_ value: StoreLimitsRecord) -> RustBuffer {
+    return FfiConverterTypeStoreLimitsRecord.lower(value)
+}
+
+
+public struct StoreTransactionConflictRecord: Equatable, Hashable {
+    public var name: Data
+    public var expected: OptionalBytesRecord
+    public var current: OptionalBytesRecord
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(name: Data, expected: OptionalBytesRecord, current: OptionalBytesRecord) {
+        self.name = name
+        self.expected = expected
+        self.current = current
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension StoreTransactionConflictRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeStoreTransactionConflictRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> StoreTransactionConflictRecord {
+        return
+            try StoreTransactionConflictRecord(
+                name: FfiConverterData.read(from: &buf),
+                expected: FfiConverterTypeOptionalBytesRecord.read(from: &buf),
+                current: FfiConverterTypeOptionalBytesRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: StoreTransactionConflictRecord, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.name, into: &buf)
+        FfiConverterTypeOptionalBytesRecord.write(value.expected, into: &buf)
+        FfiConverterTypeOptionalBytesRecord.write(value.current, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStoreTransactionConflictRecord_lift(_ buf: RustBuffer) throws -> StoreTransactionConflictRecord {
+    return try FfiConverterTypeStoreTransactionConflictRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStoreTransactionConflictRecord_lower(_ value: StoreTransactionConflictRecord) -> RustBuffer {
+    return FfiConverterTypeStoreTransactionConflictRecord.lower(value)
+}
+
+
 public struct StructuralDiffCursorRecord: Equatable, Hashable {
     public var baseRoot: Data?
     public var otherRoot: Data?
@@ -17346,6 +20302,64 @@ public func FfiConverterTypeTransactionConflictRecord_lift(_ buf: RustBuffer) th
 #endif
 public func FfiConverterTypeTransactionConflictRecord_lower(_ value: TransactionConflictRecord) -> RustBuffer {
     return FfiConverterTypeTransactionConflictRecord.lower(value)
+}
+
+
+public struct TransactionResultRecord: Equatable, Hashable {
+    public var applied: Bool
+    public var conflict: StoreTransactionConflictRecord?
+    public var error: StoreErrorRecord?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(applied: Bool, conflict: StoreTransactionConflictRecord?, error: StoreErrorRecord?) {
+        self.applied = applied
+        self.conflict = conflict
+        self.error = error
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension TransactionResultRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTransactionResultRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TransactionResultRecord {
+        return
+            try TransactionResultRecord(
+                applied: FfiConverterBool.read(from: &buf),
+                conflict: FfiConverterOptionTypeStoreTransactionConflictRecord.read(from: &buf),
+                error: FfiConverterOptionTypeStoreErrorRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: TransactionResultRecord, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.applied, into: &buf)
+        FfiConverterOptionTypeStoreTransactionConflictRecord.write(value.conflict, into: &buf)
+        FfiConverterOptionTypeStoreErrorRecord.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTransactionResultRecord_lift(_ buf: RustBuffer) throws -> TransactionResultRecord {
+    return try FfiConverterTypeTransactionResultRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTransactionResultRecord_lower(_ value: TransactionResultRecord) -> RustBuffer {
+    return FfiConverterTypeTransactionResultRecord.lower(value)
 }
 
 
@@ -18194,6 +21208,56 @@ public func FfiConverterTypeTypedContentObjectRecord_lift(_ buf: RustBuffer) thr
 #endif
 public func FfiConverterTypeTypedContentObjectRecord_lower(_ value: TypedContentObjectRecord) -> RustBuffer {
     return FfiConverterTypeTypedContentObjectRecord.lower(value)
+}
+
+
+public struct UnitResultRecord: Equatable, Hashable {
+    public var error: StoreErrorRecord?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(error: StoreErrorRecord?) {
+        self.error = error
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension UnitResultRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeUnitResultRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UnitResultRecord {
+        return
+            try UnitResultRecord(
+                error: FfiConverterOptionTypeStoreErrorRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: UnitResultRecord, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeStoreErrorRecord.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUnitResultRecord_lift(_ buf: RustBuffer) throws -> UnitResultRecord {
+    return try FfiConverterTypeUnitResultRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUnitResultRecord_lower(_ value: UnitResultRecord) -> RustBuffer {
+    return FfiConverterTypeUnitResultRecord.lower(value)
 }
 
 
@@ -21731,6 +24795,78 @@ fileprivate struct FfiConverterOptionTypeSecondaryIndexLimitsRecord: FfiConverte
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeStoreDescriptorRecord: FfiConverterRustBuffer {
+    typealias SwiftType = StoreDescriptorRecord?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeStoreDescriptorRecord.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeStoreDescriptorRecord.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeStoreErrorRecord: FfiConverterRustBuffer {
+    typealias SwiftType = StoreErrorRecord?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeStoreErrorRecord.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeStoreErrorRecord.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeStoreTransactionConflictRecord: FfiConverterRustBuffer {
+    typealias SwiftType = StoreTransactionConflictRecord?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeStoreTransactionConflictRecord.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeStoreTransactionConflictRecord.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeStructuralDiffCursorRecord: FfiConverterRustBuffer {
     typealias SwiftType = StructuralDiffCursorRecord?
 
@@ -22469,6 +25605,31 @@ fileprivate struct FfiConverterSequenceTypeMutationRecord: FfiConverterRustBuffe
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeNamedBytesRecord: FfiConverterRustBuffer {
+    typealias SwiftType = [NamedBytesRecord]
+
+    public static func write(_ value: [NamedBytesRecord], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeNamedBytesRecord.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [NamedBytesRecord] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [NamedBytesRecord]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeNamedBytesRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeNamedRootManifestRecord: FfiConverterRustBuffer {
     typealias SwiftType = [NamedRootManifestRecord]
 
@@ -22519,6 +25680,56 @@ fileprivate struct FfiConverterSequenceTypeNamedRootRecord: FfiConverterRustBuff
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeNodeEntryRecord: FfiConverterRustBuffer {
+    typealias SwiftType = [NodeEntryRecord]
+
+    public static func write(_ value: [NodeEntryRecord], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeNodeEntryRecord.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [NodeEntryRecord] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [NodeEntryRecord]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeNodeEntryRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeNodeMutationRecord: FfiConverterRustBuffer {
+    typealias SwiftType = [NodeMutationRecord]
+
+    public static func write(_ value: [NodeMutationRecord], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeNodeMutationRecord.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [NodeMutationRecord] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [NodeMutationRecord]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeNodeMutationRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeNodeRecord: FfiConverterRustBuffer {
     typealias SwiftType = [NodeRecord]
 
@@ -22536,6 +25747,31 @@ fileprivate struct FfiConverterSequenceTypeNodeRecord: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeNodeRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeOptionalBytesRecord: FfiConverterRustBuffer {
+    typealias SwiftType = [OptionalBytesRecord]
+
+    public static func write(_ value: [OptionalBytesRecord], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeOptionalBytesRecord.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [OptionalBytesRecord] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [OptionalBytesRecord]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeOptionalBytesRecord.read(from: &buf))
         }
         return seq
     }
@@ -22611,6 +25847,56 @@ fileprivate struct FfiConverterSequenceTypeProximityRecordRecord: FfiConverterRu
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeProximityRecordRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeRootConditionRecord: FfiConverterRustBuffer {
+    typealias SwiftType = [RootConditionRecord]
+
+    public static func write(_ value: [RootConditionRecord], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeRootConditionRecord.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [RootConditionRecord] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [RootConditionRecord]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeRootConditionRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeRootWriteRecord: FfiConverterRustBuffer {
+    typealias SwiftType = [RootWriteRecord]
+
+    public static func write(_ value: [RootWriteRecord], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeRootWriteRecord.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [RootWriteRecord] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [RootWriteRecord]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeRootWriteRecord.read(from: &buf))
         }
         return seq
     }
@@ -22939,6 +26225,144 @@ fileprivate struct FfiConverterSequenceOptionData: FfiConverterRustBuffer {
         }
         return seq
     }
+}
+private let UNIFFI_RUST_FUTURE_POLL_READY: Int8 = 0
+private let UNIFFI_RUST_FUTURE_POLL_WAKE: Int8 = 1
+
+fileprivate let uniffiContinuationHandleMap = UniffiHandleMap<UnsafeContinuation<Int8, Never>>()
+
+fileprivate func uniffiRustCallAsync<F, T>(
+    rustFutureFunc: () -> UInt64,
+    pollFunc: (UInt64, @escaping UniffiRustFutureContinuationCallback, UInt64) -> (),
+    completeFunc: (UInt64, UnsafeMutablePointer<RustCallStatus>) -> F,
+    freeFunc: (UInt64) -> (),
+    liftFunc: (F) throws -> T,
+    errorHandler: ((RustBuffer) throws -> Swift.Error)?
+) async throws -> T {
+    // Make sure to call the ensure init function since future creation doesn't have a
+    // RustCallStatus param, so doesn't use makeRustCall()
+    uniffiEnsureProllyBindingsInitialized()
+    let rustFuture = rustFutureFunc()
+    defer {
+        freeFunc(rustFuture)
+    }
+    var pollResult: Int8;
+    repeat {
+        pollResult = await withUnsafeContinuation {
+            pollFunc(
+                rustFuture,
+                { handle, pollResult in
+                    uniffiFutureContinuationCallback(handle: handle, pollResult: pollResult)
+                },
+                uniffiContinuationHandleMap.insert(obj: $0)
+            )
+        }
+    } while pollResult != UNIFFI_RUST_FUTURE_POLL_READY
+
+    return try liftFunc(makeRustCall(
+        { completeFunc(rustFuture, $0) },
+        errorHandler: errorHandler
+    ))
+}
+
+// Callback handlers for an async calls.  These are invoked by Rust when the future is ready.  They
+// lift the return value or error and resume the suspended function.
+fileprivate func uniffiFutureContinuationCallback(handle: UInt64, pollResult: Int8) {
+    if let continuation = try? uniffiContinuationHandleMap.remove(handle: handle) {
+        continuation.resume(returning: pollResult)
+    } else {
+        print("uniffiFutureContinuationCallback invalid handle")
+    }
+}
+private func uniffiTraitInterfaceCallAsync<T>(
+    makeCall: @escaping () async throws -> T,
+    handleSuccess: @escaping (T) -> (),
+    handleError: @escaping (Int8, RustBuffer) -> (),
+    droppedCallback: UnsafeMutablePointer<UniffiForeignFutureDroppedCallbackStruct>
+) {
+    let task = Task {
+        // Note: it's important we call either `handleSuccess` or `handleError` exactly once.  Each
+        // call consumes an Arc reference, which means there should be no possibility of a double
+        // call.  The following code is structured so that will will never call both `handleSuccess`
+        // and `handleError`, even in the face of weird errors.
+        //
+        // On platforms that need extra machinery to make C-ABI calls, like JNA or ctypes, it's
+        // possible that we fail to make either call.  However, it doesn't seem like this is
+        // possible on Swift since swift can just make the C call directly.
+        var callResult: T
+        do {
+            callResult = try await makeCall()
+        } catch {
+            handleError(CALL_UNEXPECTED_ERROR, FfiConverterString.lower(String(describing: error)))
+            return
+        }
+        handleSuccess(callResult)
+    }
+    let handle = UNIFFI_FOREIGN_FUTURE_HANDLE_MAP.insert(obj: task)
+    droppedCallback.pointee = UniffiForeignFutureDroppedCallbackStruct(
+        handle: handle,
+        free: uniffiForeignFutureDroppedCallback
+    )
+}
+
+private func uniffiTraitInterfaceCallAsyncWithError<T, E>(
+    makeCall: @escaping () async throws -> T,
+    handleSuccess: @escaping (T) -> (),
+    handleError: @escaping (Int8, RustBuffer) -> (),
+    lowerError: @escaping (E) -> RustBuffer,
+    droppedCallback: UnsafeMutablePointer<UniffiForeignFutureDroppedCallbackStruct>
+) {
+    let task = Task {
+        // See the note in uniffiTraitInterfaceCallAsync for details on `handleSuccess` and
+        // `handleError`.
+        var callResult: T
+        do {
+            callResult = try await makeCall()
+        } catch let error as E {
+            handleError(CALL_ERROR, lowerError(error))
+            return
+        } catch {
+            handleError(CALL_UNEXPECTED_ERROR, FfiConverterString.lower(String(describing: error)))
+            return
+        }
+        handleSuccess(callResult)
+    }
+    let handle = UNIFFI_FOREIGN_FUTURE_HANDLE_MAP.insert(obj: task)
+    droppedCallback.pointee = UniffiForeignFutureDroppedCallbackStruct(
+        handle: handle,
+        free: uniffiForeignFutureDroppedCallback
+    )
+}
+
+// Borrow the callback handle map implementation to store foreign future handles
+// TODO: consolidate the handle-map code (https://github.com/mozilla/uniffi-rs/pull/1823)
+fileprivate let UNIFFI_FOREIGN_FUTURE_HANDLE_MAP = UniffiHandleMap<UniffiForeignFutureTask>()
+
+// Protocol for tasks that handle foreign futures.
+//
+// Defining a protocol allows all tasks to be stored in the same handle map.  This can't be done
+// with the task object itself, since has generic parameters.
+fileprivate protocol UniffiForeignFutureTask {
+    func cancel()
+}
+
+extension Task: UniffiForeignFutureTask {}
+
+private func uniffiForeignFutureDroppedCallback(handle: UInt64) {
+    do {
+        let task = try UNIFFI_FOREIGN_FUTURE_HANDLE_MAP.remove(handle: handle)
+        // Set the cancellation flag on the task.  If it's still running, the code can check the
+        // cancellation flag or call `Task.checkCancellation()`.  If the task has completed, this is
+        // a no-op.
+        task.cancel()
+    } catch {
+        print("uniffiForeignFutureDroppedCallback: handle missing from handlemap")
+    }
+}
+
+// For testing
+public func uniffiForeignFutureHandleCountProlly() -> Int {
+    UNIFFI_FOREIGN_FUTURE_HANDLE_MAP.count
 }
 public func authenticatedProofEnvelopeFromBytes(bytes: Data)throws  -> AuthenticatedProofEnvelopeRecord  {
     return try  FfiConverterTypeAuthenticatedProofEnvelopeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
@@ -23833,6 +27257,20 @@ public func versionedValueToBytes(record: VersionedValueRecord)throws  -> Data  
     )
 })
 }
+public func openRemoteProllyEngine(store: ForeignRemoteStore, config: ConfigRecord)async throws  -> AsyncProllyEngine  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_func_open_remote_prolly_engine(FfiConverterTypeForeignRemoteStore_lower(store),FfiConverterTypeConfigRecord_lower(config)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_u64,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_u64,
+            freeFunc: ffi_prolly_bindings_rust_future_free_u64,
+            liftFunc: FfiConverterTypeAsyncProllyEngine_lift,
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
 public func defaultContentGraphLimits() -> ContentGraphLimitsRecord  {
     return try!  FfiConverterTypeContentGraphLimitsRecord_lift(try! rustCall() {
     uniffi_prolly_bindings_fn_func_default_content_graph_limits($0
@@ -24254,6 +27692,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_func_versioned_value_to_bytes() != 30630) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_func_open_remote_prolly_engine() != 31371) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_func_default_content_graph_limits() != 63706) {
@@ -24806,6 +28247,147 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_prollytransaction_rollback() != 34302) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollyengine_batch() != 40064) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollyengine_begin_transaction() != 28949) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollyengine_collect_stats() != 45715) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollyengine_compare_and_swap_named_root() != 38856) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollyengine_create() != 56360) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollyengine_delete() != 20300) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollyengine_delete_named_root() != 52828) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollyengine_diff() != 55207) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollyengine_get() != 12607) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollyengine_get_many() != 63418) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollyengine_list_named_roots() != 50340) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollyengine_load_named_root() != 318) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollyengine_merge() != 37178) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollyengine_prefix() != 9481) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollyengine_publish_named_root() != 18445) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollyengine_publish_named_root_at_millis() != 41009) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollyengine_put() != 37914) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollyengine_range() != 35865) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollyengine_range_page() != 22037) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollytransaction_batch() != 13957) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollytransaction_commit() != 47349) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollytransaction_compare_and_swap_named_root() != 59033) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollytransaction_create() != 32187) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollytransaction_delete() != 36135) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollytransaction_delete_named_root() != 47190) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollytransaction_get() != 58160) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollytransaction_load_named_root() != 28693) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollytransaction_publish_named_root() != 19910) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollytransaction_publish_named_root_at_millis() != 21635) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollytransaction_put() != 10789) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollytransaction_rollback() != 11506) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_descriptor() != 37360) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_get_node() != 60045) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_put_node() != 45131) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_delete_node() != 20183) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_nodes() != 58441) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_get_nodes_ordered() != 19651) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_list_node_cids() != 19936) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_get_hint() != 47952) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_put_hint() != 29623) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_put_nodes_with_hint() != 26659) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_get_root_manifest() != 16335) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_put_root_manifest() != 37302) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_delete_root_manifest() != 46149) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_compare_and_swap_root_manifest() != 10430) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_list_root_manifests() != 17725) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_commit_transaction() != 90) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_bindingindexregistry_len() != 2337) {
@@ -25438,6 +29020,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_prolly_bindings_checksum_constructor_prollyengine_sqlite_in_memory() != 5409) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_prolly_bindings_checksum_constructor_asyncprollyengine_new() != 15218) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_prolly_bindings_checksum_constructor_bindingindexregistry_new() != 46129) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -25452,6 +29037,7 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitCrdtResolverCallback()
     uniffiCallbackInitDiffVisitorCallback()
     uniffiCallbackInitEntryVisitorCallback()
+    uniffiCallbackInitForeignRemoteStore()
     uniffiCallbackInitHostStoreCallback()
     uniffiCallbackInitMergeResolverCallback()
     uniffiCallbackInitProximityRecordVisitorCallback()
