@@ -7,8 +7,15 @@ from prolly import (
     MutationKind,
     MutationRecord,
     ParallelConfigRecord,
+    ProximityFilterKind,
+    ProximityFilterRecord,
     ProximityRecord,
     ProximityMutationRecord,
+    ProximitySearchRequestRecord,
+    QueryKernelRecord,
+    SearchBackendRecord,
+    SearchBudgetRecord,
+    SearchPolicyKind,
     verify_key_proof,
     verify_multi_key_proof,
     verify_range_page_proof,
@@ -19,6 +26,56 @@ from prolly import (
 
 
 class PortableParityTests(unittest.TestCase):
+    def test_proximity_rich_search_request_is_shared_by_map_session_and_proof(self):
+        with Engine.memory() as engine:
+            proximity = engine.build_proximity(
+                dimensions=2,
+                records=[
+                    ProximityRecord(b"a", [0.0, 0.0], b"alpha"),
+                    ProximityRecord(b"ab", [1.0, 0.0], b"alphabet"),
+                    ProximityRecord(b"b", [0.1, 0.0], b"beta"),
+                ],
+            )
+            request = ProximitySearchRequestRecord(
+                query=[0.0, 0.0],
+                k=3,
+                policy=SearchPolicyKind.FIXED_BUDGET,
+                adaptive_quality=None,
+                budget=SearchBudgetRecord(
+                    max_nodes=1_000,
+                    max_committed_bytes=1_000_000,
+                    max_distance_evaluations=1_000,
+                    max_frontier_entries=1_000,
+                ),
+                filter=ProximityFilterRecord(
+                    kind=ProximityFilterKind.PREFIX,
+                    start=None,
+                    range_end=None,
+                    prefix=b"a",
+                    eligible_keys=[],
+                ),
+                kernel=QueryKernelRecord.SCALAR_DETERMINISTIC,
+                backend=SearchBackendRecord.AUTO,
+                hnsw_ef_search=None,
+                pq_rerank_multiplier=None,
+            )
+
+            result = proximity.search(request)
+            self.assertEqual([neighbor.key for neighbor in result.neighbors], [b"a", b"ab"])
+            self.assertGreater(result.stats.distance_evaluations, 0)
+            self.assertGreater(result.plan_format_version, 0)
+            with proximity.read() as session:
+                self.assertEqual(
+                    [neighbor.key for neighbor in session.search(request).neighbors],
+                    [b"a", b"ab"],
+                )
+            with proximity.prove_search(request) as proof:
+                verified = proof.verify(proximity.descriptor)
+                self.assertEqual(
+                    [neighbor.key for neighbor in verified.result.neighbors],
+                    [b"a", b"ab"],
+                )
+
     def test_versioned_bulk_publication_uses_native_performance_paths(self):
         with Engine.memory() as engine:
             versioned = engine.versioned_map(b"bulk-publication")

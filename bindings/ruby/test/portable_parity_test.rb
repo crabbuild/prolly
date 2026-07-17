@@ -4,6 +4,53 @@ require 'minitest/autorun'
 require 'prolly'
 
 class PortableParityTest < Minitest::Test
+  def test_proximity_rich_search_request_is_shared_by_map_session_and_proof
+    Prolly::Engine.memory.use do |engine|
+      proximity = engine.build_proximity(
+        dimensions: 2,
+        records: [
+          Prolly::ProximityRecord.new(key: 'a'.b, vector: [0.0, 0.0], value: 'alpha'.b),
+          Prolly::ProximityRecord.new(key: 'ab'.b, vector: [1.0, 0.0], value: 'alphabet'.b),
+          Prolly::ProximityRecord.new(key: 'b'.b, vector: [0.1, 0.0], value: 'beta'.b)
+        ]
+      )
+      request = Prolly::ProximitySearchRequestRecord.new(
+        query: [0.0, 0.0],
+        k: 3,
+        policy: Prolly::SearchPolicyKind::FIXED_BUDGET,
+        adaptive_quality: nil,
+        budget: Prolly::SearchBudgetRecord.new(
+          max_nodes: 1_000,
+          max_committed_bytes: 1_000_000,
+          max_distance_evaluations: 1_000,
+          max_frontier_entries: 1_000
+        ),
+        filter: Prolly::ProximityFilterRecord.new(
+          kind: Prolly::ProximityFilterKind::PREFIX,
+          start: nil,
+          range_end: nil,
+          prefix: 'a'.b,
+          eligible_keys: []
+        ),
+        kernel: Prolly::QueryKernelRecord::SCALAR_DETERMINISTIC,
+        backend: Prolly::SearchBackendRecord::AUTO,
+        hnsw_ef_search: nil,
+        pq_rerank_multiplier: nil
+      )
+
+      result = proximity.search(request)
+      assert_equal ['a'.b, 'ab'.b], result.neighbors.map(&:key)
+      assert_operator result.stats.distance_evaluations, :>, 0
+      assert_operator result.plan_format_version, :>, 0
+      proximity.read.use do |session|
+        assert_equal ['a'.b, 'ab'.b], session.search(request).neighbors.map(&:key)
+      end
+      proximity.prove_search(request).use do |proof|
+        assert_equal ['a'.b, 'ab'.b], proof.verify(proximity.descriptor).result.neighbors.map(&:key)
+      end
+    end
+  end
+
   def test_versioned_bulk_publication_uses_native_performance_paths
     Prolly::Engine.memory.use do |engine|
       map = engine.versioned_map('bulk-publication'.b)

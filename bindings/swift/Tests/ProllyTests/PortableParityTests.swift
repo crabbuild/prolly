@@ -4,6 +4,59 @@ import ProllyAPI
 import XCTest
 
 final class PortableParityTests: XCTestCase {
+    func testProximityRichSearchRequestIsSharedByMapSessionAndProof() throws {
+        try Engine.withMemory { engine in
+            let proximity = try engine.buildProximity(
+                dimensions: 2,
+                records: [
+                    ProximityRecord(key: Data("a".utf8), vector: [0, 0], value: Data("alpha".utf8)),
+                    ProximityRecord(key: Data("ab".utf8), vector: [1, 0], value: Data("alphabet".utf8)),
+                    ProximityRecord(key: Data("b".utf8), vector: [0.1, 0], value: Data("beta".utf8)),
+                ]
+            )
+            let request = ProximitySearchRequestRecord(
+                query: [0, 0],
+                k: 3,
+                policy: .fixedBudget,
+                adaptiveQuality: nil,
+                budget: SearchBudgetRecord(
+                    maxNodes: 1_000,
+                    maxCommittedBytes: 1_000_000,
+                    maxDistanceEvaluations: 1_000,
+                    maxFrontierEntries: 1_000
+                ),
+                filter: ProximityFilterRecord(
+                    kind: .prefix,
+                    start: nil,
+                    rangeEnd: nil,
+                    prefix: Data("a".utf8),
+                    eligibleKeys: []
+                ),
+                kernel: .scalarDeterministic,
+                backend: .auto,
+                hnswEfSearch: nil,
+                pqRerankMultiplier: nil
+            )
+
+            let result = try proximity.search(request)
+            XCTAssertEqual(result.neighbors.map(\.key), [Data("a".utf8), Data("ab".utf8)])
+            XCTAssertGreaterThan(result.stats.distanceEvaluations, 0)
+            XCTAssertGreaterThan(result.planFormatVersion, 0)
+            let session = try proximity.read()
+            XCTAssertEqual(
+                try session.search(request).neighbors.map(\.key),
+                [Data("a".utf8), Data("ab".utf8)]
+            )
+            session.close()
+            let proof = try proximity.proveSearch(request)
+            XCTAssertEqual(
+                try proof.verify(expectedDescriptor: proximity.descriptor).result.neighbors.map(\.key),
+                [Data("a".utf8), Data("ab".utf8)]
+            )
+            proof.close()
+        }
+    }
+
     func testVersionedBulkPublicationUsesNativePerformancePaths() throws {
         try Engine.withMemory { engine in
             let map = try engine.versionedMap(Data("bulk-publication".utf8))

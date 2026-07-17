@@ -16,6 +16,53 @@ import org.junit.jupiter.api.assertThrows
 
 class PortableParityTest {
     @Test
+    fun proximityRichSearchRequestIsSharedByMapSessionAndProof() {
+        ProllyNative.useLocalDebugLibrary()
+        Engine.memory().use { engine ->
+            engine.buildProximity(
+                2u,
+                listOf(
+                    ProximityRecord("a".bytes(), listOf(0f, 0f), "alpha".bytes()),
+                    ProximityRecord("ab".bytes(), listOf(1f, 0f), "alphabet".bytes()),
+                    ProximityRecord("b".bytes(), listOf(0.1f, 0f), "beta".bytes()),
+                ),
+            ).use { proximity ->
+                val request = ProximitySearchRequestRecord(
+                    query = listOf(0f, 0f),
+                    k = 3uL,
+                    policy = SearchPolicyKind.FIXED_BUDGET,
+                    adaptiveQuality = null,
+                    budget = SearchBudgetRecord(1_000uL, 1_000_000uL, 1_000uL, 1_000uL),
+                    filter = ProximityFilterRecord(
+                        ProximityFilterKind.PREFIX, null, null, "a".bytes(), emptyList()
+                    ),
+                    kernel = QueryKernelRecord.SCALAR_DETERMINISTIC,
+                    backend = SearchBackendRecord.AUTO,
+                    hnswEfSearch = null,
+                    pqRerankMultiplier = null,
+                )
+
+                val result = proximity.search(request)
+                assertEquals(listOf("a", "ab"), result.neighbors.map { String(it.key) })
+                assertEquals(true, result.stats.distanceEvaluations > 0uL)
+                assertEquals(true, result.planFormatVersion > 0u)
+                proximity.read().use { session ->
+                    assertEquals(
+                        listOf("a", "ab"),
+                        session.search(request).neighbors.map { String(it.key) },
+                    )
+                }
+                proximity.proveSearch(request).use { proof ->
+                    assertEquals(
+                        listOf("a", "ab"),
+                        proof.verify(proximity.descriptor).result.neighbors.map { String(it.key) },
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
     fun versionedBulkPublicationUsesNativePerformancePaths() {
         ProllyNative.useLocalDebugLibrary()
         Engine.memory().use { engine ->
