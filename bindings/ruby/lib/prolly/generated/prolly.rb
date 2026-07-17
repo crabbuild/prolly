@@ -126,6 +126,27 @@ end
     end
   end
 
+  # The Record type AcceleratorCatalogEntryRecord.
+
+  def self.check_lower_TypeAcceleratorCatalogEntryRecord(v)
+    RustBuffer.check_lower_TypeCatalogAcceleratorKindRecord(v.kind)
+    
+    
+  end
+
+  def self.alloc_from_TypeAcceleratorCatalogEntryRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeAcceleratorCatalogEntryRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeAcceleratorCatalogEntryRecord
+    consumeWithStream do |stream|
+      return stream.readTypeAcceleratorCatalogEntryRecord
+    end
+  end
+
   # The Record type ActiveIndexHealthRecord.
 
   def self.check_lower_TypeActiveIndexHealthRecord(v)
@@ -448,6 +469,147 @@ end
   def consumeIntoTypeChangedSpanRecord
     consumeWithStream do |stream|
       return stream.readTypeChangedSpanRecord
+    end
+  end
+
+  # The Record type CompositeAcceleratorConfigRecord.
+
+  def self.check_lower_TypeCompositeAcceleratorConfigRecord(v)
+    
+    
+    
+    
+    
+  end
+
+  def self.alloc_from_TypeCompositeAcceleratorConfigRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeCompositeAcceleratorConfigRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeCompositeAcceleratorConfigRecord
+    consumeWithStream do |stream|
+      return stream.readTypeCompositeAcceleratorConfigRecord
+    end
+  end
+
+  # The Record type CompositeBuildLimitsRecord.
+
+  def self.check_lower_TypeCompositeBuildLimitsRecord(v)
+    RustBuffer.check_lower_Optionalu64(v.max_diff_entries)
+    RustBuffer.check_lower_Optionalu64(v.max_owned_bytes)
+    RustBuffer.check_lower_Optionalu64(v.max_encoded_output_bytes)
+    RustBuffer.check_lower_Optionalu64(v.max_distance_evaluations)
+  end
+
+  def self.alloc_from_TypeCompositeBuildLimitsRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeCompositeBuildLimitsRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeCompositeBuildLimitsRecord
+    consumeWithStream do |stream|
+      return stream.readTypeCompositeBuildLimitsRecord
+    end
+  end
+
+  # The Record type CompositeBuildOrRebuildOutcomeRecord.
+
+  def self.check_lower_TypeCompositeBuildOrRebuildOutcomeRecord(v)
+    RustBuffer.check_lower_TypeCompositeBuildOrRebuildKindRecord(v.kind)
+    RustBuffer.check_lower_OptionalTypeBindingCompositeAccelerator(v.composite)
+    RustBuffer.check_lower_OptionalTypeBindingHnswIndex(v.hnsw)
+    RustBuffer.check_lower_OptionalTypeBindingProductQuantizer(v.pq)
+    RustBuffer.check_lower_SequenceTypeFullRebuildReasonRecord(v.reasons)
+    RustBuffer.check_lower_TypeCompositeBuildStatsRecord(v.composite_stats)
+    RustBuffer.check_lower_OptionalTypeHnswBuildStatsRecord(v.hnsw_stats)
+    RustBuffer.check_lower_OptionalTypeProductQuantizationBuildStatsRecord(v.pq_stats)
+  end
+
+  def self.alloc_from_TypeCompositeBuildOrRebuildOutcomeRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeCompositeBuildOrRebuildOutcomeRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeCompositeBuildOrRebuildOutcomeRecord
+    consumeWithStream do |stream|
+      return stream.readTypeCompositeBuildOrRebuildOutcomeRecord
+    end
+  end
+
+  # The Record type CompositeBuildOutcomeRecord.
+
+  def self.check_lower_TypeCompositeBuildOutcomeRecord(v)
+    RustBuffer.check_lower_OptionalTypeBindingCompositeAccelerator(v.accelerator)
+    RustBuffer.check_lower_SequenceTypeFullRebuildReasonRecord(v.reasons)
+    RustBuffer.check_lower_TypeCompositeBuildStatsRecord(v.stats)
+  end
+
+  def self.alloc_from_TypeCompositeBuildOutcomeRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeCompositeBuildOutcomeRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeCompositeBuildOutcomeRecord
+    consumeWithStream do |stream|
+      return stream.readTypeCompositeBuildOutcomeRecord
+    end
+  end
+
+  # The Record type CompositeBuildStatsRecord.
+
+  def self.check_lower_TypeCompositeBuildStatsRecord(v)
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+  end
+
+  def self.alloc_from_TypeCompositeBuildStatsRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeCompositeBuildStatsRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeCompositeBuildStatsRecord
+    consumeWithStream do |stream|
+      return stream.readTypeCompositeBuildStatsRecord
+    end
+  end
+
+  # The Record type CompositeRebuildOptionsRecord.
+
+  def self.check_lower_TypeCompositeRebuildOptionsRecord(v)
+    RustBuffer.check_lower_TypeHnswBuildLimitsRecord(v.hnsw_limits)
+    
+    RustBuffer.check_lower_TypeProductQuantizationBuildLimitsRecord(v.pq_limits)
+  end
+
+  def self.alloc_from_TypeCompositeRebuildOptionsRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeCompositeRebuildOptionsRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeCompositeRebuildOptionsRecord
+    consumeWithStream do |stream|
+      return stream.readTypeCompositeRebuildOptionsRecord
     end
   end
 
@@ -782,6 +944,27 @@ end
   def consumeIntoTypeExactProximityRecordRecord
     consumeWithStream do |stream|
       return stream.readTypeExactProximityRecordRecord
+    end
+  end
+
+  # The Record type FullRebuildReasonRecord.
+
+  def self.check_lower_TypeFullRebuildReasonRecord(v)
+    RustBuffer.check_lower_TypeFullRebuildReasonKindRecord(v.kind)
+    
+    
+  end
+
+  def self.alloc_from_TypeFullRebuildReasonRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeFullRebuildReasonRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeFullRebuildReasonRecord
+    consumeWithStream do |stream|
+      return stream.readTypeFullRebuildReasonRecord
     end
   end
 
@@ -4095,6 +4278,63 @@ end
   end
   
 
+  # The Enum type CatalogAcceleratorKindRecord.
+
+  def self.check_lower_TypeCatalogAcceleratorKindRecord(v)
+  end
+
+  def self.alloc_from_TypeCatalogAcceleratorKindRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeCatalogAcceleratorKindRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeCatalogAcceleratorKindRecord
+    consumeWithStream do |stream|
+      return stream.readTypeCatalogAcceleratorKindRecord
+    end
+  end
+  
+
+  # The Enum type CompositeBaseKindRecord.
+
+  def self.check_lower_TypeCompositeBaseKindRecord(v)
+  end
+
+  def self.alloc_from_TypeCompositeBaseKindRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeCompositeBaseKindRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeCompositeBaseKindRecord
+    consumeWithStream do |stream|
+      return stream.readTypeCompositeBaseKindRecord
+    end
+  end
+  
+
+  # The Enum type CompositeBuildOrRebuildKindRecord.
+
+  def self.check_lower_TypeCompositeBuildOrRebuildKindRecord(v)
+  end
+
+  def self.alloc_from_TypeCompositeBuildOrRebuildKindRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeCompositeBuildOrRebuildKindRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeCompositeBuildOrRebuildKindRecord
+    consumeWithStream do |stream|
+      return stream.readTypeCompositeBuildOrRebuildKindRecord
+    end
+  end
+  
+
   # The Enum type ContentObjectKindRecord.
 
   def self.check_lower_TypeContentObjectKindRecord(v)
@@ -4224,6 +4464,25 @@ end
   def consumeIntoTypeEncodingKind
     consumeWithStream do |stream|
       return stream.readTypeEncodingKind
+    end
+  end
+  
+
+  # The Enum type FullRebuildReasonKindRecord.
+
+  def self.check_lower_TypeFullRebuildReasonKindRecord(v)
+  end
+
+  def self.alloc_from_TypeFullRebuildReasonKindRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeFullRebuildReasonKindRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeFullRebuildReasonKindRecord
+    consumeWithStream do |stream|
+      return stream.readTypeFullRebuildReasonKindRecord
     end
   end
   
@@ -4814,6 +5073,48 @@ end
     end
   end
 
+  # The Optional<T> type for TypeBindingCompositeAccelerator.
+
+  def self.check_lower_OptionalTypeBindingCompositeAccelerator(v)
+    if not v.nil?
+      (BindingCompositeAccelerator.uniffi_check_lower v)
+    end
+  end
+
+  def self.alloc_from_OptionalTypeBindingCompositeAccelerator(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_OptionalTypeBindingCompositeAccelerator(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoOptionalTypeBindingCompositeAccelerator
+    consumeWithStream do |stream|
+      return stream.readOptionalTypeBindingCompositeAccelerator
+    end
+  end
+
+  # The Optional<T> type for TypeBindingHnswIndex.
+
+  def self.check_lower_OptionalTypeBindingHnswIndex(v)
+    if not v.nil?
+      (BindingHnswIndex.uniffi_check_lower v)
+    end
+  end
+
+  def self.alloc_from_OptionalTypeBindingHnswIndex(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_OptionalTypeBindingHnswIndex(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoOptionalTypeBindingHnswIndex
+    consumeWithStream do |stream|
+      return stream.readOptionalTypeBindingHnswIndex
+    end
+  end
+
   # The Optional<T> type for TypeBindingMapSnapshot.
 
   def self.check_lower_OptionalTypeBindingMapSnapshot(v)
@@ -4832,6 +5133,27 @@ end
   def consumeIntoOptionalTypeBindingMapSnapshot
     consumeWithStream do |stream|
       return stream.readOptionalTypeBindingMapSnapshot
+    end
+  end
+
+  # The Optional<T> type for TypeBindingProductQuantizer.
+
+  def self.check_lower_OptionalTypeBindingProductQuantizer(v)
+    if not v.nil?
+      (BindingProductQuantizer.uniffi_check_lower v)
+    end
+  end
+
+  def self.alloc_from_OptionalTypeBindingProductQuantizer(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_OptionalTypeBindingProductQuantizer(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoOptionalTypeBindingProductQuantizer
+    consumeWithStream do |stream|
+      return stream.readOptionalTypeBindingProductQuantizer
     end
   end
 
@@ -4961,6 +5283,27 @@ end
     end
   end
 
+  # The Optional<T> type for TypeHnswBuildStatsRecord.
+
+  def self.check_lower_OptionalTypeHnswBuildStatsRecord(v)
+    if not v.nil?
+      RustBuffer.check_lower_TypeHnswBuildStatsRecord(v)
+    end
+  end
+
+  def self.alloc_from_OptionalTypeHnswBuildStatsRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_OptionalTypeHnswBuildStatsRecord(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoOptionalTypeHnswBuildStatsRecord
+    consumeWithStream do |stream|
+      return stream.readOptionalTypeHnswBuildStatsRecord
+    end
+  end
+
   # The Optional<T> type for TypeIndexedVersionRecord.
 
   def self.check_lower_OptionalTypeIndexedVersionRecord(v)
@@ -5063,6 +5406,27 @@ end
   def consumeIntoOptionalTypeMutationRecord
     consumeWithStream do |stream|
       return stream.readOptionalTypeMutationRecord
+    end
+  end
+
+  # The Optional<T> type for TypeProductQuantizationBuildStatsRecord.
+
+  def self.check_lower_OptionalTypeProductQuantizationBuildStatsRecord(v)
+    if not v.nil?
+      RustBuffer.check_lower_TypeProductQuantizationBuildStatsRecord(v)
+    end
+  end
+
+  def self.alloc_from_OptionalTypeProductQuantizationBuildStatsRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_OptionalTypeProductQuantizationBuildStatsRecord(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoOptionalTypeProductQuantizationBuildStatsRecord
+    consumeWithStream do |stream|
+      return stream.readOptionalTypeProductQuantizationBuildStatsRecord
     end
   end
 
@@ -5549,6 +5913,27 @@ end
     end
   end
 
+  # The Sequence<T> type for TypeAcceleratorCatalogEntryRecord.
+
+  def self.check_lower_SequenceTypeAcceleratorCatalogEntryRecord(v)
+    v.each do |item|
+      RustBuffer.check_lower_TypeAcceleratorCatalogEntryRecord(item)
+    end
+  end
+
+  def self.alloc_from_SequenceTypeAcceleratorCatalogEntryRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_SequenceTypeAcceleratorCatalogEntryRecord(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoSequenceTypeAcceleratorCatalogEntryRecord
+    consumeWithStream do |stream|
+      return stream.readSequenceTypeAcceleratorCatalogEntryRecord
+    end
+  end
+
   # The Sequence<T> type for TypeActiveIndexHealthRecord.
 
   def self.check_lower_SequenceTypeActiveIndexHealthRecord(v)
@@ -5672,6 +6057,27 @@ end
   def consumeIntoSequenceTypeEntryRecord
     consumeWithStream do |stream|
       return stream.readSequenceTypeEntryRecord
+    end
+  end
+
+  # The Sequence<T> type for TypeFullRebuildReasonRecord.
+
+  def self.check_lower_SequenceTypeFullRebuildReasonRecord(v)
+    v.each do |item|
+      RustBuffer.check_lower_TypeFullRebuildReasonRecord(item)
+    end
+  end
+
+  def self.alloc_from_SequenceTypeFullRebuildReasonRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_SequenceTypeFullRebuildReasonRecord(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoSequenceTypeFullRebuildReasonRecord
+    consumeWithStream do |stream|
+      return stream.readSequenceTypeFullRebuildReasonRecord
     end
   end
 
@@ -6506,6 +6912,20 @@ class RustBufferStream
     return AsyncProllyTransaction.uniffi_allocate(handle)
   end
 
+  # The Object type BindingAcceleratorCatalog.
+
+  def readTypeBindingAcceleratorCatalog
+    handle = unpack_from 8, 'Q>'
+    return BindingAcceleratorCatalog.uniffi_allocate(handle)
+  end
+
+  # The Object type BindingCompositeAccelerator.
+
+  def readTypeBindingCompositeAccelerator
+    handle = unpack_from 8, 'Q>'
+    return BindingCompositeAccelerator.uniffi_allocate(handle)
+  end
+
   # The Object type BindingHnswIndex.
 
   def readTypeBindingHnswIndex
@@ -6709,6 +7129,16 @@ class RustBufferStream
     return SecondaryIndexExtractorCallback.uniffi_allocate(handle)
   end
 
+  # The Record type AcceleratorCatalogEntryRecord.
+
+  def readTypeAcceleratorCatalogEntryRecord
+    AcceleratorCatalogEntryRecord.new(
+      kind: readTypeCatalogAcceleratorKindRecord,
+      configuration_fingerprint: readBytes,
+      manifest: readBytes
+    )
+  end
+
   # The Record type ActiveIndexHealthRecord.
 
   def readTypeActiveIndexHealthRecord
@@ -6880,6 +7310,81 @@ class RustBufferStream
     )
   end
 
+  # The Record type CompositeAcceleratorConfigRecord.
+
+  def readTypeCompositeAcceleratorConfigRecord
+    CompositeAcceleratorConfigRecord.new(
+      max_delta_records: readU64,
+      max_shadow_records: readU64,
+      max_delta_ratio_ppm: readU32,
+      max_shadow_ratio_ppm: readU32,
+      base_overfetch_multiplier: readU32
+    )
+  end
+
+  # The Record type CompositeBuildLimitsRecord.
+
+  def readTypeCompositeBuildLimitsRecord
+    CompositeBuildLimitsRecord.new(
+      max_diff_entries: readOptionalu64,
+      max_owned_bytes: readOptionalu64,
+      max_encoded_output_bytes: readOptionalu64,
+      max_distance_evaluations: readOptionalu64
+    )
+  end
+
+  # The Record type CompositeBuildOrRebuildOutcomeRecord.
+
+  def readTypeCompositeBuildOrRebuildOutcomeRecord
+    CompositeBuildOrRebuildOutcomeRecord.new(
+      kind: readTypeCompositeBuildOrRebuildKindRecord,
+      composite: readOptionalTypeBindingCompositeAccelerator,
+      hnsw: readOptionalTypeBindingHnswIndex,
+      pq: readOptionalTypeBindingProductQuantizer,
+      reasons: readSequenceTypeFullRebuildReasonRecord,
+      composite_stats: readTypeCompositeBuildStatsRecord,
+      hnsw_stats: readOptionalTypeHnswBuildStatsRecord,
+      pq_stats: readOptionalTypeProductQuantizationBuildStatsRecord
+    )
+  end
+
+  # The Record type CompositeBuildOutcomeRecord.
+
+  def readTypeCompositeBuildOutcomeRecord
+    CompositeBuildOutcomeRecord.new(
+      accelerator: readOptionalTypeBindingCompositeAccelerator,
+      reasons: readSequenceTypeFullRebuildReasonRecord,
+      stats: readTypeCompositeBuildStatsRecord
+    )
+  end
+
+  # The Record type CompositeBuildStatsRecord.
+
+  def readTypeCompositeBuildStatsRecord
+    CompositeBuildStatsRecord.new(
+      diff_entries: readU64,
+      inserted_records: readU64,
+      vector_updated_records: readU64,
+      value_only_records: readU64,
+      deleted_records: readU64,
+      delta_records: readU64,
+      shadow_records: readU64,
+      owned_bytes_peak: readU64,
+      encoded_output_bytes: readU64,
+      distance_evaluations: readU64
+    )
+  end
+
+  # The Record type CompositeRebuildOptionsRecord.
+
+  def readTypeCompositeRebuildOptionsRecord
+    CompositeRebuildOptionsRecord.new(
+      hnsw_limits: readTypeHnswBuildLimitsRecord,
+      pq_worker_threads: readU64,
+      pq_limits: readTypeProductQuantizationBuildLimitsRecord
+    )
+  end
+
   # The Record type ConfigRecord.
 
   def readTypeConfigRecord
@@ -7046,6 +7551,16 @@ class RustBufferStream
     ExactProximityRecordRecord.new(
       vector: readSequencef32,
       value: readBytes
+    )
+  end
+
+  # The Record type FullRebuildReasonRecord.
+
+  def readTypeFullRebuildReasonRecord
+    FullRebuildReasonRecord.new(
+      kind: readTypeFullRebuildReasonKindRecord,
+      actual: readU64,
+      maximum: readU64
     )
   end
 
@@ -8758,6 +9273,72 @@ class RustBufferStream
 
   
   
+  # The Enum type CatalogAcceleratorKindRecord.
+
+  def readTypeCatalogAcceleratorKindRecord
+    variant = unpack_from 4, 'l>'
+    
+    if variant == 1
+      return CatalogAcceleratorKindRecord::HNSW
+    end
+    if variant == 2
+      return CatalogAcceleratorKindRecord::PRODUCT_QUANTIZED
+    end
+    if variant == 3
+      return CatalogAcceleratorKindRecord::COMPOSITE
+    end
+
+    raise InternalError, 'Unexpected variant tag for TypeCatalogAcceleratorKindRecord'
+  end
+
+  
+
+  
+  
+  # The Enum type CompositeBaseKindRecord.
+
+  def readTypeCompositeBaseKindRecord
+    variant = unpack_from 4, 'l>'
+    
+    if variant == 1
+      return CompositeBaseKindRecord::HNSW
+    end
+    if variant == 2
+      return CompositeBaseKindRecord::PRODUCT_QUANTIZED
+    end
+
+    raise InternalError, 'Unexpected variant tag for TypeCompositeBaseKindRecord'
+  end
+
+  
+
+  
+  
+  # The Enum type CompositeBuildOrRebuildKindRecord.
+
+  def readTypeCompositeBuildOrRebuildKindRecord
+    variant = unpack_from 4, 'l>'
+    
+    if variant == 1
+      return CompositeBuildOrRebuildKindRecord::COMPOSITE
+    end
+    if variant == 2
+      return CompositeBuildOrRebuildKindRecord::NO_ACCELERATOR_REQUIRED
+    end
+    if variant == 3
+      return CompositeBuildOrRebuildKindRecord::HNSW_REBUILT
+    end
+    if variant == 4
+      return CompositeBuildOrRebuildKindRecord::PRODUCT_QUANTIZED_REBUILT
+    end
+
+    raise InternalError, 'Unexpected variant tag for TypeCompositeBuildOrRebuildKindRecord'
+  end
+
+  
+
+  
+  
   # The Enum type ContentObjectKindRecord.
 
   def readTypeContentObjectKindRecord
@@ -8927,6 +9508,31 @@ class RustBufferStream
     end
 
     raise InternalError, 'Unexpected variant tag for TypeEncodingKind'
+  end
+
+  
+
+  
+  
+  # The Enum type FullRebuildReasonKindRecord.
+
+  def readTypeFullRebuildReasonKindRecord
+    variant = unpack_from 4, 'l>'
+    
+    if variant == 1
+      return FullRebuildReasonKindRecord::DELTA_RECORDS
+    end
+    if variant == 2
+      return FullRebuildReasonKindRecord::SHADOW_RECORDS
+    end
+    if variant == 3
+      return FullRebuildReasonKindRecord::DELTA_RATIO
+    end
+    if variant == 4
+      return FullRebuildReasonKindRecord::SHADOW_RATIO
+    end
+
+    raise InternalError, 'Unexpected variant tag for TypeFullRebuildReasonKindRecord'
   end
 
   
@@ -9628,6 +10234,34 @@ class RustBufferStream
     end
   end
 
+  # The Optional<T> type for TypeBindingCompositeAccelerator.
+
+  def readOptionalTypeBindingCompositeAccelerator
+    flag = unpack_from 1, 'c'
+
+    if flag == 0
+      return nil
+    elsif flag == 1
+      return readTypeBindingCompositeAccelerator
+    else
+      raise InternalError, 'Unexpected flag byte for OptionalTypeBindingCompositeAccelerator'
+    end
+  end
+
+  # The Optional<T> type for TypeBindingHnswIndex.
+
+  def readOptionalTypeBindingHnswIndex
+    flag = unpack_from 1, 'c'
+
+    if flag == 0
+      return nil
+    elsif flag == 1
+      return readTypeBindingHnswIndex
+    else
+      raise InternalError, 'Unexpected flag byte for OptionalTypeBindingHnswIndex'
+    end
+  end
+
   # The Optional<T> type for TypeBindingMapSnapshot.
 
   def readOptionalTypeBindingMapSnapshot
@@ -9639,6 +10273,20 @@ class RustBufferStream
       return readTypeBindingMapSnapshot
     else
       raise InternalError, 'Unexpected flag byte for OptionalTypeBindingMapSnapshot'
+    end
+  end
+
+  # The Optional<T> type for TypeBindingProductQuantizer.
+
+  def readOptionalTypeBindingProductQuantizer
+    flag = unpack_from 1, 'c'
+
+    if flag == 0
+      return nil
+    elsif flag == 1
+      return readTypeBindingProductQuantizer
+    else
+      raise InternalError, 'Unexpected flag byte for OptionalTypeBindingProductQuantizer'
     end
   end
 
@@ -9726,6 +10374,20 @@ class RustBufferStream
     end
   end
 
+  # The Optional<T> type for TypeHnswBuildStatsRecord.
+
+  def readOptionalTypeHnswBuildStatsRecord
+    flag = unpack_from 1, 'c'
+
+    if flag == 0
+      return nil
+    elsif flag == 1
+      return readTypeHnswBuildStatsRecord
+    else
+      raise InternalError, 'Unexpected flag byte for OptionalTypeHnswBuildStatsRecord'
+    end
+  end
+
   # The Optional<T> type for TypeIndexedVersionRecord.
 
   def readOptionalTypeIndexedVersionRecord
@@ -9793,6 +10455,20 @@ class RustBufferStream
       return readTypeMutationRecord
     else
       raise InternalError, 'Unexpected flag byte for OptionalTypeMutationRecord'
+    end
+  end
+
+  # The Optional<T> type for TypeProductQuantizationBuildStatsRecord.
+
+  def readOptionalTypeProductQuantizationBuildStatsRecord
+    flag = unpack_from 1, 'c'
+
+    if flag == 0
+      return nil
+    elsif flag == 1
+      return readTypeProductQuantizationBuildStatsRecord
+    else
+      raise InternalError, 'Unexpected flag byte for OptionalTypeProductQuantizationBuildStatsRecord'
     end
   end
 
@@ -10124,6 +10800,22 @@ class RustBufferStream
     items
   end
 
+  # The Sequence<T> type for TypeAcceleratorCatalogEntryRecord.
+
+  def readSequenceTypeAcceleratorCatalogEntryRecord
+    count = unpack_from 4, 'l>'
+
+    raise InternalError, 'Unexpected negative sequence length' if count.negative?
+
+    items = []
+
+    count.times do
+      items.append readTypeAcceleratorCatalogEntryRecord
+    end
+
+    items
+  end
+
   # The Sequence<T> type for TypeActiveIndexHealthRecord.
 
   def readSequenceTypeActiveIndexHealthRecord
@@ -10215,6 +10907,22 @@ class RustBufferStream
 
     count.times do
       items.append readTypeEntryRecord
+    end
+
+    items
+  end
+
+  # The Sequence<T> type for TypeFullRebuildReasonRecord.
+
+  def readSequenceTypeFullRebuildReasonRecord
+    count = unpack_from 4, 'l>'
+
+    raise InternalError, 'Unexpected negative sequence length' if count.negative?
+
+    items = []
+
+    count.times do
+      items.append readTypeFullRebuildReasonRecord
     end
 
     items
@@ -10878,6 +11586,20 @@ class RustBufferBuilder
     pack_into(8, 'Q>', handle)
   end
 
+  # The Object type BindingAcceleratorCatalog.
+
+  def write_TypeBindingAcceleratorCatalog(obj)
+    handle = BindingAcceleratorCatalog.uniffi_lower obj
+    pack_into(8, 'Q>', handle)
+  end
+
+  # The Object type BindingCompositeAccelerator.
+
+  def write_TypeBindingCompositeAccelerator(obj)
+    handle = BindingCompositeAccelerator.uniffi_lower obj
+    pack_into(8, 'Q>', handle)
+  end
+
   # The Object type BindingHnswIndex.
 
   def write_TypeBindingHnswIndex(obj)
@@ -11081,6 +11803,14 @@ class RustBufferBuilder
     pack_into(8, 'Q>', handle)
   end
 
+  # The Record type AcceleratorCatalogEntryRecord.
+
+  def write_TypeAcceleratorCatalogEntryRecord(v)
+    self.write_TypeCatalogAcceleratorKindRecord(v.kind)
+    self.write_Bytes(v.configuration_fingerprint)
+    self.write_Bytes(v.manifest)
+  end
+
   # The Record type ActiveIndexHealthRecord.
 
   def write_TypeActiveIndexHealthRecord(v)
@@ -11224,6 +11954,69 @@ class RustBufferBuilder
     self.write_Optionalbytes(v._end)
   end
 
+  # The Record type CompositeAcceleratorConfigRecord.
+
+  def write_TypeCompositeAcceleratorConfigRecord(v)
+    self.write_U64(v.max_delta_records)
+    self.write_U64(v.max_shadow_records)
+    self.write_U32(v.max_delta_ratio_ppm)
+    self.write_U32(v.max_shadow_ratio_ppm)
+    self.write_U32(v.base_overfetch_multiplier)
+  end
+
+  # The Record type CompositeBuildLimitsRecord.
+
+  def write_TypeCompositeBuildLimitsRecord(v)
+    self.write_Optionalu64(v.max_diff_entries)
+    self.write_Optionalu64(v.max_owned_bytes)
+    self.write_Optionalu64(v.max_encoded_output_bytes)
+    self.write_Optionalu64(v.max_distance_evaluations)
+  end
+
+  # The Record type CompositeBuildOrRebuildOutcomeRecord.
+
+  def write_TypeCompositeBuildOrRebuildOutcomeRecord(v)
+    self.write_TypeCompositeBuildOrRebuildKindRecord(v.kind)
+    self.write_OptionalTypeBindingCompositeAccelerator(v.composite)
+    self.write_OptionalTypeBindingHnswIndex(v.hnsw)
+    self.write_OptionalTypeBindingProductQuantizer(v.pq)
+    self.write_SequenceTypeFullRebuildReasonRecord(v.reasons)
+    self.write_TypeCompositeBuildStatsRecord(v.composite_stats)
+    self.write_OptionalTypeHnswBuildStatsRecord(v.hnsw_stats)
+    self.write_OptionalTypeProductQuantizationBuildStatsRecord(v.pq_stats)
+  end
+
+  # The Record type CompositeBuildOutcomeRecord.
+
+  def write_TypeCompositeBuildOutcomeRecord(v)
+    self.write_OptionalTypeBindingCompositeAccelerator(v.accelerator)
+    self.write_SequenceTypeFullRebuildReasonRecord(v.reasons)
+    self.write_TypeCompositeBuildStatsRecord(v.stats)
+  end
+
+  # The Record type CompositeBuildStatsRecord.
+
+  def write_TypeCompositeBuildStatsRecord(v)
+    self.write_U64(v.diff_entries)
+    self.write_U64(v.inserted_records)
+    self.write_U64(v.vector_updated_records)
+    self.write_U64(v.value_only_records)
+    self.write_U64(v.deleted_records)
+    self.write_U64(v.delta_records)
+    self.write_U64(v.shadow_records)
+    self.write_U64(v.owned_bytes_peak)
+    self.write_U64(v.encoded_output_bytes)
+    self.write_U64(v.distance_evaluations)
+  end
+
+  # The Record type CompositeRebuildOptionsRecord.
+
+  def write_TypeCompositeRebuildOptionsRecord(v)
+    self.write_TypeHnswBuildLimitsRecord(v.hnsw_limits)
+    self.write_U64(v.pq_worker_threads)
+    self.write_TypeProductQuantizationBuildLimitsRecord(v.pq_limits)
+  end
+
   # The Record type ConfigRecord.
 
   def write_TypeConfigRecord(v)
@@ -11361,6 +12154,14 @@ class RustBufferBuilder
   def write_TypeExactProximityRecordRecord(v)
     self.write_Sequencef32(v.vector)
     self.write_Bytes(v.value)
+  end
+
+  # The Record type FullRebuildReasonRecord.
+
+  def write_TypeFullRebuildReasonRecord(v)
+    self.write_TypeFullRebuildReasonKindRecord(v.kind)
+    self.write_U64(v.actual)
+    self.write_U64(v.maximum)
   end
 
   # The Record type GcPlanRecord.
@@ -12763,6 +13564,27 @@ class RustBufferBuilder
  end
    
 
+  # The Enum type CatalogAcceleratorKindRecord.
+
+  def write_TypeCatalogAcceleratorKindRecord(v)
+    pack_into(4, 'l>', v)
+ end
+   
+
+  # The Enum type CompositeBaseKindRecord.
+
+  def write_TypeCompositeBaseKindRecord(v)
+    pack_into(4, 'l>', v)
+ end
+   
+
+  # The Enum type CompositeBuildOrRebuildKindRecord.
+
+  def write_TypeCompositeBuildOrRebuildKindRecord(v)
+    pack_into(4, 'l>', v)
+ end
+   
+
   # The Enum type ContentObjectKindRecord.
 
   def write_TypeContentObjectKindRecord(v)
@@ -12808,6 +13630,13 @@ class RustBufferBuilder
   # The Enum type EncodingKind.
 
   def write_TypeEncodingKind(v)
+    pack_into(4, 'l>', v)
+ end
+   
+
+  # The Enum type FullRebuildReasonKindRecord.
+
+  def write_TypeFullRebuildReasonKindRecord(v)
     pack_into(4, 'l>', v)
  end
    
@@ -13052,6 +13881,28 @@ class RustBufferBuilder
     end
   end
 
+  # The Optional<T> type for TypeBindingCompositeAccelerator.
+
+  def write_OptionalTypeBindingCompositeAccelerator(v)
+    if v.nil?
+      pack_into(1, 'c', 0)
+    else
+      pack_into(1, 'c', 1)
+      self.write_TypeBindingCompositeAccelerator(v)
+    end
+  end
+
+  # The Optional<T> type for TypeBindingHnswIndex.
+
+  def write_OptionalTypeBindingHnswIndex(v)
+    if v.nil?
+      pack_into(1, 'c', 0)
+    else
+      pack_into(1, 'c', 1)
+      self.write_TypeBindingHnswIndex(v)
+    end
+  end
+
   # The Optional<T> type for TypeBindingMapSnapshot.
 
   def write_OptionalTypeBindingMapSnapshot(v)
@@ -13060,6 +13911,17 @@ class RustBufferBuilder
     else
       pack_into(1, 'c', 1)
       self.write_TypeBindingMapSnapshot(v)
+    end
+  end
+
+  # The Optional<T> type for TypeBindingProductQuantizer.
+
+  def write_OptionalTypeBindingProductQuantizer(v)
+    if v.nil?
+      pack_into(1, 'c', 0)
+    else
+      pack_into(1, 'c', 1)
+      self.write_TypeBindingProductQuantizer(v)
     end
   end
 
@@ -13129,6 +13991,17 @@ class RustBufferBuilder
     end
   end
 
+  # The Optional<T> type for TypeHnswBuildStatsRecord.
+
+  def write_OptionalTypeHnswBuildStatsRecord(v)
+    if v.nil?
+      pack_into(1, 'c', 0)
+    else
+      pack_into(1, 'c', 1)
+      self.write_TypeHnswBuildStatsRecord(v)
+    end
+  end
+
   # The Optional<T> type for TypeIndexedVersionRecord.
 
   def write_OptionalTypeIndexedVersionRecord(v)
@@ -13181,6 +14054,17 @@ class RustBufferBuilder
     else
       pack_into(1, 'c', 1)
       self.write_TypeMutationRecord(v)
+    end
+  end
+
+  # The Optional<T> type for TypeProductQuantizationBuildStatsRecord.
+
+  def write_OptionalTypeProductQuantizationBuildStatsRecord(v)
+    if v.nil?
+      pack_into(1, 'c', 0)
+    else
+      pack_into(1, 'c', 1)
+      self.write_TypeProductQuantizationBuildStatsRecord(v)
     end
   end
 
@@ -13434,6 +14318,16 @@ class RustBufferBuilder
     end
   end
 
+  # The Sequence<T> type for TypeAcceleratorCatalogEntryRecord.
+
+  def write_SequenceTypeAcceleratorCatalogEntryRecord(items)
+    pack_into(4, 'l>', items.size)
+
+    items.each do |item|
+      self.write_TypeAcceleratorCatalogEntryRecord(item)
+    end
+  end
+
   # The Sequence<T> type for TypeActiveIndexHealthRecord.
 
   def write_SequenceTypeActiveIndexHealthRecord(items)
@@ -13491,6 +14385,16 @@ class RustBufferBuilder
 
     items.each do |item|
       self.write_TypeEntryRecord(item)
+    end
+  end
+
+  # The Sequence<T> type for TypeFullRebuildReasonRecord.
+
+  def write_SequenceTypeFullRebuildReasonRecord(items)
+    pack_into(4, 'l>', items.size)
+
+    items.each do |item|
+      self.write_TypeFullRebuildReasonRecord(item)
     end
   end
 
@@ -14021,6 +14925,10 @@ end
 
 
 
+
+
+
+
 # Map error modules to the RustBuffer method name that reads them
 ERROR_MODULE_TO_READER_METHOD = {
 
@@ -14038,6 +14946,10 @@ ERROR_MODULE_TO_READER_METHOD = {
 
 
   ProllyBindingError => :readTypeProllyBindingError,
+
+
+
+
 
 
 
@@ -15083,6 +15995,63 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_fn_method_secondaryindexextractorcallback_extract,
     [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_clone_bindingacceleratorcatalog,
+    [:uint64, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_free_bindingacceleratorcatalog,
+    [:uint64, RustCallStatus.by_ref],
+    :void
+  attach_function :uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_entries,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_manifest,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_prove_search,
+    [:uint64, :uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_search,
+    [:uint64, :uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_source_descriptor,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_clone_bindingcompositeaccelerator,
+    [:uint64, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_free_bindingcompositeaccelerator,
+    [:uint64, RustCallStatus.by_ref],
+    :void
+  attach_function :uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_base_kind,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_base_source_descriptor,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_build_stats,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_config,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_current_source_descriptor,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_delta_count,
+    [:uint64, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_manifest,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_prove_search,
+    [:uint64, :uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_search,
+    [:uint64, :uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_shadow_count,
+    [:uint64, RustCallStatus.by_ref],
+    :uint64
   attach_function :uniffi_prolly_bindings_fn_clone_bindinghnswindex,
     [:uint64, RustCallStatus.by_ref],
     :uint64
@@ -15137,8 +16106,23 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_fn_free_bindingproximitymap,
     [:uint64, RustCallStatus.by_ref],
     :void
+  attach_function :uniffi_prolly_bindings_fn_method_bindingproximitymap_build_accelerator_catalog,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_bindingproximitymap_build_composite_hnsw,
+    [:uint64, :uint64, :uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingproximitymap_build_composite_pq,
+    [:uint64, :uint64, :uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_method_bindingproximitymap_build_hnsw,
     [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingproximitymap_build_or_rebuild_composite_hnsw,
+    [:uint64, :uint64, :uint64, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingproximitymap_build_or_rebuild_composite_pq,
+    [:uint64, :uint64, :uint64, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_method_bindingproximitymap_build_pq,
     [:uint64, RustBuffer.by_value, :uint64, RustBuffer.by_value, RustCallStatus.by_ref],
@@ -15164,6 +16148,12 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_fn_method_bindingproximitymap_get,
     [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingproximitymap_load_accelerator_catalog,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_bindingproximitymap_load_composite,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
   attach_function :uniffi_prolly_bindings_fn_method_bindingproximitymap_load_hnsw,
     [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
     :uint64
@@ -16079,6 +17069,15 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_fn_func_open_remote_prolly_engine,
     [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
     :uint64
+  attach_function :uniffi_prolly_bindings_fn_func_default_composite_accelerator_config,
+    [RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_func_default_composite_build_limits,
+    [RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_func_default_composite_rebuild_options,
+    [RustCallStatus.by_ref],
+    RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_func_default_content_graph_limits,
     [RustCallStatus.by_ref],
     RustBuffer.by_value
@@ -16488,6 +17487,15 @@ module UniFFILib
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_func_open_remote_prolly_engine,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_func_default_composite_accelerator_config,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_func_default_composite_build_limits,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_func_default_composite_rebuild_options,
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_func_default_content_graph_limits,
@@ -17303,6 +18311,51 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_checksum_method_secondaryindexextractorcallback_extract,
     [RustCallStatus.by_ref],
     :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_entries,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_manifest,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_prove_search,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_search,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_source_descriptor,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_base_kind,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_base_source_descriptor,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_build_stats,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_config,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_current_source_descriptor,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_delta_count,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_manifest,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_prove_search,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_search,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_shadow_count,
+    [RustCallStatus.by_ref],
+    :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_bindinghnswindex_config,
     [RustCallStatus.by_ref],
     :uint16
@@ -17339,7 +18392,22 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_checksum_method_bindingproductquantizer_source_descriptor,
     [RustCallStatus.by_ref],
     :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_accelerator_catalog,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_composite_hnsw,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_composite_pq,
+    [RustCallStatus.by_ref],
+    :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_hnsw,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_or_rebuild_composite_hnsw,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_or_rebuild_composite_pq,
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_pq,
@@ -17364,6 +18432,12 @@ module UniFFILib
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_bindingproximitymap_get,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingproximitymap_load_accelerator_catalog,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingproximitymap_load_composite,
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_bindingproximitymap_load_hnsw,
@@ -18159,6 +19233,42 @@ end
   
   
 
+class CatalogAcceleratorKindRecord
+  HNSW = 1
+  PRODUCT_QUANTIZED = 2
+  COMPOSITE = 3
+  
+end
+
+
+  
+  
+  
+
+class CompositeBaseKindRecord
+  HNSW = 1
+  PRODUCT_QUANTIZED = 2
+  
+end
+
+
+  
+  
+  
+
+class CompositeBuildOrRebuildKindRecord
+  COMPOSITE = 1
+  NO_ACCELERATOR_REQUIRED = 2
+  HNSW_REBUILT = 3
+  PRODUCT_QUANTIZED_REBUILT = 4
+  
+end
+
+
+  
+  
+  
+
 class ContentObjectKindRecord
   ORDERED_NODE = 1
   PROXIMITY_DESCRIPTOR = 2
@@ -18184,6 +19294,19 @@ class DistanceMetricRecord
   L2_SQUARED = 1
   COSINE = 2
   INNER_PRODUCT = 3
+  
+end
+
+
+  
+  
+  
+
+class FullRebuildReasonKindRecord
+  DELTA_RECORDS = 1
+  SHADOW_RECORDS = 2
+  DELTA_RATIO = 3
+  SHADOW_RATIO = 4
   
 end
 
@@ -22597,6 +23720,241 @@ class SecondaryIndexLimitsRecord
   end
 end
   
+  # Record type AcceleratorCatalogEntryRecord
+class AcceleratorCatalogEntryRecord
+  attr_reader :kind, :configuration_fingerprint, :manifest
+
+  def initialize(kind:, configuration_fingerprint:, manifest:)
+    @kind = kind
+    @configuration_fingerprint = configuration_fingerprint
+    @manifest = manifest
+  end
+
+  def ==(other)
+    if @kind != other.kind
+      return false
+    end
+    if @configuration_fingerprint != other.configuration_fingerprint
+      return false
+    end
+    if @manifest != other.manifest
+      return false
+    end
+
+    true
+  end
+end
+  
+  # Record type CompositeAcceleratorConfigRecord
+class CompositeAcceleratorConfigRecord
+  attr_reader :max_delta_records, :max_shadow_records, :max_delta_ratio_ppm, :max_shadow_ratio_ppm, :base_overfetch_multiplier
+
+  def initialize(max_delta_records:, max_shadow_records:, max_delta_ratio_ppm:, max_shadow_ratio_ppm:, base_overfetch_multiplier:)
+    @max_delta_records = max_delta_records
+    @max_shadow_records = max_shadow_records
+    @max_delta_ratio_ppm = max_delta_ratio_ppm
+    @max_shadow_ratio_ppm = max_shadow_ratio_ppm
+    @base_overfetch_multiplier = base_overfetch_multiplier
+  end
+
+  def ==(other)
+    if @max_delta_records != other.max_delta_records
+      return false
+    end
+    if @max_shadow_records != other.max_shadow_records
+      return false
+    end
+    if @max_delta_ratio_ppm != other.max_delta_ratio_ppm
+      return false
+    end
+    if @max_shadow_ratio_ppm != other.max_shadow_ratio_ppm
+      return false
+    end
+    if @base_overfetch_multiplier != other.base_overfetch_multiplier
+      return false
+    end
+
+    true
+  end
+end
+  
+  # Record type CompositeBuildLimitsRecord
+class CompositeBuildLimitsRecord
+  attr_reader :max_diff_entries, :max_owned_bytes, :max_encoded_output_bytes, :max_distance_evaluations
+
+  def initialize(max_diff_entries:, max_owned_bytes:, max_encoded_output_bytes:, max_distance_evaluations:)
+    @max_diff_entries = max_diff_entries
+    @max_owned_bytes = max_owned_bytes
+    @max_encoded_output_bytes = max_encoded_output_bytes
+    @max_distance_evaluations = max_distance_evaluations
+  end
+
+  def ==(other)
+    if @max_diff_entries != other.max_diff_entries
+      return false
+    end
+    if @max_owned_bytes != other.max_owned_bytes
+      return false
+    end
+    if @max_encoded_output_bytes != other.max_encoded_output_bytes
+      return false
+    end
+    if @max_distance_evaluations != other.max_distance_evaluations
+      return false
+    end
+
+    true
+  end
+end
+  
+  # Record type CompositeBuildOrRebuildOutcomeRecord
+class CompositeBuildOrRebuildOutcomeRecord
+  attr_reader :kind, :composite, :hnsw, :pq, :reasons, :composite_stats, :hnsw_stats, :pq_stats
+
+  def initialize(kind:, composite:, hnsw:, pq:, reasons:, composite_stats:, hnsw_stats:, pq_stats:)
+    @kind = kind
+    @composite = composite
+    @hnsw = hnsw
+    @pq = pq
+    @reasons = reasons
+    @composite_stats = composite_stats
+    @hnsw_stats = hnsw_stats
+    @pq_stats = pq_stats
+  end
+
+  def ==(other)
+    if @kind != other.kind
+      return false
+    end
+    if @composite != other.composite
+      return false
+    end
+    if @hnsw != other.hnsw
+      return false
+    end
+    if @pq != other.pq
+      return false
+    end
+    if @reasons != other.reasons
+      return false
+    end
+    if @composite_stats != other.composite_stats
+      return false
+    end
+    if @hnsw_stats != other.hnsw_stats
+      return false
+    end
+    if @pq_stats != other.pq_stats
+      return false
+    end
+
+    true
+  end
+end
+  
+  # Record type CompositeBuildOutcomeRecord
+class CompositeBuildOutcomeRecord
+  attr_reader :accelerator, :reasons, :stats
+
+  def initialize(accelerator:, reasons:, stats:)
+    @accelerator = accelerator
+    @reasons = reasons
+    @stats = stats
+  end
+
+  def ==(other)
+    if @accelerator != other.accelerator
+      return false
+    end
+    if @reasons != other.reasons
+      return false
+    end
+    if @stats != other.stats
+      return false
+    end
+
+    true
+  end
+end
+  
+  # Record type CompositeBuildStatsRecord
+class CompositeBuildStatsRecord
+  attr_reader :diff_entries, :inserted_records, :vector_updated_records, :value_only_records, :deleted_records, :delta_records, :shadow_records, :owned_bytes_peak, :encoded_output_bytes, :distance_evaluations
+
+  def initialize(diff_entries:, inserted_records:, vector_updated_records:, value_only_records:, deleted_records:, delta_records:, shadow_records:, owned_bytes_peak:, encoded_output_bytes:, distance_evaluations:)
+    @diff_entries = diff_entries
+    @inserted_records = inserted_records
+    @vector_updated_records = vector_updated_records
+    @value_only_records = value_only_records
+    @deleted_records = deleted_records
+    @delta_records = delta_records
+    @shadow_records = shadow_records
+    @owned_bytes_peak = owned_bytes_peak
+    @encoded_output_bytes = encoded_output_bytes
+    @distance_evaluations = distance_evaluations
+  end
+
+  def ==(other)
+    if @diff_entries != other.diff_entries
+      return false
+    end
+    if @inserted_records != other.inserted_records
+      return false
+    end
+    if @vector_updated_records != other.vector_updated_records
+      return false
+    end
+    if @value_only_records != other.value_only_records
+      return false
+    end
+    if @deleted_records != other.deleted_records
+      return false
+    end
+    if @delta_records != other.delta_records
+      return false
+    end
+    if @shadow_records != other.shadow_records
+      return false
+    end
+    if @owned_bytes_peak != other.owned_bytes_peak
+      return false
+    end
+    if @encoded_output_bytes != other.encoded_output_bytes
+      return false
+    end
+    if @distance_evaluations != other.distance_evaluations
+      return false
+    end
+
+    true
+  end
+end
+  
+  # Record type CompositeRebuildOptionsRecord
+class CompositeRebuildOptionsRecord
+  attr_reader :hnsw_limits, :pq_worker_threads, :pq_limits
+
+  def initialize(hnsw_limits:, pq_worker_threads:, pq_limits:)
+    @hnsw_limits = hnsw_limits
+    @pq_worker_threads = pq_worker_threads
+    @pq_limits = pq_limits
+  end
+
+  def ==(other)
+    if @hnsw_limits != other.hnsw_limits
+      return false
+    end
+    if @pq_worker_threads != other.pq_worker_threads
+      return false
+    end
+    if @pq_limits != other.pq_limits
+      return false
+    end
+
+    true
+  end
+end
+  
   # Record type ContentGraphLimitsRecord
 class ContentGraphLimitsRecord
   attr_reader :max_objects, :max_depth, :max_bytes, :max_references_per_object
@@ -22640,6 +23998,31 @@ class ExactProximityRecordRecord
       return false
     end
     if @value != other.value
+      return false
+    end
+
+    true
+  end
+end
+  
+  # Record type FullRebuildReasonRecord
+class FullRebuildReasonRecord
+  attr_reader :kind, :actual, :maximum
+
+  def initialize(kind:, actual:, maximum:)
+    @kind = kind
+    @actual = actual
+    @maximum = maximum
+  end
+
+  def ==(other)
+    if @kind != other.kind
+      return false
+    end
+    if @actual != other.actual
+      return false
+    end
+    if @maximum != other.maximum
       return false
     end
 
@@ -25350,6 +26733,33 @@ def self.open_remote_prolly_engine(store, config)
     
   result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_func_open_remote_prolly_engine,(ForeignRemoteStore.uniffi_lower store),RustBuffer.alloc_from_TypeConfigRecord(config))
   return AsyncProllyEngine.uniffi_allocate(result)
+end
+
+
+  
+  
+
+def self.default_composite_accelerator_config()
+  result = Prolly.rust_call(:uniffi_prolly_bindings_fn_func_default_composite_accelerator_config,)
+  return result.consumeIntoTypeCompositeAcceleratorConfigRecord
+end
+
+
+  
+  
+
+def self.default_composite_build_limits()
+  result = Prolly.rust_call(:uniffi_prolly_bindings_fn_func_default_composite_build_limits,)
+  return result.consumeIntoTypeCompositeBuildLimitsRecord
+end
+
+
+  
+  
+
+def self.default_composite_rebuild_options()
+  result = Prolly.rust_call(:uniffi_prolly_bindings_fn_func_default_composite_rebuild_options,)
+  return result.consumeIntoTypeCompositeRebuildOptionsRecord
 end
 
 
@@ -28539,6 +29949,182 @@ end
   
 end
   
+  class BindingAcceleratorCatalog
+
+  # A private helper for initializing instances of the class from a raw handle,
+  # bypassing any initialization logic and ensuring they are GC'd properly.
+  def self.uniffi_allocate(handle)
+    inst = allocate
+    inst.instance_variable_set :@handle, handle
+    ObjectSpace.define_finalizer(inst, uniffi_define_finalizer_by_handle(handle, inst.object_id))
+    return inst
+  end
+
+  # A private helper for registering an object finalizer.
+  # N.B. it's important that this does not capture a reference
+  # to the actual instance, only its underlying handle.
+  def self.uniffi_define_finalizer_by_handle(handle, object_id)
+    Proc.new do |_id|
+      Prolly.rust_call(
+        :uniffi_prolly_bindings_fn_free_bindingacceleratorcatalog,
+        handle
+      )
+    end
+  end
+
+  # A private helper for lowering instances into a raw handle.
+  # This does an explicit typecheck, because accidentally lowering a different type of
+  # object in a place where this type is expected, could lead to memory unsafety.
+  def self.uniffi_check_lower(inst)
+    if not inst.is_a? self
+      raise TypeError.new "Expected a BindingAcceleratorCatalog instance, got #{inst}"
+    end
+  end
+
+  def uniffi_clone_handle()
+    return Prolly.rust_call(
+      :uniffi_prolly_bindings_fn_clone_bindingacceleratorcatalog,
+      @handle
+    )
+  end
+
+  def self.uniffi_lower(inst)
+    return inst.uniffi_clone_handle()
+  end
+
+  
+
+  def entries()
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_entries,uniffi_clone_handle(),)
+    return result.consumeIntoSequenceTypeAcceleratorCatalogEntryRecord
+  end
+  def manifest()
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_manifest,uniffi_clone_handle(),)
+    return result.consumeIntoBytes
+  end
+  def prove_search(map, request, limits)
+        map = map
+        (BindingProximityMap.uniffi_check_lower map)
+        request = request
+        RustBuffer.check_lower_TypeProximitySearchRequestRecord(request)
+        limits = limits
+        RustBuffer.check_lower_TypeContentGraphLimitsRecord(limits)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_prove_search,uniffi_clone_handle(),(BindingProximityMap.uniffi_lower map),RustBuffer.alloc_from_TypeProximitySearchRequestRecord(request),RustBuffer.alloc_from_TypeContentGraphLimitsRecord(limits))
+    return BindingProximitySearchProof.uniffi_allocate(result)
+  end
+  def search(map, request)
+        map = map
+        (BindingProximityMap.uniffi_check_lower map)
+        request = request
+        RustBuffer.check_lower_TypeProximitySearchRequestRecord(request)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_search,uniffi_clone_handle(),(BindingProximityMap.uniffi_lower map),RustBuffer.alloc_from_TypeProximitySearchRequestRecord(request))
+    return result.consumeIntoTypeProximitySearchResultRecord
+  end
+  def source_descriptor()
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_source_descriptor,uniffi_clone_handle(),)
+    return result.consumeIntoBytes
+  end
+  
+end
+  
+  class BindingCompositeAccelerator
+
+  # A private helper for initializing instances of the class from a raw handle,
+  # bypassing any initialization logic and ensuring they are GC'd properly.
+  def self.uniffi_allocate(handle)
+    inst = allocate
+    inst.instance_variable_set :@handle, handle
+    ObjectSpace.define_finalizer(inst, uniffi_define_finalizer_by_handle(handle, inst.object_id))
+    return inst
+  end
+
+  # A private helper for registering an object finalizer.
+  # N.B. it's important that this does not capture a reference
+  # to the actual instance, only its underlying handle.
+  def self.uniffi_define_finalizer_by_handle(handle, object_id)
+    Proc.new do |_id|
+      Prolly.rust_call(
+        :uniffi_prolly_bindings_fn_free_bindingcompositeaccelerator,
+        handle
+      )
+    end
+  end
+
+  # A private helper for lowering instances into a raw handle.
+  # This does an explicit typecheck, because accidentally lowering a different type of
+  # object in a place where this type is expected, could lead to memory unsafety.
+  def self.uniffi_check_lower(inst)
+    if not inst.is_a? self
+      raise TypeError.new "Expected a BindingCompositeAccelerator instance, got #{inst}"
+    end
+  end
+
+  def uniffi_clone_handle()
+    return Prolly.rust_call(
+      :uniffi_prolly_bindings_fn_clone_bindingcompositeaccelerator,
+      @handle
+    )
+  end
+
+  def self.uniffi_lower(inst)
+    return inst.uniffi_clone_handle()
+  end
+
+  
+
+  def base_kind()
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_base_kind,uniffi_clone_handle(),)
+    return result.consumeIntoTypeCompositeBaseKindRecord
+  end
+  def base_source_descriptor()
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_base_source_descriptor,uniffi_clone_handle(),)
+    return result.consumeIntoBytes
+  end
+  def build_stats()
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_build_stats,uniffi_clone_handle(),)
+    return result.consumeIntoTypeCompositeBuildStatsRecord
+  end
+  def config()
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_config,uniffi_clone_handle(),)
+    return result.consumeIntoTypeCompositeAcceleratorConfigRecord
+  end
+  def current_source_descriptor()
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_current_source_descriptor,uniffi_clone_handle(),)
+    return result.consumeIntoBytes
+  end
+  def delta_count()
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_delta_count,uniffi_clone_handle(),)
+    return result.to_i
+  end
+  def manifest()
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_manifest,uniffi_clone_handle(),)
+    return result.consumeIntoBytes
+  end
+  def prove_search(map, request, limits)
+        map = map
+        (BindingProximityMap.uniffi_check_lower map)
+        request = request
+        RustBuffer.check_lower_TypeProximitySearchRequestRecord(request)
+        limits = limits
+        RustBuffer.check_lower_TypeContentGraphLimitsRecord(limits)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_prove_search,uniffi_clone_handle(),(BindingProximityMap.uniffi_lower map),RustBuffer.alloc_from_TypeProximitySearchRequestRecord(request),RustBuffer.alloc_from_TypeContentGraphLimitsRecord(limits))
+    return BindingProximitySearchProof.uniffi_allocate(result)
+  end
+  def search(map, request)
+        map = map
+        (BindingProximityMap.uniffi_check_lower map)
+        request = request
+        RustBuffer.check_lower_TypeProximitySearchRequestRecord(request)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_search,uniffi_clone_handle(),(BindingProximityMap.uniffi_lower map),RustBuffer.alloc_from_TypeProximitySearchRequestRecord(request))
+    return result.consumeIntoTypeProximitySearchResultRecord
+  end
+  def shadow_count()
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_shadow_count,uniffi_clone_handle(),)
+    return result.to_i
+  end
+  
+end
+  
   class BindingHnswIndex
 
   # A private helper for initializing instances of the class from a raw handle,
@@ -28748,6 +30334,40 @@ end
 
   
 
+  def build_accelerator_catalog(hnsw, pq, composite)
+        hnsw = (hnsw ? hnsw : nil)
+        RustBuffer.check_lower_OptionalTypeBindingHnswIndex(hnsw)
+        pq = (pq ? pq : nil)
+        RustBuffer.check_lower_OptionalTypeBindingProductQuantizer(pq)
+        composite = (composite ? composite : nil)
+        RustBuffer.check_lower_OptionalTypeBindingCompositeAccelerator(composite)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingproximitymap_build_accelerator_catalog,uniffi_clone_handle(),RustBuffer.alloc_from_OptionalTypeBindingHnswIndex(hnsw),RustBuffer.alloc_from_OptionalTypeBindingProductQuantizer(pq),RustBuffer.alloc_from_OptionalTypeBindingCompositeAccelerator(composite))
+    return BindingAcceleratorCatalog.uniffi_allocate(result)
+  end
+  def build_composite_hnsw(base_map, base, config, limits)
+        base_map = base_map
+        (BindingProximityMap.uniffi_check_lower base_map)
+        base = base
+        (BindingHnswIndex.uniffi_check_lower base)
+        config = config
+        RustBuffer.check_lower_TypeCompositeAcceleratorConfigRecord(config)
+        limits = limits
+        RustBuffer.check_lower_TypeCompositeBuildLimitsRecord(limits)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingproximitymap_build_composite_hnsw,uniffi_clone_handle(),(BindingProximityMap.uniffi_lower base_map),(BindingHnswIndex.uniffi_lower base),RustBuffer.alloc_from_TypeCompositeAcceleratorConfigRecord(config),RustBuffer.alloc_from_TypeCompositeBuildLimitsRecord(limits))
+    return result.consumeIntoTypeCompositeBuildOutcomeRecord
+  end
+  def build_composite_pq(base_map, base, config, limits)
+        base_map = base_map
+        (BindingProximityMap.uniffi_check_lower base_map)
+        base = base
+        (BindingProductQuantizer.uniffi_check_lower base)
+        config = config
+        RustBuffer.check_lower_TypeCompositeAcceleratorConfigRecord(config)
+        limits = limits
+        RustBuffer.check_lower_TypeCompositeBuildLimitsRecord(limits)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingproximitymap_build_composite_pq,uniffi_clone_handle(),(BindingProximityMap.uniffi_lower base_map),(BindingProductQuantizer.uniffi_lower base),RustBuffer.alloc_from_TypeCompositeAcceleratorConfigRecord(config),RustBuffer.alloc_from_TypeCompositeBuildLimitsRecord(limits))
+    return result.consumeIntoTypeCompositeBuildOutcomeRecord
+  end
   def build_hnsw(config, limits)
         config = config
         RustBuffer.check_lower_TypeHnswConfigRecord(config)
@@ -28755,6 +30375,34 @@ end
         RustBuffer.check_lower_TypeHnswBuildLimitsRecord(limits)
     result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingproximitymap_build_hnsw,uniffi_clone_handle(),RustBuffer.alloc_from_TypeHnswConfigRecord(config),RustBuffer.alloc_from_TypeHnswBuildLimitsRecord(limits))
     return result.consumeIntoTypeHnswBuildResultRecord
+  end
+  def build_or_rebuild_composite_hnsw(base_map, base, config, limits, rebuild)
+        base_map = base_map
+        (BindingProximityMap.uniffi_check_lower base_map)
+        base = base
+        (BindingHnswIndex.uniffi_check_lower base)
+        config = config
+        RustBuffer.check_lower_TypeCompositeAcceleratorConfigRecord(config)
+        limits = limits
+        RustBuffer.check_lower_TypeCompositeBuildLimitsRecord(limits)
+        rebuild = rebuild
+        RustBuffer.check_lower_TypeCompositeRebuildOptionsRecord(rebuild)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingproximitymap_build_or_rebuild_composite_hnsw,uniffi_clone_handle(),(BindingProximityMap.uniffi_lower base_map),(BindingHnswIndex.uniffi_lower base),RustBuffer.alloc_from_TypeCompositeAcceleratorConfigRecord(config),RustBuffer.alloc_from_TypeCompositeBuildLimitsRecord(limits),RustBuffer.alloc_from_TypeCompositeRebuildOptionsRecord(rebuild))
+    return result.consumeIntoTypeCompositeBuildOrRebuildOutcomeRecord
+  end
+  def build_or_rebuild_composite_pq(base_map, base, config, limits, rebuild)
+        base_map = base_map
+        (BindingProximityMap.uniffi_check_lower base_map)
+        base = base
+        (BindingProductQuantizer.uniffi_check_lower base)
+        config = config
+        RustBuffer.check_lower_TypeCompositeAcceleratorConfigRecord(config)
+        limits = limits
+        RustBuffer.check_lower_TypeCompositeBuildLimitsRecord(limits)
+        rebuild = rebuild
+        RustBuffer.check_lower_TypeCompositeRebuildOptionsRecord(rebuild)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingproximitymap_build_or_rebuild_composite_pq,uniffi_clone_handle(),(BindingProximityMap.uniffi_lower base_map),(BindingProductQuantizer.uniffi_lower base),RustBuffer.alloc_from_TypeCompositeAcceleratorConfigRecord(config),RustBuffer.alloc_from_TypeCompositeBuildLimitsRecord(limits),RustBuffer.alloc_from_TypeCompositeRebuildOptionsRecord(rebuild))
+    return result.consumeIntoTypeCompositeBuildOrRebuildOutcomeRecord
   end
   def build_pq(config, worker_threads, limits)
         config = config
@@ -28797,6 +30445,18 @@ end
         
     result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingproximitymap_get,uniffi_clone_handle(),RustBuffer.allocFromBytes(key))
     return result.consumeIntoOptionalTypeExactProximityRecordRecord
+  end
+  def load_accelerator_catalog(manifest)
+        manifest = Prolly::uniffi_bytes(manifest)
+        
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingproximitymap_load_accelerator_catalog,uniffi_clone_handle(),RustBuffer.allocFromBytes(manifest))
+    return BindingAcceleratorCatalog.uniffi_allocate(result)
+  end
+  def load_composite(manifest)
+        manifest = Prolly::uniffi_bytes(manifest)
+        
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingproximitymap_load_composite,uniffi_clone_handle(),RustBuffer.allocFromBytes(manifest))
+    return BindingCompositeAccelerator.uniffi_allocate(result)
   end
   def load_hnsw(manifest)
         manifest = Prolly::uniffi_bytes(manifest)

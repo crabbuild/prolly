@@ -946,6 +946,55 @@ export function defaultPqBuildLimits(): ProductQuantizationBuildLimits {
   return {};
 }
 
+export interface CompositeAcceleratorConfig {
+  maxDeltaRecords: bigint;
+  maxShadowRecords: bigint;
+  maxDeltaRatioPpm: number;
+  maxShadowRatioPpm: number;
+  baseOverfetchMultiplier: number;
+}
+export interface CompositeBuildLimits {
+  maxDiffEntries?: bigint; maxOwnedBytes?: bigint;
+  maxEncodedOutputBytes?: bigint; maxDistanceEvaluations?: bigint;
+}
+export interface CompositeBuildStats {
+  diffEntries: bigint; insertedRecords: bigint; vectorUpdatedRecords: bigint;
+  valueOnlyRecords: bigint; deletedRecords: bigint; deltaRecords: bigint;
+  shadowRecords: bigint; ownedBytesPeak: bigint; encodedOutputBytes: bigint;
+  distanceEvaluations: bigint;
+}
+export interface FullRebuildReason {
+  kind: "delta_records" | "shadow_records" | "delta_ratio" | "shadow_ratio";
+  actual: bigint; maximum: bigint;
+}
+export interface CompositeRebuildOptions {
+  hnswLimits?: HnswBuildLimits;
+  pqWorkerThreads?: bigint;
+  pqLimits?: ProductQuantizationBuildLimits;
+}
+export interface CompositeBuildOptions {
+  config?: CompositeAcceleratorConfig; limits?: CompositeBuildLimits; signal?: AbortSignal;
+}
+export interface CompositeBuildOrRebuildOptions extends CompositeBuildOptions { rebuild?: CompositeRebuildOptions; }
+export interface CompositeBuildOutcome {
+  accelerator?: WasmCompositeAccelerator; reasons: FullRebuildReason[]; stats: CompositeBuildStats;
+}
+export interface CompositeBuildOrRebuildOutcome {
+  kind: "composite" | "no_accelerator_required" | "hnsw_rebuilt" | "product_quantized_rebuilt";
+  composite?: WasmCompositeAccelerator; hnsw?: WasmHnswIndex; pq?: WasmProductQuantizer;
+  reasons: FullRebuildReason[]; compositeStats: CompositeBuildStats;
+  hnswStats?: HnswBuildStats; pqStats?: ProductQuantizationBuildStats;
+}
+export interface AcceleratorCatalogEntry {
+  kind: "hnsw" | "product_quantized" | "composite";
+  configurationFingerprint: Uint8Array; manifest: Uint8Array;
+}
+export function defaultCompositeAcceleratorConfig(): CompositeAcceleratorConfig {
+  return { maxDeltaRecords: 4_096n, maxShadowRecords: 8_192n, maxDeltaRatioPpm: 100_000,
+    maxShadowRatioPpm: 200_000, baseOverfetchMultiplier: 2 };
+}
+export function defaultCompositeBuildLimits(): CompositeBuildLimits { return {}; }
+
 function requireUnsignedInteger(value: number, name: string, maximum: number): number {
   if (!Number.isInteger(value) || value < 0 || value > maximum) {
     throw new RangeError(`${name} must be an unsigned integer no greater than ${maximum}`);
@@ -1024,6 +1073,42 @@ function ownPqBuildLimits(value: ProductQuantizationBuildLimits | undefined): ob
     maxDistanceEvaluations: optional(limits.maxDistanceEvaluations, "maxDistanceEvaluations"),
     maxEncodedOutputBytes: optional(limits.maxEncodedOutputBytes, "maxEncodedOutputBytes"),
     maxWorkerThreads: optional(limits.maxWorkerThreads, "maxWorkerThreads"),
+  };
+}
+
+function ownCompositeConfig(value: CompositeAcceleratorConfig | undefined): object {
+  const config = value ?? defaultCompositeAcceleratorConfig();
+  return {
+    maxDeltaRecords: requireUnsignedBigInt(config.maxDeltaRecords, "maxDeltaRecords").toString(),
+    maxShadowRecords: requireUnsignedBigInt(config.maxShadowRecords, "maxShadowRecords").toString(),
+    maxDeltaRatioPpm: requireUnsignedInteger(config.maxDeltaRatioPpm, "maxDeltaRatioPpm", 1_000_000),
+    maxShadowRatioPpm: requireUnsignedInteger(config.maxShadowRatioPpm, "maxShadowRatioPpm", 1_000_000),
+    baseOverfetchMultiplier: requireUnsignedInteger(config.baseOverfetchMultiplier, "baseOverfetchMultiplier", 0xffff_ffff),
+  };
+}
+
+function ownCompositeBuildLimits(value: CompositeBuildLimits | undefined): object {
+  const limits = value ?? defaultCompositeBuildLimits();
+  const optional = (candidate: bigint | undefined, name: string) =>
+    candidate == null ? undefined : requireUnsignedBigInt(candidate, name).toString();
+  return {
+    maxDiffEntries: optional(limits.maxDiffEntries, "maxDiffEntries"),
+    maxOwnedBytes: optional(limits.maxOwnedBytes, "maxOwnedBytes"),
+    maxEncodedOutputBytes: optional(limits.maxEncodedOutputBytes, "maxEncodedOutputBytes"),
+    maxDistanceEvaluations: optional(limits.maxDistanceEvaluations, "maxDistanceEvaluations"),
+  };
+}
+
+function ownCompositeRebuildOptions(value: CompositeRebuildOptions | undefined): object {
+  const options = value ?? {};
+  const workerThreads = requireUnsignedBigInt(options.pqWorkerThreads ?? 1n, "pqWorkerThreads");
+  if (workerThreads !== 1n) {
+    throw new RangeError("browser-safe WASM composite PQ rebuild requires pqWorkerThreads = 1");
+  }
+  return {
+    hnswLimits: ownHnswBuildLimits(options.hnswLimits),
+    pqWorkerThreads: workerThreads.toString(),
+    pqLimits: ownPqBuildLimits(options.pqLimits),
   };
 }
 
@@ -2265,6 +2350,19 @@ export class WasmSecondaryIndex implements Disposable {
   [Symbol.dispose](): void { this.close(); }
 }
 
+function wasmCompositeRebuildOutcome(result: any): CompositeBuildOrRebuildOutcome {
+  return {
+    kind: result.kind,
+    composite: result.composite == null ? undefined : new WasmCompositeAccelerator(result.composite),
+    hnsw: result.hnsw == null ? undefined : new WasmHnswIndex(result.hnsw),
+    pq: result.pq == null ? undefined : new WasmProductQuantizer(result.pq),
+    reasons: result.reasons,
+    compositeStats: result.compositeStats,
+    hnswStats: result.hnswStats,
+    pqStats: result.pqStats,
+  };
+}
+
 export class WasmProximityMap implements Disposable {
   #native?: any;
   constructor(native: any) { this.#native = native; }
@@ -2331,6 +2429,43 @@ export class WasmProximityMap implements Disposable {
   loadPq(manifest: Uint8Array): WasmProductQuantizer {
     return new WasmProductQuantizer(this.nativeHandle().loadPq(ownedPortableBytes(manifest)));
   }
+  buildCompositeHnsw(baseMap: WasmProximityMap, base: WasmHnswIndex, options: CompositeBuildOptions = {}): Promise<CompositeBuildOutcome> {
+    const native = this.nativeHandle();
+    return portablePromise(options.signal, () => {
+      const result = native.buildCompositeHnsw(baseMap.nativeHandle(), base.nativeHandle(), ownCompositeConfig(options.config), ownCompositeBuildLimits(options.limits));
+      return { accelerator: result.accelerator == null ? undefined : new WasmCompositeAccelerator(result.accelerator), reasons: result.reasons, stats: result.stats };
+    });
+  }
+  buildCompositePq(baseMap: WasmProximityMap, base: WasmProductQuantizer, options: CompositeBuildOptions = {}): Promise<CompositeBuildOutcome> {
+    const native = this.nativeHandle();
+    return portablePromise(options.signal, () => {
+      const result = native.buildCompositePq(baseMap.nativeHandle(), base.nativeHandle(), ownCompositeConfig(options.config), ownCompositeBuildLimits(options.limits));
+      return { accelerator: result.accelerator == null ? undefined : new WasmCompositeAccelerator(result.accelerator), reasons: result.reasons, stats: result.stats };
+    });
+  }
+  buildOrRebuildCompositeHnsw(baseMap: WasmProximityMap, base: WasmHnswIndex, options: CompositeBuildOrRebuildOptions = {}): Promise<CompositeBuildOrRebuildOutcome> {
+    const native = this.nativeHandle();
+    return portablePromise(options.signal, () => wasmCompositeRebuildOutcome(native.buildOrRebuildCompositeHnsw(
+      baseMap.nativeHandle(), base.nativeHandle(), ownCompositeConfig(options.config), ownCompositeBuildLimits(options.limits), ownCompositeRebuildOptions(options.rebuild),
+    )));
+  }
+  buildOrRebuildCompositePq(baseMap: WasmProximityMap, base: WasmProductQuantizer, options: CompositeBuildOrRebuildOptions = {}): Promise<CompositeBuildOrRebuildOutcome> {
+    const native = this.nativeHandle();
+    return portablePromise(options.signal, () => wasmCompositeRebuildOutcome(native.buildOrRebuildCompositePq(
+      baseMap.nativeHandle(), base.nativeHandle(), ownCompositeConfig(options.config), ownCompositeBuildLimits(options.limits), ownCompositeRebuildOptions(options.rebuild),
+    )));
+  }
+  loadComposite(manifest: Uint8Array): WasmCompositeAccelerator {
+    return new WasmCompositeAccelerator(this.nativeHandle().loadComposite(ownedPortableBytes(manifest)));
+  }
+  buildAcceleratorCatalog(options: { hnsw?: WasmHnswIndex; pq?: WasmProductQuantizer; composite?: WasmCompositeAccelerator } = {}): WasmAcceleratorCatalog {
+    return new WasmAcceleratorCatalog(this.nativeHandle().buildAcceleratorCatalog(
+      options.hnsw?.manifest(), options.pq?.manifest(), options.composite?.manifest(),
+    ));
+  }
+  loadAcceleratorCatalog(manifest: Uint8Array): WasmAcceleratorCatalog {
+    return new WasmAcceleratorCatalog(this.nativeHandle().loadAcceleratorCatalog(ownedPortableBytes(manifest)));
+  }
   mutate(mutations: PortableProximityMutation[]): {
     map: WasmProximityMap;
     stats: {
@@ -2380,6 +2515,7 @@ export class WasmHnswIndex implements Disposable {
     if (this.#native == null) throw new Error("WASM HNSW index is closed");
     return this.#native;
   }
+  nativeHandle(): any { return this.#open(); }
   manifest(): Uint8Array { return ownedPortableBytes(this.#open().manifest()); }
   sourceDescriptor(): Uint8Array { return ownedPortableBytes(this.#open().sourceDescriptor()); }
   config(): HnswConfig {
@@ -2417,6 +2553,7 @@ export class WasmProductQuantizer implements Disposable {
     if (this.#native == null) throw new Error("WASM product quantizer is closed");
     return this.#native;
   }
+  nativeHandle(): any { return this.#open(); }
   manifest(): Uint8Array { return ownedPortableBytes(this.#open().manifest()); }
   sourceDescriptor(): Uint8Array { return ownedPortableBytes(this.#open().sourceDescriptor()); }
   config(): ProductQuantizationConfig {
@@ -2447,6 +2584,52 @@ export class WasmProductQuantizer implements Disposable {
     return new WasmProximitySearchProof(
       this.#open().proveSearch(map.nativeHandle(), ownPortableSearchRequest(request)),
     );
+  }
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class WasmCompositeAccelerator implements Disposable {
+  #native?: any;
+  constructor(native: any) { this.#native = native; }
+  nativeHandle(): any {
+    if (this.#native == null) throw new Error("WASM composite accelerator is closed");
+    return this.#native;
+  }
+  manifest(): Uint8Array { return ownedPortableBytes(this.nativeHandle().manifest()); }
+  currentSourceDescriptor(): Uint8Array { return ownedPortableBytes(this.nativeHandle().currentSourceDescriptor()); }
+  baseSourceDescriptor(): Uint8Array { return ownedPortableBytes(this.nativeHandle().baseSourceDescriptor()); }
+  baseKind(): "hnsw" | "product_quantized" { return this.nativeHandle().baseKind(); }
+  deltaCount(): bigint { return BigInt(this.nativeHandle().deltaCount()); }
+  shadowCount(): bigint { return BigInt(this.nativeHandle().shadowCount()); }
+  config(): CompositeAcceleratorConfig { return this.nativeHandle().config(); }
+  buildStats(): CompositeBuildStats { return this.nativeHandle().buildStats(); }
+  search(map: WasmProximityMap, request: PortableSearchRequest): Promise<PortableSearchResult> {
+    const native = this.nativeHandle(); const nativeMap = map.nativeHandle(); const owned = ownPortableSearchRequest(request);
+    return portablePromise(request.signal, () => native.search(nativeMap, owned));
+  }
+  proveSearch(map: WasmProximityMap, request: PortableSearchRequest): WasmProximitySearchProof {
+    return new WasmProximitySearchProof(this.nativeHandle().proveSearch(map.nativeHandle(), ownPortableSearchRequest(request)));
+  }
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class WasmAcceleratorCatalog implements Disposable {
+  #native?: any;
+  constructor(native: any) { this.#native = native; }
+  #open(): any { if (this.#native == null) throw new Error("WASM accelerator catalog is closed"); return this.#native; }
+  manifest(): Uint8Array { return ownedPortableBytes(this.#open().manifest()); }
+  sourceDescriptor(): Uint8Array { return ownedPortableBytes(this.#open().sourceDescriptor()); }
+  entries(): AcceleratorCatalogEntry[] { return this.#open().entries().map((entry: any) => ({
+    kind: entry.kind, configurationFingerprint: ownedPortableBytes(entry.configurationFingerprint), manifest: ownedPortableBytes(entry.manifest),
+  })); }
+  search(map: WasmProximityMap, request: PortableSearchRequest): Promise<PortableSearchResult> {
+    const native = this.#open(); const nativeMap = map.nativeHandle(); const owned = ownPortableSearchRequest(request);
+    return portablePromise(request.signal, () => native.search(nativeMap, owned));
+  }
+  proveSearch(map: WasmProximityMap, request: PortableSearchRequest): WasmProximitySearchProof {
+    return new WasmProximitySearchProof(this.#open().proveSearch(map.nativeHandle(), ownPortableSearchRequest(request)));
   }
   close(): void { this.#native?.free?.(); this.#native = undefined; }
   [Symbol.dispose](): void { this.close(); }

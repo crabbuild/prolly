@@ -191,6 +191,91 @@ export function defaultPqBuildLimits(): ProductQuantizationBuildLimits {
   return {};
 }
 
+export interface CompositeAcceleratorConfig {
+  maxDeltaRecords: bigint;
+  maxShadowRecords: bigint;
+  maxDeltaRatioPpm: number;
+  maxShadowRatioPpm: number;
+  baseOverfetchMultiplier: number;
+}
+
+export interface CompositeBuildLimits {
+  maxDiffEntries?: bigint;
+  maxOwnedBytes?: bigint;
+  maxEncodedOutputBytes?: bigint;
+  maxDistanceEvaluations?: bigint;
+}
+
+export interface CompositeBuildStats {
+  diffEntries: bigint;
+  insertedRecords: bigint;
+  vectorUpdatedRecords: bigint;
+  valueOnlyRecords: bigint;
+  deletedRecords: bigint;
+  deltaRecords: bigint;
+  shadowRecords: bigint;
+  ownedBytesPeak: bigint;
+  encodedOutputBytes: bigint;
+  distanceEvaluations: bigint;
+}
+
+export interface FullRebuildReason {
+  kind: "delta_records" | "shadow_records" | "delta_ratio" | "shadow_ratio";
+  actual: bigint;
+  maximum: bigint;
+}
+
+export interface CompositeRebuildOptions {
+  hnswLimits?: HnswBuildLimits;
+  pqWorkerThreads?: bigint;
+  pqLimits?: ProductQuantizationBuildLimits;
+}
+
+export interface CompositeBuildOptions {
+  config?: CompositeAcceleratorConfig;
+  limits?: CompositeBuildLimits;
+  signal?: AbortSignal;
+}
+
+export interface CompositeBuildOrRebuildOptions extends CompositeBuildOptions {
+  rebuild?: CompositeRebuildOptions;
+}
+
+export interface CompositeBuildOutcome {
+  accelerator?: CompositeAccelerator;
+  reasons: FullRebuildReason[];
+  stats: CompositeBuildStats;
+}
+
+export interface CompositeBuildOrRebuildOutcome {
+  kind: "composite" | "no_accelerator_required" | "hnsw_rebuilt" | "product_quantized_rebuilt";
+  composite?: CompositeAccelerator;
+  hnsw?: HnswIndex;
+  pq?: ProductQuantizer;
+  reasons: FullRebuildReason[];
+  compositeStats: CompositeBuildStats;
+  hnswStats?: HnswBuildStats;
+  pqStats?: ProductQuantizationBuildStats;
+}
+
+export interface AcceleratorCatalogEntry {
+  kind: "hnsw" | "product_quantized" | "composite";
+  configurationFingerprint: Uint8Array;
+  manifest: Uint8Array;
+}
+
+export function defaultCompositeAcceleratorConfig(): CompositeAcceleratorConfig {
+  return {
+    maxDeltaRecords: 4_096n,
+    maxShadowRecords: 8_192n,
+    maxDeltaRatioPpm: 100_000,
+    maxShadowRatioPpm: 200_000,
+    baseOverfetchMultiplier: 2,
+  };
+}
+
+export function defaultCompositeBuildLimits(): CompositeBuildLimits { return {}; }
+
 export interface ProximityMutation {
   key: Uint8Array;
   vector?: Float32Array;
@@ -324,6 +409,72 @@ interface NativeProductQuantizer {
   proveSearch(map: NativeProximityMap, request: NativeSearchRequest): NativeProximitySearchProof;
 }
 
+interface NativeCompositeConfig {
+  maxDeltaRecords: string;
+  maxShadowRecords: string;
+  maxDeltaRatioPpm: number;
+  maxShadowRatioPpm: number;
+  baseOverfetchMultiplier: number;
+}
+interface NativeCompositeBuildLimits {
+  maxDiffEntries?: string;
+  maxOwnedBytes?: string;
+  maxEncodedOutputBytes?: string;
+  maxDistanceEvaluations?: string;
+}
+interface NativeCompositeBuildStats {
+  diffEntries: string;
+  insertedRecords: string;
+  vectorUpdatedRecords: string;
+  valueOnlyRecords: string;
+  deletedRecords: string;
+  deltaRecords: string;
+  shadowRecords: string;
+  ownedBytesPeak: string;
+  encodedOutputBytes: string;
+  distanceEvaluations: string;
+}
+interface NativeFullRebuildReason { kind: FullRebuildReason["kind"]; actual: string; maximum: string; }
+interface NativeCompositeRebuildOptions {
+  hnswLimits: NativeHnswBuildLimits;
+  pqWorkerThreads: string;
+  pqLimits: NativePqBuildLimits;
+}
+interface NativeCompositeBuildResult {
+  accelerator(): NativeCompositeAccelerator | undefined;
+  reasons(): NativeFullRebuildReason[];
+  stats(): NativeCompositeBuildStats;
+}
+interface NativeCompositeBuildOrRebuildResult {
+  kind(): CompositeBuildOrRebuildOutcome["kind"];
+  composite(): NativeCompositeAccelerator | undefined;
+  hnsw(): NativeHnswIndex | undefined;
+  pq(): NativeProductQuantizer | undefined;
+  reasons(): NativeFullRebuildReason[];
+  compositeStats(): NativeCompositeBuildStats;
+  hnswStats(): NativeHnswBuildStats | undefined;
+  pqStats(): NativePqBuildStats | undefined;
+}
+interface NativeCompositeAccelerator {
+  manifest(): Uint8Array;
+  currentSourceDescriptor(): Uint8Array;
+  baseSourceDescriptor(): Uint8Array;
+  baseKind(): "hnsw" | "product_quantized";
+  deltaCount(): string;
+  shadowCount(): string;
+  config(): NativeCompositeConfig;
+  buildStats(): NativeCompositeBuildStats;
+  search(map: NativeProximityMap, request: NativeSearchRequest): NativeSearchResult;
+  proveSearch(map: NativeProximityMap, request: NativeSearchRequest): NativeProximitySearchProof;
+}
+interface NativeAcceleratorCatalog {
+  manifest(): Uint8Array;
+  sourceDescriptor(): Uint8Array;
+  entries(): Array<{ kind: AcceleratorCatalogEntry["kind"]; configurationFingerprint: Uint8Array; manifest: Uint8Array }>;
+  search(map: NativeProximityMap, request: NativeSearchRequest): NativeSearchResult;
+  proveSearch(map: NativeProximityMap, request: NativeSearchRequest): NativeProximitySearchProof;
+}
+
 interface NativeSearchRequest {
   query: Float32Array;
   k: string;
@@ -362,6 +513,13 @@ interface NativeProximityMap {
   loadHnsw(manifest: Uint8Array): NativeHnswIndex;
   buildPq(config: NativePqConfig | undefined, workerThreads: string, limits?: NativePqBuildLimits): NativePqBuildResult;
   loadPq(manifest: Uint8Array): NativeProductQuantizer;
+  buildCompositeHnsw(baseMap: NativeProximityMap, base: NativeHnswIndex, config?: NativeCompositeConfig, limits?: NativeCompositeBuildLimits): NativeCompositeBuildResult;
+  buildCompositePq(baseMap: NativeProximityMap, base: NativeProductQuantizer, config?: NativeCompositeConfig, limits?: NativeCompositeBuildLimits): NativeCompositeBuildResult;
+  buildOrRebuildCompositeHnsw(baseMap: NativeProximityMap, base: NativeHnswIndex, config?: NativeCompositeConfig, limits?: NativeCompositeBuildLimits, rebuild?: NativeCompositeRebuildOptions): NativeCompositeBuildOrRebuildResult;
+  buildOrRebuildCompositePq(baseMap: NativeProximityMap, base: NativeProductQuantizer, config?: NativeCompositeConfig, limits?: NativeCompositeBuildLimits, rebuild?: NativeCompositeRebuildOptions): NativeCompositeBuildOrRebuildResult;
+  loadComposite(manifest: Uint8Array): NativeCompositeAccelerator;
+  buildAcceleratorCatalog(hnsw?: NativeHnswIndex, pq?: NativeProductQuantizer, composite?: NativeCompositeAccelerator): NativeAcceleratorCatalog;
+  loadAcceleratorCatalog(manifest: Uint8Array): NativeAcceleratorCatalog;
   read(): NativeProximityReadSession;
   search(request: NativeSearchRequest): NativeSearchResult;
   count(): string;
@@ -547,6 +705,67 @@ function pqBuildStats(value: NativePqBuildStats): ProductQuantizationBuildStats 
   };
 }
 
+function ownCompositeConfig(value: CompositeAcceleratorConfig | undefined): NativeCompositeConfig | undefined {
+  if (value == null) return undefined;
+  return {
+    maxDeltaRecords: requireUnsignedBigInt(value.maxDeltaRecords, "maxDeltaRecords"),
+    maxShadowRecords: requireUnsignedBigInt(value.maxShadowRecords, "maxShadowRecords"),
+    maxDeltaRatioPpm: requireUnsignedInteger(value.maxDeltaRatioPpm, 1_000_000, "maxDeltaRatioPpm"),
+    maxShadowRatioPpm: requireUnsignedInteger(value.maxShadowRatioPpm, 1_000_000, "maxShadowRatioPpm"),
+    baseOverfetchMultiplier: requireUnsignedInteger(value.baseOverfetchMultiplier, 0xffff_ffff, "baseOverfetchMultiplier"),
+  };
+}
+
+function compositeConfig(value: NativeCompositeConfig): CompositeAcceleratorConfig {
+  return {
+    maxDeltaRecords: BigInt(value.maxDeltaRecords),
+    maxShadowRecords: BigInt(value.maxShadowRecords),
+    maxDeltaRatioPpm: value.maxDeltaRatioPpm,
+    maxShadowRatioPpm: value.maxShadowRatioPpm,
+    baseOverfetchMultiplier: value.baseOverfetchMultiplier,
+  };
+}
+
+function ownCompositeBuildLimits(value: CompositeBuildLimits | undefined): NativeCompositeBuildLimits | undefined {
+  if (value == null) return undefined;
+  const optional = (candidate: bigint | undefined, name: string) =>
+    candidate == null ? undefined : requireUnsignedBigInt(candidate, name);
+  return {
+    maxDiffEntries: optional(value.maxDiffEntries, "maxDiffEntries"),
+    maxOwnedBytes: optional(value.maxOwnedBytes, "maxOwnedBytes"),
+    maxEncodedOutputBytes: optional(value.maxEncodedOutputBytes, "maxEncodedOutputBytes"),
+    maxDistanceEvaluations: optional(value.maxDistanceEvaluations, "maxDistanceEvaluations"),
+  };
+}
+
+function compositeBuildStats(value: NativeCompositeBuildStats): CompositeBuildStats {
+  return {
+    diffEntries: BigInt(value.diffEntries),
+    insertedRecords: BigInt(value.insertedRecords),
+    vectorUpdatedRecords: BigInt(value.vectorUpdatedRecords),
+    valueOnlyRecords: BigInt(value.valueOnlyRecords),
+    deletedRecords: BigInt(value.deletedRecords),
+    deltaRecords: BigInt(value.deltaRecords),
+    shadowRecords: BigInt(value.shadowRecords),
+    ownedBytesPeak: BigInt(value.ownedBytesPeak),
+    encodedOutputBytes: BigInt(value.encodedOutputBytes),
+    distanceEvaluations: BigInt(value.distanceEvaluations),
+  };
+}
+
+function rebuildReasons(values: NativeFullRebuildReason[]): FullRebuildReason[] {
+  return values.map((value) => ({ kind: value.kind, actual: BigInt(value.actual), maximum: BigInt(value.maximum) }));
+}
+
+function ownCompositeRebuildOptions(value: CompositeRebuildOptions | undefined): NativeCompositeRebuildOptions | undefined {
+  if (value == null) return undefined;
+  return {
+    hnswLimits: ownHnswBuildLimits(value.hnswLimits ?? defaultHnswBuildLimits())!,
+    pqWorkerThreads: requireUnsignedBigInt(value.pqWorkerThreads ?? 1n, "pqWorkerThreads"),
+    pqLimits: ownPqBuildLimits(value.pqLimits ?? defaultPqBuildLimits())!,
+  };
+}
+
 function pqConfig(value: NativePqConfig): ProductQuantizationConfig {
   return {
     subquantizers: value.subquantizers,
@@ -581,6 +800,24 @@ function searchResult(value: NativeSearchResult): SearchResult {
     completion: value.completion,
     backend: value.backend,
     planFormatVersion: value.planFormatVersion,
+  };
+}
+
+function compositeRebuildOutcome(value: NativeCompositeBuildOrRebuildResult): CompositeBuildOrRebuildOutcome {
+  const composite = value.composite();
+  const hnsw = value.hnsw();
+  const pq = value.pq();
+  const hnswStats = value.hnswStats();
+  const pqStats = value.pqStats();
+  return {
+    kind: value.kind(),
+    composite: composite == null ? undefined : new CompositeAccelerator(composite),
+    hnsw: hnsw == null ? undefined : new HnswIndex(hnsw),
+    pq: pq == null ? undefined : new ProductQuantizer(pq),
+    reasons: rebuildReasons(value.reasons()),
+    compositeStats: compositeBuildStats(value.compositeStats()),
+    hnswStats: hnswStats == null ? undefined : hnswBuildStats(hnswStats),
+    pqStats: pqStats == null ? undefined : pqBuildStats(pqStats),
   };
 }
 interface NativeProximityStructuralProof {
@@ -656,6 +893,81 @@ export class ProximityMap implements Disposable {
   loadPq(manifest: Uint8Array): ProductQuantizer {
     return new ProductQuantizer(this.nativeHandle().loadPq(ownedBytes(manifest)));
   }
+  buildCompositeHnsw(
+    baseMap: ProximityMap,
+    base: HnswIndex,
+    options: CompositeBuildOptions = {},
+  ): Promise<CompositeBuildOutcome> {
+    const native = this.nativeHandle();
+    return nativePromise(options.signal, () => {
+      const result = native.buildCompositeHnsw(
+        baseMap.nativeHandle(), base.nativeHandle(),
+        ownCompositeConfig(options.config), ownCompositeBuildLimits(options.limits),
+      );
+      const accelerator = result.accelerator();
+      return {
+        accelerator: accelerator == null ? undefined : new CompositeAccelerator(accelerator),
+        reasons: rebuildReasons(result.reasons()),
+        stats: compositeBuildStats(result.stats()),
+      };
+    });
+  }
+  buildCompositePq(
+    baseMap: ProximityMap,
+    base: ProductQuantizer,
+    options: CompositeBuildOptions = {},
+  ): Promise<CompositeBuildOutcome> {
+    const native = this.nativeHandle();
+    return nativePromise(options.signal, () => {
+      const result = native.buildCompositePq(
+        baseMap.nativeHandle(), base.nativeHandle(),
+        ownCompositeConfig(options.config), ownCompositeBuildLimits(options.limits),
+      );
+      const accelerator = result.accelerator();
+      return {
+        accelerator: accelerator == null ? undefined : new CompositeAccelerator(accelerator),
+        reasons: rebuildReasons(result.reasons()),
+        stats: compositeBuildStats(result.stats()),
+      };
+    });
+  }
+  buildOrRebuildCompositeHnsw(
+    baseMap: ProximityMap,
+    base: HnswIndex,
+    options: CompositeBuildOrRebuildOptions = {},
+  ): Promise<CompositeBuildOrRebuildOutcome> {
+    const native = this.nativeHandle();
+    return nativePromise(options.signal, () => compositeRebuildOutcome(native.buildOrRebuildCompositeHnsw(
+      baseMap.nativeHandle(), base.nativeHandle(), ownCompositeConfig(options.config),
+      ownCompositeBuildLimits(options.limits), ownCompositeRebuildOptions(options.rebuild),
+    )));
+  }
+  buildOrRebuildCompositePq(
+    baseMap: ProximityMap,
+    base: ProductQuantizer,
+    options: CompositeBuildOrRebuildOptions = {},
+  ): Promise<CompositeBuildOrRebuildOutcome> {
+    const native = this.nativeHandle();
+    return nativePromise(options.signal, () => compositeRebuildOutcome(native.buildOrRebuildCompositePq(
+      baseMap.nativeHandle(), base.nativeHandle(), ownCompositeConfig(options.config),
+      ownCompositeBuildLimits(options.limits), ownCompositeRebuildOptions(options.rebuild),
+    )));
+  }
+  loadComposite(manifest: Uint8Array): CompositeAccelerator {
+    return new CompositeAccelerator(this.nativeHandle().loadComposite(ownedBytes(manifest)));
+  }
+  buildAcceleratorCatalog(options: {
+    hnsw?: HnswIndex;
+    pq?: ProductQuantizer;
+    composite?: CompositeAccelerator;
+  } = {}): AcceleratorCatalog {
+    return new AcceleratorCatalog(this.nativeHandle().buildAcceleratorCatalog(
+      options.hnsw?.nativeHandle(), options.pq?.nativeHandle(), options.composite?.nativeHandle(),
+    ));
+  }
+  loadAcceleratorCatalog(manifest: Uint8Array): AcceleratorCatalog {
+    return new AcceleratorCatalog(this.nativeHandle().loadAcceleratorCatalog(ownedBytes(manifest)));
+  }
   count(): bigint { return BigInt(this.nativeHandle().count()); }
   config(): ProximityConfig {
     const value = this.nativeHandle().config();
@@ -708,6 +1020,7 @@ export class HnswIndex implements Disposable {
     if (this.#native == null) throw new Error("HNSW index is closed");
     return this.#native;
   }
+  nativeHandle(): NativeHnswIndex { return this.#open(); }
   manifest(): Uint8Array { return ownedBytes(this.#open().manifest()); }
   sourceDescriptor(): Uint8Array { return ownedBytes(this.#open().sourceDescriptor()); }
   config(): HnswConfig {
@@ -745,10 +1058,72 @@ export class ProductQuantizer implements Disposable {
     if (this.#native == null) throw new Error("product quantizer is closed");
     return this.#native;
   }
+  nativeHandle(): NativeProductQuantizer { return this.#open(); }
   manifest(): Uint8Array { return ownedBytes(this.#open().manifest()); }
   sourceDescriptor(): Uint8Array { return ownedBytes(this.#open().sourceDescriptor()); }
   config(): ProductQuantizationConfig { return pqConfig(this.#open().config()); }
   quality(): ProductQuantizationQuality { return this.#open().quality(); }
+  search(map: ProximityMap, request: SearchRequest): Promise<SearchResult> {
+    const native = this.#open();
+    const nativeMap = map.nativeHandle();
+    const owned = ownSearchRequest(request);
+    return nativePromise(request.signal, () => searchResult(native.search(nativeMap, owned)));
+  }
+  proveSearch(map: ProximityMap, request: SearchRequest): ProximitySearchProof {
+    return new ProximitySearchProof(
+      this.#open().proveSearch(map.nativeHandle(), ownSearchRequest(request)),
+    );
+  }
+  close(): void { this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class CompositeAccelerator implements Disposable {
+  #native?: NativeCompositeAccelerator;
+  constructor(native: NativeCompositeAccelerator) { this.#native = native; }
+  nativeHandle(): NativeCompositeAccelerator {
+    if (this.#native == null) throw new Error("composite accelerator is closed");
+    return this.#native;
+  }
+  manifest(): Uint8Array { return ownedBytes(this.nativeHandle().manifest()); }
+  currentSourceDescriptor(): Uint8Array { return ownedBytes(this.nativeHandle().currentSourceDescriptor()); }
+  baseSourceDescriptor(): Uint8Array { return ownedBytes(this.nativeHandle().baseSourceDescriptor()); }
+  baseKind(): "hnsw" | "product_quantized" { return this.nativeHandle().baseKind(); }
+  deltaCount(): bigint { return BigInt(this.nativeHandle().deltaCount()); }
+  shadowCount(): bigint { return BigInt(this.nativeHandle().shadowCount()); }
+  config(): CompositeAcceleratorConfig { return compositeConfig(this.nativeHandle().config()); }
+  buildStats(): CompositeBuildStats { return compositeBuildStats(this.nativeHandle().buildStats()); }
+  search(map: ProximityMap, request: SearchRequest): Promise<SearchResult> {
+    const native = this.nativeHandle();
+    const nativeMap = map.nativeHandle();
+    const owned = ownSearchRequest(request);
+    return nativePromise(request.signal, () => searchResult(native.search(nativeMap, owned)));
+  }
+  proveSearch(map: ProximityMap, request: SearchRequest): ProximitySearchProof {
+    return new ProximitySearchProof(
+      this.nativeHandle().proveSearch(map.nativeHandle(), ownSearchRequest(request)),
+    );
+  }
+  close(): void { this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class AcceleratorCatalog implements Disposable {
+  #native?: NativeAcceleratorCatalog;
+  constructor(native: NativeAcceleratorCatalog) { this.#native = native; }
+  #open(): NativeAcceleratorCatalog {
+    if (this.#native == null) throw new Error("accelerator catalog is closed");
+    return this.#native;
+  }
+  manifest(): Uint8Array { return ownedBytes(this.#open().manifest()); }
+  sourceDescriptor(): Uint8Array { return ownedBytes(this.#open().sourceDescriptor()); }
+  entries(): AcceleratorCatalogEntry[] {
+    return this.#open().entries().map((entry) => ({
+      kind: entry.kind,
+      configurationFingerprint: ownedBytes(entry.configurationFingerprint),
+      manifest: ownedBytes(entry.manifest),
+    }));
+  }
   search(map: ProximityMap, request: SearchRequest): Promise<SearchResult> {
     const native = this.#open();
     const nativeMap = map.nativeHandle();

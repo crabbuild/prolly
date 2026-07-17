@@ -57,6 +57,81 @@ public final class ProximityMap implements AutoCloseable {
     public ProductQuantizer loadPq(byte[] manifest) {
         return new ProductQuantizer(JavaPortableBridge.loadPq(open(), manifest.clone()));
     }
+    public CompositeBuildOutcome buildCompositeHnsw(ProximityMap baseMap, HnswIndex base) {
+        return buildCompositeHnsw(
+                baseMap, base, CompositeAcceleratorConfig.defaults(), CompositeBuildLimits.defaults());
+    }
+    public CompositeBuildOutcome buildCompositeHnsw(
+            ProximityMap baseMap,
+            HnswIndex base,
+            CompositeAcceleratorConfig config,
+            CompositeBuildLimits limits) {
+        return compositeOutcome(JavaPortableBridge.buildCompositeHnsw(
+                open(), baseMap.open(), base.open(), config.toNative(), limits.toNative()));
+    }
+    public CompositeBuildOutcome buildCompositePq(ProximityMap baseMap, ProductQuantizer base) {
+        return buildCompositePq(
+                baseMap, base, CompositeAcceleratorConfig.defaults(), CompositeBuildLimits.defaults());
+    }
+    public CompositeBuildOutcome buildCompositePq(
+            ProximityMap baseMap,
+            ProductQuantizer base,
+            CompositeAcceleratorConfig config,
+            CompositeBuildLimits limits) {
+        return compositeOutcome(JavaPortableBridge.buildCompositePq(
+                open(), baseMap.open(), base.open(), config.toNative(), limits.toNative()));
+    }
+    public CompositeBuildOrRebuildOutcome buildOrRebuildCompositeHnsw(
+            ProximityMap baseMap,
+            HnswIndex base,
+            CompositeAcceleratorConfig config) {
+        return compositeRebuildOutcome(JavaPortableBridge.buildOrRebuildCompositeHnsw(
+                open(), baseMap.open(), base.open(), config.toNative(),
+                CompositeBuildLimits.defaults().toNative(),
+                CompositeRebuildOptions.defaults().toNative()));
+    }
+    public CompositeBuildOrRebuildOutcome buildOrRebuildCompositePq(
+            ProximityMap baseMap,
+            ProductQuantizer base,
+            CompositeAcceleratorConfig config) {
+        return compositeRebuildOutcome(JavaPortableBridge.buildOrRebuildCompositePq(
+                open(), baseMap.open(), base.open(), config.toNative(),
+                CompositeBuildLimits.defaults().toNative(),
+                CompositeRebuildOptions.defaults().toNative()));
+    }
+    public CompositeAccelerator loadComposite(byte[] manifest) {
+        return new CompositeAccelerator(JavaPortableBridge.loadComposite(open(), manifest.clone()));
+    }
+    public AcceleratorCatalog buildAcceleratorCatalog(
+            HnswIndex hnsw, ProductQuantizer pq, CompositeAccelerator composite) {
+        return new AcceleratorCatalog(JavaPortableBridge.buildAcceleratorCatalog(
+                open(), hnsw == null ? null : hnsw.open(), pq == null ? null : pq.open(),
+                composite == null ? null : composite.open()));
+    }
+    public AcceleratorCatalog loadAcceleratorCatalog(byte[] manifest) {
+        return new AcceleratorCatalog(
+                JavaPortableBridge.loadAcceleratorCatalog(open(), manifest.clone()));
+    }
+    private static CompositeBuildOutcome compositeOutcome(
+            build.crab.prolly.api.JavaCompositeBuildOutcome value) {
+        return new CompositeBuildOutcome(
+                value.getAccelerator() == null ? null : new CompositeAccelerator(value.getAccelerator()),
+                value.getReasons().stream().map(FullRebuildReason::fromNative).toList(),
+                CompositeBuildStats.fromNative(value.getStats()));
+    }
+    private static CompositeBuildOrRebuildOutcome compositeRebuildOutcome(
+            build.crab.prolly.api.JavaCompositeBuildOrRebuildOutcome value) {
+        return new CompositeBuildOrRebuildOutcome(
+                CompositeBuildOrRebuildOutcome.Kind.valueOf(value.getKind()),
+                value.getComposite() == null ? null : new CompositeAccelerator(value.getComposite()),
+                value.getHnsw() == null ? null : new HnswIndex(value.getHnsw()),
+                value.getPq() == null ? null : new ProductQuantizer(value.getPq()),
+                value.getReasons().stream().map(FullRebuildReason::fromNative).toList(),
+                CompositeBuildStats.fromNative(value.getCompositeStats()),
+                value.getHnswStats() == null ? null : HnswBuildStats.fromNative(value.getHnswStats()),
+                value.getPqStats() == null
+                        ? null : ProductQuantizationBuildStats.fromNative(value.getPqStats()));
+    }
     public ProximityReadSession read() { return new ProximityReadSession(this, open().read()); }
     public SearchResult search(SearchRequest request) {
         return fromNative(JavaPortableBridge.search(open(), request.toNative()));

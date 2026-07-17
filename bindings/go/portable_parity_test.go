@@ -262,6 +262,170 @@ func TestProductQuantizerLifecycleIsPortableAndBounded(t *testing.T) {
 	}
 }
 
+func TestCompositeAndCatalogLifecycleIsPortableAndBounded(t *testing.T) {
+	config, err := DefaultConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine, err := NewMemoryEngine(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(engine.Close)
+	records := make([]ProximityRecord, 16)
+	for index := range records {
+		records[index] = ProximityRecord{
+			Key:    []byte(fmt.Sprintf("composite-vector-%02d", index)),
+			Vector: []float32{float32(index), 0},
+			Value:  []byte(fmt.Sprintf("composite-value-%02d", index)),
+		}
+	}
+	baseMap, err := engine.BuildProximity(2, records)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(baseMap.Close)
+	hnswConfig, err := DefaultHNSWConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	hnswLimits, err := DefaultHNSWBuildLimits()
+	if err != nil {
+		t.Fatal(err)
+	}
+	baseBuild, err := baseMap.BuildHNSW(hnswConfig, hnswLimits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := baseBuild.Index
+	t.Cleanup(base.Close)
+	current, _, err := baseMap.Mutate([]ProximityMutation{UpsertProximity(
+		[]byte("composite-vector-00"), []float32{0.25, 0}, []byte("updated"),
+	)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(current.Close)
+	compositeConfig, err := DefaultCompositeAcceleratorConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	limits, err := DefaultCompositeBuildLimits()
+	if err != nil {
+		t.Fatal(err)
+	}
+	built, err := current.BuildCompositeHNSW(baseMap, base, compositeConfig, limits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if built.Accelerator == nil || len(built.Reasons) != 0 || built.Stats.VectorUpdatedRecords != 1 {
+		t.Fatalf("composite build = %#v", built)
+	}
+	composite := built.Accelerator
+	currentDescriptor, err := current.Descriptor()
+	if err != nil {
+		t.Fatal(err)
+	}
+	baseDescriptor, err := baseMap.Descriptor()
+	if err != nil {
+		t.Fatal(err)
+	}
+	currentSource, err := composite.CurrentSourceDescriptor()
+	if err != nil || !bytes.Equal(currentSource, currentDescriptor) {
+		t.Fatalf("current source = %x, %v", currentSource, err)
+	}
+	baseSource, err := composite.BaseSourceDescriptor()
+	if err != nil || !bytes.Equal(baseSource, baseDescriptor) {
+		t.Fatalf("base source = %x, %v", baseSource, err)
+	}
+	baseKind, err := composite.BaseKind()
+	if err != nil || baseKind != CompositeBaseHNSW {
+		t.Fatalf("base kind = %v, %v", baseKind, err)
+	}
+	delta, err := composite.DeltaCount()
+	if err != nil || delta != 1 {
+		t.Fatalf("delta = %d, %v", delta, err)
+	}
+	shadow, err := composite.ShadowCount()
+	if err != nil || shadow != 1 {
+		t.Fatalf("shadow = %d, %v", shadow, err)
+	}
+	request := ExactSearch([]float32{0, 0}, 3)
+	request.Policy = SearchPolicyFixedBudget
+	request.Backend = SearchBackendComposite
+	result, err := composite.Search(context.Background(), current, request)
+	if err != nil || result.Backend != "composite" {
+		t.Fatalf("composite search = %#v, %v", result, err)
+	}
+	proof, err := composite.ProveSearch(current, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	verified, err := proof.Verify(currentDescriptor)
+	proof.Close()
+	if err != nil || verified.Result.Backend != "composite" {
+		t.Fatalf("composite proof = %#v, %v", verified, err)
+	}
+	manifest, err := composite.Manifest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	catalog, err := current.BuildAcceleratorCatalog(nil, nil, composite)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries, err := catalog.Entries()
+	if err != nil || len(entries) != 1 || entries[0].Kind != CatalogComposite {
+		t.Fatalf("catalog entries = %#v, %v", entries, err)
+	}
+	catalogResult, err := catalog.Search(context.Background(), current, request)
+	if err != nil || catalogResult.Backend != "composite" {
+		t.Fatalf("catalog search = %#v, %v", catalogResult, err)
+	}
+	catalogManifest, err := catalog.Manifest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	catalog.Close()
+	loadedCatalog, err := current.LoadAcceleratorCatalog(catalogManifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	loadedCatalogManifest, err := loadedCatalog.Manifest()
+	loadedCatalog.Close()
+	if err != nil || !bytes.Equal(loadedCatalogManifest, catalogManifest) {
+		t.Fatalf("loaded catalog = %x, %v", loadedCatalogManifest, err)
+	}
+	composite.Close()
+	loaded, err := current.LoadComposite(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	loadedManifest, err := loaded.Manifest()
+	loaded.Close()
+	if err != nil || !bytes.Equal(loadedManifest, manifest) {
+		t.Fatalf("loaded composite = %x, %v", loadedManifest, err)
+	}
+
+	compositeConfig.MaxDeltaRecords = 0
+	rebuild, err := DefaultCompositeRebuildOptions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rebuilt, err := current.BuildOrRebuildCompositeHNSW(baseMap, base, compositeConfig, limits, rebuild)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rebuilt.Kind != CompositeHNSWRebuilt || rebuilt.HNSW == nil || len(rebuilt.Reasons) == 0 {
+		t.Fatalf("composite rebuild = %#v", rebuilt)
+	}
+	rebuiltSource, err := rebuilt.HNSW.SourceDescriptor()
+	rebuilt.HNSW.Close()
+	if err != nil || !bytes.Equal(rebuiltSource, currentDescriptor) {
+		t.Fatalf("rebuilt source = %x, %v", rebuiltSource, err)
+	}
+}
+
 func TestVersionedBulkPublicationUsesNativePerformancePaths(t *testing.T) {
 	config, err := DefaultConfig()
 	if err != nil {

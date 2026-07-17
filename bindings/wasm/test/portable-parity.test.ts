@@ -110,6 +110,59 @@ test("WASM product quantizer lifecycle is portable and bounded", { skip: !genera
   }
 });
 
+test("WASM composite and catalog lifecycle is portable and bounded", { skip: !generatedPresent }, async () => {
+  const engine = api.Engine.memory(wasm);
+  try {
+    const baseMap = await engine.buildProximity(2, Array.from({ length: 16 }, (_, index) => ({
+      key: bytes(`composite-vector-${index.toString().padStart(2, "0")}`),
+      vector: new Float32Array([index, 0]),
+      value: bytes(`composite-value-${index.toString().padStart(2, "0")}`),
+    })));
+    const base = (await baseMap.buildHnsw()).index;
+    const current = baseMap.mutate([{
+      key: bytes("composite-vector-00"), vector: new Float32Array([0.25, 0]), value: bytes("updated"),
+    }]).map;
+    const built = await current.buildCompositeHnsw(baseMap, base);
+    assert.equal(built.reasons.length, 0);
+    assert.equal(built.stats.vectorUpdatedRecords, 1n);
+    const composite = built.accelerator!;
+    assert.deepEqual(composite.currentSourceDescriptor(), current.descriptor());
+    assert.deepEqual(composite.baseSourceDescriptor(), baseMap.descriptor());
+    assert.equal(composite.baseKind(), "hnsw");
+    assert.equal(composite.deltaCount(), 1n);
+    assert.equal(composite.shadowCount(), 1n);
+    const request = { vector: new Float32Array([0, 0]), topK: 3, policy: "fixed_budget" as const, backend: "composite" as const };
+    assert.equal((await composite.search(current, request)).backend, "composite");
+    const proof = composite.proveSearch(current, request);
+    assert.equal(proof.verify(current.descriptor()).result.backend, "composite");
+    proof.close();
+    const manifest = composite.manifest();
+    const catalog = current.buildAcceleratorCatalog({ composite });
+    assert.equal(catalog.entries().length, 1);
+    assert.equal((await catalog.search(current, request)).backend, "composite");
+    const catalogManifest = catalog.manifest();
+    catalog.close();
+    const loadedCatalog = current.loadAcceleratorCatalog(catalogManifest);
+    assert.deepEqual(loadedCatalog.manifest(), catalogManifest);
+    loadedCatalog.close();
+    composite.close();
+    const loaded = current.loadComposite(manifest);
+    assert.deepEqual(loaded.manifest(), manifest);
+    loaded.close();
+    const forced = { ...api.defaultCompositeAcceleratorConfig(), maxDeltaRecords: 0n };
+    const rebuilt = await current.buildOrRebuildCompositeHnsw(baseMap, base, { config: forced });
+    assert.equal(rebuilt.kind, "hnsw_rebuilt");
+    assert.ok(rebuilt.reasons.length > 0);
+    assert.deepEqual(rebuilt.hnsw!.sourceDescriptor(), current.descriptor());
+    rebuilt.hnsw!.close();
+    await assert.rejects(
+      current.buildOrRebuildCompositeHnsw(baseMap, base, { config: forced, rebuild: { pqWorkerThreads: 2n } }),
+      /browser-safe WASM composite PQ rebuild requires pqWorkerThreads = 1/,
+    );
+    current.close(); base.close(); baseMap.close();
+  } finally { engine.close(); }
+});
+
 test("WASM rich proximity search preserves policy filter stats session and proof", { skip: !generatedPresent }, async () => {
   const engine = api.Engine.memory(wasm);
   try {

@@ -4,6 +4,67 @@ import ProllyAPI
 import XCTest
 
 final class PortableParityTests: XCTestCase {
+    func testCompositeAndCatalogLifecycleIsPortableAndBounded() throws {
+        try Engine.withMemory { engine in
+            let base = try engine.buildProximity(
+                dimensions: 2,
+                records: (0..<16).map { index in
+                    ProximityRecord(
+                        key: Data(String(format: "vector-%02d", index).utf8),
+                        vector: [Float(index), 0],
+                        value: Data(String(format: "value-%02d", index).utf8)
+                    )
+                }
+            )
+            let hnsw = try base.buildHnsw().index
+            let current = try base.mutate([
+                ProximityMutationRecord(
+                    key: Data("vector-00".utf8), vector: [0.25, 0], value: Data("updated".utf8)
+                )
+            ]).map
+            let built = try current.buildCompositeHnsw(baseMap: base, base: hnsw)
+            XCTAssertEqual(built.stats.vectorUpdatedRecords, 1)
+            XCTAssertTrue(built.reasons.isEmpty)
+            let composite = try XCTUnwrap(built.accelerator)
+            XCTAssertEqual(composite.baseKind, .hnsw)
+            XCTAssertEqual(composite.currentSourceDescriptor, current.descriptor)
+            XCTAssertEqual(composite.baseSourceDescriptor, base.descriptor)
+            XCTAssertEqual(composite.deltaCount, 1)
+            XCTAssertEqual(composite.shadowCount, 1)
+            var request = exactProximitySearchRequest(query: [0, 0], k: 3)
+            request.policy = .fixedBudget
+            request.backend = .composite
+            XCTAssertEqual(try composite.search(current, request: request).backend, .composite)
+            let proof = try composite.proveSearch(current, request: request)
+            XCTAssertEqual(
+                try proof.verify(expectedDescriptor: current.descriptor).result.backend,
+                .composite
+            )
+            proof.close()
+            let manifest = composite.manifest
+            let catalog = try current.buildAcceleratorCatalog(composite: composite)
+            XCTAssertEqual(catalog.sourceDescriptor, current.descriptor)
+            XCTAssertEqual(catalog.entries.first?.kind, .composite)
+            XCTAssertEqual(try catalog.search(current, request: request).backend, .composite)
+            let loadedCatalog = try current.loadAcceleratorCatalog(catalog.manifest)
+            XCTAssertEqual(loadedCatalog.manifest, catalog.manifest)
+            loadedCatalog.close()
+            catalog.close()
+            composite.close()
+            let loaded = try current.loadComposite(manifest)
+            XCTAssertEqual(loaded.manifest, manifest)
+            loaded.close()
+            var forced = defaultCompositeAcceleratorConfig()
+            forced.maxDeltaRecords = 0
+            let rebuilt = try current.buildOrRebuildCompositeHnsw(
+                baseMap: base, base: hnsw, config: forced
+            )
+            XCTAssertEqual(rebuilt.kind, .hnswRebuilt)
+            rebuilt.hnsw?.close()
+            hnsw.close()
+        }
+    }
+
     func testProductQuantizerLifecycleIsPortableAndBounded() throws {
         try Engine.withMemory { engine in
             let proximity = try engine.buildProximity(

@@ -21,6 +21,10 @@ public record ProductQuantizationBuildLimits(
 
     public static ProductQuantizationBuildLimits defaults() {
         var value = JavaPortableBridge.defaultPqBuildLimits();
+        return fromNative(value);
+    }
+
+    static ProductQuantizationBuildLimits fromNative(JavaProductQuantizationBuildLimits value) {
         return new ProductQuantizationBuildLimits(
                 value.getMaxTrainingVectors(), value.getMaxTrainingBytes(),
                 value.getMaxTemporaryCodeBytes(), value.getMaxDistanceEvaluations(),

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { Engine, exactSearch } from "../src/index.ts";
+import { Engine, defaultCompositeAcceleratorConfig, exactSearch } from "../src/index.ts";
 
 const bytes = (value: string): Buffer => Buffer.from(value);
 
@@ -77,6 +77,66 @@ test("HNSW accelerator lifecycle is portable", async () => {
     const loaded = proximity.loadHnsw(manifest);
     assert.deepEqual(loaded.manifest(), manifest);
     loaded.close();
+  } finally {
+    engine.close();
+  }
+});
+
+test("composite and catalog lifecycle is portable and bounded", async () => {
+  const engine = await Engine.memory();
+  try {
+    const baseMap = await engine.buildProximity(2, Array.from({ length: 16 }, (_, index) => ({
+      key: bytes(`vector-${index.toString().padStart(2, "0")}`),
+      vector: new Float32Array([index, 0]),
+      value: bytes(`value-${index.toString().padStart(2, "0")}`),
+    })));
+    const base = (await baseMap.buildHnsw()).index;
+    const current = baseMap.mutate([{
+      key: bytes("vector-00"),
+      vector: new Float32Array([0.25, 0]),
+      value: bytes("updated"),
+    }]).map;
+    const built = await current.buildCompositeHnsw(baseMap, base);
+    assert.equal(built.reasons.length, 0);
+    assert.equal(built.stats.vectorUpdatedRecords, 1n);
+    const composite = built.accelerator!;
+    assert.deepEqual(composite.currentSourceDescriptor(), current.descriptor());
+    assert.deepEqual(composite.baseSourceDescriptor(), baseMap.descriptor());
+    assert.equal(composite.baseKind(), "hnsw");
+    assert.equal(composite.deltaCount(), 1n);
+    assert.equal(composite.shadowCount(), 1n);
+    const request = {
+      ...exactSearch(new Float32Array([0, 0]), 3),
+      policy: "fixed_budget" as const,
+      backend: "composite" as const,
+    };
+    assert.equal((await composite.search(current, request)).backend, "composite");
+    const proof = composite.proveSearch(current, request);
+    assert.equal(proof.verify(current.descriptor()).result.backend, "composite");
+    proof.close();
+    const manifest = composite.manifest();
+    const catalog = current.buildAcceleratorCatalog({ composite });
+    assert.equal(catalog.entries().length, 1);
+    assert.equal((await catalog.search(current, request)).backend, "composite");
+    const catalogManifest = catalog.manifest();
+    const loadedCatalog = current.loadAcceleratorCatalog(catalogManifest);
+    assert.deepEqual(loadedCatalog.manifest(), catalogManifest);
+    loadedCatalog.close();
+    catalog.close();
+    composite.close();
+    const loaded = current.loadComposite(manifest);
+    assert.deepEqual(loaded.manifest(), manifest);
+    loaded.close();
+
+    const forced = { ...defaultCompositeAcceleratorConfig(), maxDeltaRecords: 0n };
+    const rebuilt = await current.buildOrRebuildCompositeHnsw(baseMap, base, { config: forced });
+    assert.equal(rebuilt.kind, "hnsw_rebuilt");
+    assert.ok(rebuilt.reasons.length > 0);
+    assert.deepEqual(rebuilt.hnsw!.sourceDescriptor(), current.descriptor());
+    rebuilt.hnsw!.close();
+    current.close();
+    base.close();
+    baseMap.close();
   } finally {
     engine.close();
   }

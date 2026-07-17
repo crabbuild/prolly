@@ -1444,6 +1444,378 @@ public func FfiConverterTypeAsyncProllyTransaction_lower(_ value: AsyncProllyTra
 
 
 
+public protocol BindingAcceleratorCatalogProtocol: AnyObject, Sendable {
+    
+    func entries()  -> [AcceleratorCatalogEntryRecord]
+    
+    func manifest()  -> Data
+    
+    func proveSearch(map: BindingProximityMap, request: ProximitySearchRequestRecord, limits: ContentGraphLimitsRecord) throws  -> BindingProximitySearchProof
+    
+    func search(map: BindingProximityMap, request: ProximitySearchRequestRecord) throws  -> ProximitySearchResultRecord
+    
+    func sourceDescriptor()  -> Data
+    
+}
+open class BindingAcceleratorCatalog: BindingAcceleratorCatalogProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_prolly_bindings_fn_clone_bindingacceleratorcatalog(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_prolly_bindings_fn_free_bindingacceleratorcatalog(handle, $0) }
+    }
+
+    
+
+    
+open func entries() -> [AcceleratorCatalogEntryRecord]  {
+    return try!  FfiConverterSequenceTypeAcceleratorCatalogEntryRecord.lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_entries(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+open func manifest() -> Data  {
+    return try!  FfiConverterData.lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_manifest(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+open func proveSearch(map: BindingProximityMap, request: ProximitySearchRequestRecord, limits: ContentGraphLimitsRecord)throws  -> BindingProximitySearchProof  {
+    return try  FfiConverterTypeBindingProximitySearchProof_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_prove_search(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeBindingProximityMap_lower(map),
+        FfiConverterTypeProximitySearchRequestRecord_lower(request),
+        FfiConverterTypeContentGraphLimitsRecord_lower(limits),$0
+    )
+})
+}
+    
+open func search(map: BindingProximityMap, request: ProximitySearchRequestRecord)throws  -> ProximitySearchResultRecord  {
+    return try  FfiConverterTypeProximitySearchResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_search(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeBindingProximityMap_lower(map),
+        FfiConverterTypeProximitySearchRequestRecord_lower(request),$0
+    )
+})
+}
+    
+open func sourceDescriptor() -> Data  {
+    return try!  FfiConverterData.lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_source_descriptor(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBindingAcceleratorCatalog: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = BindingAcceleratorCatalog
+
+    public static func lift(_ handle: UInt64) throws -> BindingAcceleratorCatalog {
+        return BindingAcceleratorCatalog(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: BindingAcceleratorCatalog) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BindingAcceleratorCatalog {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: BindingAcceleratorCatalog, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBindingAcceleratorCatalog_lift(_ handle: UInt64) throws -> BindingAcceleratorCatalog {
+    return try FfiConverterTypeBindingAcceleratorCatalog.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBindingAcceleratorCatalog_lower(_ value: BindingAcceleratorCatalog) -> UInt64 {
+    return FfiConverterTypeBindingAcceleratorCatalog.lower(value)
+}
+
+
+
+
+
+
+public protocol BindingCompositeAcceleratorProtocol: AnyObject, Sendable {
+    
+    func baseKind()  -> CompositeBaseKindRecord
+    
+    func baseSourceDescriptor()  -> Data
+    
+    func buildStats()  -> CompositeBuildStatsRecord
+    
+    func config()  -> CompositeAcceleratorConfigRecord
+    
+    func currentSourceDescriptor()  -> Data
+    
+    func deltaCount()  -> UInt64
+    
+    func manifest()  -> Data
+    
+    func proveSearch(map: BindingProximityMap, request: ProximitySearchRequestRecord, limits: ContentGraphLimitsRecord) throws  -> BindingProximitySearchProof
+    
+    func search(map: BindingProximityMap, request: ProximitySearchRequestRecord) throws  -> ProximitySearchResultRecord
+    
+    func shadowCount()  -> UInt64
+    
+}
+open class BindingCompositeAccelerator: BindingCompositeAcceleratorProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_prolly_bindings_fn_clone_bindingcompositeaccelerator(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_prolly_bindings_fn_free_bindingcompositeaccelerator(handle, $0) }
+    }
+
+    
+
+    
+open func baseKind() -> CompositeBaseKindRecord  {
+    return try!  FfiConverterTypeCompositeBaseKindRecord_lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_base_kind(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+open func baseSourceDescriptor() -> Data  {
+    return try!  FfiConverterData.lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_base_source_descriptor(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+open func buildStats() -> CompositeBuildStatsRecord  {
+    return try!  FfiConverterTypeCompositeBuildStatsRecord_lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_build_stats(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+open func config() -> CompositeAcceleratorConfigRecord  {
+    return try!  FfiConverterTypeCompositeAcceleratorConfigRecord_lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_config(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+open func currentSourceDescriptor() -> Data  {
+    return try!  FfiConverterData.lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_current_source_descriptor(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+open func deltaCount() -> UInt64  {
+    return try!  FfiConverterUInt64.lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_delta_count(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+open func manifest() -> Data  {
+    return try!  FfiConverterData.lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_manifest(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+open func proveSearch(map: BindingProximityMap, request: ProximitySearchRequestRecord, limits: ContentGraphLimitsRecord)throws  -> BindingProximitySearchProof  {
+    return try  FfiConverterTypeBindingProximitySearchProof_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_prove_search(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeBindingProximityMap_lower(map),
+        FfiConverterTypeProximitySearchRequestRecord_lower(request),
+        FfiConverterTypeContentGraphLimitsRecord_lower(limits),$0
+    )
+})
+}
+    
+open func search(map: BindingProximityMap, request: ProximitySearchRequestRecord)throws  -> ProximitySearchResultRecord  {
+    return try  FfiConverterTypeProximitySearchResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_search(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeBindingProximityMap_lower(map),
+        FfiConverterTypeProximitySearchRequestRecord_lower(request),$0
+    )
+})
+}
+    
+open func shadowCount() -> UInt64  {
+    return try!  FfiConverterUInt64.lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_shadow_count(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBindingCompositeAccelerator: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = BindingCompositeAccelerator
+
+    public static func lift(_ handle: UInt64) throws -> BindingCompositeAccelerator {
+        return BindingCompositeAccelerator(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: BindingCompositeAccelerator) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BindingCompositeAccelerator {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: BindingCompositeAccelerator, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBindingCompositeAccelerator_lift(_ handle: UInt64) throws -> BindingCompositeAccelerator {
+    return try FfiConverterTypeBindingCompositeAccelerator.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBindingCompositeAccelerator_lower(_ value: BindingCompositeAccelerator) -> UInt64 {
+    return FfiConverterTypeBindingCompositeAccelerator.lower(value)
+}
+
+
+
+
+
+
 public protocol BindingHnswIndexProtocol: AnyObject, Sendable {
     
     func config()  -> HnswConfigRecord
@@ -3513,7 +3885,17 @@ public func FfiConverterTypeBindingProductQuantizer_lower(_ value: BindingProduc
 
 public protocol BindingProximityMapProtocol: AnyObject, Sendable {
     
+    func buildAcceleratorCatalog(hnsw: BindingHnswIndex?, pq: BindingProductQuantizer?, composite: BindingCompositeAccelerator?) throws  -> BindingAcceleratorCatalog
+    
+    func buildCompositeHnsw(baseMap: BindingProximityMap, base: BindingHnswIndex, config: CompositeAcceleratorConfigRecord, limits: CompositeBuildLimitsRecord) throws  -> CompositeBuildOutcomeRecord
+    
+    func buildCompositePq(baseMap: BindingProximityMap, base: BindingProductQuantizer, config: CompositeAcceleratorConfigRecord, limits: CompositeBuildLimitsRecord) throws  -> CompositeBuildOutcomeRecord
+    
     func buildHnsw(config: HnswConfigRecord, limits: HnswBuildLimitsRecord) throws  -> HnswBuildResultRecord
+    
+    func buildOrRebuildCompositeHnsw(baseMap: BindingProximityMap, base: BindingHnswIndex, config: CompositeAcceleratorConfigRecord, limits: CompositeBuildLimitsRecord, rebuild: CompositeRebuildOptionsRecord) throws  -> CompositeBuildOrRebuildOutcomeRecord
+    
+    func buildOrRebuildCompositePq(baseMap: BindingProximityMap, base: BindingProductQuantizer, config: CompositeAcceleratorConfigRecord, limits: CompositeBuildLimitsRecord, rebuild: CompositeRebuildOptionsRecord) throws  -> CompositeBuildOrRebuildOutcomeRecord
     
     func buildPq(config: ProductQuantizationConfigRecord, workerThreads: UInt64, limits: ProductQuantizationBuildLimitsRecord) throws  -> ProductQuantizationBuildResultRecord
     
@@ -3530,6 +3912,10 @@ public protocol BindingProximityMapProtocol: AnyObject, Sendable {
     func fastHandle()  -> UInt64
     
     func get(key: Data) throws  -> ExactProximityRecordRecord?
+    
+    func loadAcceleratorCatalog(manifest: Data) throws  -> BindingAcceleratorCatalog
+    
+    func loadComposite(manifest: Data) throws  -> BindingCompositeAccelerator
     
     func loadHnsw(manifest: Data) throws  -> BindingHnswIndex
     
@@ -3607,12 +3993,73 @@ open class BindingProximityMap: BindingProximityMapProtocol, @unchecked Sendable
     
 
     
+open func buildAcceleratorCatalog(hnsw: BindingHnswIndex?, pq: BindingProductQuantizer?, composite: BindingCompositeAccelerator?)throws  -> BindingAcceleratorCatalog  {
+    return try  FfiConverterTypeBindingAcceleratorCatalog_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingproximitymap_build_accelerator_catalog(
+            self.uniffiCloneHandle(),
+        FfiConverterOptionTypeBindingHnswIndex.lower(hnsw),
+        FfiConverterOptionTypeBindingProductQuantizer.lower(pq),
+        FfiConverterOptionTypeBindingCompositeAccelerator.lower(composite),$0
+    )
+})
+}
+    
+open func buildCompositeHnsw(baseMap: BindingProximityMap, base: BindingHnswIndex, config: CompositeAcceleratorConfigRecord, limits: CompositeBuildLimitsRecord)throws  -> CompositeBuildOutcomeRecord  {
+    return try  FfiConverterTypeCompositeBuildOutcomeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingproximitymap_build_composite_hnsw(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeBindingProximityMap_lower(baseMap),
+        FfiConverterTypeBindingHnswIndex_lower(base),
+        FfiConverterTypeCompositeAcceleratorConfigRecord_lower(config),
+        FfiConverterTypeCompositeBuildLimitsRecord_lower(limits),$0
+    )
+})
+}
+    
+open func buildCompositePq(baseMap: BindingProximityMap, base: BindingProductQuantizer, config: CompositeAcceleratorConfigRecord, limits: CompositeBuildLimitsRecord)throws  -> CompositeBuildOutcomeRecord  {
+    return try  FfiConverterTypeCompositeBuildOutcomeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingproximitymap_build_composite_pq(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeBindingProximityMap_lower(baseMap),
+        FfiConverterTypeBindingProductQuantizer_lower(base),
+        FfiConverterTypeCompositeAcceleratorConfigRecord_lower(config),
+        FfiConverterTypeCompositeBuildLimitsRecord_lower(limits),$0
+    )
+})
+}
+    
 open func buildHnsw(config: HnswConfigRecord, limits: HnswBuildLimitsRecord)throws  -> HnswBuildResultRecord  {
     return try  FfiConverterTypeHnswBuildResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingproximitymap_build_hnsw(
             self.uniffiCloneHandle(),
         FfiConverterTypeHnswConfigRecord_lower(config),
         FfiConverterTypeHnswBuildLimitsRecord_lower(limits),$0
+    )
+})
+}
+    
+open func buildOrRebuildCompositeHnsw(baseMap: BindingProximityMap, base: BindingHnswIndex, config: CompositeAcceleratorConfigRecord, limits: CompositeBuildLimitsRecord, rebuild: CompositeRebuildOptionsRecord)throws  -> CompositeBuildOrRebuildOutcomeRecord  {
+    return try  FfiConverterTypeCompositeBuildOrRebuildOutcomeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingproximitymap_build_or_rebuild_composite_hnsw(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeBindingProximityMap_lower(baseMap),
+        FfiConverterTypeBindingHnswIndex_lower(base),
+        FfiConverterTypeCompositeAcceleratorConfigRecord_lower(config),
+        FfiConverterTypeCompositeBuildLimitsRecord_lower(limits),
+        FfiConverterTypeCompositeRebuildOptionsRecord_lower(rebuild),$0
+    )
+})
+}
+    
+open func buildOrRebuildCompositePq(baseMap: BindingProximityMap, base: BindingProductQuantizer, config: CompositeAcceleratorConfigRecord, limits: CompositeBuildLimitsRecord, rebuild: CompositeRebuildOptionsRecord)throws  -> CompositeBuildOrRebuildOutcomeRecord  {
+    return try  FfiConverterTypeCompositeBuildOrRebuildOutcomeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingproximitymap_build_or_rebuild_composite_pq(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeBindingProximityMap_lower(baseMap),
+        FfiConverterTypeBindingProductQuantizer_lower(base),
+        FfiConverterTypeCompositeAcceleratorConfigRecord_lower(config),
+        FfiConverterTypeCompositeBuildLimitsRecord_lower(limits),
+        FfiConverterTypeCompositeRebuildOptionsRecord_lower(rebuild),$0
     )
 })
 }
@@ -3681,6 +4128,24 @@ open func get(key: Data)throws  -> ExactProximityRecordRecord?  {
     uniffi_prolly_bindings_fn_method_bindingproximitymap_get(
             self.uniffiCloneHandle(),
         FfiConverterData.lower(key),$0
+    )
+})
+}
+    
+open func loadAcceleratorCatalog(manifest: Data)throws  -> BindingAcceleratorCatalog  {
+    return try  FfiConverterTypeBindingAcceleratorCatalog_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingproximitymap_load_accelerator_catalog(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(manifest),$0
+    )
+})
+}
+    
+open func loadComposite(manifest: Data)throws  -> BindingCompositeAccelerator  {
+    return try  FfiConverterTypeBindingCompositeAccelerator_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingproximitymap_load_composite(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(manifest),$0
     )
 })
 }
@@ -11386,6 +11851,64 @@ public func FfiConverterTypeSecondaryIndexExtractorCallback_lower(_ value: Secon
 
 
 
+public struct AcceleratorCatalogEntryRecord: Equatable, Hashable {
+    public var kind: CatalogAcceleratorKindRecord
+    public var configurationFingerprint: Data
+    public var manifest: Data
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(kind: CatalogAcceleratorKindRecord, configurationFingerprint: Data, manifest: Data) {
+        self.kind = kind
+        self.configurationFingerprint = configurationFingerprint
+        self.manifest = manifest
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension AcceleratorCatalogEntryRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAcceleratorCatalogEntryRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AcceleratorCatalogEntryRecord {
+        return
+            try AcceleratorCatalogEntryRecord(
+                kind: FfiConverterTypeCatalogAcceleratorKindRecord.read(from: &buf), 
+                configurationFingerprint: FfiConverterData.read(from: &buf), 
+                manifest: FfiConverterData.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: AcceleratorCatalogEntryRecord, into buf: inout [UInt8]) {
+        FfiConverterTypeCatalogAcceleratorKindRecord.write(value.kind, into: &buf)
+        FfiConverterData.write(value.configurationFingerprint, into: &buf)
+        FfiConverterData.write(value.manifest, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAcceleratorCatalogEntryRecord_lift(_ buf: RustBuffer) throws -> AcceleratorCatalogEntryRecord {
+    return try FfiConverterTypeAcceleratorCatalogEntryRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAcceleratorCatalogEntryRecord_lower(_ value: AcceleratorCatalogEntryRecord) -> RustBuffer {
+    return FfiConverterTypeAcceleratorCatalogEntryRecord.lower(value)
+}
+
+
 public struct ActiveIndexHealthRecord: Equatable, Hashable {
     public var name: Data
     public var generation: UInt64
@@ -12319,6 +12842,414 @@ public func FfiConverterTypeChangedSpanRecord_lift(_ buf: RustBuffer) throws -> 
 #endif
 public func FfiConverterTypeChangedSpanRecord_lower(_ value: ChangedSpanRecord) -> RustBuffer {
     return FfiConverterTypeChangedSpanRecord.lower(value)
+}
+
+
+public struct CompositeAcceleratorConfigRecord: Equatable, Hashable {
+    public var maxDeltaRecords: UInt64
+    public var maxShadowRecords: UInt64
+    public var maxDeltaRatioPpm: UInt32
+    public var maxShadowRatioPpm: UInt32
+    public var baseOverfetchMultiplier: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(maxDeltaRecords: UInt64, maxShadowRecords: UInt64, maxDeltaRatioPpm: UInt32, maxShadowRatioPpm: UInt32, baseOverfetchMultiplier: UInt32) {
+        self.maxDeltaRecords = maxDeltaRecords
+        self.maxShadowRecords = maxShadowRecords
+        self.maxDeltaRatioPpm = maxDeltaRatioPpm
+        self.maxShadowRatioPpm = maxShadowRatioPpm
+        self.baseOverfetchMultiplier = baseOverfetchMultiplier
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension CompositeAcceleratorConfigRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCompositeAcceleratorConfigRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CompositeAcceleratorConfigRecord {
+        return
+            try CompositeAcceleratorConfigRecord(
+                maxDeltaRecords: FfiConverterUInt64.read(from: &buf), 
+                maxShadowRecords: FfiConverterUInt64.read(from: &buf), 
+                maxDeltaRatioPpm: FfiConverterUInt32.read(from: &buf), 
+                maxShadowRatioPpm: FfiConverterUInt32.read(from: &buf), 
+                baseOverfetchMultiplier: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CompositeAcceleratorConfigRecord, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.maxDeltaRecords, into: &buf)
+        FfiConverterUInt64.write(value.maxShadowRecords, into: &buf)
+        FfiConverterUInt32.write(value.maxDeltaRatioPpm, into: &buf)
+        FfiConverterUInt32.write(value.maxShadowRatioPpm, into: &buf)
+        FfiConverterUInt32.write(value.baseOverfetchMultiplier, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCompositeAcceleratorConfigRecord_lift(_ buf: RustBuffer) throws -> CompositeAcceleratorConfigRecord {
+    return try FfiConverterTypeCompositeAcceleratorConfigRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCompositeAcceleratorConfigRecord_lower(_ value: CompositeAcceleratorConfigRecord) -> RustBuffer {
+    return FfiConverterTypeCompositeAcceleratorConfigRecord.lower(value)
+}
+
+
+public struct CompositeBuildLimitsRecord: Equatable, Hashable {
+    public var maxDiffEntries: UInt64?
+    public var maxOwnedBytes: UInt64?
+    public var maxEncodedOutputBytes: UInt64?
+    public var maxDistanceEvaluations: UInt64?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(maxDiffEntries: UInt64?, maxOwnedBytes: UInt64?, maxEncodedOutputBytes: UInt64?, maxDistanceEvaluations: UInt64?) {
+        self.maxDiffEntries = maxDiffEntries
+        self.maxOwnedBytes = maxOwnedBytes
+        self.maxEncodedOutputBytes = maxEncodedOutputBytes
+        self.maxDistanceEvaluations = maxDistanceEvaluations
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension CompositeBuildLimitsRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCompositeBuildLimitsRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CompositeBuildLimitsRecord {
+        return
+            try CompositeBuildLimitsRecord(
+                maxDiffEntries: FfiConverterOptionUInt64.read(from: &buf), 
+                maxOwnedBytes: FfiConverterOptionUInt64.read(from: &buf), 
+                maxEncodedOutputBytes: FfiConverterOptionUInt64.read(from: &buf), 
+                maxDistanceEvaluations: FfiConverterOptionUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CompositeBuildLimitsRecord, into buf: inout [UInt8]) {
+        FfiConverterOptionUInt64.write(value.maxDiffEntries, into: &buf)
+        FfiConverterOptionUInt64.write(value.maxOwnedBytes, into: &buf)
+        FfiConverterOptionUInt64.write(value.maxEncodedOutputBytes, into: &buf)
+        FfiConverterOptionUInt64.write(value.maxDistanceEvaluations, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCompositeBuildLimitsRecord_lift(_ buf: RustBuffer) throws -> CompositeBuildLimitsRecord {
+    return try FfiConverterTypeCompositeBuildLimitsRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCompositeBuildLimitsRecord_lower(_ value: CompositeBuildLimitsRecord) -> RustBuffer {
+    return FfiConverterTypeCompositeBuildLimitsRecord.lower(value)
+}
+
+
+public struct CompositeBuildOrRebuildOutcomeRecord {
+    public var kind: CompositeBuildOrRebuildKindRecord
+    public var composite: BindingCompositeAccelerator?
+    public var hnsw: BindingHnswIndex?
+    public var pq: BindingProductQuantizer?
+    public var reasons: [FullRebuildReasonRecord]
+    public var compositeStats: CompositeBuildStatsRecord
+    public var hnswStats: HnswBuildStatsRecord?
+    public var pqStats: ProductQuantizationBuildStatsRecord?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(kind: CompositeBuildOrRebuildKindRecord, composite: BindingCompositeAccelerator?, hnsw: BindingHnswIndex?, pq: BindingProductQuantizer?, reasons: [FullRebuildReasonRecord], compositeStats: CompositeBuildStatsRecord, hnswStats: HnswBuildStatsRecord?, pqStats: ProductQuantizationBuildStatsRecord?) {
+        self.kind = kind
+        self.composite = composite
+        self.hnsw = hnsw
+        self.pq = pq
+        self.reasons = reasons
+        self.compositeStats = compositeStats
+        self.hnswStats = hnswStats
+        self.pqStats = pqStats
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension CompositeBuildOrRebuildOutcomeRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCompositeBuildOrRebuildOutcomeRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CompositeBuildOrRebuildOutcomeRecord {
+        return
+            try CompositeBuildOrRebuildOutcomeRecord(
+                kind: FfiConverterTypeCompositeBuildOrRebuildKindRecord.read(from: &buf), 
+                composite: FfiConverterOptionTypeBindingCompositeAccelerator.read(from: &buf), 
+                hnsw: FfiConverterOptionTypeBindingHnswIndex.read(from: &buf), 
+                pq: FfiConverterOptionTypeBindingProductQuantizer.read(from: &buf), 
+                reasons: FfiConverterSequenceTypeFullRebuildReasonRecord.read(from: &buf), 
+                compositeStats: FfiConverterTypeCompositeBuildStatsRecord.read(from: &buf), 
+                hnswStats: FfiConverterOptionTypeHnswBuildStatsRecord.read(from: &buf), 
+                pqStats: FfiConverterOptionTypeProductQuantizationBuildStatsRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CompositeBuildOrRebuildOutcomeRecord, into buf: inout [UInt8]) {
+        FfiConverterTypeCompositeBuildOrRebuildKindRecord.write(value.kind, into: &buf)
+        FfiConverterOptionTypeBindingCompositeAccelerator.write(value.composite, into: &buf)
+        FfiConverterOptionTypeBindingHnswIndex.write(value.hnsw, into: &buf)
+        FfiConverterOptionTypeBindingProductQuantizer.write(value.pq, into: &buf)
+        FfiConverterSequenceTypeFullRebuildReasonRecord.write(value.reasons, into: &buf)
+        FfiConverterTypeCompositeBuildStatsRecord.write(value.compositeStats, into: &buf)
+        FfiConverterOptionTypeHnswBuildStatsRecord.write(value.hnswStats, into: &buf)
+        FfiConverterOptionTypeProductQuantizationBuildStatsRecord.write(value.pqStats, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCompositeBuildOrRebuildOutcomeRecord_lift(_ buf: RustBuffer) throws -> CompositeBuildOrRebuildOutcomeRecord {
+    return try FfiConverterTypeCompositeBuildOrRebuildOutcomeRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCompositeBuildOrRebuildOutcomeRecord_lower(_ value: CompositeBuildOrRebuildOutcomeRecord) -> RustBuffer {
+    return FfiConverterTypeCompositeBuildOrRebuildOutcomeRecord.lower(value)
+}
+
+
+public struct CompositeBuildOutcomeRecord {
+    public var accelerator: BindingCompositeAccelerator?
+    public var reasons: [FullRebuildReasonRecord]
+    public var stats: CompositeBuildStatsRecord
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(accelerator: BindingCompositeAccelerator?, reasons: [FullRebuildReasonRecord], stats: CompositeBuildStatsRecord) {
+        self.accelerator = accelerator
+        self.reasons = reasons
+        self.stats = stats
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension CompositeBuildOutcomeRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCompositeBuildOutcomeRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CompositeBuildOutcomeRecord {
+        return
+            try CompositeBuildOutcomeRecord(
+                accelerator: FfiConverterOptionTypeBindingCompositeAccelerator.read(from: &buf), 
+                reasons: FfiConverterSequenceTypeFullRebuildReasonRecord.read(from: &buf), 
+                stats: FfiConverterTypeCompositeBuildStatsRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CompositeBuildOutcomeRecord, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeBindingCompositeAccelerator.write(value.accelerator, into: &buf)
+        FfiConverterSequenceTypeFullRebuildReasonRecord.write(value.reasons, into: &buf)
+        FfiConverterTypeCompositeBuildStatsRecord.write(value.stats, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCompositeBuildOutcomeRecord_lift(_ buf: RustBuffer) throws -> CompositeBuildOutcomeRecord {
+    return try FfiConverterTypeCompositeBuildOutcomeRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCompositeBuildOutcomeRecord_lower(_ value: CompositeBuildOutcomeRecord) -> RustBuffer {
+    return FfiConverterTypeCompositeBuildOutcomeRecord.lower(value)
+}
+
+
+public struct CompositeBuildStatsRecord: Equatable, Hashable {
+    public var diffEntries: UInt64
+    public var insertedRecords: UInt64
+    public var vectorUpdatedRecords: UInt64
+    public var valueOnlyRecords: UInt64
+    public var deletedRecords: UInt64
+    public var deltaRecords: UInt64
+    public var shadowRecords: UInt64
+    public var ownedBytesPeak: UInt64
+    public var encodedOutputBytes: UInt64
+    public var distanceEvaluations: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(diffEntries: UInt64, insertedRecords: UInt64, vectorUpdatedRecords: UInt64, valueOnlyRecords: UInt64, deletedRecords: UInt64, deltaRecords: UInt64, shadowRecords: UInt64, ownedBytesPeak: UInt64, encodedOutputBytes: UInt64, distanceEvaluations: UInt64) {
+        self.diffEntries = diffEntries
+        self.insertedRecords = insertedRecords
+        self.vectorUpdatedRecords = vectorUpdatedRecords
+        self.valueOnlyRecords = valueOnlyRecords
+        self.deletedRecords = deletedRecords
+        self.deltaRecords = deltaRecords
+        self.shadowRecords = shadowRecords
+        self.ownedBytesPeak = ownedBytesPeak
+        self.encodedOutputBytes = encodedOutputBytes
+        self.distanceEvaluations = distanceEvaluations
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension CompositeBuildStatsRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCompositeBuildStatsRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CompositeBuildStatsRecord {
+        return
+            try CompositeBuildStatsRecord(
+                diffEntries: FfiConverterUInt64.read(from: &buf), 
+                insertedRecords: FfiConverterUInt64.read(from: &buf), 
+                vectorUpdatedRecords: FfiConverterUInt64.read(from: &buf), 
+                valueOnlyRecords: FfiConverterUInt64.read(from: &buf), 
+                deletedRecords: FfiConverterUInt64.read(from: &buf), 
+                deltaRecords: FfiConverterUInt64.read(from: &buf), 
+                shadowRecords: FfiConverterUInt64.read(from: &buf), 
+                ownedBytesPeak: FfiConverterUInt64.read(from: &buf), 
+                encodedOutputBytes: FfiConverterUInt64.read(from: &buf), 
+                distanceEvaluations: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CompositeBuildStatsRecord, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.diffEntries, into: &buf)
+        FfiConverterUInt64.write(value.insertedRecords, into: &buf)
+        FfiConverterUInt64.write(value.vectorUpdatedRecords, into: &buf)
+        FfiConverterUInt64.write(value.valueOnlyRecords, into: &buf)
+        FfiConverterUInt64.write(value.deletedRecords, into: &buf)
+        FfiConverterUInt64.write(value.deltaRecords, into: &buf)
+        FfiConverterUInt64.write(value.shadowRecords, into: &buf)
+        FfiConverterUInt64.write(value.ownedBytesPeak, into: &buf)
+        FfiConverterUInt64.write(value.encodedOutputBytes, into: &buf)
+        FfiConverterUInt64.write(value.distanceEvaluations, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCompositeBuildStatsRecord_lift(_ buf: RustBuffer) throws -> CompositeBuildStatsRecord {
+    return try FfiConverterTypeCompositeBuildStatsRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCompositeBuildStatsRecord_lower(_ value: CompositeBuildStatsRecord) -> RustBuffer {
+    return FfiConverterTypeCompositeBuildStatsRecord.lower(value)
+}
+
+
+public struct CompositeRebuildOptionsRecord: Equatable, Hashable {
+    public var hnswLimits: HnswBuildLimitsRecord
+    public var pqWorkerThreads: UInt64
+    public var pqLimits: ProductQuantizationBuildLimitsRecord
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(hnswLimits: HnswBuildLimitsRecord, pqWorkerThreads: UInt64, pqLimits: ProductQuantizationBuildLimitsRecord) {
+        self.hnswLimits = hnswLimits
+        self.pqWorkerThreads = pqWorkerThreads
+        self.pqLimits = pqLimits
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension CompositeRebuildOptionsRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCompositeRebuildOptionsRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CompositeRebuildOptionsRecord {
+        return
+            try CompositeRebuildOptionsRecord(
+                hnswLimits: FfiConverterTypeHnswBuildLimitsRecord.read(from: &buf), 
+                pqWorkerThreads: FfiConverterUInt64.read(from: &buf), 
+                pqLimits: FfiConverterTypeProductQuantizationBuildLimitsRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CompositeRebuildOptionsRecord, into buf: inout [UInt8]) {
+        FfiConverterTypeHnswBuildLimitsRecord.write(value.hnswLimits, into: &buf)
+        FfiConverterUInt64.write(value.pqWorkerThreads, into: &buf)
+        FfiConverterTypeProductQuantizationBuildLimitsRecord.write(value.pqLimits, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCompositeRebuildOptionsRecord_lift(_ buf: RustBuffer) throws -> CompositeRebuildOptionsRecord {
+    return try FfiConverterTypeCompositeRebuildOptionsRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCompositeRebuildOptionsRecord_lower(_ value: CompositeRebuildOptionsRecord) -> RustBuffer {
+    return FfiConverterTypeCompositeRebuildOptionsRecord.lower(value)
 }
 
 
@@ -13265,6 +14196,64 @@ public func FfiConverterTypeExactProximityRecordRecord_lift(_ buf: RustBuffer) t
 #endif
 public func FfiConverterTypeExactProximityRecordRecord_lower(_ value: ExactProximityRecordRecord) -> RustBuffer {
     return FfiConverterTypeExactProximityRecordRecord.lower(value)
+}
+
+
+public struct FullRebuildReasonRecord: Equatable, Hashable {
+    public var kind: FullRebuildReasonKindRecord
+    public var actual: UInt64
+    public var maximum: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(kind: FullRebuildReasonKindRecord, actual: UInt64, maximum: UInt64) {
+        self.kind = kind
+        self.actual = actual
+        self.maximum = maximum
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FullRebuildReasonRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFullRebuildReasonRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FullRebuildReasonRecord {
+        return
+            try FullRebuildReasonRecord(
+                kind: FfiConverterTypeFullRebuildReasonKindRecord.read(from: &buf), 
+                actual: FfiConverterUInt64.read(from: &buf), 
+                maximum: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FullRebuildReasonRecord, into buf: inout [UInt8]) {
+        FfiConverterTypeFullRebuildReasonKindRecord.write(value.kind, into: &buf)
+        FfiConverterUInt64.write(value.actual, into: &buf)
+        FfiConverterUInt64.write(value.maximum, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFullRebuildReasonRecord_lift(_ buf: RustBuffer) throws -> FullRebuildReasonRecord {
+    return try FfiConverterTypeFullRebuildReasonRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFullRebuildReasonRecord_lower(_ value: FullRebuildReasonRecord) -> RustBuffer {
+    return FfiConverterTypeFullRebuildReasonRecord.lower(value)
 }
 
 
@@ -22746,6 +23735,228 @@ public func FfiConverterTypeAdaptiveQualityRecord_lower(_ value: AdaptiveQuality
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
+public enum CatalogAcceleratorKindRecord: Equatable, Hashable {
+    
+    case hnsw
+    case productQuantized
+    case composite
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension CatalogAcceleratorKindRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCatalogAcceleratorKindRecord: FfiConverterRustBuffer {
+    typealias SwiftType = CatalogAcceleratorKindRecord
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CatalogAcceleratorKindRecord {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .hnsw
+        
+        case 2: return .productQuantized
+        
+        case 3: return .composite
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CatalogAcceleratorKindRecord, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .hnsw:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .productQuantized:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .composite:
+            writeInt(&buf, Int32(3))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCatalogAcceleratorKindRecord_lift(_ buf: RustBuffer) throws -> CatalogAcceleratorKindRecord {
+    return try FfiConverterTypeCatalogAcceleratorKindRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCatalogAcceleratorKindRecord_lower(_ value: CatalogAcceleratorKindRecord) -> RustBuffer {
+    return FfiConverterTypeCatalogAcceleratorKindRecord.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum CompositeBaseKindRecord: Equatable, Hashable {
+    
+    case hnsw
+    case productQuantized
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension CompositeBaseKindRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCompositeBaseKindRecord: FfiConverterRustBuffer {
+    typealias SwiftType = CompositeBaseKindRecord
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CompositeBaseKindRecord {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .hnsw
+        
+        case 2: return .productQuantized
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CompositeBaseKindRecord, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .hnsw:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .productQuantized:
+            writeInt(&buf, Int32(2))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCompositeBaseKindRecord_lift(_ buf: RustBuffer) throws -> CompositeBaseKindRecord {
+    return try FfiConverterTypeCompositeBaseKindRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCompositeBaseKindRecord_lower(_ value: CompositeBaseKindRecord) -> RustBuffer {
+    return FfiConverterTypeCompositeBaseKindRecord.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum CompositeBuildOrRebuildKindRecord: Equatable, Hashable {
+    
+    case composite
+    case noAcceleratorRequired
+    case hnswRebuilt
+    case productQuantizedRebuilt
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension CompositeBuildOrRebuildKindRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCompositeBuildOrRebuildKindRecord: FfiConverterRustBuffer {
+    typealias SwiftType = CompositeBuildOrRebuildKindRecord
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CompositeBuildOrRebuildKindRecord {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .composite
+        
+        case 2: return .noAcceleratorRequired
+        
+        case 3: return .hnswRebuilt
+        
+        case 4: return .productQuantizedRebuilt
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CompositeBuildOrRebuildKindRecord, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .composite:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .noAcceleratorRequired:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .hnswRebuilt:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .productQuantizedRebuilt:
+            writeInt(&buf, Int32(4))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCompositeBuildOrRebuildKindRecord_lift(_ buf: RustBuffer) throws -> CompositeBuildOrRebuildKindRecord {
+    return try FfiConverterTypeCompositeBuildOrRebuildKindRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCompositeBuildOrRebuildKindRecord_lower(_ value: CompositeBuildOrRebuildKindRecord) -> RustBuffer {
+    return FfiConverterTypeCompositeBuildOrRebuildKindRecord.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 public enum ContentObjectKindRecord: Equatable, Hashable {
     
     case orderedNode
@@ -23307,6 +24518,87 @@ public func FfiConverterTypeEncodingKind_lift(_ buf: RustBuffer) throws -> Encod
 #endif
 public func FfiConverterTypeEncodingKind_lower(_ value: EncodingKind) -> RustBuffer {
     return FfiConverterTypeEncodingKind.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum FullRebuildReasonKindRecord: Equatable, Hashable {
+    
+    case deltaRecords
+    case shadowRecords
+    case deltaRatio
+    case shadowRatio
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension FullRebuildReasonKindRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFullRebuildReasonKindRecord: FfiConverterRustBuffer {
+    typealias SwiftType = FullRebuildReasonKindRecord
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FullRebuildReasonKindRecord {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .deltaRecords
+        
+        case 2: return .shadowRecords
+        
+        case 3: return .deltaRatio
+        
+        case 4: return .shadowRatio
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: FullRebuildReasonKindRecord, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .deltaRecords:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .shadowRecords:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .deltaRatio:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .shadowRatio:
+            writeInt(&buf, Int32(4))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFullRebuildReasonKindRecord_lift(_ buf: RustBuffer) throws -> FullRebuildReasonKindRecord {
+    return try FfiConverterTypeFullRebuildReasonKindRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFullRebuildReasonKindRecord_lower(_ value: FullRebuildReasonKindRecord) -> RustBuffer {
+    return FfiConverterTypeFullRebuildReasonKindRecord.lower(value)
 }
 
 
@@ -25418,6 +26710,54 @@ fileprivate struct FfiConverterOptionData: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeBindingCompositeAccelerator: FfiConverterRustBuffer {
+    typealias SwiftType = BindingCompositeAccelerator?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeBindingCompositeAccelerator.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeBindingCompositeAccelerator.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeBindingHnswIndex: FfiConverterRustBuffer {
+    typealias SwiftType = BindingHnswIndex?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeBindingHnswIndex.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeBindingHnswIndex.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeBindingMapSnapshot: FfiConverterRustBuffer {
     typealias SwiftType = BindingMapSnapshot?
 
@@ -25434,6 +26774,30 @@ fileprivate struct FfiConverterOptionTypeBindingMapSnapshot: FfiConverterRustBuf
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeBindingMapSnapshot.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeBindingProductQuantizer: FfiConverterRustBuffer {
+    typealias SwiftType = BindingProductQuantizer?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeBindingProductQuantizer.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeBindingProductQuantizer.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -25586,6 +26950,30 @@ fileprivate struct FfiConverterOptionTypeExactProximityRecordRecord: FfiConverte
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeHnswBuildStatsRecord: FfiConverterRustBuffer {
+    typealias SwiftType = HnswBuildStatsRecord?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeHnswBuildStatsRecord.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeHnswBuildStatsRecord.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeIndexedVersionRecord: FfiConverterRustBuffer {
     typealias SwiftType = IndexedVersionRecord?
 
@@ -25698,6 +27086,30 @@ fileprivate struct FfiConverterOptionTypeMutationRecord: FfiConverterRustBuffer 
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeMutationRecord.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeProductQuantizationBuildStatsRecord: FfiConverterRustBuffer {
+    typealias SwiftType = ProductQuantizationBuildStatsRecord?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeProductQuantizationBuildStatsRecord.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeProductQuantizationBuildStatsRecord.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -26261,6 +27673,31 @@ fileprivate struct FfiConverterSequenceData: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeAcceleratorCatalogEntryRecord: FfiConverterRustBuffer {
+    typealias SwiftType = [AcceleratorCatalogEntryRecord]
+
+    public static func write(_ value: [AcceleratorCatalogEntryRecord], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeAcceleratorCatalogEntryRecord.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [AcceleratorCatalogEntryRecord] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [AcceleratorCatalogEntryRecord]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeAcceleratorCatalogEntryRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeActiveIndexHealthRecord: FfiConverterRustBuffer {
     typealias SwiftType = [ActiveIndexHealthRecord]
 
@@ -26403,6 +27840,31 @@ fileprivate struct FfiConverterSequenceTypeEntryRecord: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeEntryRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeFullRebuildReasonRecord: FfiConverterRustBuffer {
+    typealias SwiftType = [FullRebuildReasonRecord]
+
+    public static func write(_ value: [FullRebuildReasonRecord], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeFullRebuildReasonRecord.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [FullRebuildReasonRecord] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [FullRebuildReasonRecord]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeFullRebuildReasonRecord.read(from: &buf))
         }
         return seq
     }
@@ -28302,6 +29764,24 @@ public func openRemoteProllyEngine(store: ForeignRemoteStore, config: ConfigReco
             errorHandler: FfiConverterTypeProllyBindingError_lift
         )
 }
+public func defaultCompositeAcceleratorConfig() -> CompositeAcceleratorConfigRecord  {
+    return try!  FfiConverterTypeCompositeAcceleratorConfigRecord_lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_func_default_composite_accelerator_config($0
+    )
+})
+}
+public func defaultCompositeBuildLimits() -> CompositeBuildLimitsRecord  {
+    return try!  FfiConverterTypeCompositeBuildLimitsRecord_lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_func_default_composite_build_limits($0
+    )
+})
+}
+public func defaultCompositeRebuildOptions() -> CompositeRebuildOptionsRecord  {
+    return try!  FfiConverterTypeCompositeRebuildOptionsRecord_lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_func_default_composite_rebuild_options($0
+    )
+})
+}
 public func defaultContentGraphLimits() -> ContentGraphLimitsRecord  {
     return try!  FfiConverterTypeContentGraphLimitsRecord_lift(try! rustCall() {
     uniffi_prolly_bindings_fn_func_default_content_graph_limits($0
@@ -28750,6 +30230,15 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_func_open_remote_prolly_engine() != 31371) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_func_default_composite_accelerator_config() != 39819) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_func_default_composite_build_limits() != 3977) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_func_default_composite_rebuild_options() != 61172) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_func_default_content_graph_limits() != 63706) {
@@ -29565,6 +31054,51 @@ private let initializationResult: InitializationResult = {
     if (uniffi_prolly_bindings_checksum_method_secondaryindexextractorcallback_extract() != 330) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_entries() != 1963) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_manifest() != 7708) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_prove_search() != 60058) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_search() != 55802) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_source_descriptor() != 29366) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_base_kind() != 38194) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_base_source_descriptor() != 27682) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_build_stats() != 13990) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_config() != 34290) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_current_source_descriptor() != 8293) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_delta_count() != 30824) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_manifest() != 60414) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_prove_search() != 23157) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_search() != 7681) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_shadow_count() != 49297) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_prolly_bindings_checksum_method_bindinghnswindex_config() != 7633) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -29601,7 +31135,22 @@ private let initializationResult: InitializationResult = {
     if (uniffi_prolly_bindings_checksum_method_bindingproductquantizer_source_descriptor() != 61276) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_accelerator_catalog() != 27841) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_composite_hnsw() != 60836) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_composite_pq() != 36562) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_hnsw() != 15873) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_or_rebuild_composite_hnsw() != 51755) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_or_rebuild_composite_pq() != 27287) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_pq() != 7075) {
@@ -29626,6 +31175,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_bindingproximitymap_get() != 51400) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingproximitymap_load_accelerator_catalog() != 29318) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingproximitymap_load_composite() != 64875) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_bindingproximitymap_load_hnsw() != 8586) {

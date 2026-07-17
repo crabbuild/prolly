@@ -1,6 +1,8 @@
 package build.crab.prolly.api
 
 import build.crab.prolly.BindingIndexedMap
+import build.crab.prolly.BindingAcceleratorCatalog
+import build.crab.prolly.BindingCompositeAccelerator
 import build.crab.prolly.BindingIndexedSnapshot
 import build.crab.prolly.BindingHnswIndex
 import build.crab.prolly.BindingIndexRegistry
@@ -17,6 +19,14 @@ import build.crab.prolly.BindingVersionedTransaction
 import build.crab.prolly.BindingMapSnapshot
 import build.crab.prolly.ConfigRecord
 import build.crab.prolly.ContentGraphLimitsRecord
+import build.crab.prolly.CompositeAcceleratorConfigRecord
+import build.crab.prolly.CompositeBuildLimitsRecord
+import build.crab.prolly.CompositeBuildOrRebuildKindRecord
+import build.crab.prolly.CompositeBuildOrRebuildOutcomeRecord
+import build.crab.prolly.CompositeBuildOutcomeRecord
+import build.crab.prolly.CompositeBuildStatsRecord
+import build.crab.prolly.CompositeRebuildOptionsRecord
+import build.crab.prolly.FullRebuildReasonRecord
 import build.crab.prolly.EntryRecord
 import build.crab.prolly.HnswBuildLimitsRecord
 import build.crab.prolly.HnswBuildStatsRecord
@@ -45,6 +55,9 @@ import build.crab.prolly.ProximityStructuralProofRecord
 import build.crab.prolly.SecondaryIndexExtractorCallback
 import build.crab.prolly.SnapshotBundleRecord
 import build.crab.prolly.defaultConfig
+import build.crab.prolly.defaultCompositeAcceleratorConfig
+import build.crab.prolly.defaultCompositeBuildLimits
+import build.crab.prolly.defaultCompositeRebuildOptions
 import build.crab.prolly.defaultContentGraphLimits
 import build.crab.prolly.defaultHnswBuildLimits
 import build.crab.prolly.defaultHnswConfig
@@ -66,6 +79,36 @@ data class HnswBuildResult(val index: HnswIndex, val stats: HnswBuildStatsRecord
 data class ProductQuantizationBuildResult(
     val index: ProductQuantizer,
     val stats: ProductQuantizationBuildStatsRecord,
+)
+data class CompositeBuildOutcome(
+    val accelerator: CompositeAccelerator?,
+    val reasons: List<FullRebuildReasonRecord>,
+    val stats: CompositeBuildStatsRecord,
+)
+data class CompositeBuildOrRebuildOutcome(
+    val kind: CompositeBuildOrRebuildKindRecord,
+    val composite: CompositeAccelerator?,
+    val hnsw: HnswIndex?,
+    val pq: ProductQuantizer?,
+    val reasons: List<FullRebuildReasonRecord>,
+    val compositeStats: CompositeBuildStatsRecord,
+    val hnswStats: HnswBuildStatsRecord?,
+    val pqStats: ProductQuantizationBuildStatsRecord?,
+)
+
+private fun CompositeBuildOutcomeRecord.portable() = CompositeBuildOutcome(
+    accelerator?.let(::CompositeAccelerator), reasons, stats,
+)
+
+private fun CompositeBuildOrRebuildOutcomeRecord.portable() = CompositeBuildOrRebuildOutcome(
+    kind,
+    composite?.let(::CompositeAccelerator),
+    hnsw?.let(::HnswIndex),
+    pq?.let(::ProductQuantizer),
+    reasons,
+    compositeStats,
+    hnswStats,
+    pqStats,
 )
 
 private fun ownedSearchRequest(request: ProximitySearchRequestRecord) = request.copy(
@@ -421,6 +464,47 @@ class ProximityMap(internal val native: BindingProximityMap) : AutoCloseable {
         return ProductQuantizationBuildResult(ProductQuantizer(result.index), result.stats)
     }
     fun loadPq(manifest: ByteArray) = ProductQuantizer(native.loadPq(manifest.copyOf()))
+    fun buildCompositeHnsw(
+        baseMap: ProximityMap,
+        base: HnswIndex,
+        config: CompositeAcceleratorConfigRecord = defaultCompositeAcceleratorConfig(),
+        limits: CompositeBuildLimitsRecord = defaultCompositeBuildLimits(),
+    ) = native.buildCompositeHnsw(baseMap.native, base.native, config, limits).portable()
+    fun buildCompositePq(
+        baseMap: ProximityMap,
+        base: ProductQuantizer,
+        config: CompositeAcceleratorConfigRecord = defaultCompositeAcceleratorConfig(),
+        limits: CompositeBuildLimitsRecord = defaultCompositeBuildLimits(),
+    ) = native.buildCompositePq(baseMap.native, base.native, config, limits).portable()
+    fun buildOrRebuildCompositeHnsw(
+        baseMap: ProximityMap,
+        base: HnswIndex,
+        config: CompositeAcceleratorConfigRecord = defaultCompositeAcceleratorConfig(),
+        limits: CompositeBuildLimitsRecord = defaultCompositeBuildLimits(),
+        rebuild: CompositeRebuildOptionsRecord = defaultCompositeRebuildOptions(),
+    ) = native.buildOrRebuildCompositeHnsw(
+        baseMap.native, base.native, config, limits, rebuild,
+    ).portable()
+    fun buildOrRebuildCompositePq(
+        baseMap: ProximityMap,
+        base: ProductQuantizer,
+        config: CompositeAcceleratorConfigRecord = defaultCompositeAcceleratorConfig(),
+        limits: CompositeBuildLimitsRecord = defaultCompositeBuildLimits(),
+        rebuild: CompositeRebuildOptionsRecord = defaultCompositeRebuildOptions(),
+    ) = native.buildOrRebuildCompositePq(
+        baseMap.native, base.native, config, limits, rebuild,
+    ).portable()
+    fun loadComposite(manifest: ByteArray) =
+        CompositeAccelerator(native.loadComposite(manifest.copyOf()))
+    fun buildAcceleratorCatalog(
+        hnsw: HnswIndex? = null,
+        pq: ProductQuantizer? = null,
+        composite: CompositeAccelerator? = null,
+    ) = AcceleratorCatalog(
+        native.buildAcceleratorCatalog(hnsw?.native, pq?.native, composite?.native),
+    )
+    fun loadAcceleratorCatalog(manifest: ByteArray) =
+        AcceleratorCatalog(native.loadAcceleratorCatalog(manifest.copyOf()))
     fun get(key: ByteArray) = native.get(key.copyOf())
     fun containsKey(key: ByteArray) = native.containsKey(key.copyOf())
     fun search(request: ProximitySearchRequestRecord): ProximitySearchResultRecord =
@@ -475,6 +559,39 @@ class ProductQuantizer(internal val native: BindingProductQuantizer) : AutoClose
     val sourceDescriptor: ByteArray get() = native.sourceDescriptor().copyOf()
     val config: ProductQuantizationConfigRecord get() = native.config()
     val quality: ProductQuantizationQualityRecord get() = native.quality()
+    fun search(map: ProximityMap, request: ProximitySearchRequestRecord): ProximitySearchResultRecord =
+        native.search(map.native, ownedSearchRequest(request))
+    fun proveSearch(
+        map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        limits: ContentGraphLimitsRecord = defaultContentGraphLimits(),
+    ) = ProximitySearchProof(native.proveSearch(map.native, ownedSearchRequest(request), limits))
+    override fun close() = native.close()
+}
+
+class CompositeAccelerator(internal val native: BindingCompositeAccelerator) : AutoCloseable {
+    val manifest: ByteArray get() = native.manifest().copyOf()
+    val currentSourceDescriptor: ByteArray get() = native.currentSourceDescriptor().copyOf()
+    val baseSourceDescriptor: ByteArray get() = native.baseSourceDescriptor().copyOf()
+    val baseKind get() = native.baseKind()
+    val deltaCount: ULong get() = native.deltaCount()
+    val shadowCount: ULong get() = native.shadowCount()
+    val config: CompositeAcceleratorConfigRecord get() = native.config()
+    val buildStats: CompositeBuildStatsRecord get() = native.buildStats()
+    fun search(map: ProximityMap, request: ProximitySearchRequestRecord): ProximitySearchResultRecord =
+        native.search(map.native, ownedSearchRequest(request))
+    fun proveSearch(
+        map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        limits: ContentGraphLimitsRecord = defaultContentGraphLimits(),
+    ) = ProximitySearchProof(native.proveSearch(map.native, ownedSearchRequest(request), limits))
+    override fun close() = native.close()
+}
+
+class AcceleratorCatalog(internal val native: BindingAcceleratorCatalog) : AutoCloseable {
+    val manifest: ByteArray get() = native.manifest().copyOf()
+    val sourceDescriptor: ByteArray get() = native.sourceDescriptor().copyOf()
+    val entries get() = native.entries()
     fun search(map: ProximityMap, request: ProximitySearchRequestRecord): ProximitySearchResultRecord =
         native.search(map.native, ownedSearchRequest(request))
     fun proveSearch(

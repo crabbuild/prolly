@@ -10,18 +10,24 @@ use napi::bindgen_prelude::{Buffer, Env, Error, Float32Array, FunctionRef, Resul
 use napi::JsObject;
 use napi_derive::napi;
 use prolly_bindings::{
-    default_content_graph_limits, default_hnsw_build_limits, default_hnsw_config,
-    default_pq_build_limits, default_pq_config, default_proximity_config, verify_key_proof,
-    verify_multi_key_proof, verify_proximity_membership_proof, verify_proximity_structure_proof,
-    verify_range_page_proof, verify_range_proof, ActiveIndexHealthRecord, AdaptiveQualityRecord,
-    BindingHnswIndex, BindingIndexRegistry, BindingIndexedMap, BindingIndexedSnapshot,
-    BindingMapComparison, BindingMapMerge, BindingMapSnapshot, BindingMapSubscription,
-    BindingProductQuantizer, BindingProximityMap, BindingProximityReadSession,
-    BindingProximitySearchProof, BindingSecondaryIndexSnapshot, BindingVersionedMap,
-    BindingVersionedTransaction, DistanceMetricRecord, ExactProximityRecordRecord,
-    HnswBuildLimitsRecord, HnswBuildStatsRecord, HnswConfigRecord, HnswRoutingVectorEncodingRecord,
-    IndexBuildResultRecord, IndexEntryRecord, IndexMatchRecord, IndexPageRecord,
-    IndexProjectionRecord, IndexVerificationRecord, IndexedMapHealthRecord,
+    default_composite_accelerator_config, default_composite_build_limits,
+    default_composite_rebuild_options, default_content_graph_limits, default_hnsw_build_limits,
+    default_hnsw_config, default_pq_build_limits, default_pq_config, default_proximity_config,
+    verify_key_proof, verify_multi_key_proof, verify_proximity_membership_proof,
+    verify_proximity_structure_proof, verify_range_page_proof, verify_range_proof,
+    AcceleratorCatalogEntryRecord, ActiveIndexHealthRecord, AdaptiveQualityRecord,
+    BindingAcceleratorCatalog, BindingCompositeAccelerator, BindingHnswIndex, BindingIndexRegistry,
+    BindingIndexedMap, BindingIndexedSnapshot, BindingMapComparison, BindingMapMerge,
+    BindingMapSnapshot, BindingMapSubscription, BindingProductQuantizer, BindingProximityMap,
+    BindingProximityReadSession, BindingProximitySearchProof, BindingSecondaryIndexSnapshot,
+    BindingVersionedMap, BindingVersionedTransaction, CatalogAcceleratorKindRecord,
+    CompositeAcceleratorConfigRecord, CompositeBaseKindRecord, CompositeBuildLimitsRecord,
+    CompositeBuildOrRebuildKindRecord, CompositeBuildOrRebuildOutcomeRecord,
+    CompositeBuildOutcomeRecord, CompositeBuildStatsRecord, CompositeRebuildOptionsRecord,
+    DistanceMetricRecord, ExactProximityRecordRecord, FullRebuildReasonKindRecord,
+    FullRebuildReasonRecord, HnswBuildLimitsRecord, HnswBuildStatsRecord, HnswConfigRecord,
+    HnswRoutingVectorEncodingRecord, IndexBuildResultRecord, IndexEntryRecord, IndexMatchRecord,
+    IndexPageRecord, IndexProjectionRecord, IndexVerificationRecord, IndexedMapHealthRecord,
     IndexedMapMetricsRecord, IndexedRetentionRecord, IndexedSnapshotIdRecord, IndexedSourceRecord,
     IndexedUpdateKind, IndexedUpdateRecord, IndexedVersionRecord, KeyProofRecord, MapUpdateKind,
     MapUpdateRecord, MapVersionRecord, MultiKeyProofRecord, ProductQuantizationBuildLimitsRecord,
@@ -883,6 +889,178 @@ impl From<ProductQuantizationQualityRecord> for NodePortablePqQuality {
         Self {
             mean_squared_error: value.mean_squared_error,
             maximum_squared_error: value.maximum_squared_error,
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NodePortableCompositeConfig {
+    pub max_delta_records: String,
+    pub max_shadow_records: String,
+    pub max_delta_ratio_ppm: u32,
+    pub max_shadow_ratio_ppm: u32,
+    pub base_overfetch_multiplier: u32,
+}
+
+impl From<CompositeAcceleratorConfigRecord> for NodePortableCompositeConfig {
+    fn from(value: CompositeAcceleratorConfigRecord) -> Self {
+        Self {
+            max_delta_records: value.max_delta_records.to_string(),
+            max_shadow_records: value.max_shadow_records.to_string(),
+            max_delta_ratio_ppm: value.max_delta_ratio_ppm,
+            max_shadow_ratio_ppm: value.max_shadow_ratio_ppm,
+            base_overfetch_multiplier: value.base_overfetch_multiplier,
+        }
+    }
+}
+
+impl TryFrom<NodePortableCompositeConfig> for CompositeAcceleratorConfigRecord {
+    type Error = Error;
+
+    fn try_from(value: NodePortableCompositeConfig) -> Result<Self> {
+        Ok(Self {
+            max_delta_records: parse_u64(value.max_delta_records, "maxDeltaRecords")?,
+            max_shadow_records: parse_u64(value.max_shadow_records, "maxShadowRecords")?,
+            max_delta_ratio_ppm: value.max_delta_ratio_ppm,
+            max_shadow_ratio_ppm: value.max_shadow_ratio_ppm,
+            base_overfetch_multiplier: value.base_overfetch_multiplier,
+        })
+    }
+}
+
+#[napi(object)]
+pub struct NodePortableCompositeBuildLimits {
+    pub max_diff_entries: Option<String>,
+    pub max_owned_bytes: Option<String>,
+    pub max_encoded_output_bytes: Option<String>,
+    pub max_distance_evaluations: Option<String>,
+}
+
+impl From<CompositeBuildLimitsRecord> for NodePortableCompositeBuildLimits {
+    fn from(value: CompositeBuildLimitsRecord) -> Self {
+        Self {
+            max_diff_entries: value.max_diff_entries.map(|value| value.to_string()),
+            max_owned_bytes: value.max_owned_bytes.map(|value| value.to_string()),
+            max_encoded_output_bytes: value
+                .max_encoded_output_bytes
+                .map(|value| value.to_string()),
+            max_distance_evaluations: value
+                .max_distance_evaluations
+                .map(|value| value.to_string()),
+        }
+    }
+}
+
+impl TryFrom<NodePortableCompositeBuildLimits> for CompositeBuildLimitsRecord {
+    type Error = Error;
+
+    fn try_from(value: NodePortableCompositeBuildLimits) -> Result<Self> {
+        Ok(Self {
+            max_diff_entries: parse_optional_u64(value.max_diff_entries, "maxDiffEntries")?,
+            max_owned_bytes: parse_optional_u64(value.max_owned_bytes, "maxOwnedBytes")?,
+            max_encoded_output_bytes: parse_optional_u64(
+                value.max_encoded_output_bytes,
+                "maxEncodedOutputBytes",
+            )?,
+            max_distance_evaluations: parse_optional_u64(
+                value.max_distance_evaluations,
+                "maxDistanceEvaluations",
+            )?,
+        })
+    }
+}
+
+#[napi(object)]
+pub struct NodePortableCompositeBuildStats {
+    pub diff_entries: String,
+    pub inserted_records: String,
+    pub vector_updated_records: String,
+    pub value_only_records: String,
+    pub deleted_records: String,
+    pub delta_records: String,
+    pub shadow_records: String,
+    pub owned_bytes_peak: String,
+    pub encoded_output_bytes: String,
+    pub distance_evaluations: String,
+}
+
+impl From<CompositeBuildStatsRecord> for NodePortableCompositeBuildStats {
+    fn from(value: CompositeBuildStatsRecord) -> Self {
+        Self {
+            diff_entries: value.diff_entries.to_string(),
+            inserted_records: value.inserted_records.to_string(),
+            vector_updated_records: value.vector_updated_records.to_string(),
+            value_only_records: value.value_only_records.to_string(),
+            deleted_records: value.deleted_records.to_string(),
+            delta_records: value.delta_records.to_string(),
+            shadow_records: value.shadow_records.to_string(),
+            owned_bytes_peak: value.owned_bytes_peak.to_string(),
+            encoded_output_bytes: value.encoded_output_bytes.to_string(),
+            distance_evaluations: value.distance_evaluations.to_string(),
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NodePortableFullRebuildReason {
+    pub kind: String,
+    pub actual: String,
+    pub maximum: String,
+}
+
+impl From<FullRebuildReasonRecord> for NodePortableFullRebuildReason {
+    fn from(value: FullRebuildReasonRecord) -> Self {
+        Self {
+            kind: match value.kind {
+                FullRebuildReasonKindRecord::DeltaRecords => "delta_records",
+                FullRebuildReasonKindRecord::ShadowRecords => "shadow_records",
+                FullRebuildReasonKindRecord::DeltaRatio => "delta_ratio",
+                FullRebuildReasonKindRecord::ShadowRatio => "shadow_ratio",
+            }
+            .to_string(),
+            actual: value.actual.to_string(),
+            maximum: value.maximum.to_string(),
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NodePortableCompositeRebuildOptions {
+    pub hnsw_limits: NodePortableHnswBuildLimits,
+    pub pq_worker_threads: String,
+    pub pq_limits: NodePortablePqBuildLimits,
+}
+
+impl TryFrom<NodePortableCompositeRebuildOptions> for CompositeRebuildOptionsRecord {
+    type Error = Error;
+
+    fn try_from(value: NodePortableCompositeRebuildOptions) -> Result<Self> {
+        Ok(Self {
+            hnsw_limits: value.hnsw_limits.try_into()?,
+            pq_worker_threads: parse_u64(value.pq_worker_threads, "pqWorkerThreads")?,
+            pq_limits: value.pq_limits.try_into()?,
+        })
+    }
+}
+
+#[napi(object)]
+pub struct NodePortableCatalogEntry {
+    pub kind: String,
+    pub configuration_fingerprint: Buffer,
+    pub manifest: Buffer,
+}
+
+impl From<AcceleratorCatalogEntryRecord> for NodePortableCatalogEntry {
+    fn from(value: AcceleratorCatalogEntryRecord) -> Self {
+        Self {
+            kind: match value.kind {
+                CatalogAcceleratorKindRecord::Hnsw => "hnsw",
+                CatalogAcceleratorKindRecord::ProductQuantized => "product_quantized",
+                CatalogAcceleratorKindRecord::Composite => "composite",
+            }
+            .to_string(),
+            configuration_fingerprint: Buffer::from(value.configuration_fingerprint),
+            manifest: Buffer::from(value.manifest),
         }
     }
 }
@@ -3021,6 +3199,252 @@ impl NativePortableProductQuantizer {
 }
 
 #[napi]
+pub struct NativePortableCompositeBuildResult {
+    accelerator: Option<Arc<BindingCompositeAccelerator>>,
+    reasons: Vec<FullRebuildReasonRecord>,
+    stats: CompositeBuildStatsRecord,
+}
+
+impl From<CompositeBuildOutcomeRecord> for NativePortableCompositeBuildResult {
+    fn from(value: CompositeBuildOutcomeRecord) -> Self {
+        Self {
+            accelerator: value.accelerator,
+            reasons: value.reasons,
+            stats: value.stats,
+        }
+    }
+}
+
+#[napi]
+impl NativePortableCompositeBuildResult {
+    #[napi]
+    pub fn accelerator(&self) -> Option<NativePortableCompositeAccelerator> {
+        self.accelerator
+            .as_ref()
+            .map(|inner| NativePortableCompositeAccelerator {
+                inner: Arc::clone(inner),
+            })
+    }
+
+    #[napi]
+    pub fn reasons(&self) -> Vec<NodePortableFullRebuildReason> {
+        self.reasons.clone().into_iter().map(Into::into).collect()
+    }
+
+    #[napi]
+    pub fn stats(&self) -> NodePortableCompositeBuildStats {
+        self.stats.clone().into()
+    }
+}
+
+#[napi]
+pub struct NativePortableCompositeBuildOrRebuildResult {
+    inner: CompositeBuildOrRebuildOutcomeRecord,
+}
+
+#[napi]
+impl NativePortableCompositeBuildOrRebuildResult {
+    #[napi]
+    pub fn kind(&self) -> String {
+        match self.inner.kind {
+            CompositeBuildOrRebuildKindRecord::Composite => "composite",
+            CompositeBuildOrRebuildKindRecord::NoAcceleratorRequired => "no_accelerator_required",
+            CompositeBuildOrRebuildKindRecord::HnswRebuilt => "hnsw_rebuilt",
+            CompositeBuildOrRebuildKindRecord::ProductQuantizedRebuilt => {
+                "product_quantized_rebuilt"
+            }
+        }
+        .to_string()
+    }
+
+    #[napi]
+    pub fn composite(&self) -> Option<NativePortableCompositeAccelerator> {
+        self.inner
+            .composite
+            .as_ref()
+            .map(|inner| NativePortableCompositeAccelerator {
+                inner: Arc::clone(inner),
+            })
+    }
+
+    #[napi]
+    pub fn hnsw(&self) -> Option<NativePortableHnswIndex> {
+        self.inner
+            .hnsw
+            .as_ref()
+            .map(|inner| NativePortableHnswIndex {
+                inner: Arc::clone(inner),
+            })
+    }
+
+    #[napi]
+    pub fn pq(&self) -> Option<NativePortableProductQuantizer> {
+        self.inner
+            .pq
+            .as_ref()
+            .map(|inner| NativePortableProductQuantizer {
+                inner: Arc::clone(inner),
+            })
+    }
+
+    #[napi]
+    pub fn reasons(&self) -> Vec<NodePortableFullRebuildReason> {
+        self.inner
+            .reasons
+            .clone()
+            .into_iter()
+            .map(Into::into)
+            .collect()
+    }
+
+    #[napi(js_name = "compositeStats")]
+    pub fn composite_stats(&self) -> NodePortableCompositeBuildStats {
+        self.inner.composite_stats.clone().into()
+    }
+
+    #[napi(js_name = "hnswStats")]
+    pub fn hnsw_stats(&self) -> Option<NodePortableHnswBuildStats> {
+        self.inner.hnsw_stats.clone().map(Into::into)
+    }
+
+    #[napi(js_name = "pqStats")]
+    pub fn pq_stats(&self) -> Option<NodePortablePqBuildStats> {
+        self.inner.pq_stats.clone().map(Into::into)
+    }
+}
+
+#[napi]
+pub struct NativePortableCompositeAccelerator {
+    inner: Arc<BindingCompositeAccelerator>,
+}
+
+#[napi]
+impl NativePortableCompositeAccelerator {
+    #[napi]
+    pub fn manifest(&self) -> Buffer {
+        Buffer::from(self.inner.manifest())
+    }
+
+    #[napi(js_name = "currentSourceDescriptor")]
+    pub fn current_source_descriptor(&self) -> Buffer {
+        Buffer::from(self.inner.current_source_descriptor())
+    }
+
+    #[napi(js_name = "baseSourceDescriptor")]
+    pub fn base_source_descriptor(&self) -> Buffer {
+        Buffer::from(self.inner.base_source_descriptor())
+    }
+
+    #[napi(js_name = "baseKind")]
+    pub fn base_kind(&self) -> String {
+        match self.inner.base_kind() {
+            CompositeBaseKindRecord::Hnsw => "hnsw",
+            CompositeBaseKindRecord::ProductQuantized => "product_quantized",
+        }
+        .to_string()
+    }
+
+    #[napi(js_name = "deltaCount")]
+    pub fn delta_count(&self) -> String {
+        self.inner.delta_count().to_string()
+    }
+
+    #[napi(js_name = "shadowCount")]
+    pub fn shadow_count(&self) -> String {
+        self.inner.shadow_count().to_string()
+    }
+
+    #[napi]
+    pub fn config(&self) -> NodePortableCompositeConfig {
+        self.inner.config().into()
+    }
+
+    #[napi(js_name = "buildStats")]
+    pub fn build_stats(&self) -> NodePortableCompositeBuildStats {
+        self.inner.build_stats().into()
+    }
+
+    #[napi]
+    pub fn search(
+        &self,
+        map: &NativePortableProximityMap,
+        request: NodePortableSearchRequest,
+    ) -> Result<NodePortableSearchResult> {
+        self.inner
+            .search(Arc::clone(&map.inner), request.try_into()?)
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "proveSearch")]
+    pub fn prove_search(
+        &self,
+        map: &NativePortableProximityMap,
+        request: NodePortableSearchRequest,
+    ) -> Result<NativePortableProximitySearchProof> {
+        self.inner
+            .prove_search(
+                Arc::clone(&map.inner),
+                request.try_into()?,
+                default_content_graph_limits(),
+            )
+            .map(|inner| NativePortableProximitySearchProof { inner })
+            .map_err(to_napi_error)
+    }
+}
+
+#[napi]
+pub struct NativePortableAcceleratorCatalog {
+    inner: Arc<BindingAcceleratorCatalog>,
+}
+
+#[napi]
+impl NativePortableAcceleratorCatalog {
+    #[napi]
+    pub fn manifest(&self) -> Buffer {
+        Buffer::from(self.inner.manifest())
+    }
+
+    #[napi(js_name = "sourceDescriptor")]
+    pub fn source_descriptor(&self) -> Buffer {
+        Buffer::from(self.inner.source_descriptor())
+    }
+
+    #[napi]
+    pub fn entries(&self) -> Vec<NodePortableCatalogEntry> {
+        self.inner.entries().into_iter().map(Into::into).collect()
+    }
+
+    #[napi]
+    pub fn search(
+        &self,
+        map: &NativePortableProximityMap,
+        request: NodePortableSearchRequest,
+    ) -> Result<NodePortableSearchResult> {
+        self.inner
+            .search(Arc::clone(&map.inner), request.try_into()?)
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "proveSearch")]
+    pub fn prove_search(
+        &self,
+        map: &NativePortableProximityMap,
+        request: NodePortableSearchRequest,
+    ) -> Result<NativePortableProximitySearchProof> {
+        self.inner
+            .prove_search(
+                Arc::clone(&map.inner),
+                request.try_into()?,
+                default_content_graph_limits(),
+            )
+            .map(|inner| NativePortableProximitySearchProof { inner })
+            .map_err(to_napi_error)
+    }
+}
+
+#[napi]
 pub struct NativePortableProximityMap {
     inner: Arc<BindingProximityMap>,
 }
@@ -3087,6 +3511,162 @@ impl NativePortableProximityMap {
         self.inner
             .load_pq(manifest.to_vec())
             .map(|inner| NativePortableProductQuantizer { inner })
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "buildCompositeHnsw")]
+    pub fn build_composite_hnsw(
+        &self,
+        base_map: &NativePortableProximityMap,
+        base: &NativePortableHnswIndex,
+        config: Option<NodePortableCompositeConfig>,
+        limits: Option<NodePortableCompositeBuildLimits>,
+    ) -> Result<NativePortableCompositeBuildResult> {
+        let config = config
+            .map(TryInto::try_into)
+            .transpose()?
+            .unwrap_or_else(default_composite_accelerator_config);
+        let limits = limits
+            .map(TryInto::try_into)
+            .transpose()?
+            .unwrap_or_else(default_composite_build_limits);
+        self.inner
+            .build_composite_hnsw(
+                Arc::clone(&base_map.inner),
+                Arc::clone(&base.inner),
+                config,
+                limits,
+            )
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "buildCompositePq")]
+    pub fn build_composite_pq(
+        &self,
+        base_map: &NativePortableProximityMap,
+        base: &NativePortableProductQuantizer,
+        config: Option<NodePortableCompositeConfig>,
+        limits: Option<NodePortableCompositeBuildLimits>,
+    ) -> Result<NativePortableCompositeBuildResult> {
+        let config = config
+            .map(TryInto::try_into)
+            .transpose()?
+            .unwrap_or_else(default_composite_accelerator_config);
+        let limits = limits
+            .map(TryInto::try_into)
+            .transpose()?
+            .unwrap_or_else(default_composite_build_limits);
+        self.inner
+            .build_composite_pq(
+                Arc::clone(&base_map.inner),
+                Arc::clone(&base.inner),
+                config,
+                limits,
+            )
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "buildOrRebuildCompositeHnsw")]
+    pub fn build_or_rebuild_composite_hnsw(
+        &self,
+        base_map: &NativePortableProximityMap,
+        base: &NativePortableHnswIndex,
+        config: Option<NodePortableCompositeConfig>,
+        limits: Option<NodePortableCompositeBuildLimits>,
+        rebuild: Option<NodePortableCompositeRebuildOptions>,
+    ) -> Result<NativePortableCompositeBuildOrRebuildResult> {
+        let config = config
+            .map(TryInto::try_into)
+            .transpose()?
+            .unwrap_or_else(default_composite_accelerator_config);
+        let limits = limits
+            .map(TryInto::try_into)
+            .transpose()?
+            .unwrap_or_else(default_composite_build_limits);
+        let rebuild = rebuild
+            .map(TryInto::try_into)
+            .transpose()?
+            .unwrap_or_else(default_composite_rebuild_options);
+        self.inner
+            .build_or_rebuild_composite_hnsw(
+                Arc::clone(&base_map.inner),
+                Arc::clone(&base.inner),
+                config,
+                limits,
+                rebuild,
+            )
+            .map(|inner| NativePortableCompositeBuildOrRebuildResult { inner })
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "buildOrRebuildCompositePq")]
+    pub fn build_or_rebuild_composite_pq(
+        &self,
+        base_map: &NativePortableProximityMap,
+        base: &NativePortableProductQuantizer,
+        config: Option<NodePortableCompositeConfig>,
+        limits: Option<NodePortableCompositeBuildLimits>,
+        rebuild: Option<NodePortableCompositeRebuildOptions>,
+    ) -> Result<NativePortableCompositeBuildOrRebuildResult> {
+        let config = config
+            .map(TryInto::try_into)
+            .transpose()?
+            .unwrap_or_else(default_composite_accelerator_config);
+        let limits = limits
+            .map(TryInto::try_into)
+            .transpose()?
+            .unwrap_or_else(default_composite_build_limits);
+        let rebuild = rebuild
+            .map(TryInto::try_into)
+            .transpose()?
+            .unwrap_or_else(default_composite_rebuild_options);
+        self.inner
+            .build_or_rebuild_composite_pq(
+                Arc::clone(&base_map.inner),
+                Arc::clone(&base.inner),
+                config,
+                limits,
+                rebuild,
+            )
+            .map(|inner| NativePortableCompositeBuildOrRebuildResult { inner })
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "loadComposite")]
+    pub fn load_composite(&self, manifest: Buffer) -> Result<NativePortableCompositeAccelerator> {
+        self.inner
+            .load_composite(manifest.to_vec())
+            .map(|inner| NativePortableCompositeAccelerator { inner })
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "buildAcceleratorCatalog")]
+    pub fn build_accelerator_catalog(
+        &self,
+        hnsw: Option<&NativePortableHnswIndex>,
+        pq: Option<&NativePortableProductQuantizer>,
+        composite: Option<&NativePortableCompositeAccelerator>,
+    ) -> Result<NativePortableAcceleratorCatalog> {
+        self.inner
+            .build_accelerator_catalog(
+                hnsw.map(|value| Arc::clone(&value.inner)),
+                pq.map(|value| Arc::clone(&value.inner)),
+                composite.map(|value| Arc::clone(&value.inner)),
+            )
+            .map(|inner| NativePortableAcceleratorCatalog { inner })
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "loadAcceleratorCatalog")]
+    pub fn load_accelerator_catalog(
+        &self,
+        manifest: Buffer,
+    ) -> Result<NativePortableAcceleratorCatalog> {
+        self.inner
+            .load_accelerator_catalog(manifest.to_vec())
+            .map(|inner| NativePortableAcceleratorCatalog { inner })
             .map_err(to_napi_error)
     }
 

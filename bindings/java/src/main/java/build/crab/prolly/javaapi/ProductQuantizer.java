@@ -9,7 +9,7 @@ public final class ProductQuantizer implements AutoCloseable {
         this.nativeIndex = nativeIndex;
     }
 
-    private build.crab.prolly.api.ProductQuantizer open() {
+    build.crab.prolly.api.ProductQuantizer open() {
         if (nativeIndex == null) throw new IllegalStateException("product quantizer is closed");
         return nativeIndex;
     }

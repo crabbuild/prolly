@@ -55,6 +55,25 @@ class ProductQuantizationBuildResult:
     stats: _native.ProductQuantizationBuildStatsRecord
 
 
+@dataclass(frozen=True)
+class CompositeBuildOutcome:
+    accelerator: "CompositeAccelerator | None"
+    reasons: Sequence[_native.FullRebuildReasonRecord]
+    stats: _native.CompositeBuildStatsRecord
+
+
+@dataclass(frozen=True)
+class CompositeBuildOrRebuildOutcome:
+    kind: _native.CompositeBuildOrRebuildKindRecord
+    composite: "CompositeAccelerator | None"
+    hnsw: "HnswIndex | None"
+    pq: "ProductQuantizer | None"
+    reasons: Sequence[_native.FullRebuildReasonRecord]
+    composite_stats: _native.CompositeBuildStatsRecord
+    hnsw_stats: _native.HnswBuildStatsRecord | None
+    pq_stats: _native.ProductQuantizationBuildStatsRecord | None
+
+
 IndexProjection = _native.IndexProjectionRecord
 
 
@@ -926,6 +945,134 @@ class ProximityMap(_Scoped):
         self._open()
         return ProductQuantizer(self._inner.load_pq(bytes(manifest)))
 
+    def build_composite_hnsw(
+        self,
+        base_map: "ProximityMap",
+        base: "HnswIndex",
+        config: _native.CompositeAcceleratorConfigRecord | None = None,
+        limits: _native.CompositeBuildLimitsRecord | None = None,
+    ) -> CompositeBuildOutcome:
+        self._open()
+        base_map._open()
+        base._open()
+        result = self._inner.build_composite_hnsw(
+            base_map._inner,
+            base._inner,
+            config or _native.default_composite_accelerator_config(),
+            limits or _native.default_composite_build_limits(),
+        )
+        return CompositeBuildOutcome(
+            None if result.accelerator is None else CompositeAccelerator(result.accelerator),
+            result.reasons,
+            result.stats,
+        )
+
+    def build_composite_pq(
+        self,
+        base_map: "ProximityMap",
+        base: "ProductQuantizer",
+        config: _native.CompositeAcceleratorConfigRecord | None = None,
+        limits: _native.CompositeBuildLimitsRecord | None = None,
+    ) -> CompositeBuildOutcome:
+        self._open()
+        base_map._open()
+        base._open()
+        result = self._inner.build_composite_pq(
+            base_map._inner,
+            base._inner,
+            config or _native.default_composite_accelerator_config(),
+            limits or _native.default_composite_build_limits(),
+        )
+        return CompositeBuildOutcome(
+            None if result.accelerator is None else CompositeAccelerator(result.accelerator),
+            result.reasons,
+            result.stats,
+        )
+
+    @staticmethod
+    def _rebuild_outcome(result) -> CompositeBuildOrRebuildOutcome:
+        return CompositeBuildOrRebuildOutcome(
+            result.kind,
+            None if result.composite is None else CompositeAccelerator(result.composite),
+            None if result.hnsw is None else HnswIndex(result.hnsw),
+            None if result.pq is None else ProductQuantizer(result.pq),
+            result.reasons,
+            result.composite_stats,
+            result.hnsw_stats,
+            result.pq_stats,
+        )
+
+    def build_or_rebuild_composite_hnsw(
+        self,
+        base_map: "ProximityMap",
+        base: "HnswIndex",
+        config: _native.CompositeAcceleratorConfigRecord | None = None,
+        limits: _native.CompositeBuildLimitsRecord | None = None,
+        rebuild: _native.CompositeRebuildOptionsRecord | None = None,
+    ) -> CompositeBuildOrRebuildOutcome:
+        self._open()
+        base_map._open()
+        base._open()
+        return self._rebuild_outcome(
+            self._inner.build_or_rebuild_composite_hnsw(
+                base_map._inner,
+                base._inner,
+                config or _native.default_composite_accelerator_config(),
+                limits or _native.default_composite_build_limits(),
+                rebuild or _native.default_composite_rebuild_options(),
+            )
+        )
+
+    def build_or_rebuild_composite_pq(
+        self,
+        base_map: "ProximityMap",
+        base: "ProductQuantizer",
+        config: _native.CompositeAcceleratorConfigRecord | None = None,
+        limits: _native.CompositeBuildLimitsRecord | None = None,
+        rebuild: _native.CompositeRebuildOptionsRecord | None = None,
+    ) -> CompositeBuildOrRebuildOutcome:
+        self._open()
+        base_map._open()
+        base._open()
+        return self._rebuild_outcome(
+            self._inner.build_or_rebuild_composite_pq(
+                base_map._inner,
+                base._inner,
+                config or _native.default_composite_accelerator_config(),
+                limits or _native.default_composite_build_limits(),
+                rebuild or _native.default_composite_rebuild_options(),
+            )
+        )
+
+    def load_composite(self, manifest: bytes) -> "CompositeAccelerator":
+        self._open()
+        return CompositeAccelerator(self._inner.load_composite(bytes(manifest)))
+
+    def build_accelerator_catalog(
+        self,
+        *,
+        hnsw: "HnswIndex | None" = None,
+        pq: "ProductQuantizer | None" = None,
+        composite: "CompositeAccelerator | None" = None,
+    ) -> "AcceleratorCatalog":
+        self._open()
+        for value in (hnsw, pq, composite):
+            if value is not None:
+                value._open()
+        return AcceleratorCatalog(
+            self._inner.build_accelerator_catalog(
+                None if hnsw is None else hnsw._inner,
+                None if pq is None else pq._inner,
+                None if composite is None else composite._inner,
+            )
+        )
+
+    def load_accelerator_catalog(self, manifest: bytes) -> "AcceleratorCatalog":
+        self._open()
+        return AcceleratorCatalog(
+            self._inner.load_accelerator_catalog(bytes(manifest))
+        )
+
     def search(self, request: _native.ProximitySearchRequestRecord):
         with self.read() as session:
             return session.search(request)
@@ -1102,6 +1249,105 @@ class ProductQuantizer(_Scoped):
         )
 
 
+class CompositeAccelerator(_Scoped):
+    def __init__(self, inner: _native.BindingCompositeAccelerator):
+        super().__init__()
+        self._inner = inner
+
+    @property
+    def manifest(self) -> bytes:
+        self._open()
+        return self._inner.manifest()
+
+    @property
+    def current_source_descriptor(self) -> bytes:
+        self._open()
+        return self._inner.current_source_descriptor()
+
+    @property
+    def base_source_descriptor(self) -> bytes:
+        self._open()
+        return self._inner.base_source_descriptor()
+
+    @property
+    def base_kind(self):
+        self._open()
+        return self._inner.base_kind()
+
+    @property
+    def delta_count(self) -> int:
+        self._open()
+        return self._inner.delta_count()
+
+    @property
+    def shadow_count(self) -> int:
+        self._open()
+        return self._inner.shadow_count()
+
+    @property
+    def config(self):
+        self._open()
+        return self._inner.config()
+
+    @property
+    def build_stats(self):
+        self._open()
+        return self._inner.build_stats()
+
+    def search(self, map: ProximityMap, request):
+        self._open()
+        map._open()
+        return self._inner.search(map._inner, _owned_proximity_search_request(request))
+
+    def prove_search(self, map: ProximityMap, request, limits=None) -> "ProximitySearchProof":
+        self._open()
+        map._open()
+        return ProximitySearchProof(
+            self._inner.prove_search(
+                map._inner,
+                _owned_proximity_search_request(request),
+                limits or _native.default_content_graph_limits(),
+            )
+        )
+
+
+class AcceleratorCatalog(_Scoped):
+    def __init__(self, inner: _native.BindingAcceleratorCatalog):
+        super().__init__()
+        self._inner = inner
+
+    @property
+    def manifest(self) -> bytes:
+        self._open()
+        return self._inner.manifest()
+
+    @property
+    def source_descriptor(self) -> bytes:
+        self._open()
+        return self._inner.source_descriptor()
+
+    @property
+    def entries(self):
+        self._open()
+        return self._inner.entries()
+
+    def search(self, map: ProximityMap, request):
+        self._open()
+        map._open()
+        return self._inner.search(map._inner, _owned_proximity_search_request(request))
+
+    def prove_search(self, map: ProximityMap, request, limits=None) -> "ProximitySearchProof":
+        self._open()
+        map._open()
+        return ProximitySearchProof(
+            self._inner.prove_search(
+                map._inner,
+                _owned_proximity_search_request(request),
+                limits or _native.default_content_graph_limits(),
+            )
+        )
+
+
 class ProximityReadSession(_Scoped):
     def __init__(self, inner: _native.BindingProximityReadSession):
         super().__init__()
@@ -1176,6 +1422,10 @@ def verify_proximity_structure_proof(
 
 
 __all__ = [
+    "AcceleratorCatalog",
+    "CompositeAccelerator",
+    "CompositeBuildOrRebuildOutcome",
+    "CompositeBuildOutcome",
     "Engine",
     "EntryView",
     "HnswBuildResult",

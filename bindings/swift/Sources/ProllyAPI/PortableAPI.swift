@@ -24,6 +24,46 @@ public struct ProductQuantizationBuildResult {
     public let stats: ProductQuantizationBuildStatsRecord
 }
 
+public struct CompositeBuildOutcome {
+    public let accelerator: CompositeAccelerator?
+    public let reasons: [FullRebuildReasonRecord]
+    public let stats: CompositeBuildStatsRecord
+}
+
+public struct CompositeBuildOrRebuildOutcome {
+    public let kind: CompositeBuildOrRebuildKindRecord
+    public let composite: CompositeAccelerator?
+    public let hnsw: HnswIndex?
+    public let pq: ProductQuantizer?
+    public let reasons: [FullRebuildReasonRecord]
+    public let compositeStats: CompositeBuildStatsRecord
+    public let hnswStats: HnswBuildStatsRecord?
+    public let pqStats: ProductQuantizationBuildStatsRecord?
+}
+
+private func portableCompositeOutcome(_ result: CompositeBuildOutcomeRecord) -> CompositeBuildOutcome {
+    CompositeBuildOutcome(
+        accelerator: result.accelerator.map { CompositeAccelerator(native: $0) },
+        reasons: result.reasons,
+        stats: result.stats
+    )
+}
+
+private func portableCompositeRebuildOutcome(
+    _ result: CompositeBuildOrRebuildOutcomeRecord
+) -> CompositeBuildOrRebuildOutcome {
+    CompositeBuildOrRebuildOutcome(
+        kind: result.kind,
+        composite: result.composite.map { CompositeAccelerator(native: $0) },
+        hnsw: result.hnsw.map { HnswIndex(native: $0) },
+        pq: result.pq.map { ProductQuantizer(native: $0) },
+        reasons: result.reasons,
+        compositeStats: result.compositeStats,
+        hnswStats: result.hnswStats,
+        pqStats: result.pqStats
+    )
+}
+
 public final class Engine: @unchecked Sendable {
     let native: ProllyEngine
     private var closed = false
@@ -913,6 +953,65 @@ public final class ProximityMap: @unchecked Sendable {
     public func loadPq(_ manifest: Data) throws -> ProductQuantizer {
         ProductQuantizer(native: try native.loadPq(manifest: Data(manifest)))
     }
+    public func buildCompositeHnsw(
+        baseMap: ProximityMap,
+        base: HnswIndex,
+        config: CompositeAcceleratorConfigRecord = defaultCompositeAcceleratorConfig(),
+        limits: CompositeBuildLimitsRecord = defaultCompositeBuildLimits()
+    ) throws -> CompositeBuildOutcome {
+        portableCompositeOutcome(try native.buildCompositeHnsw(
+            baseMap: baseMap.native, base: base.native, config: config, limits: limits
+        ))
+    }
+    public func buildCompositePq(
+        baseMap: ProximityMap,
+        base: ProductQuantizer,
+        config: CompositeAcceleratorConfigRecord = defaultCompositeAcceleratorConfig(),
+        limits: CompositeBuildLimitsRecord = defaultCompositeBuildLimits()
+    ) throws -> CompositeBuildOutcome {
+        portableCompositeOutcome(try native.buildCompositePq(
+            baseMap: baseMap.native, base: base.native, config: config, limits: limits
+        ))
+    }
+    public func buildOrRebuildCompositeHnsw(
+        baseMap: ProximityMap,
+        base: HnswIndex,
+        config: CompositeAcceleratorConfigRecord = defaultCompositeAcceleratorConfig(),
+        limits: CompositeBuildLimitsRecord = defaultCompositeBuildLimits(),
+        rebuild: CompositeRebuildOptionsRecord = defaultCompositeRebuildOptions()
+    ) throws -> CompositeBuildOrRebuildOutcome {
+        portableCompositeRebuildOutcome(try native.buildOrRebuildCompositeHnsw(
+            baseMap: baseMap.native, base: base.native, config: config,
+            limits: limits, rebuild: rebuild
+        ))
+    }
+    public func buildOrRebuildCompositePq(
+        baseMap: ProximityMap,
+        base: ProductQuantizer,
+        config: CompositeAcceleratorConfigRecord = defaultCompositeAcceleratorConfig(),
+        limits: CompositeBuildLimitsRecord = defaultCompositeBuildLimits(),
+        rebuild: CompositeRebuildOptionsRecord = defaultCompositeRebuildOptions()
+    ) throws -> CompositeBuildOrRebuildOutcome {
+        portableCompositeRebuildOutcome(try native.buildOrRebuildCompositePq(
+            baseMap: baseMap.native, base: base.native, config: config,
+            limits: limits, rebuild: rebuild
+        ))
+    }
+    public func loadComposite(_ manifest: Data) throws -> CompositeAccelerator {
+        CompositeAccelerator(native: try native.loadComposite(manifest: Data(manifest)))
+    }
+    public func buildAcceleratorCatalog(
+        hnsw: HnswIndex? = nil,
+        pq: ProductQuantizer? = nil,
+        composite: CompositeAccelerator? = nil
+    ) throws -> AcceleratorCatalog {
+        AcceleratorCatalog(native: try native.buildAcceleratorCatalog(
+            hnsw: hnsw?.native, pq: pq?.native, composite: composite?.native
+        ))
+    }
+    public func loadAcceleratorCatalog(_ manifest: Data) throws -> AcceleratorCatalog {
+        AcceleratorCatalog(native: try native.loadAcceleratorCatalog(manifest: Data(manifest)))
+    }
     public func get(_ key: Data) throws -> ExactProximityRecordRecord? { try native.get(key: Data(key)) }
     public func contains(_ key: Data) throws -> Bool { try native.containsKey(key: Data(key)) }
     public func search(_ request: ProximitySearchRequestRecord) throws -> ProximitySearchResultRecord {
@@ -1058,6 +1157,71 @@ public final class ProductQuantizer: @unchecked Sendable {
                 limits: limits
             )
         )
+    }
+    public func close() { closed = true }
+}
+
+public final class CompositeAccelerator: @unchecked Sendable {
+    let native: BindingCompositeAccelerator
+    private var closed = false
+    init(native: BindingCompositeAccelerator) { self.native = native }
+
+    public var manifest: Data { precondition(!closed); return Data(native.manifest()) }
+    public var currentSourceDescriptor: Data {
+        precondition(!closed); return Data(native.currentSourceDescriptor())
+    }
+    public var baseSourceDescriptor: Data {
+        precondition(!closed); return Data(native.baseSourceDescriptor())
+    }
+    public var baseKind: CompositeBaseKindRecord { precondition(!closed); return native.baseKind() }
+    public var deltaCount: UInt64 { precondition(!closed); return native.deltaCount() }
+    public var shadowCount: UInt64 { precondition(!closed); return native.shadowCount() }
+    public var config: CompositeAcceleratorConfigRecord { precondition(!closed); return native.config() }
+    public var buildStats: CompositeBuildStatsRecord { precondition(!closed); return native.buildStats() }
+    public func search(
+        _ map: ProximityMap,
+        request: ProximitySearchRequestRecord
+    ) throws -> ProximitySearchResultRecord {
+        guard !closed else { throw PortableAPIError.closed("composite accelerator") }
+        return try native.search(map: map.native, request: ownedSearchRequest(request))
+    }
+    public func proveSearch(
+        _ map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        limits: ContentGraphLimitsRecord = defaultContentGraphLimits()
+    ) throws -> ProximitySearchProof {
+        guard !closed else { throw PortableAPIError.closed("composite accelerator") }
+        return ProximitySearchProof(native: try native.proveSearch(
+            map: map.native, request: ownedSearchRequest(request), limits: limits
+        ))
+    }
+    public func close() { closed = true }
+}
+
+public final class AcceleratorCatalog: @unchecked Sendable {
+    let native: BindingAcceleratorCatalog
+    private var closed = false
+    init(native: BindingAcceleratorCatalog) { self.native = native }
+
+    public var manifest: Data { precondition(!closed); return Data(native.manifest()) }
+    public var sourceDescriptor: Data { precondition(!closed); return Data(native.sourceDescriptor()) }
+    public var entries: [AcceleratorCatalogEntryRecord] { precondition(!closed); return native.entries() }
+    public func search(
+        _ map: ProximityMap,
+        request: ProximitySearchRequestRecord
+    ) throws -> ProximitySearchResultRecord {
+        guard !closed else { throw PortableAPIError.closed("accelerator catalog") }
+        return try native.search(map: map.native, request: ownedSearchRequest(request))
+    }
+    public func proveSearch(
+        _ map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        limits: ContentGraphLimitsRecord = defaultContentGraphLimits()
+    ) throws -> ProximitySearchProof {
+        guard !closed else { throw PortableAPIError.closed("accelerator catalog") }
+        return ProximitySearchProof(native: try native.proveSearch(
+            map: map.native, request: ownedSearchRequest(request), limits: limits
+        ))
     }
     public func close() { closed = true }
 }

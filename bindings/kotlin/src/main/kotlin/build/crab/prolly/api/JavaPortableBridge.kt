@@ -1,6 +1,12 @@
 package build.crab.prolly.api
 
 import build.crab.prolly.BatchApplyStatsRecord
+import build.crab.prolly.AcceleratorCatalogEntryRecord
+import build.crab.prolly.CompositeAcceleratorConfigRecord
+import build.crab.prolly.CompositeBuildLimitsRecord
+import build.crab.prolly.CompositeBuildStatsRecord
+import build.crab.prolly.CompositeRebuildOptionsRecord
+import build.crab.prolly.FullRebuildReasonRecord
 import build.crab.prolly.AdaptiveQualityRecord
 import build.crab.prolly.EntryRecord
 import build.crab.prolly.ConflictPageRecord
@@ -66,6 +72,9 @@ import build.crab.prolly.defaultHnswBuildLimits as nativeDefaultHnswBuildLimits
 import build.crab.prolly.defaultHnswConfig as nativeDefaultHnswConfig
 import build.crab.prolly.defaultPqBuildLimits as nativeDefaultPqBuildLimits
 import build.crab.prolly.defaultPqConfig as nativeDefaultPqConfig
+import build.crab.prolly.defaultCompositeAcceleratorConfig as nativeDefaultCompositeAcceleratorConfig
+import build.crab.prolly.defaultCompositeBuildLimits as nativeDefaultCompositeBuildLimits
+import build.crab.prolly.defaultCompositeRebuildOptions as nativeDefaultCompositeRebuildOptions
 import build.crab.prolly.verifyMultiKeyProof as verifyNativeMultiKeyProof
 import build.crab.prolly.verifyRangePageProof as verifyNativeRangePageProof
 import build.crab.prolly.verifyRangeProof as verifyNativeRangeProof
@@ -302,6 +311,107 @@ private fun ProductQuantizationBuildStatsRecord.toJava() = JavaProductQuantizati
 
 private fun ProductQuantizationQualityRecord.toJava() = JavaProductQuantizationQuality(
     meanSquaredError, maximumSquaredError,
+)
+
+data class JavaCompositeAcceleratorConfig(
+    val maxDeltaRecords: Long,
+    val maxShadowRecords: Long,
+    val maxDeltaRatioPpm: Long,
+    val maxShadowRatioPpm: Long,
+    val baseOverfetchMultiplier: Long,
+) {
+    fun toNative() = CompositeAcceleratorConfigRecord(
+        maxDeltaRecords.toULong(), maxShadowRecords.toULong(), maxDeltaRatioPpm.toUInt(),
+        maxShadowRatioPpm.toUInt(), baseOverfetchMultiplier.toUInt(),
+    )
+}
+
+data class JavaCompositeBuildLimits(
+    val maxDiffEntries: Long?,
+    val maxOwnedBytes: Long?,
+    val maxEncodedOutputBytes: Long?,
+    val maxDistanceEvaluations: Long?,
+) {
+    fun toNative() = CompositeBuildLimitsRecord(
+        maxDiffEntries?.toULong(), maxOwnedBytes?.toULong(), maxEncodedOutputBytes?.toULong(),
+        maxDistanceEvaluations?.toULong(),
+    )
+}
+
+data class JavaCompositeBuildStats(
+    val diffEntries: Long,
+    val insertedRecords: Long,
+    val vectorUpdatedRecords: Long,
+    val valueOnlyRecords: Long,
+    val deletedRecords: Long,
+    val deltaRecords: Long,
+    val shadowRecords: Long,
+    val ownedBytesPeak: Long,
+    val encodedOutputBytes: Long,
+    val distanceEvaluations: Long,
+)
+
+data class JavaFullRebuildReason(val kind: String, val actual: Long, val maximum: Long)
+
+data class JavaCompositeRebuildOptions(
+    val hnswLimits: JavaHnswBuildLimits,
+    val pqWorkerThreads: Long,
+    val pqLimits: JavaProductQuantizationBuildLimits,
+) {
+    fun toNative() = CompositeRebuildOptionsRecord(
+        hnswLimits.toNative(), pqWorkerThreads.toULong(), pqLimits.toNative(),
+    )
+}
+
+data class JavaCompositeBuildOutcome(
+    val accelerator: CompositeAccelerator?,
+    val reasons: List<JavaFullRebuildReason>,
+    val stats: JavaCompositeBuildStats,
+)
+
+data class JavaCompositeBuildOrRebuildOutcome(
+    val kind: String,
+    val composite: CompositeAccelerator?,
+    val hnsw: HnswIndex?,
+    val pq: ProductQuantizer?,
+    val reasons: List<JavaFullRebuildReason>,
+    val compositeStats: JavaCompositeBuildStats,
+    val hnswStats: JavaHnswBuildStats?,
+    val pqStats: JavaProductQuantizationBuildStats?,
+)
+
+data class JavaAcceleratorCatalogEntry(
+    val kind: String,
+    val configurationFingerprint: ByteArray,
+    val manifest: ByteArray,
+)
+
+private fun CompositeAcceleratorConfigRecord.toJava() = JavaCompositeAcceleratorConfig(
+    maxDeltaRecords.toLong(), maxShadowRecords.toLong(), maxDeltaRatioPpm.toLong(),
+    maxShadowRatioPpm.toLong(), baseOverfetchMultiplier.toLong(),
+)
+private fun CompositeBuildLimitsRecord.toJava() = JavaCompositeBuildLimits(
+    maxDiffEntries?.toLong(), maxOwnedBytes?.toLong(), maxEncodedOutputBytes?.toLong(),
+    maxDistanceEvaluations?.toLong(),
+)
+private fun CompositeBuildStatsRecord.toJava() = JavaCompositeBuildStats(
+    diffEntries.toLong(), insertedRecords.toLong(), vectorUpdatedRecords.toLong(),
+    valueOnlyRecords.toLong(), deletedRecords.toLong(), deltaRecords.toLong(),
+    shadowRecords.toLong(), ownedBytesPeak.toLong(), encodedOutputBytes.toLong(),
+    distanceEvaluations.toLong(),
+)
+private fun FullRebuildReasonRecord.toJava() = JavaFullRebuildReason(
+    kind.name, actual.toLong(), maximum.toLong(),
+)
+private fun AcceleratorCatalogEntryRecord.toJava() = JavaAcceleratorCatalogEntry(
+    kind.name, configurationFingerprint.copyOf(), manifest.copyOf(),
+)
+private fun CompositeBuildOutcome.toJava() = JavaCompositeBuildOutcome(
+    accelerator, reasons.map(FullRebuildReasonRecord::toJava), stats.toJava(),
+)
+private fun CompositeBuildOrRebuildOutcome.toJava() = JavaCompositeBuildOrRebuildOutcome(
+    kind.name, composite, hnsw, pq, reasons.map(FullRebuildReasonRecord::toJava),
+    compositeStats.toJava(), hnswStats?.toJava(), pqStats?.toJava(),
 )
 
 data class JavaMapUpdate(
@@ -906,6 +1016,128 @@ object JavaPortableBridge {
         map: ProximityMap,
         request: JavaProximitySearchRequest,
     ): ProximitySearchProof = index.proveSearch(map, request.toNative())
+
+    @JvmStatic
+    fun defaultCompositeAcceleratorConfig(): JavaCompositeAcceleratorConfig =
+        nativeDefaultCompositeAcceleratorConfig().toJava()
+
+    @JvmStatic
+    fun defaultCompositeBuildLimits(): JavaCompositeBuildLimits =
+        nativeDefaultCompositeBuildLimits().toJava()
+
+    @JvmStatic
+    fun defaultCompositeRebuildOptions(): JavaCompositeRebuildOptions =
+        nativeDefaultCompositeRebuildOptions().let {
+            JavaCompositeRebuildOptions(
+                it.hnswLimits.toJava(), it.pqWorkerThreads.toLong(), it.pqLimits.toJava(),
+            )
+        }
+
+    @JvmStatic
+    fun buildCompositeHnsw(
+        map: ProximityMap,
+        baseMap: ProximityMap,
+        base: HnswIndex,
+        config: JavaCompositeAcceleratorConfig,
+        limits: JavaCompositeBuildLimits,
+    ): JavaCompositeBuildOutcome =
+        map.buildCompositeHnsw(baseMap, base, config.toNative(), limits.toNative()).toJava()
+
+    @JvmStatic
+    fun buildCompositePq(
+        map: ProximityMap,
+        baseMap: ProximityMap,
+        base: ProductQuantizer,
+        config: JavaCompositeAcceleratorConfig,
+        limits: JavaCompositeBuildLimits,
+    ): JavaCompositeBuildOutcome =
+        map.buildCompositePq(baseMap, base, config.toNative(), limits.toNative()).toJava()
+
+    @JvmStatic
+    fun buildOrRebuildCompositeHnsw(
+        map: ProximityMap,
+        baseMap: ProximityMap,
+        base: HnswIndex,
+        config: JavaCompositeAcceleratorConfig,
+        limits: JavaCompositeBuildLimits,
+        rebuild: JavaCompositeRebuildOptions,
+    ): JavaCompositeBuildOrRebuildOutcome = map.buildOrRebuildCompositeHnsw(
+        baseMap, base, config.toNative(), limits.toNative(), rebuild.toNative(),
+    ).toJava()
+
+    @JvmStatic
+    fun buildOrRebuildCompositePq(
+        map: ProximityMap,
+        baseMap: ProximityMap,
+        base: ProductQuantizer,
+        config: JavaCompositeAcceleratorConfig,
+        limits: JavaCompositeBuildLimits,
+        rebuild: JavaCompositeRebuildOptions,
+    ): JavaCompositeBuildOrRebuildOutcome = map.buildOrRebuildCompositePq(
+        baseMap, base, config.toNative(), limits.toNative(), rebuild.toNative(),
+    ).toJava()
+
+    @JvmStatic
+    fun loadComposite(map: ProximityMap, manifest: ByteArray): CompositeAccelerator =
+        map.loadComposite(manifest.copyOf())
+
+    @JvmStatic
+    fun buildAcceleratorCatalog(
+        map: ProximityMap,
+        hnsw: HnswIndex?,
+        pq: ProductQuantizer?,
+        composite: CompositeAccelerator?,
+    ): AcceleratorCatalog = map.buildAcceleratorCatalog(hnsw, pq, composite)
+
+    @JvmStatic
+    fun loadAcceleratorCatalog(map: ProximityMap, manifest: ByteArray): AcceleratorCatalog =
+        map.loadAcceleratorCatalog(manifest.copyOf())
+
+    @JvmStatic
+    fun compositeConfig(index: CompositeAccelerator): JavaCompositeAcceleratorConfig =
+        index.config.toJava()
+
+    @JvmStatic
+    fun compositeBuildStats(index: CompositeAccelerator): JavaCompositeBuildStats =
+        index.buildStats.toJava()
+
+    @JvmStatic
+    fun compositeDeltaCount(index: CompositeAccelerator): Long = index.deltaCount.toLong()
+
+    @JvmStatic
+    fun compositeShadowCount(index: CompositeAccelerator): Long = index.shadowCount.toLong()
+
+    @JvmStatic
+    fun compositeSearch(
+        index: CompositeAccelerator,
+        map: ProximityMap,
+        request: JavaProximitySearchRequest,
+    ): ProximitySearchResultRecord = index.search(map, request.toNative())
+
+    @JvmStatic
+    fun compositeProveSearch(
+        index: CompositeAccelerator,
+        map: ProximityMap,
+        request: JavaProximitySearchRequest,
+    ): ProximitySearchProof = index.proveSearch(map, request.toNative())
+
+    @JvmStatic
+    fun catalogEntries(catalog: AcceleratorCatalog): List<JavaAcceleratorCatalogEntry> =
+        catalog.entries.map(AcceleratorCatalogEntryRecord::toJava)
+
+    @JvmStatic
+    fun catalogSearch(
+        catalog: AcceleratorCatalog,
+        map: ProximityMap,
+        request: JavaProximitySearchRequest,
+    ): ProximitySearchResultRecord = catalog.search(map, request.toNative())
+
+    @JvmStatic
+    fun catalogProveSearch(
+        catalog: AcceleratorCatalog,
+        map: ProximityMap,
+        request: JavaProximitySearchRequest,
+    ): ProximitySearchProof = catalog.proveSearch(map, request.toNative())
 
     @JvmStatic
     fun search(
