@@ -253,6 +253,7 @@ extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximitymap_prove_mem
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximitymap_prove_structure(uint64_t ptr, RustBuffer limits, RustCallStatus *out_err);
 extern uint64_t uniffi_prolly_bindings_fn_method_bindingproximitymap_prove_search(uint64_t ptr, RustBuffer request, RustBuffer limits, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximitymap_search(uint64_t ptr, RustBuffer request, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximitymap_search_cancellable(uint64_t ptr, RustBuffer request, RustBuffer runtime, uint64_t cancellation, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximitymap_search_with_runtime(uint64_t ptr, RustBuffer request, uint64_t runtime, RustCallStatus *out_err);
 extern uint64_t uniffi_prolly_bindings_fn_method_bindingproximitymap_scan_records(uint64_t ptr, uint64_t visitor, RustCallStatus *out_err);
 extern uint64_t uniffi_prolly_bindings_fn_method_bindingproximitymap_read_session(uint64_t ptr, RustCallStatus *out_err);
@@ -264,6 +265,7 @@ extern int8_t uniffi_prolly_bindings_fn_method_bindingproximityreadsession_conta
 extern uint64_t uniffi_prolly_bindings_fn_method_bindingproximityreadsession_fast_handle(uint64_t ptr, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximityreadsession_get(uint64_t ptr, RustBuffer key, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximityreadsession_search(uint64_t ptr, RustBuffer request, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximityreadsession_search_cancellable(uint64_t ptr, RustBuffer request, RustBuffer runtime, uint64_t cancellation, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximityreadsession_search_with_runtime(uint64_t ptr, RustBuffer request, uint64_t runtime, RustCallStatus *out_err);
 extern uint64_t uniffi_prolly_bindings_fn_method_bindingproximityreadsession_scan_records(uint64_t ptr, uint64_t visitor, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_func_verify_proximity_membership_proof(RustBuffer proof, RustBuffer expected_descriptor, RustCallStatus *out_err);
@@ -282,6 +284,10 @@ extern void uniffi_prolly_bindings_fn_free_bindingproximitysearchproof(uint64_t 
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximitysearchproof_verify(uint64_t ptr, RustBuffer expected_descriptor, RustBuffer limits, RustCallStatus *out_err);
 extern uint64_t uniffi_prolly_bindings_fn_clone_bindinghnswindex(uint64_t ptr, RustCallStatus *out_err);
 extern void uniffi_prolly_bindings_fn_free_bindinghnswindex(uint64_t ptr, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindinghnswindex_search_cancellable(uint64_t ptr, uint64_t map, RustBuffer request, RustBuffer runtime, uint64_t cancellation, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproductquantizer_search_cancellable(uint64_t ptr, uint64_t map, RustBuffer request, RustBuffer runtime, uint64_t cancellation, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_search_cancellable(uint64_t ptr, uint64_t map, RustBuffer request, RustBuffer runtime, uint64_t cancellation, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_search_cancellable(uint64_t ptr, uint64_t map, RustBuffer request, RustBuffer runtime, uint64_t cancellation, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindinghnswindex_config(uint64_t ptr, RustCallStatus *out_err);
 extern int8_t uniffi_prolly_bindings_fn_method_bindinghnswindex_is_canonical(uint64_t ptr, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindinghnswindex_manifest(uint64_t ptr, RustCallStatus *out_err);
@@ -327,6 +333,11 @@ extern void uniffi_prolly_bindings_fn_free_bindingproximitysearchruntime(uint64_
 extern void uniffi_prolly_bindings_fn_method_bindingproximitysearchruntime_clear(uint64_t ptr, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximitysearchruntime_policy(uint64_t ptr, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximitysearchruntime_stats(uint64_t ptr, RustCallStatus *out_err);
+extern uint64_t uniffi_prolly_bindings_fn_constructor_bindingproximitycancellationtoken_new(RustCallStatus *out_err);
+extern uint64_t uniffi_prolly_bindings_fn_clone_bindingproximitycancellationtoken(uint64_t ptr, RustCallStatus *out_err);
+extern void uniffi_prolly_bindings_fn_free_bindingproximitycancellationtoken(uint64_t ptr, RustCallStatus *out_err);
+extern void uniffi_prolly_bindings_fn_method_bindingproximitycancellationtoken_cancel(uint64_t ptr, RustCallStatus *out_err);
+extern int8_t uniffi_prolly_bindings_fn_method_bindingproximitycancellationtoken_is_cancelled(uint64_t ptr, RustCallStatus *out_err);
 extern uint64_t uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_prove_search(uint64_t ptr, uint64_t map, RustBuffer request, RustBuffer limits, RustCallStatus *out_err);
 
 extern ProllyFastScanOpenResult prolly_fast_index_cursor_open(uint64_t snapshot_handle, uint32_t query_kind, const uint8_t *start_ptr, size_t start_len, const uint8_t *end_ptr, size_t end_len, uint8_t has_end, uint8_t reverse);
@@ -646,6 +657,45 @@ func ffiProximitySearchRuntimeStats(handle uint64) ([]byte, error) {
 	return ffiProximitySearchRuntimeBufferCall(handle, func(clone C.uint64_t, status *C.RustCallStatus) C.RustBuffer {
 		return C.uniffi_prolly_bindings_fn_method_bindingproximitysearchruntime_stats(clone, status)
 	})
+}
+
+func ffiNewProximityCancellationToken() (uint64, error) {
+	var status C.RustCallStatus
+	handle := C.uniffi_prolly_bindings_fn_constructor_bindingproximitycancellationtoken_new(&status)
+	return uint64(handle), portableStatusError(&status)
+}
+
+func ffiCloneProximityCancellationToken(handle uint64) (uint64, error) {
+	var status C.RustCallStatus
+	clone := C.uniffi_prolly_bindings_fn_clone_bindingproximitycancellationtoken(C.uint64_t(handle), &status)
+	return uint64(clone), portableStatusError(&status)
+}
+
+func ffiFreeProximityCancellationToken(handle uint64) {
+	var status C.RustCallStatus
+	C.uniffi_prolly_bindings_fn_free_bindingproximitycancellationtoken(C.uint64_t(handle), &status)
+}
+
+func ffiProximityCancellationTokenCancel(handle uint64) error {
+	clone, err := ffiCloneProximityCancellationToken(handle)
+	if err != nil {
+		return err
+	}
+	var status C.RustCallStatus
+	C.uniffi_prolly_bindings_fn_method_bindingproximitycancellationtoken_cancel(C.uint64_t(clone), &status)
+	return portableStatusError(&status)
+}
+
+func ffiProximityCancellationTokenIsCancelled(handle uint64) (bool, error) {
+	clone, err := ffiCloneProximityCancellationToken(handle)
+	if err != nil {
+		return false, err
+	}
+	var status C.RustCallStatus
+	value := C.uniffi_prolly_bindings_fn_method_bindingproximitycancellationtoken_is_cancelled(
+		C.uint64_t(clone), &status,
+	)
+	return value != 0, portableStatusError(&status)
 }
 
 func ffiVersionedNoArg(handle uint64, call func(C.uint64_t, *C.RustCallStatus) C.RustBuffer) ([]byte, error) {
@@ -3675,6 +3725,243 @@ func ffiProximitySearchRecordWithRuntime(handle uint64, request []byte, searchRu
 	var status C.RustCallStatus
 	buf := C.uniffi_prolly_bindings_fn_method_bindingproximitymap_search_with_runtime(
 		C.uint64_t(clone), requestBuf, C.uint64_t(runtimeClone), &status,
+	)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiProximitySearchRecordCancellable(
+	handle uint64, request []byte, searchRuntime *uint64, cancellation uint64,
+) ([]byte, error) {
+	clone, err := ffiCloneProximity(handle)
+	if err != nil {
+		return nil, err
+	}
+	requestBuf, err := portableInput(request)
+	if err != nil {
+		ffiFreeProximity(clone)
+		return nil, err
+	}
+	var runtimeClone *uint64
+	if searchRuntime != nil {
+		cloned, cloneErr := ffiCloneProximitySearchRuntime(*searchRuntime)
+		if cloneErr != nil {
+			portableFreeBuffer(requestBuf)
+			ffiFreeProximity(clone)
+			return nil, cloneErr
+		}
+		runtimeClone = &cloned
+	}
+	runtimeBuf, err := portableInput(encodeOptionalU64Bytes(runtimeClone))
+	if err != nil {
+		portableFreeBuffer(requestBuf)
+		ffiFreeProximity(clone)
+		if runtimeClone != nil {
+			ffiFreeProximitySearchRuntime(*runtimeClone)
+		}
+		return nil, err
+	}
+	cancellationClone, err := ffiCloneProximityCancellationToken(cancellation)
+	if err != nil {
+		portableFreeBuffer(requestBuf)
+		portableFreeBuffer(runtimeBuf)
+		ffiFreeProximity(clone)
+		if runtimeClone != nil {
+			ffiFreeProximitySearchRuntime(*runtimeClone)
+		}
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingproximitymap_search_cancellable(
+		C.uint64_t(clone), requestBuf, runtimeBuf, C.uint64_t(cancellationClone), &status,
+	)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+type portableCancellableSearchInputs struct {
+	target       uint64
+	mapHandle    uint64
+	request      C.RustBuffer
+	runtime      C.RustBuffer
+	cancellation uint64
+}
+
+func preparePortableCancellableSearch(
+	target uint64,
+	cloneTarget func(uint64) (uint64, error),
+	freeTarget func(uint64),
+	mapHandle *uint64,
+	request []byte,
+	searchRuntime *uint64,
+	cancellation uint64,
+) (portableCancellableSearchInputs, error) {
+	targetClone, err := cloneTarget(target)
+	if err != nil {
+		return portableCancellableSearchInputs{}, err
+	}
+	var mapClone uint64
+	if mapHandle != nil {
+		mapClone, err = ffiCloneProximity(*mapHandle)
+		if err != nil {
+			freeTarget(targetClone)
+			return portableCancellableSearchInputs{}, err
+		}
+	}
+	requestBuf, err := portableInput(request)
+	if err != nil {
+		freeTarget(targetClone)
+		if mapClone != 0 {
+			ffiFreeProximity(mapClone)
+		}
+		return portableCancellableSearchInputs{}, err
+	}
+	var runtimeClone *uint64
+	if searchRuntime != nil {
+		cloned, cloneErr := ffiCloneProximitySearchRuntime(*searchRuntime)
+		if cloneErr != nil {
+			portableFreeBuffer(requestBuf)
+			freeTarget(targetClone)
+			if mapClone != 0 {
+				ffiFreeProximity(mapClone)
+			}
+			return portableCancellableSearchInputs{}, cloneErr
+		}
+		runtimeClone = &cloned
+	}
+	runtimeBuf, err := portableInput(encodeOptionalU64Bytes(runtimeClone))
+	if err != nil {
+		portableFreeBuffer(requestBuf)
+		freeTarget(targetClone)
+		if mapClone != 0 {
+			ffiFreeProximity(mapClone)
+		}
+		if runtimeClone != nil {
+			ffiFreeProximitySearchRuntime(*runtimeClone)
+		}
+		return portableCancellableSearchInputs{}, err
+	}
+	cancellationClone, err := ffiCloneProximityCancellationToken(cancellation)
+	if err != nil {
+		portableFreeBuffer(requestBuf)
+		portableFreeBuffer(runtimeBuf)
+		freeTarget(targetClone)
+		if mapClone != 0 {
+			ffiFreeProximity(mapClone)
+		}
+		if runtimeClone != nil {
+			ffiFreeProximitySearchRuntime(*runtimeClone)
+		}
+		return portableCancellableSearchInputs{}, err
+	}
+	return portableCancellableSearchInputs{
+		target: targetClone, mapHandle: mapClone, request: requestBuf,
+		runtime: runtimeBuf, cancellation: cancellationClone,
+	}, nil
+}
+
+func ffiProximitySessionSearchCancellable(
+	handle uint64, request []byte, searchRuntime *uint64, cancellation uint64,
+) ([]byte, error) {
+	inputs, err := preparePortableCancellableSearch(
+		handle, ffiCloneProximityReadSession, ffiFreeProximityReadSession,
+		nil, request, searchRuntime, cancellation,
+	)
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingproximityreadsession_search_cancellable(
+		C.uint64_t(inputs.target), inputs.request, inputs.runtime,
+		C.uint64_t(inputs.cancellation), &status,
+	)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiHNSWIndexSearchCancellable(
+	index, mapHandle uint64, request []byte, searchRuntime *uint64, cancellation uint64,
+) ([]byte, error) {
+	inputs, err := preparePortableCancellableSearch(
+		index, ffiCloneHNSWIndex, ffiFreeHNSWIndex,
+		&mapHandle, request, searchRuntime, cancellation,
+	)
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindinghnswindex_search_cancellable(
+		C.uint64_t(inputs.target), C.uint64_t(inputs.mapHandle), inputs.request, inputs.runtime,
+		C.uint64_t(inputs.cancellation), &status,
+	)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiProductQuantizerSearchCancellable(
+	index, mapHandle uint64, request []byte, searchRuntime *uint64, cancellation uint64,
+) ([]byte, error) {
+	inputs, err := preparePortableCancellableSearch(
+		index, ffiCloneProductQuantizer, ffiFreeProductQuantizer,
+		&mapHandle, request, searchRuntime, cancellation,
+	)
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingproductquantizer_search_cancellable(
+		C.uint64_t(inputs.target), C.uint64_t(inputs.mapHandle), inputs.request, inputs.runtime,
+		C.uint64_t(inputs.cancellation), &status,
+	)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiCompositeSearchCancellable(
+	index, mapHandle uint64, request []byte, searchRuntime *uint64, cancellation uint64,
+) ([]byte, error) {
+	inputs, err := preparePortableCancellableSearch(
+		index, ffiCloneComposite, ffiFreeComposite,
+		&mapHandle, request, searchRuntime, cancellation,
+	)
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_search_cancellable(
+		C.uint64_t(inputs.target), C.uint64_t(inputs.mapHandle), inputs.request, inputs.runtime,
+		C.uint64_t(inputs.cancellation), &status,
+	)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiCatalogSearchCancellable(
+	index, mapHandle uint64, request []byte, searchRuntime *uint64, cancellation uint64,
+) ([]byte, error) {
+	inputs, err := preparePortableCancellableSearch(
+		index, ffiCloneCatalog, ffiFreeCatalog,
+		&mapHandle, request, searchRuntime, cancellation,
+	)
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_search_cancellable(
+		C.uint64_t(inputs.target), C.uint64_t(inputs.mapHandle), inputs.request, inputs.runtime,
+		C.uint64_t(inputs.cancellation), &status,
 	)
 	if err := portableStatusError(&status); err != nil {
 		return nil, err

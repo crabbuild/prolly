@@ -20,6 +20,7 @@ import build.crab.prolly.javaapi.MapEntry;
 import build.crab.prolly.javaapi.MapUpdateKind;
 import build.crab.prolly.javaapi.ParallelConfig;
 import build.crab.prolly.javaapi.ProximityRecord;
+import build.crab.prolly.javaapi.ProximityCancellationToken;
 import build.crab.prolly.javaapi.ProximityMutation;
 import build.crab.prolly.javaapi.ProductQuantizationConfig;
 import build.crab.prolly.javaapi.Proofs;
@@ -64,6 +65,38 @@ class PortableParityTest {
             runtime.clear();
             assertTrue(index.searchWithRuntime(proximity, request, runtime)
                     .stats().physicalBytesRead() > 0);
+        }
+    }
+
+    @Test
+    void proximityFutureUsesNativeCooperativeCancellation() throws Exception {
+        Prolly.useLocalDebugLibrary();
+        var records = new ArrayList<ProximityRecord>();
+        for (int index = 0; index < 256; index++) {
+            records.add(new ProximityRecord(
+                    bytes(String.format("vector-%04d", index)),
+                    new float[] {index, index % 7},
+                    bytes(Integer.toString(index))));
+        }
+        try (Engine engine = Engine.memory();
+             var proximity = engine.buildProximity(2, records);
+             var runtime = engine.proximitySearchRuntime();
+             var cancellation = new ProximityCancellationToken()) {
+            cancellation.cancel();
+            var result = proximity.searchAsync(
+                    SearchRequest.exact(new float[] {0, 0}, 10),
+                    runtime,
+                    cancellation).get();
+            assertEquals("cancelled", result.completion());
+            assertTrue(result.neighbors().isEmpty());
+            try (var session = proximity.read()) {
+                var sessionResult = session.searchAsync(
+                        SearchRequest.exact(new float[] {0, 0}, 10),
+                        runtime,
+                        cancellation).get();
+                assertEquals("cancelled", sessionResult.completion());
+                assertTrue(sessionResult.neighbors().isEmpty());
+            }
         }
     }
 
@@ -146,6 +179,13 @@ class PortableParityTest {
                 var result = index.search(proximity, request);
                 assertEquals("hnsw", result.backend());
                 assertArrayEquals(bytes("vector-00"), result.neighbors().get(0).key());
+                try (var cancellation = new ProximityCancellationToken()) {
+                    cancellation.cancel();
+                    var cancelled = index.searchCancellable(
+                            proximity, request, null, cancellation);
+                    assertEquals("cancelled", cancelled.completion());
+                    assertTrue(cancelled.neighbors().isEmpty());
+                }
                 manifest = index.manifest();
                 try (var proof = index.proveSearch(proximity, request)) {
                     assertEquals(

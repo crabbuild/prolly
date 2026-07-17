@@ -111,9 +111,116 @@ func (m *IndexedMap) SnapshotAsync(ctx context.Context) *Future[*IndexedSnapshot
 	return startFuture(ctx, m.Snapshot)
 }
 
-func (s *ProximitySession) SearchAsync(ctx context.Context, request SearchRequest) *Future[SearchResult] {
+func startProximitySearchFuture(
+	ctx context.Context,
+	request SearchRequest,
+	call func(SearchRequest, *ProximityCancellationToken) (SearchResult, error),
+) *Future[SearchResult] {
 	request = cloneSearchRequest(request)
-	return startFuture(ctx, func() (SearchResult, error) { return s.Search(ctx, request) })
+	return startFuture(ctx, func() (SearchResult, error) {
+		token, err := NewProximityCancellationToken()
+		if err != nil {
+			return SearchResult{}, err
+		}
+		defer token.Close()
+		return call(request, token)
+	})
+}
+
+func (s *ProximitySession) SearchAsync(ctx context.Context, request SearchRequest) *Future[SearchResult] {
+	return startProximitySearchFuture(ctx, request, func(owned SearchRequest, token *ProximityCancellationToken) (SearchResult, error) {
+		return s.SearchCancellable(ctx, owned, nil, token)
+	})
+}
+
+func (s *ProximitySession) SearchWithRuntimeAsync(
+	ctx context.Context, request SearchRequest, searchRuntime *ProximitySearchRuntime,
+) *Future[SearchResult] {
+	return startProximitySearchFuture(ctx, request, func(owned SearchRequest, token *ProximityCancellationToken) (SearchResult, error) {
+		return s.SearchCancellable(ctx, owned, searchRuntime, token)
+	})
+}
+
+func (m *ProximityMap) SearchAsync(ctx context.Context, request SearchRequest) *Future[SearchResult] {
+	return startProximitySearchFuture(ctx, request, func(owned SearchRequest, token *ProximityCancellationToken) (SearchResult, error) {
+		return m.SearchCancellable(ctx, owned, nil, token)
+	})
+}
+
+func (m *ProximityMap) SearchWithRuntimeAsync(
+	ctx context.Context, request SearchRequest, searchRuntime *ProximitySearchRuntime,
+) *Future[SearchResult] {
+	return startProximitySearchFuture(ctx, request, func(owned SearchRequest, token *ProximityCancellationToken) (SearchResult, error) {
+		return m.SearchCancellable(ctx, owned, searchRuntime, token)
+	})
+}
+
+func (i *HNSWIndex) SearchAsync(
+	ctx context.Context, proximity *ProximityMap, request SearchRequest,
+) *Future[SearchResult] {
+	return startProximitySearchFuture(ctx, request, func(owned SearchRequest, token *ProximityCancellationToken) (SearchResult, error) {
+		return i.SearchCancellable(ctx, proximity, owned, nil, token)
+	})
+}
+
+func (i *HNSWIndex) SearchWithRuntimeAsync(
+	ctx context.Context, proximity *ProximityMap, request SearchRequest,
+	searchRuntime *ProximitySearchRuntime,
+) *Future[SearchResult] {
+	return startProximitySearchFuture(ctx, request, func(owned SearchRequest, token *ProximityCancellationToken) (SearchResult, error) {
+		return i.SearchCancellable(ctx, proximity, owned, searchRuntime, token)
+	})
+}
+
+func (i *ProductQuantizer) SearchAsync(
+	ctx context.Context, proximity *ProximityMap, request SearchRequest,
+) *Future[SearchResult] {
+	return startProximitySearchFuture(ctx, request, func(owned SearchRequest, token *ProximityCancellationToken) (SearchResult, error) {
+		return i.SearchCancellable(ctx, proximity, owned, nil, token)
+	})
+}
+
+func (i *ProductQuantizer) SearchWithRuntimeAsync(
+	ctx context.Context, proximity *ProximityMap, request SearchRequest,
+	searchRuntime *ProximitySearchRuntime,
+) *Future[SearchResult] {
+	return startProximitySearchFuture(ctx, request, func(owned SearchRequest, token *ProximityCancellationToken) (SearchResult, error) {
+		return i.SearchCancellable(ctx, proximity, owned, searchRuntime, token)
+	})
+}
+
+func (a *CompositeAccelerator) SearchAsync(
+	ctx context.Context, proximity *ProximityMap, request SearchRequest,
+) *Future[SearchResult] {
+	return startProximitySearchFuture(ctx, request, func(owned SearchRequest, token *ProximityCancellationToken) (SearchResult, error) {
+		return a.SearchCancellable(ctx, proximity, owned, nil, token)
+	})
+}
+
+func (a *CompositeAccelerator) SearchWithRuntimeAsync(
+	ctx context.Context, proximity *ProximityMap, request SearchRequest,
+	searchRuntime *ProximitySearchRuntime,
+) *Future[SearchResult] {
+	return startProximitySearchFuture(ctx, request, func(owned SearchRequest, token *ProximityCancellationToken) (SearchResult, error) {
+		return a.SearchCancellable(ctx, proximity, owned, searchRuntime, token)
+	})
+}
+
+func (a *AcceleratorCatalog) SearchAsync(
+	ctx context.Context, proximity *ProximityMap, request SearchRequest,
+) *Future[SearchResult] {
+	return startProximitySearchFuture(ctx, request, func(owned SearchRequest, token *ProximityCancellationToken) (SearchResult, error) {
+		return a.SearchCancellable(ctx, proximity, owned, nil, token)
+	})
+}
+
+func (a *AcceleratorCatalog) SearchWithRuntimeAsync(
+	ctx context.Context, proximity *ProximityMap, request SearchRequest,
+	searchRuntime *ProximitySearchRuntime,
+) *Future[SearchResult] {
+	return startProximitySearchFuture(ctx, request, func(owned SearchRequest, token *ProximityCancellationToken) (SearchResult, error) {
+		return a.SearchCancellable(ctx, proximity, owned, searchRuntime, token)
+	})
 }
 
 func (e *Engine) BuildProximityAsync(ctx context.Context, dimensions uint32, records []ProximityRecord) *Future[*ProximityMap] {

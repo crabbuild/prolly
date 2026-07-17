@@ -33,6 +33,40 @@ class PortableParityTest < Minitest::Test
     end
   end
 
+  def test_proximity_future_uses_native_cooperative_cancellation
+    Prolly::Engine.memory.use do |engine|
+      proximity = engine.build_proximity(
+        dimensions: 2,
+        records: 256.times.map do |index|
+          Prolly::ProximityRecord.new(
+            key: format('vector-%04d', index).b,
+            vector: [index.to_f, (index % 7).to_f],
+            value: [index].pack('Q<')
+          )
+        end
+      )
+      request = Prolly.exact_proximity_search_request([0.0, 0.0], 10)
+      engine.proximity_search_runtime.use do |runtime|
+        Prolly::ProximityCancellationToken.new.use do |cancellation|
+          cancellation.cancel
+          result = proximity.search_async(
+            request, runtime: runtime, cancellation: cancellation
+          ).value
+          session_result = proximity.read.use do |session|
+            session.search_async(
+              request, runtime: runtime, cancellation: cancellation
+            ).value
+          end
+          assert_equal Prolly::SearchCompletionRecord::CANCELLED, result.completion
+          assert_empty result.neighbors
+          assert_equal Prolly::SearchCompletionRecord::CANCELLED, session_result.completion
+          assert_empty session_result.neighbors
+        end
+      end
+      proximity.close
+    end
+  end
+
   def test_composite_and_catalog_lifecycle_is_portable_and_bounded
     Prolly::Engine.memory.use do |engine|
       base = engine.build_proximity(
@@ -150,6 +184,14 @@ class PortableParityTest < Minitest::Test
         result = index.search(proximity, request)
         assert_equal Prolly::SearchBackendRecord::PRODUCT_QUANTIZED, result.backend
         assert_equal 'vector-00'.b, result.neighbors.first.key
+        Prolly::ProximityCancellationToken.new.use do |cancellation|
+          cancellation.cancel
+          cancelled = index.search_cancellable(
+            proximity, request, cancellation: cancellation
+          )
+          assert_equal Prolly::SearchCompletionRecord::CANCELLED, cancelled.completion
+          assert_empty cancelled.neighbors
+        end
         manifest = index.manifest
         index.prove_search(proximity, request).use do |proof|
           assert_equal Prolly::SearchBackendRecord::PRODUCT_QUANTIZED,

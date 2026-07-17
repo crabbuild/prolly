@@ -4,6 +4,7 @@ import build.crab.prolly.api.JavaPortableBridge;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Function;
 import java.util.function.Predicate;
 
 public final class ProximityMap implements AutoCloseable {
@@ -167,8 +168,41 @@ public final class ProximityMap implements AutoCloseable {
                 JavaPortableBridge.searchPlanFormatVersion(result));
     }
     public CompletableFuture<SearchResult> searchAsync(SearchRequest request) {
+        return searchAsync(request, null, null);
+    }
+    public SearchResult searchCancellable(
+            SearchRequest request,
+            ProximitySearchRuntime runtime,
+            ProximityCancellationToken cancellation) {
+        return fromNative(JavaPortableBridge.searchCancellable(
+                open(), request.toNative(), runtime == null ? null : runtime.open(),
+                cancellation.open()));
+    }
+    public CompletableFuture<SearchResult> searchAsync(
+            SearchRequest request,
+            ProximitySearchRuntime runtime,
+            ProximityCancellationToken cancellation) {
         var owned = request.ownedCopy();
-        return CompletableFuture.supplyAsync(() -> search(owned));
+        return cancellableFuture(cancellation, token -> searchCancellable(owned, runtime, token));
+    }
+    static <T> CompletableFuture<T> cancellableFuture(
+            ProximityCancellationToken cancellation,
+            Function<ProximityCancellationToken, T> operation) {
+        var token = cancellation == null ? new ProximityCancellationToken() : cancellation;
+        var future = new CompletableFuture<T>();
+        future.whenComplete((ignored, error) -> {
+            if (future.isCancelled()) token.cancel();
+        });
+        CompletableFuture.runAsync(() -> {
+            try {
+                future.complete(operation.apply(token));
+            } catch (Throwable error) {
+                future.completeExceptionally(error);
+            } finally {
+                if (cancellation == null) token.close();
+            }
+        });
+        return future;
     }
     public build.crab.prolly.ProximityMembershipProofRecord proveMembership(byte[] key) {
         return open().proveMembership(key.clone());

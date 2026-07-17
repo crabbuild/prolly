@@ -2442,6 +2442,37 @@ export class WasmProximitySearchRuntime implements Disposable {
   [Symbol.dispose](): void { this.close(); }
 }
 
+export class WasmProximityCancellationToken implements Disposable {
+  #native?: any;
+  constructor(native: any) { this.#native = native; }
+  nativeHandle(): any {
+    if (this.#native == null) throw new Error("WASM proximity cancellation token is closed");
+    return this.#native;
+  }
+  cancel(): void { this.nativeHandle().cancel(); }
+  get isCancelled(): boolean { return this.nativeHandle().isCancelled; }
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+async function cooperativeWasmSearch(
+  request: PortableSearchRequest,
+  cancellation: WasmProximityCancellationToken,
+  invoke: (owned: any, token: any) => PortableSearchResult,
+): Promise<PortableSearchResult> {
+  const owned = ownPortableSearchRequest(request);
+  const nativeCancellation = cancellation.nativeHandle();
+  const onAbort = () => cancellation.cancel();
+  request.signal?.addEventListener("abort", onAbort, { once: true });
+  try {
+    return await portablePromise(
+      request.signal, () => invoke(owned, nativeCancellation),
+    );
+  } finally {
+    request.signal?.removeEventListener("abort", onAbort);
+  }
+}
+
 export class WasmProximityMap implements Disposable {
   #native?: any;
   #memory?: WebAssembly.Memory;
@@ -2456,19 +2487,33 @@ export class WasmProximityMap implements Disposable {
   read(): WasmProximityReadSession {
     return new WasmProximityReadSession(this.nativeHandle().read(), this.#memory);
   }
+  cancellationToken(): WasmProximityCancellationToken {
+    return new WasmProximityCancellationToken(this.nativeHandle().cancellationToken());
+  }
   search(request: PortableSearchRequest): Promise<PortableSearchResult> {
-    return this.read().search(request);
+    const cancellation = this.cancellationToken();
+    return this.searchCancellable(request, cancellation).finally(() => cancellation.close());
   }
   searchWithRuntime(
     request: PortableSearchRequest,
     runtime: WasmProximitySearchRuntime,
   ): Promise<PortableSearchResult> {
+    const cancellation = this.cancellationToken();
+    return this.searchCancellable(request, cancellation, runtime).finally(() => cancellation.close());
+  }
+  async searchCancellable(
+    request: PortableSearchRequest,
+    cancellation: WasmProximityCancellationToken,
+    runtime?: WasmProximitySearchRuntime,
+  ): Promise<PortableSearchResult> {
     const native = this.nativeHandle();
-    const owned = ownPortableSearchRequest(request);
-    const nativeRuntime = runtime.nativeHandle();
-    return portablePromise(
-      request.signal,
-      () => native.searchWithRuntime(owned, nativeRuntime),
+    const nativeRuntime = runtime?.nativeHandle();
+    return cooperativeWasmSearch(
+      request, cancellation, (owned, token) => (
+        nativeRuntime == null
+          ? native.searchCancellable(owned, token)
+          : native.searchWithRuntimeCancellable(owned, nativeRuntime, token)
+      ),
     );
   }
   get(key: Uint8Array): { vector: Float32Array; value: Uint8Array } | undefined {
@@ -2643,24 +2688,30 @@ export class WasmHnswIndex implements Disposable {
   }
   isCanonical(): boolean { return this.#open().isCanonical(); }
   search(map: WasmProximityMap, request: PortableSearchRequest): Promise<PortableSearchResult> {
-    const native = this.#open();
-    const nativeMap = map.nativeHandle();
-    const owned = ownPortableSearchRequest(request);
-    return portablePromise(request.signal, () => native.search(nativeMap, owned));
+    const cancellation = map.cancellationToken();
+    return this.searchCancellable(map, request, cancellation).finally(() => cancellation.close());
   }
   searchWithRuntime(
     map: WasmProximityMap,
     request: PortableSearchRequest,
     runtime: WasmProximitySearchRuntime,
   ): Promise<PortableSearchResult> {
+    const cancellation = map.cancellationToken();
+    return this.searchCancellable(map, request, cancellation, runtime)
+      .finally(() => cancellation.close());
+  }
+  searchCancellable(
+    map: WasmProximityMap, request: PortableSearchRequest,
+    cancellation: WasmProximityCancellationToken, runtime?: WasmProximitySearchRuntime,
+  ): Promise<PortableSearchResult> {
     const native = this.#open();
     const nativeMap = map.nativeHandle();
-    const owned = ownPortableSearchRequest(request);
-    const nativeRuntime = runtime.nativeHandle();
-    return portablePromise(
-      request.signal,
-      () => native.searchWithRuntime(nativeMap, owned, nativeRuntime),
-    );
+    const nativeRuntime = runtime?.nativeHandle();
+    return cooperativeWasmSearch(request, cancellation, (owned, token) => (
+      nativeRuntime == null
+        ? native.searchCancellable(nativeMap, owned, token)
+        : native.searchWithRuntimeCancellable(nativeMap, owned, nativeRuntime, token)
+    ));
   }
   proveSearch(map: WasmProximityMap, request: PortableSearchRequest): WasmProximitySearchProof {
     return new WasmProximitySearchProof(
@@ -2700,24 +2751,30 @@ export class WasmProductQuantizer implements Disposable {
     };
   }
   search(map: WasmProximityMap, request: PortableSearchRequest): Promise<PortableSearchResult> {
-    const native = this.#open();
-    const nativeMap = map.nativeHandle();
-    const owned = ownPortableSearchRequest(request);
-    return portablePromise(request.signal, () => native.search(nativeMap, owned));
+    const cancellation = map.cancellationToken();
+    return this.searchCancellable(map, request, cancellation).finally(() => cancellation.close());
   }
   searchWithRuntime(
     map: WasmProximityMap,
     request: PortableSearchRequest,
     runtime: WasmProximitySearchRuntime,
   ): Promise<PortableSearchResult> {
+    const cancellation = map.cancellationToken();
+    return this.searchCancellable(map, request, cancellation, runtime)
+      .finally(() => cancellation.close());
+  }
+  searchCancellable(
+    map: WasmProximityMap, request: PortableSearchRequest,
+    cancellation: WasmProximityCancellationToken, runtime?: WasmProximitySearchRuntime,
+  ): Promise<PortableSearchResult> {
     const native = this.#open();
     const nativeMap = map.nativeHandle();
-    const owned = ownPortableSearchRequest(request);
-    const nativeRuntime = runtime.nativeHandle();
-    return portablePromise(
-      request.signal,
-      () => native.searchWithRuntime(nativeMap, owned, nativeRuntime),
-    );
+    const nativeRuntime = runtime?.nativeHandle();
+    return cooperativeWasmSearch(request, cancellation, (owned, token) => (
+      nativeRuntime == null
+        ? native.searchCancellable(nativeMap, owned, token)
+        : native.searchWithRuntimeCancellable(nativeMap, owned, nativeRuntime, token)
+    ));
   }
   proveSearch(map: WasmProximityMap, request: PortableSearchRequest): WasmProximitySearchProof {
     return new WasmProximitySearchProof(
@@ -2744,22 +2801,30 @@ export class WasmCompositeAccelerator implements Disposable {
   config(): CompositeAcceleratorConfig { return this.nativeHandle().config(); }
   buildStats(): CompositeBuildStats { return this.nativeHandle().buildStats(); }
   search(map: WasmProximityMap, request: PortableSearchRequest): Promise<PortableSearchResult> {
-    const native = this.nativeHandle(); const nativeMap = map.nativeHandle(); const owned = ownPortableSearchRequest(request);
-    return portablePromise(request.signal, () => native.search(nativeMap, owned));
+    const cancellation = map.cancellationToken();
+    return this.searchCancellable(map, request, cancellation).finally(() => cancellation.close());
   }
   searchWithRuntime(
     map: WasmProximityMap,
     request: PortableSearchRequest,
     runtime: WasmProximitySearchRuntime,
   ): Promise<PortableSearchResult> {
+    const cancellation = map.cancellationToken();
+    return this.searchCancellable(map, request, cancellation, runtime)
+      .finally(() => cancellation.close());
+  }
+  searchCancellable(
+    map: WasmProximityMap, request: PortableSearchRequest,
+    cancellation: WasmProximityCancellationToken, runtime?: WasmProximitySearchRuntime,
+  ): Promise<PortableSearchResult> {
     const native = this.nativeHandle();
     const nativeMap = map.nativeHandle();
-    const owned = ownPortableSearchRequest(request);
-    const nativeRuntime = runtime.nativeHandle();
-    return portablePromise(
-      request.signal,
-      () => native.searchWithRuntime(nativeMap, owned, nativeRuntime),
-    );
+    const nativeRuntime = runtime?.nativeHandle();
+    return cooperativeWasmSearch(request, cancellation, (owned, token) => (
+      nativeRuntime == null
+        ? native.searchCancellable(nativeMap, owned, token)
+        : native.searchWithRuntimeCancellable(nativeMap, owned, nativeRuntime, token)
+    ));
   }
   proveSearch(map: WasmProximityMap, request: PortableSearchRequest): WasmProximitySearchProof {
     return new WasmProximitySearchProof(this.nativeHandle().proveSearch(map.nativeHandle(), ownPortableSearchRequest(request)));
@@ -2778,22 +2843,30 @@ export class WasmAcceleratorCatalog implements Disposable {
     kind: entry.kind, configurationFingerprint: ownedPortableBytes(entry.configurationFingerprint), manifest: ownedPortableBytes(entry.manifest),
   })); }
   search(map: WasmProximityMap, request: PortableSearchRequest): Promise<PortableSearchResult> {
-    const native = this.#open(); const nativeMap = map.nativeHandle(); const owned = ownPortableSearchRequest(request);
-    return portablePromise(request.signal, () => native.search(nativeMap, owned));
+    const cancellation = map.cancellationToken();
+    return this.searchCancellable(map, request, cancellation).finally(() => cancellation.close());
   }
   searchWithRuntime(
     map: WasmProximityMap,
     request: PortableSearchRequest,
     runtime: WasmProximitySearchRuntime,
   ): Promise<PortableSearchResult> {
+    const cancellation = map.cancellationToken();
+    return this.searchCancellable(map, request, cancellation, runtime)
+      .finally(() => cancellation.close());
+  }
+  searchCancellable(
+    map: WasmProximityMap, request: PortableSearchRequest,
+    cancellation: WasmProximityCancellationToken, runtime?: WasmProximitySearchRuntime,
+  ): Promise<PortableSearchResult> {
     const native = this.#open();
     const nativeMap = map.nativeHandle();
-    const owned = ownPortableSearchRequest(request);
-    const nativeRuntime = runtime.nativeHandle();
-    return portablePromise(
-      request.signal,
-      () => native.searchWithRuntime(nativeMap, owned, nativeRuntime),
-    );
+    const nativeRuntime = runtime?.nativeHandle();
+    return cooperativeWasmSearch(request, cancellation, (owned, token) => (
+      nativeRuntime == null
+        ? native.searchCancellable(nativeMap, owned, token)
+        : native.searchWithRuntimeCancellable(nativeMap, owned, nativeRuntime, token)
+    ));
   }
   proveSearch(map: WasmProximityMap, request: PortableSearchRequest): WasmProximitySearchProof {
     return new WasmProximitySearchProof(this.#open().proveSearch(map.nativeHandle(), ownPortableSearchRequest(request)));
@@ -2857,6 +2930,10 @@ export class WasmProximityReadSession implements Disposable {
     this.#native = native;
     this.#memory = memory;
   }
+  cancellationToken(): WasmProximityCancellationToken {
+    if (this.#native == null) throw new Error("WASM proximity session is closed");
+    return new WasmProximityCancellationToken(this.#native.cancellationToken());
+  }
   get(key: Uint8Array): { vector: Float32Array; value: Uint8Array } | undefined {
     if (this.#native == null) throw new Error("WASM proximity session is closed");
     return this.#native.get(ownedPortableBytes(key)) ?? undefined;
@@ -2901,9 +2978,8 @@ export class WasmProximityReadSession implements Disposable {
   }
   search(request: PortableSearchRequest): Promise<PortableSearchResult> {
     if (this.#native == null) return Promise.reject(new Error("WASM proximity session is closed"));
-    const native = this.#native;
-    const owned = ownPortableSearchRequest(request);
-    return portablePromise(request.signal, () => native.search(owned));
+    const cancellation = this.cancellationToken();
+    return this.searchCancellable(request, cancellation).finally(() => cancellation.close());
   }
   searchWithRuntime(
     request: PortableSearchRequest,
@@ -2912,13 +2988,23 @@ export class WasmProximityReadSession implements Disposable {
     if (this.#native == null) {
       return Promise.reject(new Error("WASM proximity session is closed"));
     }
+    const cancellation = this.cancellationToken();
+    return this.searchCancellable(request, cancellation, runtime)
+      .finally(() => cancellation.close());
+  }
+  searchCancellable(
+    request: PortableSearchRequest,
+    cancellation: WasmProximityCancellationToken,
+    runtime?: WasmProximitySearchRuntime,
+  ): Promise<PortableSearchResult> {
+    if (this.#native == null) return Promise.reject(new Error("WASM proximity session is closed"));
     const native = this.#native;
-    const owned = ownPortableSearchRequest(request);
-    const nativeRuntime = runtime.nativeHandle();
-    return portablePromise(
-      request.signal,
-      () => native.searchWithRuntime(owned, nativeRuntime),
-    );
+    const nativeRuntime = runtime?.nativeHandle();
+    return cooperativeWasmSearch(request, cancellation, (owned, token) => (
+      nativeRuntime == null
+        ? native.searchCancellable(owned, token)
+        : native.searchWithRuntimeCancellable(owned, nativeRuntime, token)
+    ));
   }
   close(): void { this.#native?.free?.(); this.#native = undefined; this.#memory = undefined; }
   [Symbol.dispose](): void { this.close(); }

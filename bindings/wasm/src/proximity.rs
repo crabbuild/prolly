@@ -2,9 +2,11 @@ use super::{js_error, WasmProllyEngine};
 use crate::page::set_bytes;
 use js_sys::{Array, BigInt, Float32Array, Function, Object, Reflect, Uint8Array};
 use prolly::{
-    AcceleratorCatalog, AcceleratorSet, AdaptiveQuality, BuildParallelism, CatalogAcceleratorKind,
-    Cid, CompositeAccelerator, CompositeAcceleratorConfig, CompositeBase, CompositeBaseKind,
-    CompositeBuildLimits, CompositeBuildOrRebuildOutcome, CompositeBuildOutcome,
+    AcceleratorCatalog, AcceleratorSet, AdaptiveQuality, AsyncAcceleratorCatalog,
+    AsyncAcceleratorSet, AsyncCompositeAccelerator, AsyncHnswIndex, AsyncProductQuantizer,
+    AsyncProximityMap, AsyncSearchControl, BuildParallelism, CancellationToken,
+    CatalogAcceleratorKind, Cid, CompositeAccelerator, CompositeAcceleratorConfig, CompositeBase,
+    CompositeBaseKind, CompositeBuildLimits, CompositeBuildOrRebuildOutcome, CompositeBuildOutcome,
     CompositeBuildStats, CompositeRebuildOptions, ContentGraphLimits, DistanceMetric,
     FullRebuildReason, HnswBuildLimits, HnswBuildStats, HnswConfig, HnswIndex,
     HnswRoutingVectorEncoding, HnswSearchOptions, PlannerPolicy, PqSearchOptions,
@@ -15,7 +17,9 @@ use prolly::{
     SearchBackend, SearchBudget, SearchCompletion, SearchIo, SearchOptions, SearchPolicy,
     SearchRequest, SearchRuntime, SearchRuntimePolicy,
 };
+use std::future::Future;
 use std::sync::Arc;
+use std::task::{Context, Poll, Wake, Waker};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 
@@ -30,6 +34,48 @@ pub struct WasmProximitySearchRuntime {
     engine: Arc<super::WasmEngine>,
     policy: SearchRuntimePolicy,
     io: SearchIo<Arc<prolly::MemStore>>,
+}
+
+#[wasm_bindgen(js_name = WasmProximityCancellationToken)]
+pub struct WasmProximityCancellationToken {
+    inner: CancellationToken,
+}
+
+#[wasm_bindgen(js_class = WasmProximityCancellationToken)]
+impl WasmProximityCancellationToken {
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> Self {
+        Self {
+            inner: CancellationToken::default(),
+        }
+    }
+
+    pub fn cancel(&self) {
+        self.inner.cancel();
+    }
+
+    #[wasm_bindgen(getter, js_name = isCancelled)]
+    pub fn is_cancelled(&self) -> bool {
+        self.inner.is_cancelled()
+    }
+}
+
+struct WasmNoopWake;
+
+impl Wake for WasmNoopWake {
+    fn wake(self: Arc<Self>) {}
+}
+
+fn block_on_wasm_search<F: Future>(future: F) -> F::Output {
+    let waker = Waker::from(Arc::new(WasmNoopWake));
+    let mut context = Context::from_waker(&waker);
+    let mut future = Box::pin(future);
+    loop {
+        match future.as_mut().poll(&mut context) {
+            Poll::Ready(value) => return value,
+            Poll::Pending => std::hint::spin_loop(),
+        }
+    }
 }
 
 impl WasmProximitySearchRuntime {
@@ -123,6 +169,93 @@ impl OwnedSearchRequest {
             options: self.options.clone(),
         }
     }
+}
+
+fn cancellable_map_search(
+    map: &ProximityMap<Arc<prolly::MemStore>>,
+    io: &SearchIo<Arc<prolly::MemStore>>,
+    request: &OwnedSearchRequest,
+    cancellation: CancellationToken,
+) -> Result<Object, JsValue> {
+    let before = io.physical_bytes_read();
+    let async_io = io
+        .clone()
+        .with_proximity_dimensions(map.tree().config.dimensions)
+        .sync_store_as_async();
+    let async_map = block_on_wasm_search(AsyncProximityMap::load(
+        async_io,
+        map.tree().descriptor.clone(),
+    ))
+    .map_err(js_error)?;
+    let mut result = block_on_wasm_search(async_map.search(
+        request.as_request(),
+        AsyncSearchControl {
+            cancellation: Some(cancellation),
+            ..AsyncSearchControl::default()
+        },
+    ))
+    .map_err(js_error)?;
+    result.stats.physical_bytes_read = io.physical_bytes_read().saturating_sub(before);
+    search_result_object(result)
+}
+
+#[derive(Clone, Copy)]
+enum WasmAsyncAcceleratorKind {
+    Hnsw,
+    ProductQuantized,
+    Composite,
+    Catalog,
+}
+
+fn cancellable_accelerated_search(
+    map: &ProximityMap<Arc<prolly::MemStore>>,
+    io: &SearchIo<Arc<prolly::MemStore>>,
+    manifest: Cid,
+    kind: WasmAsyncAcceleratorKind,
+    request: &OwnedSearchRequest,
+    cancellation: CancellationToken,
+) -> Result<Object, JsValue> {
+    let before = io.physical_bytes_read();
+    let store = io
+        .clone()
+        .with_proximity_dimensions(map.tree().config.dimensions)
+        .sync_store_as_async();
+    let mut result = block_on_wasm_search(async {
+        let async_map =
+            AsyncProximityMap::load(store.clone(), map.tree().descriptor.clone()).await?;
+        let accelerators = match kind {
+            WasmAsyncAcceleratorKind::Hnsw => AsyncAcceleratorSet::empty().with_hnsw(
+                async_map.tree(),
+                AsyncHnswIndex::load(&store, manifest).await?,
+            )?,
+            WasmAsyncAcceleratorKind::ProductQuantized => AsyncAcceleratorSet::empty().with_pq(
+                async_map.tree(),
+                AsyncProductQuantizer::load(&store, manifest).await?,
+            )?,
+            WasmAsyncAcceleratorKind::Composite => AsyncAcceleratorSet::empty().with_composite(
+                async_map.tree(),
+                AsyncCompositeAccelerator::load(&store, manifest).await?,
+            )?,
+            WasmAsyncAcceleratorKind::Catalog => {
+                AsyncAcceleratorCatalog::load(&store, manifest, async_map.tree())
+                    .await?
+                    .into_accelerators()
+            }
+        };
+        async_map
+            .search_with_accelerators(
+                &accelerators,
+                request.as_request(),
+                AsyncSearchControl {
+                    cancellation: Some(cancellation),
+                    ..AsyncSearchControl::default()
+                },
+            )
+            .await
+    })
+    .map_err(js_error)?;
+    result.stats.physical_bytes_read = io.physical_bytes_read().saturating_sub(before);
+    search_result_object(result)
 }
 
 fn js_field(value: &JsValue, name: &str) -> Result<JsValue, JsValue> {
@@ -868,6 +1001,43 @@ impl WasmProximityMap {
         search_map(&self.load()?, &request)
     }
 
+    #[wasm_bindgen(js_name = cancellationToken)]
+    pub fn cancellation_token(&self) -> WasmProximityCancellationToken {
+        WasmProximityCancellationToken::new()
+    }
+
+    #[wasm_bindgen(js_name = searchCancellable)]
+    pub fn search_cancellable(
+        &self,
+        request: JsValue,
+        cancellation: &WasmProximityCancellationToken,
+    ) -> Result<Object, JsValue> {
+        let request = owned_search_request(request)?;
+        let map = self.load()?;
+        let io = SearchIo::new(
+            self.engine.store().clone(),
+            Arc::new(SearchRuntime::default()),
+        );
+        cancellable_map_search(&map, &io, &request, cancellation.inner.clone())
+    }
+
+    #[wasm_bindgen(js_name = searchWithRuntimeCancellable)]
+    pub fn search_with_runtime_cancellable(
+        &self,
+        request: JsValue,
+        runtime: &WasmProximitySearchRuntime,
+        cancellation: &WasmProximityCancellationToken,
+    ) -> Result<Object, JsValue> {
+        runtime.ensure_engine(&self.engine)?;
+        let request = owned_search_request(request)?;
+        cancellable_map_search(
+            &self.load()?,
+            &runtime.io,
+            &request,
+            cancellation.inner.clone(),
+        )
+    }
+
     #[wasm_bindgen(js_name = searchWithRuntime)]
     pub fn search_with_runtime(
         &self,
@@ -1391,6 +1561,47 @@ impl WasmHnswIndex {
             .and_then(search_result_object)
     }
 
+    #[wasm_bindgen(js_name = searchCancellable)]
+    pub fn search_cancellable(
+        &self,
+        map: &WasmProximityMap,
+        request: JsValue,
+        cancellation: &WasmProximityCancellationToken,
+    ) -> Result<Object, JsValue> {
+        let io = SearchIo::new(
+            self.engine.store().clone(),
+            Arc::new(SearchRuntime::default()),
+        );
+        cancellable_accelerated_search(
+            &map.load()?,
+            &io,
+            self.inner.manifest_cid().clone(),
+            WasmAsyncAcceleratorKind::Hnsw,
+            &owned_search_request(request)?,
+            cancellation.inner.clone(),
+        )
+    }
+
+    #[wasm_bindgen(js_name = searchWithRuntimeCancellable)]
+    pub fn search_with_runtime_cancellable(
+        &self,
+        map: &WasmProximityMap,
+        request: JsValue,
+        runtime: &WasmProximitySearchRuntime,
+        cancellation: &WasmProximityCancellationToken,
+    ) -> Result<Object, JsValue> {
+        runtime.ensure_engine(&self.engine)?;
+        runtime.ensure_engine(&map.engine)?;
+        cancellable_accelerated_search(
+            &map.load()?,
+            &runtime.io,
+            self.inner.manifest_cid().clone(),
+            WasmAsyncAcceleratorKind::Hnsw,
+            &owned_search_request(request)?,
+            cancellation.inner.clone(),
+        )
+    }
+
     #[wasm_bindgen(js_name = proveSearch)]
     pub fn prove_search(
         &self,
@@ -1462,6 +1673,47 @@ impl WasmProductQuantizer {
         map.search_with(&accelerators, &runtime.io, request.as_request())
             .map_err(js_error)
             .and_then(search_result_object)
+    }
+
+    #[wasm_bindgen(js_name = searchCancellable)]
+    pub fn search_cancellable(
+        &self,
+        map: &WasmProximityMap,
+        request: JsValue,
+        cancellation: &WasmProximityCancellationToken,
+    ) -> Result<Object, JsValue> {
+        let io = SearchIo::new(
+            self.engine.store().clone(),
+            Arc::new(SearchRuntime::default()),
+        );
+        cancellable_accelerated_search(
+            &map.load()?,
+            &io,
+            self.inner.manifest_cid().clone(),
+            WasmAsyncAcceleratorKind::ProductQuantized,
+            &owned_search_request(request)?,
+            cancellation.inner.clone(),
+        )
+    }
+
+    #[wasm_bindgen(js_name = searchWithRuntimeCancellable)]
+    pub fn search_with_runtime_cancellable(
+        &self,
+        map: &WasmProximityMap,
+        request: JsValue,
+        runtime: &WasmProximitySearchRuntime,
+        cancellation: &WasmProximityCancellationToken,
+    ) -> Result<Object, JsValue> {
+        runtime.ensure_engine(&self.engine)?;
+        runtime.ensure_engine(&map.engine)?;
+        cancellable_accelerated_search(
+            &map.load()?,
+            &runtime.io,
+            self.inner.manifest_cid().clone(),
+            WasmAsyncAcceleratorKind::ProductQuantized,
+            &owned_search_request(request)?,
+            cancellation.inner.clone(),
+        )
     }
 
     #[wasm_bindgen(js_name = proveSearch)]
@@ -1565,6 +1817,45 @@ impl WasmCompositeAccelerator {
             .map_err(js_error)
             .and_then(search_result_object)
     }
+    #[wasm_bindgen(js_name = searchCancellable)]
+    pub fn search_cancellable(
+        &self,
+        map: &WasmProximityMap,
+        request: JsValue,
+        cancellation: &WasmProximityCancellationToken,
+    ) -> Result<Object, JsValue> {
+        let io = SearchIo::new(
+            self.engine.store().clone(),
+            Arc::new(SearchRuntime::default()),
+        );
+        cancellable_accelerated_search(
+            &map.load()?,
+            &io,
+            self.inner.manifest_cid().clone(),
+            WasmAsyncAcceleratorKind::Composite,
+            &owned_search_request(request)?,
+            cancellation.inner.clone(),
+        )
+    }
+    #[wasm_bindgen(js_name = searchWithRuntimeCancellable)]
+    pub fn search_with_runtime_cancellable(
+        &self,
+        map: &WasmProximityMap,
+        request: JsValue,
+        runtime: &WasmProximitySearchRuntime,
+        cancellation: &WasmProximityCancellationToken,
+    ) -> Result<Object, JsValue> {
+        runtime.ensure_engine(&self.engine)?;
+        runtime.ensure_engine(&map.engine)?;
+        cancellable_accelerated_search(
+            &map.load()?,
+            &runtime.io,
+            self.inner.manifest_cid().clone(),
+            WasmAsyncAcceleratorKind::Composite,
+            &owned_search_request(request)?,
+            cancellation.inner.clone(),
+        )
+    }
     #[wasm_bindgen(js_name = proveSearch)]
     pub fn prove_search(
         &self,
@@ -1648,6 +1939,45 @@ impl WasmAcceleratorCatalog {
             .search_with(catalog.accelerators(), &runtime.io, request.as_request())
             .map_err(js_error)
             .and_then(search_result_object)
+    }
+    #[wasm_bindgen(js_name = searchCancellable)]
+    pub fn search_cancellable(
+        &self,
+        map: &WasmProximityMap,
+        request: JsValue,
+        cancellation: &WasmProximityCancellationToken,
+    ) -> Result<Object, JsValue> {
+        let io = SearchIo::new(
+            self.engine.store().clone(),
+            Arc::new(SearchRuntime::default()),
+        );
+        cancellable_accelerated_search(
+            &map.load()?,
+            &io,
+            self.inner.manifest_cid().clone(),
+            WasmAsyncAcceleratorKind::Catalog,
+            &owned_search_request(request)?,
+            cancellation.inner.clone(),
+        )
+    }
+    #[wasm_bindgen(js_name = searchWithRuntimeCancellable)]
+    pub fn search_with_runtime_cancellable(
+        &self,
+        map: &WasmProximityMap,
+        request: JsValue,
+        runtime: &WasmProximitySearchRuntime,
+        cancellation: &WasmProximityCancellationToken,
+    ) -> Result<Object, JsValue> {
+        runtime.ensure_engine(&self.engine)?;
+        runtime.ensure_engine(&map.engine)?;
+        cancellable_accelerated_search(
+            &map.load()?,
+            &runtime.io,
+            self.inner.manifest_cid().clone(),
+            WasmAsyncAcceleratorKind::Catalog,
+            &owned_search_request(request)?,
+            cancellation.inner.clone(),
+        )
     }
     #[wasm_bindgen(js_name = proveSearch)]
     pub fn prove_search(
@@ -1821,6 +2151,45 @@ impl WasmProximityReadSession {
     pub fn search(&self, request: JsValue) -> Result<Object, JsValue> {
         let request = owned_search_request(request)?;
         search_map(&self.map, &request)
+    }
+
+    #[wasm_bindgen(js_name = cancellationToken)]
+    pub fn cancellation_token(&self) -> WasmProximityCancellationToken {
+        WasmProximityCancellationToken::new()
+    }
+
+    #[wasm_bindgen(js_name = searchCancellable)]
+    pub fn search_cancellable(
+        &self,
+        request: JsValue,
+        cancellation: &WasmProximityCancellationToken,
+    ) -> Result<Object, JsValue> {
+        let io = SearchIo::new(
+            self.engine.store().clone(),
+            Arc::new(SearchRuntime::default()),
+        );
+        cancellable_map_search(
+            &self.map,
+            &io,
+            &owned_search_request(request)?,
+            cancellation.inner.clone(),
+        )
+    }
+
+    #[wasm_bindgen(js_name = searchWithRuntimeCancellable)]
+    pub fn search_with_runtime_cancellable(
+        &self,
+        request: JsValue,
+        runtime: &WasmProximitySearchRuntime,
+        cancellation: &WasmProximityCancellationToken,
+    ) -> Result<Object, JsValue> {
+        runtime.ensure_engine(&self.engine)?;
+        cancellable_map_search(
+            &self.map,
+            &runtime.io,
+            &owned_search_request(request)?,
+            cancellation.inner.clone(),
+        )
     }
 
     #[wasm_bindgen(js_name = searchWithRuntime)]

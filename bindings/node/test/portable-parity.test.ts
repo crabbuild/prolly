@@ -32,6 +32,47 @@ test("retained search runtime reuses validated content", async () => {
   }
 });
 
+test("proximity promise uses native cooperative cancellation", async () => {
+  const engine = await Engine.memory();
+  try {
+    const proximity = await engine.buildProximity(2, Array.from({ length: 256 }, (_, index) => ({
+      key: bytes(`vector-${index.toString().padStart(4, "0")}`),
+      vector: new Float32Array([index, index % 7]),
+      value: bytes(String(index)),
+    })));
+    const runtime = engine.proximitySearchRuntime();
+    const cancellation = proximity.cancellationToken();
+    try {
+      cancellation.cancel();
+      const result = await proximity.searchCancellable(
+        exactSearch(new Float32Array([0, 0]), 10),
+        cancellation,
+        runtime,
+      );
+      assert.equal(result.completion, "cancelled");
+      assert.deepEqual(result.neighbors, []);
+      const session = proximity.read();
+      try {
+        const sessionResult = await session.searchCancellable(
+          exactSearch(new Float32Array([0, 0]), 10),
+          cancellation,
+          runtime,
+        );
+        assert.equal(sessionResult.completion, "cancelled");
+        assert.deepEqual(sessionResult.neighbors, []);
+      } finally {
+        session.close();
+      }
+    } finally {
+      cancellation.close();
+      runtime.close();
+      proximity.close();
+    }
+  } finally {
+    engine.close();
+  }
+});
+
 test("product quantizer lifecycle is portable and bounded", async () => {
   const engine = await Engine.memory();
   try {
@@ -62,6 +103,15 @@ test("product quantizer lifecycle is portable and bounded", async () => {
     const result = await index.search(proximity, request);
     assert.equal(result.backend, "product_quantized");
     assert.equal(Buffer.from(result.neighbors[0].key).toString(), "vector-00");
+    const cancellation = proximity.cancellationToken();
+    try {
+      cancellation.cancel();
+      const cancelled = await index.searchCancellable(proximity, request, cancellation);
+      assert.equal(cancelled.completion, "cancelled");
+      assert.deepEqual(cancelled.neighbors, []);
+    } finally {
+      cancellation.close();
+    }
     const manifest = index.manifest();
     const proof = index.proveSearch(proximity, request);
     assert.equal(proof.verify(proximity.descriptor()).result.backend, "product_quantized");

@@ -11,7 +11,7 @@ use crate::prolly::proximity::storage::quantized::ScalarQuantized;
 use crate::prolly::proximity::storage::vector::ExternalVector;
 use crate::prolly::proximity::storage::{Descriptor, ProximityNode};
 #[cfg(feature = "async-store")]
-use crate::prolly::store::AsyncStore;
+use crate::prolly::store::{AsyncStore, SyncStoreAsAsync};
 use crate::prolly::store::{BatchOp, Store};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
@@ -134,6 +134,25 @@ impl<S> SearchIo<S> {
         let mut binding = self.for_kind(kind);
         binding.dimensions = Some(dimensions);
         binding
+    }
+
+    /// Adapt a synchronous search I/O binding for native async traversal while
+    /// retaining the same cache namespace, partition, counters, and decoder
+    /// context. Shared reads remain backend-owned through `SyncStoreAsAsync`.
+    #[cfg(feature = "async-store")]
+    pub fn sync_store_as_async(&self) -> SearchIo<SyncStoreAsAsync<S>>
+    where
+        S: Clone,
+    {
+        SearchIo {
+            store: SyncStoreAsAsync::new(self.store.clone()),
+            namespace: self.namespace,
+            runtime: Arc::clone(&self.runtime),
+            kind: self.kind,
+            physical_bytes_read: Arc::clone(&self.physical_bytes_read),
+            physical_reads: Arc::clone(&self.physical_reads),
+            dimensions: self.dimensions,
+        }
     }
 }
 

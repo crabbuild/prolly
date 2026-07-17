@@ -1,6 +1,7 @@
 package build.crab.prolly.javaapi;
 
 import build.crab.prolly.api.JavaPortableBridge;
+import java.util.concurrent.CompletableFuture;
 
 public final class HnswIndex implements AutoCloseable {
     private build.crab.prolly.api.HnswIndex nativeIndex;
@@ -26,6 +27,27 @@ public final class HnswIndex implements AutoCloseable {
             ProximityMap map, SearchRequest request, ProximitySearchRuntime runtime) {
         return ProximityMap.fromNative(JavaPortableBridge.hnswSearchWithRuntime(
                 open(), map.open(), request.toNative(), runtime.open()));
+    }
+    public SearchResult searchCancellable(
+            ProximityMap map,
+            SearchRequest request,
+            ProximitySearchRuntime runtime,
+            ProximityCancellationToken cancellation) {
+        return ProximityMap.fromNative(JavaPortableBridge.hnswSearchCancellable(
+                open(), map.open(), request.toNative(), runtime == null ? null : runtime.open(),
+                cancellation.open()));
+    }
+    public CompletableFuture<SearchResult> searchAsync(ProximityMap map, SearchRequest request) {
+        return searchAsync(map, request, null, null);
+    }
+    public CompletableFuture<SearchResult> searchAsync(
+            ProximityMap map,
+            SearchRequest request,
+            ProximitySearchRuntime runtime,
+            ProximityCancellationToken cancellation) {
+        var owned = request.ownedCopy();
+        return ProximityMap.cancellableFuture(
+                cancellation, token -> searchCancellable(map, owned, runtime, token));
     }
     public ProximitySearchProof proveSearch(ProximityMap map, SearchRequest request) {
         return new ProximitySearchProof(

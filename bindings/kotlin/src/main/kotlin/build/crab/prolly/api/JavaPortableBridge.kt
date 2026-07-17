@@ -1029,6 +1029,17 @@ object JavaPortableBridge {
     ): ProximitySearchResultRecord = index.searchWithRuntime(map, request.toNative(), runtime)
 
     @JvmStatic
+    fun hnswSearchCancellable(
+        index: HnswIndex,
+        map: ProximityMap,
+        request: JavaProximitySearchRequest,
+        runtime: ProximitySearchRuntime?,
+        cancellation: ProximityCancellationToken,
+    ): ProximitySearchResultRecord = index.searchCancellable(
+        map, request.toNative(), runtime, cancellation,
+    )
+
+    @JvmStatic
     fun hnswProveSearch(
         index: HnswIndex,
         map: ProximityMap,
@@ -1077,6 +1088,17 @@ object JavaPortableBridge {
         request: JavaProximitySearchRequest,
         runtime: ProximitySearchRuntime,
     ): ProximitySearchResultRecord = index.searchWithRuntime(map, request.toNative(), runtime)
+
+    @JvmStatic
+    fun pqSearchCancellable(
+        index: ProductQuantizer,
+        map: ProximityMap,
+        request: JavaProximitySearchRequest,
+        runtime: ProximitySearchRuntime?,
+        cancellation: ProximityCancellationToken,
+    ): ProximitySearchResultRecord = index.searchCancellable(
+        map, request.toNative(), runtime, cancellation,
+    )
 
     @JvmStatic
     fun pqProveSearch(
@@ -1191,6 +1213,17 @@ object JavaPortableBridge {
     ): ProximitySearchResultRecord = index.searchWithRuntime(map, request.toNative(), runtime)
 
     @JvmStatic
+    fun compositeSearchCancellable(
+        index: CompositeAccelerator,
+        map: ProximityMap,
+        request: JavaProximitySearchRequest,
+        runtime: ProximitySearchRuntime?,
+        cancellation: ProximityCancellationToken,
+    ): ProximitySearchResultRecord = index.searchCancellable(
+        map, request.toNative(), runtime, cancellation,
+    )
+
+    @JvmStatic
     fun compositeProveSearch(
         index: CompositeAccelerator,
         map: ProximityMap,
@@ -1217,6 +1250,17 @@ object JavaPortableBridge {
     ): ProximitySearchResultRecord = catalog.searchWithRuntime(map, request.toNative(), runtime)
 
     @JvmStatic
+    fun catalogSearchCancellable(
+        catalog: AcceleratorCatalog,
+        map: ProximityMap,
+        request: JavaProximitySearchRequest,
+        runtime: ProximitySearchRuntime?,
+        cancellation: ProximityCancellationToken,
+    ): ProximitySearchResultRecord = catalog.searchCancellable(
+        map, request.toNative(), runtime, cancellation,
+    )
+
+    @JvmStatic
     fun catalogProveSearch(
         catalog: AcceleratorCatalog,
         map: ProximityMap,
@@ -1237,6 +1281,16 @@ object JavaPortableBridge {
     ): ProximitySearchResultRecord = map.searchWithRuntime(request.toNative(), runtime)
 
     @JvmStatic
+    fun searchCancellable(
+        map: ProximityMap,
+        request: JavaProximitySearchRequest,
+        runtime: ProximitySearchRuntime?,
+        cancellation: ProximityCancellationToken,
+    ): ProximitySearchResultRecord = map.searchCancellable(
+        request.toNative(), runtime, cancellation,
+    )
+
+    @JvmStatic
     fun search(
         session: ProximityReadSession,
         request: JavaProximitySearchRequest,
@@ -1248,6 +1302,16 @@ object JavaPortableBridge {
         request: JavaProximitySearchRequest,
         runtime: ProximitySearchRuntime,
     ): ProximitySearchResultRecord = session.searchWithRuntime(request.toNative(), runtime)
+
+    @JvmStatic
+    fun searchCancellable(
+        session: ProximityReadSession,
+        request: JavaProximitySearchRequest,
+        runtime: ProximitySearchRuntime?,
+        cancellation: ProximityCancellationToken,
+    ): ProximitySearchResultRecord = session.searchCancellable(
+        request.toNative(), runtime, cancellation,
+    )
 
     @JvmStatic
     fun scanRecords(

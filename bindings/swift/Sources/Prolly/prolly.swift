@@ -1454,6 +1454,8 @@ public protocol BindingAcceleratorCatalogProtocol: AnyObject, Sendable {
     
     func search(map: BindingProximityMap, request: ProximitySearchRequestRecord) throws  -> ProximitySearchResultRecord
     
+    func searchCancellable(map: BindingProximityMap, request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime?, cancellation: BindingProximityCancellationToken) throws  -> ProximitySearchResultRecord
+    
     func searchWithRuntime(map: BindingProximityMap, request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime) throws  -> ProximitySearchResultRecord
     
     func sourceDescriptor()  -> Data
@@ -1549,6 +1551,18 @@ open func search(map: BindingProximityMap, request: ProximitySearchRequestRecord
 })
 }
     
+open func searchCancellable(map: BindingProximityMap, request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime?, cancellation: BindingProximityCancellationToken)throws  -> ProximitySearchResultRecord  {
+    return try  FfiConverterTypeProximitySearchResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_search_cancellable(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeBindingProximityMap_lower(map),
+        FfiConverterTypeProximitySearchRequestRecord_lower(request),
+        FfiConverterOptionTypeBindingProximitySearchRuntime.lower(runtime),
+        FfiConverterTypeBindingProximityCancellationToken_lower(cancellation),$0
+    )
+})
+}
+    
 open func searchWithRuntime(map: BindingProximityMap, request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime)throws  -> ProximitySearchResultRecord  {
     return try  FfiConverterTypeProximitySearchResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_search_with_runtime(
@@ -1637,6 +1651,8 @@ public protocol BindingCompositeAcceleratorProtocol: AnyObject, Sendable {
     func proveSearch(map: BindingProximityMap, request: ProximitySearchRequestRecord, limits: ContentGraphLimitsRecord) throws  -> BindingProximitySearchProof
     
     func search(map: BindingProximityMap, request: ProximitySearchRequestRecord) throws  -> ProximitySearchResultRecord
+    
+    func searchCancellable(map: BindingProximityMap, request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime?, cancellation: BindingProximityCancellationToken) throws  -> ProximitySearchResultRecord
     
     func searchWithRuntime(map: BindingProximityMap, request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime) throws  -> ProximitySearchResultRecord
     
@@ -1773,6 +1789,18 @@ open func search(map: BindingProximityMap, request: ProximitySearchRequestRecord
 })
 }
     
+open func searchCancellable(map: BindingProximityMap, request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime?, cancellation: BindingProximityCancellationToken)throws  -> ProximitySearchResultRecord  {
+    return try  FfiConverterTypeProximitySearchResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_search_cancellable(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeBindingProximityMap_lower(map),
+        FfiConverterTypeProximitySearchRequestRecord_lower(request),
+        FfiConverterOptionTypeBindingProximitySearchRuntime.lower(runtime),
+        FfiConverterTypeBindingProximityCancellationToken_lower(cancellation),$0
+    )
+})
+}
+    
 open func searchWithRuntime(map: BindingProximityMap, request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime)throws  -> ProximitySearchResultRecord  {
     return try  FfiConverterTypeProximitySearchResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_search_with_runtime(
@@ -1853,6 +1881,8 @@ public protocol BindingHnswIndexProtocol: AnyObject, Sendable {
     func proveSearch(map: BindingProximityMap, request: ProximitySearchRequestRecord, limits: ContentGraphLimitsRecord) throws  -> BindingProximitySearchProof
     
     func search(map: BindingProximityMap, request: ProximitySearchRequestRecord) throws  -> ProximitySearchResultRecord
+    
+    func searchCancellable(map: BindingProximityMap, request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime?, cancellation: BindingProximityCancellationToken) throws  -> ProximitySearchResultRecord
     
     func searchWithRuntime(map: BindingProximityMap, request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime) throws  -> ProximitySearchResultRecord
     
@@ -1953,6 +1983,18 @@ open func search(map: BindingProximityMap, request: ProximitySearchRequestRecord
             self.uniffiCloneHandle(),
         FfiConverterTypeBindingProximityMap_lower(map),
         FfiConverterTypeProximitySearchRequestRecord_lower(request),$0
+    )
+})
+}
+    
+open func searchCancellable(map: BindingProximityMap, request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime?, cancellation: BindingProximityCancellationToken)throws  -> ProximitySearchResultRecord  {
+    return try  FfiConverterTypeProximitySearchResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindinghnswindex_search_cancellable(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeBindingProximityMap_lower(map),
+        FfiConverterTypeProximitySearchRequestRecord_lower(request),
+        FfiConverterOptionTypeBindingProximitySearchRuntime.lower(runtime),
+        FfiConverterTypeBindingProximityCancellationToken_lower(cancellation),$0
     )
 })
 }
@@ -3763,6 +3805,8 @@ public protocol BindingProductQuantizerProtocol: AnyObject, Sendable {
     
     func search(map: BindingProximityMap, request: ProximitySearchRequestRecord) throws  -> ProximitySearchResultRecord
     
+    func searchCancellable(map: BindingProximityMap, request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime?, cancellation: BindingProximityCancellationToken) throws  -> ProximitySearchResultRecord
+    
     func searchWithRuntime(map: BindingProximityMap, request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime) throws  -> ProximitySearchResultRecord
     
     func sourceDescriptor()  -> Data
@@ -3866,6 +3910,18 @@ open func search(map: BindingProximityMap, request: ProximitySearchRequestRecord
 })
 }
     
+open func searchCancellable(map: BindingProximityMap, request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime?, cancellation: BindingProximityCancellationToken)throws  -> ProximitySearchResultRecord  {
+    return try  FfiConverterTypeProximitySearchResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingproductquantizer_search_cancellable(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeBindingProximityMap_lower(map),
+        FfiConverterTypeProximitySearchRequestRecord_lower(request),
+        FfiConverterOptionTypeBindingProximitySearchRuntime.lower(runtime),
+        FfiConverterTypeBindingProximityCancellationToken_lower(cancellation),$0
+    )
+})
+}
+    
 open func searchWithRuntime(map: BindingProximityMap, request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime)throws  -> ProximitySearchResultRecord  {
     return try  FfiConverterTypeProximitySearchResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingproductquantizer_search_with_runtime(
@@ -3935,6 +3991,138 @@ public func FfiConverterTypeBindingProductQuantizer_lower(_ value: BindingProduc
 
 
 
+public protocol BindingProximityCancellationTokenProtocol: AnyObject, Sendable {
+    
+    func cancel() 
+    
+    func isCancelled()  -> Bool
+    
+}
+open class BindingProximityCancellationToken: BindingProximityCancellationTokenProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_prolly_bindings_fn_clone_bindingproximitycancellationtoken(self.handle, $0) }
+    }
+public convenience init() {
+    let handle =
+        try! rustCall() {
+    uniffi_prolly_bindings_fn_constructor_bindingproximitycancellationtoken_new($0
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_prolly_bindings_fn_free_bindingproximitycancellationtoken(handle, $0) }
+    }
+
+    
+
+    
+open func cancel()  {try! rustCall() {
+    uniffi_prolly_bindings_fn_method_bindingproximitycancellationtoken_cancel(
+            self.uniffiCloneHandle(),$0
+    )
+}
+}
+    
+open func isCancelled() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_method_bindingproximitycancellationtoken_is_cancelled(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBindingProximityCancellationToken: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = BindingProximityCancellationToken
+
+    public static func lift(_ handle: UInt64) throws -> BindingProximityCancellationToken {
+        return BindingProximityCancellationToken(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: BindingProximityCancellationToken) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BindingProximityCancellationToken {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: BindingProximityCancellationToken, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBindingProximityCancellationToken_lift(_ handle: UInt64) throws -> BindingProximityCancellationToken {
+    return try FfiConverterTypeBindingProximityCancellationToken.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBindingProximityCancellationToken_lower(_ value: BindingProximityCancellationToken) -> UInt64 {
+    return FfiConverterTypeBindingProximityCancellationToken.lower(value)
+}
+
+
+
+
+
+
 public protocol BindingProximityMapProtocol: AnyObject, Sendable {
     
     func buildAcceleratorCatalog(hnsw: BindingHnswIndex?, pq: BindingProductQuantizer?, composite: BindingCompositeAccelerator?) throws  -> BindingAcceleratorCatalog
@@ -3988,6 +4176,8 @@ public protocol BindingProximityMapProtocol: AnyObject, Sendable {
     func scanRecords(visitor: ProximityRecordVisitorCallback) throws  -> UInt64
     
     func search(request: ProximitySearchRequestRecord) throws  -> ProximitySearchResultRecord
+    
+    func searchCancellable(request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime?, cancellation: BindingProximityCancellationToken) throws  -> ProximitySearchResultRecord
     
     func searchWithRuntime(request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime) throws  -> ProximitySearchResultRecord
     
@@ -4294,6 +4484,17 @@ open func search(request: ProximitySearchRequestRecord)throws  -> ProximitySearc
 })
 }
     
+open func searchCancellable(request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime?, cancellation: BindingProximityCancellationToken)throws  -> ProximitySearchResultRecord  {
+    return try  FfiConverterTypeProximitySearchResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingproximitymap_search_cancellable(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeProximitySearchRequestRecord_lower(request),
+        FfiConverterOptionTypeBindingProximitySearchRuntime.lower(runtime),
+        FfiConverterTypeBindingProximityCancellationToken_lower(cancellation),$0
+    )
+})
+}
+    
 open func searchWithRuntime(request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime)throws  -> ProximitySearchResultRecord  {
     return try  FfiConverterTypeProximitySearchResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingproximitymap_search_with_runtime(
@@ -4373,6 +4574,8 @@ public protocol BindingProximityReadSessionProtocol: AnyObject, Sendable {
     func scanRecords(visitor: ProximityRecordVisitorCallback) throws  -> UInt64
     
     func search(request: ProximitySearchRequestRecord) throws  -> ProximitySearchResultRecord
+    
+    func searchCancellable(request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime?, cancellation: BindingProximityCancellationToken) throws  -> ProximitySearchResultRecord
     
     func searchWithRuntime(request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime) throws  -> ProximitySearchResultRecord
     
@@ -4470,6 +4673,17 @@ open func search(request: ProximitySearchRequestRecord)throws  -> ProximitySearc
     uniffi_prolly_bindings_fn_method_bindingproximityreadsession_search(
             self.uniffiCloneHandle(),
         FfiConverterTypeProximitySearchRequestRecord_lower(request),$0
+    )
+})
+}
+    
+open func searchCancellable(request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime?, cancellation: BindingProximityCancellationToken)throws  -> ProximitySearchResultRecord  {
+    return try  FfiConverterTypeProximitySearchResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingproximityreadsession_search_cancellable(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeProximitySearchRequestRecord_lower(request),
+        FfiConverterOptionTypeBindingProximitySearchRuntime.lower(runtime),
+        FfiConverterTypeBindingProximityCancellationToken_lower(cancellation),$0
     )
 })
 }
@@ -27158,6 +27372,30 @@ fileprivate struct FfiConverterOptionTypeBindingProductQuantizer: FfiConverterRu
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeBindingProximitySearchRuntime: FfiConverterRustBuffer {
+    typealias SwiftType = BindingProximitySearchRuntime?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeBindingProximitySearchRuntime.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeBindingProximitySearchRuntime.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeProllyReadSession: FfiConverterRustBuffer {
     typealias SwiftType = ProllyReadSession?
 
@@ -31430,6 +31668,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_search() != 55802) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_search_cancellable() != 34098) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_search_with_runtime() != 53678) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -31463,6 +31704,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_search() != 7681) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_search_cancellable() != 48784) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_search_with_runtime() != 35233) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -31482,6 +31726,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_bindinghnswindex_search() != 59229) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindinghnswindex_search_cancellable() != 3123) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_bindinghnswindex_search_with_runtime() != 42474) {
@@ -31505,10 +31752,19 @@ private let initializationResult: InitializationResult = {
     if (uniffi_prolly_bindings_checksum_method_bindingproductquantizer_search() != 14867) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_prolly_bindings_checksum_method_bindingproductquantizer_search_cancellable() != 36527) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_prolly_bindings_checksum_method_bindingproductquantizer_search_with_runtime() != 59197) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_bindingproductquantizer_source_descriptor() != 61276) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingproximitycancellationtoken_cancel() != 22166) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingproximitycancellationtoken_is_cancelled() != 33821) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_accelerator_catalog() != 27841) {
@@ -31589,6 +31845,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_prolly_bindings_checksum_method_bindingproximitymap_search() != 3285) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_prolly_bindings_checksum_method_bindingproximitymap_search_cancellable() != 6128) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_prolly_bindings_checksum_method_bindingproximitymap_search_with_runtime() != 38486) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -31608,6 +31867,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_search() != 12060) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_search_cancellable() != 7278) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_search_with_runtime() != 989) {
@@ -32088,6 +32350,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_constructor_bindingindexedmap_new() != 57256) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_constructor_bindingproximitycancellationtoken_new() != 17518) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_constructor_bindingversionedmap_new() != 64633) {

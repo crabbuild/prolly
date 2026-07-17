@@ -783,6 +783,67 @@ func (r *ProximitySearchRuntime) Clear() error {
 	return ffiProximitySearchRuntimeClear(handle)
 }
 
+// ProximityCancellationToken cooperatively stops native proximity traversal.
+// It is safe to cancel from a goroutine while a search is running.
+type ProximityCancellationToken struct {
+	handle uint64
+	closed atomic.Bool
+	mu     sync.RWMutex
+}
+
+func NewProximityCancellationToken() (*ProximityCancellationToken, error) {
+	handle, err := ffiNewProximityCancellationToken()
+	if err != nil {
+		return nil, err
+	}
+	token := &ProximityCancellationToken{handle: handle}
+	runtime.SetFinalizer(token, (*ProximityCancellationToken).Close)
+	return token, nil
+}
+
+func (t *ProximityCancellationToken) withHandle() (uint64, func(), error) {
+	if t == nil || t.closed.Load() {
+		return 0, nil, errors.New("proximity cancellation token is closed")
+	}
+	t.mu.RLock()
+	if t.closed.Load() || t.handle == 0 {
+		t.mu.RUnlock()
+		return 0, nil, errors.New("proximity cancellation token is closed")
+	}
+	return t.handle, t.mu.RUnlock, nil
+}
+
+func (t *ProximityCancellationToken) Cancel() error {
+	handle, unlock, err := t.withHandle()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	return ffiProximityCancellationTokenCancel(handle)
+}
+
+func (t *ProximityCancellationToken) IsCancelled() (bool, error) {
+	handle, unlock, err := t.withHandle()
+	if err != nil {
+		return false, err
+	}
+	defer unlock()
+	return ffiProximityCancellationTokenIsCancelled(handle)
+}
+
+func (t *ProximityCancellationToken) Close() {
+	if t == nil || t.closed.Swap(true) {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	runtime.SetFinalizer(t, nil)
+	if t.handle != 0 {
+		ffiFreeProximityCancellationToken(t.handle)
+		t.handle = 0
+	}
+}
+
 type ProximityMap struct {
 	handle uint64
 	fast   uint64
@@ -1027,6 +1088,33 @@ func (i *HNSWIndex) SearchWithRuntime(
 		return SearchResult{}, err
 	}
 	return decodeProximitySearchResultBytes(raw)
+}
+
+func (i *HNSWIndex) SearchCancellable(
+	ctx context.Context,
+	proximity *ProximityMap,
+	request SearchRequest,
+	searchRuntime *ProximitySearchRuntime,
+	cancellation *ProximityCancellationToken,
+) (SearchResult, error) {
+	index, indexUnlock, err := i.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer indexUnlock()
+	mapHandle, _, mapUnlock, err := proximity.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer mapUnlock()
+	return runPortableCancellableSearch(
+		ctx, request, searchRuntime, cancellation,
+		func(encoded []byte, runtimeHandle *uint64, cancellationHandle uint64) ([]byte, error) {
+			return ffiHNSWIndexSearchCancellable(
+				index, mapHandle, encoded, runtimeHandle, cancellationHandle,
+			)
+		},
+	)
 }
 
 func (i *HNSWIndex) ProveSearch(proximity *ProximityMap, request SearchRequest) (*ProximitySearchProof, error) {
@@ -1275,6 +1363,33 @@ func (i *ProductQuantizer) SearchWithRuntime(
 		return SearchResult{}, err
 	}
 	return decodeProximitySearchResultBytes(raw)
+}
+
+func (i *ProductQuantizer) SearchCancellable(
+	ctx context.Context,
+	proximity *ProximityMap,
+	request SearchRequest,
+	searchRuntime *ProximitySearchRuntime,
+	cancellation *ProximityCancellationToken,
+) (SearchResult, error) {
+	index, indexUnlock, err := i.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer indexUnlock()
+	mapHandle, _, mapUnlock, err := proximity.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer mapUnlock()
+	return runPortableCancellableSearch(
+		ctx, request, searchRuntime, cancellation,
+		func(encoded []byte, runtimeHandle *uint64, cancellationHandle uint64) ([]byte, error) {
+			return ffiProductQuantizerSearchCancellable(
+				index, mapHandle, encoded, runtimeHandle, cancellationHandle,
+			)
+		},
+	)
 }
 
 func (i *ProductQuantizer) ProveSearch(proximity *ProximityMap, request SearchRequest) (*ProximitySearchProof, error) {
@@ -1690,34 +1805,52 @@ func (m *ProximityMap) ProveSearch(request SearchRequest) (*ProximitySearchProof
 }
 
 func (m *ProximityMap) Search(ctx context.Context, request SearchRequest) (SearchResult, error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	if err := ctx.Err(); err != nil {
-		return SearchResult{}, err
-	}
-	request = cloneSearchRequest(request)
-	nativeRequest, err := encodeProximitySearchRequest(request)
+	token, err := NewProximityCancellationToken()
 	if err != nil {
 		return SearchResult{}, err
 	}
+	defer token.Close()
+	return m.SearchCancellable(ctx, request, nil, token)
+}
+
+func (m *ProximityMap) SearchWithRuntime(
+	ctx context.Context, request SearchRequest, searchRuntime *ProximitySearchRuntime,
+) (SearchResult, error) {
+	token, err := NewProximityCancellationToken()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer token.Close()
+	return m.SearchCancellable(ctx, request, searchRuntime, token)
+}
+
+func (m *ProximityMap) SearchCancellable(
+	ctx context.Context,
+	request SearchRequest,
+	searchRuntime *ProximitySearchRuntime,
+	cancellation *ProximityCancellationToken,
+) (SearchResult, error) {
 	handle, _, unlock, err := m.withHandle()
 	if err != nil {
 		return SearchResult{}, err
 	}
 	defer unlock()
-	raw, err := ffiProximitySearchRecord(handle, nativeRequest)
-	if err != nil {
-		return SearchResult{}, err
-	}
-	if err := ctx.Err(); err != nil {
-		return SearchResult{}, err
-	}
-	return decodeProximitySearchResultBytes(raw)
+	return runPortableCancellableSearch(
+		ctx, request, searchRuntime, cancellation,
+		func(encoded []byte, runtimeHandle *uint64, cancellationHandle uint64) ([]byte, error) {
+			return ffiProximitySearchRecordCancellable(
+				handle, encoded, runtimeHandle, cancellationHandle,
+			)
+		},
+	)
 }
 
-func (m *ProximityMap) SearchWithRuntime(
-	ctx context.Context, request SearchRequest, searchRuntime *ProximitySearchRuntime,
+func runPortableCancellableSearch(
+	ctx context.Context,
+	request SearchRequest,
+	searchRuntime *ProximitySearchRuntime,
+	cancellation *ProximityCancellationToken,
+	invoke func([]byte, *uint64, uint64) ([]byte, error),
 ) (SearchResult, error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -1729,17 +1862,32 @@ func (m *ProximityMap) SearchWithRuntime(
 	if err != nil {
 		return SearchResult{}, err
 	}
-	handle, _, unlock, err := m.withHandle()
+	var runtimeHandle *uint64
+	var runtimeUnlock func()
+	if searchRuntime != nil {
+		handle, unlockRuntime, runtimeErr := searchRuntime.withHandle()
+		if runtimeErr != nil {
+			return SearchResult{}, runtimeErr
+		}
+		runtimeHandle = &handle
+		runtimeUnlock = unlockRuntime
+		defer runtimeUnlock()
+	}
+	cancellationHandle, cancellationUnlock, err := cancellation.withHandle()
 	if err != nil {
 		return SearchResult{}, err
 	}
-	defer unlock()
-	runtimeHandle, runtimeUnlock, err := searchRuntime.withHandle()
-	if err != nil {
-		return SearchResult{}, err
-	}
-	defer runtimeUnlock()
-	raw, err := ffiProximitySearchRecordWithRuntime(handle, encoded, runtimeHandle)
+	defer cancellationUnlock()
+	finished := make(chan struct{})
+	defer close(finished)
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = cancellation.Cancel()
+		case <-finished:
+		}
+	}()
+	raw, err := invoke(encoded, runtimeHandle, cancellationHandle)
 	if err != nil {
 		return SearchResult{}, err
 	}
@@ -2001,6 +2149,27 @@ func (s *ProximitySession) SearchWithRuntime(
 		return SearchResult{}, err
 	}
 	return decodeProximitySearchResultBytes(raw)
+}
+
+func (s *ProximitySession) SearchCancellable(
+	ctx context.Context,
+	request SearchRequest,
+	searchRuntime *ProximitySearchRuntime,
+	cancellation *ProximityCancellationToken,
+) (SearchResult, error) {
+	handle, unlock, err := s.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer unlock()
+	return runPortableCancellableSearch(
+		ctx, request, searchRuntime, cancellation,
+		func(encoded []byte, runtimeHandle *uint64, cancellationHandle uint64) ([]byte, error) {
+			return ffiProximitySessionSearchCancellable(
+				handle, encoded, runtimeHandle, cancellationHandle,
+			)
+		},
+	)
 }
 
 func (s *ProximitySession) WithSearchView(ctx context.Context, request SearchRequest, visit func([]NeighborView) error) error {

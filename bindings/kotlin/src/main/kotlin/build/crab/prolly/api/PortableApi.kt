@@ -10,6 +10,7 @@ import build.crab.prolly.BindingMapComparison
 import build.crab.prolly.BindingMapMerge
 import build.crab.prolly.BindingMapSubscription
 import build.crab.prolly.BindingProductQuantizer
+import build.crab.prolly.BindingProximityCancellationToken
 import build.crab.prolly.BindingProximityMap
 import build.crab.prolly.BindingProximityReadSession
 import build.crab.prolly.BindingProximitySearchProof
@@ -77,7 +78,9 @@ import build.crab.prolly.verifyRangeProof as verifyNativeRangeProof
 import build.crab.prolly.verifyProximityMembershipProof as verifyNativeProximityMembershipProof
 import build.crab.prolly.verifyProximityStructureProof as verifyNativeProximityStructureProof
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import java.util.concurrent.CompletableFuture
 
 data class ProximityRecord(val key: ByteArray, val vector: List<Float>, val value: ByteArray)
 data class HnswBuildResult(val index: HnswIndex, val stats: HnswBuildStatsRecord)
@@ -126,6 +129,25 @@ private fun ownedSearchRequest(request: ProximitySearchRequestRecord) = request.
         eligibleKeys = request.filter.eligibleKeys.map(ByteArray::copyOf),
     ),
 )
+
+private suspend fun <T> cooperativeSearch(
+    cancellation: ProximityCancellationToken?,
+    block: (ProximityCancellationToken) -> T,
+): T {
+    val token = cancellation ?: ProximityCancellationToken()
+    return suspendCancellableCoroutine { continuation ->
+        val future = CompletableFuture.supplyAsync { block(token) }
+        continuation.invokeOnCancellation { token.cancel() }
+        future.whenComplete { value, error ->
+            if (continuation.isActive) {
+                continuation.resumeWith(
+                    if (error == null) Result.success(value) else Result.failure(error),
+                )
+            }
+            if (cancellation == null) token.close()
+        }
+    }
+}
 
 class Engine private constructor(internal val native: ProllyEngine) : AutoCloseable {
     companion object {
@@ -523,6 +545,23 @@ class ProximityMap(internal val native: BindingProximityMap) : AutoCloseable {
         runtime: ProximitySearchRuntime,
     ): ProximitySearchResultRecord =
         native.searchWithRuntime(ownedSearchRequest(request), runtime.native)
+    fun searchCancellable(
+        request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime? = null,
+        cancellation: ProximityCancellationToken,
+    ): ProximitySearchResultRecord = native.searchCancellable(
+        ownedSearchRequest(request), runtime?.native, cancellation.native,
+    )
+    suspend fun searchAsync(
+        request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime? = null,
+        cancellation: ProximityCancellationToken? = null,
+    ): ProximitySearchResultRecord {
+        val owned = ownedSearchRequest(request)
+        return cooperativeSearch(cancellation) { token ->
+            searchCancellable(owned, runtime, token)
+        }
+    }
     fun searchExact(query: List<Float>, k: ULong): ProximitySearchResultRecord =
         read().use { it.searchExact(query, k) }
     fun scanRecords(visitor: (ProximityRecordRecord) -> Boolean): ULong =
@@ -566,6 +605,14 @@ class ProximitySearchRuntime(
     override fun close() = native.close()
 }
 
+class ProximityCancellationToken(
+    internal val native: BindingProximityCancellationToken = BindingProximityCancellationToken(),
+) : AutoCloseable {
+    val isCancelled: Boolean get() = native.isCancelled()
+    fun cancel() = native.cancel()
+    override fun close() = native.close()
+}
+
 class HnswIndex(internal val native: BindingHnswIndex) : AutoCloseable {
     val manifest: ByteArray get() = native.manifest().copyOf()
     val sourceDescriptor: ByteArray get() = native.sourceDescriptor().copyOf()
@@ -579,6 +626,25 @@ class HnswIndex(internal val native: BindingHnswIndex) : AutoCloseable {
         runtime: ProximitySearchRuntime,
     ): ProximitySearchResultRecord =
         native.searchWithRuntime(map.native, ownedSearchRequest(request), runtime.native)
+    fun searchCancellable(
+        map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime? = null,
+        cancellation: ProximityCancellationToken,
+    ): ProximitySearchResultRecord = native.searchCancellable(
+        map.native, ownedSearchRequest(request), runtime?.native, cancellation.native,
+    )
+    suspend fun searchAsync(
+        map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime? = null,
+        cancellation: ProximityCancellationToken? = null,
+    ): ProximitySearchResultRecord {
+        val owned = ownedSearchRequest(request)
+        return cooperativeSearch(cancellation) { token ->
+            searchCancellable(map, owned, runtime, token)
+        }
+    }
     fun proveSearch(
         map: ProximityMap,
         request: ProximitySearchRequestRecord,
@@ -600,6 +666,25 @@ class ProductQuantizer(internal val native: BindingProductQuantizer) : AutoClose
         runtime: ProximitySearchRuntime,
     ): ProximitySearchResultRecord =
         native.searchWithRuntime(map.native, ownedSearchRequest(request), runtime.native)
+    fun searchCancellable(
+        map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime? = null,
+        cancellation: ProximityCancellationToken,
+    ): ProximitySearchResultRecord = native.searchCancellable(
+        map.native, ownedSearchRequest(request), runtime?.native, cancellation.native,
+    )
+    suspend fun searchAsync(
+        map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime? = null,
+        cancellation: ProximityCancellationToken? = null,
+    ): ProximitySearchResultRecord {
+        val owned = ownedSearchRequest(request)
+        return cooperativeSearch(cancellation) { token ->
+            searchCancellable(map, owned, runtime, token)
+        }
+    }
     fun proveSearch(
         map: ProximityMap,
         request: ProximitySearchRequestRecord,
@@ -625,6 +710,25 @@ class CompositeAccelerator(internal val native: BindingCompositeAccelerator) : A
         runtime: ProximitySearchRuntime,
     ): ProximitySearchResultRecord =
         native.searchWithRuntime(map.native, ownedSearchRequest(request), runtime.native)
+    fun searchCancellable(
+        map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime? = null,
+        cancellation: ProximityCancellationToken,
+    ): ProximitySearchResultRecord = native.searchCancellable(
+        map.native, ownedSearchRequest(request), runtime?.native, cancellation.native,
+    )
+    suspend fun searchAsync(
+        map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime? = null,
+        cancellation: ProximityCancellationToken? = null,
+    ): ProximitySearchResultRecord {
+        val owned = ownedSearchRequest(request)
+        return cooperativeSearch(cancellation) { token ->
+            searchCancellable(map, owned, runtime, token)
+        }
+    }
     fun proveSearch(
         map: ProximityMap,
         request: ProximitySearchRequestRecord,
@@ -645,6 +749,25 @@ class AcceleratorCatalog(internal val native: BindingAcceleratorCatalog) : AutoC
         runtime: ProximitySearchRuntime,
     ): ProximitySearchResultRecord =
         native.searchWithRuntime(map.native, ownedSearchRequest(request), runtime.native)
+    fun searchCancellable(
+        map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime? = null,
+        cancellation: ProximityCancellationToken,
+    ): ProximitySearchResultRecord = native.searchCancellable(
+        map.native, ownedSearchRequest(request), runtime?.native, cancellation.native,
+    )
+    suspend fun searchAsync(
+        map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime? = null,
+        cancellation: ProximityCancellationToken? = null,
+    ): ProximitySearchResultRecord {
+        val owned = ownedSearchRequest(request)
+        return cooperativeSearch(cancellation) { token ->
+            searchCancellable(map, owned, runtime, token)
+        }
+    }
     fun proveSearch(
         map: ProximityMap,
         request: ProximitySearchRequestRecord,
@@ -663,6 +786,23 @@ class ProximityReadSession(internal val native: BindingProximityReadSession) : A
         runtime: ProximitySearchRuntime,
     ): ProximitySearchResultRecord =
         native.searchWithRuntime(ownedSearchRequest(request), runtime.native)
+    fun searchCancellable(
+        request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime? = null,
+        cancellation: ProximityCancellationToken,
+    ): ProximitySearchResultRecord = native.searchCancellable(
+        ownedSearchRequest(request), runtime?.native, cancellation.native,
+    )
+    suspend fun searchAsync(
+        request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime? = null,
+        cancellation: ProximityCancellationToken? = null,
+    ): ProximitySearchResultRecord {
+        val owned = ownedSearchRequest(request)
+        return cooperativeSearch(cancellation) { token ->
+            searchCancellable(owned, runtime, token)
+        }
+    }
     fun searchExact(query: List<Float>, k: ULong): ProximitySearchResultRecord =
         search(exactProximitySearchRequest(query.toList(), k))
     fun scanRecords(visitor: (ProximityRecordRecord) -> Boolean): ULong =

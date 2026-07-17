@@ -181,6 +181,33 @@ public final class ProximitySearchRuntime: @unchecked Sendable {
     }
 }
 
+public final class ProximityCancellationToken: @unchecked Sendable {
+    let native = BindingProximityCancellationToken()
+    private var closed = false
+
+    public init() {}
+
+    public var isCancelled: Bool {
+        get throws { try open { native.isCancelled() } }
+    }
+
+    public func cancel() {
+        guard !closed else { return }
+        native.cancel()
+    }
+
+    public func close() { closed = true }
+
+    func checkedNative() throws -> BindingProximityCancellationToken {
+        try open { native }
+    }
+
+    private func open<R>(_ body: () throws -> R) throws -> R {
+        if closed { throw PortableAPIError.closed("proximity cancellation token") }
+        return try body()
+    }
+}
+
 public enum PortableAPIError: Error, Equatable {
     case closed(String)
     case packedPage(String)
@@ -1064,6 +1091,32 @@ public final class ProximityMap: @unchecked Sendable {
             request: ownedSearchRequest(request), runtime: runtime.checkedNative()
         )
     }
+    public func searchCancellable(
+        _ request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime? = nil,
+        cancellation: ProximityCancellationToken
+    ) throws -> ProximitySearchResultRecord {
+        try native.searchCancellable(
+            request: ownedSearchRequest(request),
+            runtime: try runtime?.checkedNative(),
+            cancellation: cancellation.checkedNative()
+        )
+    }
+    public func searchAsync(
+        _ request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime? = nil,
+        cancellation: ProximityCancellationToken? = nil
+    ) -> Task<ProximitySearchResultRecord, Error> {
+        let owned = ownedSearchRequest(request)
+        let token = cancellation ?? ProximityCancellationToken()
+        return Task {
+            try await withTaskCancellationHandler {
+                try searchCancellable(owned, runtime: runtime, cancellation: token)
+            } onCancel: {
+                token.cancel()
+            }
+        }
+    }
     public func searchExact(_ query: [Float], k: UInt64) throws -> ProximitySearchResultRecord {
         let session = try read()
         defer { session.close() }
@@ -1160,6 +1213,34 @@ public final class HnswIndex: @unchecked Sendable {
             map: map.native, request: ownedSearchRequest(request), runtime: runtime.checkedNative()
         )
     }
+    public func searchCancellable(
+        _ map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime? = nil,
+        cancellation: ProximityCancellationToken
+    ) throws -> ProximitySearchResultRecord {
+        guard !closed else { throw PortableAPIError.closed("HNSW index") }
+        return try native.searchCancellable(
+            map: map.native,
+            request: ownedSearchRequest(request),
+            runtime: try runtime?.checkedNative(),
+            cancellation: cancellation.checkedNative()
+        )
+    }
+    public func searchAsync(
+        _ map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime? = nil,
+        cancellation: ProximityCancellationToken? = nil
+    ) -> Task<ProximitySearchResultRecord, Error> {
+        let owned = ownedSearchRequest(request)
+        let token = cancellation ?? ProximityCancellationToken()
+        return Task {
+            try await withTaskCancellationHandler {
+                try searchCancellable(map, request: owned, runtime: runtime, cancellation: token)
+            } onCancel: { token.cancel() }
+        }
+    }
     public func proveSearch(
         _ map: ProximityMap,
         request: ProximitySearchRequestRecord,
@@ -1215,6 +1296,34 @@ public final class ProductQuantizer: @unchecked Sendable {
             map: map.native, request: ownedSearchRequest(request), runtime: runtime.checkedNative()
         )
     }
+    public func searchCancellable(
+        _ map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime? = nil,
+        cancellation: ProximityCancellationToken
+    ) throws -> ProximitySearchResultRecord {
+        guard !closed else { throw PortableAPIError.closed("product quantizer") }
+        return try native.searchCancellable(
+            map: map.native,
+            request: ownedSearchRequest(request),
+            runtime: try runtime?.checkedNative(),
+            cancellation: cancellation.checkedNative()
+        )
+    }
+    public func searchAsync(
+        _ map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime? = nil,
+        cancellation: ProximityCancellationToken? = nil
+    ) -> Task<ProximitySearchResultRecord, Error> {
+        let owned = ownedSearchRequest(request)
+        let token = cancellation ?? ProximityCancellationToken()
+        return Task {
+            try await withTaskCancellationHandler {
+                try searchCancellable(map, request: owned, runtime: runtime, cancellation: token)
+            } onCancel: { token.cancel() }
+        }
+    }
     public func proveSearch(
         _ map: ProximityMap,
         request: ProximitySearchRequestRecord,
@@ -1266,6 +1375,34 @@ public final class CompositeAccelerator: @unchecked Sendable {
             map: map.native, request: ownedSearchRequest(request), runtime: runtime.checkedNative()
         )
     }
+    public func searchCancellable(
+        _ map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime? = nil,
+        cancellation: ProximityCancellationToken
+    ) throws -> ProximitySearchResultRecord {
+        guard !closed else { throw PortableAPIError.closed("composite accelerator") }
+        return try native.searchCancellable(
+            map: map.native,
+            request: ownedSearchRequest(request),
+            runtime: try runtime?.checkedNative(),
+            cancellation: cancellation.checkedNative()
+        )
+    }
+    public func searchAsync(
+        _ map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime? = nil,
+        cancellation: ProximityCancellationToken? = nil
+    ) -> Task<ProximitySearchResultRecord, Error> {
+        let owned = ownedSearchRequest(request)
+        let token = cancellation ?? ProximityCancellationToken()
+        return Task {
+            try await withTaskCancellationHandler {
+                try searchCancellable(map, request: owned, runtime: runtime, cancellation: token)
+            } onCancel: { token.cancel() }
+        }
+    }
     public func proveSearch(
         _ map: ProximityMap,
         request: ProximitySearchRequestRecord,
@@ -1303,6 +1440,34 @@ public final class AcceleratorCatalog: @unchecked Sendable {
         return try native.searchWithRuntime(
             map: map.native, request: ownedSearchRequest(request), runtime: runtime.checkedNative()
         )
+    }
+    public func searchCancellable(
+        _ map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime? = nil,
+        cancellation: ProximityCancellationToken
+    ) throws -> ProximitySearchResultRecord {
+        guard !closed else { throw PortableAPIError.closed("accelerator catalog") }
+        return try native.searchCancellable(
+            map: map.native,
+            request: ownedSearchRequest(request),
+            runtime: try runtime?.checkedNative(),
+            cancellation: cancellation.checkedNative()
+        )
+    }
+    public func searchAsync(
+        _ map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime? = nil,
+        cancellation: ProximityCancellationToken? = nil
+    ) -> Task<ProximitySearchResultRecord, Error> {
+        let owned = ownedSearchRequest(request)
+        let token = cancellation ?? ProximityCancellationToken()
+        return Task {
+            try await withTaskCancellationHandler {
+                try searchCancellable(map, request: owned, runtime: runtime, cancellation: token)
+            } onCancel: { token.cancel() }
+        }
     }
     public func proveSearch(
         _ map: ProximityMap,
@@ -1393,6 +1558,31 @@ public final class ProximityReadSession: @unchecked Sendable {
         return try native.searchWithRuntime(
             request: ownedSearchRequest(request), runtime: runtime.checkedNative()
         )
+    }
+    public func searchCancellable(
+        _ request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime? = nil,
+        cancellation: ProximityCancellationToken
+    ) throws -> ProximitySearchResultRecord {
+        guard !closed else { throw PortableAPIError.closed("proximity read session") }
+        return try native.searchCancellable(
+            request: ownedSearchRequest(request),
+            runtime: try runtime?.checkedNative(),
+            cancellation: cancellation.checkedNative()
+        )
+    }
+    public func searchAsync(
+        _ request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime? = nil,
+        cancellation: ProximityCancellationToken? = nil
+    ) -> Task<ProximitySearchResultRecord, Error> {
+        let owned = ownedSearchRequest(request)
+        let token = cancellation ?? ProximityCancellationToken()
+        return Task {
+            try await withTaskCancellationHandler {
+                try searchCancellable(owned, runtime: runtime, cancellation: token)
+            } onCancel: { token.cancel() }
+        }
     }
 
     public func scanRecords(

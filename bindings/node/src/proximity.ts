@@ -1,4 +1,4 @@
-import { nativePromise, ownedBytes, scopedBytes, type ViewScope } from "./packed.ts";
+import { abortError, nativePromise, ownedBytes, scopedBytes, type ViewScope } from "./packed.ts";
 
 export interface ProximityRecord {
   key: Uint8Array;
@@ -401,6 +401,7 @@ interface NativeHnswIndex {
   isCanonical(): boolean;
   search(map: NativeProximityMap, request: NativeSearchRequest): NativeSearchResult;
   searchWithRuntime(map: NativeProximityMap, request: NativeSearchRequest, runtime: NativeProximitySearchRuntime): NativeSearchResult;
+  searchCancellable(map: NativeProximityMap, request: NativeSearchRequest, runtime: NativeProximitySearchRuntime | undefined, cancellation: NativeProximityCancellationToken): Promise<NativeSearchResult>;
   proveSearch(map: NativeProximityMap, request: NativeSearchRequest): NativeProximitySearchProof;
 }
 
@@ -439,6 +440,7 @@ interface NativeProductQuantizer {
   quality(): ProductQuantizationQuality;
   search(map: NativeProximityMap, request: NativeSearchRequest): NativeSearchResult;
   searchWithRuntime(map: NativeProximityMap, request: NativeSearchRequest, runtime: NativeProximitySearchRuntime): NativeSearchResult;
+  searchCancellable(map: NativeProximityMap, request: NativeSearchRequest, runtime: NativeProximitySearchRuntime | undefined, cancellation: NativeProximityCancellationToken): Promise<NativeSearchResult>;
   proveSearch(map: NativeProximityMap, request: NativeSearchRequest): NativeProximitySearchProof;
 }
 
@@ -499,6 +501,7 @@ interface NativeCompositeAccelerator {
   buildStats(): NativeCompositeBuildStats;
   search(map: NativeProximityMap, request: NativeSearchRequest): NativeSearchResult;
   searchWithRuntime(map: NativeProximityMap, request: NativeSearchRequest, runtime: NativeProximitySearchRuntime): NativeSearchResult;
+  searchCancellable(map: NativeProximityMap, request: NativeSearchRequest, runtime: NativeProximitySearchRuntime | undefined, cancellation: NativeProximityCancellationToken): Promise<NativeSearchResult>;
   proveSearch(map: NativeProximityMap, request: NativeSearchRequest): NativeProximitySearchProof;
 }
 interface NativeAcceleratorCatalog {
@@ -507,6 +510,7 @@ interface NativeAcceleratorCatalog {
   entries(): Array<{ kind: AcceleratorCatalogEntry["kind"]; configurationFingerprint: Uint8Array; manifest: Uint8Array }>;
   search(map: NativeProximityMap, request: NativeSearchRequest): NativeSearchResult;
   searchWithRuntime(map: NativeProximityMap, request: NativeSearchRequest, runtime: NativeProximitySearchRuntime): NativeSearchResult;
+  searchCancellable(map: NativeProximityMap, request: NativeSearchRequest, runtime: NativeProximitySearchRuntime | undefined, cancellation: NativeProximityCancellationToken): Promise<NativeSearchResult>;
   proveSearch(map: NativeProximityMap, request: NativeSearchRequest): NativeProximitySearchProof;
 }
 
@@ -557,6 +561,11 @@ export interface NativeProximitySearchRuntime {
   clear(): void;
 }
 
+export interface NativeProximityCancellationToken {
+  cancel(): void;
+  isCancelled(): boolean;
+}
+
 interface NativeProximityMap {
   buildHnsw(config?: NativeHnswConfig, limits?: NativeHnswBuildLimits): NativeHnswBuildResult;
   loadHnsw(manifest: Uint8Array): NativeHnswIndex;
@@ -572,6 +581,12 @@ interface NativeProximityMap {
   read(): NativeProximityReadSession;
   search(request: NativeSearchRequest): NativeSearchResult;
   searchWithRuntime(request: NativeSearchRequest, runtime: NativeProximitySearchRuntime): NativeSearchResult;
+  cancellationToken(): NativeProximityCancellationToken;
+  searchCancellable(
+    request: NativeSearchRequest,
+    runtime: NativeProximitySearchRuntime | undefined,
+    cancellation: NativeProximityCancellationToken,
+  ): Promise<NativeSearchResult>;
   count(): string;
   config(): NativeProximityConfig;
   get(key: Uint8Array): { vector: number[]; value: Uint8Array } | null;
@@ -588,6 +603,8 @@ interface NativeProximityMap {
 interface NativeProximityReadSession {
   search(request: NativeSearchRequest): NativeSearchResult;
   searchWithRuntime(request: NativeSearchRequest, runtime: NativeProximitySearchRuntime): NativeSearchResult;
+  cancellationToken(): NativeProximityCancellationToken;
+  searchCancellable(request: NativeSearchRequest, runtime: NativeProximitySearchRuntime | undefined, cancellation: NativeProximityCancellationToken): Promise<NativeSearchResult>;
   get(key: Uint8Array): { vector: number[]; value: Uint8Array } | null;
   contains(key: Uint8Array): boolean;
   scanRecords(visitor: (record: { key: Uint8Array; vector: Float32Array; value: Uint8Array }) => boolean): string;
@@ -957,6 +974,41 @@ export class ProximitySearchRuntime implements Disposable {
   [Symbol.dispose](): void { this.close(); }
 }
 
+export class ProximityCancellationToken implements Disposable {
+  #native?: NativeProximityCancellationToken;
+  constructor(native: NativeProximityCancellationToken) { this.#native = native; }
+  nativeHandle(): NativeProximityCancellationToken {
+    if (this.#native == null) throw new Error("proximity cancellation token is closed");
+    return this.#native;
+  }
+  cancel(): void { this.nativeHandle().cancel(); }
+  get isCancelled(): boolean { return this.nativeHandle().isCancelled(); }
+  close(): void { this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+async function cooperativeNativeSearch(
+  request: SearchRequest,
+  cancellation: ProximityCancellationToken,
+  invoke: (owned: NativeSearchRequest, token: NativeProximityCancellationToken) => Promise<NativeSearchResult>,
+): Promise<SearchResult> {
+  const owned = ownSearchRequest(request);
+  const nativeCancellation = cancellation.nativeHandle();
+  if (request.signal?.aborted) {
+    cancellation.cancel();
+    throw abortError();
+  }
+  const onAbort = () => cancellation.cancel();
+  request.signal?.addEventListener("abort", onAbort, { once: true });
+  try {
+    const result = searchResult(await invoke(owned, nativeCancellation));
+    if (request.signal?.aborted) throw abortError();
+    return result;
+  } finally {
+    request.signal?.removeEventListener("abort", onAbort);
+  }
+}
+
 export class ProximityMap implements Disposable {
   #native?: NativeProximityMap;
   constructor(native: NativeProximityMap) { this.#native = native; }
@@ -964,18 +1016,31 @@ export class ProximityMap implements Disposable {
     if (this.#native == null) throw new Error("proximity map is closed");
     return this.#native;
   }
+  cancellationToken(): ProximityCancellationToken {
+    return new ProximityCancellationToken(this.nativeHandle().cancellationToken());
+  }
   read(): ProximityReadSession { return new ProximityReadSession(this.nativeHandle().read()); }
-  search(request: SearchRequest): Promise<SearchResult> { return this.read().search(request); }
+  search(request: SearchRequest): Promise<SearchResult> {
+    const cancellation = new ProximityCancellationToken(this.nativeHandle().cancellationToken());
+    return this.searchCancellable(request, cancellation).finally(() => cancellation.close());
+  }
   searchWithRuntime(
     request: SearchRequest,
     runtime: ProximitySearchRuntime,
   ): Promise<SearchResult> {
+    const cancellation = new ProximityCancellationToken(this.nativeHandle().cancellationToken());
+    return this.searchCancellable(request, cancellation, runtime).finally(() => cancellation.close());
+  }
+  async searchCancellable(
+    request: SearchRequest,
+    cancellation: ProximityCancellationToken,
+    runtime?: ProximitySearchRuntime,
+  ): Promise<SearchResult> {
     const native = this.nativeHandle();
-    const owned = ownSearchRequest(request);
-    const nativeRuntime = runtime.nativeHandle();
-    return nativePromise(
-      request.signal,
-      () => searchResult(native.searchWithRuntime(owned, nativeRuntime)),
+    const nativeRuntime = runtime?.nativeHandle();
+    return cooperativeNativeSearch(
+      request, cancellation,
+      (owned, token) => native.searchCancellable(owned, nativeRuntime, token),
     );
   }
   get(key: Uint8Array): { vector: Float32Array; value: Uint8Array } | undefined {
@@ -1167,21 +1232,26 @@ export class HnswIndex implements Disposable {
   }
   isCanonical(): boolean { return this.#open().isCanonical(); }
   search(map: ProximityMap, request: SearchRequest): Promise<SearchResult> {
-    const native = this.#open();
-    const nativeMap = map.nativeHandle();
-    const owned = ownSearchRequest(request);
-    return nativePromise(request.signal, () => searchResult(native.search(nativeMap, owned)));
+    const cancellation = map.cancellationToken();
+    return this.searchCancellable(map, request, cancellation).finally(() => cancellation.close());
   }
   searchWithRuntime(
     map: ProximityMap, request: SearchRequest, runtime: ProximitySearchRuntime,
   ): Promise<SearchResult> {
+    const cancellation = map.cancellationToken();
+    return this.searchCancellable(map, request, cancellation, runtime)
+      .finally(() => cancellation.close());
+  }
+  searchCancellable(
+    map: ProximityMap, request: SearchRequest, cancellation: ProximityCancellationToken,
+    runtime?: ProximitySearchRuntime,
+  ): Promise<SearchResult> {
     const native = this.#open();
     const nativeMap = map.nativeHandle();
-    const owned = ownSearchRequest(request);
-    const nativeRuntime = runtime.nativeHandle();
-    return nativePromise(
-      request.signal,
-      () => searchResult(native.searchWithRuntime(nativeMap, owned, nativeRuntime)),
+    const nativeRuntime = runtime?.nativeHandle();
+    return cooperativeNativeSearch(
+      request, cancellation,
+      (owned, token) => native.searchCancellable(nativeMap, owned, nativeRuntime, token),
     );
   }
   proveSearch(map: ProximityMap, request: SearchRequest): ProximitySearchProof {
@@ -1206,21 +1276,26 @@ export class ProductQuantizer implements Disposable {
   config(): ProductQuantizationConfig { return pqConfig(this.#open().config()); }
   quality(): ProductQuantizationQuality { return this.#open().quality(); }
   search(map: ProximityMap, request: SearchRequest): Promise<SearchResult> {
-    const native = this.#open();
-    const nativeMap = map.nativeHandle();
-    const owned = ownSearchRequest(request);
-    return nativePromise(request.signal, () => searchResult(native.search(nativeMap, owned)));
+    const cancellation = map.cancellationToken();
+    return this.searchCancellable(map, request, cancellation).finally(() => cancellation.close());
   }
   searchWithRuntime(
     map: ProximityMap, request: SearchRequest, runtime: ProximitySearchRuntime,
   ): Promise<SearchResult> {
+    const cancellation = map.cancellationToken();
+    return this.searchCancellable(map, request, cancellation, runtime)
+      .finally(() => cancellation.close());
+  }
+  searchCancellable(
+    map: ProximityMap, request: SearchRequest, cancellation: ProximityCancellationToken,
+    runtime?: ProximitySearchRuntime,
+  ): Promise<SearchResult> {
     const native = this.#open();
     const nativeMap = map.nativeHandle();
-    const owned = ownSearchRequest(request);
-    const nativeRuntime = runtime.nativeHandle();
-    return nativePromise(
-      request.signal,
-      () => searchResult(native.searchWithRuntime(nativeMap, owned, nativeRuntime)),
+    const nativeRuntime = runtime?.nativeHandle();
+    return cooperativeNativeSearch(
+      request, cancellation,
+      (owned, token) => native.searchCancellable(nativeMap, owned, nativeRuntime, token),
     );
   }
   proveSearch(map: ProximityMap, request: SearchRequest): ProximitySearchProof {
@@ -1248,21 +1323,26 @@ export class CompositeAccelerator implements Disposable {
   config(): CompositeAcceleratorConfig { return compositeConfig(this.nativeHandle().config()); }
   buildStats(): CompositeBuildStats { return compositeBuildStats(this.nativeHandle().buildStats()); }
   search(map: ProximityMap, request: SearchRequest): Promise<SearchResult> {
-    const native = this.nativeHandle();
-    const nativeMap = map.nativeHandle();
-    const owned = ownSearchRequest(request);
-    return nativePromise(request.signal, () => searchResult(native.search(nativeMap, owned)));
+    const cancellation = map.cancellationToken();
+    return this.searchCancellable(map, request, cancellation).finally(() => cancellation.close());
   }
   searchWithRuntime(
     map: ProximityMap, request: SearchRequest, runtime: ProximitySearchRuntime,
   ): Promise<SearchResult> {
+    const cancellation = map.cancellationToken();
+    return this.searchCancellable(map, request, cancellation, runtime)
+      .finally(() => cancellation.close());
+  }
+  searchCancellable(
+    map: ProximityMap, request: SearchRequest, cancellation: ProximityCancellationToken,
+    runtime?: ProximitySearchRuntime,
+  ): Promise<SearchResult> {
     const native = this.nativeHandle();
     const nativeMap = map.nativeHandle();
-    const owned = ownSearchRequest(request);
-    const nativeRuntime = runtime.nativeHandle();
-    return nativePromise(
-      request.signal,
-      () => searchResult(native.searchWithRuntime(nativeMap, owned, nativeRuntime)),
+    const nativeRuntime = runtime?.nativeHandle();
+    return cooperativeNativeSearch(
+      request, cancellation,
+      (owned, token) => native.searchCancellable(nativeMap, owned, nativeRuntime, token),
     );
   }
   proveSearch(map: ProximityMap, request: SearchRequest): ProximitySearchProof {
@@ -1291,21 +1371,26 @@ export class AcceleratorCatalog implements Disposable {
     }));
   }
   search(map: ProximityMap, request: SearchRequest): Promise<SearchResult> {
-    const native = this.#open();
-    const nativeMap = map.nativeHandle();
-    const owned = ownSearchRequest(request);
-    return nativePromise(request.signal, () => searchResult(native.search(nativeMap, owned)));
+    const cancellation = map.cancellationToken();
+    return this.searchCancellable(map, request, cancellation).finally(() => cancellation.close());
   }
   searchWithRuntime(
     map: ProximityMap, request: SearchRequest, runtime: ProximitySearchRuntime,
   ): Promise<SearchResult> {
+    const cancellation = map.cancellationToken();
+    return this.searchCancellable(map, request, cancellation, runtime)
+      .finally(() => cancellation.close());
+  }
+  searchCancellable(
+    map: ProximityMap, request: SearchRequest, cancellation: ProximityCancellationToken,
+    runtime?: ProximitySearchRuntime,
+  ): Promise<SearchResult> {
     const native = this.#open();
     const nativeMap = map.nativeHandle();
-    const owned = ownSearchRequest(request);
-    const nativeRuntime = runtime.nativeHandle();
-    return nativePromise(
-      request.signal,
-      () => searchResult(native.searchWithRuntime(nativeMap, owned, nativeRuntime)),
+    const nativeRuntime = runtime?.nativeHandle();
+    return cooperativeNativeSearch(
+      request, cancellation,
+      (owned, token) => native.searchCancellable(nativeMap, owned, nativeRuntime, token),
     );
   }
   proveSearch(map: ProximityMap, request: SearchRequest): ProximitySearchProof {
@@ -1372,6 +1457,10 @@ export class ProximitySearchProof implements Disposable {
 export class ProximityReadSession implements Disposable {
   #native?: NativeProximityReadSession;
   constructor(native: NativeProximityReadSession) { this.#native = native; }
+  cancellationToken(): ProximityCancellationToken {
+    if (this.#native == null) throw new Error("proximity session is closed");
+    return new ProximityCancellationToken(this.#native.cancellationToken());
+  }
   get(key: Uint8Array): { vector: Float32Array; value: Uint8Array } | undefined {
     if (this.#native == null) throw new Error("proximity session is closed");
     const record = this.#native.get(ownedBytes(key));
@@ -1414,21 +1503,28 @@ export class ProximityReadSession implements Disposable {
   }
   search(request: SearchRequest): Promise<SearchResult> {
     if (this.#native == null) return Promise.reject(new Error("proximity session is closed"));
-    const native = this.#native;
-    const owned = ownSearchRequest(request);
-    return nativePromise(request.signal, () => searchResult(native.search(owned)));
+    const cancellation = this.cancellationToken();
+    return this.searchCancellable(request, cancellation).finally(() => cancellation.close());
   }
   searchWithRuntime(
     request: SearchRequest,
     runtime: ProximitySearchRuntime,
   ): Promise<SearchResult> {
+    const cancellation = this.cancellationToken();
+    return this.searchCancellable(request, cancellation, runtime)
+      .finally(() => cancellation.close());
+  }
+  searchCancellable(
+    request: SearchRequest,
+    cancellation: ProximityCancellationToken,
+    runtime?: ProximitySearchRuntime,
+  ): Promise<SearchResult> {
     if (this.#native == null) return Promise.reject(new Error("proximity session is closed"));
     const native = this.#native;
-    const owned = ownSearchRequest(request);
-    const nativeRuntime = runtime.nativeHandle();
-    return nativePromise(
-      request.signal,
-      () => searchResult(native.searchWithRuntime(owned, nativeRuntime)),
+    const nativeRuntime = runtime?.nativeHandle();
+    return cooperativeNativeSearch(
+      request, cancellation,
+      (owned, token) => native.searchCancellable(owned, nativeRuntime, token),
     );
   }
   fastHandle(): bigint {

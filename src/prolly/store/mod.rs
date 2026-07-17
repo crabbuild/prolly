@@ -580,6 +580,21 @@ impl<S: Store> AsyncStore for SyncStoreAsAsync<S> {
         self.inner.get(key)
     }
 
+    async fn get_shared(&self, key: &[u8]) -> Result<Option<Arc<[u8]>>, Self::Error> {
+        self.inner.get_shared(key)
+    }
+
+    async fn batch_get_shared_ordered_unique(
+        &self,
+        keys: &[&[u8]],
+    ) -> Result<SharedReadBatch, Self::Error> {
+        self.inner.batch_get_shared_ordered_unique(keys)
+    }
+
+    fn has_native_shared_reads(&self) -> bool {
+        self.inner.has_native_shared_reads()
+    }
+
     async fn put(&self, key: &[u8], value: &[u8]) -> Result<(), Self::Error> {
         self.inner.put(key, value)
     }
