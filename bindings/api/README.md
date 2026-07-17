@@ -92,3 +92,33 @@ gate.
 Public enum variants and public trait items inherit reachability from their
 public owner even though rustdoc commonly records their visibility as
 `default`. The inventory includes them explicitly.
+
+## Idiomatic equivalents
+
+`idiomatic-equivalents.json` records shared semantic and performance contracts
+for Rust abstractions that cannot be copied literally into every host language.
+The reviewed families cover generic codecs, iterators and sequences, borrowed
+views, store traits, typestate builders, and compile-time marker or associated
+types.
+
+The catalog does not synthesize manifest mappings or mark operations complete.
+An `idiomatic` or `rust-language-only` manifest row passes release validation
+only when it:
+
+- references a valid catalog equivalence with the same classification;
+- maps a concrete host symbol or pattern in all eight languages;
+- is explicitly reviewed with a non-empty rationale and documentation link;
+- cites test evidence shared with the equivalence contract.
+
+A `platform-excluded` row needs the same review metadata and may exclude only
+WASM. Each exclusion reason must be non-empty. Native bindings are required to
+provide the complete portable application surface; browser-WASM exclusions are
+limited to genuine filesystem, SQLite, OS-thread blocking, or native-thread
+constraints described above.
+
+Run `python3 scripts/binding_api_inventory.py review-abstractions` after a
+rustdoc refresh to apply the exact, checked-in owner/kind review rules. This
+command adds classification, equivalence, rationale, and documentation metadata
+only. It deliberately preserves `planned`, empty language mappings, and empty
+test evidence until the corresponding host API and conformance coverage have
+been verified.

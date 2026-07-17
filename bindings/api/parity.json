@@ -568,80 +568,115 @@
     },
     {
       "rust": "prolly::AsyncBlobStore",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "maintenance",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::AsyncBlobStore is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::AsyncBlobStore::Error",
-      "classification": "portable",
+      "classification": "rust-language-only",
       "status": "planned",
       "family": "maintenance",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#marker-and-associated-type"
+      ],
+      "equivalence": "marker-and-associated-type",
+      "rationale": "prolly::AsyncBlobStore::Error is represented by the reviewed marker-and-associated-type host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::AsyncBlobStore::delete_blob",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "maintenance",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::AsyncBlobStore::delete_blob is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::AsyncBlobStore::get_blob",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "maintenance",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::AsyncBlobStore::get_blob is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::AsyncBlobStore::get_blobs_ordered",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "maintenance",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::AsyncBlobStore::get_blobs_ordered is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::AsyncBlobStore::put_blob",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "maintenance",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::AsyncBlobStore::put_blob is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::AsyncBlobStore::read_parallelism",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "maintenance",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::AsyncBlobStore::read_parallelism is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::AsyncCompositeAccelerator",
@@ -931,91 +966,131 @@
     },
     {
       "rust": "prolly::AsyncManifestStore",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::AsyncManifestStore is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::AsyncManifestStore::Error",
-      "classification": "portable",
+      "classification": "rust-language-only",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#marker-and-associated-type"
+      ],
+      "equivalence": "marker-and-associated-type",
+      "rationale": "prolly::AsyncManifestStore::Error is represented by the reviewed marker-and-associated-type host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::AsyncManifestStore::compare_and_swap_root",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::AsyncManifestStore::compare_and_swap_root is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::AsyncManifestStore::delete_root",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::AsyncManifestStore::delete_root is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::AsyncManifestStore::get_root",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::AsyncManifestStore::get_root is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::AsyncManifestStore::put_root",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::AsyncManifestStore::put_root is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::AsyncManifestStoreScan",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::AsyncManifestStoreScan is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::AsyncManifestStoreScan::list_roots",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::AsyncManifestStoreScan::list_roots is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::AsyncMapChangeSubscription",
@@ -2614,14 +2689,19 @@
     },
     {
       "rust": "prolly::AsyncRangePage",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#record-alias"
+      ],
+      "equivalence": "record-alias",
+      "rationale": "prolly::AsyncRangePage is represented by the reviewed record-alias host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::AsyncReadSession",
@@ -2768,14 +2848,19 @@
     },
     {
       "rust": "prolly::AsyncReversePage",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#record-alias"
+      ],
+      "equivalence": "record-alias",
+      "rationale": "prolly::AsyncReversePage is represented by the reviewed record-alias host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::AsyncSearchControl",
@@ -2823,212 +2908,307 @@
     },
     {
       "rust": "prolly::AsyncStore",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::AsyncStore is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::AsyncStore::Error",
-      "classification": "portable",
+      "classification": "rust-language-only",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#marker-and-associated-type"
+      ],
+      "equivalence": "marker-and-associated-type",
+      "rationale": "prolly::AsyncStore::Error is represented by the reviewed marker-and-associated-type host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::AsyncStore::batch",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::AsyncStore::batch is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::AsyncStore::batch_get",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::AsyncStore::batch_get is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::AsyncStore::batch_get_ordered",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::AsyncStore::batch_get_ordered is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::AsyncStore::batch_get_ordered_unique",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::AsyncStore::batch_get_ordered_unique is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::AsyncStore::batch_get_shared_ordered_unique",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::AsyncStore::batch_get_shared_ordered_unique is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::AsyncStore::batch_put",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::AsyncStore::batch_put is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::AsyncStore::batch_put_with_hint",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::AsyncStore::batch_put_with_hint is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::AsyncStore::delete",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::AsyncStore::delete is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::AsyncStore::get",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::AsyncStore::get is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::AsyncStore::get_hint",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::AsyncStore::get_hint is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::AsyncStore::get_shared",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::AsyncStore::get_shared is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::AsyncStore::has_native_shared_reads",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::AsyncStore::has_native_shared_reads is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::AsyncStore::prefers_batch_reads",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::AsyncStore::prefers_batch_reads is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::AsyncStore::put",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::AsyncStore::put is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::AsyncStore::put_hint",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::AsyncStore::put_hint is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::AsyncStore::read_parallelism",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::AsyncStore::read_parallelism is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::AsyncStore::supports_hints",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::AsyncStore::supports_hints is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::AsyncTransactionOverlayStore",
@@ -3043,36 +3223,51 @@
     },
     {
       "rust": "prolly::AsyncTransactionalStore",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::AsyncTransactionalStore is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::AsyncTransactionalStore::commit_transaction",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::AsyncTransactionalStore::commit_transaction is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::AsyncTransactionalStore::supports_transactions",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::AsyncTransactionalStore::supports_transactions is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::AsyncVersionedMap",
@@ -4374,102 +4569,147 @@
     },
     {
       "rust": "prolly::BlobStore",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "maintenance",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::BlobStore is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::BlobStore::Error",
-      "classification": "portable",
+      "classification": "rust-language-only",
       "status": "planned",
       "family": "maintenance",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#marker-and-associated-type"
+      ],
+      "equivalence": "marker-and-associated-type",
+      "rationale": "prolly::BlobStore::Error is represented by the reviewed marker-and-associated-type host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::BlobStore::delete_blob",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "maintenance",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::BlobStore::delete_blob is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::BlobStore::get_blob",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "maintenance",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::BlobStore::get_blob is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::BlobStore::put_blob",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "maintenance",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::BlobStore::put_blob is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::BlobStoreScan",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "maintenance",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::BlobStoreScan is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::BlobStoreScan::list_blob_refs",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "maintenance",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::BlobStoreScan::list_blob_refs is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::BorrowedMergeResolver",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#callback-protocol"
+      ],
+      "equivalence": "callback-protocol",
+      "rationale": "prolly::BorrowedMergeResolver is represented by the reviewed callback-protocol host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::BorrowedMergeResolver::resolve",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#callback-protocol"
+      ],
+      "equivalence": "callback-protocol",
+      "rationale": "prolly::BorrowedMergeResolver::resolve is represented by the reviewed callback-protocol host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::BoundaryDetector",
@@ -5980,25 +6220,35 @@
     },
     {
       "rust": "prolly::ConflictFreeMerger",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#callback-protocol"
+      ],
+      "equivalence": "callback-protocol",
+      "rationale": "prolly::ConflictFreeMerger is represented by the reviewed callback-protocol host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::ConflictFreeMerger::crdt_merge",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#callback-protocol"
+      ],
+      "equivalence": "callback-protocol",
+      "rationale": "prolly::ConflictFreeMerger::crdt_merge is represented by the reviewed callback-protocol host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::ConflictRef",
@@ -7036,14 +7286,19 @@
     },
     {
       "rust": "prolly::CustomMergeFn",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#callback-protocol"
+      ],
+      "equivalence": "callback-protocol",
+      "rationale": "prolly::CustomMergeFn is represented by the reviewed callback-protocol host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::DEFAULT_CHUNKING_FACTOR",
@@ -8455,14 +8710,19 @@
     },
     {
       "rust": "prolly::ExactProximityRecord",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "proximity-map",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#record-alias"
+      ],
+      "equivalence": "record-alias",
+      "rationale": "prolly::ExactProximityRecord is represented by the reviewed record-alias host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::FileBlobStore",
@@ -11359,14 +11619,19 @@
     },
     {
       "rust": "prolly::IndexedSourceRecord",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "indexed-map",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#record-alias"
+      ],
+      "equivalence": "record-alias",
+      "rationale": "prolly::IndexedSourceRecord is represented by the reviewed record-alias host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::IndexedSourceRecordRef",
@@ -11645,36 +11910,51 @@
     },
     {
       "rust": "prolly::KeyCodec",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#generic-codec"
+      ],
+      "equivalence": "generic-codec",
+      "rationale": "prolly::KeyCodec is represented by the reviewed generic-codec host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::KeyCodec::decode_key",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#generic-codec"
+      ],
+      "equivalence": "generic-codec",
+      "rationale": "prolly::KeyCodec::decode_key is represented by the reviewed generic-codec host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::KeyCodec::encode_key",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#generic-codec"
+      ],
+      "equivalence": "generic-codec",
+      "rationale": "prolly::KeyCodec::encode_key is represented by the reviewed generic-codec host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::KeyDecodeError",
@@ -11887,14 +12167,19 @@
     },
     {
       "rust": "prolly::KeyValue",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#record-alias"
+      ],
+      "equivalence": "record-alias",
+      "rationale": "prolly::KeyValue is represented by the reviewed record-alias host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::LargeValueConfig",
@@ -11986,91 +12271,131 @@
     },
     {
       "rust": "prolly::ManifestStore",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::ManifestStore is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::ManifestStore::Error",
-      "classification": "portable",
+      "classification": "rust-language-only",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#marker-and-associated-type"
+      ],
+      "equivalence": "marker-and-associated-type",
+      "rationale": "prolly::ManifestStore::Error is represented by the reviewed marker-and-associated-type host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::ManifestStore::compare_and_swap_root",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::ManifestStore::compare_and_swap_root is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::ManifestStore::delete_root",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::ManifestStore::delete_root is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::ManifestStore::get_root",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::ManifestStore::get_root is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::ManifestStore::put_root",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::ManifestStore::put_root is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::ManifestStoreScan",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::ManifestStoreScan is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::ManifestStoreScan::list_roots",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::ManifestStoreScan::list_roots is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::ManifestUpdate",
@@ -13589,14 +13914,19 @@
     },
     {
       "rust": "prolly::MergePolicyFn",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#callback-protocol"
+      ],
+      "equivalence": "callback-protocol",
+      "rationale": "prolly::MergePolicyFn is represented by the reviewed callback-protocol host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::MergePolicyRegistry",
@@ -15690,36 +16020,51 @@
     },
     {
       "rust": "prolly::NodeStoreScan",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::NodeStoreScan is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::NodeStoreScan::Error",
-      "classification": "portable",
+      "classification": "rust-language-only",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#marker-and-associated-type"
+      ],
+      "equivalence": "marker-and-associated-type",
+      "rationale": "prolly::NodeStoreScan::Error is represented by the reviewed marker-and-associated-type host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::NodeStoreScan::list_node_cids",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::NodeStoreScan::list_node_cids is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::OverflowConfig",
@@ -16152,36 +16497,51 @@
     },
     {
       "rust": "prolly::ParallelRebalancer",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#builder-typestate"
+      ],
+      "equivalence": "builder-typestate",
+      "rationale": "prolly::ParallelRebalancer is represented by the reviewed builder-typestate host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::ParallelRebalancer::parallel_batch",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#builder-typestate"
+      ],
+      "equivalence": "builder-typestate",
+      "rationale": "prolly::ParallelRebalancer::parallel_batch is represented by the reviewed builder-typestate host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::ParallelRebalancer::parallel_rebalance",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#builder-typestate"
+      ],
+      "equivalence": "builder-typestate",
+      "rationale": "prolly::ParallelRebalancer::parallel_rebalance is represented by the reviewed builder-typestate host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::PendingValue",
@@ -16669,14 +17029,19 @@
     },
     {
       "rust": "prolly::ProjectedIndexEntry",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#record-alias"
+      ],
+      "equivalence": "record-alias",
+      "rationale": "prolly::ProjectedIndexEntry is represented by the reviewed record-alias host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::Prolly",
@@ -22026,245 +22391,355 @@
     },
     {
       "rust": "prolly::RemoteStoreBackend",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::RemoteStoreBackend is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::RemoteStoreBackend::Error",
-      "classification": "portable",
+      "classification": "rust-language-only",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#marker-and-associated-type"
+      ],
+      "equivalence": "marker-and-associated-type",
+      "rationale": "prolly::RemoteStoreBackend::Error is represented by the reviewed marker-and-associated-type host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::RemoteStoreBackend::batch_get_nodes_ordered",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::RemoteStoreBackend::batch_get_nodes_ordered is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::RemoteStoreBackend::batch_nodes",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::RemoteStoreBackend::batch_nodes is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::RemoteStoreBackend::batch_put_nodes",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::RemoteStoreBackend::batch_put_nodes is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::RemoteStoreBackend::batch_put_nodes_with_hint",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::RemoteStoreBackend::batch_put_nodes_with_hint is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::RemoteStoreBackend::commit_transaction",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::RemoteStoreBackend::commit_transaction is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::RemoteStoreBackend::compare_and_swap_root_manifest",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::RemoteStoreBackend::compare_and_swap_root_manifest is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::RemoteStoreBackend::delete_node",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::RemoteStoreBackend::delete_node is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::RemoteStoreBackend::delete_root_manifest",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::RemoteStoreBackend::delete_root_manifest is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::RemoteStoreBackend::get_hint",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::RemoteStoreBackend::get_hint is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::RemoteStoreBackend::get_node",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::RemoteStoreBackend::get_node is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::RemoteStoreBackend::get_root_manifest",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::RemoteStoreBackend::get_root_manifest is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::RemoteStoreBackend::list_node_cids",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::RemoteStoreBackend::list_node_cids is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::RemoteStoreBackend::list_root_manifests",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::RemoteStoreBackend::list_root_manifests is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::RemoteStoreBackend::prefers_batch_reads",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::RemoteStoreBackend::prefers_batch_reads is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::RemoteStoreBackend::put_hint",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::RemoteStoreBackend::put_hint is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::RemoteStoreBackend::put_node",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::RemoteStoreBackend::put_node is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::RemoteStoreBackend::put_root_manifest",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::RemoteStoreBackend::put_root_manifest is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::RemoteStoreBackend::read_parallelism",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::RemoteStoreBackend::read_parallelism is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::RemoteStoreBackend::supports_hints",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::RemoteStoreBackend::supports_hints is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::RemoteStoreBackend::supports_transactions",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::RemoteStoreBackend::supports_transactions is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::RemoteStoreConfig",
@@ -22455,14 +22930,19 @@
     },
     {
       "rust": "prolly::Resolver",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#callback-protocol"
+      ],
+      "equivalence": "callback-protocol",
+      "rationale": "prolly::Resolver is represented by the reviewed callback-protocol host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::ReverseCursor",
@@ -24369,25 +24849,35 @@
     },
     {
       "rust": "prolly::SecondaryIndexExtractor",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "indexed-map",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#callback-protocol"
+      ],
+      "equivalence": "callback-protocol",
+      "rationale": "prolly::SecondaryIndexExtractor is represented by the reviewed callback-protocol host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::SecondaryIndexExtractor::extract",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "indexed-map",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#callback-protocol"
+      ],
+      "equivalence": "callback-protocol",
+      "rationale": "prolly::SecondaryIndexExtractor::extract is represented by the reviewed callback-protocol host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::SecondaryIndexLimits",
@@ -26569,201 +27059,291 @@
     },
     {
       "rust": "prolly::Store",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::Store is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::Store::Error",
-      "classification": "portable",
+      "classification": "rust-language-only",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#marker-and-associated-type"
+      ],
+      "equivalence": "marker-and-associated-type",
+      "rationale": "prolly::Store::Error is represented by the reviewed marker-and-associated-type host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::Store::batch",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::Store::batch is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::Store::batch_get",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::Store::batch_get is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::Store::batch_get_ordered",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::Store::batch_get_ordered is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::Store::batch_get_ordered_unique",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::Store::batch_get_ordered_unique is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::Store::batch_get_shared_ordered_unique",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::Store::batch_get_shared_ordered_unique is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::Store::batch_put",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::Store::batch_put is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::Store::batch_put_with_hint",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::Store::batch_put_with_hint is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::Store::delete",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::Store::delete is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::Store::get",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::Store::get is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::Store::get_hint",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::Store::get_hint is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::Store::get_shared",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::Store::get_shared is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::Store::has_native_shared_reads",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::Store::has_native_shared_reads is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::Store::prefers_batch_reads",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::Store::prefers_batch_reads is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::Store::put",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::Store::put is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::Store::put_hint",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::Store::put_hint is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::Store::supports_hints",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::Store::supports_hints is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::StoreCacheNamespace",
@@ -26778,47 +27358,67 @@
     },
     {
       "rust": "prolly::StreamingDiffer",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#iterator-sequence"
+      ],
+      "equivalence": "iterator-sequence",
+      "rationale": "prolly::StreamingDiffer is represented by the reviewed iterator-sequence host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::StreamingDiffer::stream_diff",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#iterator-sequence"
+      ],
+      "equivalence": "iterator-sequence",
+      "rationale": "prolly::StreamingDiffer::stream_diff is represented by the reviewed iterator-sequence host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::StreamingSecondaryIndexExtractor",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "indexed-map",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#callback-protocol"
+      ],
+      "equivalence": "callback-protocol",
+      "rationale": "prolly::StreamingSecondaryIndexExtractor is represented by the reviewed callback-protocol host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::StreamingSecondaryIndexExtractor::extract",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "indexed-map",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#callback-protocol"
+      ],
+      "equivalence": "callback-protocol",
+      "rationale": "prolly::StreamingSecondaryIndexExtractor::extract is represented by the reviewed callback-protocol host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::StringKeyCodec",
@@ -27207,14 +27807,19 @@
     },
     {
       "rust": "prolly::TimestampExtractor",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#callback-protocol"
+      ],
+      "equivalence": "callback-protocol",
+      "rationale": "prolly::TimestampExtractor is represented by the reviewed callback-protocol host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::TimestampedValue",
@@ -27592,36 +28197,51 @@
     },
     {
       "rust": "prolly::TransactionalStore",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::TransactionalStore is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::TransactionalStore::commit_transaction",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::TransactionalStore::commit_transaction is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::TransactionalStore::supports_transactions",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::TransactionalStore::supports_transactions is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::Tree",
@@ -28959,36 +29579,51 @@
     },
     {
       "rust": "prolly::ValueCodec",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#generic-codec"
+      ],
+      "equivalence": "generic-codec",
+      "rationale": "prolly::ValueCodec is represented by the reviewed generic-codec host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::ValueCodec::decode",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#generic-codec"
+      ],
+      "equivalence": "generic-codec",
+      "rationale": "prolly::ValueCodec::decode is represented by the reviewed generic-codec host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::ValueCodec::encode",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#generic-codec"
+      ],
+      "equivalence": "generic-codec",
+      "rationale": "prolly::ValueCodec::encode is represented by the reviewed generic-codec host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::ValueRef",
@@ -31543,14 +32178,19 @@
     },
     {
       "rust": "prolly::chunking",
-      "classification": "portable",
+      "classification": "rust-language-only",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#namespace-module"
+      ],
+      "equivalence": "namespace-module",
+      "rationale": "prolly::chunking is represented by the reviewed namespace-module host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::chunking::entry_count_key_hash",
@@ -31961,14 +32601,19 @@
     },
     {
       "rust": "prolly::remote_conformance",
-      "classification": "portable",
+      "classification": "rust-language-only",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#namespace-module"
+      ],
+      "equivalence": "namespace-module",
+      "rationale": "prolly::remote_conformance is represented by the reviewed namespace-module host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::remote_conformance::assert_remote_backend_contract",
@@ -31994,14 +32639,19 @@
     },
     {
       "rust": "prolly::resolver",
-      "classification": "portable",
+      "classification": "rust-language-only",
       "status": "planned",
       "family": "core",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
       "tests": [],
-      "docs": []
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#namespace-module"
+      ],
+      "equivalence": "namespace-module",
+      "rationale": "prolly::resolver is represented by the reviewed namespace-module host-language contract instead of a literal Rust declaration.",
+      "reviewed": true
     },
     {
       "rust": "prolly::resolver::delete_wins",

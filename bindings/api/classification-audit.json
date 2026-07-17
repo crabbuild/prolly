@@ -6,10 +6,10 @@
   ],
   "summary": {
     "release_complete": 10,
-    "reviewed_incomplete": 0,
+    "reviewed_incomplete": 130,
     "unreviewed_runtime_candidate": 1260,
     "unreviewed_data_model": 1480,
-    "unreviewed_rust_abstraction": 130
+    "unreviewed_rust_abstraction": 0
   },
   "family_counts": {
     "core": 1525,
@@ -997,9 +997,9 @@
       "owner": null,
       "member_kind": null,
       "family": "maintenance",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::AsyncBlobStore::Error",
@@ -1007,9 +1007,9 @@
       "owner": "prolly::AsyncBlobStore",
       "member_kind": "trait-item",
       "family": "maintenance",
-      "classification": "portable",
+      "classification": "rust-language-only",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::AsyncBlobStore::delete_blob",
@@ -1017,9 +1017,9 @@
       "owner": "prolly::AsyncBlobStore",
       "member_kind": "trait-item",
       "family": "maintenance",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::AsyncBlobStore::get_blob",
@@ -1027,9 +1027,9 @@
       "owner": "prolly::AsyncBlobStore",
       "member_kind": "trait-item",
       "family": "maintenance",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::AsyncBlobStore::get_blobs_ordered",
@@ -1037,9 +1037,9 @@
       "owner": "prolly::AsyncBlobStore",
       "member_kind": "trait-item",
       "family": "maintenance",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::AsyncBlobStore::put_blob",
@@ -1047,9 +1047,9 @@
       "owner": "prolly::AsyncBlobStore",
       "member_kind": "trait-item",
       "family": "maintenance",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::AsyncBlobStore::read_parallelism",
@@ -1057,9 +1057,9 @@
       "owner": "prolly::AsyncBlobStore",
       "member_kind": "trait-item",
       "family": "maintenance",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::AsyncCompositeAccelerator",
@@ -1327,9 +1327,9 @@
       "owner": null,
       "member_kind": null,
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::AsyncManifestStore::Error",
@@ -1337,9 +1337,9 @@
       "owner": "prolly::AsyncManifestStore",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "rust-language-only",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::AsyncManifestStore::compare_and_swap_root",
@@ -1347,9 +1347,9 @@
       "owner": "prolly::AsyncManifestStore",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::AsyncManifestStore::delete_root",
@@ -1357,9 +1357,9 @@
       "owner": "prolly::AsyncManifestStore",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::AsyncManifestStore::get_root",
@@ -1367,9 +1367,9 @@
       "owner": "prolly::AsyncManifestStore",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::AsyncManifestStore::put_root",
@@ -1377,9 +1377,9 @@
       "owner": "prolly::AsyncManifestStore",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::AsyncManifestStoreScan",
@@ -1387,9 +1387,9 @@
       "owner": null,
       "member_kind": null,
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::AsyncManifestStoreScan::list_roots",
@@ -1397,9 +1397,9 @@
       "owner": "prolly::AsyncManifestStoreScan",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::AsyncMapChangeSubscription",
@@ -2857,9 +2857,9 @@
       "owner": null,
       "member_kind": null,
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::AsyncReadSession",
@@ -2997,9 +2997,9 @@
       "owner": null,
       "member_kind": null,
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::AsyncSearchControl",
@@ -3047,9 +3047,9 @@
       "owner": null,
       "member_kind": null,
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::AsyncStore::Error",
@@ -3057,9 +3057,9 @@
       "owner": "prolly::AsyncStore",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "rust-language-only",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::AsyncStore::batch",
@@ -3067,9 +3067,9 @@
       "owner": "prolly::AsyncStore",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::AsyncStore::batch_get",
@@ -3077,9 +3077,9 @@
       "owner": "prolly::AsyncStore",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::AsyncStore::batch_get_ordered",
@@ -3087,9 +3087,9 @@
       "owner": "prolly::AsyncStore",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::AsyncStore::batch_get_ordered_unique",
@@ -3097,9 +3097,9 @@
       "owner": "prolly::AsyncStore",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::AsyncStore::batch_get_shared_ordered_unique",
@@ -3107,9 +3107,9 @@
       "owner": "prolly::AsyncStore",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::AsyncStore::batch_put",
@@ -3117,9 +3117,9 @@
       "owner": "prolly::AsyncStore",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::AsyncStore::batch_put_with_hint",
@@ -3127,9 +3127,9 @@
       "owner": "prolly::AsyncStore",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::AsyncStore::delete",
@@ -3137,9 +3137,9 @@
       "owner": "prolly::AsyncStore",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::AsyncStore::get",
@@ -3147,9 +3147,9 @@
       "owner": "prolly::AsyncStore",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::AsyncStore::get_hint",
@@ -3157,9 +3157,9 @@
       "owner": "prolly::AsyncStore",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::AsyncStore::get_shared",
@@ -3167,9 +3167,9 @@
       "owner": "prolly::AsyncStore",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::AsyncStore::has_native_shared_reads",
@@ -3177,9 +3177,9 @@
       "owner": "prolly::AsyncStore",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::AsyncStore::prefers_batch_reads",
@@ -3187,9 +3187,9 @@
       "owner": "prolly::AsyncStore",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::AsyncStore::put",
@@ -3197,9 +3197,9 @@
       "owner": "prolly::AsyncStore",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::AsyncStore::put_hint",
@@ -3207,9 +3207,9 @@
       "owner": "prolly::AsyncStore",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::AsyncStore::read_parallelism",
@@ -3217,9 +3217,9 @@
       "owner": "prolly::AsyncStore",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::AsyncStore::supports_hints",
@@ -3227,9 +3227,9 @@
       "owner": "prolly::AsyncStore",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::AsyncTransactionOverlayStore",
@@ -3247,9 +3247,9 @@
       "owner": null,
       "member_kind": null,
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::AsyncTransactionalStore::commit_transaction",
@@ -3257,9 +3257,9 @@
       "owner": "prolly::AsyncTransactionalStore",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::AsyncTransactionalStore::supports_transactions",
@@ -3267,9 +3267,9 @@
       "owner": "prolly::AsyncTransactionalStore",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::AsyncVersionedMap",
@@ -4457,9 +4457,9 @@
       "owner": null,
       "member_kind": null,
       "family": "maintenance",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::BlobStore::Error",
@@ -4467,9 +4467,9 @@
       "owner": "prolly::BlobStore",
       "member_kind": "trait-item",
       "family": "maintenance",
-      "classification": "portable",
+      "classification": "rust-language-only",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::BlobStore::delete_blob",
@@ -4477,9 +4477,9 @@
       "owner": "prolly::BlobStore",
       "member_kind": "trait-item",
       "family": "maintenance",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::BlobStore::get_blob",
@@ -4487,9 +4487,9 @@
       "owner": "prolly::BlobStore",
       "member_kind": "trait-item",
       "family": "maintenance",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::BlobStore::put_blob",
@@ -4497,9 +4497,9 @@
       "owner": "prolly::BlobStore",
       "member_kind": "trait-item",
       "family": "maintenance",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::BlobStoreScan",
@@ -4507,9 +4507,9 @@
       "owner": null,
       "member_kind": null,
       "family": "maintenance",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::BlobStoreScan::list_blob_refs",
@@ -4517,9 +4517,9 @@
       "owner": "prolly::BlobStoreScan",
       "member_kind": "trait-item",
       "family": "maintenance",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::BorrowedMergeResolver",
@@ -4527,9 +4527,9 @@
       "owner": null,
       "member_kind": null,
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::BorrowedMergeResolver::resolve",
@@ -4537,9 +4537,9 @@
       "owner": "prolly::BorrowedMergeResolver",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::BoundaryDetector",
@@ -5917,9 +5917,9 @@
       "owner": null,
       "member_kind": null,
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::ConflictFreeMerger::crdt_merge",
@@ -5927,9 +5927,9 @@
       "owner": "prolly::ConflictFreeMerger",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::ConflictRef",
@@ -6877,9 +6877,9 @@
       "owner": null,
       "member_kind": null,
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::DEFAULT_CHUNKING_FACTOR",
@@ -8167,9 +8167,9 @@
       "owner": null,
       "member_kind": null,
       "family": "proximity-map",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::FileBlobStore",
@@ -10807,9 +10807,9 @@
       "owner": null,
       "member_kind": null,
       "family": "indexed-map",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::IndexedSourceRecordRef",
@@ -11067,9 +11067,9 @@
       "owner": null,
       "member_kind": null,
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::KeyCodec::decode_key",
@@ -11077,9 +11077,9 @@
       "owner": "prolly::KeyCodec",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::KeyCodec::encode_key",
@@ -11087,9 +11087,9 @@
       "owner": "prolly::KeyCodec",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::KeyDecodeError",
@@ -11287,9 +11287,9 @@
       "owner": null,
       "member_kind": null,
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::LargeValueConfig",
@@ -11377,9 +11377,9 @@
       "owner": null,
       "member_kind": null,
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::ManifestStore::Error",
@@ -11387,9 +11387,9 @@
       "owner": "prolly::ManifestStore",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "rust-language-only",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::ManifestStore::compare_and_swap_root",
@@ -11397,9 +11397,9 @@
       "owner": "prolly::ManifestStore",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::ManifestStore::delete_root",
@@ -11407,9 +11407,9 @@
       "owner": "prolly::ManifestStore",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::ManifestStore::get_root",
@@ -11417,9 +11417,9 @@
       "owner": "prolly::ManifestStore",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::ManifestStore::put_root",
@@ -11427,9 +11427,9 @@
       "owner": "prolly::ManifestStore",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::ManifestStoreScan",
@@ -11437,9 +11437,9 @@
       "owner": null,
       "member_kind": null,
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::ManifestStoreScan::list_roots",
@@ -11447,9 +11447,9 @@
       "owner": "prolly::ManifestStoreScan",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::ManifestUpdate",
@@ -12787,9 +12787,9 @@
       "owner": null,
       "member_kind": null,
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::MergePolicyRegistry",
@@ -14697,9 +14697,9 @@
       "owner": null,
       "member_kind": null,
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::NodeStoreScan::Error",
@@ -14707,9 +14707,9 @@
       "owner": "prolly::NodeStoreScan",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "rust-language-only",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::NodeStoreScan::list_node_cids",
@@ -14717,9 +14717,9 @@
       "owner": "prolly::NodeStoreScan",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::OverflowConfig",
@@ -15117,9 +15117,9 @@
       "owner": null,
       "member_kind": null,
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::ParallelRebalancer::parallel_batch",
@@ -15127,9 +15127,9 @@
       "owner": "prolly::ParallelRebalancer",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::ParallelRebalancer::parallel_rebalance",
@@ -15137,9 +15137,9 @@
       "owner": "prolly::ParallelRebalancer",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::PendingValue",
@@ -15587,9 +15587,9 @@
       "owner": null,
       "member_kind": null,
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::Prolly",
@@ -20457,9 +20457,9 @@
       "owner": null,
       "member_kind": null,
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::RemoteStoreBackend::Error",
@@ -20467,9 +20467,9 @@
       "owner": "prolly::RemoteStoreBackend",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "rust-language-only",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::RemoteStoreBackend::batch_get_nodes_ordered",
@@ -20477,9 +20477,9 @@
       "owner": "prolly::RemoteStoreBackend",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::RemoteStoreBackend::batch_nodes",
@@ -20487,9 +20487,9 @@
       "owner": "prolly::RemoteStoreBackend",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::RemoteStoreBackend::batch_put_nodes",
@@ -20497,9 +20497,9 @@
       "owner": "prolly::RemoteStoreBackend",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::RemoteStoreBackend::batch_put_nodes_with_hint",
@@ -20507,9 +20507,9 @@
       "owner": "prolly::RemoteStoreBackend",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::RemoteStoreBackend::commit_transaction",
@@ -20517,9 +20517,9 @@
       "owner": "prolly::RemoteStoreBackend",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::RemoteStoreBackend::compare_and_swap_root_manifest",
@@ -20527,9 +20527,9 @@
       "owner": "prolly::RemoteStoreBackend",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::RemoteStoreBackend::delete_node",
@@ -20537,9 +20537,9 @@
       "owner": "prolly::RemoteStoreBackend",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::RemoteStoreBackend::delete_root_manifest",
@@ -20547,9 +20547,9 @@
       "owner": "prolly::RemoteStoreBackend",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::RemoteStoreBackend::get_hint",
@@ -20557,9 +20557,9 @@
       "owner": "prolly::RemoteStoreBackend",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::RemoteStoreBackend::get_node",
@@ -20567,9 +20567,9 @@
       "owner": "prolly::RemoteStoreBackend",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::RemoteStoreBackend::get_root_manifest",
@@ -20577,9 +20577,9 @@
       "owner": "prolly::RemoteStoreBackend",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::RemoteStoreBackend::list_node_cids",
@@ -20587,9 +20587,9 @@
       "owner": "prolly::RemoteStoreBackend",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::RemoteStoreBackend::list_root_manifests",
@@ -20597,9 +20597,9 @@
       "owner": "prolly::RemoteStoreBackend",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::RemoteStoreBackend::prefers_batch_reads",
@@ -20607,9 +20607,9 @@
       "owner": "prolly::RemoteStoreBackend",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::RemoteStoreBackend::put_hint",
@@ -20617,9 +20617,9 @@
       "owner": "prolly::RemoteStoreBackend",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::RemoteStoreBackend::put_node",
@@ -20627,9 +20627,9 @@
       "owner": "prolly::RemoteStoreBackend",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::RemoteStoreBackend::put_root_manifest",
@@ -20637,9 +20637,9 @@
       "owner": "prolly::RemoteStoreBackend",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::RemoteStoreBackend::read_parallelism",
@@ -20647,9 +20647,9 @@
       "owner": "prolly::RemoteStoreBackend",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::RemoteStoreBackend::supports_hints",
@@ -20657,9 +20657,9 @@
       "owner": "prolly::RemoteStoreBackend",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::RemoteStoreBackend::supports_transactions",
@@ -20667,9 +20667,9 @@
       "owner": "prolly::RemoteStoreBackend",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::RemoteStoreConfig",
@@ -20847,9 +20847,9 @@
       "owner": null,
       "member_kind": null,
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::ReverseCursor",
@@ -22587,9 +22587,9 @@
       "owner": null,
       "member_kind": null,
       "family": "indexed-map",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::SecondaryIndexExtractor::extract",
@@ -22597,9 +22597,9 @@
       "owner": "prolly::SecondaryIndexExtractor",
       "member_kind": "trait-item",
       "family": "indexed-map",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::SecondaryIndexLimits",
@@ -24587,9 +24587,9 @@
       "owner": null,
       "member_kind": null,
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::Store::Error",
@@ -24597,9 +24597,9 @@
       "owner": "prolly::Store",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "rust-language-only",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::Store::batch",
@@ -24607,9 +24607,9 @@
       "owner": "prolly::Store",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::Store::batch_get",
@@ -24617,9 +24617,9 @@
       "owner": "prolly::Store",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::Store::batch_get_ordered",
@@ -24627,9 +24627,9 @@
       "owner": "prolly::Store",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::Store::batch_get_ordered_unique",
@@ -24637,9 +24637,9 @@
       "owner": "prolly::Store",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::Store::batch_get_shared_ordered_unique",
@@ -24647,9 +24647,9 @@
       "owner": "prolly::Store",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::Store::batch_put",
@@ -24657,9 +24657,9 @@
       "owner": "prolly::Store",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::Store::batch_put_with_hint",
@@ -24667,9 +24667,9 @@
       "owner": "prolly::Store",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::Store::delete",
@@ -24677,9 +24677,9 @@
       "owner": "prolly::Store",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::Store::get",
@@ -24687,9 +24687,9 @@
       "owner": "prolly::Store",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::Store::get_hint",
@@ -24697,9 +24697,9 @@
       "owner": "prolly::Store",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::Store::get_shared",
@@ -24707,9 +24707,9 @@
       "owner": "prolly::Store",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::Store::has_native_shared_reads",
@@ -24717,9 +24717,9 @@
       "owner": "prolly::Store",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::Store::prefers_batch_reads",
@@ -24727,9 +24727,9 @@
       "owner": "prolly::Store",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::Store::put",
@@ -24737,9 +24737,9 @@
       "owner": "prolly::Store",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::Store::put_hint",
@@ -24747,9 +24747,9 @@
       "owner": "prolly::Store",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::Store::supports_hints",
@@ -24757,9 +24757,9 @@
       "owner": "prolly::Store",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::StoreCacheNamespace",
@@ -24777,9 +24777,9 @@
       "owner": null,
       "member_kind": null,
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::StreamingDiffer::stream_diff",
@@ -24787,9 +24787,9 @@
       "owner": "prolly::StreamingDiffer",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::StreamingSecondaryIndexExtractor",
@@ -24797,9 +24797,9 @@
       "owner": null,
       "member_kind": null,
       "family": "indexed-map",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::StreamingSecondaryIndexExtractor::extract",
@@ -24807,9 +24807,9 @@
       "owner": "prolly::StreamingSecondaryIndexExtractor",
       "member_kind": "trait-item",
       "family": "indexed-map",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::StringKeyCodec",
@@ -25167,9 +25167,9 @@
       "owner": null,
       "member_kind": null,
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::TimestampedValue",
@@ -25517,9 +25517,9 @@
       "owner": null,
       "member_kind": null,
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::TransactionalStore::commit_transaction",
@@ -25527,9 +25527,9 @@
       "owner": "prolly::TransactionalStore",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::TransactionalStore::supports_transactions",
@@ -25537,9 +25537,9 @@
       "owner": "prolly::TransactionalStore",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::Tree",
@@ -26727,9 +26727,9 @@
       "owner": null,
       "member_kind": null,
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::ValueCodec::decode",
@@ -26737,9 +26737,9 @@
       "owner": "prolly::ValueCodec",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::ValueCodec::encode",
@@ -26747,9 +26747,9 @@
       "owner": "prolly::ValueCodec",
       "member_kind": "trait-item",
       "family": "core",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::ValueRef",
@@ -28607,9 +28607,9 @@
       "owner": null,
       "member_kind": null,
       "family": "core",
-      "classification": "portable",
+      "classification": "rust-language-only",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::chunking::entry_count_key_hash",
@@ -28987,9 +28987,9 @@
       "owner": null,
       "member_kind": null,
       "family": "core",
-      "classification": "portable",
+      "classification": "rust-language-only",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::remote_conformance::assert_remote_backend_contract",
@@ -29017,9 +29017,9 @@
       "owner": null,
       "member_kind": null,
       "family": "core",
-      "classification": "portable",
+      "classification": "rust-language-only",
       "status": "planned",
-      "bucket": "unreviewed_rust_abstraction"
+      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::resolver::delete_wins",

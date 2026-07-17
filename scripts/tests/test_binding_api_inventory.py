@@ -11,10 +11,256 @@ from scripts.binding_api_inventory import (
     extract_public_api_items,
     generate_manifest,
     missing_feature_sentinels,
+    review_abstraction_entries,
+    validate_equivalence_catalog,
 )
 
 
 class ManifestCheckTests(unittest.TestCase):
+    def test_abstraction_review_classifies_without_claiming_implementation(self) -> None:
+        items = {
+            "prolly::Store": ApiItem(
+                rust="prolly::Store",
+                kind="trait",
+                owner=None,
+                member_kind=None,
+            ),
+            "prolly::Store::Error": ApiItem(
+                rust="prolly::Store::Error",
+                kind="assoc_type",
+                owner="prolly::Store",
+                member_kind="trait-item",
+            ),
+            "prolly::KeyValue": ApiItem(
+                rust="prolly::KeyValue",
+                kind="type_alias",
+                owner=None,
+                member_kind=None,
+            ),
+            "prolly::resolver": ApiItem(
+                rust="prolly::resolver",
+                kind="module",
+                owner=None,
+                member_kind=None,
+            ),
+        }
+        manifest = {
+            "operations": [
+                {
+                    "rust": rust,
+                    "classification": "portable",
+                    "status": "planned",
+                    "languages": {},
+                    "tests": [],
+                    "docs": [],
+                }
+                for rust in items
+            ]
+        }
+
+        reviewed = review_abstraction_entries(items, manifest)
+        entries = {entry["rust"]: entry for entry in reviewed["operations"]}
+
+        self.assertEqual(entries["prolly::Store"]["equivalence"], "store-trait")
+        self.assertEqual(entries["prolly::Store"]["classification"], "idiomatic")
+        self.assertEqual(
+            entries["prolly::Store::Error"]["equivalence"],
+            "marker-and-associated-type",
+        )
+        self.assertEqual(
+            entries["prolly::Store::Error"]["classification"],
+            "rust-language-only",
+        )
+        self.assertEqual(entries["prolly::KeyValue"]["equivalence"], "record-alias")
+        self.assertEqual(
+            entries["prolly::resolver"]["equivalence"], "namespace-module"
+        )
+        for entry in entries.values():
+            self.assertTrue(entry["reviewed"])
+            self.assertEqual(entry["status"], "planned")
+            self.assertEqual(entry["languages"], {})
+
+    def test_release_rejects_unreviewed_idiomatic_mapping(self) -> None:
+        languages = {
+            language: f"{language}.iterable"
+            for language in (
+                "python",
+                "go",
+                "node",
+                "kotlin",
+                "java",
+                "ruby",
+                "swift",
+                "wasm",
+            )
+        }
+        result = check_manifest(
+            rust_items={"prolly::DiffIter"},
+            manifest={
+                "operations": [
+                    {
+                        "rust": "prolly::DiffIter",
+                        "classification": "idiomatic",
+                        "status": "implemented",
+                        "languages": languages,
+                        "exclusions": {},
+                        "tests": ["binding.iteration"],
+                        "equivalence": "iterator-sequence",
+                    }
+                ]
+            },
+            release=True,
+            equivalences={
+                "iterator-sequence": self.complete_equivalence("idiomatic")
+            },
+        )
+
+        self.assertEqual(result.incomplete, ("prolly::DiffIter",))
+
+    def test_release_accepts_reviewed_idiomatic_equivalence(self) -> None:
+        languages = {
+            language: f"{language}.iterable"
+            for language in (
+                "python",
+                "go",
+                "node",
+                "kotlin",
+                "java",
+                "ruby",
+                "swift",
+                "wasm",
+            )
+        }
+        result = check_manifest(
+            rust_items={"prolly::DiffIter"},
+            manifest={
+                "operations": [
+                    {
+                        "rust": "prolly::DiffIter",
+                        "classification": "idiomatic",
+                        "status": "implemented",
+                        "languages": languages,
+                        "exclusions": {},
+                        "tests": ["binding.iteration"],
+                        "docs": ["bindings/api/README.md#idiomatic-equivalents"],
+                        "equivalence": "iterator-sequence",
+                        "rationale": "Host sequences preserve ordered iteration.",
+                        "reviewed": True,
+                    }
+                ]
+            },
+            release=True,
+            equivalences={
+                "iterator-sequence": self.complete_equivalence("idiomatic")
+            },
+        )
+
+        self.assertTrue(result.ok)
+
+    def test_release_rejects_unknown_equivalence_id(self) -> None:
+        languages = {
+            language: f"{language}.iterable"
+            for language in (
+                "python",
+                "go",
+                "node",
+                "kotlin",
+                "java",
+                "ruby",
+                "swift",
+                "wasm",
+            )
+        }
+        result = check_manifest(
+            rust_items={"prolly::DiffIter"},
+            manifest={
+                "operations": [
+                    {
+                        "rust": "prolly::DiffIter",
+                        "classification": "idiomatic",
+                        "status": "implemented",
+                        "languages": languages,
+                        "exclusions": {},
+                        "tests": ["binding.iteration"],
+                        "docs": ["bindings/api/README.md#idiomatic-equivalents"],
+                        "equivalence": "not-in-catalog",
+                        "rationale": "Host sequences preserve ordered iteration.",
+                        "reviewed": True,
+                    }
+                ]
+            },
+            release=True,
+            equivalences={
+                "iterator-sequence": self.complete_equivalence("idiomatic")
+            },
+        )
+
+        self.assertEqual(result.incomplete, ("prolly::DiffIter",))
+
+    def test_release_rejects_native_platform_exclusion(self) -> None:
+        result = check_manifest(
+            rust_items={"prolly::FileNodeStore::open"},
+            manifest={
+                "operations": [
+                    {
+                        "rust": "prolly::FileNodeStore::open",
+                        "classification": "platform-excluded",
+                        "status": "implemented",
+                        "languages": {
+                            "python": "python.FileNodeStore.open",
+                            "node": "node.FileNodeStore.open",
+                            "kotlin": "kotlin.FileNodeStore.open",
+                            "java": "java.FileNodeStore.open",
+                            "ruby": "ruby.FileNodeStore.open",
+                            "swift": "swift.FileNodeStore.open",
+                        },
+                        "exclusions": {
+                            "go": "not implemented",
+                            "wasm": "browser runtimes have no filesystem",
+                        },
+                        "tests": ["binding.file-store"],
+                        "docs": ["bindings/api/README.md#release-validation"],
+                        "rationale": "Filesystem access is unavailable in browsers.",
+                        "reviewed": True,
+                    }
+                ]
+            },
+            release=True,
+        )
+
+        self.assertEqual(result.incomplete, ("prolly::FileNodeStore::open",))
+
+    def test_equivalence_catalog_requires_complete_language_patterns(self) -> None:
+        equivalence = self.complete_equivalence("idiomatic")
+        del equivalence["language_patterns"]["wasm"]
+
+        self.assertEqual(
+            validate_equivalence_catalog({"iterator-sequence": equivalence}),
+            ("iterator-sequence",),
+        )
+
+    @staticmethod
+    def complete_equivalence(classification: str) -> dict[str, object]:
+        return {
+            "classification": classification,
+            "portable_semantics": "Ordered host iteration preserves Rust behavior.",
+            "performance_contract": "Hot reads use bounded packed pages.",
+            "language_patterns": {
+                language: f"{language} sequence"
+                for language in (
+                    "python",
+                    "go",
+                    "node",
+                    "kotlin",
+                    "java",
+                    "ruby",
+                    "swift",
+                    "wasm",
+                )
+            },
+            "tests": ["binding.iteration"],
+        }
+
     def test_audit_separates_release_evidence_from_unreviewed_item_kinds(self) -> None:
         items = {
             "prolly::VersionedMap::head": ApiItem(

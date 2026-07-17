@@ -231,7 +231,56 @@ def _nonempty_strings(values: Any) -> bool:
     )
 
 
-def _complete_release_entry(entry: dict[str, Any]) -> bool:
+def _valid_review_metadata(entry: dict[str, Any]) -> bool:
+    return (
+        entry.get("reviewed") is True
+        and isinstance(entry.get("rationale"), str)
+        and bool(entry["rationale"].strip())
+        and isinstance(entry.get("docs"), list)
+        and bool(entry["docs"])
+        and all(isinstance(doc, str) and doc.strip() for doc in entry["docs"])
+    )
+
+
+def _valid_equivalence_record(record: Any) -> bool:
+    if not isinstance(record, dict):
+        return False
+    if record.get("classification") not in {"idiomatic", "rust-language-only"}:
+        return False
+    for field in ("portable_semantics", "performance_contract"):
+        if not isinstance(record.get(field), str) or not record[field].strip():
+            return False
+    if not _nonempty_strings(record.get("language_patterns")):
+        return False
+    if set(record["language_patterns"]) != set(LANGUAGES):
+        return False
+    tests = record.get("tests")
+    return (
+        isinstance(tests, list)
+        and bool(tests)
+        and all(isinstance(test, str) and test.strip() for test in tests)
+    )
+
+
+def validate_equivalence_catalog(equivalences: Any) -> tuple[str, ...]:
+    """Return malformed equivalence IDs in deterministic order."""
+
+    if not isinstance(equivalences, dict):
+        return ("<catalog>",)
+    return tuple(
+        sorted(
+            equivalence_id
+            for equivalence_id, record in equivalences.items()
+            if not isinstance(equivalence_id, str)
+            or not equivalence_id.strip()
+            or not _valid_equivalence_record(record)
+        )
+    )
+
+
+def _complete_release_entry(
+    entry: dict[str, Any], equivalences: dict[str, Any] | None = None
+) -> bool:
     if entry.get("status") != "implemented":
         return False
     if not isinstance(entry.get("tests"), list) or not entry["tests"]:
@@ -254,10 +303,26 @@ def _complete_release_entry(entry: dict[str, Any]) -> bool:
     covered = set(languages) | set(exclusions)
     if covered != set(LANGUAGES):
         return False
-    if classification in {"portable", "idiomatic", "rust-language-only"}:
+    if classification == "portable":
         return set(languages) == set(LANGUAGES) and not exclusions
+    if classification in {"idiomatic", "rust-language-only"}:
+        equivalence_id = entry.get("equivalence")
+        if not isinstance(equivalence_id, str) or not equivalence_id.strip():
+            return False
+        record = (equivalences or {}).get(equivalence_id)
+        if not _valid_equivalence_record(record):
+            return False
+        if record["classification"] != classification:
+            return False
+        if not set(entry["tests"]) & set(record["tests"]):
+            return False
+        return (
+            set(languages) == set(LANGUAGES)
+            and not exclusions
+            and _valid_review_metadata(entry)
+        )
     if classification == "platform-excluded":
-        return bool(exclusions)
+        return set(exclusions) == {"wasm"} and _valid_review_metadata(entry)
     return False
 
 
@@ -278,9 +343,114 @@ _RUST_ABSTRACTION_KINDS = {
     "assoc_type",
 }
 
+_STORE_TRAIT_OWNERS = {
+    "prolly::AsyncBlobStore",
+    "prolly::AsyncManifestStore",
+    "prolly::AsyncManifestStoreScan",
+    "prolly::AsyncStore",
+    "prolly::AsyncTransactionalStore",
+    "prolly::BlobStore",
+    "prolly::BlobStoreScan",
+    "prolly::ManifestStore",
+    "prolly::ManifestStoreScan",
+    "prolly::NodeStoreScan",
+    "prolly::RemoteStoreBackend",
+    "prolly::Store",
+    "prolly::TransactionalStore",
+}
+_CODEC_TRAIT_OWNERS = {"prolly::KeyCodec", "prolly::ValueCodec"}
+_CALLBACK_TRAIT_OWNERS = {
+    "prolly::BorrowedMergeResolver",
+    "prolly::ConflictFreeMerger",
+    "prolly::SecondaryIndexExtractor",
+    "prolly::StreamingSecondaryIndexExtractor",
+}
+_CALLBACK_TYPE_ALIASES = {
+    "prolly::CustomMergeFn",
+    "prolly::MergePolicyFn",
+    "prolly::Resolver",
+    "prolly::TimestampExtractor",
+}
 
-def _audit_bucket(item: ApiItem, entry: dict[str, Any]) -> str:
-    if _complete_release_entry(entry):
+
+def _abstraction_equivalence(item: ApiItem) -> str | None:
+    if item.kind == "module":
+        return "namespace-module"
+    if item.kind in {"assoc_type", "assoc_const"}:
+        return "marker-and-associated-type"
+
+    owner = item.owner or item.rust
+    if owner in _STORE_TRAIT_OWNERS:
+        return "store-trait"
+    if owner in _CODEC_TRAIT_OWNERS:
+        return "generic-codec"
+    if owner in _CALLBACK_TRAIT_OWNERS:
+        return "callback-protocol"
+    if owner == "prolly::StreamingDiffer":
+        return "iterator-sequence"
+    if owner == "prolly::ParallelRebalancer":
+        return "builder-typestate"
+    if item.kind == "type_alias":
+        if item.rust in _CALLBACK_TYPE_ALIASES:
+            return "callback-protocol"
+        return "record-alias"
+    return None
+
+
+def review_abstraction_entries(
+    items: dict[str, ApiItem], manifest: dict[str, Any]
+) -> dict[str, Any]:
+    """Apply explicit abstraction classifications without claiming coverage."""
+
+    reviewed = dict(manifest)
+    operations: list[Any] = []
+    for original in manifest.get("operations", []):
+        if not isinstance(original, dict):
+            operations.append(original)
+            continue
+        entry = dict(original)
+        item = items.get(entry.get("rust"))
+        if item is None:
+            operations.append(entry)
+            continue
+        is_abstraction = (
+            item.kind in _RUST_ABSTRACTION_KINDS
+            or item.member_kind == "trait-item"
+            or (item.kind not in _DATA_MODEL_KINDS and item.kind != "function")
+        )
+        if not is_abstraction:
+            operations.append(entry)
+            continue
+        equivalence = _abstraction_equivalence(item)
+        if equivalence is None:
+            raise ValueError(f"no abstraction review rule for {item.rust}")
+        classification = (
+            "rust-language-only"
+            if equivalence in {"marker-and-associated-type", "namespace-module"}
+            else "idiomatic"
+        )
+        entry.update(
+            classification=classification,
+            equivalence=equivalence,
+            rationale=(
+                f"{item.rust} is represented by the reviewed "
+                f"{equivalence} host-language contract instead of a literal "
+                "Rust declaration."
+            ),
+            docs=[f"bindings/api/idiomatic-equivalents.json#{equivalence}"],
+            reviewed=True,
+        )
+        operations.append(entry)
+    reviewed["operations"] = operations
+    return reviewed
+
+
+def _audit_bucket(
+    item: ApiItem,
+    entry: dict[str, Any],
+    equivalences: dict[str, Any] | None = None,
+) -> str:
+    if _complete_release_entry(entry, equivalences):
         return "release_complete"
     if entry.get("reviewed") is True:
         return "reviewed_incomplete"
@@ -296,7 +466,9 @@ def _audit_bucket(item: ApiItem, entry: dict[str, Any]) -> str:
 
 
 def build_classification_audit(
-    items: dict[str, ApiItem], manifest: dict[str, Any]
+    items: dict[str, ApiItem],
+    manifest: dict[str, Any],
+    equivalences: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build deterministic triage data without inferring parity completion."""
 
@@ -318,7 +490,7 @@ def build_classification_audit(
     for rust in sorted(items):
         item = items[rust]
         entry = entries.get(rust, {})
-        bucket = _audit_bucket(item, entry)
+        bucket = _audit_bucket(item, entry, equivalences)
         summary[bucket] += 1
         family = entry.get("family") or _family(rust)
         family_counts[family] = family_counts.get(family, 0) + 1
@@ -351,6 +523,7 @@ def check_manifest(
     manifest: dict[str, Any],
     release: bool,
     required_rust_features: tuple[str, ...] = (),
+    equivalences: dict[str, Any] | None = None,
 ) -> CheckResult:
     entries = manifest.get("operations")
     if not isinstance(entries, list):
@@ -375,6 +548,11 @@ def check_manifest(
     missing = tuple(sorted(rust_items - operations.keys()))
     stale = tuple(sorted(operations.keys() - rust_items))
     incomplete = set(malformed) | duplicates
+    if release and equivalences is not None:
+        incomplete.update(
+            f"<equivalence:{equivalence_id}>"
+            for equivalence_id in validate_equivalence_catalog(equivalences)
+        )
     if required_rust_features:
         if manifest.get("schema_version") != MANIFEST_SCHEMA_VERSION:
             incomplete.add("<manifest.schema_version>")
@@ -391,7 +569,7 @@ def check_manifest(
         if entry.get("status") not in STATUSES:
             incomplete.add(name)
             continue
-        if release and not _complete_release_entry(entry):
+        if release and not _complete_release_entry(entry, equivalences):
             incomplete.add(name)
 
     return CheckResult(missing, stale, tuple(sorted(incomplete)))
@@ -532,10 +710,13 @@ def missing_feature_sentinels(
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("generate", "check", "audit"))
+    parser.add_argument(
+        "command", choices=("generate", "check", "audit", "review-abstractions")
+    )
     parser.add_argument("--release", action="store_true")
     parser.add_argument("--rustdoc", type=Path)
     parser.add_argument("--manifest", type=Path)
+    parser.add_argument("--equivalences", type=Path)
     parser.add_argument("--output", type=Path)
     return parser
 
@@ -544,6 +725,10 @@ def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     root = _repo_root()
     manifest_path = args.manifest or root / "bindings" / "api" / "parity.json"
+    equivalences_path = (
+        args.equivalences
+        or root / "bindings" / "api" / "idiomatic-equivalents.json"
+    )
     rustdoc_path = args.rustdoc or _default_rustdoc_path(root)
     if not rustdoc_path.exists():
         print(
@@ -583,8 +768,25 @@ def main(argv: list[str] | None = None) -> int:
         print(f"manifest is missing: {manifest_path}", file=sys.stderr)
         return 2
     manifest = _load_json(manifest_path)
+    equivalence_document = (
+        _load_json(equivalences_path) if equivalences_path.exists() else {}
+    )
+    equivalences = equivalence_document.get("equivalences", {})
+    if args.command == "review-abstractions":
+        reviewed = review_abstraction_entries(api_items, manifest)
+        _write_json(manifest_path, reviewed)
+        reviewed_count = sum(
+            1
+            for entry in reviewed["operations"]
+            if isinstance(entry, dict) and entry.get("reviewed") is True
+        )
+        print(
+            f"wrote {reviewed_count} reviewed abstraction classifications "
+            f"to {manifest_path}"
+        )
+        return 0
     if args.command == "audit":
-        audit = build_classification_audit(api_items, manifest)
+        audit = build_classification_audit(api_items, manifest, equivalences)
         audit = {
             "schema_version": 1,
             "rustdoc_format_version": rustdoc.get("format_version"),
@@ -607,6 +809,7 @@ def main(argv: list[str] | None = None) -> int:
         manifest,
         args.release,
         REQUIRED_RUST_FEATURES,
+        equivalences,
     )
     if not result.ok:
         _print_result(result)
