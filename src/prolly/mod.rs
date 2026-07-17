@@ -176,7 +176,7 @@ mod traits;
 use self::sync::{MissingNodeCopy, MissingNodePlan, SnapshotBundle, SnapshotBundleNode};
 use blob::{BlobStore, BlobStoreScan, LargeValueConfig};
 use cid::Cid;
-use config::Config;
+use config::{Config, RuntimeConfig};
 use encoding::INIT_LEVEL;
 use error::Conflict;
 use error::Diff;
@@ -5196,35 +5196,34 @@ where
         &self,
         existing_tail_leaf: Option<Node>,
         mutations: &[Mutation],
-    ) -> Vec<Node> {
+    ) -> Result<Vec<Node>, Error> {
+        let mut emitter = builder::LevelEmitter::new(self.config.clone(), true, 0)?;
         let mut leaves = Vec::new();
-        let mut current_leaf = existing_tail_leaf.unwrap_or_else(|| self.new_leaf_node());
-        let max_chunk_size = current_leaf.max_chunk_size();
-
-        if should_close_append_leaf(&current_leaf, max_chunk_size) {
-            leaves.push(current_leaf);
-            current_leaf = self.new_leaf_node();
+        if let Some(existing) = existing_tail_leaf {
+            for (key, value) in existing.keys.into_iter().zip(existing.vals) {
+                leaves.extend(
+                    emitter
+                        .push_leaf(key, value)?
+                        .into_iter()
+                        .map(|emitted| emitted.node),
+                );
+            }
         }
-
         for mutation in mutations {
             let Mutation::Upsert { key, val } = mutation else {
                 continue;
             };
-
-            current_leaf.keys.push(key.clone());
-            current_leaf.vals.push(val.clone());
-
-            if should_close_append_leaf(&current_leaf, max_chunk_size) {
-                leaves.push(current_leaf);
-                current_leaf = self.new_leaf_node();
-            }
+            leaves.extend(
+                emitter
+                    .push_leaf(key.clone(), val.clone())?
+                    .into_iter()
+                    .map(|emitted| emitted.node),
+            );
         }
-
-        if !current_leaf.is_empty() {
-            leaves.push(current_leaf);
+        if let Some(emitted) = emitter.finish() {
+            leaves.push(emitted.node);
         }
-
-        leaves
+        Ok(leaves)
     }
 
     fn collect_append_leaf_cids(
@@ -5277,7 +5276,7 @@ where
 
         let mut level = 1;
         loop {
-            current_level = self.build_append_parent_level(&current_level, level, collector);
+            current_level = self.build_append_parent_level(&current_level, level, collector)?;
             rightmost_path.insert(
                 0,
                 async_rightmost_entry_from_node_ref(
@@ -5344,7 +5343,7 @@ where
             }
 
             current_level = if updated_node.len() > updated_node.max_chunk_size() {
-                self.split_append_internal_node(&updated_node, collector)
+                self.split_append_internal_node(&updated_node, collector)?
             } else {
                 let cid = collector.add(&updated_node);
                 vec![(cid, updated_node)]
@@ -5399,55 +5398,41 @@ where
         children: &[(Cid, Node)],
         level: u8,
         collector: &mut AsyncWriteCollector,
-    ) -> Vec<(Cid, Node)> {
+    ) -> Result<Vec<(Cid, Node)>, Error> {
+        let mut emitter = builder::LevelEmitter::new(self.config.clone(), false, level)?;
         let mut parents = Vec::new();
-        let mut current_parent = self.new_internal_node(level);
-        let parent_capacity = children.len().min(current_parent.max_chunk_size().max(1));
-        reserve_node_entries(&mut current_parent, parent_capacity);
-
-        for (idx, (cid, child)) in children.iter().enumerate() {
-            current_parent
-                .keys
-                .push(child.keys.first().cloned().unwrap_or_default());
-            current_parent.vals.push(cid.0.to_vec());
-            current_parent
-                .child_counts
-                .push(stored_logical_count(child));
-
-            if boundary::is_boundary(&current_parent, current_parent.len() - 1) {
-                parents.push(current_parent);
-                current_parent = self.new_internal_node(level);
-                let remaining = children.len().saturating_sub(idx + 1);
-                let parent_capacity = remaining.min(current_parent.max_chunk_size().max(1));
-                reserve_node_entries(&mut current_parent, parent_capacity);
-            }
+        for (cid, child) in children {
+            parents.extend(emitter.push_child(builder::NodeSummary {
+                cid: cid.clone(),
+                first_key: child.keys.first().cloned().ok_or(Error::InvalidNode)?,
+                count: stored_logical_count(child),
+            })?);
         }
-
-        if !current_parent.is_empty() {
-            parents.push(current_parent);
+        if let Some(parent) = emitter.finish() {
+            parents.push(parent);
         }
-
-        parents
+        Ok(parents
             .into_iter()
             .map(|parent| {
-                let cid = collector.add(&parent);
-                (cid, parent)
+                let cid = collector.add(&parent.node);
+                (cid, parent.node)
             })
-            .collect()
+            .collect())
     }
 
     fn split_append_internal_node(
         &self,
         node: &Node,
         collector: &mut AsyncWriteCollector,
-    ) -> Vec<(Cid, Node)> {
-        self.split_node_chunks(node)
+    ) -> Result<Vec<(Cid, Node)>, Error> {
+        Ok(self
+            .split_node_chunks(node)?
             .into_iter()
             .map(|chunk| {
                 let cid = collector.add(&chunk);
                 (cid, chunk)
             })
-            .collect()
+            .collect())
     }
 
     async fn group_batch_mutations_by_leaf(
@@ -5554,7 +5539,7 @@ where
 
             changed_leaves += 1;
             let child_refs =
-                self.async_batch_child_refs_from_modified_node(modified_leaf, collector);
+                self.async_batch_child_refs_from_modified_node(modified_leaf, collector)?;
 
             if let Some(path) = group.route_path {
                 collect_async_batch_route_contexts(&path, &mut contexts);
@@ -5621,9 +5606,9 @@ where
         &self,
         node: Node,
         collector: &mut AsyncWriteCollector,
-    ) -> Vec<AsyncBatchChildRef> {
+    ) -> Result<Vec<AsyncBatchChildRef>, Error> {
         if node.is_empty() {
-            return Vec::new();
+            return Ok(Vec::new());
         }
 
         if node.len() <= node.max_chunk_size() || node.len() == 1 {
@@ -5631,15 +5616,15 @@ where
             let level = node.level;
             let count = stored_logical_count(&node);
             let cid = collector.add(&node);
-            return vec![AsyncBatchChildRef {
+            return Ok(vec![AsyncBatchChildRef {
                 cid,
                 first_key,
                 level,
                 count,
-            }];
+            }]);
         }
 
-        let chunks = self.split_node_chunks(&node);
+        let chunks = self.split_node_chunks(&node)?;
         let metadata = chunks
             .iter()
             .map(|chunk| {
@@ -5651,7 +5636,7 @@ where
             })
             .collect::<Vec<_>>();
 
-        metadata
+        Ok(metadata
             .into_iter()
             .zip(collector.add_many(chunks))
             .map(|((first_key, level, count), cid)| AsyncBatchChildRef {
@@ -5660,7 +5645,7 @@ where
                 level,
                 count,
             })
-            .collect()
+            .collect())
     }
 
     fn apply_async_batch_child_replacements(
@@ -5696,7 +5681,7 @@ where
                 "async coalesced batch rebuild must preserve parent key order"
             );
 
-            return Ok(self.async_batch_child_refs_from_modified_node(updated, collector));
+            return self.async_batch_child_refs_from_modified_node(updated, collector);
         }
 
         let replacement_len = node.len() - replacements.len()
@@ -5732,7 +5717,7 @@ where
             "async coalesced batch rebuild must preserve parent key order"
         );
 
-        Ok(self.async_batch_child_refs_from_modified_node(updated, collector))
+        self.async_batch_child_refs_from_modified_node(updated, collector)
     }
 
     fn build_root_from_async_child_refs(
@@ -7559,7 +7544,7 @@ where
             }
 
             if node.len() > node.max_chunk_size() && node.len() > 1 {
-                let chunks = self.split_node_chunks(&node);
+                let chunks = self.split_node_chunks(&node)?;
 
                 if chunks.len() == 1 {
                     node = chunks.into_iter().next().ok_or(Error::InvalidNode)?;
@@ -7643,7 +7628,7 @@ where
             let left_cid = child_cid_at(parent, idx - 1)?;
             let left_sibling = self.load_arc(&left_cid).await?;
 
-            if !is_valid_boundary_between(&left_sibling, node) {
+            if !is_valid_boundary_between(&left_sibling, node)? {
                 let merged = self.merge_nodes(&left_sibling, node);
                 let mut new_parent = parent.clone();
                 new_parent.keys.remove(idx - 1);
@@ -7672,7 +7657,7 @@ where
             let right_cid = child_cid_at(parent, idx + 1)?;
             let right_sibling = self.load_arc(&right_cid).await?;
 
-            if !is_valid_boundary_between(node, &right_sibling) {
+            if !is_valid_boundary_between(node, &right_sibling)? {
                 let merged = self.merge_nodes(node, &right_sibling);
                 let mut new_parent = parent.clone();
                 new_parent.keys.remove(idx + 1);
@@ -7699,65 +7684,25 @@ where
         Ok(None)
     }
 
-    fn split_node_chunks(&self, node: &Node) -> Vec<Node> {
-        let capacity = node.max_chunk_size().max(1);
-        if node.len() <= capacity {
-            return vec![node.clone()];
+    fn split_node_chunks(&self, node: &Node) -> Result<Vec<Node>, Error> {
+        let mut emitter = builder::LevelEmitter::new(self.config.clone(), node.leaf, node.level)?;
+        let mut chunks = Vec::new();
+        for index in 0..node.len() {
+            let emitted = if node.leaf {
+                emitter.push_leaf(node.keys[index].clone(), node.vals[index].clone())?
+            } else {
+                emitter.push_child(builder::NodeSummary {
+                    cid: child_cid_at(node, index)?,
+                    first_key: node.keys[index].clone(),
+                    count: *node.child_counts.get(index).ok_or(Error::InvalidNode)?,
+                })?
+            };
+            chunks.extend(emitted.into_iter().map(|emitted| emitted.node));
         }
-
-        let num_chunks = node.len().div_ceil(capacity);
-        let mut chunks = Vec::with_capacity(num_chunks);
-        let mut start = 0;
-
-        while start < node.len() {
-            let remaining_chunks = num_chunks - chunks.len();
-            let remaining_entries = node.len() - start;
-            let target_size = remaining_entries
-                .checked_div(remaining_chunks)
-                .unwrap_or_else(|| remaining_entries.min(capacity))
-                .max(1);
-            let target_end = start + target_size;
-
-            let max_end = (start + capacity).min(node.len());
-            let min_end = start + 1;
-            let mut end = target_end.min(max_end).max(min_end);
-            let search_start = target_end.saturating_sub(50).max(min_end);
-            let search_end = (target_end + 50).min(max_end);
-
-            for idx in (search_start..=search_end).rev() {
-                if idx <= max_end && idx < node.len() && boundary::is_boundary(node, idx - 1) {
-                    end = idx;
-                    break;
-                }
-            }
-
-            if end - start > capacity {
-                end = start + capacity;
-            }
-
-            let remaining_after = node.len() - end;
-            if remaining_after > 0
-                && remaining_after < capacity / 4
-                && (end - start) + remaining_after <= capacity
-            {
-                end = node.len();
-            }
-
-            if end - start > capacity {
-                end = start + capacity;
-            }
-
-            let mut chunk = self.new_node_like(node);
-            chunk.keys = node.keys[start..end].to_vec();
-            chunk.vals = node.vals[start..end].to_vec();
-            if !node.leaf {
-                chunk.child_counts = node.child_counts[start..end].to_vec();
-            }
-            chunks.push(chunk);
-            start = end;
+        if let Some(emitted) = emitter.finish() {
+            chunks.push(emitted.node);
         }
-
-        chunks
+        Ok(chunks)
     }
 
     fn merge_nodes(&self, left: &Node, right: &Node) -> Node {
@@ -7804,20 +7749,6 @@ fn collect_async_batch_route_contexts(
 
         current = path.parent.clone();
     }
-}
-
-#[cfg(feature = "async-store")]
-#[allow(dead_code)]
-fn should_close_append_leaf(node: &Node, max_chunk_size: usize) -> bool {
-    if node.is_empty() {
-        return false;
-    }
-
-    if node.len() >= max_chunk_size {
-        return true;
-    }
-
-    boundary::is_boundary(node, node.len() - 1)
 }
 
 #[cfg(feature = "async-store")]
@@ -8462,12 +8393,47 @@ fn chunks_logical_counts(chunks: &[Node]) -> Vec<u64> {
 
 #[cfg(feature = "async-store")]
 #[allow(dead_code)]
-fn is_valid_boundary_between(left: &Node, _right: &Node) -> bool {
+fn is_valid_boundary_between(left: &Node, right: &Node) -> Result<bool, Error> {
     if left.is_empty() {
-        return false;
+        return Ok(false);
     }
-
-    boundary::is_boundary(left, left.len() - 1)
+    let config = Config {
+        format: left.format.clone(),
+        runtime: RuntimeConfig::default(),
+    };
+    let mut emitter = builder::LevelEmitter::new(config, left.leaf, left.level)?;
+    let mut ended_at_boundary = false;
+    for index in 0..left.len() {
+        let emitted = if left.leaf {
+            emitter.push_leaf(left.keys[index].clone(), left.vals[index].clone())?
+        } else {
+            emitter.push_child(builder::NodeSummary {
+                cid: child_cid_at(left, index)?,
+                first_key: left.keys[index].clone(),
+                count: *left.child_counts.get(index).ok_or(Error::InvalidNode)?,
+            })?
+        };
+        if index + 1 < left.len() && !emitted.is_empty() {
+            return Ok(false);
+        }
+        ended_at_boundary = !emitted.is_empty();
+    }
+    if ended_at_boundary {
+        return Ok(true);
+    }
+    if right.is_empty() {
+        return Ok(false);
+    }
+    let emitted = if right.leaf {
+        emitter.push_leaf(right.keys[0].clone(), right.vals[0].clone())?
+    } else {
+        emitter.push_child(builder::NodeSummary {
+            cid: child_cid_at(right, 0)?,
+            first_key: right.keys[0].clone(),
+            count: *right.child_counts.first().ok_or(Error::InvalidNode)?,
+        })?
+    };
+    Ok(emitted.first().is_some_and(|emitted| emitted.node == *left))
 }
 
 #[cfg(test)]

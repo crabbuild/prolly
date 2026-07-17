@@ -26,6 +26,16 @@ use prolly::{AsyncStore, TokioBlockingBlobStore, TokioBlockingStore};
 
 const EXPECTED_ASYNC_NODE_PREFETCH_BATCH_CAP: usize = 64;
 
+#[test]
+fn async_write_assembly_has_no_stateless_legacy_boundary_calls() {
+    let source = include_str!("../src/prolly/mod.rs");
+    let forbidden = ["boundary::", "is_boundary("].concat();
+    assert!(
+        !source.contains(&forbidden),
+        "async write assembly still calls the stateless legacy boundary helper"
+    );
+}
+
 fn block_on<F: Future>(future: F) -> F::Output {
     let waker = futures_util::task::noop_waker();
     let mut cx = Context::from_waker(&waker);
