@@ -7,5 +7,6 @@ use (
 	./mysql
 	./postgres
 	./redis
+	./spanner
 	./sqlite
 )
