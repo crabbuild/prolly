@@ -1,6 +1,7 @@
 package prolly
 
 import (
+	"bytes"
 	"errors"
 	"runtime"
 	"sync"
@@ -36,7 +37,13 @@ type VersionPrune struct {
 	Removed  [][]byte
 }
 
+type VersionedMapBatchResult struct {
+	Version MapVersion
+	Stats   BatchApplyStats
+}
+
 type VersionedMap struct {
+	engine *Engine
 	handle uint64
 	closed atomic.Bool
 	mu     sync.RWMutex
@@ -52,9 +59,457 @@ func (e *Engine) VersionedMap(id []byte) (*VersionedMap, error) {
 	if err != nil {
 		return nil, err
 	}
-	result := &VersionedMap{handle: handle}
+	result := &VersionedMap{engine: e, handle: handle}
 	runtime.SetFinalizer(result, (*VersionedMap).Close)
 	return result, nil
+}
+
+// MapComparison pins two cataloged versions so later head changes cannot alter
+// the comparison inputs.
+type MapComparison struct {
+	engine *Engine
+	base   MapVersion
+	target MapVersion
+	closed atomic.Bool
+}
+
+type MapMerge struct {
+	handle uint64
+	closed atomic.Bool
+	mu     sync.RWMutex
+}
+
+func (m *VersionedMap) PrepareMerge(base, candidate []byte) (*MapMerge, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	mergeHandle, err := ffiVersionedPrepareMerge(handle, bytes.Clone(base), bytes.Clone(candidate))
+	if err != nil {
+		return nil, err
+	}
+	result := &MapMerge{handle: mergeHandle}
+	runtime.SetFinalizer(result, (*MapMerge).Close)
+	return result, nil
+}
+
+func (m *MapMerge) Close() {
+	if m == nil || m.closed.Swap(true) {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	runtime.SetFinalizer(m, nil)
+	if m.handle != 0 {
+		ffiFreeMapMerge(m.handle)
+		m.handle = 0
+	}
+}
+
+func (m *MapMerge) withHandle() (uint64, func(), error) {
+	if m == nil || m.closed.Load() {
+		return 0, nil, errors.New("map merge is closed")
+	}
+	m.mu.RLock()
+	if m.closed.Load() || m.handle == 0 {
+		m.mu.RUnlock()
+		return 0, nil, errors.New("map merge is closed")
+	}
+	return m.handle, m.mu.RUnlock, nil
+}
+
+func (m *MapMerge) version(which string) (MapVersion, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return MapVersion{}, err
+	}
+	defer unlock()
+	raw, err := ffiMapMergeVersion(handle, which)
+	if err != nil {
+		return MapVersion{}, err
+	}
+	return decodePortableMapVersion(raw)
+}
+
+func (m *MapMerge) Base() (MapVersion, error)      { return m.version("base") }
+func (m *MapMerge) Head() (MapVersion, error)      { return m.version("head") }
+func (m *MapMerge) Candidate() (MapVersion, error) { return m.version("candidate") }
+
+func (m *MapMerge) Merge(resolver string) (Tree, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return Tree{}, err
+	}
+	defer unlock()
+	raw, err := ffiMapMergeMerge(handle, resolver)
+	if err != nil {
+		return Tree{}, err
+	}
+	return decodeTree(raw)
+}
+
+func (m *MapMerge) ConflictPage(cursor *RangeCursor, limit uint64) (ConflictPage, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return ConflictPage{}, err
+	}
+	defer unlock()
+	raw, err := ffiMapMergeConflictPage(handle, cloneRangeCursor(cursor), limit)
+	if err != nil {
+		return ConflictPage{}, err
+	}
+	return decodeConflictPage(raw)
+}
+
+func (m *MapMerge) Publish(resolver string) (MapUpdate, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return MapUpdate{}, err
+	}
+	defer unlock()
+	raw, err := ffiMapMergePublish(handle, resolver)
+	if err != nil {
+		return MapUpdate{}, err
+	}
+	return decodePortableMapUpdate(raw)
+}
+
+type MapChangeEvent struct {
+	Previous []byte
+	Current  MapVersion
+	Diffs    []Diff
+}
+
+// MapSubscription is a resumable explicitly-polled change stream.
+type MapSubscription struct {
+	engine   *Engine
+	mapID    []byte
+	lastSeen []byte
+	closed   atomic.Bool
+	mu       sync.Mutex
+}
+
+type VersionedTransactionCommit struct {
+	Applied         bool
+	Versions        []MapVersion
+	ConflictMapID   []byte
+	ConflictCurrent *MapVersion
+}
+
+// VersionedTransaction atomically commits edits spanning multiple managed maps.
+type VersionedTransaction struct {
+	handle uint64
+	closed atomic.Bool
+	mu     sync.RWMutex
+}
+
+func (e *Engine) BeginVersionedTransaction() (*VersionedTransaction, error) {
+	handle, err := ffiEngineBeginVersionedTransaction(e)
+	if err != nil {
+		return nil, err
+	}
+	result := &VersionedTransaction{handle: handle}
+	runtime.SetFinalizer(result, (*VersionedTransaction).Close)
+	return result, nil
+}
+
+func (t *VersionedTransaction) Close() {
+	if t == nil || t.closed.Swap(true) {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	runtime.SetFinalizer(t, nil)
+	if t.handle != 0 {
+		ffiFreeVersionedTransaction(t.handle)
+		t.handle = 0
+	}
+}
+
+func (t *VersionedTransaction) withHandle() (uint64, func(), error) {
+	if t == nil || t.closed.Load() {
+		return 0, nil, errors.New("versioned transaction is completed")
+	}
+	t.mu.RLock()
+	if t.closed.Load() || t.handle == 0 {
+		t.mu.RUnlock()
+		return 0, nil, errors.New("versioned transaction is completed")
+	}
+	return t.handle, t.mu.RUnlock, nil
+}
+
+func (t *VersionedTransaction) Head(mapID []byte) (*MapVersion, error) {
+	handle, unlock, err := t.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	raw, err := ffiVersionedTransactionHead(handle, bytes.Clone(mapID))
+	if err != nil {
+		return nil, err
+	}
+	return decodeOptionalPortableMapVersion(raw)
+}
+
+func (t *VersionedTransaction) Get(mapID, key []byte) ([]byte, bool, error) {
+	handle, unlock, err := t.withHandle()
+	if err != nil {
+		return nil, false, err
+	}
+	defer unlock()
+	raw, err := ffiVersionedTransactionGet(handle, bytes.Clone(mapID), bytes.Clone(key))
+	if err != nil {
+		return nil, false, err
+	}
+	d := byteDecoder{data: raw}
+	value, ok, err := d.readOptionalByteArray()
+	if err != nil {
+		return nil, false, err
+	}
+	return value, ok, d.done()
+}
+
+func (t *VersionedTransaction) Apply(mapID []byte, mutations []Mutation) (MapVersion, error) {
+	handle, unlock, err := t.withHandle()
+	if err != nil {
+		return MapVersion{}, err
+	}
+	defer unlock()
+	encoded, err := encodeMutations(cloneMutations(mutations))
+	if err != nil {
+		return MapVersion{}, err
+	}
+	raw, err := ffiVersionedTransactionApply(handle, bytes.Clone(mapID), encoded)
+	if err != nil {
+		return MapVersion{}, err
+	}
+	return decodePortableMapVersion(raw)
+}
+
+func (t *VersionedTransaction) ApplyIf(mapID, expected []byte, mutations []Mutation) (MapUpdate, error) {
+	handle, unlock, err := t.withHandle()
+	if err != nil {
+		return MapUpdate{}, err
+	}
+	defer unlock()
+	encoded, err := encodeMutations(cloneMutations(mutations))
+	if err != nil {
+		return MapUpdate{}, err
+	}
+	raw, err := ffiVersionedTransactionApplyIf(handle, bytes.Clone(mapID), bytes.Clone(expected), encoded)
+	if err != nil {
+		return MapUpdate{}, err
+	}
+	return decodePortableMapUpdate(raw)
+}
+
+func (t *VersionedTransaction) Put(mapID, key, value []byte) (MapVersion, error) {
+	handle, unlock, err := t.withHandle()
+	if err != nil {
+		return MapVersion{}, err
+	}
+	defer unlock()
+	raw, err := ffiVersionedTransactionPut(handle, bytes.Clone(mapID), bytes.Clone(key), bytes.Clone(value))
+	if err != nil {
+		return MapVersion{}, err
+	}
+	return decodePortableMapVersion(raw)
+}
+
+func (t *VersionedTransaction) Delete(mapID, key []byte) (MapVersion, error) {
+	handle, unlock, err := t.withHandle()
+	if err != nil {
+		return MapVersion{}, err
+	}
+	defer unlock()
+	raw, err := ffiVersionedTransactionDelete(handle, bytes.Clone(mapID), bytes.Clone(key))
+	if err != nil {
+		return MapVersion{}, err
+	}
+	return decodePortableMapVersion(raw)
+}
+
+func (t *VersionedTransaction) Commit() (VersionedTransactionCommit, error) {
+	handle, unlock, err := t.withHandle()
+	if err != nil {
+		return VersionedTransactionCommit{}, err
+	}
+	raw, callErr := ffiVersionedTransactionCommit(handle)
+	unlock()
+	t.Close()
+	if callErr != nil {
+		return VersionedTransactionCommit{}, callErr
+	}
+	return decodeVersionedTransactionCommit(raw)
+}
+
+func (t *VersionedTransaction) Rollback() error {
+	handle, unlock, err := t.withHandle()
+	if err != nil {
+		return err
+	}
+	callErr := ffiVersionedTransactionRollback(handle)
+	unlock()
+	t.Close()
+	return callErr
+}
+
+func (m *VersionedMap) Subscribe() (*MapSubscription, error) {
+	id, err := m.ID()
+	if err != nil {
+		return nil, err
+	}
+	lastSeen, ok, err := m.HeadID()
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		lastSeen = nil
+	}
+	return &MapSubscription{engine: m.engine, mapID: id, lastSeen: bytes.Clone(lastSeen)}, nil
+}
+
+func (m *VersionedMap) SubscribeFrom(lastSeen []byte) (*MapSubscription, error) {
+	id, err := m.ID()
+	if err != nil {
+		return nil, err
+	}
+	return &MapSubscription{engine: m.engine, mapID: id, lastSeen: bytes.Clone(lastSeen)}, nil
+}
+
+func (s *MapSubscription) Close() {
+	if s != nil {
+		s.closed.Store(true)
+	}
+}
+
+func (s *MapSubscription) LastSeen() ([]byte, bool, error) {
+	if s == nil || s.closed.Load() {
+		return nil, false, errors.New("map subscription is closed")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.lastSeen == nil {
+		return nil, false, nil
+	}
+	return bytes.Clone(s.lastSeen), true, nil
+}
+
+func (s *MapSubscription) Poll() (*MapChangeEvent, error) {
+	if s == nil || s.closed.Load() {
+		return nil, errors.New("map subscription is closed")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed.Load() {
+		return nil, errors.New("map subscription is closed")
+	}
+	mapHandle, err := s.engine.VersionedMap(s.mapID)
+	if err != nil {
+		return nil, err
+	}
+	defer mapHandle.Close()
+	current, err := mapHandle.Head()
+	if err != nil || current == nil {
+		return nil, err
+	}
+	if bytes.Equal(s.lastSeen, current.ID) {
+		return nil, nil
+	}
+	var previousTree Tree
+	if s.lastSeen == nil {
+		previousTree, err = s.engine.Create()
+	} else {
+		previous, loadErr := mapHandle.Version(s.lastSeen)
+		if loadErr != nil {
+			return nil, loadErr
+		}
+		if previous == nil {
+			return nil, errors.New("subscription resume version was pruned")
+		}
+		previousTree = previous.Tree
+	}
+	if err != nil {
+		return nil, err
+	}
+	diffs, err := s.engine.Diff(previousTree, current.Tree)
+	if err != nil {
+		return nil, err
+	}
+	previous := bytes.Clone(s.lastSeen)
+	s.lastSeen = bytes.Clone(current.ID)
+	return &MapChangeEvent{Previous: previous, Current: *current, Diffs: diffs}, nil
+}
+
+func (m *VersionedMap) Compare(baseID, targetID []byte) (*MapComparison, error) {
+	base, err := m.Version(append([]byte(nil), baseID...))
+	if err != nil {
+		return nil, err
+	}
+	if base == nil {
+		return nil, errors.New("base map version is not cataloged")
+	}
+	target, err := m.Version(append([]byte(nil), targetID...))
+	if err != nil {
+		return nil, err
+	}
+	if target == nil {
+		return nil, errors.New("target map version is not cataloged")
+	}
+	return &MapComparison{engine: m.engine, base: *base, target: *target}, nil
+}
+
+func (m *VersionedMap) CompareToHead(baseID []byte) (*MapComparison, error) {
+	head, err := m.Head()
+	if err != nil {
+		return nil, err
+	}
+	if head == nil {
+		return nil, errors.New("versioned map has not been initialized")
+	}
+	return m.Compare(baseID, head.ID)
+}
+
+func (c *MapComparison) Close() {
+	if c != nil {
+		c.closed.Store(true)
+	}
+}
+
+func (c *MapComparison) open() error {
+	if c == nil || c.closed.Load() {
+		return errors.New("map comparison is closed")
+	}
+	return nil
+}
+
+func (c *MapComparison) Base() (MapVersion, error) {
+	if err := c.open(); err != nil {
+		return MapVersion{}, err
+	}
+	return c.base, nil
+}
+
+func (c *MapComparison) Target() (MapVersion, error) {
+	if err := c.open(); err != nil {
+		return MapVersion{}, err
+	}
+	return c.target, nil
+}
+
+func (c *MapComparison) Diff() ([]Diff, error) {
+	if err := c.open(); err != nil {
+		return nil, err
+	}
+	return c.engine.Diff(c.base.Tree, c.target.Tree)
+}
+
+func (c *MapComparison) DiffPage(cursor *RangeCursor, end []byte, limit uint64) (DiffPage, error) {
+	if err := c.open(); err != nil {
+		return DiffPage{}, err
+	}
+	return c.engine.DiffPage(c.base.Tree, c.target.Tree, cursor, append([]byte(nil), end...), limit)
 }
 
 func (m *VersionedMap) Close() {
@@ -101,6 +556,44 @@ func (m *VersionedMap) ID() ([]byte, error) {
 	return value, d.done()
 }
 
+// HeadName returns the owned catalog key used for this map's head pointer.
+func (m *VersionedMap) HeadName() ([]byte, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	raw, err := ffiVersionedHeadName(handle)
+	if err != nil {
+		return nil, err
+	}
+	d := byteDecoder{data: raw}
+	value, err := d.readByteArray()
+	if err != nil {
+		return nil, err
+	}
+	return value, d.done()
+}
+
+// VersionsPrefix returns the owned catalog namespace containing this map's versions.
+func (m *VersionedMap) VersionsPrefix() ([]byte, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	raw, err := ffiVersionedVersionsPrefix(handle)
+	if err != nil {
+		return nil, err
+	}
+	d := byteDecoder{data: raw}
+	value, err := d.readByteArray()
+	if err != nil {
+		return nil, err
+	}
+	return value, d.done()
+}
+
 func (m *VersionedMap) IsInitialized() (bool, error) {
 	handle, unlock, err := m.withHandle()
 	if err != nil {
@@ -121,6 +614,19 @@ func (m *VersionedMap) Initialize() (MapVersion, error) {
 		return MapVersion{}, err
 	}
 	return decodePortableMapVersion(raw)
+}
+
+func (m *VersionedMap) InitializeSorted(entries []Entry) (MapUpdate, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return MapUpdate{}, err
+	}
+	defer unlock()
+	raw, err := ffiVersionedInitializeSorted(handle, encodeEntries(cloneEntries(entries)))
+	if err != nil {
+		return MapUpdate{}, err
+	}
+	return decodePortableMapUpdate(raw)
 }
 
 func (m *VersionedMap) Head() (*MapVersion, error) {
@@ -198,6 +704,25 @@ func (m *VersionedMap) Get(key []byte) ([]byte, bool, error) {
 	return value, ok, decoder.done()
 }
 
+// GetLargeValue resolves either an inline value or its external blob payload.
+func (m *VersionedMap) GetLargeValue(blobStore *BlobStore, key []byte) ([]byte, bool, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return nil, false, err
+	}
+	defer unlock()
+	raw, err := ffiVersionedGetLargeValue(handle, blobStore, bytes.Clone(key))
+	if err != nil {
+		return nil, false, err
+	}
+	d := byteDecoder{data: raw}
+	value, ok, err := d.readOptionalByteArray()
+	if err != nil {
+		return nil, false, err
+	}
+	return value, ok, d.done()
+}
+
 func (m *VersionedMap) ContainsKey(key []byte) (bool, error) {
 	handle, unlock, err := m.withHandle()
 	if err != nil {
@@ -254,6 +779,160 @@ func (m *VersionedMap) GetManyAt(id []byte, keys [][]byte) ([][]byte, error) {
 	return values, err
 }
 
+// Range returns owned entries from one head snapshot.
+func (m *VersionedMap) Range(start, end []byte) ([]Entry, error) {
+	snapshot, err := m.Snapshot()
+	if err != nil {
+		return nil, err
+	}
+	if snapshot == nil {
+		tree, err := m.engine.Create()
+		if err != nil {
+			return nil, err
+		}
+		return m.engine.Range(tree, bytes.Clone(start), bytes.Clone(end))
+	}
+	defer snapshot.Close()
+	return snapshot.Range(bytes.Clone(start), bytes.Clone(end))
+}
+
+// Prefix returns owned entries sharing prefix from one head snapshot.
+func (m *VersionedMap) Prefix(prefix []byte) ([]Entry, error) {
+	snapshot, err := m.Snapshot()
+	if err != nil {
+		return nil, err
+	}
+	if snapshot == nil {
+		tree, err := m.engine.Create()
+		if err != nil {
+			return nil, err
+		}
+		return m.engine.Prefix(tree, bytes.Clone(prefix))
+	}
+	defer snapshot.Close()
+	return snapshot.Prefix(bytes.Clone(prefix))
+}
+
+// RangeAt returns owned entries from a cataloged immutable version.
+func (m *VersionedMap) RangeAt(id, start, end []byte) ([]Entry, error) {
+	snapshot, err := m.SnapshotAt(bytes.Clone(id))
+	if err != nil {
+		return nil, err
+	}
+	if snapshot == nil {
+		return nil, errors.New("map version is not cataloged")
+	}
+	defer snapshot.Close()
+	return snapshot.Range(bytes.Clone(start), bytes.Clone(end))
+}
+
+// PrefixAt returns owned entries from a cataloged immutable version.
+func (m *VersionedMap) PrefixAt(id, prefix []byte) ([]Entry, error) {
+	snapshot, err := m.SnapshotAt(bytes.Clone(id))
+	if err != nil {
+		return nil, err
+	}
+	if snapshot == nil {
+		return nil, errors.New("map version is not cataloged")
+	}
+	defer snapshot.Close()
+	return snapshot.Prefix(bytes.Clone(prefix))
+}
+
+// RangePage returns one bounded page from the current head.
+func (m *VersionedMap) RangePage(cursor *RangeCursor, end []byte, limit uint64) (RangePage, error) {
+	snapshot, err := m.Snapshot()
+	if err != nil {
+		return RangePage{}, err
+	}
+	if snapshot == nil {
+		tree, err := m.engine.Create()
+		if err != nil {
+			return RangePage{}, err
+		}
+		return m.engine.RangePage(tree, cloneRangeCursor(cursor), bytes.Clone(end), limit)
+	}
+	defer snapshot.Close()
+	return snapshot.RangePage(cloneRangeCursor(cursor), bytes.Clone(end), limit)
+}
+
+// PrefixPage returns one bounded prefix page from the current head.
+func (m *VersionedMap) PrefixPage(prefix []byte, cursor *RangeCursor, limit uint64) (RangePage, error) {
+	snapshot, err := m.Snapshot()
+	if err != nil {
+		return RangePage{}, err
+	}
+	if snapshot == nil {
+		tree, err := m.engine.Create()
+		if err != nil {
+			return RangePage{}, err
+		}
+		return m.engine.PrefixPage(tree, bytes.Clone(prefix), cloneRangeCursor(cursor), limit)
+	}
+	defer snapshot.Close()
+	return snapshot.PrefixPage(bytes.Clone(prefix), cloneRangeCursor(cursor), limit)
+}
+
+// RangePageAt returns one bounded page pinned to a cataloged version.
+func (m *VersionedMap) RangePageAt(id []byte, cursor *RangeCursor, end []byte, limit uint64) (RangePage, error) {
+	snapshot, err := m.SnapshotAt(bytes.Clone(id))
+	if err != nil {
+		return RangePage{}, err
+	}
+	if snapshot == nil {
+		return RangePage{}, errors.New("map version is not cataloged")
+	}
+	defer snapshot.Close()
+	return snapshot.RangePage(cloneRangeCursor(cursor), bytes.Clone(end), limit)
+}
+
+// PrefixPageAt returns one bounded prefix page pinned to a cataloged version.
+func (m *VersionedMap) PrefixPageAt(id, prefix []byte, cursor *RangeCursor, limit uint64) (RangePage, error) {
+	snapshot, err := m.SnapshotAt(bytes.Clone(id))
+	if err != nil {
+		return RangePage{}, err
+	}
+	if snapshot == nil {
+		return RangePage{}, errors.New("map version is not cataloged")
+	}
+	defer snapshot.Close()
+	return snapshot.PrefixPage(bytes.Clone(prefix), cloneRangeCursor(cursor), limit)
+}
+
+// Diff compares two cataloged immutable versions.
+func (m *VersionedMap) Diff(base, target []byte) ([]Diff, error) {
+	comparison, err := m.Compare(bytes.Clone(base), bytes.Clone(target))
+	if err != nil {
+		return nil, err
+	}
+	defer comparison.Close()
+	return comparison.Diff()
+}
+
+// ChangesSince compares a cataloged immutable version with the current head.
+func (m *VersionedMap) ChangesSince(base []byte) ([]Diff, error) {
+	comparison, err := m.CompareToHead(bytes.Clone(base))
+	if err != nil {
+		return nil, err
+	}
+	defer comparison.Close()
+	return comparison.Diff()
+}
+
+// RollbackTo moves head to an existing cataloged version without deleting history.
+func (m *VersionedMap) RollbackTo(id []byte) (MapVersion, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return MapVersion{}, err
+	}
+	defer unlock()
+	raw, err := ffiVersionedRollbackTo(handle, bytes.Clone(id))
+	if err != nil {
+		return MapVersion{}, err
+	}
+	return decodePortableMapVersion(raw)
+}
+
 func (m *VersionedMap) Put(key, value []byte) (MapVersion, error) {
 	handle, unlock, err := m.withHandle()
 	if err != nil {
@@ -261,6 +940,20 @@ func (m *VersionedMap) Put(key, value []byte) (MapVersion, error) {
 	}
 	defer unlock()
 	raw, err := ffiVersionedPut(handle, append([]byte(nil), key...), append([]byte(nil), value...))
+	if err != nil {
+		return MapVersion{}, err
+	}
+	return decodePortableMapVersion(raw)
+}
+
+// PutLargeValue stores value inline or in blobStore according to config.
+func (m *VersionedMap) PutLargeValue(blobStore *BlobStore, key, value []byte, config LargeValueConfig) (MapVersion, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return MapVersion{}, err
+	}
+	defer unlock()
+	raw, err := ffiVersionedPutLargeValue(handle, blobStore, bytes.Clone(key), bytes.Clone(value), config)
 	if err != nil {
 		return MapVersion{}, err
 	}
@@ -284,6 +977,88 @@ func (m *VersionedMap) Apply(mutations []Mutation) (MapVersion, error) {
 	return decodePortableMapVersion(raw)
 }
 
+func (m *VersionedMap) Append(mutations []Mutation) (MapVersion, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return MapVersion{}, err
+	}
+	defer unlock()
+	encoded, err := encodeMutations(cloneMutations(mutations))
+	if err != nil {
+		return MapVersion{}, err
+	}
+	raw, err := ffiVersionedAppend(handle, encoded)
+	if err != nil {
+		return MapVersion{}, err
+	}
+	return decodePortableMapVersion(raw)
+}
+
+func (m *VersionedMap) ParallelApply(mutations []Mutation, config ParallelConfig) (VersionedMapBatchResult, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return VersionedMapBatchResult{}, err
+	}
+	defer unlock()
+	encoded, err := encodeMutations(cloneMutations(mutations))
+	if err != nil {
+		return VersionedMapBatchResult{}, err
+	}
+	raw, err := ffiVersionedParallelApply(handle, encoded, encodeParallelConfig(config))
+	if err != nil {
+		return VersionedMapBatchResult{}, err
+	}
+	return decodePortableVersionedMapBatchResult(raw)
+}
+
+func (m *VersionedMap) RebuildSortedIf(expected []byte, entries []Entry) (MapUpdate, error) {
+	return m.rebuildEntriesIf(expected, entries, true)
+}
+
+func (m *VersionedMap) RebuildFromEntriesIf(expected []byte, entries []Entry) (MapUpdate, error) {
+	return m.rebuildEntriesIf(expected, entries, false)
+}
+
+func (m *VersionedMap) RebuildFromIterIf(expected []byte, entries []Entry) (MapUpdate, error) {
+	return m.RebuildFromEntriesIf(expected, entries)
+}
+
+func (m *VersionedMap) rebuildEntriesIf(expected []byte, entries []Entry, sorted bool) (MapUpdate, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return MapUpdate{}, err
+	}
+	defer unlock()
+	owned := encodeEntries(cloneEntries(entries))
+	var raw []byte
+	if sorted {
+		raw, err = ffiVersionedRebuildSortedIf(handle, bytes.Clone(expected), owned)
+	} else {
+		raw, err = ffiVersionedRebuildFromEntriesIf(handle, bytes.Clone(expected), owned)
+	}
+	if err != nil {
+		return MapUpdate{}, err
+	}
+	return decodePortableMapUpdate(raw)
+}
+
+func (m *VersionedMap) ApplyAtMillis(mutations []Mutation, timestampMillis uint64) (MapVersion, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return MapVersion{}, err
+	}
+	defer unlock()
+	encoded, err := encodeMutations(cloneMutations(mutations))
+	if err != nil {
+		return MapVersion{}, err
+	}
+	raw, err := ffiVersionedApplyAtMillis(handle, encoded, timestampMillis)
+	if err != nil {
+		return MapVersion{}, err
+	}
+	return decodePortableMapVersion(raw)
+}
+
 func (m *VersionedMap) ApplyIf(expected []byte, mutations []Mutation) (MapUpdate, error) {
 	handle, unlock, err := m.withHandle()
 	if err != nil {
@@ -301,6 +1076,23 @@ func (m *VersionedMap) ApplyIf(expected []byte, mutations []Mutation) (MapUpdate
 	return decodePortableMapUpdate(raw)
 }
 
+func (m *VersionedMap) ApplyIfAtMillis(expected []byte, mutations []Mutation, timestampMillis uint64) (MapUpdate, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return MapUpdate{}, err
+	}
+	defer unlock()
+	encoded, err := encodeMutations(cloneMutations(mutations))
+	if err != nil {
+		return MapUpdate{}, err
+	}
+	raw, err := ffiVersionedApplyIfAtMillis(handle, bytes.Clone(expected), encoded, timestampMillis)
+	if err != nil {
+		return MapUpdate{}, err
+	}
+	return decodePortableMapUpdate(raw)
+}
+
 func (m *VersionedMap) PutIf(expected, key, value []byte) (MapUpdate, error) {
 	handle, unlock, err := m.withHandle()
 	if err != nil {
@@ -308,6 +1100,27 @@ func (m *VersionedMap) PutIf(expected, key, value []byte) (MapUpdate, error) {
 	}
 	defer unlock()
 	raw, err := ffiVersionedPutIf(handle, append([]byte(nil), expected...), append([]byte(nil), key...), append([]byte(nil), value...))
+	if err != nil {
+		return MapUpdate{}, err
+	}
+	return decodePortableMapUpdate(raw)
+}
+
+// PutLargeValueIf conditionally stores an inline or external value when expected is still head.
+func (m *VersionedMap) PutLargeValueIf(blobStore *BlobStore, expected, key, value []byte, config LargeValueConfig) (MapUpdate, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return MapUpdate{}, err
+	}
+	defer unlock()
+	raw, err := ffiVersionedPutLargeValueIf(
+		handle,
+		blobStore,
+		bytes.Clone(expected),
+		bytes.Clone(key),
+		bytes.Clone(value),
+		config,
+	)
 	if err != nil {
 		return MapUpdate{}, err
 	}
@@ -402,6 +1215,36 @@ func (m *VersionedMap) RestoreBackup(bytes []byte) (MapVersion, error) {
 	return decodePortableMapVersion(raw)
 }
 
+// ImportAsHead imports a portable snapshot bundle and publishes its tree as
+// this map's new head. The bundle is encoded before crossing the FFI boundary,
+// so callers retain ownership of all input slices.
+func (m *VersionedMap) ImportAsHead(bundle SnapshotBundle) (MapVersion, error) {
+	return m.importAsHeadEncoded(encodeSnapshotBundle(bundle), nil)
+}
+
+// ImportAsHeadAtMillis is the deterministic-timestamp variant of ImportAsHead.
+func (m *VersionedMap) ImportAsHeadAtMillis(bundle SnapshotBundle, timestampMillis uint64) (MapVersion, error) {
+	return m.importAsHeadEncoded(encodeSnapshotBundle(bundle), &timestampMillis)
+}
+
+func (m *VersionedMap) importAsHeadEncoded(encodedBundle []byte, timestampMillis *uint64) (MapVersion, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return MapVersion{}, err
+	}
+	defer unlock()
+	var raw []byte
+	if timestampMillis == nil {
+		raw, err = ffiVersionedImportAsHead(handle, encodedBundle)
+	} else {
+		raw, err = ffiVersionedImportAsHeadAtMillis(handle, encodedBundle, *timestampMillis)
+	}
+	if err != nil {
+		return MapVersion{}, err
+	}
+	return decodePortableMapVersion(raw)
+}
+
 func (m *VersionedMap) KeepLast(count uint64) (VersionPrune, error) {
 	handle, unlock, err := m.withHandle()
 	if err != nil {
@@ -412,6 +1255,10 @@ func (m *VersionedMap) KeepLast(count uint64) (VersionPrune, error) {
 	if err != nil {
 		return VersionPrune{}, err
 	}
+	return decodePortableVersionPrune(raw)
+}
+
+func decodePortableVersionPrune(raw []byte) (VersionPrune, error) {
 	d := byteDecoder{data: raw}
 	retained, err := d.readByteArraySequence()
 	if err != nil {
@@ -423,6 +1270,126 @@ func (m *VersionedMap) KeepLast(count uint64) (VersionPrune, error) {
 	}
 	return VersionPrune{Retained: retained, Removed: removed}, d.done()
 }
+
+func (m *VersionedMap) PruneVersions(keepLatest uint64) (VersionPrune, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return VersionPrune{}, err
+	}
+	defer unlock()
+	raw, err := ffiVersionedPruneVersions(handle, keepLatest)
+	if err != nil {
+		return VersionPrune{}, err
+	}
+	return decodePortableVersionPrune(raw)
+}
+
+func (m *VersionedMap) KeepForAt(nowMillis, maxAgeMillis uint64) (VersionPrune, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return VersionPrune{}, err
+	}
+	defer unlock()
+	raw, err := ffiVersionedKeepForAt(handle, nowMillis, maxAgeMillis)
+	if err != nil {
+		return VersionPrune{}, err
+	}
+	return decodePortableVersionPrune(raw)
+}
+
+func (m *VersionedMap) KeepFor(maxAgeMillis uint64) (VersionPrune, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return VersionPrune{}, err
+	}
+	defer unlock()
+	raw, err := ffiVersionedKeepFor(handle, maxAgeMillis)
+	if err != nil {
+		return VersionPrune{}, err
+	}
+	return decodePortableVersionPrune(raw)
+}
+
+func (m *VersionedMap) KeepVersions(ids [][]byte) (VersionPrune, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return VersionPrune{}, err
+	}
+	defer unlock()
+	raw, err := ffiVersionedKeepVersions(handle, cloneByteSlices(ids))
+	if err != nil {
+		return VersionPrune{}, err
+	}
+	return decodePortableVersionPrune(raw)
+}
+
+func (m *VersionedMap) RetentionPolicy() (NamedRootRetention, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return NamedRootRetention{}, err
+	}
+	defer unlock()
+	raw, err := ffiVersionedRetentionPolicy(handle)
+	if err != nil {
+		return NamedRootRetention{}, err
+	}
+	return decodeNamedRootRetention(raw)
+}
+
+func (m *VersionedMap) PlanGC() (GcPlan, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return GcPlan{}, err
+	}
+	defer unlock()
+	raw, err := ffiVersionedPlanGC(handle)
+	if err != nil {
+		return GcPlan{}, err
+	}
+	return decodeGcPlan(raw)
+}
+
+func (m *VersionedMap) SweepGC() (GcSweep, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return GcSweep{}, err
+	}
+	defer unlock()
+	raw, err := ffiVersionedSweepGC(handle)
+	if err != nil {
+		return GcSweep{}, err
+	}
+	return decodeGcSweep(raw)
+}
+
+// PlanBlobGC reports external blobs reachable from retained map versions.
+func (m *VersionedMap) PlanBlobGC(blobStore *BlobStore) (BlobGcPlan, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return BlobGcPlan{}, err
+	}
+	defer unlock()
+	raw, err := ffiVersionedPlanBlobGC(handle, blobStore)
+	if err != nil {
+		return BlobGcPlan{}, err
+	}
+	return decodeBlobGcPlan(raw)
+}
+
+// SweepBlobGC deletes external blobs not reachable from retained map versions.
+func (m *VersionedMap) SweepBlobGC(blobStore *BlobStore) (BlobGcSweep, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return BlobGcSweep{}, err
+	}
+	defer unlock()
+	raw, err := ffiVersionedSweepBlobGC(handle, blobStore)
+	if err != nil {
+		return BlobGcSweep{}, err
+	}
+	return decodeBlobGcSweep(raw)
+}
+
 func (m *VersionedMap) VerifyCatalog() (CatalogVerification, error) {
 	handle, unlock, err := m.withHandle()
 	if err != nil {
@@ -714,6 +1681,68 @@ func (s *MapSnapshot) ProveKey(key []byte) (KeyProof, error) {
 	}
 	return decodeKeyProof(raw)
 }
+
+// ProveKeys creates a compact proof for the requested keys. Input keys are
+// copied before crossing the FFI boundary so callers may safely reuse them.
+func (s *MapSnapshot) ProveKeys(keys [][]byte) (MultiKeyProof, error) {
+	handle, unlock, err := s.withHandle()
+	if err != nil {
+		return MultiKeyProof{}, err
+	}
+	defer unlock()
+	owned := make([][]byte, len(keys))
+	for index, key := range keys {
+		owned[index] = append([]byte(nil), key...)
+	}
+	raw, err := ffiMapSnapshotProveKeys(handle, owned)
+	if err != nil {
+		return MultiKeyProof{}, err
+	}
+	return decodeMultiKeyProof(raw)
+}
+
+// ProveRange creates a proof for the half-open interval [start, end).
+func (s *MapSnapshot) ProveRange(start, end []byte) (RangeProof, error) {
+	handle, unlock, err := s.withHandle()
+	if err != nil {
+		return RangeProof{}, err
+	}
+	defer unlock()
+	raw, err := ffiMapSnapshotProveRange(handle, append([]byte(nil), start...), cloneOptionalBytes(end))
+	if err != nil {
+		return RangeProof{}, err
+	}
+	return decodeRangeProof(raw)
+}
+
+// ProvePrefix creates a proof covering every key with prefix.
+func (s *MapSnapshot) ProvePrefix(prefix []byte) (RangeProof, error) {
+	handle, unlock, err := s.withHandle()
+	if err != nil {
+		return RangeProof{}, err
+	}
+	defer unlock()
+	raw, err := ffiMapSnapshotProvePrefix(handle, append([]byte(nil), prefix...))
+	if err != nil {
+		return RangeProof{}, err
+	}
+	return decodeRangeProof(raw)
+}
+
+// ProveRangePage returns a bounded page together with its independently
+// verifiable proof.
+func (s *MapSnapshot) ProveRangePage(cursor *RangeCursor, end []byte, limit uint64) (ProvedRangePage, error) {
+	handle, unlock, err := s.withHandle()
+	if err != nil {
+		return ProvedRangePage{}, err
+	}
+	defer unlock()
+	raw, err := ffiMapSnapshotProveRangePage(handle, cloneRangeCursor(cursor), cloneOptionalBytes(end), limit)
+	if err != nil {
+		return ProvedRangePage{}, err
+	}
+	return decodeProvedRangePage(raw)
+}
 func (s *MapSnapshot) Read() (*ReadSession, error) {
 	handle, unlock, err := s.withHandle()
 	if err != nil {
@@ -727,6 +1756,21 @@ func (s *MapSnapshot) Read() (*ReadSession, error) {
 	return ffiAdoptReadSession(native)
 }
 
+// Export returns the lossless portable snapshot bundle for this pinned map
+// version, including every reachable encoded node.
+func (s *MapSnapshot) Export() (SnapshotBundle, error) {
+	handle, unlock, err := s.withHandle()
+	if err != nil {
+		return SnapshotBundle{}, err
+	}
+	defer unlock()
+	raw, err := ffiMapSnapshotExport(handle)
+	if err != nil {
+		return SnapshotBundle{}, err
+	}
+	return decodeSnapshotBundle(raw)
+}
+
 func decodePortableMapVersion(raw []byte) (MapVersion, error) {
 	decoder := byteDecoder{data: raw}
 	value, err := readPortableMapVersion(&decoder)
@@ -734,6 +1778,19 @@ func decodePortableMapVersion(raw []byte) (MapVersion, error) {
 		return MapVersion{}, err
 	}
 	return value, decoder.done()
+}
+
+func decodePortableVersionedMapBatchResult(raw []byte) (VersionedMapBatchResult, error) {
+	decoder := byteDecoder{data: raw}
+	version, err := readPortableMapVersion(&decoder)
+	if err != nil {
+		return VersionedMapBatchResult{}, err
+	}
+	stats, err := decoder.readBatchApplyStats()
+	if err != nil {
+		return VersionedMapBatchResult{}, err
+	}
+	return VersionedMapBatchResult{Version: version, Stats: stats}, decoder.done()
 }
 
 func readPortableMapVersion(decoder *byteDecoder) (MapVersion, error) {
@@ -792,6 +1849,52 @@ func decodePortableMapVersions(raw []byte) ([]MapVersion, error) {
 	return versions, decoder.done()
 }
 
+func decodeVersionedTransactionCommit(raw []byte) (VersionedTransactionCommit, error) {
+	d := byteDecoder{data: raw}
+	applied, err := d.readBool()
+	if err != nil {
+		return VersionedTransactionCommit{}, err
+	}
+	count, err := d.readInt32()
+	if err != nil || count < 0 {
+		if err == nil {
+			err = errors.New("invalid transaction version sequence length")
+		}
+		return VersionedTransactionCommit{}, err
+	}
+	versions := make([]MapVersion, 0, count)
+	for range count {
+		version, err := readPortableMapVersion(&d)
+		if err != nil {
+			return VersionedTransactionCommit{}, err
+		}
+		versions = append(versions, version)
+	}
+	conflictMapID, present, err := d.readOptionalByteArray()
+	if err != nil {
+		return VersionedTransactionCommit{}, err
+	}
+	if !present {
+		conflictMapID = nil
+	}
+	presentVersion, err := d.readByte()
+	if err != nil {
+		return VersionedTransactionCommit{}, err
+	}
+	var conflictCurrent *MapVersion
+	if presentVersion != 0 {
+		value, err := readPortableMapVersion(&d)
+		if err != nil {
+			return VersionedTransactionCommit{}, err
+		}
+		conflictCurrent = &value
+	}
+	return VersionedTransactionCommit{
+		Applied: applied, Versions: versions, ConflictMapID: conflictMapID,
+		ConflictCurrent: conflictCurrent,
+	}, d.done()
+}
+
 func decodePortableMapUpdate(raw []byte) (MapUpdate, error) {
 	d := byteDecoder{data: raw}
 	kind, err := d.readInt32()
@@ -846,6 +1949,14 @@ func cloneMutations(values []Mutation) []Mutation {
 			Key:   append([]byte(nil), value.Key...),
 			Value: append([]byte(nil), value.Value...),
 		}
+	}
+	return owned
+}
+
+func cloneEntries(values []Entry) []Entry {
+	owned := make([]Entry, len(values))
+	for index, value := range values {
+		owned[index] = Entry{Key: bytes.Clone(value.Key), Value: bytes.Clone(value.Value)}
 	}
 	return owned
 }

@@ -1,0 +1,167 @@
+{
+  "schema_version": 1,
+  "equivalences": {
+    "generic-codec": {
+      "classification": "idiomatic",
+      "portable_semantics": "Rust generic key and value codecs become typed host wrapper constructors or synchronous codec callbacks with stable decode errors.",
+      "performance_contract": "Callback results are copied into Rust-owned buffers before return; retained sessions and packed pages bypass per-record codec callbacks on hot reads.",
+      "language_patterns": {
+        "python": "codec protocol objects passed to typed map factories",
+        "go": "generic codec interfaces passed to typed map constructors",
+        "node": "Codec<T> objects passed to typed map factories",
+        "kotlin": "Codec<T> interfaces passed to typed map factories",
+        "java": "Codec<T> interfaces passed to typed map factories",
+        "ruby": "codec objects responding to encode and decode",
+        "swift": "Codec protocols passed to typed map initializers",
+        "wasm": "Codec<T> JavaScript objects passed to typed map factories"
+      },
+      "tests": [
+        "portable-parity::typed-codec-round-trip"
+      ]
+    },
+    "iterator-sequence": {
+      "classification": "idiomatic",
+      "portable_semantics": "Rust iterators become ordered host iterables or sequences for cold paths and bounded cursor pages for hot multi-result paths.",
+      "performance_contract": "Hot reads return bounded packed pages decoded through retained sessions; no Rust iterator borrow or foreign pointer outlives its call or page lease.",
+      "language_patterns": {
+        "python": "iterator or context-managed paged cursor",
+        "go": "iterator callback or paged cursor with Close",
+        "node": "Iterable or AsyncIterable backed by disposable page cursors",
+        "kotlin": "Sequence or closeable paged cursor",
+        "java": "Iterable or AutoCloseable paged cursor",
+        "ruby": "Enumerable or block-scoped paged cursor",
+        "swift": "Sequence or scoped paged cursor",
+        "wasm": "Iterable or AsyncIterable over bounded browser-safe pages"
+      },
+      "tests": [
+        "portable-parity::bounded-ordered-iteration"
+      ]
+    },
+    "borrowed-view": {
+      "classification": "idiomatic",
+      "portable_semantics": "Rust lifetime-bound byte and record views become callback-scoped views or explicit page leases whose use after scope closure is rejected.",
+      "performance_contract": "Views borrow stable Rust-owned memory only within the synchronous callback or lease; scoped views never cross await and owned fallbacks copy once.",
+      "language_patterns": {
+        "python": "context-managed memoryview or callback-scoped bytes view",
+        "go": "callback-scoped byte slice or closeable page lease",
+        "node": "callback-scoped Buffer view or disposable page lease",
+        "kotlin": "callback-scoped ByteBuffer or closeable page lease",
+        "java": "callback-scoped ByteBuffer or AutoCloseable page lease",
+        "ruby": "block-scoped string view or explicit page lease",
+        "swift": "withUnsafeBytes-style closure or scoped page lease",
+        "wasm": "callback-scoped Uint8Array view invalidated on scope exit"
+      },
+      "tests": [
+        "portable-parity::scoped-view-lifetime"
+      ]
+    },
+    "store-trait": {
+      "classification": "idiomatic",
+      "portable_semantics": "Rust storage traits become host callback or protocol interfaces with the same ordered batch, manifest, transaction, hint, and capability behavior.",
+      "performance_contract": "Inputs are owned for the callback duration, callback results become Rust-owned before return, ordered batch operations stay batched, and async adapters own handles across await.",
+      "language_patterns": {
+        "python": "store protocol object with synchronous and async adapters",
+        "go": "Store interface implemented by host callbacks",
+        "node": "Store callback object with Promise-based async adapter",
+        "kotlin": "Store interface with suspend-compatible async adapter",
+        "java": "Store interface with CompletionStage async adapter",
+        "ruby": "store object responding to the documented callback methods",
+        "swift": "Store protocol with async wrapper ownership",
+        "wasm": "browser Store callback object with Promise-based adapter"
+      },
+      "tests": [
+        "portable-parity::custom-store-callbacks"
+      ]
+    },
+    "builder-typestate": {
+      "classification": "idiomatic",
+      "portable_semantics": "Rust generic and typestate builders become host builders or immutable option records validated before the Rust object is constructed.",
+      "performance_contract": "Validation occurs once at construction; immutable validated configuration is retained in Rust and not rebuilt on each operation.",
+      "language_patterns": {
+        "python": "keyword option records validated by factory methods",
+        "go": "option structs and validating constructors",
+        "node": "typed option objects and validating factories",
+        "kotlin": "data-class options and validating builders",
+        "java": "immutable option records and validating builders",
+        "ruby": "keyword option hashes normalized by validating factories",
+        "swift": "value-type options and throwing initializers",
+        "wasm": "typed JavaScript option objects validated at the WASM boundary"
+      },
+      "tests": [
+        "portable-parity::configuration-validation"
+      ]
+    },
+    "marker-and-associated-type": {
+      "classification": "rust-language-only",
+      "portable_semantics": "Rust marker traits and associated types become documented host type constraints plus stable runtime validation at the first behaviorally relevant boundary.",
+      "performance_contract": "Compile-time-only markers add no boundary work; runtime validation is performed once during construction or callback registration.",
+      "language_patterns": {
+        "python": "documented protocol type constraints with construction-time validation",
+        "go": "interface type constraints with construction-time validation",
+        "node": "TypeScript type constraints with runtime boundary validation",
+        "kotlin": "generic interface constraints with construction-time validation",
+        "java": "generic interface constraints with construction-time validation",
+        "ruby": "documented duck-type constraints with registration-time validation",
+        "swift": "protocol constraints with throwing construction-time validation",
+        "wasm": "TypeScript type constraints with WASM boundary validation"
+      },
+      "tests": [
+        "portable-parity::type-constraint-validation"
+      ]
+    },
+    "callback-protocol": {
+      "classification": "idiomatic",
+      "portable_semantics": "Rust closure aliases and behavioral callback traits become host callable or protocol values with stable input records, result records, and callback error translation.",
+      "performance_contract": "Borrowed callback inputs are valid only for the synchronous call; returned data is Rust-owned before the callback returns and callbacks never execute while a registry lock is held.",
+      "language_patterns": {
+        "python": "callable or protocol object receiving immutable callback records",
+        "go": "function type or callback interface receiving owned records",
+        "node": "typed function or callback object receiving immutable records",
+        "kotlin": "function type or single-method callback interface",
+        "java": "functional interface receiving immutable callback records",
+        "ruby": "Proc or object responding to the documented callback method",
+        "swift": "escaping closure or callback protocol receiving value records",
+        "wasm": "JavaScript function receiving copied or callback-scoped records"
+      },
+      "tests": [
+        "portable-parity::callback-protocol-lifetime"
+      ]
+    },
+    "record-alias": {
+      "classification": "idiomatic",
+      "portable_semantics": "Rust tuple and concrete type aliases become named host records or the existing aliased host record without exposing Rust tuple indexing.",
+      "performance_contract": "Owned fields copy once; aliases of packed-page records retain the same bounded page and lease behavior as their canonical record.",
+      "language_patterns": {
+        "python": "dataclass or canonical aliased record",
+        "go": "named struct or canonical aliased struct",
+        "node": "TypeScript interface or canonical record type",
+        "kotlin": "data class or canonical record type",
+        "java": "record class or canonical record type",
+        "ruby": "immutable value object or canonical record type",
+        "swift": "value struct or canonical record type",
+        "wasm": "TypeScript interface or canonical browser-safe record type"
+      },
+      "tests": [
+        "portable-parity::record-shape-round-trip"
+      ]
+    },
+    "namespace-module": {
+      "classification": "rust-language-only",
+      "portable_semantics": "A Rust public module is represented by the host package or namespace containing its application-facing exports; the module path itself has no runtime operation.",
+      "performance_contract": "Namespace mapping adds no runtime work or boundary allocation.",
+      "language_patterns": {
+        "python": "package module namespace",
+        "go": "package namespace",
+        "node": "ES module export namespace",
+        "kotlin": "package namespace",
+        "java": "package namespace",
+        "ruby": "module namespace",
+        "swift": "module namespace",
+        "wasm": "ES module export namespace"
+      },
+      "tests": [
+        "portable-parity::public-export-surface"
+      ]
+    }
+  }
+}

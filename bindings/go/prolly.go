@@ -216,6 +216,9 @@ extern uint32_t prolly_fast_abi_version(void);
 extern uint64_t prolly_fast_abi_capabilities(void);
 extern ProllyFastCopyResult prolly_fast_read_session_get_into(uint64_t session, const uint8_t *key_ptr, size_t key_len, uint8_t *out_ptr, size_t out_capacity);
 extern ProllyFastValueLeaseResult prolly_fast_read_session_get_lease(uint64_t session, const uint8_t *key_ptr, size_t key_len);
+extern ProllyFastValueLeaseResult prolly_fast_proximity_get_lease(uint64_t map, const uint8_t *key_ptr, size_t key_len);
+extern ProllyFastValueLeaseResult prolly_fast_indexed_get_lease(uint64_t map, const uint8_t *key_ptr, size_t key_len);
+extern ProllyFastPageResult prolly_fast_proximity_scan_range_page(uint64_t map, const uint8_t *start_ptr, size_t start_len, const uint8_t *end_ptr, size_t end_len, uint8_t has_end, const uint8_t *after_ptr, size_t after_len, uint8_t has_after, uint32_t max_records, uint64_t max_arena_bytes);
 extern ProllyFastPageResult prolly_fast_read_session_get_many_page(uint64_t session, const uint8_t *input_ptr, size_t input_len, uint32_t key_count);
 extern ProllyFastCopyResult prolly_fast_read_session_last_error_into(uint64_t session, uint8_t *out_ptr, size_t out_capacity);
 extern ProllyFastPageResult prolly_fast_read_session_scan_page(uint64_t session, const uint8_t *start_ptr, size_t start_len, const uint8_t *end_ptr, size_t end_len, uint8_t has_end, const uint8_t *after_ptr, size_t after_len, uint8_t has_after, uint32_t max_records, uint64_t max_arena_bytes);
@@ -1484,6 +1487,14 @@ type ValueRef struct {
 	Blob  *BlobRef
 }
 
+// ValueRefView is valid only during a GetValueRefView callback. Inline bytes
+// borrow the retained immutable leaf; blob metadata is owned.
+type ValueRefView struct {
+	Kind   string
+	Inline []byte
+	Blob   *BlobRef
+}
+
 type BlobGcReachability struct {
 	LiveBlobs     []BlobRef
 	LiveBlobCount uint64
@@ -2163,6 +2174,151 @@ func (s *ReadSession) GetView(key []byte, visitor func([]byte)) (bool, error) {
 	visitor(value)
 	runtime.KeepAlive(value)
 	return true, nil
+}
+
+func withFastProximityValue(
+	fast uint64, key []byte, visitor func([]byte) error,
+) (bool, error) {
+	result := C.prolly_fast_proximity_get_lease(
+		C.uint64_t(fast), bytePointer(key), C.size_t(len(key)),
+	)
+	runtime.KeepAlive(key)
+	if int32(result.status) != fastStatusOK {
+		return false, fmt.Errorf("native retained proximity read failed with status %d", result.status)
+	}
+	if result.found == 0 {
+		if result.lease_handle != 0 {
+			C.prolly_fast_value_release(result.lease_handle)
+			return false, errors.New("missing proximity read returned a value lease")
+		}
+		return false, nil
+	}
+	dataLen := uint64(result.data_len)
+	if dataLen > uint64(^uint(0)>>1) || result.lease_handle == 0 ||
+		(dataLen != 0 && result.data_ptr == nil) {
+		if result.lease_handle != 0 {
+			C.prolly_fast_value_release(result.lease_handle)
+		}
+		return false, errors.New("native proximity read returned an invalid value lease")
+	}
+	defer C.prolly_fast_value_release(result.lease_handle)
+	var raw []byte
+	if dataLen == 0 {
+		raw = []byte{}
+	} else {
+		raw = unsafe.Slice((*byte)(unsafe.Pointer(result.data_ptr)), int(dataLen))
+	}
+	if err := visitor(raw); err != nil {
+		return false, err
+	}
+	runtime.KeepAlive(raw)
+	return true, nil
+}
+
+func withFastIndexedValue(
+	fast uint64, key []byte, visitor func([]byte),
+) (bool, error) {
+	result := C.prolly_fast_indexed_get_lease(
+		C.uint64_t(fast), bytePointer(key), C.size_t(len(key)),
+	)
+	runtime.KeepAlive(key)
+	if int32(result.status) != fastStatusOK {
+		return false, fmt.Errorf("native indexed point read failed with status %d", result.status)
+	}
+	if result.found == 0 {
+		if result.lease_handle != 0 {
+			C.prolly_fast_value_release(result.lease_handle)
+			return false, errors.New("missing indexed point read returned a value lease")
+		}
+		return false, nil
+	}
+	dataLen := uint64(result.data_len)
+	if dataLen > uint64(^uint(0)>>1) || result.lease_handle == 0 ||
+		(dataLen != 0 && result.data_ptr == nil) {
+		if result.lease_handle != 0 {
+			C.prolly_fast_value_release(result.lease_handle)
+		}
+		return false, errors.New("native indexed point read returned an invalid value lease")
+	}
+	defer C.prolly_fast_value_release(result.lease_handle)
+	value := []byte{}
+	if dataLen != 0 {
+		value = unsafe.Slice((*byte)(unsafe.Pointer(result.data_ptr)), int(dataLen))
+	}
+	visitor(value)
+	runtime.KeepAlive(value)
+	return true, nil
+}
+
+func fastProximityRangePage(
+	fast uint64, start, end, after []byte, hasEnd, hasAfter bool,
+) (fastScanPage, error) {
+	result := C.prolly_fast_proximity_scan_range_page(
+		C.uint64_t(fast), bytePointer(start), C.size_t(len(start)),
+		bytePointer(end), C.size_t(len(end)), C.uint8_t(boolByte(hasEnd)),
+		bytePointer(after), C.size_t(len(after)), C.uint8_t(boolByte(hasAfter)),
+		4096, 4*1024*1024,
+	)
+	runtime.KeepAlive(start)
+	runtime.KeepAlive(end)
+	runtime.KeepAlive(after)
+	if int32(result.status) != fastStatusOK {
+		return fastScanPage{}, fmt.Errorf("native proximity range scan failed with status %d", result.status)
+	}
+	return fastScanPageFromResult(result)
+}
+
+// GetValueRefView parses a stored inline/blob envelope without copying inline
+// payload bytes. The callback must not retain Inline after returning.
+func (s *ReadSession) GetValueRefView(
+	key []byte, visitor func(ValueRefView),
+) (bool, error) {
+	if visitor == nil {
+		return false, errors.New("nil value reference view visitor")
+	}
+	var parseErr error
+	found, err := s.GetView(key, func(value []byte) {
+		view, err := parseValueRefView(value)
+		if err != nil {
+			parseErr = err
+			return
+		}
+		visitor(view)
+	})
+	if err != nil {
+		return false, err
+	}
+	return found, parseErr
+}
+
+func parseValueRefView(value []byte) (ValueRefView, error) {
+	if len(value) < 4 || !bytes.Equal(value[:4], []byte("PLVB")) {
+		return ValueRefView{Kind: "inline", Inline: value}, nil
+	}
+	if len(value) < 6 || value[4] != 1 {
+		return ValueRefView{}, errors.New("invalid or unsupported value reference header")
+	}
+	switch value[5] {
+	case 0:
+		if len(value) < 14 {
+			return ValueRefView{}, errors.New("inline value reference is truncated")
+		}
+		length := binary.BigEndian.Uint64(value[6:14])
+		if length > uint64(len(value)-14) || uint64(len(value)) != 14+length {
+			return ValueRefView{}, errors.New("inline value reference length does not match payload")
+		}
+		return ValueRefView{Kind: "inline", Inline: value[14:]}, nil
+	case 1:
+		if len(value) != 46 {
+			return ValueRefView{}, errors.New("blob value reference length is invalid")
+		}
+		return ValueRefView{
+			Kind: "blob",
+			Blob: &BlobRef{Cid: bytes.Clone(value[6:38]), Len: binary.BigEndian.Uint64(value[38:46])},
+		}, nil
+	default:
+		return ValueRefView{}, fmt.Errorf("unknown value reference tag %d", value[5])
+	}
 }
 
 // GetMany returns point-read results in input order while crossing the native

@@ -40,24 +40,40 @@ mod async_store;
 pub use async_store::*;
 
 pub use domain::indexed::{
-    ActiveIndexHealthRecord, BindingIndexRegistry, BindingIndexedMap, BindingIndexedSnapshot,
-    BindingSecondaryIndexSnapshot, IndexBuildResultRecord, IndexEntryRecord, IndexMatchRecord,
-    IndexPageRecord, IndexProjectionRecord, IndexVerificationRecord, IndexedMapHealthRecord,
+    default_secondary_index_limits, ActiveIndexHealthRecord, BindingIndexRegistry,
+    BindingIndexedMap, BindingIndexedSnapshot, BindingSecondaryIndexSnapshot,
+    IndexBuildResultRecord, IndexEntryRecord, IndexMatchRecord, IndexPageRecord,
+    IndexProjectionRecord, IndexVerificationRecord, IndexedMapHealthRecord,
     IndexedMapMetricsRecord, IndexedRetentionRecord, IndexedSnapshotIdRecord, IndexedSourceRecord,
     IndexedUpdateKind, IndexedUpdateRecord, IndexedVersionRecord, SecondaryIndexExtractorCallback,
     SecondaryIndexLimitsRecord,
 };
 pub use domain::proximity::{
-    default_content_graph_limits, default_proximity_config, exact_proximity_search_request,
-    verify_proximity_membership_proof, verify_proximity_structure_proof, AdaptiveQualityRecord,
-    BindingProximityMap, BindingProximityReadSession, BindingProximitySearchProof,
+    default_composite_accelerator_config, default_composite_build_limits,
+    default_composite_rebuild_options, default_content_graph_limits, default_hnsw_build_limits,
+    default_hnsw_config, default_pq_build_limits, default_pq_config, default_proximity_config,
+    default_proximity_search_runtime_policy, exact_proximity_search_request,
+    verify_proximity_membership_proof, verify_proximity_structure_proof,
+    AcceleratorCatalogEntryRecord, AdaptiveQualityRecord, BindingAcceleratorCatalog,
+    BindingCompositeAccelerator, BindingHnswIndex, BindingProductQuantizer,
+    BindingProximityCancellationToken, BindingProximityMap, BindingProximityReadSession,
+    BindingProximitySearchProof, BindingProximitySearchRuntime, CatalogAcceleratorKindRecord,
+    CompositeAcceleratorConfigRecord, CompositeBaseKindRecord, CompositeBuildLimitsRecord,
+    CompositeBuildOrRebuildKindRecord, CompositeBuildOrRebuildOutcomeRecord,
+    CompositeBuildOutcomeRecord, CompositeBuildStatsRecord, CompositeRebuildOptionsRecord,
     ContentGraphLimitsRecord, ContentObjectKindRecord, DistanceMetricRecord,
-    ExactProximityRecordRecord, ProximityConfigRecord, ProximityFilterKind, ProximityFilterRecord,
-    ProximityMembershipProofRecord, ProximityMembershipVerificationRecord, ProximityMutationRecord,
-    ProximityMutationResultRecord, ProximityMutationStatsRecord, ProximityNeighborRecord,
-    ProximityRecordRecord, ProximityRecordVisitorCallback, ProximitySearchClaimKindRecord,
-    ProximitySearchClaimRecord, ProximitySearchRequestRecord, ProximitySearchResultRecord,
-    ProximitySearchStatsRecord, ProximitySearchVerificationRecord, ProximityStructuralProofRecord,
+    ExactProximityRecordRecord, FullRebuildReasonKindRecord, FullRebuildReasonRecord,
+    HnswBuildLimitsRecord, HnswBuildResultRecord, HnswBuildStatsRecord, HnswConfigRecord,
+    HnswRoutingVectorEncodingRecord, ProductQuantizationBuildLimitsRecord,
+    ProductQuantizationBuildResultRecord, ProductQuantizationBuildStatsRecord,
+    ProductQuantizationConfigRecord, ProductQuantizationQualityRecord, ProximityConfigRecord,
+    ProximityFilterKind, ProximityFilterRecord, ProximityMembershipProofRecord,
+    ProximityMembershipVerificationRecord, ProximityMutationRecord, ProximityMutationResultRecord,
+    ProximityMutationStatsRecord, ProximityNeighborRecord, ProximityRecordRecord,
+    ProximityRecordVisitorCallback, ProximitySearchClaimKindRecord, ProximitySearchClaimRecord,
+    ProximitySearchRequestRecord, ProximitySearchResultRecord, ProximitySearchRuntimePolicyRecord,
+    ProximitySearchRuntimeStatsRecord, ProximitySearchStatsRecord,
+    ProximitySearchVerificationRecord, ProximityStructuralProofRecord,
     ProximityStructuralVerificationRecord, ProximityVerificationRecord, QueryKernelRecord,
     SearchBackendRecord, SearchBudgetRecord, SearchCompletionRecord, SearchPolicyKind,
     TypedContentObjectRecord,
@@ -2422,6 +2438,22 @@ impl ProllyEngine {
             }),
             descriptor,
         )
+    }
+
+    /// Create an engine-bound, reusable proximity search runtime. Reusing this
+    /// object across searches preserves validated content-cache entries and
+    /// exposes cumulative physical I/O counters.
+    pub fn proximity_search_runtime(
+        &self,
+        policy: ProximitySearchRuntimePolicyRecord,
+    ) -> Result<Arc<BindingProximitySearchRuntime>, ProllyBindingError> {
+        BindingProximitySearchRuntime::new(
+            Arc::new(Self {
+                inner: self.inner.clone(),
+            }),
+            policy,
+        )
+        .map(Arc::new)
     }
 
     pub fn begin_versioned_transaction(

@@ -2,13 +2,49 @@ import { createHash } from "node:crypto";
 import { loadNative } from "./native.ts";
 import { IndexRegistry, IndexedMap } from "./indexed.ts";
 import { nativePromise, ownedBytes } from "./packed.ts";
-import { ownProximityRecords, ProximityMap, type ProximityRecord } from "./proximity.ts";
-import { VersionedMap } from "./versioned.ts";
+import {
+  ownProximityRecords,
+  ownProximitySearchRuntimePolicy,
+  ProximityMap,
+  ProximitySearchRuntime,
+  type ProximityRecord,
+  type ProximitySearchRuntimePolicy,
+} from "./proximity.ts";
+import { VersionedMap, VersionedTransaction } from "./versioned.ts";
 
-export { IndexRegistry, IndexedMap } from "./indexed.ts";
+export { defaultSecondaryIndexLimits, IndexRegistry, IndexedMap } from "./indexed.ts";
 export { ViewExpiredError } from "./packed.ts";
-export { exactSearch, ProximityMap, ProximityReadSession } from "./proximity.ts";
-export { VersionedMap } from "./versioned.ts";
+export {
+  defaultHnswBuildLimits,
+  defaultHnswConfig,
+  defaultCompositeAcceleratorConfig,
+  defaultCompositeBuildLimits,
+  defaultPqBuildLimits,
+  defaultPqConfig,
+  defaultProximitySearchRuntimePolicy,
+  exactSearch,
+  HnswIndex,
+  AcceleratorCatalog,
+  CompositeAccelerator,
+  ProductQuantizer,
+  ProximityCancellationToken,
+  ProximityMap,
+  ProximityReadSession,
+  ProximitySearchRuntime,
+} from "./proximity.ts";
+export {
+  BlobStore,
+  BytesKeyCodec,
+  BytesValueCodec,
+  JsonValueCodec,
+  MapComparison,
+  MapMerge,
+  MapSubscription,
+  StringKeyCodec,
+  TypedVersionedMap,
+  VersionedMap,
+  VersionedTransaction,
+} from "./versioned.ts";
 export { RemoteAsyncProllyEngine } from "./remote-async.ts";
 export * from "./remote-store.ts";
 export type * from "./indexed.ts";
@@ -45,6 +81,10 @@ export class Engine implements Disposable {
     return new VersionedMap(this.#open().versionedMap(ownedBytes(id)));
   }
 
+  beginVersionedTransaction(): VersionedTransaction {
+    return new VersionedTransaction(this.#open().beginVersionedTransaction());
+  }
+
   indexRegistry(): IndexRegistry {
     if (this.#module == null) throw new Error("prolly engine is closed");
     return new IndexRegistry(new this.#module.NativePortableIndexRegistry());
@@ -57,11 +97,31 @@ export class Engine implements Disposable {
   buildProximity(
     dimensions: number,
     records: ProximityRecord[],
-    signal?: AbortSignal,
+    options: { threads?: number; signal?: AbortSignal } = {},
   ): Promise<ProximityMap> {
     const native = this.#open();
+    const threads = options.threads ?? 1;
+    if (!Number.isSafeInteger(threads) || threads <= 0) {
+      return Promise.reject(new RangeError("proximity build threads must be a positive safe integer"));
+    }
     const owned = ownProximityRecords(records);
-    return nativePromise(signal, () => new ProximityMap(native.buildProximity(dimensions, owned)));
+    return nativePromise(options.signal, () => new ProximityMap(native.buildProximity(dimensions, owned, threads)));
+  }
+
+  loadProximity(descriptor: Uint8Array, signal?: AbortSignal): Promise<ProximityMap> {
+    const native = this.#open();
+    const owned = ownedBytes(descriptor);
+    return nativePromise(signal, () => new ProximityMap(native.loadProximity(owned)));
+  }
+
+  proximitySearchRuntime(
+    policy?: ProximitySearchRuntimePolicy,
+  ): ProximitySearchRuntime {
+    return new ProximitySearchRuntime(
+      this.#open().proximitySearchRuntime(
+        policy == null ? undefined : ownProximitySearchRuntimePolicy(policy),
+      ),
+    );
   }
 
   close(): void {

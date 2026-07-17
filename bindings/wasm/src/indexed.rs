@@ -4,7 +4,7 @@ use js_sys::{Array, Function, Object, Reflect, Uint8Array};
 use prolly::{
     IndexProjection, IndexedMapMetricsSnapshot, IndexedMapUpdate, IndexedSnapshotBundle,
     IndexedSnapshotId, Mutation, SecondaryIndex, SecondaryIndexCursor, SecondaryIndexEntry,
-    SecondaryIndexError, SecondaryIndexPage, SecondaryIndexRegistry,
+    SecondaryIndexError, SecondaryIndexLimits, SecondaryIndexPage, SecondaryIndexRegistry,
 };
 use std::cell::RefCell;
 use std::sync::Arc;
@@ -71,6 +71,49 @@ fn js_value_message(value: JsValue) -> String {
         .unwrap_or_else(|| "JavaScript index extractor failed".to_string())
 }
 
+fn index_projection(value: &str) -> Result<IndexProjection, JsValue> {
+    match value {
+        "keys_only" => Ok(IndexProjection::KeysOnly),
+        "include" => Ok(IndexProjection::Include),
+        "all" => Ok(IndexProjection::All),
+        _ => Err(JsValue::from_str("invalid index projection")),
+    }
+}
+
+fn secondary_index_limits(value: Option<JsValue>) -> Result<SecondaryIndexLimits, JsValue> {
+    let Some(value) = value else {
+        return Ok(SecondaryIndexLimits::default());
+    };
+    let field = |name: &str| -> Result<usize, JsValue> {
+        let value = Reflect::get(&value, &JsValue::from_str(name))
+            .map_err(|error| JsValue::from_str(&js_value_message(error)))?;
+        let text = value
+            .as_string()
+            .ok_or_else(|| JsValue::from_str(&format!("{name} must be a decimal string")))?;
+        text.parse::<u64>()
+            .map_err(|error| JsValue::from_str(&format!("invalid {name}: {error}")))?
+            .try_into()
+            .map_err(|_| JsValue::from_str(&format!("{name} does not fit this platform")))
+    };
+    Ok(SecondaryIndexLimits {
+        max_term_bytes: field("maxTermBytes")?,
+        max_projection_bytes: field("maxProjectionBytes")?,
+        max_all_value_bytes: field("maxAllValueBytes")?,
+        max_terms_per_record: field("maxTermsPerRecord")?,
+        max_projected_bytes_per_record: field("maxProjectedBytesPerRecord")?,
+        max_derived_mutations_per_transaction: field("maxDerivedMutationsPerTransaction")?,
+        max_projected_bytes_per_transaction: field("maxProjectedBytesPerTransaction")?,
+        max_indexes: field("maxIndexes")?,
+        build_page_size: field("buildPageSize")?,
+        max_temporary_sort_bytes: field("maxTemporarySortBytes")?,
+        max_bundle_nodes: field("maxBundleNodes")?,
+        max_bundle_bytes: field("maxBundleBytes")?,
+        max_verification_entries: field("maxVerificationEntries")?,
+        max_write_retries: field("maxWriteRetries")?,
+        max_build_retries: field("maxBuildRetries")?,
+    })
+}
+
 #[wasm_bindgen(js_name = WasmIndexRegistry)]
 pub struct WasmIndexRegistry {
     registry: SecondaryIndexRegistry,
@@ -91,17 +134,14 @@ impl WasmIndexRegistry {
         generation: u64,
         extractor_id: String,
         projection: String,
+        limits: Option<JsValue>,
         extractor: Function,
     ) -> Result<(), JsValue> {
-        let projection = match projection.as_str() {
-            "keys_only" => IndexProjection::KeysOnly,
-            "include" => IndexProjection::Include,
-            "all" => IndexProjection::All,
-            _ => return Err(JsValue::from_str("invalid index projection")),
-        };
+        let projection = index_projection(&projection)?;
         let callback = JsIndexExtractor(extractor);
         let definition = SecondaryIndex::builder(name.to_vec(), generation, extractor_id)
             .projection(projection)
+            .limits(secondary_index_limits(limits)?)
             .extract(move |key, value| callback.extract(key, value))
             .map_err(js_error)?;
         self.registry = self
@@ -123,11 +163,15 @@ impl Default for WasmIndexRegistry {
 pub struct WasmIndexedMap {
     engine: Arc<super::WasmEngine>,
     id: Vec<u8>,
-    registry: SecondaryIndexRegistry,
+    registry: RefCell<SecondaryIndexRegistry>,
     metrics: RefCell<IndexedMapMetricsSnapshot>,
 }
 
 impl WasmIndexedMap {
+    fn registry_snapshot(&self) -> SecondaryIndexRegistry {
+        self.registry.borrow().clone()
+    }
+
     fn capture_metrics(&self, value: IndexedMapMetricsSnapshot) {
         let mut total = self.metrics.borrow_mut();
         total.normalized_source_mutations = total
@@ -174,17 +218,40 @@ impl WasmIndexedMap {
     pub fn get(&self, key: Uint8Array) -> Result<JsValue, JsValue> {
         let map = self
             .engine
-            .indexed_map(&self.id, self.registry.clone())
+            .indexed_map(&self.id, self.registry_snapshot())
             .map_err(js_error)?;
         let result = map.get(&key.to_vec()).map(optional_bytes).map_err(js_error);
         self.capture_metrics(map.metrics());
         result
     }
 
+    #[wasm_bindgen(js_name = withValueView)]
+    pub fn with_value_view(&self, key: Uint8Array, visitor: &Function) -> Result<bool, JsValue> {
+        let map = self
+            .engine
+            .indexed_map(&self.id, self.registry_snapshot())
+            .map_err(js_error)?;
+        let mut callback_result = Ok(());
+        let found = map
+            .get_with(&key.to_vec(), |value| {
+                // SAFETY: the immutable source leaf remains retained for the
+                // complete synchronous JavaScript callback.
+                let borrowed = unsafe { Uint8Array::view(value) };
+                callback_result = visitor
+                    .call1(&JsValue::UNDEFINED, &borrowed.into())
+                    .map(|_| ());
+            })
+            .map_err(js_error)?
+            .is_some();
+        self.capture_metrics(map.metrics());
+        callback_result?;
+        Ok(found)
+    }
+
     pub fn put(&self, key: Uint8Array, value: Uint8Array) -> Result<Object, JsValue> {
         let map = self
             .engine
-            .indexed_map(&self.id, self.registry.clone())
+            .indexed_map(&self.id, self.registry_snapshot())
             .map_err(js_error)?;
         let result = map
             .put(key.to_vec(), value.to_vec())
@@ -198,7 +265,7 @@ impl WasmIndexedMap {
         let mutations = mutations_from_array(&mutations)?;
         let map = self
             .engine
-            .indexed_map(&self.id, self.registry.clone())
+            .indexed_map(&self.id, self.registry_snapshot())
             .map_err(js_error)?;
         let result = map
             .apply(mutations)
@@ -221,7 +288,7 @@ impl WasmIndexedMap {
         let mutations = mutations_from_array(&mutations)?;
         let map = self
             .engine
-            .indexed_map(&self.id, self.registry.clone())
+            .indexed_map(&self.id, self.registry_snapshot())
             .map_err(js_error)?;
         let result = map
             .apply_if(expected.as_ref(), mutations)
@@ -234,7 +301,7 @@ impl WasmIndexedMap {
     pub fn delete(&self, key: Uint8Array) -> Result<Object, JsValue> {
         let map = self
             .engine
-            .indexed_map(&self.id, self.registry.clone())
+            .indexed_map(&self.id, self.registry_snapshot())
             .map_err(js_error)?;
         let result = map
             .delete(key.to_vec())
@@ -248,7 +315,7 @@ impl WasmIndexedMap {
     pub fn ensure_index(&self, name: Uint8Array) -> Result<Object, JsValue> {
         let map = self
             .engine
-            .indexed_map(&self.id, self.registry.clone())
+            .indexed_map(&self.id, self.registry_snapshot())
             .map_err(js_error)?;
         let result = map.ensure_index(name.to_vec()).map_err(js_error)?;
         self.capture_metrics(map.metrics());
@@ -291,17 +358,84 @@ impl WasmIndexedMap {
         Ok(object)
     }
 
+    #[wasm_bindgen(js_name = replaceIndex)]
+    pub fn replace_index(
+        &self,
+        name: Uint8Array,
+        generation: u64,
+        extractor_id: String,
+        projection: String,
+        limits: Option<JsValue>,
+        extractor: Function,
+    ) -> Result<Object, JsValue> {
+        let projection = index_projection(&projection)?;
+        let callback = JsIndexExtractor(extractor);
+        let definition = SecondaryIndex::builder(name.to_vec(), generation, extractor_id)
+            .projection(projection)
+            .limits(secondary_index_limits(limits)?)
+            .extract(move |key, value| callback.extract(key, value))
+            .map_err(js_error)?;
+        let registry = self.registry_snapshot();
+        let map = self
+            .engine
+            .indexed_map(&self.id, registry.clone())
+            .map_err(js_error)?;
+        let result = map
+            .replace_index(name.to_vec(), definition.clone())
+            .map_err(js_error)?;
+        self.capture_metrics(map.metrics());
+        *self.registry.borrow_mut() = registry.replace(definition).map_err(js_error)?;
+
+        let object = Object::new();
+        set_bytes(
+            &object,
+            "sourceVersion",
+            result.source_version.as_cid().as_bytes(),
+        )?;
+        set_bytes(
+            &object,
+            "indexVersion",
+            result.index_version.as_cid().as_bytes(),
+        )?;
+        set_bytes(
+            &object,
+            "catalogVersion",
+            result.catalog_version.as_cid().as_bytes(),
+        )?;
+        Reflect::set(
+            &object,
+            &"generation".into(),
+            &result.generation.to_string().into(),
+        )?;
+        Reflect::set(
+            &object,
+            &"entries".into(),
+            &result.entries.to_string().into(),
+        )?;
+        Reflect::set(
+            &object,
+            &"attempts".into(),
+            &result.attempts.to_string().into(),
+        )?;
+        Reflect::set(
+            &object,
+            &"activated".into(),
+            &JsValue::from_bool(result.activated),
+        )?;
+        Ok(object)
+    }
+
     pub fn snapshot(&self) -> Result<WasmIndexedSnapshot, JsValue> {
         let map = self
             .engine
-            .indexed_map(&self.id, self.registry.clone())
+            .indexed_map(&self.id, self.registry_snapshot())
             .map_err(js_error)?;
         let snapshot_id = map.snapshot().map_err(js_error)?.id().clone();
         self.capture_metrics(map.metrics());
         Ok(WasmIndexedSnapshot {
             engine: Arc::clone(&self.engine),
             id: self.id.clone(),
-            registry: self.registry.clone(),
+            registry: self.registry_snapshot(),
             snapshot_id,
         })
     }
@@ -312,14 +446,14 @@ impl WasmIndexedMap {
             prolly::MapVersionId::from_bytes(&source_version.to_vec()).map_err(js_error)?;
         let map = self
             .engine
-            .indexed_map(&self.id, self.registry.clone())
+            .indexed_map(&self.id, self.registry_snapshot())
             .map_err(js_error)?;
         let snapshot_id = map.snapshot_at(&version).map_err(js_error)?.id().clone();
         self.capture_metrics(map.metrics());
         Ok(WasmIndexedSnapshot {
             engine: Arc::clone(&self.engine),
             id: self.id.clone(),
-            registry: self.registry.clone(),
+            registry: self.registry_snapshot(),
             snapshot_id,
         })
     }
@@ -338,14 +472,14 @@ impl WasmIndexedMap {
         };
         let map = self
             .engine
-            .indexed_map(&self.id, self.registry.clone())
+            .indexed_map(&self.id, self.registry_snapshot())
             .map_err(js_error)?;
         map.snapshot_by_id(&snapshot_id).map_err(js_error)?;
         self.capture_metrics(map.metrics());
         Ok(WasmIndexedSnapshot {
             engine: Arc::clone(&self.engine),
             id: self.id.clone(),
-            registry: self.registry.clone(),
+            registry: self.registry_snapshot(),
             snapshot_id,
         })
     }
@@ -353,7 +487,7 @@ impl WasmIndexedMap {
     pub fn health(&self) -> Result<Object, JsValue> {
         let map = self
             .engine
-            .indexed_map(&self.id, self.registry.clone())
+            .indexed_map(&self.id, self.registry_snapshot())
             .map_err(js_error)?;
         let result = map
             .health()
@@ -400,7 +534,7 @@ impl WasmIndexedMap {
             prolly::MapVersionId::from_bytes(&source_version.to_vec()).map_err(js_error)?;
         let map = self
             .engine
-            .indexed_map(&self.id, self.registry.clone())
+            .indexed_map(&self.id, self.registry_snapshot())
             .map_err(js_error)?;
         let result = map
             .verify_index(name.to_vec(), &version)
@@ -416,7 +550,7 @@ impl WasmIndexedMap {
             prolly::MapVersionId::from_bytes(&source_version.to_vec()).map_err(js_error)?;
         let map = self
             .engine
-            .indexed_map(&self.id, self.registry.clone())
+            .indexed_map(&self.id, self.registry_snapshot())
             .map_err(js_error)?;
         let values = map.verify_all(&version).map_err(js_error)?;
         self.capture_metrics(map.metrics());
@@ -437,7 +571,7 @@ impl WasmIndexedMap {
             prolly::MapVersionId::from_bytes(&source_version.to_vec()).map_err(js_error)?;
         let map = self
             .engine
-            .indexed_map(&self.id, self.registry.clone())
+            .indexed_map(&self.id, self.registry_snapshot())
             .map_err(js_error)?;
         let result = map
             .repair_index(name.to_vec(), &version)
@@ -451,7 +585,7 @@ impl WasmIndexedMap {
     pub fn deactivate_index(&self, name: Uint8Array) -> Result<Object, JsValue> {
         let map = self
             .engine
-            .indexed_map(&self.id, self.registry.clone())
+            .indexed_map(&self.id, self.registry_snapshot())
             .map_err(js_error)?;
         let result = map
             .deactivate_index(name.to_vec())
@@ -464,7 +598,7 @@ impl WasmIndexedMap {
     pub fn export_current(&self) -> Result<Vec<u8>, JsValue> {
         let map = self
             .engine
-            .indexed_map(&self.id, self.registry.clone())
+            .indexed_map(&self.id, self.registry_snapshot())
             .map_err(js_error)?;
         let result = map
             .export_current()
@@ -487,7 +621,7 @@ impl WasmIndexedMap {
             .map_err(js_error)?;
         let map = self
             .engine
-            .indexed_map(&self.id, self.registry.clone())
+            .indexed_map(&self.id, self.registry_snapshot())
             .map_err(js_error)?;
         let result = map
             .import_current(&bundle, expected.as_ref())
@@ -503,12 +637,26 @@ impl WasmIndexedMap {
             .map_err(|_| JsValue::from_str("retention count does not fit this platform"))?;
         let map = self
             .engine
-            .indexed_map(&self.id, self.registry.clone())
+            .indexed_map(&self.id, self.registry_snapshot())
             .map_err(js_error)?;
         let result = map
             .keep_last(count)
             .map_err(js_error)
             .and_then(indexed_retention_object);
+        self.capture_metrics(map.metrics());
+        result
+    }
+
+    #[wasm_bindgen(js_name = planGc)]
+    pub fn plan_gc(&self) -> Result<Object, JsValue> {
+        let map = self
+            .engine
+            .indexed_map(&self.id, self.registry_snapshot())
+            .map_err(js_error)?;
+        let result = map
+            .plan_indexed_gc()
+            .map_err(js_error)
+            .and_then(super::domain::gc_plan_object);
         self.capture_metrics(map.metrics());
         result
     }
@@ -773,7 +921,7 @@ impl WasmProllyEngine {
         Ok(WasmIndexedMap {
             engine: Arc::clone(&self.inner),
             id,
-            registry: registry.registry.clone(),
+            registry: RefCell::new(registry.registry.clone()),
             metrics: RefCell::new(IndexedMapMetricsSnapshot::default()),
         })
     }

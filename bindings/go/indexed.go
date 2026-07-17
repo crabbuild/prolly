@@ -49,6 +49,26 @@ type SecondaryIndexLimits struct {
 	MaxBuildRetries                   uint64
 }
 
+func DefaultSecondaryIndexLimits() SecondaryIndexLimits {
+	return SecondaryIndexLimits{
+		MaxTermBytes:                      4 * 1024,
+		MaxProjectionBytes:                64 * 1024,
+		MaxAllValueBytes:                  1024 * 1024,
+		MaxTermsPerRecord:                 1024,
+		MaxProjectedBytesPerRecord:        1024 * 1024,
+		MaxDerivedMutationsPerTransaction: 100_000,
+		MaxProjectedBytesPerTransaction:   64 * 1024 * 1024,
+		MaxIndexes:                        32,
+		BuildPageSize:                     4096,
+		MaxTemporarySortBytes:             256 * 1024 * 1024,
+		MaxBundleNodes:                    1_000_000,
+		MaxBundleBytes:                    1024 * 1024 * 1024,
+		MaxVerificationEntries:            10_000_000,
+		MaxWriteRetries:                   8,
+		MaxBuildRetries:                   8,
+	}
+}
+
 type IndexRegistry struct {
 	handle uint64
 	closed atomic.Bool
@@ -226,6 +246,7 @@ type IndexedRetention struct {
 
 type IndexedMap struct {
 	handle uint64
+	fast   uint64
 	closed atomic.Bool
 	mu     sync.RWMutex
 }
@@ -240,7 +261,12 @@ func (e *Engine) IndexedMap(id []byte, registry *IndexRegistry) (*IndexedMap, er
 	if err != nil {
 		return nil, err
 	}
-	result := &IndexedMap{handle: handle}
+	fast, err := ffiIndexedMapFastHandle(handle)
+	if err != nil {
+		ffiFreeIndexedMap(handle)
+		return nil, err
+	}
+	result := &IndexedMap{handle: handle, fast: fast}
 	runtime.SetFinalizer(result, (*IndexedMap).Close)
 	return result, nil
 }
@@ -362,6 +388,23 @@ func (m *IndexedMap) Get(key []byte) ([]byte, bool, error) {
 	}
 	return value, ok, decoder.done()
 }
+
+// GetView exposes the current durable source value without copying it across
+// the language boundary. The visitor must not retain value after returning.
+func (m *IndexedMap) GetView(key []byte, visitor func([]byte)) (bool, error) {
+	if visitor == nil {
+		return false, errors.New("nil indexed value view visitor")
+	}
+	if m == nil {
+		return false, errors.New("indexed map is closed")
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.closed.Load() || m.fast == 0 {
+		return false, errors.New("indexed map is closed")
+	}
+	return withFastIndexedValue(m.fast, key, visitor)
+}
 func (m *IndexedMap) EnsureIndex(name []byte) (IndexBuildResult, error) {
 	handle, unlock, err := m.withHandle()
 	if err != nil {
@@ -370,6 +413,33 @@ func (m *IndexedMap) EnsureIndex(name []byte) (IndexBuildResult, error) {
 	defer unlock()
 	raw, err := ffiIndexedMapEnsureIndex(handle, append([]byte(nil), name...))
 	if err != nil {
+		return IndexBuildResult{}, err
+	}
+	return decodeIndexBuildResult(raw)
+}
+
+// ReplaceIndex shadow-builds a newer generation and atomically activates it.
+// Retired extractor generations remain retained by the native map so exact
+// historical snapshots can still be reopened through this handle.
+func (m *IndexedMap) ReplaceIndex(name []byte, generation uint64, extractorID string, projection IndexProjection, limits *SecondaryIndexLimits, extractor IndexExtractor) (IndexBuildResult, error) {
+	if extractor == nil {
+		return IndexBuildResult{}, errors.New("nil secondary index extractor")
+	}
+	if projection < IndexProjectionKeysOnly || projection > IndexProjectionAll {
+		return IndexBuildResult{}, errors.New("invalid index projection")
+	}
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return IndexBuildResult{}, err
+	}
+	defer unlock()
+	callback := registerGoIndexExtractor(extractor)
+	raw, err := ffiIndexedMapReplaceIndex(
+		handle, append([]byte(nil), name...), generation, extractorID,
+		int32(projection), encodeOptionalSecondaryIndexLimits(limits), callback,
+	)
+	if err != nil {
+		removeGoIndexExtractor(callback)
 		return IndexBuildResult{}, err
 	}
 	return decodeIndexBuildResult(raw)
@@ -495,6 +565,19 @@ func (m *IndexedMap) KeepLast(count uint64) (IndexedRetention, error) {
 		return IndexedRetention{}, err
 	}
 	return decodeIndexedRetention(raw)
+}
+
+func (m *IndexedMap) PlanGC() (GcPlan, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return GcPlan{}, err
+	}
+	defer unlock()
+	raw, err := ffiIndexedMapPlanGC(handle)
+	if err != nil {
+		return GcPlan{}, err
+	}
+	return decodeGcPlan(raw)
 }
 func (m *IndexedMap) Snapshot() (*IndexedSnapshot, error) {
 	handle, unlock, err := m.withHandle()

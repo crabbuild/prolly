@@ -1,7 +1,181 @@
 # frozen_string_literal: true
 
+require 'json'
+
 module Prolly
   ProximityRecord = Data.define(:key, :vector, :value)
+  HnswBuildResult = Data.define(:index, :stats)
+  ProductQuantizationBuildResult = Data.define(:index, :stats)
+  CompositeBuildOutcome = Data.define(:accelerator, :reasons, :stats)
+  CompositeBuildOrRebuildOutcome = Data.define(
+    :kind, :composite, :hnsw, :pq, :reasons, :composite_stats, :hnsw_stats, :pq_stats
+  )
+  TypedEntry = Data.define(:key, :value)
+  TypedMigrationResult = Data.define(:update, :scanned_values, :rewritten_values)
+
+  class StringKeyCodec
+    def encode_key(key) = key.encode(Encoding::UTF_8).force_encoding(Encoding::BINARY)
+
+    def decode_key(bytes)
+      value = bytes.dup.force_encoding(Encoding::UTF_8)
+      raise EncodingError, 'key is not valid UTF-8' unless value.valid_encoding?
+
+      value
+    end
+  end
+
+  class BytesKeyCodec
+    def encode_key(key) = key.b.dup
+    def decode_key(bytes) = bytes.b.dup
+  end
+
+  class BytesValueCodec
+    def encode(value) = value.b.dup
+    def decode(bytes) = bytes.b.dup
+  end
+
+  class JsonValueCodec
+    def encode(value) = JSON.generate(value).force_encoding(Encoding::BINARY)
+    def decode(bytes) = JSON.parse(bytes)
+  end
+
+  class TypedVersionedMap
+    attr_reader :raw
+
+    def initialize(raw, key_codec, value_codec)
+      @raw = raw
+      @key_codec = key_codec
+      @value_codec = value_codec
+    end
+
+    def get(key)
+      value = @raw.__typed_get(@key_codec.encode_key(key))
+      value.nil? ? nil : @value_codec.decode(value)
+    end
+
+    def get_at(id, key)
+      value = @raw.__typed_get_at(id.b.dup, @key_codec.encode_key(key))
+      value.nil? ? nil : @value_codec.decode(value)
+    end
+
+    def entries
+      @raw.__typed_entries.map do |entry|
+        TypedEntry.new(
+          key: @key_codec.decode_key(entry.key), value: @value_codec.decode(entry.value)
+        )
+      end
+    end
+
+    def put(key, value) = @raw.__typed_put(@key_codec.encode_key(key), @value_codec.encode(value))
+
+    def put_if(expected, key, value)
+      @raw.__typed_put_if(
+        expected&.b&.dup, @key_codec.encode_key(key), @value_codec.encode(value)
+      )
+    end
+
+    def delete(key) = @raw.__typed_delete(@key_codec.encode_key(key))
+
+    def migrate_from(expected, source_codec, migrate = nil, &block)
+      transform = migrate || block
+      raise ArgumentError, 'migrate_from requires a callable' unless transform
+
+      entries = @raw.__typed_entries_at(expected.b.dup)
+      mutations = entries.map do |entry|
+        MutationRecord.new(
+          kind: MutationKind::UPSERT,
+          key: entry.key,
+          value: @value_codec.encode(transform.call(source_codec.decode(entry.value)))
+        )
+      end
+      update = @raw.__typed_apply_if(expected.b.dup, mutations)
+      TypedMigrationResult.new(
+        update: update, scanned_values: entries.length, rewritten_values: entries.length
+      )
+    end
+  end
+
+  class BlobStore
+    def self.memory = new(ProllyBlobStore.memory)
+    def self.file(path) = new(ProllyBlobStore.file(path))
+
+    def initialize(native)
+      @native = native
+      @closed = false
+    end
+
+    def native_handle
+      raise 'blob store is closed' if @closed
+
+      @native
+    end
+
+    def owned_clone
+      self.class.new(ProllyBlobStore.uniffi_allocate(native_handle.uniffi_clone_handle))
+    end
+
+    def put_blob(bytes) = native_handle.put_blob(bytes.b.dup)
+    def get_blob(reference) = native_handle.get_blob(reference)
+    def delete_blob(reference) = native_handle.delete_blob(reference)
+    def list_blob_refs = native_handle.list_blob_refs
+    def blob_count = native_handle.blob_count
+
+    def close
+      return if @closed
+
+      @closed = true
+      @native = nil
+    end
+
+    def use
+      raise 'blob store is closed' if @closed
+      return self unless block_given?
+
+      begin
+        yield self
+      ensure
+        close
+      end
+    end
+  end
+
+  def self.native_blob_store(store)
+    store.is_a?(BlobStore) ? store.native_handle : store
+  end
+
+  def self.with_owned_blob_store(store)
+    yield store
+  ensure
+    store.close if store.is_a?(BlobStore)
+  end
+
+  def self.owned_proximity_search_request(request)
+    budget = request.budget
+    filter = request.filter
+    ProximitySearchRequestRecord.new(
+      query: request.query.map(&:to_f),
+      k: request.k,
+      policy: request.policy,
+      adaptive_quality: request.adaptive_quality,
+      budget: SearchBudgetRecord.new(
+        max_nodes: budget.max_nodes,
+        max_committed_bytes: budget.max_committed_bytes,
+        max_distance_evaluations: budget.max_distance_evaluations,
+        max_frontier_entries: budget.max_frontier_entries
+      ),
+      filter: ProximityFilterRecord.new(
+        kind: filter.kind,
+        start: filter.start&.dup,
+        range_end: filter.range_end&.dup,
+        prefix: filter.prefix&.dup,
+        eligible_keys: filter.eligible_keys.map(&:dup)
+      ),
+      kernel: request.kernel,
+      backend: request.backend,
+      hnsw_ef_search: request.hnsw_ef_search,
+      pq_rerank_multiplier: request.pq_rerank_multiplier
+    )
+  end
 
   module RubySecondaryIndexExtractorCallbacks
     class VTable < FFI::Struct
@@ -142,6 +316,10 @@ module Prolly
       ensure_open
       VersionedMap.new(@native.versioned_map(id.b))
     end
+    def begin_versioned_transaction
+      ensure_open
+      VersionedTransaction.new(@native.begin_versioned_transaction)
+    end
 
     def index_registry
       ensure_open
@@ -170,10 +348,78 @@ module Prolly
       ProximityMap.new(@native.load_proximity_map(descriptor.b))
     end
 
+    def proximity_search_runtime(policy = Prolly.default_proximity_search_runtime_policy)
+      ensure_open
+      ProximitySearchRuntime.new(@native.proximity_search_runtime(policy))
+    end
+
     private
 
     def ensure_open
       raise 'engine is closed' if @closed
+    end
+  end
+
+  class ProximitySearchRuntime
+    def initialize(native)
+      @native = native
+      @closed = false
+    end
+
+    def policy = open! { @native.policy }
+    def stats = open! { @native.stats }
+    def clear = open! { @native.clear }
+    def close = @closed = true
+
+    def use
+      raise 'proximity search runtime is closed' if @closed
+      return self unless block_given?
+
+      begin
+        yield self
+      ensure
+        close
+      end
+    end
+
+    private
+
+    def native_for_search = open! { @native }
+
+    def open!
+      raise 'proximity search runtime is closed' if @closed
+      yield
+    end
+  end
+
+  class ProximityCancellationToken
+    def initialize
+      @native = BindingProximityCancellationToken.new
+      @closed = false
+    end
+
+    def cancel = open! { @native.cancel }
+    def cancelled? = open! { @native.is_cancelled }
+    def close = @closed = true
+
+    def use
+      raise 'proximity cancellation token is closed' if @closed
+      return self unless block_given?
+
+      begin
+        yield self
+      ensure
+        close
+      end
+    end
+
+    private
+
+    def native_for_search = open! { @native }
+
+    def open!
+      raise 'proximity cancellation token is closed' if @closed
+      yield
     end
   end
 
@@ -202,6 +448,7 @@ module Prolly
     def id = open! { @native.id }
     def ensure_index(name) = open! { @native.ensure_index(name.b) }
     def get(key) = open! { @native.get(key.b) }
+    def get_view(key, &block) = open! { PackedPage.indexed_point_read_view(@native.fast_handle, key.b, &block) }
     def contains?(key) = open! { @native.contains_key(key.b) }
     def get_many(keys) = open! { @native.get_many(keys.map(&:b)) }
     def get_at(id, key) = open! { @native.get_at(id.b, key.b) }
@@ -219,13 +466,28 @@ module Prolly
     def verify_index(name, source_version) = open! { @native.verify_index(name.b, source_version.b) }
     def verify_all(source_version) = open! { @native.verify_all(source_version.b) }
     def repair_index(name, source_version) = open! { @native.repair_index(name.b, source_version.b) }
+    def replace_index(name, generation, extractor_id, projection, extractor, limits: nil)
+      adapter = extractor.is_a?(SecondaryIndexExtractorCallback) ? extractor : ProcIndexExtractor.new(extractor)
+      open! { @native.replace_index(name.b, generation, extractor_id, projection, limits, adapter) }
+    end
     def deactivate_index(name) = open! { @native.deactivate_index(name.b) }
     def export_current = open! { @native.export_current }
     def import_current(bundle, expected_source = nil) = open! { @native.import_current(bundle.b, expected_source&.b) }
     def keep_last(count) = open! { @native.keep_last(count) }
+    def plan_gc = open! { @native.plan_gc }
     def snapshot = open! { IndexedSnapshot.new(@native.snapshot) }
     def snapshot_at(source_version) = open! { IndexedSnapshot.new(@native.snapshot_at(source_version.b)) }
     def snapshot_by_id(id) = open! { IndexedSnapshot.new(@native.snapshot_by_id(id)) }
+    def get_async(key) = Future.new { get(key.b.dup) }
+    def put_async(key, value) = Future.new { put(key.b.dup, value.b.dup) }
+    def apply_async(mutations)
+      owned = owned_mutations(mutations)
+      Future.new { apply(owned) }
+    end
+    def delete_async(key) = Future.new { delete(key.b.dup) }
+    def ensure_index_async(name) = Future.new { ensure_index(name.b.dup) }
+    def snapshot_async = Future.new { snapshot }
+    def snapshot_at_async(source_version) = Future.new { snapshot_at(source_version.b.dup) }
     def close = @closed = true
 
     private
@@ -271,25 +533,107 @@ module Prolly
       @closed = false
     end
 
+    def typed(key_codec, value_codec) = TypedVersionedMap.new(self, key_codec, value_codec)
+
+    # Codec output is freshly owned, so these internal calls avoid the public API's second copy.
+    def __typed_get(encoded_key) = open! { @native.get(encoded_key) }
+    def __typed_get_at(owned_id, encoded_key) = open! { @native.get_at(owned_id, encoded_key) }
+    def __typed_entries = open! { @native.range(''.b, nil) }
+    def __typed_entries_at(owned_expected) = open! { @native.range_at(owned_expected, ''.b, nil) }
+    def __typed_put(encoded_key, encoded_value) = open! { @native.put(encoded_key, encoded_value) }
+    def __typed_put_if(owned_expected, encoded_key, encoded_value) =
+      open! { @native.put_if(owned_expected, encoded_key, encoded_value) }
+    def __typed_delete(encoded_key) = open! { @native.delete(encoded_key) }
+    def __typed_apply_if(owned_expected, mutations) =
+      open! { @native.apply_if(owned_expected, mutations) }
+
     # Ruby makes `initialize` private even when generated as an FFI method.
     def initialize_map = open! { @native.__send__(:initialize) }
+    def initialize_sorted(entries) = open! { @native.initialize_sorted(owned_entries(entries)) }
     def id = open! { @native.id }
     def initialized? = open! { @native.is_initialized }
     def head = open! { @native.head }
     def head_id = open! { @native.head_id }
+    def head_name = open! { @native.head_name }
+    def versions_prefix = open! { @native.versions_prefix }
     def version(id) = open! { @native.version(id.b) }
     def versions = open! { @native.versions }
     def get(key) = open! { @native.get(key.b) }
+    def get_large_value(blob_store, key) =
+      open! { @native.get_large_value(Prolly.native_blob_store(blob_store), key.b) }
+    def contains?(key) = open! { @native.contains_key(key.b) }
+    def get_many(keys) = open! { @native.get_many(keys.map { |key| key.b.dup }) }
+    def get_at(id, key) = open! { @native.get_at(id.b, key.b) }
+    def get_many_at(id, keys) = open! { @native.get_many_at(id.b, keys.map { |key| key.b.dup }) }
+    def range(start = ''.b, range_end = nil) = open! { @native.range(start.b, range_end&.b) }
+    def prefix(prefix) = open! { @native.prefix(prefix.b) }
+    def range_at(id, start = ''.b, range_end = nil) = open! { @native.range_at(id.b, start.b, range_end&.b) }
+    def prefix_at(id, prefix) = open! { @native.prefix_at(id.b, prefix.b) }
+    def range_page(cursor = nil, range_end = nil, limit = 256) = open! { @native.range_page(cursor, range_end&.b, limit) }
+    def prefix_page(prefix, cursor = nil, limit = 256) = open! { @native.prefix_page(prefix.b, cursor, limit) }
+    def range_page_at(id, cursor = nil, range_end = nil, limit = 256) = open! { @native.range_page_at(id.b, cursor, range_end&.b, limit) }
+    def prefix_page_at(id, prefix, cursor = nil, limit = 256) = open! { @native.prefix_page_at(id.b, prefix.b, cursor, limit) }
+    def diff(base, target) = open! { @native.diff(base.b, target.b) }
+    def changes_since(base) = open! { @native.changes_since(base.b) }
+    def rollback_to(id) = open! { @native.rollback_to(id.b) }
     def put(key, value) = open! { @native.put(key.b, value.b) }
+    def put_large_value(blob_store, key, value, config) =
+      open! do
+        @native.put_large_value(Prolly.native_blob_store(blob_store), key.b, value.b, config)
+      end
+    def put_large_value_if(blob_store, expected, key, value, config) =
+      open! do
+        @native.put_large_value_if(
+          Prolly.native_blob_store(blob_store), expected&.b, key.b, value.b, config
+        )
+      end
+    def apply(mutations) = open! { @native.apply(owned_mutations(mutations)) }
+    def append(mutations) = open! { @native.append(owned_mutations(mutations)) }
+    def parallel_apply(mutations, config)
+      open! do
+        @native.parallel_apply(
+          owned_mutations(mutations),
+          ParallelConfigRecord.new(
+            max_threads: config.max_threads,
+            parallelism_threshold: config.parallelism_threshold
+          )
+        )
+      end
+    end
+    def rebuild_sorted_if(expected, entries) = open! { @native.rebuild_sorted_if(expected&.b, owned_entries(entries)) }
+    def rebuild_from_entries_if(expected, entries) = open! { @native.rebuild_from_entries_if(expected&.b, owned_entries(entries)) }
+    def rebuild_from_iter_if(expected, entries) = rebuild_from_entries_if(expected, entries)
+    def apply_if(expected, mutations) = open! { @native.apply_if(expected&.b, owned_mutations(mutations)) }
+    def put_if(expected, key, value) = open! { @native.put_if(expected&.b, key.b, value.b) }
+    def delete_if(expected, key) = open! { @native.delete_if(expected&.b, key.b) }
+    def apply_at_millis(mutations, timestamp_millis) = open! { @native.apply_at_millis(owned_mutations(mutations), timestamp_millis) }
+    def apply_if_at_millis(expected, mutations, timestamp_millis) = open! { @native.apply_if_at_millis(expected&.b, owned_mutations(mutations), timestamp_millis) }
     def delete(key) = open! { @native.delete(key.b) }
     def snapshot = open! { @native.snapshot&.then { |value| MapSnapshot.new(value) } }
     def snapshot_at(id) = open! { @native.snapshot_at(id.b)&.then { |value| MapSnapshot.new(value) } }
+    def compare(base, target) = open! { MapComparison.new(@native.compare(base.b, target.b)) }
+    def compare_to_head(base) = open! { MapComparison.new(@native.compare_to_head(base.b)) }
+    def subscribe = open! { MapSubscription.new(@native.subscribe) }
+    def subscribe_from(last_seen = nil) = open! { MapSubscription.new(@native.subscribe_from(last_seen&.b)) }
+    def prepare_merge(base, candidate) = open! { MapMerge.new(@native.prepare_merge(base.b, candidate.b)) }
     def backup = open! { @native.backup }
     def restore_backup(bundle) = open! { @native.restore_backup(bundle.b) }
+    def import_as_head(bundle) = open! { @native.import_as_head(bundle) }
+    def import_as_head_at_millis(bundle, timestamp_millis) =
+      open! { @native.import_as_head_at_millis(bundle, timestamp_millis) }
     def keep_last(count) = open! { @native.keep_last(count) }
+    def prune_versions(keep_latest) = open! { @native.prune_versions(keep_latest) }
+    def keep_for_at(now_millis, max_age_millis) = open! { @native.keep_for_at(now_millis, max_age_millis) }
+    def keep_for(max_age_millis) = open! { @native.keep_for(max_age_millis) }
+    def keep_versions(ids) = open! { @native.keep_versions(ids.map { |id| id.b.dup }) }
+    def retention_policy = open! { @native.retention_policy }
     def verify_catalog = open! { @native.verify_catalog }
     def plan_gc = open! { @native.plan_gc }
     def sweep_gc = open! { @native.sweep_gc }
+    def plan_blob_gc(blob_store) =
+      open! { @native.plan_blob_gc(Prolly.native_blob_store(blob_store)) }
+    def sweep_blob_gc(blob_store) =
+      open! { @native.sweep_blob_gc(Prolly.native_blob_store(blob_store)) }
 
     def put_async(key, value)
       copied_key = key.b.dup
@@ -297,12 +641,171 @@ module Prolly
       Future.new { put(copied_key, copied_value) }
     end
 
+    def initialize_async = Future.new { initialize_map }
+    def head_async = Future.new { head }
+    def version_async(id) = Future.new { version(id.b.dup) }
+    def get_async(key) = Future.new { get(key.b.dup) }
+    def get_large_value_async(blob_store, key)
+      owned_store = blob_store.is_a?(BlobStore) ? blob_store.owned_clone : blob_store
+      owned_key = key.b.dup
+      Future.new do
+        Prolly.with_owned_blob_store(owned_store) { get_large_value(owned_store, owned_key) }
+      end
+    end
+    def apply_async(mutations)
+      owned = owned_mutations(mutations)
+      Future.new { apply(owned) }
+    end
+    def delete_async(key) = Future.new { delete(key.b.dup) }
+    def put_large_value_async(blob_store, key, value, config)
+      owned_store = blob_store.is_a?(BlobStore) ? blob_store.owned_clone : blob_store
+      owned_key = key.b.dup
+      owned_value = value.b.dup
+      owned_config = LargeValueConfigRecord.new(inline_threshold: config.inline_threshold)
+      Future.new do
+        Prolly.with_owned_blob_store(owned_store) do
+          put_large_value(owned_store, owned_key, owned_value, owned_config)
+        end
+      end
+    end
+    def put_large_value_if_async(blob_store, expected, key, value, config)
+      owned_store = blob_store.is_a?(BlobStore) ? blob_store.owned_clone : blob_store
+      owned_expected = expected&.b&.dup
+      owned_key = key.b.dup
+      owned_value = value.b.dup
+      owned_config = LargeValueConfigRecord.new(inline_threshold: config.inline_threshold)
+      Future.new do
+        Prolly.with_owned_blob_store(owned_store) do
+          put_large_value_if(owned_store, owned_expected, owned_key, owned_value, owned_config)
+        end
+      end
+    end
+    def plan_blob_gc_async(blob_store)
+      owned_store = blob_store.is_a?(BlobStore) ? blob_store.owned_clone : blob_store
+      Future.new do
+        Prolly.with_owned_blob_store(owned_store) { plan_blob_gc(owned_store) }
+      end
+    end
+    def sweep_blob_gc_async(blob_store)
+      owned_store = blob_store.is_a?(BlobStore) ? blob_store.owned_clone : blob_store
+      Future.new do
+        Prolly.with_owned_blob_store(owned_store) { sweep_blob_gc(owned_store) }
+      end
+    end
+    def snapshot_async = Future.new { snapshot }
+    def snapshot_at_async(id) = Future.new { snapshot_at(id.b.dup) }
+    def import_as_head_async(bundle)
+      owned = Prolly.snapshot_bundle_to_bytes(bundle)
+      Future.new { import_as_head(Prolly.snapshot_bundle_from_bytes(owned)) }
+    end
+    def import_as_head_at_millis_async(bundle, timestamp_millis)
+      owned = Prolly.snapshot_bundle_to_bytes(bundle)
+      Future.new do
+        import_as_head_at_millis(Prolly.snapshot_bundle_from_bytes(owned), timestamp_millis)
+      end
+    end
+    def subscribe_async = Future.new { subscribe }
+    def subscribe_from_async(last_seen = nil)
+      owned = last_seen&.b&.dup
+      Future.new { subscribe_from(owned) }
+    end
+
+    def close = @closed = true
+
+    private
+
+    def owned_mutations(mutations)
+      mutations.map do |mutation|
+        MutationRecord.new(
+          kind: mutation.kind, key: mutation.key.b.dup, value: mutation.value&.b&.dup
+        )
+      end
+    end
+
+    def owned_entries(entries)
+      entries.map { |entry| EntryRecord.new(key: entry.key.b.dup, value: entry.value.b.dup) }
+    end
+
+    def open!
+      raise 'versioned map is closed' if @closed
+      yield
+    end
+  end
+
+  class VersionedTransaction
+    def initialize(native) = @native = native
+    def head(map_id) = open! { @native.head(map_id.b) }
+    def get(map_id, key) = open! { @native.get(map_id.b, key.b) }
+    def apply(map_id, mutations) = open! { @native.apply(map_id.b, mutations) }
+    def apply_if(map_id, expected, mutations) = open! { @native.apply_if(map_id.b, expected&.b, mutations) }
+    def put(map_id, key, value) = open! { @native.put(map_id.b, key.b, value.b) }
+    def delete(map_id, key) = open! { @native.delete(map_id.b, key.b) }
+    def commit = open! { @native.commit }.tap { close }
+    def rollback = open! { @native.rollback }.tap { close }
+    def close
+      @native = nil
+    end
+    private
+    def open!
+      raise IOError, 'versioned transaction is completed' unless @native
+      yield
+    end
+  end
+
+  class MapComparison
+    def initialize(native)
+      @native = native
+      @closed = false
+    end
+
+    def base = open! { @native.base }
+    def target = open! { @native.target }
+    def diff = open! { @native.diff }
+    def diff_page(cursor = nil, range_end = nil, limit = 256) = open! { @native.diff_page(cursor, range_end&.b, limit) }
     def close = @closed = true
 
     private
 
     def open!
-      raise 'versioned map is closed' if @closed
+      raise IOError, 'map comparison is closed' if @closed
+      yield
+    end
+  end
+
+  class MapSubscription
+    def initialize(native)
+      @native = native
+      @closed = false
+    end
+
+    def last_seen = open! { @native.last_seen }
+    def poll = open! { @native.poll }
+    def poll_async = Future.new { poll }
+    def close = @closed = true
+
+    private
+
+    def open!
+      raise IOError, 'map subscription is closed' if @closed
+      yield
+    end
+  end
+
+  class MapMerge
+    def initialize(native)
+      @native = native
+      @closed = false
+    end
+    def base = open! { @native.base }
+    def head = open! { @native.head }
+    def candidate = open! { @native.candidate }
+    def merge(resolver = nil) = open! { @native.merge(resolver) }
+    def conflict_page(cursor = nil, limit = 256) = open! { @native.conflict_page(cursor, limit) }
+    def publish(resolver = nil) = open! { @native.publish(resolver) }
+    def close = @closed = true
+    private
+    def open!
+      raise IOError, 'map merge is closed' if @closed
       yield
     end
   end
@@ -331,9 +834,43 @@ module Prolly
     def prove_key(key) = open! { @native.prove_key(key.b) }
     def prove_keys(keys) = open! { @native.prove_keys(keys.map(&:b)) }
     def prove_range(start = ''.b, range_end = nil) = open! { @native.prove_range(start.b, range_end&.b) }
+    def prove_prefix(prefix) = open! { @native.prove_prefix(prefix.b) }
+    def prove_range_page(cursor = nil, range_end = nil, limit = 256) = open! { @native.prove_range_page(cursor, range_end&.b, limit) }
     def stats = open! { @native.stats }
     def export = open! { @native.export }
     def read = open! { ReadSession.new(@native.read_session) }
+    def get_async(key) = Future.new { get(key.b.dup) }
+    def get_many_async(keys)
+      owned = keys.map { |key| key.b.dup }
+      Future.new { get_many(owned) }
+    end
+    def range_async(start = ''.b, range_end = nil)
+      owned_start = start.b.dup
+      owned_end = range_end&.b&.dup
+      Future.new { range(owned_start, owned_end) }
+    end
+    def prefix_async(prefix) = Future.new { self.prefix(prefix.b.dup) }
+    def range_page_async(cursor = nil, range_end = nil, limit = 256)
+      owned_end = range_end&.b&.dup
+      Future.new { range_page(cursor, owned_end, limit) }
+    end
+    def prefix_page_async(prefix, cursor = nil, limit = 256)
+      owned_prefix = prefix.b.dup
+      Future.new { prefix_page(owned_prefix, cursor, limit) }
+    end
+    def prove_key_async(key) = Future.new { prove_key(key.b.dup) }
+    def prove_keys_async(keys)
+      owned = keys.map { |key| key.b.dup }
+      Future.new { prove_keys(owned) }
+    end
+    def prove_range_async(start = ''.b, range_end = nil)
+      owned_start = start.b.dup
+      owned_end = range_end&.b&.dup
+      Future.new { prove_range(owned_start, owned_end) }
+    end
+    def prove_prefix_async(prefix) = Future.new { prove_prefix(prefix.b.dup) }
+    def stats_async = Future.new { stats }
+    def export_async = Future.new { export }
     def close = @closed = true
 
     private
@@ -352,6 +889,21 @@ module Prolly
 
     def get(key) = open! { @native.get(key.b) }
     def get_many(keys) = open! { @native.get_many(keys.map(&:b)) }
+    def get_view(key, &block) = open! { PackedPage.point_read_view(@native.fast_handle, key.b, &block) }
+    def get_value_ref_view(key, &block) =
+      open! { PackedPage.value_ref_view(@native.fast_handle, key.b, &block) }
+    def get_async(key) = Future.new { get(key.b.dup) }
+    def get_many_async(keys)
+      owned = keys.map { |key| key.b.dup }
+      Future.new { get_many(owned) }
+    end
+    def scan_range_view(start = ''.b, range_end = nil, &block)
+      open! do
+        PackedPage.scan_range_view(
+          @native.fast_handle, start.b, range_end&.b, &block
+        )
+      end
+    end
     def close = @closed = true
 
     def use
@@ -380,14 +932,119 @@ module Prolly
     end
 
     def get(key) = open! { @native.get(key.b) }
+    def get_view(key, &block)
+      raise ArgumentError, 'get_view requires a block' unless block
+      open! { PackedPage.proximity_point_read_view(@native.fast_handle, key.b, &block) }
+    end
     def contains?(key) = open! { @native.contains_key(key.b) }
     def count = open! { @native.count }
     def config = open! { @native.config }
     def descriptor = open! { @native.descriptor }
+    def build_hnsw(config = Prolly.default_hnsw_config, limits = Prolly.default_hnsw_build_limits)
+      open! do
+        result = @native.build_hnsw(config, limits)
+        HnswBuildResult.new(index: HnswIndex.new(result.index), stats: result.stats)
+      end
+    end
+    def load_hnsw(manifest) = open! { HnswIndex.new(@native.load_hnsw(manifest.b)) }
+    def build_pq(config: Prolly.default_pq_config, worker_threads: 1,
+                 limits: Prolly.default_pq_build_limits)
+      open! do
+        result = @native.build_pq(config, worker_threads, limits)
+        ProductQuantizationBuildResult.new(
+          index: ProductQuantizer.new(result.index),
+          stats: result.stats
+        )
+      end
+    end
+    def load_pq(manifest) = open! { ProductQuantizer.new(@native.load_pq(manifest.b)) }
+    def build_composite_hnsw(base_map, base, config: Prolly.default_composite_accelerator_config,
+                             limits: Prolly.default_composite_build_limits)
+      open! do
+        result = @native.build_composite_hnsw(
+          base_map.send(:native_for_accelerator), base.send(:native_for_composite), config, limits
+        )
+        CompositeBuildOutcome.new(
+          accelerator: result.accelerator && CompositeAccelerator.new(result.accelerator),
+          reasons: result.reasons,
+          stats: result.stats
+        )
+      end
+    end
+    def build_composite_pq(base_map, base, config: Prolly.default_composite_accelerator_config,
+                           limits: Prolly.default_composite_build_limits)
+      open! do
+        result = @native.build_composite_pq(
+          base_map.send(:native_for_accelerator), base.send(:native_for_composite), config, limits
+        )
+        CompositeBuildOutcome.new(
+          accelerator: result.accelerator && CompositeAccelerator.new(result.accelerator),
+          reasons: result.reasons,
+          stats: result.stats
+        )
+      end
+    end
+    def portable_rebuild_outcome(result)
+      CompositeBuildOrRebuildOutcome.new(
+        kind: result.kind,
+        composite: result.composite && CompositeAccelerator.new(result.composite),
+        hnsw: result.hnsw && HnswIndex.new(result.hnsw),
+        pq: result.pq && ProductQuantizer.new(result.pq),
+        reasons: result.reasons,
+        composite_stats: result.composite_stats,
+        hnsw_stats: result.hnsw_stats,
+        pq_stats: result.pq_stats
+      )
+    end
+    private :portable_rebuild_outcome
+    def build_or_rebuild_composite_hnsw(
+      base_map, base, config: Prolly.default_composite_accelerator_config,
+      limits: Prolly.default_composite_build_limits,
+      rebuild: Prolly.default_composite_rebuild_options
+    )
+      open! do
+        portable_rebuild_outcome(
+          @native.build_or_rebuild_composite_hnsw(
+            base_map.send(:native_for_accelerator), base.send(:native_for_composite),
+            config, limits, rebuild
+          )
+        )
+      end
+    end
+    def build_or_rebuild_composite_pq(
+      base_map, base, config: Prolly.default_composite_accelerator_config,
+      limits: Prolly.default_composite_build_limits,
+      rebuild: Prolly.default_composite_rebuild_options
+    )
+      open! do
+        portable_rebuild_outcome(
+          @native.build_or_rebuild_composite_pq(
+            base_map.send(:native_for_accelerator), base.send(:native_for_composite),
+            config, limits, rebuild
+          )
+        )
+      end
+    end
+    def load_composite(manifest) = open! { CompositeAccelerator.new(@native.load_composite(manifest.b)) }
+    def build_accelerator_catalog(hnsw: nil, pq: nil, composite: nil)
+      open! do
+        AcceleratorCatalog.new(
+          @native.build_accelerator_catalog(
+            hnsw&.send(:native_for_composite),
+            pq&.send(:native_for_composite),
+            composite&.send(:native_for_composite)
+          )
+        )
+      end
+    end
+    def load_accelerator_catalog(manifest)
+      open! { AcceleratorCatalog.new(@native.load_accelerator_catalog(manifest.b)) }
+    end
     def verify = open! { @native.verify }
     def prove_membership(key) = open! { @native.prove_membership(key.b) }
     def prove_search(request, limits = Prolly.default_content_graph_limits)
-      open! { ProximitySearchProof.new(@native.prove_search(request, limits)) }
+      owned = Prolly.owned_proximity_search_request(request)
+      open! { ProximitySearchProof.new(@native.prove_search(owned, limits)) }
     end
     def prove_search_exact(query, k, limits = Prolly.default_content_graph_limits)
       prove_search(Prolly.exact_proximity_search_request(query, k), limits)
@@ -403,8 +1060,51 @@ module Prolly
     def rebuild(mutations) = open! { ProximityMap.new(@native.rebuild(mutations)) }
     def read = open! { ProximityReadSession.new(@native.read_session) }
 
+    def search(request)
+      read.use { |session| session.search(request) }
+    end
+
+    def search_with_runtime(request, runtime)
+      open! do
+        @native.search_with_runtime(
+          Prolly.owned_proximity_search_request(request), runtime.send(:native_for_search)
+        )
+      end
+    end
+
+    def search_cancellable(request, cancellation:, runtime: nil)
+      open! do
+        @native.search_cancellable(
+          Prolly.owned_proximity_search_request(request),
+          runtime&.send(:native_for_search),
+          cancellation.send(:native_for_search)
+        )
+      end
+    end
+
+    def search_async(request, runtime: nil, cancellation: nil)
+      owned = Prolly.owned_proximity_search_request(request)
+      token = cancellation || ProximityCancellationToken.new
+      Future.new(cancel: -> { token.cancel }) do
+        search_cancellable(owned, runtime: runtime, cancellation: token)
+      end
+    end
+
     def search_exact(query, k)
       read.use { |session| session.search_exact(query, k) }
+    end
+
+    def scan_records(&block)
+      raise ArgumentError, 'scan_records requires a block' unless block
+      scan_record_views do |record|
+        block.call(ProximityRecordRecord.new(
+          key: record.key.bytes, vector: record.vector.to_a, value: record.value.bytes
+        ))
+      end.visited
+    end
+    def scan_record_views(start: ''.b, range_end: nil, &block)
+      raise ArgumentError, 'scan_record_views requires a block' unless block
+      open! { PackedPage.proximity_scan_view(@native.fast_handle, start: start, range_end: range_end, &block) }
     end
 
     def search_view(query, k, &block)
@@ -415,8 +1115,297 @@ module Prolly
 
     private
 
+    def native_for_accelerator = open! { @native }
+
     def open!
       raise 'proximity map is closed' if @closed
+      yield
+    end
+  end
+
+  class HnswIndex
+    def initialize(native)
+      @native = native
+      @closed = false
+    end
+
+    def manifest = open! { @native.manifest }
+    def source_descriptor = open! { @native.source_descriptor }
+    def config = open! { @native.config }
+    def canonical? = open! { @native.is_canonical }
+    def search(map, request)
+      open! { @native.search(map.send(:native_for_accelerator), Prolly.owned_proximity_search_request(request)) }
+    end
+    def search_with_runtime(map, request, runtime)
+      open! do
+        @native.search_with_runtime(
+          map.send(:native_for_accelerator), Prolly.owned_proximity_search_request(request),
+          runtime.send(:native_for_search)
+        )
+      end
+    end
+    def search_cancellable(map, request, cancellation:, runtime: nil)
+      open! do
+        @native.search_cancellable(
+          map.send(:native_for_accelerator), Prolly.owned_proximity_search_request(request),
+          runtime&.send(:native_for_search), cancellation.send(:native_for_search)
+        )
+      end
+    end
+    def search_async(map, request, runtime: nil, cancellation: nil)
+      owned = Prolly.owned_proximity_search_request(request)
+      token = cancellation || ProximityCancellationToken.new
+      Future.new(cancel: -> { token.cancel }) do
+        search_cancellable(map, owned, runtime: runtime, cancellation: token)
+      end
+    end
+    def prove_search(map, request, limits = Prolly.default_content_graph_limits)
+      open! do
+        ProximitySearchProof.new(
+          @native.prove_search(
+            map.send(:native_for_accelerator),
+            Prolly.owned_proximity_search_request(request),
+            limits
+          )
+        )
+      end
+    end
+    def close = @closed = true
+
+    def use
+      raise 'HNSW index is closed' if @closed
+      return self unless block_given?
+
+      begin
+        yield self
+      ensure
+        close
+      end
+    end
+
+    private
+
+    def native_for_composite = open! { @native }
+
+    def open!
+      raise 'HNSW index is closed' if @closed
+      yield
+    end
+  end
+
+  class ProductQuantizer
+    def initialize(native)
+      @native = native
+      @closed = false
+    end
+
+    def manifest = open! { @native.manifest }
+    def source_descriptor = open! { @native.source_descriptor }
+    def config = open! { @native.config }
+    def quality = open! { @native.quality }
+    def search(map, request)
+      open! do
+        @native.search(
+          map.send(:native_for_accelerator),
+          Prolly.owned_proximity_search_request(request)
+        )
+      end
+    end
+    def search_with_runtime(map, request, runtime)
+      open! do
+        @native.search_with_runtime(
+          map.send(:native_for_accelerator), Prolly.owned_proximity_search_request(request),
+          runtime.send(:native_for_search)
+        )
+      end
+    end
+    def search_cancellable(map, request, cancellation:, runtime: nil)
+      open! do
+        @native.search_cancellable(
+          map.send(:native_for_accelerator), Prolly.owned_proximity_search_request(request),
+          runtime&.send(:native_for_search), cancellation.send(:native_for_search)
+        )
+      end
+    end
+    def search_async(map, request, runtime: nil, cancellation: nil)
+      owned = Prolly.owned_proximity_search_request(request)
+      token = cancellation || ProximityCancellationToken.new
+      Future.new(cancel: -> { token.cancel }) do
+        search_cancellable(map, owned, runtime: runtime, cancellation: token)
+      end
+    end
+    def prove_search(map, request, limits = Prolly.default_content_graph_limits)
+      open! do
+        ProximitySearchProof.new(
+          @native.prove_search(
+            map.send(:native_for_accelerator),
+            Prolly.owned_proximity_search_request(request),
+            limits
+          )
+        )
+      end
+    end
+    def close = @closed = true
+
+    def use
+      raise 'product quantizer is closed' if @closed
+      return self unless block_given?
+
+      begin
+        yield self
+      ensure
+        close
+      end
+    end
+
+    private
+
+    def native_for_composite = open! { @native }
+
+    def open!
+      raise 'product quantizer is closed' if @closed
+      yield
+    end
+  end
+
+  class CompositeAccelerator
+    def initialize(native)
+      @native = native
+      @closed = false
+    end
+
+    def manifest = open! { @native.manifest }
+    def current_source_descriptor = open! { @native.current_source_descriptor }
+    def base_source_descriptor = open! { @native.base_source_descriptor }
+    def base_kind = open! { @native.base_kind }
+    def delta_count = open! { @native.delta_count }
+    def shadow_count = open! { @native.shadow_count }
+    def config = open! { @native.config }
+    def build_stats = open! { @native.build_stats }
+    def search(map, request)
+      open! do
+        @native.search(
+          map.send(:native_for_accelerator), Prolly.owned_proximity_search_request(request)
+        )
+      end
+    end
+    def search_with_runtime(map, request, runtime)
+      open! do
+        @native.search_with_runtime(
+          map.send(:native_for_accelerator), Prolly.owned_proximity_search_request(request),
+          runtime.send(:native_for_search)
+        )
+      end
+    end
+    def search_cancellable(map, request, cancellation:, runtime: nil)
+      open! do
+        @native.search_cancellable(
+          map.send(:native_for_accelerator), Prolly.owned_proximity_search_request(request),
+          runtime&.send(:native_for_search), cancellation.send(:native_for_search)
+        )
+      end
+    end
+    def search_async(map, request, runtime: nil, cancellation: nil)
+      owned = Prolly.owned_proximity_search_request(request)
+      token = cancellation || ProximityCancellationToken.new
+      Future.new(cancel: -> { token.cancel }) do
+        search_cancellable(map, owned, runtime: runtime, cancellation: token)
+      end
+    end
+    def prove_search(map, request, limits = Prolly.default_content_graph_limits)
+      open! do
+        ProximitySearchProof.new(
+          @native.prove_search(
+            map.send(:native_for_accelerator),
+            Prolly.owned_proximity_search_request(request), limits
+          )
+        )
+      end
+    end
+    def close = @closed = true
+    def use
+      raise 'composite accelerator is closed' if @closed
+      return self unless block_given?
+      begin
+        yield self
+      ensure
+        close
+      end
+    end
+
+    private
+
+    def native_for_composite = open! { @native }
+    def open!
+      raise 'composite accelerator is closed' if @closed
+      yield
+    end
+  end
+
+  class AcceleratorCatalog
+    def initialize(native)
+      @native = native
+      @closed = false
+    end
+
+    def manifest = open! { @native.manifest }
+    def source_descriptor = open! { @native.source_descriptor }
+    def entries = open! { @native.entries }
+    def search(map, request)
+      open! do
+        @native.search(
+          map.send(:native_for_accelerator), Prolly.owned_proximity_search_request(request)
+        )
+      end
+    end
+    def search_with_runtime(map, request, runtime)
+      open! do
+        @native.search_with_runtime(
+          map.send(:native_for_accelerator), Prolly.owned_proximity_search_request(request),
+          runtime.send(:native_for_search)
+        )
+      end
+    end
+    def search_cancellable(map, request, cancellation:, runtime: nil)
+      open! do
+        @native.search_cancellable(
+          map.send(:native_for_accelerator), Prolly.owned_proximity_search_request(request),
+          runtime&.send(:native_for_search), cancellation.send(:native_for_search)
+        )
+      end
+    end
+    def search_async(map, request, runtime: nil, cancellation: nil)
+      owned = Prolly.owned_proximity_search_request(request)
+      token = cancellation || ProximityCancellationToken.new
+      Future.new(cancel: -> { token.cancel }) do
+        search_cancellable(map, owned, runtime: runtime, cancellation: token)
+      end
+    end
+    def prove_search(map, request, limits = Prolly.default_content_graph_limits)
+      open! do
+        ProximitySearchProof.new(
+          @native.prove_search(
+            map.send(:native_for_accelerator),
+            Prolly.owned_proximity_search_request(request), limits
+          )
+        )
+      end
+    end
+    def close = @closed = true
+    def use
+      raise 'accelerator catalog is closed' if @closed
+      return self unless block_given?
+      begin
+        yield self
+      ensure
+        close
+      end
+    end
+
+    private
+
+    def open!
+      raise 'accelerator catalog is closed' if @closed
       yield
     end
   end
@@ -428,8 +1417,47 @@ module Prolly
     end
 
     def get(key) = open! { @native.get(key.b) }
+    def get_view(key, &block)
+      raise ArgumentError, 'get_view requires a block' unless block
+      open! { PackedPage.proximity_point_read_view(@native.fast_handle, key.b, &block) }
+    end
     def contains?(key) = open! { @native.contains_key(key.b) }
-    def search_exact(query, k) = open! { @native.search(Prolly.exact_proximity_search_request(query, k)) }
+    def search(request) = open! { @native.search(Prolly.owned_proximity_search_request(request)) }
+    def search_with_runtime(request, runtime)
+      open! do
+        @native.search_with_runtime(
+          Prolly.owned_proximity_search_request(request), runtime.send(:native_for_search)
+        )
+      end
+    end
+    def search_cancellable(request, cancellation:, runtime: nil)
+      open! do
+        @native.search_cancellable(
+          Prolly.owned_proximity_search_request(request), runtime&.send(:native_for_search),
+          cancellation.send(:native_for_search)
+        )
+      end
+    end
+    def search_async(request, runtime: nil, cancellation: nil)
+      owned = Prolly.owned_proximity_search_request(request)
+      token = cancellation || ProximityCancellationToken.new
+      Future.new(cancel: -> { token.cancel }) do
+        search_cancellable(owned, runtime: runtime, cancellation: token)
+      end
+    end
+    def search_exact(query, k) = search(Prolly.exact_proximity_search_request(query, k))
+    def scan_records(&block)
+      raise ArgumentError, 'scan_records requires a block' unless block
+      scan_record_views do |record|
+        block.call(ProximityRecordRecord.new(
+          key: record.key.bytes, vector: record.vector.to_a, value: record.value.bytes
+        ))
+      end.visited
+    end
+    def scan_record_views(start: ''.b, range_end: nil, &block)
+      raise ArgumentError, 'scan_record_views requires a block' unless block
+      open! { PackedPage.proximity_scan_view(@native.fast_handle, start: start, range_end: range_end, &block) }
+    end
     def search_view(query, k, &block)
       open! { PackedPage.proximity_search_view(@native.fast_handle, query, k, &block) }
     end

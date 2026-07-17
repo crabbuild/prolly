@@ -1,4 +1,5 @@
 import { nativePromise, ownedBytes, scopedBytes, type ViewScope } from "./packed.ts";
+import { gcPlan, type GcPlan } from "./versioned.ts";
 
 export type IndexProjection = "keys_only" | "include" | "all";
 
@@ -12,7 +13,55 @@ export interface IndexRegistration {
   generation: bigint;
   extractorId: string;
   projection: IndexProjection;
+  limits?: SecondaryIndexLimits;
   extract(primaryKey: Uint8Array, sourceValue: Uint8Array): IndexEntry[];
+}
+
+export interface SecondaryIndexLimits {
+  maxTermBytes: bigint;
+  maxProjectionBytes: bigint;
+  maxAllValueBytes: bigint;
+  maxTermsPerRecord: bigint;
+  maxProjectedBytesPerRecord: bigint;
+  maxDerivedMutationsPerTransaction: bigint;
+  maxProjectedBytesPerTransaction: bigint;
+  maxIndexes: bigint;
+  buildPageSize: bigint;
+  maxTemporarySortBytes: bigint;
+  maxBundleNodes: bigint;
+  maxBundleBytes: bigint;
+  maxVerificationEntries: bigint;
+  maxWriteRetries: bigint;
+  maxBuildRetries: bigint;
+}
+
+export function defaultSecondaryIndexLimits(): SecondaryIndexLimits {
+  return {
+    maxTermBytes: 4n * 1024n,
+    maxProjectionBytes: 64n * 1024n,
+    maxAllValueBytes: 1024n * 1024n,
+    maxTermsPerRecord: 1024n,
+    maxProjectedBytesPerRecord: 1024n * 1024n,
+    maxDerivedMutationsPerTransaction: 100_000n,
+    maxProjectedBytesPerTransaction: 64n * 1024n * 1024n,
+    maxIndexes: 32n,
+    buildPageSize: 4096n,
+    maxTemporarySortBytes: 256n * 1024n * 1024n,
+    maxBundleNodes: 1_000_000n,
+    maxBundleBytes: 1024n * 1024n * 1024n,
+    maxVerificationEntries: 10_000_000n,
+    maxWriteRetries: 8n,
+    maxBuildRetries: 8n,
+  };
+}
+
+type NativeSecondaryIndexLimits = Record<keyof SecondaryIndexLimits, string>;
+
+function nativeSecondaryIndexLimits(value: SecondaryIndexLimits | undefined): NativeSecondaryIndexLimits | undefined {
+  if (value == null) return undefined;
+  return Object.fromEntries(
+    Object.entries(value).map(([name, limit]) => [name, limit.toString()]),
+  ) as NativeSecondaryIndexLimits;
 }
 
 export interface IndexedVersion {
@@ -125,6 +174,7 @@ interface NativeIndexRegistry {
     generation: string,
     extractorId: string,
     projection: string,
+    limits: NativeSecondaryIndexLimits | undefined,
     extract: (request: { primaryKey: Uint8Array; sourceValue: Uint8Array }) => IndexEntry[],
   ): void;
 }
@@ -185,6 +235,7 @@ export class IndexRegistry implements Disposable {
       registration.generation.toString(),
       registration.extractorId,
       registration.projection,
+      nativeSecondaryIndexLimits(registration.limits),
       ({ primaryKey, sourceValue }) => registration.extract(primaryKey, sourceValue).map((entry) => ({
         term: ownedBytes(entry.term),
         projection: entry.projection == null ? undefined : ownedBytes(entry.projection),
@@ -199,6 +250,7 @@ export class IndexRegistry implements Disposable {
 interface NativeIndexedMap {
   id(): Uint8Array;
   get(key: Uint8Array): Uint8Array | null;
+  withValueView(key: Uint8Array, visitor: (value: Uint8Array) => void): boolean;
   put(key: Uint8Array, value: Uint8Array): NativeIndexedVersion;
   apply(mutations: { kind: string; key: Uint8Array; value?: Uint8Array }[]): NativeIndexedVersion;
   applyIf(expectedSource: Uint8Array | undefined, mutations: { kind: string; key: Uint8Array; value?: Uint8Array }[]): NativeIndexedUpdate;
@@ -216,6 +268,14 @@ interface NativeIndexedMap {
   verifyIndex(name: Uint8Array, sourceVersion: Uint8Array): NativeIndexVerification;
   verifyAll(sourceVersion: Uint8Array): NativeIndexVerification[];
   repairIndex(name: Uint8Array, sourceVersion: Uint8Array): NativeIndexVerification;
+  replaceIndex(
+    name: Uint8Array,
+    generation: string,
+    extractorId: string,
+    projection: IndexProjection,
+    limits: NativeSecondaryIndexLimits | undefined,
+    extractor: (request: { primaryKey: Uint8Array; sourceValue: Uint8Array }) => IndexEntry[],
+  ): NativeIndexBuildResult;
   deactivateIndex(name: Uint8Array): NativeIndexedVersion;
   exportCurrent(): Uint8Array;
   importCurrent(bundle: Uint8Array, expectedSource?: Uint8Array): NativeIndexedVersion;
@@ -225,6 +285,7 @@ interface NativeIndexedMap {
     removedCatalogVersions: Uint8Array[]; removedCheckpointRecords: string;
     removedNamedRoots: Uint8Array[];
   };
+  planGc(): any;
 }
 
 interface NativeIndexVerification {
@@ -302,6 +363,13 @@ export class IndexedMap implements Disposable {
     const native = this.#open(); key = ownedBytes(key);
     return nativePromise(signal, () => native.get(key) ?? undefined);
   }
+  withValueView(key: Uint8Array, visitor: (value: Uint8Array) => void): boolean {
+    if (typeof visitor !== "function") throw new TypeError("indexed value visitor must be a function");
+    const scope: ViewScope = { alive: true };
+    try {
+      return this.#open().withValueView(ownedBytes(key), (value) => visitor(scopedBytes(value, scope)));
+    } finally { scope.alive = false; }
+  }
   put(key: Uint8Array, value: Uint8Array, signal?: AbortSignal): Promise<IndexedVersion> {
     const native = this.#open(); key = ownedBytes(key); value = ownedBytes(value);
     return nativePromise(signal, () => indexedVersion(native.put(key, value)));
@@ -325,6 +393,28 @@ export class IndexedMap implements Disposable {
     const native = this.#open(); name = ownedBytes(name);
     return nativePromise(signal, () => {
       const value = native.ensureIndex(name);
+      return {
+        sourceVersion: value.sourceVersion, indexVersion: value.indexVersion,
+        catalogVersion: value.catalogVersion, generation: BigInt(value.generation),
+        entries: BigInt(value.entries), attempts: BigInt(value.attempts), activated: value.activated,
+      };
+    });
+  }
+  replaceIndex(registration: IndexRegistration, signal?: AbortSignal): Promise<IndexBuildResult> {
+    const native = this.#open();
+    const name = ownedBytes(registration.name);
+    return nativePromise(signal, () => {
+      const value = native.replaceIndex(
+        name,
+        registration.generation.toString(),
+        registration.extractorId,
+        registration.projection,
+        nativeSecondaryIndexLimits(registration.limits),
+        ({ primaryKey, sourceValue }) => registration.extract(primaryKey, sourceValue).map((entry) => ({
+          term: ownedBytes(entry.term),
+          projection: entry.projection == null ? undefined : ownedBytes(entry.projection),
+        })),
+      );
       return {
         sourceVersion: value.sourceVersion, indexVersion: value.indexVersion,
         catalogVersion: value.catalogVersion, generation: BigInt(value.generation),
@@ -391,6 +481,7 @@ export class IndexedMap implements Disposable {
       removedNamedRoots: value.removedNamedRoots,
     };
   }
+  planGc(): GcPlan { return gcPlan(this.#open().planGc()); }
   close(): void { this.#native = undefined; }
   [Symbol.dispose](): void { this.close(); }
 }

@@ -340,6 +340,13 @@ impl<'a> ProximityVectorRef<'a> {
         self.dimensions as usize
     }
 
+    /// Canonical little-endian component bytes retained by this record view.
+    /// Language adapters use this to expose callback-scoped vector views
+    /// without materializing an intermediate `Vec<f32>`.
+    pub fn as_le_bytes(&self) -> &'a [u8] {
+        self.bytes
+    }
+
     pub fn component(&self, index: usize) -> Option<f32> {
         if index >= self.dimensions() {
             return None;

@@ -1,5 +1,10 @@
 package build.crab.prolly.javaapi;
 
+import build.crab.prolly.api.JavaPortableBridge;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Predicate;
+import java.util.function.Consumer;
+
 public final class ProximityReadSession implements AutoCloseable {
     private build.crab.prolly.api.ProximityReadSession nativeSession;
     ProximityReadSession(ProximityMap owner, build.crab.prolly.api.ProximityReadSession nativeSession) {
@@ -7,19 +12,67 @@ public final class ProximityReadSession implements AutoCloseable {
     }
     public SearchResult search(SearchRequest request) {
         if (nativeSession == null) throw new IllegalStateException("proximity session is closed");
-        var query = new java.util.ArrayList<Float>(request.vector().length);
-        for (float value : request.vector()) query.add(value);
         return ProximityMap.fromNative(
-                build.crab.prolly.api.JavaPortableBridge.searchExact(
-                        nativeSession, query, request.topK()));
+                build.crab.prolly.api.JavaPortableBridge.search(nativeSession, request.toNative()));
+    }
+    public SearchResult searchWithRuntime(
+            SearchRequest request, ProximitySearchRuntime runtime) {
+        if (nativeSession == null) throw new IllegalStateException("proximity session is closed");
+        return ProximityMap.fromNative(JavaPortableBridge.searchWithRuntime(
+                nativeSession, request.toNative(), runtime.open()));
+    }
+    public SearchResult searchCancellable(
+            SearchRequest request,
+            ProximitySearchRuntime runtime,
+            ProximityCancellationToken cancellation) {
+        if (nativeSession == null) throw new IllegalStateException("proximity session is closed");
+        return ProximityMap.fromNative(JavaPortableBridge.searchCancellable(
+                nativeSession, request.toNative(), runtime == null ? null : runtime.open(),
+                cancellation.open()));
+    }
+    public CompletableFuture<SearchResult> searchAsync(SearchRequest request) {
+        return searchAsync(request, null, null);
+    }
+    public CompletableFuture<SearchResult> searchAsync(
+            SearchRequest request,
+            ProximitySearchRuntime runtime,
+            ProximityCancellationToken cancellation) {
+        var owned = request.ownedCopy();
+        return ProximityMap.cancellableFuture(
+                cancellation, token -> searchCancellable(owned, runtime, token));
     }
     public build.crab.prolly.ExactProximityRecordRecord get(byte[] key) {
         if (nativeSession == null) throw new IllegalStateException("proximity session is closed");
         return nativeSession.get(key.clone());
     }
+    public boolean getView(byte[] key, Consumer<ProximityRecordView> visitor) {
+        if (nativeSession == null) throw new IllegalStateException("proximity session is closed");
+        return nativeSession.getView(key.clone(), value -> {
+            visitor.accept(ProximityRecordView.fromNative(value));
+            return kotlin.Unit.INSTANCE;
+        });
+    }
     public boolean contains(byte[] key) {
         if (nativeSession == null) throw new IllegalStateException("proximity session is closed");
         return nativeSession.containsKey(key.clone());
+    }
+    public long scanRecords(Predicate<ProximityRecord> visitor) {
+        if (nativeSession == null) throw new IllegalStateException("proximity session is closed");
+        return JavaPortableBridge.scanRecords(nativeSession, record -> {
+            var vector = new float[record.getVector().size()];
+            for (int index = 0; index < vector.length; index++) vector[index] = record.getVector().get(index);
+            return visitor.test(new ProximityRecord(
+                    record.getKey().clone(), vector, record.getValue().clone()));
+        });
+    }
+    public ReadScanOutcome scanRecordViews(
+            byte[] start, byte[] end, Predicate<ProximityScanRecordView> visitor) {
+        if (nativeSession == null) throw new IllegalStateException("proximity session is closed");
+        if (visitor == null) throw new NullPointerException("visitor");
+        var outcome = nativeSession.scanRecordViews(
+                start.clone(), end == null ? null : end.clone(),
+                value -> visitor.test(ProximityScanRecordView.fromNative(value)));
+        return new ReadScanOutcome(outcome.getVisited(), outcome.getStopped());
     }
     @Override public void close() {
         if (nativeSession != null) { nativeSession.close(); nativeSession = null; }

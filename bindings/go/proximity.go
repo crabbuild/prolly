@@ -3,6 +3,7 @@ package prolly
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"errors"
 	"math"
 	"runtime"
@@ -16,6 +17,56 @@ type ProximityRecord struct {
 	Value  []byte
 }
 
+// ProximityVectorView is a callback-scoped, unaligned-safe view over the
+// canonical little-endian vector stored in an immutable native leaf.
+type ProximityVectorView struct {
+	raw   []byte
+	scope *viewScope
+}
+
+func (v ProximityVectorView) Dimensions() int { return len(v.raw) / 4 }
+func (v ProximityVectorView) Component(index int) float32 {
+	if index < 0 || index >= v.Dimensions() {
+		panic("proximity vector index is out of range")
+	}
+	var value float32
+	read := func() { value = math.Float32frombits(binary.LittleEndian.Uint32(v.raw[index*4 : index*4+4])) }
+	if v.scope == nil {
+		read()
+	} else {
+		v.scope.mu.RLock()
+		defer v.scope.mu.RUnlock()
+		if !v.scope.alive {
+			panic(ErrViewExpired)
+		}
+		read()
+	}
+	return value
+}
+func (v ProximityVectorView) Copy() []float32 {
+	result := make([]float32, v.Dimensions())
+	for index := range result {
+		result[index] = v.Component(index)
+	}
+	return result
+}
+
+// ProximityRecordView is valid only for the duration of a GetView callback.
+// Copy Value or Vector if the data must outlive the callback.
+type ProximityRecordView struct {
+	Vector ProximityVectorView
+	Value  []byte
+}
+
+// ProximityScanRecordView is valid only during its ScanRecordViews callback.
+type ProximityScanRecordView struct {
+	Key    ScopedBytes
+	Vector ProximityVectorView
+	Value  ScopedBytes
+}
+
+var proximityRecordVisitorVtableOnce sync.Once
+
 type ProximityConfig struct {
 	Dimensions                  uint32
 	Metric                      string
@@ -27,6 +78,332 @@ type ProximityConfig struct {
 	OverflowHashSeed            uint64
 	InlineThresholdBytes        uint32
 	ScalarQuantizationGroupSize *uint32
+}
+
+type HNSWRoutingVectorEncoding int32
+
+const (
+	HNSWRoutingVectorFullF32 HNSWRoutingVectorEncoding = 1
+)
+
+type HNSWConfig struct {
+	MaxConnections        uint16
+	EFConstruction        uint32
+	EFSearch              uint32
+	LevelBits             uint8
+	OverfetchMultiplier   uint32
+	Seed                  uint64
+	RoutingVectorEncoding HNSWRoutingVectorEncoding
+}
+
+type HNSWBuildLimits struct {
+	MaxRecords             *uint64
+	MaxOwnedBytes          *uint64
+	MaxDistanceEvaluations *uint64
+	WorkerThreads          uint64
+	MaxEncodedGraphBytes   *uint64
+}
+
+type HNSWBuildStats struct {
+	Records             uint64
+	DistanceEvaluations uint64
+	DirectedEdges       uint64
+	MaximumLevel        uint8
+	OwnedBytes          uint64
+	EncodedGraphBytes   uint64
+}
+
+type HNSWBuildResult struct {
+	Index *HNSWIndex
+	Stats HNSWBuildStats
+}
+
+func decodeHNSWConfig(raw []byte) (HNSWConfig, error) {
+	d := byteDecoder{data: raw}
+	high, err := d.readByte()
+	if err != nil {
+		return HNSWConfig{}, err
+	}
+	low, err := d.readByte()
+	if err != nil {
+		return HNSWConfig{}, err
+	}
+	config := HNSWConfig{MaxConnections: uint16(high)<<8 | uint16(low)}
+	if config.EFConstruction, err = d.readUint32(); err != nil {
+		return HNSWConfig{}, err
+	}
+	if config.EFSearch, err = d.readUint32(); err != nil {
+		return HNSWConfig{}, err
+	}
+	if config.LevelBits, err = d.readByte(); err != nil {
+		return HNSWConfig{}, err
+	}
+	if config.OverfetchMultiplier, err = d.readUint32(); err != nil {
+		return HNSWConfig{}, err
+	}
+	if config.Seed, err = d.readUint64(); err != nil {
+		return HNSWConfig{}, err
+	}
+	encoding, err := d.readInt32()
+	if err != nil {
+		return HNSWConfig{}, err
+	}
+	config.RoutingVectorEncoding = HNSWRoutingVectorEncoding(encoding)
+	if config.RoutingVectorEncoding != HNSWRoutingVectorFullF32 {
+		return HNSWConfig{}, errors.New("unknown HNSW routing-vector encoding")
+	}
+	return config, d.done()
+}
+
+func encodeHNSWConfig(config HNSWConfig) ([]byte, error) {
+	if config.RoutingVectorEncoding != HNSWRoutingVectorFullF32 {
+		return nil, errors.New("unknown HNSW routing-vector encoding")
+	}
+	var out bytes.Buffer
+	out.WriteByte(byte(config.MaxConnections >> 8))
+	out.WriteByte(byte(config.MaxConnections))
+	writeU32(&out, config.EFConstruction)
+	writeU32(&out, config.EFSearch)
+	out.WriteByte(config.LevelBits)
+	writeU32(&out, config.OverfetchMultiplier)
+	writeU64(&out, config.Seed)
+	writeI32(&out, int32(config.RoutingVectorEncoding))
+	return out.Bytes(), nil
+}
+
+func decodeHNSWBuildLimits(raw []byte) (HNSWBuildLimits, error) {
+	d := byteDecoder{data: raw}
+	var result HNSWBuildLimits
+	var err error
+	if result.MaxRecords, err = d.readOptionalUint64(); err != nil {
+		return HNSWBuildLimits{}, err
+	}
+	if result.MaxOwnedBytes, err = d.readOptionalUint64(); err != nil {
+		return HNSWBuildLimits{}, err
+	}
+	if result.MaxDistanceEvaluations, err = d.readOptionalUint64(); err != nil {
+		return HNSWBuildLimits{}, err
+	}
+	if result.WorkerThreads, err = d.readUint64(); err != nil {
+		return HNSWBuildLimits{}, err
+	}
+	if result.MaxEncodedGraphBytes, err = d.readOptionalUint64(); err != nil {
+		return HNSWBuildLimits{}, err
+	}
+	return result, d.done()
+}
+
+func encodeHNSWBuildLimits(limits HNSWBuildLimits) []byte {
+	var out bytes.Buffer
+	encodeOptionalU64(&out, limits.MaxRecords)
+	encodeOptionalU64(&out, limits.MaxOwnedBytes)
+	encodeOptionalU64(&out, limits.MaxDistanceEvaluations)
+	writeU64(&out, limits.WorkerThreads)
+	encodeOptionalU64(&out, limits.MaxEncodedGraphBytes)
+	return out.Bytes()
+}
+
+func decodeHNSWBuildStats(d *byteDecoder) (HNSWBuildStats, error) {
+	var result HNSWBuildStats
+	var err error
+	if result.Records, err = d.readUint64(); err != nil {
+		return HNSWBuildStats{}, err
+	}
+	if result.DistanceEvaluations, err = d.readUint64(); err != nil {
+		return HNSWBuildStats{}, err
+	}
+	if result.DirectedEdges, err = d.readUint64(); err != nil {
+		return HNSWBuildStats{}, err
+	}
+	if result.MaximumLevel, err = d.readByte(); err != nil {
+		return HNSWBuildStats{}, err
+	}
+	if result.OwnedBytes, err = d.readUint64(); err != nil {
+		return HNSWBuildStats{}, err
+	}
+	if result.EncodedGraphBytes, err = d.readUint64(); err != nil {
+		return HNSWBuildStats{}, err
+	}
+	return result, nil
+}
+
+func DefaultHNSWConfig() (HNSWConfig, error) {
+	raw, err := ffiDefaultHNSWConfig()
+	if err != nil {
+		return HNSWConfig{}, err
+	}
+	return decodeHNSWConfig(raw)
+}
+
+func DefaultHNSWBuildLimits() (HNSWBuildLimits, error) {
+	raw, err := ffiDefaultHNSWBuildLimits()
+	if err != nil {
+		return HNSWBuildLimits{}, err
+	}
+	return decodeHNSWBuildLimits(raw)
+}
+
+type ProductQuantizationConfig struct {
+	Subquantizers            uint32
+	CentroidsPerSubquantizer uint16
+	TrainingIterations       uint16
+	RerankMultiplier         uint32
+	Seed                     uint64
+	MaxTrainingVectors       uint64
+}
+
+type ProductQuantizationBuildLimits struct {
+	MaxTrainingVectors     *uint64
+	MaxTrainingBytes       *uint64
+	MaxTemporaryCodeBytes  *uint64
+	MaxDistanceEvaluations *uint64
+	MaxEncodedOutputBytes  *uint64
+	MaxWorkerThreads       *uint64
+}
+
+type ProductQuantizationBuildStats struct {
+	TrainingDistanceEvaluations uint64
+	EncodingDistanceEvaluations uint64
+	EncodedVectors              uint64
+	TrainingVectors             uint64
+	TrainingBytes               uint64
+	EncodedOutputBytes          uint64
+}
+
+type ProductQuantizationQuality struct {
+	MeanSquaredError    float64
+	MaximumSquaredError float64
+}
+
+type ProductQuantizationBuildResult struct {
+	Index *ProductQuantizer
+	Stats ProductQuantizationBuildStats
+}
+
+func decodeProductQuantizationConfig(raw []byte) (ProductQuantizationConfig, error) {
+	d := byteDecoder{data: raw}
+	var result ProductQuantizationConfig
+	var err error
+	if result.Subquantizers, err = d.readUint32(); err != nil {
+		return ProductQuantizationConfig{}, err
+	}
+	high, err := d.readByte()
+	if err != nil {
+		return ProductQuantizationConfig{}, err
+	}
+	low, err := d.readByte()
+	if err != nil {
+		return ProductQuantizationConfig{}, err
+	}
+	result.CentroidsPerSubquantizer = uint16(high)<<8 | uint16(low)
+	high, err = d.readByte()
+	if err != nil {
+		return ProductQuantizationConfig{}, err
+	}
+	low, err = d.readByte()
+	if err != nil {
+		return ProductQuantizationConfig{}, err
+	}
+	result.TrainingIterations = uint16(high)<<8 | uint16(low)
+	if result.RerankMultiplier, err = d.readUint32(); err != nil {
+		return ProductQuantizationConfig{}, err
+	}
+	if result.Seed, err = d.readUint64(); err != nil {
+		return ProductQuantizationConfig{}, err
+	}
+	if result.MaxTrainingVectors, err = d.readUint64(); err != nil {
+		return ProductQuantizationConfig{}, err
+	}
+	return result, d.done()
+}
+
+func encodeProductQuantizationConfig(config ProductQuantizationConfig) []byte {
+	var out bytes.Buffer
+	writeU32(&out, config.Subquantizers)
+	out.WriteByte(byte(config.CentroidsPerSubquantizer >> 8))
+	out.WriteByte(byte(config.CentroidsPerSubquantizer))
+	out.WriteByte(byte(config.TrainingIterations >> 8))
+	out.WriteByte(byte(config.TrainingIterations))
+	writeU32(&out, config.RerankMultiplier)
+	writeU64(&out, config.Seed)
+	writeU64(&out, config.MaxTrainingVectors)
+	return out.Bytes()
+}
+
+func decodeProductQuantizationBuildLimits(raw []byte) (ProductQuantizationBuildLimits, error) {
+	d := byteDecoder{data: raw}
+	var result ProductQuantizationBuildLimits
+	var err error
+	if result.MaxTrainingVectors, err = d.readOptionalUint64(); err != nil {
+		return ProductQuantizationBuildLimits{}, err
+	}
+	if result.MaxTrainingBytes, err = d.readOptionalUint64(); err != nil {
+		return ProductQuantizationBuildLimits{}, err
+	}
+	if result.MaxTemporaryCodeBytes, err = d.readOptionalUint64(); err != nil {
+		return ProductQuantizationBuildLimits{}, err
+	}
+	if result.MaxDistanceEvaluations, err = d.readOptionalUint64(); err != nil {
+		return ProductQuantizationBuildLimits{}, err
+	}
+	if result.MaxEncodedOutputBytes, err = d.readOptionalUint64(); err != nil {
+		return ProductQuantizationBuildLimits{}, err
+	}
+	if result.MaxWorkerThreads, err = d.readOptionalUint64(); err != nil {
+		return ProductQuantizationBuildLimits{}, err
+	}
+	return result, d.done()
+}
+
+func encodeProductQuantizationBuildLimits(limits ProductQuantizationBuildLimits) []byte {
+	var out bytes.Buffer
+	encodeOptionalU64(&out, limits.MaxTrainingVectors)
+	encodeOptionalU64(&out, limits.MaxTrainingBytes)
+	encodeOptionalU64(&out, limits.MaxTemporaryCodeBytes)
+	encodeOptionalU64(&out, limits.MaxDistanceEvaluations)
+	encodeOptionalU64(&out, limits.MaxEncodedOutputBytes)
+	encodeOptionalU64(&out, limits.MaxWorkerThreads)
+	return out.Bytes()
+}
+
+func decodeProductQuantizationBuildStats(d *byteDecoder) (ProductQuantizationBuildStats, error) {
+	var result ProductQuantizationBuildStats
+	var err error
+	if result.TrainingDistanceEvaluations, err = d.readUint64(); err != nil {
+		return ProductQuantizationBuildStats{}, err
+	}
+	if result.EncodingDistanceEvaluations, err = d.readUint64(); err != nil {
+		return ProductQuantizationBuildStats{}, err
+	}
+	if result.EncodedVectors, err = d.readUint64(); err != nil {
+		return ProductQuantizationBuildStats{}, err
+	}
+	if result.TrainingVectors, err = d.readUint64(); err != nil {
+		return ProductQuantizationBuildStats{}, err
+	}
+	if result.TrainingBytes, err = d.readUint64(); err != nil {
+		return ProductQuantizationBuildStats{}, err
+	}
+	if result.EncodedOutputBytes, err = d.readUint64(); err != nil {
+		return ProductQuantizationBuildStats{}, err
+	}
+	return result, nil
+}
+
+func DefaultPQConfig() (ProductQuantizationConfig, error) {
+	raw, err := ffiDefaultPQConfig()
+	if err != nil {
+		return ProductQuantizationConfig{}, err
+	}
+	return decodeProductQuantizationConfig(raw)
+}
+
+func DefaultPQBuildLimits() (ProductQuantizationBuildLimits, error) {
+	raw, err := ffiDefaultPQBuildLimits()
+	if err != nil {
+		return ProductQuantizationBuildLimits{}, err
+	}
+	return decodeProductQuantizationBuildLimits(raw)
 }
 
 type ProximityMutation struct {
@@ -113,13 +490,161 @@ type ProximityVerification struct {
 	DistanceChecks         uint64
 }
 
+type SearchPolicy int32
+
+const (
+	SearchPolicyExact       SearchPolicy = 1
+	SearchPolicyFixedBudget SearchPolicy = 2
+	SearchPolicyAdaptive    SearchPolicy = 3
+)
+
+type AdaptiveQuality int32
+
+const (
+	AdaptiveQualityFast       AdaptiveQuality = 1
+	AdaptiveQualityBalanced   AdaptiveQuality = 2
+	AdaptiveQualityHighRecall AdaptiveQuality = 3
+)
+
+type QueryKernel int32
+
+const (
+	QueryKernelScalarDeterministic QueryKernel = 1
+	QueryKernelSIMDDeterministic   QueryKernel = 2
+	QueryKernelAutoDeterministic   QueryKernel = 3
+)
+
+type SearchBackend int32
+
+const (
+	SearchBackendNative           SearchBackend = 1
+	SearchBackendProductQuantized SearchBackend = 2
+	SearchBackendHNSW             SearchBackend = 3
+	SearchBackendComposite        SearchBackend = 4
+	SearchBackendAuto             SearchBackend = 5
+)
+
+type ProximityFilterKind int32
+
+const (
+	ProximityFilterAll          ProximityFilterKind = 1
+	ProximityFilterKeyRange     ProximityFilterKind = 2
+	ProximityFilterPrefix       ProximityFilterKind = 3
+	ProximityFilterEligibleKeys ProximityFilterKind = 4
+)
+
+type SearchBudget struct {
+	MaxNodes               *uint64
+	MaxCommittedBytes      *uint64
+	MaxDistanceEvaluations *uint64
+	MaxFrontierEntries     *uint64
+}
+
+type ProximityFilter struct {
+	Kind         ProximityFilterKind
+	Start        []byte
+	End          []byte
+	Prefix       []byte
+	EligibleKeys [][]byte
+}
+
+func AllFilter() ProximityFilter { return ProximityFilter{Kind: ProximityFilterAll} }
+func KeyRangeFilter(start, end []byte) ProximityFilter {
+	return ProximityFilter{Kind: ProximityFilterKeyRange, Start: bytes.Clone(start), End: bytes.Clone(end)}
+}
+func PrefixFilter(prefix []byte) ProximityFilter {
+	return ProximityFilter{Kind: ProximityFilterPrefix, Prefix: bytes.Clone(prefix)}
+}
+func EligibleKeysFilter(keys [][]byte) ProximityFilter {
+	return ProximityFilter{Kind: ProximityFilterEligibleKeys, EligibleKeys: cloneByteSlices(keys)}
+}
+
 type SearchRequest struct {
-	Query []float32
-	K     uint32
+	Query              []float32
+	K                  uint32
+	Policy             SearchPolicy
+	AdaptiveQuality    *AdaptiveQuality
+	Budget             SearchBudget
+	Filter             ProximityFilter
+	Kernel             QueryKernel
+	Backend            SearchBackend
+	HNSWEFSearch       *uint32
+	PQRerankMultiplier *uint16
 }
 
 func ExactSearch(query []float32, k uint32) SearchRequest {
-	return SearchRequest{Query: append([]float32(nil), query...), K: k}
+	return SearchRequest{
+		Query: append([]float32(nil), query...), K: k, Policy: SearchPolicyExact,
+		Filter: AllFilter(), Kernel: QueryKernelAutoDeterministic, Backend: SearchBackendNative,
+	}
+}
+
+func cloneSearchRequest(request SearchRequest) SearchRequest {
+	request.Query = append([]float32(nil), request.Query...)
+	request.Filter.Start = bytes.Clone(request.Filter.Start)
+	request.Filter.End = bytes.Clone(request.Filter.End)
+	request.Filter.Prefix = bytes.Clone(request.Filter.Prefix)
+	request.Filter.EligibleKeys = cloneByteSlices(request.Filter.EligibleKeys)
+	if request.AdaptiveQuality != nil {
+		value := *request.AdaptiveQuality
+		request.AdaptiveQuality = &value
+	}
+	cloneU64 := func(value *uint64) *uint64 {
+		if value == nil {
+			return nil
+		}
+		copy := *value
+		return &copy
+	}
+	request.Budget.MaxNodes = cloneU64(request.Budget.MaxNodes)
+	request.Budget.MaxCommittedBytes = cloneU64(request.Budget.MaxCommittedBytes)
+	request.Budget.MaxDistanceEvaluations = cloneU64(request.Budget.MaxDistanceEvaluations)
+	request.Budget.MaxFrontierEntries = cloneU64(request.Budget.MaxFrontierEntries)
+	if request.HNSWEFSearch != nil {
+		value := *request.HNSWEFSearch
+		request.HNSWEFSearch = &value
+	}
+	if request.PQRerankMultiplier != nil {
+		value := *request.PQRerankMultiplier
+		request.PQRerankMultiplier = &value
+	}
+	return request
+}
+
+func (request SearchRequest) validate() error {
+	if len(request.Query) == 0 || request.K == 0 {
+		return errors.New("proximity query and k must be non-empty")
+	}
+	if request.Policy < SearchPolicyExact || request.Policy > SearchPolicyAdaptive {
+		return errors.New("invalid proximity search policy")
+	}
+	if request.Policy == SearchPolicyAdaptive && request.AdaptiveQuality == nil {
+		return errors.New("adaptive proximity search requires adaptive quality")
+	}
+	if request.AdaptiveQuality != nil && (*request.AdaptiveQuality < AdaptiveQualityFast || *request.AdaptiveQuality > AdaptiveQualityHighRecall) {
+		return errors.New("invalid adaptive quality")
+	}
+	if request.Filter.Kind < ProximityFilterAll || request.Filter.Kind > ProximityFilterEligibleKeys {
+		return errors.New("invalid proximity filter")
+	}
+	if request.Filter.Kind == ProximityFilterPrefix && request.Filter.Prefix == nil {
+		return errors.New("prefix filter requires prefix")
+	}
+	if request.Kernel < QueryKernelScalarDeterministic || request.Kernel > QueryKernelAutoDeterministic {
+		return errors.New("invalid query kernel")
+	}
+	if request.Backend < SearchBackendNative || request.Backend > SearchBackendAuto {
+		return errors.New("invalid search backend")
+	}
+	return nil
+}
+
+func (request SearchRequest) usesPackedExactPath() bool {
+	return request.Policy == SearchPolicyExact && request.AdaptiveQuality == nil &&
+		request.Budget.MaxNodes == nil && request.Budget.MaxCommittedBytes == nil &&
+		request.Budget.MaxDistanceEvaluations == nil && request.Budget.MaxFrontierEntries == nil &&
+		request.Filter.Kind == ProximityFilterAll && request.Kernel == QueryKernelAutoDeterministic &&
+		request.Backend == SearchBackendNative && request.HNSWEFSearch == nil && request.PQRerankMultiplier == nil
 }
 
 type Neighbor struct {
@@ -129,9 +654,243 @@ type Neighbor struct {
 	Rank     uint32
 }
 type SearchResult struct {
-	Neighbors  []Neighbor
-	Completion string
-	Backend    string
+	Neighbors         []Neighbor
+	Stats             SearchStats
+	Completion        string
+	Backend           string
+	PlanFormatVersion uint8
+}
+
+type SearchStats struct {
+	LevelsVisited                uint64
+	NodesRead                    uint64
+	BytesRead                    uint64
+	PhysicalBytesRead            uint64
+	CommittedBytes               uint64
+	DistanceEvaluations          uint64
+	QuantizedDistanceEvaluations uint64
+	RerankedCandidates           uint64
+	FrontierPeak                 uint64
+	CandidateHandlesPeak         uint64
+	CandidateRetainedBytesPeak   uint64
+}
+
+// ProximitySearchRuntimePolicy bounds the retained, validated content cache
+// shared by repeated proximity searches.
+type ProximitySearchRuntimePolicy struct {
+	MaxEntries            uint64
+	MaxBytes              uint64
+	AuthoritativeMaxBytes uint64
+	HNSWMaxBytes          uint64
+	PQMaxBytes            uint64
+}
+
+type ProximitySearchRuntimeStats struct {
+	PhysicalReads     uint64
+	PhysicalBytesRead uint64
+}
+
+// ProximitySearchRuntime is engine-bound and safe for reuse across map,
+// session, and accelerator search calls.
+type ProximitySearchRuntime struct {
+	handle uint64
+	closed atomic.Bool
+	mu     sync.RWMutex
+}
+
+func encodeProximitySearchRuntimePolicy(policy ProximitySearchRuntimePolicy) []byte {
+	var out bytes.Buffer
+	writeU64(&out, policy.MaxEntries)
+	writeU64(&out, policy.MaxBytes)
+	writeU64(&out, policy.AuthoritativeMaxBytes)
+	writeU64(&out, policy.HNSWMaxBytes)
+	writeU64(&out, policy.PQMaxBytes)
+	return out.Bytes()
+}
+
+func decodeProximitySearchRuntimePolicy(raw []byte) (ProximitySearchRuntimePolicy, error) {
+	d := byteDecoder{data: raw}
+	values := [5]uint64{}
+	for index := range values {
+		value, err := d.readUint64()
+		if err != nil {
+			return ProximitySearchRuntimePolicy{}, err
+		}
+		values[index] = value
+	}
+	if err := d.done(); err != nil {
+		return ProximitySearchRuntimePolicy{}, err
+	}
+	return ProximitySearchRuntimePolicy{
+		MaxEntries: values[0], MaxBytes: values[1], AuthoritativeMaxBytes: values[2],
+		HNSWMaxBytes: values[3], PQMaxBytes: values[4],
+	}, nil
+}
+
+func DefaultProximitySearchRuntimePolicy() (ProximitySearchRuntimePolicy, error) {
+	raw, err := ffiDefaultProximitySearchRuntimePolicy()
+	if err != nil {
+		return ProximitySearchRuntimePolicy{}, err
+	}
+	return decodeProximitySearchRuntimePolicy(raw)
+}
+
+func (e *Engine) NewProximitySearchRuntime(
+	policies ...ProximitySearchRuntimePolicy,
+) (*ProximitySearchRuntime, error) {
+	if len(policies) > 1 {
+		return nil, errors.New("expected at most one proximity search runtime policy")
+	}
+	var policy ProximitySearchRuntimePolicy
+	var err error
+	if len(policies) == 0 {
+		policy, err = DefaultProximitySearchRuntimePolicy()
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		policy = policies[0]
+	}
+	handle, err := ffiEngineProximitySearchRuntime(e, encodeProximitySearchRuntimePolicy(policy))
+	if err != nil {
+		return nil, err
+	}
+	result := &ProximitySearchRuntime{handle: handle}
+	runtime.SetFinalizer(result, (*ProximitySearchRuntime).Close)
+	return result, nil
+}
+
+func (r *ProximitySearchRuntime) withHandle() (uint64, func(), error) {
+	if r == nil || r.closed.Load() {
+		return 0, nil, errors.New("proximity search runtime is closed")
+	}
+	r.mu.RLock()
+	if r.closed.Load() || r.handle == 0 {
+		r.mu.RUnlock()
+		return 0, nil, errors.New("proximity search runtime is closed")
+	}
+	return r.handle, r.mu.RUnlock, nil
+}
+
+func (r *ProximitySearchRuntime) Close() {
+	if r == nil || r.closed.Swap(true) {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	runtime.SetFinalizer(r, nil)
+	if r.handle != 0 {
+		ffiFreeProximitySearchRuntime(r.handle)
+		r.handle = 0
+	}
+}
+
+func (r *ProximitySearchRuntime) Policy() (ProximitySearchRuntimePolicy, error) {
+	handle, unlock, err := r.withHandle()
+	if err != nil {
+		return ProximitySearchRuntimePolicy{}, err
+	}
+	defer unlock()
+	raw, err := ffiProximitySearchRuntimePolicy(handle)
+	if err != nil {
+		return ProximitySearchRuntimePolicy{}, err
+	}
+	return decodeProximitySearchRuntimePolicy(raw)
+}
+
+func (r *ProximitySearchRuntime) Stats() (ProximitySearchRuntimeStats, error) {
+	handle, unlock, err := r.withHandle()
+	if err != nil {
+		return ProximitySearchRuntimeStats{}, err
+	}
+	defer unlock()
+	raw, err := ffiProximitySearchRuntimeStats(handle)
+	if err != nil {
+		return ProximitySearchRuntimeStats{}, err
+	}
+	d := byteDecoder{data: raw}
+	reads, err := d.readUint64()
+	if err != nil {
+		return ProximitySearchRuntimeStats{}, err
+	}
+	readBytes, err := d.readUint64()
+	if err != nil {
+		return ProximitySearchRuntimeStats{}, err
+	}
+	if err := d.done(); err != nil {
+		return ProximitySearchRuntimeStats{}, err
+	}
+	return ProximitySearchRuntimeStats{PhysicalReads: reads, PhysicalBytesRead: readBytes}, nil
+}
+
+func (r *ProximitySearchRuntime) Clear() error {
+	handle, unlock, err := r.withHandle()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	return ffiProximitySearchRuntimeClear(handle)
+}
+
+// ProximityCancellationToken cooperatively stops native proximity traversal.
+// It is safe to cancel from a goroutine while a search is running.
+type ProximityCancellationToken struct {
+	handle uint64
+	closed atomic.Bool
+	mu     sync.RWMutex
+}
+
+func NewProximityCancellationToken() (*ProximityCancellationToken, error) {
+	handle, err := ffiNewProximityCancellationToken()
+	if err != nil {
+		return nil, err
+	}
+	token := &ProximityCancellationToken{handle: handle}
+	runtime.SetFinalizer(token, (*ProximityCancellationToken).Close)
+	return token, nil
+}
+
+func (t *ProximityCancellationToken) withHandle() (uint64, func(), error) {
+	if t == nil || t.closed.Load() {
+		return 0, nil, errors.New("proximity cancellation token is closed")
+	}
+	t.mu.RLock()
+	if t.closed.Load() || t.handle == 0 {
+		t.mu.RUnlock()
+		return 0, nil, errors.New("proximity cancellation token is closed")
+	}
+	return t.handle, t.mu.RUnlock, nil
+}
+
+func (t *ProximityCancellationToken) Cancel() error {
+	handle, unlock, err := t.withHandle()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	return ffiProximityCancellationTokenCancel(handle)
+}
+
+func (t *ProximityCancellationToken) IsCancelled() (bool, error) {
+	handle, unlock, err := t.withHandle()
+	if err != nil {
+		return false, err
+	}
+	defer unlock()
+	return ffiProximityCancellationTokenIsCancelled(handle)
+}
+
+func (t *ProximityCancellationToken) Close() {
+	if t == nil || t.closed.Swap(true) {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	runtime.SetFinalizer(t, nil)
+	if t.handle != 0 {
+		ffiFreeProximityCancellationToken(t.handle)
+		t.handle = 0
+	}
 }
 
 type ProximityMap struct {
@@ -141,9 +900,24 @@ type ProximityMap struct {
 	mu     sync.RWMutex
 }
 
+// ProximityBuildOptions controls runtime-only construction work. Threads does
+// not affect canonical map contents and must be greater than zero.
+type ProximityBuildOptions struct {
+	Threads uint64
+}
+
 func (e *Engine) BuildProximity(dimensions uint32, records []ProximityRecord) (*ProximityMap, error) {
+	return e.BuildProximityWithOptions(dimensions, records, ProximityBuildOptions{Threads: 1})
+}
+
+// BuildProximityWithOptions builds the same canonical map with an explicit
+// native worker limit.
+func (e *Engine) BuildProximityWithOptions(dimensions uint32, records []ProximityRecord, options ProximityBuildOptions) (*ProximityMap, error) {
 	if dimensions == 0 {
 		return nil, errors.New("proximity dimensions must be positive")
+	}
+	if options.Threads == 0 {
+		return nil, errors.New("proximity build threads must be positive")
 	}
 	config, err := ffiDefaultProximityConfig(dimensions)
 	if err != nil {
@@ -153,7 +927,19 @@ func (e *Engine) BuildProximity(dimensions uint32, records []ProximityRecord) (*
 	if err != nil {
 		return nil, err
 	}
-	handle, err := ffiEngineBuildProximity(e, config, encoded)
+	handle, err := ffiEngineBuildProximity(e, config, encoded, &options.Threads)
+	if err != nil {
+		return nil, err
+	}
+	return newProximityMap(handle)
+}
+
+// LoadProximity reopens and validates an immutable proximity descriptor.
+func (e *Engine) LoadProximity(descriptor []byte) (*ProximityMap, error) {
+	if len(descriptor) != 32 {
+		return nil, errors.New("proximity descriptor must be 32 bytes")
+	}
+	handle, err := ffiEngineLoadProximity(e, append([]byte(nil), descriptor...))
 	if err != nil {
 		return nil, err
 	}
@@ -169,6 +955,546 @@ func newProximityMap(handle uint64) (*ProximityMap, error) {
 	result := &ProximityMap{handle: handle, fast: fast}
 	runtime.SetFinalizer(result, (*ProximityMap).Close)
 	return result, nil
+}
+
+type HNSWIndex struct {
+	handle uint64
+	closed atomic.Bool
+	mu     sync.RWMutex
+}
+
+func newHNSWIndex(handle uint64) *HNSWIndex {
+	index := &HNSWIndex{handle: handle}
+	runtime.SetFinalizer(index, (*HNSWIndex).Close)
+	return index
+}
+
+func (i *HNSWIndex) Close() {
+	if i == nil || i.closed.Swap(true) {
+		return
+	}
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	runtime.SetFinalizer(i, nil)
+	if i.handle != 0 {
+		ffiFreeHNSWIndex(i.handle)
+		i.handle = 0
+	}
+}
+
+func (i *HNSWIndex) withHandle() (uint64, func(), error) {
+	if i == nil || i.closed.Load() {
+		return 0, nil, errors.New("HNSW index is closed")
+	}
+	i.mu.RLock()
+	if i.closed.Load() || i.handle == 0 {
+		i.mu.RUnlock()
+		return 0, nil, errors.New("HNSW index is closed")
+	}
+	return i.handle, i.mu.RUnlock, nil
+}
+
+func (m *ProximityMap) BuildHNSW(config HNSWConfig, limits HNSWBuildLimits) (HNSWBuildResult, error) {
+	encodedConfig, err := encodeHNSWConfig(config)
+	if err != nil {
+		return HNSWBuildResult{}, err
+	}
+	encodedLimits := encodeHNSWBuildLimits(limits)
+	handle, _, unlock, err := m.withHandle()
+	if err != nil {
+		return HNSWBuildResult{}, err
+	}
+	defer unlock()
+	raw, err := ffiProximityBuildHNSW(handle, encodedConfig, encodedLimits)
+	if err != nil {
+		return HNSWBuildResult{}, err
+	}
+	d := byteDecoder{data: raw}
+	indexHandle, err := d.readUint64()
+	if err != nil {
+		return HNSWBuildResult{}, err
+	}
+	stats, err := decodeHNSWBuildStats(&d)
+	if err != nil {
+		ffiFreeHNSWIndex(indexHandle)
+		return HNSWBuildResult{}, err
+	}
+	if err := d.done(); err != nil {
+		ffiFreeHNSWIndex(indexHandle)
+		return HNSWBuildResult{}, err
+	}
+	return HNSWBuildResult{Index: newHNSWIndex(indexHandle), Stats: stats}, nil
+}
+
+func (m *ProximityMap) LoadHNSW(manifest []byte) (*HNSWIndex, error) {
+	handle, _, unlock, err := m.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	indexHandle, err := ffiProximityLoadHNSW(handle, append([]byte(nil), manifest...))
+	if err != nil {
+		return nil, err
+	}
+	return newHNSWIndex(indexHandle), nil
+}
+
+func decodeHNSWByteArray(raw []byte) ([]byte, error) {
+	d := byteDecoder{data: raw}
+	value, err := d.readByteArray()
+	if err != nil {
+		return nil, err
+	}
+	return value, d.done()
+}
+
+func (i *HNSWIndex) Manifest() ([]byte, error) {
+	handle, unlock, err := i.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	raw, err := ffiHNSWIndexManifest(handle)
+	if err != nil {
+		return nil, err
+	}
+	return decodeHNSWByteArray(raw)
+}
+
+func (i *HNSWIndex) SourceDescriptor() ([]byte, error) {
+	handle, unlock, err := i.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	raw, err := ffiHNSWIndexSourceDescriptor(handle)
+	if err != nil {
+		return nil, err
+	}
+	return decodeHNSWByteArray(raw)
+}
+
+func (i *HNSWIndex) Config() (HNSWConfig, error) {
+	handle, unlock, err := i.withHandle()
+	if err != nil {
+		return HNSWConfig{}, err
+	}
+	defer unlock()
+	raw, err := ffiHNSWIndexConfig(handle)
+	if err != nil {
+		return HNSWConfig{}, err
+	}
+	return decodeHNSWConfig(raw)
+}
+
+func (i *HNSWIndex) IsCanonical() (bool, error) {
+	handle, unlock, err := i.withHandle()
+	if err != nil {
+		return false, err
+	}
+	defer unlock()
+	return ffiHNSWIndexIsCanonical(handle)
+}
+
+func (i *HNSWIndex) Search(ctx context.Context, proximity *ProximityMap, request SearchRequest) (SearchResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return SearchResult{}, err
+	}
+	request = cloneSearchRequest(request)
+	encodedRequest, err := encodeProximitySearchRequest(request)
+	if err != nil {
+		return SearchResult{}, err
+	}
+	indexHandle, indexUnlock, err := i.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer indexUnlock()
+	mapHandle, _, mapUnlock, err := proximity.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer mapUnlock()
+	raw, err := ffiHNSWIndexSearch(indexHandle, mapHandle, encodedRequest)
+	if err != nil {
+		return SearchResult{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return SearchResult{}, err
+	}
+	return decodeProximitySearchResultBytes(raw)
+}
+
+func (i *HNSWIndex) SearchWithRuntime(
+	ctx context.Context, proximity *ProximityMap, request SearchRequest, searchRuntime *ProximitySearchRuntime,
+) (SearchResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return SearchResult{}, err
+	}
+	encoded, err := encodeProximitySearchRequest(cloneSearchRequest(request))
+	if err != nil {
+		return SearchResult{}, err
+	}
+	index, indexUnlock, err := i.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer indexUnlock()
+	proximityHandle, _, proximityUnlock, err := proximity.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer proximityUnlock()
+	runtimeHandle, runtimeUnlock, err := searchRuntime.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer runtimeUnlock()
+	raw, err := ffiHNSWIndexSearchWithRuntime(index, proximityHandle, encoded, runtimeHandle)
+	if err != nil {
+		return SearchResult{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return SearchResult{}, err
+	}
+	return decodeProximitySearchResultBytes(raw)
+}
+
+func (i *HNSWIndex) SearchCancellable(
+	ctx context.Context,
+	proximity *ProximityMap,
+	request SearchRequest,
+	searchRuntime *ProximitySearchRuntime,
+	cancellation *ProximityCancellationToken,
+) (SearchResult, error) {
+	index, indexUnlock, err := i.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer indexUnlock()
+	mapHandle, _, mapUnlock, err := proximity.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer mapUnlock()
+	return runPortableCancellableSearch(
+		ctx, request, searchRuntime, cancellation,
+		func(encoded []byte, runtimeHandle *uint64, cancellationHandle uint64) ([]byte, error) {
+			return ffiHNSWIndexSearchCancellable(
+				index, mapHandle, encoded, runtimeHandle, cancellationHandle,
+			)
+		},
+	)
+}
+
+func (i *HNSWIndex) ProveSearch(proximity *ProximityMap, request SearchRequest) (*ProximitySearchProof, error) {
+	request = cloneSearchRequest(request)
+	encodedRequest, err := encodeProximitySearchRequest(request)
+	if err != nil {
+		return nil, err
+	}
+	limits, err := ffiDefaultContentGraphLimits()
+	if err != nil {
+		return nil, err
+	}
+	indexHandle, indexUnlock, err := i.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer indexUnlock()
+	mapHandle, _, mapUnlock, err := proximity.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer mapUnlock()
+	proofHandle, err := ffiHNSWIndexProveSearch(indexHandle, mapHandle, encodedRequest, limits)
+	if err != nil {
+		return nil, err
+	}
+	proof := &ProximitySearchProof{handle: proofHandle}
+	runtime.SetFinalizer(proof, (*ProximitySearchProof).Close)
+	return proof, nil
+}
+
+type ProductQuantizer struct {
+	handle uint64
+	closed atomic.Bool
+	mu     sync.RWMutex
+}
+
+func newProductQuantizer(handle uint64) *ProductQuantizer {
+	index := &ProductQuantizer{handle: handle}
+	runtime.SetFinalizer(index, (*ProductQuantizer).Close)
+	return index
+}
+
+func (i *ProductQuantizer) Close() {
+	if i == nil || i.closed.Swap(true) {
+		return
+	}
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	runtime.SetFinalizer(i, nil)
+	if i.handle != 0 {
+		ffiFreeProductQuantizer(i.handle)
+		i.handle = 0
+	}
+}
+
+func (i *ProductQuantizer) withHandle() (uint64, func(), error) {
+	if i == nil || i.closed.Load() {
+		return 0, nil, errors.New("product quantizer is closed")
+	}
+	i.mu.RLock()
+	if i.closed.Load() || i.handle == 0 {
+		i.mu.RUnlock()
+		return 0, nil, errors.New("product quantizer is closed")
+	}
+	return i.handle, i.mu.RUnlock, nil
+}
+
+func (m *ProximityMap) BuildPQ(
+	config ProductQuantizationConfig,
+	workerThreads uint64,
+	limits ProductQuantizationBuildLimits,
+) (ProductQuantizationBuildResult, error) {
+	encodedConfig := encodeProductQuantizationConfig(config)
+	encodedLimits := encodeProductQuantizationBuildLimits(limits)
+	handle, _, unlock, err := m.withHandle()
+	if err != nil {
+		return ProductQuantizationBuildResult{}, err
+	}
+	defer unlock()
+	raw, err := ffiProximityBuildPQ(handle, encodedConfig, workerThreads, encodedLimits)
+	if err != nil {
+		return ProductQuantizationBuildResult{}, err
+	}
+	d := byteDecoder{data: raw}
+	indexHandle, err := d.readUint64()
+	if err != nil {
+		return ProductQuantizationBuildResult{}, err
+	}
+	stats, err := decodeProductQuantizationBuildStats(&d)
+	if err != nil {
+		ffiFreeProductQuantizer(indexHandle)
+		return ProductQuantizationBuildResult{}, err
+	}
+	if err := d.done(); err != nil {
+		ffiFreeProductQuantizer(indexHandle)
+		return ProductQuantizationBuildResult{}, err
+	}
+	return ProductQuantizationBuildResult{Index: newProductQuantizer(indexHandle), Stats: stats}, nil
+}
+
+func (m *ProximityMap) LoadPQ(manifest []byte) (*ProductQuantizer, error) {
+	handle, _, unlock, err := m.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	indexHandle, err := ffiProximityLoadPQ(handle, append([]byte(nil), manifest...))
+	if err != nil {
+		return nil, err
+	}
+	return newProductQuantizer(indexHandle), nil
+}
+
+func (i *ProductQuantizer) Manifest() ([]byte, error) {
+	handle, unlock, err := i.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	raw, err := ffiProductQuantizerManifest(handle)
+	if err != nil {
+		return nil, err
+	}
+	return decodeHNSWByteArray(raw)
+}
+
+func (i *ProductQuantizer) SourceDescriptor() ([]byte, error) {
+	handle, unlock, err := i.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	raw, err := ffiProductQuantizerSourceDescriptor(handle)
+	if err != nil {
+		return nil, err
+	}
+	return decodeHNSWByteArray(raw)
+}
+
+func (i *ProductQuantizer) Config() (ProductQuantizationConfig, error) {
+	handle, unlock, err := i.withHandle()
+	if err != nil {
+		return ProductQuantizationConfig{}, err
+	}
+	defer unlock()
+	raw, err := ffiProductQuantizerConfig(handle)
+	if err != nil {
+		return ProductQuantizationConfig{}, err
+	}
+	return decodeProductQuantizationConfig(raw)
+}
+
+func (i *ProductQuantizer) Quality() (ProductQuantizationQuality, error) {
+	handle, unlock, err := i.withHandle()
+	if err != nil {
+		return ProductQuantizationQuality{}, err
+	}
+	defer unlock()
+	raw, err := ffiProductQuantizerQuality(handle)
+	if err != nil {
+		return ProductQuantizationQuality{}, err
+	}
+	d := byteDecoder{data: raw}
+	meanBits, err := d.readUint64()
+	if err != nil {
+		return ProductQuantizationQuality{}, err
+	}
+	maxBits, err := d.readUint64()
+	if err != nil {
+		return ProductQuantizationQuality{}, err
+	}
+	if err := d.done(); err != nil {
+		return ProductQuantizationQuality{}, err
+	}
+	return ProductQuantizationQuality{
+		MeanSquaredError: math.Float64frombits(meanBits), MaximumSquaredError: math.Float64frombits(maxBits),
+	}, nil
+}
+
+func (i *ProductQuantizer) Search(ctx context.Context, proximity *ProximityMap, request SearchRequest) (SearchResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return SearchResult{}, err
+	}
+	request = cloneSearchRequest(request)
+	encodedRequest, err := encodeProximitySearchRequest(request)
+	if err != nil {
+		return SearchResult{}, err
+	}
+	indexHandle, indexUnlock, err := i.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer indexUnlock()
+	mapHandle, _, mapUnlock, err := proximity.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer mapUnlock()
+	raw, err := ffiProductQuantizerSearch(indexHandle, mapHandle, encodedRequest)
+	if err != nil {
+		return SearchResult{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return SearchResult{}, err
+	}
+	return decodeProximitySearchResultBytes(raw)
+}
+
+func (i *ProductQuantizer) SearchWithRuntime(
+	ctx context.Context, proximity *ProximityMap, request SearchRequest, searchRuntime *ProximitySearchRuntime,
+) (SearchResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return SearchResult{}, err
+	}
+	encoded, err := encodeProximitySearchRequest(cloneSearchRequest(request))
+	if err != nil {
+		return SearchResult{}, err
+	}
+	index, indexUnlock, err := i.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer indexUnlock()
+	proximityHandle, _, proximityUnlock, err := proximity.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer proximityUnlock()
+	runtimeHandle, runtimeUnlock, err := searchRuntime.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer runtimeUnlock()
+	raw, err := ffiProductQuantizerSearchWithRuntime(index, proximityHandle, encoded, runtimeHandle)
+	if err != nil {
+		return SearchResult{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return SearchResult{}, err
+	}
+	return decodeProximitySearchResultBytes(raw)
+}
+
+func (i *ProductQuantizer) SearchCancellable(
+	ctx context.Context,
+	proximity *ProximityMap,
+	request SearchRequest,
+	searchRuntime *ProximitySearchRuntime,
+	cancellation *ProximityCancellationToken,
+) (SearchResult, error) {
+	index, indexUnlock, err := i.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer indexUnlock()
+	mapHandle, _, mapUnlock, err := proximity.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer mapUnlock()
+	return runPortableCancellableSearch(
+		ctx, request, searchRuntime, cancellation,
+		func(encoded []byte, runtimeHandle *uint64, cancellationHandle uint64) ([]byte, error) {
+			return ffiProductQuantizerSearchCancellable(
+				index, mapHandle, encoded, runtimeHandle, cancellationHandle,
+			)
+		},
+	)
+}
+
+func (i *ProductQuantizer) ProveSearch(proximity *ProximityMap, request SearchRequest) (*ProximitySearchProof, error) {
+	request = cloneSearchRequest(request)
+	encodedRequest, err := encodeProximitySearchRequest(request)
+	if err != nil {
+		return nil, err
+	}
+	limits, err := ffiDefaultContentGraphLimits()
+	if err != nil {
+		return nil, err
+	}
+	indexHandle, indexUnlock, err := i.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer indexUnlock()
+	mapHandle, _, mapUnlock, err := proximity.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer mapUnlock()
+	proofHandle, err := ffiProductQuantizerProveSearch(indexHandle, mapHandle, encodedRequest, limits)
+	if err != nil {
+		return nil, err
+	}
+	proof := &ProximitySearchProof{handle: proofHandle}
+	runtime.SetFinalizer(proof, (*ProximitySearchProof).Close)
+	return proof, nil
 }
 
 func encodeProximityRecords(dimensions uint32, records []ProximityRecord) ([]byte, error) {
@@ -195,6 +1521,48 @@ func encodeFloat32Sequence(values []float32) []byte {
 		writeU32(&out, math.Float32bits(value))
 	}
 	return out.Bytes()
+}
+
+func encodeProximitySearchRequest(request SearchRequest) ([]byte, error) {
+	request = cloneSearchRequest(request)
+	if err := request.validate(); err != nil {
+		return nil, err
+	}
+	var out bytes.Buffer
+	out.Write(encodeFloat32Sequence(request.Query))
+	writeU64(&out, uint64(request.K))
+	writeI32(&out, int32(request.Policy))
+	if request.AdaptiveQuality == nil {
+		out.WriteByte(0)
+	} else {
+		out.WriteByte(1)
+		writeI32(&out, int32(*request.AdaptiveQuality))
+	}
+	encodeOptionalU64(&out, request.Budget.MaxNodes)
+	encodeOptionalU64(&out, request.Budget.MaxCommittedBytes)
+	encodeOptionalU64(&out, request.Budget.MaxDistanceEvaluations)
+	encodeOptionalU64(&out, request.Budget.MaxFrontierEntries)
+	writeI32(&out, int32(request.Filter.Kind))
+	encodeOptionalByteArrayInto(&out, request.Filter.Start)
+	encodeOptionalByteArrayInto(&out, request.Filter.End)
+	encodeOptionalByteArrayInto(&out, request.Filter.Prefix)
+	out.Write(encodeByteArraySequence(request.Filter.EligibleKeys))
+	writeI32(&out, int32(request.Kernel))
+	writeI32(&out, int32(request.Backend))
+	if request.HNSWEFSearch == nil {
+		out.WriteByte(0)
+	} else {
+		out.WriteByte(1)
+		writeU32(&out, *request.HNSWEFSearch)
+	}
+	if request.PQRerankMultiplier == nil {
+		out.WriteByte(0)
+	} else {
+		out.WriteByte(1)
+		out.WriteByte(byte(*request.PQRerankMultiplier >> 8))
+		out.WriteByte(byte(*request.PQRerankMultiplier))
+	}
+	return out.Bytes(), nil
 }
 
 func encodeProximityMutations(mutations []ProximityMutation) ([]byte, error) {
@@ -358,6 +1726,54 @@ func (m *ProximityMap) Get(key []byte) (ExactProximityRecord, bool, error) {
 	return record, ok, nil
 }
 
+// GetView exposes a zero-copy exact record retained by an immutable native
+// leaf. The visitor must not retain the view after returning.
+func (m *ProximityMap) GetView(key []byte, visitor func(ProximityRecordView)) (bool, error) {
+	if visitor == nil {
+		return false, errors.New("nil proximity record view visitor")
+	}
+	_, fast, unlock, err := m.withHandle()
+	if err != nil {
+		return false, err
+	}
+	defer unlock()
+	return proximityGetView(fast, key, visitor)
+}
+
+// ScanRecords visits exact records in bytewise key order and stops when the
+// visitor returns false. Records own their Go memory and may be retained.
+func (m *ProximityMap) ScanRecords(visitor func(ProximityRecord) bool) (uint64, error) {
+	if visitor == nil {
+		return 0, errors.New("nil proximity record visitor")
+	}
+	proximityRecordVisitorVtableOnce.Do(ffiRegisterProximityRecordVisitorVtable)
+	handle, _, unlock, err := m.withHandle()
+	if err != nil {
+		return 0, err
+	}
+	defer unlock()
+	callback := registerGoProximityRecordVisitor(visitor)
+	visited, err := ffiProximityScanRecords(handle, callback)
+	if err != nil {
+		removeGoProximityRecordVisitor(callback)
+	}
+	return visited, err
+}
+
+// ScanRecordViews visits `[start,end)` through callback-scoped views into
+// leased native pages and stops when visitor returns false.
+func (m *ProximityMap) ScanRecordViews(start, end []byte, visitor func(ProximityScanRecordView) bool) (ScanOutcome, error) {
+	if visitor == nil {
+		return ScanOutcome{}, errors.New("nil proximity record view visitor")
+	}
+	_, fast, unlock, err := m.withHandle()
+	if err != nil {
+		return ScanOutcome{}, err
+	}
+	defer unlock()
+	return scanProximityRecordViews(fast, start, end, visitor)
+}
+
 func (m *ProximityMap) ProveMembership(key []byte) (ProximityMembershipProof, error) {
 	handle, _, unlock, err := m.withHandle()
 	if err != nil {
@@ -469,18 +1885,16 @@ type ProximitySearchProof struct {
 }
 
 func (m *ProximityMap) ProveSearch(request SearchRequest) (*ProximitySearchProof, error) {
-	if len(request.Query) == 0 || request.K == 0 {
-		return nil, errors.New("proximity query and k must be non-empty")
+	request = cloneSearchRequest(request)
+	nativeRequest, err := encodeProximitySearchRequest(request)
+	if err != nil {
+		return nil, err
 	}
 	handle, _, unlock, err := m.withHandle()
 	if err != nil {
 		return nil, err
 	}
 	defer unlock()
-	nativeRequest, err := ffiExactProximitySearchRequest(append([]float32(nil), request.Query...), uint64(request.K))
-	if err != nil {
-		return nil, err
-	}
 	limits, err := ffiDefaultContentGraphLimits()
 	if err != nil {
 		return nil, err
@@ -492,6 +1906,99 @@ func (m *ProximityMap) ProveSearch(request SearchRequest) (*ProximitySearchProof
 	proof := &ProximitySearchProof{handle: proofHandle}
 	runtime.SetFinalizer(proof, (*ProximitySearchProof).Close)
 	return proof, nil
+}
+
+func (m *ProximityMap) Search(ctx context.Context, request SearchRequest) (SearchResult, error) {
+	token, err := NewProximityCancellationToken()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer token.Close()
+	return m.SearchCancellable(ctx, request, nil, token)
+}
+
+func (m *ProximityMap) SearchWithRuntime(
+	ctx context.Context, request SearchRequest, searchRuntime *ProximitySearchRuntime,
+) (SearchResult, error) {
+	token, err := NewProximityCancellationToken()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer token.Close()
+	return m.SearchCancellable(ctx, request, searchRuntime, token)
+}
+
+func (m *ProximityMap) SearchCancellable(
+	ctx context.Context,
+	request SearchRequest,
+	searchRuntime *ProximitySearchRuntime,
+	cancellation *ProximityCancellationToken,
+) (SearchResult, error) {
+	handle, _, unlock, err := m.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer unlock()
+	return runPortableCancellableSearch(
+		ctx, request, searchRuntime, cancellation,
+		func(encoded []byte, runtimeHandle *uint64, cancellationHandle uint64) ([]byte, error) {
+			return ffiProximitySearchRecordCancellable(
+				handle, encoded, runtimeHandle, cancellationHandle,
+			)
+		},
+	)
+}
+
+func runPortableCancellableSearch(
+	ctx context.Context,
+	request SearchRequest,
+	searchRuntime *ProximitySearchRuntime,
+	cancellation *ProximityCancellationToken,
+	invoke func([]byte, *uint64, uint64) ([]byte, error),
+) (SearchResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return SearchResult{}, err
+	}
+	encoded, err := encodeProximitySearchRequest(cloneSearchRequest(request))
+	if err != nil {
+		return SearchResult{}, err
+	}
+	var runtimeHandle *uint64
+	var runtimeUnlock func()
+	if searchRuntime != nil {
+		handle, unlockRuntime, runtimeErr := searchRuntime.withHandle()
+		if runtimeErr != nil {
+			return SearchResult{}, runtimeErr
+		}
+		runtimeHandle = &handle
+		runtimeUnlock = unlockRuntime
+		defer runtimeUnlock()
+	}
+	cancellationHandle, cancellationUnlock, err := cancellation.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer cancellationUnlock()
+	finished := make(chan struct{})
+	defer close(finished)
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = cancellation.Cancel()
+		case <-finished:
+		}
+	}()
+	raw, err := invoke(encoded, runtimeHandle, cancellationHandle)
+	if err != nil {
+		return SearchResult{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return SearchResult{}, err
+	}
+	return decodeProximitySearchResultBytes(raw)
 }
 
 func (p *ProximitySearchProof) Close() {
@@ -650,6 +2157,141 @@ func (s *ProximitySession) Get(key []byte) (ExactProximityRecord, bool, error) {
 	}
 	return record, ok, nil
 }
+
+// GetView exposes a callback-scoped zero-copy exact record from this retained
+// read session.
+func (s *ProximitySession) GetView(key []byte, visitor func(ProximityRecordView)) (bool, error) {
+	if visitor == nil {
+		return false, errors.New("nil proximity record view visitor")
+	}
+	fast, unlock, err := s.withFast()
+	if err != nil {
+		return false, err
+	}
+	defer unlock()
+	return proximityGetView(fast, key, visitor)
+}
+
+func readProximityVarint(raw []byte, offset int) (uint64, int, error) {
+	var value uint64
+	for shift := uint(0); shift < 64 && offset < len(raw); shift += 7 {
+		current := raw[offset]
+		offset++
+		if shift == 63 && current > 1 {
+			return 0, 0, errors.New("proximity record varint overflow")
+		}
+		value |= uint64(current&0x7f) << shift
+		if current&0x80 == 0 {
+			return value, offset, nil
+		}
+	}
+	return 0, 0, errors.New("invalid proximity record varint")
+}
+
+func proximityGetView(fast uint64, key []byte, visitor func(ProximityRecordView)) (bool, error) {
+	return withFastProximityValue(fast, key, func(raw []byte) error {
+		if len(raw) < 8 || !bytes.Equal(raw[:6], []byte{'P', 'R', 'V', 'R', 2, 1}) {
+			return errors.New("invalid retained proximity record header")
+		}
+		dimensions, vectorStart, err := readProximityVarint(raw, 6)
+		if err != nil {
+			return err
+		}
+		if dimensions > uint64((len(raw)-vectorStart)/4) {
+			return errors.New("retained proximity vector is truncated")
+		}
+		vectorEnd := vectorStart + int(dimensions)*4
+		valueLength, valueStart, err := readProximityVarint(raw, vectorEnd)
+		if err != nil || valueLength > uint64(len(raw)-valueStart) || valueStart+int(valueLength) != len(raw) {
+			return errors.New("retained proximity value length is invalid")
+		}
+		visitor(ProximityRecordView{Vector: ProximityVectorView{raw: raw[vectorStart:vectorEnd]}, Value: raw[valueStart:]})
+		return nil
+	})
+}
+
+// ScanRecords reuses the retained session and visits records in key order.
+func (s *ProximitySession) ScanRecords(visitor func(ProximityRecord) bool) (uint64, error) {
+	if visitor == nil {
+		return 0, errors.New("nil proximity record visitor")
+	}
+	proximityRecordVisitorVtableOnce.Do(ffiRegisterProximityRecordVisitorVtable)
+	handle, unlock, err := s.withHandle()
+	if err != nil {
+		return 0, err
+	}
+	defer unlock()
+	callback := registerGoProximityRecordVisitor(visitor)
+	visited, err := ffiProximitySessionScanRecords(handle, callback)
+	if err != nil {
+		removeGoProximityRecordVisitor(callback)
+	}
+	return visited, err
+}
+
+// ScanRecordViews reuses the retained session and visits `[start,end)` through
+// callback-scoped views into leased native pages.
+func (s *ProximitySession) ScanRecordViews(start, end []byte, visitor func(ProximityScanRecordView) bool) (ScanOutcome, error) {
+	if visitor == nil {
+		return ScanOutcome{}, errors.New("nil proximity record view visitor")
+	}
+	fast, unlock, err := s.withFast()
+	if err != nil {
+		return ScanOutcome{}, err
+	}
+	defer unlock()
+	return scanProximityRecordViews(fast, start, end, visitor)
+}
+
+func scanProximityRecordViews(fast uint64, start, end []byte, visitor func(ProximityScanRecordView) bool) (ScanOutcome, error) {
+	start = append([]byte(nil), start...)
+	var boundedEnd []byte
+	if end != nil {
+		boundedEnd = append([]byte(nil), end...)
+	}
+	var after []byte
+	var visited uint64
+	for {
+		page, err := fastProximityRangePage(fast, start, boundedEnd, after, end != nil, after != nil)
+		if err != nil {
+			return ScanOutcome{}, err
+		}
+		scope := newViewScope()
+		rows, decodeErr := decodeProximityRecordViews(page.bytes, scope)
+		if decodeErr != nil {
+			scope.close()
+			page.close()
+			return ScanOutcome{}, decodeErr
+		}
+		stopped := false
+		for _, row := range rows {
+			key, copyErr := row.Key.Copy()
+			if copyErr != nil {
+				scope.close()
+				page.close()
+				return ScanOutcome{}, copyErr
+			}
+			after = key
+			visited++
+			if !visitor(row) {
+				stopped = true
+				break
+			}
+		}
+		terminal := page.terminal
+		scope.close()
+		page.close()
+		if stopped {
+			return ScanOutcome{Visited: visited, Stopped: true}, nil
+		}
+		if terminal {
+			return ScanOutcome{Visited: visited, Stopped: false}, nil
+		}
+		if len(rows) == 0 {
+			return ScanOutcome{}, errors.New("non-terminal proximity record page made no progress")
+		}
+	}
+}
 func (s *ProximitySession) withFast() (uint64, func(), error) {
 	if s == nil || s.closed.Load() {
 		return 0, nil, errors.New("proximity session is closed")
@@ -663,34 +2305,95 @@ func (s *ProximitySession) withFast() (uint64, func(), error) {
 }
 
 func (s *ProximitySession) Search(ctx context.Context, request SearchRequest) (SearchResult, error) {
-	var result SearchResult
-	err := s.WithSearchView(ctx, request, func(rows []NeighborView) error {
-		result.Neighbors = make([]Neighbor, 0, len(rows))
-		for _, row := range rows {
-			key, err := row.Key.Copy()
-			if err != nil {
-				return err
-			}
-			var value []byte
-			if row.Value != nil {
-				value, err = row.Value.Copy()
-				if err != nil {
-					return err
-				}
-			}
-			result.Neighbors = append(result.Neighbors, Neighbor{key, value, row.Distance, row.Rank})
-		}
-		return nil
-	})
+	request = cloneSearchRequest(request)
+	if err := request.validate(); err != nil {
+		return SearchResult{}, err
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return SearchResult{}, err
+	}
+	nativeRequest, err := encodeProximitySearchRequest(request)
 	if err != nil {
 		return SearchResult{}, err
 	}
-	result.Completion = "exact"
-	result.Backend = "native"
-	return result, nil
+	handle, unlock, err := s.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer unlock()
+	raw, err := ffiProximityReadSessionSearch(handle, nativeRequest)
+	if err != nil {
+		return SearchResult{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return SearchResult{}, err
+	}
+	return decodeProximitySearchResultBytes(raw)
+}
+
+func (s *ProximitySession) SearchWithRuntime(
+	ctx context.Context, request SearchRequest, searchRuntime *ProximitySearchRuntime,
+) (SearchResult, error) {
+	request = cloneSearchRequest(request)
+	if err := request.validate(); err != nil {
+		return SearchResult{}, err
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return SearchResult{}, err
+	}
+	encoded, err := encodeProximitySearchRequest(request)
+	if err != nil {
+		return SearchResult{}, err
+	}
+	handle, unlock, err := s.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer unlock()
+	runtimeHandle, runtimeUnlock, err := searchRuntime.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer runtimeUnlock()
+	raw, err := ffiProximityReadSessionSearchWithRuntime(handle, encoded, runtimeHandle)
+	if err != nil {
+		return SearchResult{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return SearchResult{}, err
+	}
+	return decodeProximitySearchResultBytes(raw)
+}
+
+func (s *ProximitySession) SearchCancellable(
+	ctx context.Context,
+	request SearchRequest,
+	searchRuntime *ProximitySearchRuntime,
+	cancellation *ProximityCancellationToken,
+) (SearchResult, error) {
+	handle, unlock, err := s.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer unlock()
+	return runPortableCancellableSearch(
+		ctx, request, searchRuntime, cancellation,
+		func(encoded []byte, runtimeHandle *uint64, cancellationHandle uint64) ([]byte, error) {
+			return ffiProximitySessionSearchCancellable(
+				handle, encoded, runtimeHandle, cancellationHandle,
+			)
+		},
+	)
 }
 
 func (s *ProximitySession) WithSearchView(ctx context.Context, request SearchRequest, visit func([]NeighborView) error) error {
+	request = cloneSearchRequest(request)
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -700,8 +2403,11 @@ func (s *ProximitySession) WithSearchView(ctx context.Context, request SearchReq
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if len(request.Query) == 0 || request.K == 0 {
-		return errors.New("proximity query and k must be non-empty")
+	if err := request.validate(); err != nil {
+		return err
+	}
+	if !request.usesPackedExactPath() {
+		return errors.New("zero-copy proximity views require an exact native request")
 	}
 	fast, unlock, err := s.withFast()
 	if err != nil {
@@ -717,8 +2423,8 @@ func (s *ProximitySession) WithSearchView(ctx context.Context, request SearchReq
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	scope := &viewScope{}
-	defer scope.expired.Store(true)
+	scope := newViewScope()
+	defer scope.close()
 	rows, err := decodeNeighborViews(page.data, scope)
 	if err != nil {
 		return err
@@ -743,6 +2449,26 @@ func decodeFloat32Sequence(d *byteDecoder) ([]float32, error) {
 		values = append(values, math.Float32frombits(bits))
 	}
 	return values, nil
+}
+
+func decodeProximityRecordBytes(raw []byte) (ProximityRecord, error) {
+	d := byteDecoder{data: raw}
+	key, err := d.readByteArray()
+	if err != nil {
+		return ProximityRecord{}, err
+	}
+	vector, err := decodeFloat32Sequence(&d)
+	if err != nil {
+		return ProximityRecord{}, err
+	}
+	value, err := d.readByteArray()
+	if err != nil {
+		return ProximityRecord{}, err
+	}
+	if err := d.done(); err != nil {
+		return ProximityRecord{}, err
+	}
+	return ProximityRecord{Key: key, Vector: vector, Value: value}, nil
 }
 
 func decodeProximitySearchResult(d *byteDecoder) (SearchResult, error) {
@@ -771,10 +2497,25 @@ func decodeProximitySearchResult(d *byteDecoder) (SearchResult, error) {
 			Key: key, Value: value, Distance: math.Float64frombits(distanceBits), Rank: uint32(index),
 		})
 	}
-	for range 11 {
-		if _, err := d.readUint64(); err != nil {
+	stats := []*uint64{
+		&result.Stats.LevelsVisited,
+		&result.Stats.NodesRead,
+		&result.Stats.BytesRead,
+		&result.Stats.PhysicalBytesRead,
+		&result.Stats.CommittedBytes,
+		&result.Stats.DistanceEvaluations,
+		&result.Stats.QuantizedDistanceEvaluations,
+		&result.Stats.RerankedCandidates,
+		&result.Stats.FrontierPeak,
+		&result.Stats.CandidateHandlesPeak,
+		&result.Stats.CandidateRetainedBytesPeak,
+	}
+	for _, field := range stats {
+		value, err := d.readUint64()
+		if err != nil {
 			return SearchResult{}, err
 		}
+		*field = value
 	}
 	completion, err := d.readInt32()
 	if err != nil {
@@ -797,10 +2538,20 @@ func decodeProximitySearchResult(d *byteDecoder) (SearchResult, error) {
 	if result.Backend == "" {
 		return SearchResult{}, errors.New("unknown proximity search backend")
 	}
-	if _, err := d.readByte(); err != nil {
+	result.PlanFormatVersion, err = d.readByte()
+	if err != nil {
 		return SearchResult{}, err
 	}
 	return result, nil
+}
+
+func decodeProximitySearchResultBytes(raw []byte) (SearchResult, error) {
+	d := byteDecoder{data: raw}
+	result, err := decodeProximitySearchResult(&d)
+	if err != nil {
+		return SearchResult{}, err
+	}
+	return result, d.done()
 }
 
 func decodeProximitySearchVerification(raw []byte) (ProximitySearchVerification, error) {

@@ -30,7 +30,26 @@ CLASSIFICATIONS = (
     "rust-language-only",
 )
 STATUSES = ("planned", "implemented")
-MANIFEST_SCHEMA_VERSION = 1
+AUDIENCES = (
+    "application",
+    "supporting-data-model",
+    "rust-extension",
+    "implementation-detail",
+)
+RECONCILIATION_STATES = (
+    "bound-direct",
+    "bound-idiomatic",
+    "confirmed-api-gap",
+    "confirmed-performance-gap",
+)
+MANIFEST_SCHEMA_VERSION = 2
+REQUIRED_RUST_FEATURES = ("async-store",)
+FEATURE_SENTINELS = {
+    "async-store": (
+        "prolly::AsyncProlly",
+        "prolly::AsyncVersionedMap",
+    ),
+}
 
 
 @dataclass(frozen=True)
@@ -42,6 +61,16 @@ class CheckResult:
     @property
     def ok(self) -> bool:
         return not (self.missing or self.stale or self.incomplete)
+
+
+@dataclass(frozen=True, order=True)
+class ApiItem:
+    """A stable public Rust path plus the rustdoc shape needed for review."""
+
+    rust: str
+    kind: str
+    owner: str | None
+    member_kind: str | None
 
 
 def _inner(item: dict[str, Any]) -> tuple[str, dict[str, Any]]:
@@ -63,8 +92,8 @@ def _item(index: dict[str, Any], item_id: Any) -> dict[str, Any] | None:
     return index.get(str(item_id))
 
 
-def extract_public_api(rustdoc: dict[str, Any]) -> set[str]:
-    """Extract the crate-root public API and reachable associated items."""
+def extract_public_api_items(rustdoc: dict[str, Any]) -> dict[str, ApiItem]:
+    """Extract public Rust paths with enough shape data for classification."""
 
     index = rustdoc["index"]
     root = _item(index, rustdoc["root"])
@@ -75,8 +104,16 @@ def extract_public_api(rustdoc: dict[str, Any]) -> set[str]:
         raise ValueError("rustdoc root item is not a module")
 
     crate_name = root.get("name") or "crate"
-    public_api: set[str] = set()
+    public_api: dict[str, ApiItem] = {}
     expanded_modules: set[tuple[str, str]] = set()
+
+    def record(
+        rust: str,
+        kind: str,
+        owner: str | None = None,
+        member_kind: str | None = None,
+    ) -> None:
+        public_api[rust] = ApiItem(rust, kind, owner, member_kind)
 
     def add_named_item(item_id: Any, public_path: str) -> None:
         item = _item(index, item_id)
@@ -92,7 +129,7 @@ def extract_public_api(rustdoc: dict[str, Any]) -> set[str]:
                 add_named_item(target_id, f"{parent}::{public_name}")
             return
 
-        public_api.add(public_path)
+        record(public_path, item_kind)
 
         if item_kind == "module":
             module_key = (str(item_id), public_path)
@@ -134,11 +171,21 @@ def extract_public_api(rustdoc: dict[str, Any]) -> set[str]:
 
         for child_id in child_ids:
             child = _item(index, child_id)
-            if child is None or not _is_public(child):
+            if child is None or child.get("crate_id") != 0:
                 continue
+            if item_kind not in {"enum", "trait"} and not _is_public(child):
+                continue
+            child_kind, _ = _inner(child)
             child_name = child.get("name")
             if child_name:
-                public_api.add(f"{public_path}::{child_name}")
+                if item_kind == "struct":
+                    member_kind = "field"
+                elif item_kind == "enum":
+                    member_kind = "variant"
+                else:
+                    member_kind = "trait-item"
+                child_path = f"{public_path}::{child_name}"
+                record(child_path, child_kind, public_path, member_kind)
 
         for impl_id in impl_ids:
             impl_item = _item(index, impl_id)
@@ -158,7 +205,13 @@ def extract_public_api(rustdoc: dict[str, Any]) -> set[str]:
                     "assoc_const",
                     "assoc_type",
                 }:
-                    public_api.add(f"{public_path}::{associated_name}")
+                    associated_path = f"{public_path}::{associated_name}"
+                    record(
+                        associated_path,
+                        associated_kind,
+                        public_path,
+                        "inherent-item",
+                    )
 
     for root_item_id in module.get("items", []):
         root_item = _item(index, root_item_id)
@@ -176,6 +229,12 @@ def extract_public_api(rustdoc: dict[str, Any]) -> set[str]:
     return public_api
 
 
+def extract_public_api(rustdoc: dict[str, Any]) -> set[str]:
+    """Extract the crate-root public API and reachable associated items."""
+
+    return set(extract_public_api_items(rustdoc))
+
+
 def _nonempty_strings(values: Any) -> bool:
     return (
         isinstance(values, dict)
@@ -184,7 +243,56 @@ def _nonempty_strings(values: Any) -> bool:
     )
 
 
-def _complete_release_entry(entry: dict[str, Any]) -> bool:
+def _valid_review_metadata(entry: dict[str, Any]) -> bool:
+    return (
+        entry.get("reviewed") is True
+        and isinstance(entry.get("rationale"), str)
+        and bool(entry["rationale"].strip())
+        and isinstance(entry.get("docs"), list)
+        and bool(entry["docs"])
+        and all(isinstance(doc, str) and doc.strip() for doc in entry["docs"])
+    )
+
+
+def _valid_equivalence_record(record: Any) -> bool:
+    if not isinstance(record, dict):
+        return False
+    if record.get("classification") not in {"idiomatic", "rust-language-only"}:
+        return False
+    for field in ("portable_semantics", "performance_contract"):
+        if not isinstance(record.get(field), str) or not record[field].strip():
+            return False
+    if not _nonempty_strings(record.get("language_patterns")):
+        return False
+    if set(record["language_patterns"]) != set(LANGUAGES):
+        return False
+    tests = record.get("tests")
+    return (
+        isinstance(tests, list)
+        and bool(tests)
+        and all(isinstance(test, str) and test.strip() for test in tests)
+    )
+
+
+def validate_equivalence_catalog(equivalences: Any) -> tuple[str, ...]:
+    """Return malformed equivalence IDs in deterministic order."""
+
+    if not isinstance(equivalences, dict):
+        return ("<catalog>",)
+    return tuple(
+        sorted(
+            equivalence_id
+            for equivalence_id, record in equivalences.items()
+            if not isinstance(equivalence_id, str)
+            or not equivalence_id.strip()
+            or not _valid_equivalence_record(record)
+        )
+    )
+
+
+def _complete_release_entry(
+    entry: dict[str, Any], equivalences: dict[str, Any] | None = None
+) -> bool:
     if entry.get("status") != "implemented":
         return False
     if not isinstance(entry.get("tests"), list) or not entry["tests"]:
@@ -207,17 +315,445 @@ def _complete_release_entry(entry: dict[str, Any]) -> bool:
     covered = set(languages) | set(exclusions)
     if covered != set(LANGUAGES):
         return False
-    if classification in {"portable", "idiomatic", "rust-language-only"}:
+    if classification == "portable":
         return set(languages) == set(LANGUAGES) and not exclusions
+    if classification in {"idiomatic", "rust-language-only"}:
+        equivalence_id = entry.get("equivalence")
+        if not isinstance(equivalence_id, str) or not equivalence_id.strip():
+            return False
+        record = (equivalences or {}).get(equivalence_id)
+        if not _valid_equivalence_record(record):
+            return False
+        if record["classification"] != classification:
+            return False
+        if not set(entry["tests"]) & set(record["tests"]):
+            return False
+        return (
+            set(languages) == set(LANGUAGES)
+            and not exclusions
+            and _valid_review_metadata(entry)
+        )
     if classification == "platform-excluded":
-        return bool(exclusions)
+        return set(exclusions) == {"wasm"} and _valid_review_metadata(entry)
     return False
+
+
+_DATA_MODEL_KINDS = {
+    "struct",
+    "enum",
+    "union",
+    "struct_field",
+    "variant",
+    "constant",
+    "static",
+}
+_RUST_ABSTRACTION_KINDS = {
+    "trait",
+    "type_alias",
+    "primitive",
+    "assoc_const",
+    "assoc_type",
+}
+
+_STORE_TRAIT_OWNERS = {
+    "prolly::AsyncBlobStore",
+    "prolly::AsyncManifestStore",
+    "prolly::AsyncManifestStoreScan",
+    "prolly::AsyncStore",
+    "prolly::AsyncTransactionalStore",
+    "prolly::BlobStore",
+    "prolly::BlobStoreScan",
+    "prolly::ManifestStore",
+    "prolly::ManifestStoreScan",
+    "prolly::NodeStoreScan",
+    "prolly::RemoteStoreBackend",
+    "prolly::Store",
+    "prolly::TransactionalStore",
+}
+_CODEC_TRAIT_OWNERS = {"prolly::KeyCodec", "prolly::ValueCodec"}
+_CALLBACK_TRAIT_OWNERS = {
+    "prolly::BorrowedMergeResolver",
+    "prolly::ConflictFreeMerger",
+    "prolly::SecondaryIndexExtractor",
+    "prolly::StreamingSecondaryIndexExtractor",
+}
+_CALLBACK_TYPE_ALIASES = {
+    "prolly::CustomMergeFn",
+    "prolly::MergePolicyFn",
+    "prolly::Resolver",
+    "prolly::TimestampExtractor",
+}
+_NON_APPLICATION_RUNTIME_OWNERS = {
+    "prolly::AsyncRangeIter",
+    "prolly::Cursor",
+    "prolly::CursorIterator",
+    "prolly::DiffCursor",
+    "prolly::IndexedSourceRecordRef",
+    "prolly::ProximityRecordRef",
+    "prolly::ProximityVectorRef",
+    "prolly::RangeCursor",
+    "prolly::RangeIter",
+    "prolly::ReverseCursor",
+    "prolly::SearchIo",
+    "prolly::SecondaryIndexMatchRef",
+    "prolly::StructuralDiffCursor",
+    "prolly::SyncBlobStoreAsAsync",
+}
+
+
+def _abstraction_equivalence(item: ApiItem) -> str | None:
+    if item.kind == "module":
+        return "namespace-module"
+    if item.kind in {"assoc_type", "assoc_const"}:
+        return "marker-and-associated-type"
+
+    owner = item.owner or item.rust
+    if owner in _STORE_TRAIT_OWNERS:
+        return "store-trait"
+    if owner in _CODEC_TRAIT_OWNERS:
+        return "generic-codec"
+    if owner in _CALLBACK_TRAIT_OWNERS:
+        return "callback-protocol"
+    if owner == "prolly::StreamingDiffer":
+        return "iterator-sequence"
+    if owner == "prolly::ParallelRebalancer":
+        return "builder-typestate"
+    if item.kind == "type_alias":
+        if item.rust in _CALLBACK_TYPE_ALIASES:
+            return "callback-protocol"
+        return "record-alias"
+    return None
+
+
+def review_abstraction_entries(
+    items: dict[str, ApiItem], manifest: dict[str, Any]
+) -> dict[str, Any]:
+    """Apply explicit abstraction classifications without claiming coverage."""
+
+    reviewed = dict(manifest)
+    operations: list[Any] = []
+    for original in manifest.get("operations", []):
+        if not isinstance(original, dict):
+            operations.append(original)
+            continue
+        entry = dict(original)
+        item = items.get(entry.get("rust"))
+        if item is None:
+            operations.append(entry)
+            continue
+        is_abstraction = (
+            item.kind in _RUST_ABSTRACTION_KINDS
+            or item.member_kind == "trait-item"
+            or (item.kind not in _DATA_MODEL_KINDS and item.kind != "function")
+        )
+        if not is_abstraction:
+            operations.append(entry)
+            continue
+        equivalence = _abstraction_equivalence(item)
+        if equivalence is None:
+            raise ValueError(f"no abstraction review rule for {item.rust}")
+        classification = (
+            "rust-language-only"
+            if equivalence in {"marker-and-associated-type", "namespace-module"}
+            else "idiomatic"
+        )
+        audience = (
+            "supporting-data-model"
+            if equivalence == "record-alias"
+            else "rust-extension"
+        )
+        entry.update(
+            classification=classification,
+            equivalence=equivalence,
+            rationale=(
+                f"{item.rust} is represented by the reviewed "
+                f"{equivalence} host-language contract instead of a literal "
+                "Rust declaration."
+            ),
+            docs=[f"bindings/api/idiomatic-equivalents.json#{equivalence}"],
+            reviewed=True,
+            audience=audience,
+            audience_rationale=(
+                f"{item.rust} supports the portable application API through "
+                f"the {equivalence} contract and is not a separately invoked "
+                "application operation."
+            ),
+        )
+        operations.append(entry)
+    reviewed["operations"] = operations
+    return reviewed
+
+
+def review_runtime_audience_entries(
+    items: dict[str, ApiItem], manifest: dict[str, Any]
+) -> dict[str, Any]:
+    """Review runtime audiences for the requested non-core domain families."""
+
+    reviewed = dict(manifest)
+    operations: list[Any] = []
+    for original in manifest.get("operations", []):
+        if not isinstance(original, dict):
+            operations.append(original)
+            continue
+        entry = dict(original)
+        item = items.get(entry.get("rust"))
+        if (
+            item is None
+            or item.kind != "function"
+            or entry.get("family") == "core"
+            or entry.get("audience") in AUDIENCES
+        ):
+            operations.append(entry)
+            continue
+        if item.owner in _NON_APPLICATION_RUNTIME_OWNERS:
+            audience = "rust-extension"
+            reason = (
+                f"{item.rust} is Rust cursor, borrowed-view, or adapter machinery; "
+                "host applications use the reviewed bounded-page or owned facade."
+            )
+        else:
+            audience = "application"
+            reason = (
+                f"{item.rust} has runtime behavior in the requested "
+                f"{entry.get('family')} application domain and requires direct or "
+                "idiomatic host evidence."
+            )
+        entry.update(
+            audience=audience,
+            audience_rationale=reason,
+            reviewed=True,
+        )
+        operations.append(entry)
+    reviewed["operations"] = operations
+    return reviewed
+
+
+def apply_reconciliations(
+    manifest: dict[str, Any], document: dict[str, Any]
+) -> dict[str, Any]:
+    """Expand reviewed reconciliation groups onto exact manifest rows."""
+
+    decisions: dict[str, tuple[str, list[str], str]] = {}
+    groups = document.get("groups")
+    if not isinstance(groups, list):
+        raise ValueError("reconciliation document must contain groups")
+    for group in groups:
+        if not isinstance(group, dict) or group.get("state") not in RECONCILIATION_STATES:
+            raise ValueError("reconciliation group has an invalid state")
+        rust_paths = group.get("rust")
+        evidence = group.get("evidence")
+        rationale = group.get("rationale")
+        if (
+            not isinstance(rust_paths, list)
+            or not rust_paths
+            or not all(isinstance(path, str) and path for path in rust_paths)
+            or not isinstance(evidence, list)
+            or not evidence
+            or not all(isinstance(path, str) and path for path in evidence)
+            or not isinstance(rationale, str)
+            or not rationale.strip()
+        ):
+            raise ValueError("reconciliation group is incomplete")
+        for rust in rust_paths:
+            if rust in decisions:
+                raise ValueError(f"duplicate reconciliation for {rust}")
+            decisions[rust] = (group["state"], list(evidence), rationale)
+
+    reconciled = dict(manifest)
+    operations: list[Any] = []
+    seen: set[str] = set()
+    for original in manifest.get("operations", []):
+        if not isinstance(original, dict):
+            operations.append(original)
+            continue
+        entry = dict(original)
+        rust = entry.get("rust")
+        if rust in decisions:
+            state, evidence, rationale = decisions[rust]
+            entry.update(
+                reconciliation=state,
+                reconciliation_evidence=evidence,
+                reconciliation_rationale=rationale,
+            )
+            seen.add(rust)
+        operations.append(entry)
+    missing = sorted(set(decisions) - seen)
+    if missing:
+        raise ValueError(f"reconciliation paths are absent from manifest: {missing}")
+    reconciled["operations"] = operations
+    return reconciled
+
+
+def _audit_bucket(
+    item: ApiItem,
+    entry: dict[str, Any],
+    equivalences: dict[str, Any] | None = None,
+) -> str:
+    if _complete_release_entry(entry, equivalences):
+        return "release_complete"
+    if entry.get("reviewed") is True:
+        return "reviewed_incomplete"
+    if item.kind in _DATA_MODEL_KINDS:
+        return "unreviewed_data_model"
+    if (
+        item.kind in _RUST_ABSTRACTION_KINDS
+        or item.member_kind == "trait-item"
+        or item.kind != "function"
+    ):
+        return "unreviewed_rust_abstraction"
+    return "unreviewed_runtime_candidate"
+
+
+def build_classification_audit(
+    items: dict[str, ApiItem],
+    manifest: dict[str, Any],
+    equivalences: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build deterministic triage data without inferring parity completion."""
+
+    entries = {
+        entry["rust"]: entry
+        for entry in manifest.get("operations", [])
+        if isinstance(entry, dict) and isinstance(entry.get("rust"), str)
+    }
+    summary = {
+        "release_complete": 0,
+        "reviewed_incomplete": 0,
+        "unreviewed_runtime_candidate": 0,
+        "unreviewed_data_model": 0,
+        "unreviewed_rust_abstraction": 0,
+    }
+    family_counts: dict[str, int] = {}
+    owner_counts: dict[str, int] = {}
+    rows: list[dict[str, Any]] = []
+    for rust in sorted(items):
+        item = items[rust]
+        entry = entries.get(rust, {})
+        bucket = _audit_bucket(item, entry, equivalences)
+        summary[bucket] += 1
+        family = entry.get("family") or _family(rust)
+        family_counts[family] = family_counts.get(family, 0) + 1
+        owner = item.owner or rust
+        owner_counts[owner] = owner_counts.get(owner, 0) + 1
+        rows.append(
+            {
+                "rust": rust,
+                "kind": item.kind,
+                "owner": item.owner,
+                "member_kind": item.member_kind,
+                "family": family,
+                "classification": entry.get("classification"),
+                "status": entry.get("status"),
+                "bucket": bucket,
+            }
+        )
+    return {
+        "summary": summary,
+        "family_counts": dict(sorted(family_counts.items())),
+        "owner_counts": dict(
+            sorted(owner_counts.items(), key=lambda pair: (-pair[1], pair[0]))
+        ),
+        "rows": rows,
+    }
+
+
+def _gap_row(item: ApiItem, entry: dict[str, Any]) -> dict[str, Any]:
+    languages = entry.get("languages")
+    exclusions = entry.get("exclusions")
+    covered = set(languages) if isinstance(languages, dict) else set()
+    if isinstance(exclusions, dict):
+        covered.update(exclusions)
+    return {
+        "rust": item.rust,
+        "kind": item.kind,
+        "owner": item.owner,
+        "member_kind": item.member_kind,
+        "family": entry.get("family") or _family(item.rust),
+        "classification": entry.get("classification"),
+        "status": entry.get("status"),
+        "missing_languages": sorted(set(LANGUAGES) - covered),
+        "tests": entry.get("tests") if isinstance(entry.get("tests"), list) else [],
+        "performance": entry.get("performance"),
+        "rationale": entry.get("rationale"),
+        "audience": entry.get("audience"),
+        "audience_rationale": entry.get("audience_rationale"),
+        "reconciliation": entry.get("reconciliation"),
+        "reconciliation_evidence": entry.get("reconciliation_evidence", []),
+    }
+
+
+def build_application_gap_report(
+    items: dict[str, ApiItem],
+    manifest: dict[str, Any],
+    equivalences: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Separate runtime operation gaps from data-model/classification debt."""
+
+    entries = {
+        entry["rust"]: entry
+        for entry in manifest.get("operations", [])
+        if isinstance(entry, dict) and isinstance(entry.get("rust"), str)
+    }
+    report: dict[str, Any] = {
+        "release_complete_application_operations": [],
+        "bound_pending_manifest_evidence": [],
+        "confirmed_missing_implementation": [],
+        "confirmed_performance_gap": [],
+        "unmapped_application_operations": [],
+        "mapped_missing_evidence": [],
+        "platform_review_required": [],
+        "application_review_required": [],
+        "non_application_runtime": [],
+        "data_model_or_abstraction_debt": [],
+    }
+    for rust in sorted(items):
+        item = items[rust]
+        entry = entries.get(rust, {})
+        complete = _complete_release_entry(entry, equivalences)
+        is_application_operation = item.kind == "function"
+        audience = entry.get("audience")
+        if not is_application_operation:
+            if not complete:
+                report["data_model_or_abstraction_debt"].append(
+                    _gap_row(item, entry)
+                )
+            continue
+        if complete:
+            report["release_complete_application_operations"].append(
+                _gap_row(item, entry)
+            )
+            continue
+        if audience not in AUDIENCES:
+            report["application_review_required"].append(_gap_row(item, entry))
+            continue
+        if audience != "application":
+            report["non_application_runtime"].append(_gap_row(item, entry))
+            continue
+        row = _gap_row(item, entry)
+        reconciliation = entry.get("reconciliation")
+        if reconciliation in {"bound-direct", "bound-idiomatic"}:
+            report["bound_pending_manifest_evidence"].append(row)
+        elif reconciliation == "confirmed-api-gap":
+            report["confirmed_missing_implementation"].append(row)
+        elif reconciliation == "confirmed-performance-gap":
+            report["confirmed_performance_gap"].append(row)
+        elif entry.get("classification") == "platform-excluded":
+            report["platform_review_required"].append(row)
+        elif entry.get("status") == "implemented" or bool(entry.get("languages")):
+            report["mapped_missing_evidence"].append(row)
+        else:
+            report["unmapped_application_operations"].append(row)
+
+    summary = {name: len(rows) for name, rows in report.items()}
+    return {"summary": summary, **report}
 
 
 def check_manifest(
     rust_items: set[str],
     manifest: dict[str, Any],
     release: bool,
+    required_rust_features: tuple[str, ...] = (),
+    equivalences: dict[str, Any] | None = None,
 ) -> CheckResult:
     entries = manifest.get("operations")
     if not isinstance(entries, list):
@@ -242,6 +778,19 @@ def check_manifest(
     missing = tuple(sorted(rust_items - operations.keys()))
     stale = tuple(sorted(operations.keys() - rust_items))
     incomplete = set(malformed) | duplicates
+    if release and equivalences is not None:
+        incomplete.update(
+            f"<equivalence:{equivalence_id}>"
+            for equivalence_id in validate_equivalence_catalog(equivalences)
+        )
+    if required_rust_features:
+        if manifest.get("schema_version") != MANIFEST_SCHEMA_VERSION:
+            incomplete.add("<manifest.schema_version>")
+        features = manifest.get("rust_features")
+        if not isinstance(features, list) or set(features) != set(
+            required_rust_features
+        ):
+            incomplete.add("<manifest.rust_features>")
     for name in rust_items & operations.keys():
         entry = operations[name]
         if entry.get("classification") not in CLASSIFICATIONS:
@@ -250,7 +799,7 @@ def check_manifest(
         if entry.get("status") not in STATUSES:
             incomplete.add(name)
             continue
-        if release and not _complete_release_entry(entry):
+        if release and not _complete_release_entry(entry, equivalences):
             incomplete.add(name)
 
     return CheckResult(missing, stale, tuple(sorted(incomplete)))
@@ -302,6 +851,7 @@ def generate_manifest(
     rust_items: Iterable[str],
     previous: dict[str, Any] | None,
     rustdoc_format_version: int | None,
+    rust_features: tuple[str, ...] = (),
 ) -> dict[str, Any]:
     rust_names = sorted(set(rust_items))
     prior_entries = {
@@ -317,6 +867,7 @@ def generate_manifest(
         previous is not None
         and set(prior_entries) == set(rust_names)
         and previous.get("rustdoc_format_version") == rustdoc_format_version
+        and previous.get("rust_features") == list(rust_features)
     )
     generated_at = (
         previous.get("generated_at")
@@ -327,6 +878,7 @@ def generate_manifest(
         "schema_version": MANIFEST_SCHEMA_VERSION,
         "generated_at": generated_at,
         "rustdoc_format_version": rustdoc_format_version,
+        "rust_features": list(rust_features),
         "languages": list(LANGUAGES),
         "operations": operations,
     }
@@ -372,12 +924,40 @@ def _print_result(result: CheckResult) -> None:
             print(f"{label}: {value}", file=sys.stderr)
 
 
+def missing_feature_sentinels(
+    rust_items: set[str],
+    rust_features: tuple[str, ...],
+) -> tuple[str, ...]:
+    """Return feature-gated symbols absent from the supplied rustdoc inventory."""
+
+    return tuple(
+        sentinel
+        for feature in rust_features
+        for sentinel in FEATURE_SENTINELS.get(feature, ())
+        if sentinel not in rust_items
+    )
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("generate", "check"))
+    parser.add_argument(
+        "command",
+        choices=(
+            "generate",
+            "check",
+            "audit",
+            "gaps",
+            "review-abstractions",
+            "review-audiences",
+            "apply-reconciliations",
+        ),
+    )
     parser.add_argument("--release", action="store_true")
     parser.add_argument("--rustdoc", type=Path)
     parser.add_argument("--manifest", type=Path)
+    parser.add_argument("--equivalences", type=Path)
+    parser.add_argument("--reconciliation", type=Path)
+    parser.add_argument("--output", type=Path)
     return parser
 
 
@@ -385,23 +965,44 @@ def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     root = _repo_root()
     manifest_path = args.manifest or root / "bindings" / "api" / "parity.json"
+    equivalences_path = (
+        args.equivalences
+        or root / "bindings" / "api" / "idiomatic-equivalents.json"
+    )
+    reconciliation_path = (
+        args.reconciliation
+        or root / "bindings" / "api" / "versioned-map-reconciliation.json"
+    )
     rustdoc_path = args.rustdoc or _default_rustdoc_path(root)
     if not rustdoc_path.exists():
         print(
             "rustdoc JSON is missing; run "
-            "cargo +nightly rustdoc --lib -- -Z unstable-options --output-format json",
+            "cargo +nightly rustdoc --lib --features async-store -- "
+            "-Z unstable-options --output-format json",
             file=sys.stderr,
         )
         return 2
 
     rustdoc = _load_json(rustdoc_path)
-    rust_items = extract_public_api(rustdoc)
+    api_items = extract_public_api_items(rustdoc)
+    rust_items = set(api_items)
+    missing_sentinels = missing_feature_sentinels(rust_items, REQUIRED_RUST_FEATURES)
+    if missing_sentinels:
+        for sentinel in missing_sentinels:
+            print(f"missing feature-gated symbol: {sentinel}", file=sys.stderr)
+        print(
+            "regenerate rustdoc JSON with: cargo +nightly rustdoc --lib "
+            "--features async-store -- -Z unstable-options --output-format json",
+            file=sys.stderr,
+        )
+        return 2
     if args.command == "generate":
         previous = _load_json(manifest_path) if manifest_path.exists() else None
         manifest = generate_manifest(
             rust_items,
             previous,
             rustdoc.get("format_version"),
+            REQUIRED_RUST_FEATURES,
         )
         _write_json(manifest_path, manifest)
         print(f"wrote {len(rust_items)} operations to {manifest_path}")
@@ -410,7 +1011,97 @@ def main(argv: list[str] | None = None) -> int:
     if not manifest_path.exists():
         print(f"manifest is missing: {manifest_path}", file=sys.stderr)
         return 2
-    result = check_manifest(rust_items, _load_json(manifest_path), args.release)
+    manifest = _load_json(manifest_path)
+    equivalence_document = (
+        _load_json(equivalences_path) if equivalences_path.exists() else {}
+    )
+    equivalences = equivalence_document.get("equivalences", {})
+    if args.command == "apply-reconciliations":
+        if not reconciliation_path.exists():
+            print(f"reconciliation is missing: {reconciliation_path}", file=sys.stderr)
+            return 2
+        reconciled = apply_reconciliations(
+            manifest, _load_json(reconciliation_path)
+        )
+        _write_json(manifest_path, reconciled)
+        reconciled_count = sum(
+            1
+            for entry in reconciled["operations"]
+            if isinstance(entry, dict)
+            and entry.get("reconciliation") in RECONCILIATION_STATES
+        )
+        print(f"wrote {reconciled_count} reconciliations to {manifest_path}")
+        return 0
+    if args.command == "review-abstractions":
+        reviewed = review_abstraction_entries(api_items, manifest)
+        _write_json(manifest_path, reviewed)
+        reviewed_count = sum(
+            1
+            for entry in reviewed["operations"]
+            if isinstance(entry, dict) and entry.get("reviewed") is True
+        )
+        print(
+            f"wrote {reviewed_count} reviewed abstraction classifications "
+            f"to {manifest_path}"
+        )
+        return 0
+    if args.command == "review-audiences":
+        reviewed = review_runtime_audience_entries(api_items, manifest)
+        _write_json(manifest_path, reviewed)
+        audience_count = sum(
+            1
+            for entry in reviewed["operations"]
+            if isinstance(entry, dict) and entry.get("audience") in AUDIENCES
+        )
+        print(
+            f"wrote {audience_count} reviewed audience classifications "
+            f"to {manifest_path}"
+        )
+        return 0
+    if args.command == "audit":
+        audit = build_classification_audit(api_items, manifest, equivalences)
+        audit = {
+            "schema_version": 1,
+            "rustdoc_format_version": rustdoc.get("format_version"),
+            "rust_features": list(REQUIRED_RUST_FEATURES),
+            **audit,
+        }
+        output_path = (
+            args.output
+            or root / "bindings" / "api" / "classification-audit.json"
+        )
+        _write_json(output_path, audit)
+        print(
+            f"wrote classification audit for {len(api_items)} operations "
+            f"to {output_path}"
+        )
+        return 0
+    if args.command == "gaps":
+        report = build_application_gap_report(api_items, manifest, equivalences)
+        report = {
+            "schema_version": 1,
+            "rustdoc_format_version": rustdoc.get("format_version"),
+            "rust_features": list(REQUIRED_RUST_FEATURES),
+            **report,
+        }
+        output_path = (
+            args.output
+            or root / "bindings" / "api" / "application-gap-report.json"
+        )
+        _write_json(output_path, report)
+        print(
+            f"wrote application gap report for {len(api_items)} operations "
+            f"to {output_path}"
+        )
+        return 0
+
+    result = check_manifest(
+        rust_items,
+        manifest,
+        args.release,
+        REQUIRED_RUST_FEATURES,
+        equivalences,
+    )
     if not result.ok:
         _print_result(result)
         return 1

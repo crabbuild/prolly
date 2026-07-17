@@ -1,9 +1,348 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { Engine, exactSearch } from "../src/index.ts";
+import {
+  BlobStore, Engine, JsonValueCodec, StringKeyCodec,
+  defaultCompositeAcceleratorConfig, defaultSecondaryIndexLimits, exactSearch,
+} from "../src/index.ts";
 
 const bytes = (value: string): Buffer => Buffer.from(value);
+
+test("typed versioned map is application-facing", async () => {
+  const engine = await Engine.memory();
+  try {
+    const raw = engine.versionedMap(bytes("typed-users"));
+    await raw.initialize();
+    const typed = raw.typed(new StringKeyCodec(), new JsonValueCodec<{ score: number }>());
+    const first = await typed.put("alice", { score: 1 });
+    assert.deepEqual(await typed.get("alice"), { score: 1 });
+    assert.deepEqual(await typed.getAt(first.id, "alice"), { score: 1 });
+    assert.deepEqual(await typed.entries(), [["alice", { score: 1 }]]);
+    const updated = await typed.putIf(first.id, "alice", { score: 2 });
+    assert.equal(updated.kind, "applied");
+    const migrated = await typed.migrateFrom(
+      updated.current!.id,
+      new JsonValueCodec<{ score: number }>(),
+      (value) => ({ score: value.score + 10 }),
+    );
+    assert.equal(migrated.update.kind, "applied");
+    assert.deepEqual([migrated.scannedValues, migrated.rewrittenValues], [1, 1]);
+    assert.deepEqual(await typed.get("alice"), { score: 12 });
+    assert.equal(typed.raw, raw);
+    await typed.delete("alice");
+    assert.equal(await typed.get("alice"), undefined);
+  } finally {
+    engine.close();
+  }
+});
+
+test("versioned large values and blob GC are application-facing", async () => {
+  const engine = await Engine.memory();
+  const blobs = await BlobStore.memory();
+  try {
+    const map = engine.versionedMap(bytes("large-values"));
+    await map.initialize();
+    assert.ok(map.headName().byteLength > 0);
+    assert.ok(map.versionsPrefix().byteLength > 0);
+    const first = await map.putLargeValue(blobs, bytes("document"), bytes("large-value"), { inlineThreshold: 1n });
+    assert.equal(Buffer.from(await map.getLargeValue(blobs, bytes("document")) ?? []).toString(), "large-value");
+    assert.equal((await map.putLargeValueIf(blobs, first.id, bytes("document"), bytes("new-large-value"), { inlineThreshold: 1n })).kind, "applied");
+    const snapshot = await map.snapshot();
+    assert.ok(snapshot);
+    using session = snapshot.read();
+    let blob: { kind: "blob"; cid: Uint8Array; length: bigint } | undefined;
+    assert.equal(session.withValueRefView(bytes("document"), (value) => {
+      if (value.kind === "blob") blob = value;
+    }), true);
+    assert.ok(blob);
+    assert.equal(blob.cid.byteLength, 32);
+    assert.equal(blob.length, BigInt(bytes("new-large-value").byteLength));
+    snapshot.close();
+    assert.ok((await map.planBlobGc(blobs)).reachability.liveBlobCount >= 1n);
+    assert.ok((await map.sweepBlobGc(blobs)).plan.reachability.liveBlobCount >= 1n);
+  } finally {
+    blobs.close();
+    engine.close();
+  }
+});
+
+test("retained search runtime reuses validated content", async () => {
+  const engine = await Engine.memory();
+  try {
+    const proximity = await engine.buildProximity(2, Array.from({ length: 16 }, (_, index) => ({
+      key: bytes(`vector-${index.toString().padStart(2, "0")}`),
+      vector: new Float32Array([index, 0]),
+      value: bytes(`value-${index.toString().padStart(2, "0")}`),
+    })));
+    const runtime = engine.proximitySearchRuntime();
+    try {
+      const request = exactSearch(new Float32Array([0, 0]), 3);
+      const cold = await proximity.searchWithRuntime(request, runtime);
+      const warm = await proximity.searchWithRuntime(request, runtime);
+      assert.ok(cold.stats.physicalBytesRead > 0n);
+      assert.equal(warm.stats.physicalBytesRead, 0n);
+      assert.ok(runtime.stats().physicalReads > 0n);
+      runtime.clear();
+      assert.ok((await proximity.searchWithRuntime(request, runtime)).stats.physicalBytesRead > 0n);
+    } finally {
+      runtime.close();
+      proximity.close();
+    }
+  } finally {
+    engine.close();
+  }
+});
+
+test("proximity promise uses native cooperative cancellation", async () => {
+  const engine = await Engine.memory();
+  try {
+    const proximity = await engine.buildProximity(2, Array.from({ length: 256 }, (_, index) => ({
+      key: bytes(`vector-${index.toString().padStart(4, "0")}`),
+      vector: new Float32Array([index, index % 7]),
+      value: bytes(String(index)),
+    })));
+    const runtime = engine.proximitySearchRuntime();
+    const cancellation = proximity.cancellationToken();
+    try {
+      cancellation.cancel();
+      const result = await proximity.searchCancellable(
+        exactSearch(new Float32Array([0, 0]), 10),
+        cancellation,
+        runtime,
+      );
+      assert.equal(result.completion, "cancelled");
+      assert.deepEqual(result.neighbors, []);
+      const session = proximity.read();
+      try {
+        const sessionResult = await session.searchCancellable(
+          exactSearch(new Float32Array([0, 0]), 10),
+          cancellation,
+          runtime,
+        );
+        assert.equal(sessionResult.completion, "cancelled");
+        assert.deepEqual(sessionResult.neighbors, []);
+      } finally {
+        session.close();
+      }
+    } finally {
+      cancellation.close();
+      runtime.close();
+      proximity.close();
+    }
+  } finally {
+    engine.close();
+  }
+});
+
+test("product quantizer lifecycle is portable and bounded", async () => {
+  const engine = await Engine.memory();
+  try {
+    const proximity = await engine.buildProximity(4, Array.from({ length: 16 }, (_, index) => ({
+      key: bytes(`vector-${index.toString().padStart(2, "0")}`),
+      vector: new Float32Array([index, index % 3, 0, 1]),
+      value: bytes(`value-${index.toString().padStart(2, "0")}`),
+    })));
+    const config = {
+      subquantizers: 2,
+      centroidsPerSubquantizer: 4,
+      trainingIterations: 2,
+      rerankMultiplier: 4,
+      seed: (1n << 64n) - 1n,
+      maxTrainingVectors: 16n,
+    };
+    const built = await proximity.buildPq({ config, workerThreads: 2n });
+    assert.equal(built.stats.encodedVectors, 16n);
+    const request = {
+      ...exactSearch(new Float32Array([0, 0, 0, 1]), 3),
+      policy: "fixed_budget" as const,
+      backend: "product_quantized" as const,
+    };
+    const index = built.index;
+    assert.deepEqual(index.config(), config);
+    assert.deepEqual(index.sourceDescriptor(), proximity.descriptor());
+    assert.ok(index.quality().meanSquaredError >= 0);
+    const result = await index.search(proximity, request);
+    assert.equal(result.backend, "product_quantized");
+    assert.equal(Buffer.from(result.neighbors[0].key).toString(), "vector-00");
+    const cancellation = proximity.cancellationToken();
+    try {
+      cancellation.cancel();
+      const cancelled = await index.searchCancellable(proximity, request, cancellation);
+      assert.equal(cancelled.completion, "cancelled");
+      assert.deepEqual(cancelled.neighbors, []);
+    } finally {
+      cancellation.close();
+    }
+    const manifest = index.manifest();
+    const proof = index.proveSearch(proximity, request);
+    assert.equal(proof.verify(proximity.descriptor()).result.backend, "product_quantized");
+    proof.close();
+    index.close();
+    const loaded = proximity.loadPq(manifest);
+    assert.deepEqual(loaded.manifest(), manifest);
+    loaded.close();
+  } finally {
+    engine.close();
+  }
+});
+
+test("HNSW accelerator lifecycle is portable", async () => {
+  const engine = await Engine.memory();
+  try {
+    const proximity = await engine.buildProximity(2, Array.from({ length: 16 }, (_, index) => ({
+      key: bytes(`vector-${index.toString().padStart(2, "0")}`),
+      vector: new Float32Array([index, 0]),
+      value: bytes(`value-${index.toString().padStart(2, "0")}`),
+    })));
+    const built = await proximity.buildHnsw();
+    assert.equal(built.stats.records, 16n);
+    const request = {
+      ...exactSearch(new Float32Array([0, 0]), 3),
+      policy: "fixed_budget" as const,
+      backend: "hnsw" as const,
+    };
+    const index = built.index;
+    assert.equal(index.isCanonical(), true);
+    assert.deepEqual(index.sourceDescriptor(), proximity.descriptor());
+    const result = await index.search(proximity, request);
+    assert.equal(result.backend, "hnsw");
+    assert.equal(Buffer.from(result.neighbors[0].key).toString(), "vector-00");
+    const manifest = index.manifest();
+    const proof = index.proveSearch(proximity, request);
+    assert.equal(proof.verify(proximity.descriptor()).result.backend, "hnsw");
+    proof.close();
+    index.close();
+    const loaded = proximity.loadHnsw(manifest);
+    assert.deepEqual(loaded.manifest(), manifest);
+    loaded.close();
+  } finally {
+    engine.close();
+  }
+});
+
+test("composite and catalog lifecycle is portable and bounded", async () => {
+  const engine = await Engine.memory();
+  try {
+    const baseMap = await engine.buildProximity(2, Array.from({ length: 16 }, (_, index) => ({
+      key: bytes(`vector-${index.toString().padStart(2, "0")}`),
+      vector: new Float32Array([index, 0]),
+      value: bytes(`value-${index.toString().padStart(2, "0")}`),
+    })));
+    const base = (await baseMap.buildHnsw()).index;
+    const current = baseMap.mutate([{
+      key: bytes("vector-00"),
+      vector: new Float32Array([0.25, 0]),
+      value: bytes("updated"),
+    }]).map;
+    const built = await current.buildCompositeHnsw(baseMap, base);
+    assert.equal(built.reasons.length, 0);
+    assert.equal(built.stats.vectorUpdatedRecords, 1n);
+    const composite = built.accelerator!;
+    assert.deepEqual(composite.currentSourceDescriptor(), current.descriptor());
+    assert.deepEqual(composite.baseSourceDescriptor(), baseMap.descriptor());
+    assert.equal(composite.baseKind(), "hnsw");
+    assert.equal(composite.deltaCount(), 1n);
+    assert.equal(composite.shadowCount(), 1n);
+    const request = {
+      ...exactSearch(new Float32Array([0, 0]), 3),
+      policy: "fixed_budget" as const,
+      backend: "composite" as const,
+    };
+    assert.equal((await composite.search(current, request)).backend, "composite");
+    const proof = composite.proveSearch(current, request);
+    assert.equal(proof.verify(current.descriptor()).result.backend, "composite");
+    proof.close();
+    const manifest = composite.manifest();
+    const catalog = current.buildAcceleratorCatalog({ composite });
+    assert.equal(catalog.entries().length, 1);
+    assert.equal((await catalog.search(current, request)).backend, "composite");
+    const catalogManifest = catalog.manifest();
+    const loadedCatalog = current.loadAcceleratorCatalog(catalogManifest);
+    assert.deepEqual(loadedCatalog.manifest(), catalogManifest);
+    loadedCatalog.close();
+    catalog.close();
+    composite.close();
+    const loaded = current.loadComposite(manifest);
+    assert.deepEqual(loaded.manifest(), manifest);
+    loaded.close();
+
+    const forced = { ...defaultCompositeAcceleratorConfig(), maxDeltaRecords: 0n };
+    const rebuilt = await current.buildOrRebuildCompositeHnsw(baseMap, base, { config: forced });
+    assert.equal(rebuilt.kind, "hnsw_rebuilt");
+    assert.ok(rebuilt.reasons.length > 0);
+    assert.deepEqual(rebuilt.hnsw!.sourceDescriptor(), current.descriptor());
+    rebuilt.hnsw!.close();
+    current.close();
+    base.close();
+    baseMap.close();
+  } finally {
+    engine.close();
+  }
+});
+
+test("rich proximity search preserves policy filter stats session and proof", async () => {
+  const engine = await Engine.memory();
+  try {
+    const proximity = await engine.buildProximity(2, [
+      { key: bytes("a"), vector: new Float32Array([0, 0]), value: bytes("alpha") },
+      { key: bytes("ab"), vector: new Float32Array([1, 0]), value: bytes("alphabet") },
+      { key: bytes("b"), vector: new Float32Array([0.1, 0]), value: bytes("beta") },
+    ]);
+    const request = {
+      vector: new Float32Array([0, 0]),
+      topK: 3,
+      policy: "fixed_budget" as const,
+      budget: {
+        maxNodes: 1_000n,
+        maxCommittedBytes: 1_000_000n,
+        maxDistanceEvaluations: 1_000n,
+        maxFrontierEntries: 1_000n,
+      },
+      filter: { kind: "prefix" as const, prefix: bytes("a") },
+      kernel: "scalar_deterministic" as const,
+      backend: "auto" as const,
+    };
+
+    const result = await proximity.search(request);
+    assert.deepEqual(result.neighbors.map((neighbor) => Buffer.from(neighbor.key).toString()), ["a", "ab"]);
+    assert.ok(result.stats.distanceEvaluations > 0n);
+    assert.ok(result.planFormatVersion > 0);
+    const scanned: string[] = [];
+    assert.equal(proximity.scanRecords((record) => {
+      scanned.push(Buffer.from(record.key).toString());
+      return scanned.length < 2;
+    }), 2n);
+    assert.deepEqual(scanned, ["a", "ab"]);
+    let expiredKey: Uint8Array | undefined;
+    const viewed = proximity.withSearchView(new Float32Array([0, 0]), 2, (neighbors) => {
+      expiredKey = neighbors[0]!.key;
+      return neighbors.map((neighbor) => Buffer.from(neighbor.key).toString());
+    });
+    assert.deepEqual(viewed, ["a", "b"]);
+    assert.throws(() => expiredKey![0], /expired/i);
+    const session = proximity.read();
+    assert.deepEqual(
+      (await session.search(request)).neighbors.map((neighbor) => Buffer.from(neighbor.key).toString()),
+      ["a", "ab"],
+    );
+    const retained: string[] = [];
+    assert.equal(session.scanRecords((record) => {
+      retained.push(Buffer.from(record.key).toString());
+      return true;
+    }), 3n);
+    assert.deepEqual(retained, ["a", "ab", "b"]);
+    session.close();
+    const proof = proximity.proveSearch(request);
+    assert.deepEqual(
+      proof.verify(proximity.descriptor()).result.neighbors
+        .map((neighbor) => Buffer.from(neighbor.key).toString()),
+      ["a", "ab"],
+    );
+    proof.close();
+  } finally {
+    engine.close();
+  }
+});
 
 test("portable versioned, indexed, and proximity maps stay native", async () => {
   const engine = await Engine.memory();
@@ -46,6 +385,10 @@ test("portable versioned, indexed, and proximity maps stay native", async () => 
     const proximity = await engine.buildProximity(2, [
       { key: bytes("a"), vector: new Float32Array([0, 0]), value: bytes("alpha") },
     ]);
+    proximity.clearCache();
+    const loadedProximity = await engine.loadProximity(proximity.descriptor());
+    assert.equal(Buffer.from(loadedProximity.get(bytes("a"))?.value ?? []).toString(), "alpha");
+    loadedProximity.close();
     const proximitySession = proximity.read();
     assert.equal(proximitySession.contains(bytes("a")), true);
     assert.equal(Buffer.from(proximitySession.get(bytes("a"))?.value ?? []).toString(), "alpha");
@@ -70,6 +413,15 @@ test("portable promises honor AbortSignal and own inputs", async () => {
     value.fill(0);
     await pending;
     assert.equal(Buffer.from(await map.get(bytes("original-key")) ?? []).toString(), "original-value");
+
+    const snapshot = await map.snapshot();
+    assert.ok(snapshot);
+    const bundle = await snapshot.export();
+    const imported = engine.versionedMap(bytes("async-import"));
+    const pendingImport = imported.importAsHead(bundle);
+    bundle.nodes[0].bytes.fill(0);
+    await pendingImport;
+    assert.equal(Buffer.from(await imported.get(bytes("original-key")) ?? []).toString(), "original-value");
 
     const controller = new AbortController();
     controller.abort();
@@ -181,6 +533,16 @@ test("versioned backups restore and retention returns complete version sets", as
     const restored = await target.restoreBackup(backup);
     assert.deepEqual(restored.id, await source.headId());
     assert.equal(Buffer.from(await target.get(bytes("k")) ?? []).toString(), "v2");
+    const snapshot = await source.snapshot();
+    assert.ok(snapshot);
+    const bundle = await snapshot.export();
+    const importedMap = targetEngine.versionedMap(bytes("versioned-import"));
+    assert.equal((await importedMap.importAsHead(bundle)).isHead, true);
+    assert.equal(Buffer.from(await importedMap.get(bytes("k")) ?? []).toString(), "v2");
+    const timestampedMap = targetEngine.versionedMap(bytes("versioned-import-at"));
+    const timestamped = await timestampedMap.importAsHeadAtMillis(bundle, 12_345n);
+    assert.equal(timestamped.createdAtMillis, 12_345n);
+    assert.equal(Buffer.from(await timestampedMap.get(bytes("k")) ?? []).toString(), "v2");
     const pruned = await source.keepLast(1);
     assert.ok(pruned.retained.length >= 1);
     assert.ok(pruned.removed.length >= 1);
@@ -196,17 +558,54 @@ test("proofs, retained sessions, and maintenance stay native", async () => {
     const versioned = engine.versionedMap(bytes("proofs"));
     await versioned.initialize();
     await versioned.put(bytes("k"), bytes("v"));
+    await versioned.put(bytes("ka"), bytes("v2"));
     const snapshot = await versioned.snapshot();
     assert.ok(snapshot);
     const proof = snapshot.proveKey(bytes("k"));
     assert.equal(Buffer.from(proof.verify().value ?? []).toString(), "v");
-    assert.equal(snapshot.stats().itemCount, 1n);
-    assert.ok(snapshot.exportSummary().itemCount > 0n);
+    const multi = snapshot.proveKeys([bytes("k"), bytes("missing")]).verify();
+    assert.equal(multi.valid, true);
+    assert.deepEqual(multi.results.map((result) => result.exists), [true, false]);
+    assert.deepEqual(snapshot.proveRange(bytes("k"), bytes("l")).verify().entries.map((entry) => Buffer.from(entry.key).toString()), ["k", "ka"]);
+    assert.deepEqual(snapshot.provePrefix(bytes("k")).verify().entries.map((entry) => Buffer.from(entry.key).toString()), ["k", "ka"]);
+    const provedPage = snapshot.proveRangePage(undefined, bytes("l"), 1n);
+    assert.equal(provedPage.verify().valid, true);
+    assert.deepEqual(provedPage.page().entries.map((entry) => Buffer.from(entry.key).toString()), ["k"]);
+    assert.equal(snapshot.stats().itemCount, 2n);
+    assert.ok((await snapshot.export()).nodes.length > 0);
     const session = snapshot.read();
     assert.equal(Buffer.from(session.get(bytes("k")) ?? []).toString(), "v");
-    assert.ok((await versioned.verifyCatalog()).itemCount >= 2n);
+    assert.equal(Buffer.from(await session.getAsync(bytes("k")) ?? []).toString(), "v");
+    let copiedValue: Uint8Array | undefined;
+    assert.equal(session.withValueView(bytes("k"), (value) => { copiedValue = new Uint8Array(value); }), true);
+    assert.equal(Buffer.from(copiedValue ?? []).toString(), "v");
+    let escapedValue: Uint8Array | undefined;
+    session.withValueView(bytes("k"), (value) => { escapedValue = value; });
+    assert.throws(() => escapedValue![0], /scope|expired/i);
+    assert.equal(session.withValueView(bytes("missing"), () => assert.fail("missing callback")), false);
+    let inlineRef: Uint8Array | undefined;
+    assert.equal(session.withValueRefView(bytes("k"), (value) => {
+      assert.equal(value.kind, "inline");
+      if (value.kind === "inline") inlineRef = new Uint8Array(value.value);
+    }), true);
+    assert.equal(Buffer.from(inlineRef ?? []).toString(), "v");
+    let escaped: Uint8Array | undefined;
+    const seen: string[] = [];
+    const scan = session.scanRangeView(bytes("k"), bytes("l"), (entry) => {
+      escaped ??= entry.key;
+      seen.push(`${Buffer.from(entry.key)}=${Buffer.from(entry.value)}`);
+      return true;
+    });
+    assert.deepEqual(scan, { visited: 2n, stopped: false });
+    assert.deepEqual(seen, ["k=v", "ka=v2"]);
+    assert.throws(() => Buffer.from(escaped!));
+    assert.deepEqual(
+      session.scanRangeView(bytes("k"), bytes("l"), () => false),
+      { visited: 1n, stopped: true },
+    );
+    assert.ok((await versioned.verifyCatalog()).versionCount >= 2n);
     assert.ok((await versioned.backup()).byteLength > 0);
-    assert.ok((await versioned.planGc()).itemCount > 0n);
+    assert.ok((await versioned.planGc()).reachability.liveNodes > 0n);
 
     const registry = engine.indexRegistry();
     registry.register({
@@ -216,6 +615,21 @@ test("proofs, retained sessions, and maintenance stay native", async () => {
     const indexed = engine.indexedMap(bytes("indexed-maintenance"), registry);
     const version = await indexed.put(bytes("k"), bytes("term"));
     await indexed.ensureIndex(bytes("by_value"));
+    const oldSnapshotId = (await indexed.snapshot()).id();
+    await assert.rejects(indexed.replaceIndex({
+      name: bytes("by_value"), generation: 2n, extractorId: "value-too-small-v2", projection: "all",
+      limits: { ...defaultSecondaryIndexLimits(), maxTermBytes: 3n },
+      extract: (_key, value) => [{ term: Buffer.from(value) }],
+    }));
+    assert.equal(indexed.health().activeIndexes[0]?.generation, 1n);
+    const replacement = await indexed.replaceIndex({
+      name: bytes("by_value"), generation: 2n, extractorId: "value-v2", projection: "all",
+      extract: (_key, value) => [{ term: Buffer.from(value) }],
+    });
+    assert.equal(replacement.generation, 2n);
+    assert.equal(indexed.health().activeIndexes[0]?.generation, 2n);
+    const historicalIndex = (await indexed.snapshotById(oldSnapshotId)).index(bytes("by_value"));
+    assert.equal((await historicalIndex.exact(bytes("term"))).length, 1);
     assert.equal(indexed.verifyIndex(bytes("by_value"), version.sourceVersion).valid, true);
     assert.ok(indexed.metrics().buildAttempts >= 1n);
     assert.ok(indexed.exportCurrent().byteLength > 0);
@@ -362,4 +776,225 @@ test("secondary indexes expose identity and every bounded page direction", async
   } finally {
     engine.close();
   }
+});
+
+test("versioned comparisons pin versions and page diffs", async () => {
+  const engine = await Engine.memory();
+  try {
+    const map = engine.versionedMap(bytes("comparison"));
+    const base = await map.initialize();
+    const target = await map.put(bytes("k"), bytes("v"));
+    using comparison = map.compare(base.id, target.id);
+    assert.deepEqual(comparison.base().id, base.id);
+    assert.deepEqual(comparison.target().id, target.id);
+    assert.deepEqual((await comparison.diff()).map((diff) => Buffer.from(diff.key).toString()), ["k"]);
+    assert.deepEqual((await comparison.diffPage(undefined, undefined, 1n)).diffs.map((diff) => Buffer.from(diff.key).toString()), ["k"]);
+  } finally {
+    engine.close();
+  }
+});
+
+test("versioned history navigation, diffs, and rollback stay native", async () => {
+  const engine = await Engine.memory();
+  try {
+    const map = engine.versionedMap(bytes("history-navigation"));
+    await map.initialize();
+    await map.put(bytes("a"), bytes("one"));
+    await map.put(bytes("ab"), bytes("two"));
+    const base = await map.put(bytes("b"), bytes("three"));
+    const target = await map.put(bytes("a"), bytes("updated"));
+    const keys = (rows: readonly { key: Uint8Array }[]) => rows.map((row) => Buffer.from(row.key).toString());
+
+    assert.deepEqual(keys(await map.range(bytes("a"), bytes("c"))), ["a", "ab", "b"]);
+    assert.deepEqual(keys(await map.prefix(bytes("a"))), ["a", "ab"]);
+    assert.equal(Buffer.from((await map.rangeAt(base.id, bytes("a"), bytes("b")))[0]!.value).toString(), "one");
+    assert.deepEqual(keys(await map.prefixAt(base.id, bytes("a"))), ["a", "ab"]);
+    assert.deepEqual(keys((await map.rangePage(undefined, undefined, 2n)).entries), ["a", "ab"]);
+    assert.deepEqual(keys((await map.prefixPage(bytes("a"), undefined, 1n)).entries), ["a"]);
+    const historicalPage = await map.prefixPageAt(base.id, bytes("a"), undefined, 1n);
+    assert.deepEqual(keys(historicalPage.entries), ["a"]);
+    assert.ok(historicalPage.nextCursor != null);
+    assert.deepEqual((await map.diff(base.id, target.id)).map((row) => Buffer.from(row.key).toString()), ["a"]);
+    assert.deepEqual((await map.changesSince(base.id)).map((row) => Buffer.from(row.key).toString()), ["a"]);
+
+    const rolledBack = await map.rollbackTo(base.id);
+    assert.deepEqual(await map.headId(), rolledBack.id);
+    assert.equal(Buffer.from((await map.get(bytes("a")))!).toString(), "one");
+    assert.deepEqual(await map.changesSince(base.id), []);
+  } finally { engine.close(); }
+});
+
+test("versioned timestamped writes expose complete maintenance and retention records", async () => {
+  const engine = await Engine.memory();
+  try {
+    const map = engine.versionedMap(bytes("maintenance-complete"));
+    const first = await map.applyAtMillis([{ kind: "upsert", key: bytes("k"), value: bytes("one") }], 1_000n);
+    const second = (await map.applyIfAtMillis(first.id, [{ kind: "upsert", key: bytes("k"), value: bytes("two") }], 2_000n)).current!;
+    const third = await map.applyAtMillis([{ kind: "upsert", key: bytes("k"), value: bytes("three") }], 3_000n);
+
+    assert.equal(first.createdAtMillis, 1_000n);
+    assert.equal(second.createdAtMillis, 2_000n);
+    assert.equal(map.retentionPolicy().kind, "prefix");
+    const verification = await map.verifyCatalog();
+    assert.deepEqual(verification.head, third.id);
+    assert.equal(verification.versionCount, 3n);
+    const plan = await map.planGc();
+    assert.ok(plan.reachability.liveNodes > 0n);
+    assert.ok(plan.candidateNodes >= plan.reclaimableNodes);
+
+    const aged = await map.keepForAt(3_000n, 1_500n);
+    assert.ok(aged.retained.some((id) => Buffer.from(id).equals(Buffer.from(second.id))));
+    assert.ok(aged.removed.some((id) => Buffer.from(id).equals(Buffer.from(first.id))));
+    const explicit = await map.keepVersions([second.id]);
+    assert.ok(explicit.retained.some((id) => Buffer.from(id).equals(Buffer.from(third.id))));
+    const pruned = await map.pruneVersions(0n);
+    assert.deepEqual(pruned.retained, [third.id]);
+    assert.ok(pruned.removed.some((id) => Buffer.from(id).equals(Buffer.from(second.id))));
+    assert.ok((await map.keepFor(10_000n)).retained.length >= 1);
+    const sweep = await map.sweepGc();
+    assert.ok(sweep.deletedNodes >= 0n);
+  } finally { engine.close(); }
+});
+
+test("versioned bulk publication uses native performance paths", async () => {
+  const engine = await Engine.memory();
+  try {
+    const map = engine.versionedMap(bytes("bulk-publication"));
+    const initialized = await map.initializeSorted([{ key: bytes("a"), value: bytes("one") }, { key: bytes("b"), value: bytes("two") }]);
+    assert.equal(initialized.kind, "applied");
+    await map.append([{ kind: "upsert", key: bytes("c"), value: bytes("three") }]);
+    const parallel = await map.parallelApply([
+      { kind: "upsert", key: bytes("b"), value: bytes("updated") },
+      { kind: "upsert", key: bytes("d"), value: bytes("four") },
+    ], { maxThreads: 1n, parallelismThreshold: 1n });
+    assert.equal(parallel.stats.inputMutations, 2n);
+    const rebuilt = await map.rebuildSortedIf(parallel.version.id, [{ key: bytes("x"), value: bytes("nine") }, { key: bytes("y"), value: bytes("ten") }]);
+    assert.equal(rebuilt.kind, "applied");
+    const iterRebuilt = await map.rebuildFromEntriesIf(rebuilt.current!.id, [{ key: bytes("q"), value: bytes("queue") }, { key: bytes("p"), value: bytes("priority") }]);
+    assert.equal(iterRebuilt.kind, "applied");
+    assert.equal(Buffer.from((await map.get(bytes("p")))!).toString(), "priority");
+  } finally { engine.close(); }
+});
+
+test("versioned subscriptions resume and poll owned diffs", async () => {
+  const engine = await Engine.memory();
+  try {
+    const map = engine.versionedMap(bytes("subscription"));
+    const initial = await map.initialize();
+    using subscription = map.subscribe();
+    assert.deepEqual(subscription.lastSeen(), initial.id);
+    assert.equal(await subscription.poll(), undefined);
+    const current = await map.put(bytes("k"), bytes("v"));
+    const event = await subscription.poll();
+    assert.deepEqual(event?.previous, initial.id);
+    assert.deepEqual(event?.current.id, current.id);
+    assert.deepEqual(event?.diffs.map((diff) => Buffer.from(diff.key).toString()), ["k"]);
+    assert.deepEqual(subscription.lastSeen(), current.id);
+  } finally {
+    engine.close();
+  }
+});
+
+test("multi-map transactions are atomic and read staged values", async () => {
+  const engine = await Engine.memory();
+  try {
+    const tx = engine.beginVersionedTransaction();
+    await tx.put(bytes("a"), bytes("k"), bytes("one"));
+    await tx.put(bytes("b"), bytes("k"), bytes("two"));
+    assert.equal(Buffer.from((await tx.get(bytes("a"), bytes("k")))!).toString(), "one");
+    const committed = await tx.commit();
+    assert.equal(committed.applied, true);
+    assert.equal(committed.versions.length, 2);
+    assert.equal(Buffer.from((await engine.versionedMap(bytes("a")).get(bytes("k")))!).toString(), "one");
+    assert.equal(Buffer.from((await engine.versionedMap(bytes("b")).get(bytes("k")))!).toString(), "two");
+    const rolledBack = engine.beginVersionedTransaction();
+    await rolledBack.put(bytes("a"), bytes("discard"), bytes("x"));
+    await rolledBack.rollback();
+    assert.equal(await engine.versionedMap(bytes("a")).get(bytes("discard")), undefined);
+  } finally { engine.close(); }
+});
+
+test("pinned merges page conflicts and CAS publish", async () => {
+  const engine = await Engine.memory();
+  try {
+    const map = engine.versionedMap(bytes("merge"));
+    const base = await map.initialize();
+    const candidate = await map.put(bytes("k"), bytes("candidate"));
+    await map.put(bytes("k"), bytes("head"));
+    using merge = map.prepareMerge(base.id, candidate.id);
+    assert.deepEqual(merge.base().id, base.id);
+    assert.deepEqual(merge.candidate().id, candidate.id);
+    assert.deepEqual((await merge.conflictPage(undefined, 1n)).conflicts.map((row) => Buffer.from(row.key).toString()), ["k"]);
+    assert.deepEqual((await merge.publish("prefer_right")).current?.id, candidate.id);
+    assert.equal(Buffer.from((await map.get(bytes("k")))!).toString(), "candidate");
+  } finally { engine.close(); }
+});
+
+test("portable proximity builds accept explicit worker limits", async () => {
+  const engine = await Engine.memory();
+  try {
+    const records = [
+      { key: bytes("a"), vector: [0, 1], value: bytes("alpha") },
+      { key: bytes("b"), vector: [1, 0], value: bytes("beta") },
+    ];
+    const serial = await engine.buildProximity(2, records, { threads: 1 });
+    const parallel = await engine.buildProximity(2, records, { threads: 2 });
+    assert.deepEqual(parallel.descriptor(), serial.descriptor());
+    await assert.rejects(engine.buildProximity(2, records, { threads: 0 }), /threads/);
+    serial.close(); parallel.close();
+  } finally { engine.close(); }
+});
+
+test("proximity exact reads expose callback-scoped zero-copy record views", async () => {
+  const engine = await Engine.memory();
+  try {
+    const map = await engine.buildProximity(2, [
+      { key: bytes("a"), vector: [1.25, 2.5], value: bytes("alpha") },
+    ]);
+    let escaped: any;
+    assert.equal(map.withRecordView(bytes("a"), (record) => {
+      assert.equal(record.vector.dimensions, 2);
+      assert.equal(record.vector.component(0), 1.25);
+      assert.deepEqual(record.vector.toFloat32Array(), new Float32Array([1.25, 2.5]));
+      assert.equal(Buffer.from(record.value).toString(), "alpha");
+      escaped = record.value;
+    }), true);
+    assert.throws(() => escaped[0], /expired/);
+    assert.equal(map.withRecordView(bytes("missing"), () => assert.fail()), false);
+    map.close();
+  } finally { engine.close(); }
+});
+
+test("indexed values and bounded proximity records expose scoped views", async () => {
+  const engine = await Engine.memory();
+  try {
+    const registry = engine.indexRegistry();
+    const indexed = engine.indexedMap(bytes("view-indexed"), registry);
+    await indexed.put(bytes("u1"), bytes("red"));
+    let escapedValue: Uint8Array | undefined;
+    assert.equal(indexed.withValueView(bytes("u1"), (value) => {
+      assert.equal(Buffer.from(value).toString(), "red");
+      escapedValue = value;
+    }), true);
+    assert.throws(() => escapedValue![0], /expired/);
+    assert.equal(indexed.withValueView(bytes("missing"), () => assert.fail()), false);
+
+    const map = await engine.buildProximity(2, [
+      { key: bytes("a"), vector: [1, 0], value: bytes("A") },
+      { key: bytes("b"), vector: [0, 1], value: bytes("B") },
+      { key: bytes("c"), vector: [1, 1], value: bytes("C") },
+      { key: bytes("d"), vector: [2, 2], value: bytes("D") },
+    ]);
+    const seen: string[] = [];
+    let escapedKey: Uint8Array | undefined;
+    assert.deepEqual(map.scanRecordViews(bytes("b"), bytes("d"), (record) => {
+      seen.push(Buffer.from(record.key).toString());
+      assert.equal(record.vector.dimensions, 2);
+      escapedKey = record.key;
+      return true;
+    }), { visited: 2n, stopped: false });
+    assert.deepEqual(seen, ["b", "c"]);
+    assert.throws(() => escapedKey![0], /expired/);
+    map.close(); indexed.close(); registry.close();
+  } finally { engine.close(); }
 });

@@ -18,10 +18,10 @@ type ScanOutcome struct {
 type EntryVisitor func(Entry) bool
 
 // EntryView is backed by a native packed page and is valid only for the
-// duration of the ScanRangeView callback. Copy Key or Value to retain it.
+// duration of the ScanRangeView callback.
 type EntryView struct {
-	Key   []byte
-	Value []byte
+	Key   ScopedBytes
+	Value ScopedBytes
 }
 
 type EntryViewVisitor func(EntryView) bool
@@ -135,6 +135,8 @@ func visitPackedEntryPage(
 	hasAfter bool,
 	visitor EntryViewVisitor,
 ) (visited uint32, stopped bool, last []byte, err error) {
+	scope := newViewScope()
+	defer scope.close()
 	data := page.bytes
 	if len(data) < fastPageHeaderBytes || !bytes.Equal(data[:4], []byte("PRPG")) {
 		return 0, false, nil, errors.New("malformed packed scan page header")
@@ -177,7 +179,10 @@ func visitPackedEntryPage(
 		}
 		previous = key
 		visited++
-		if !visitor(EntryView{Key: key, Value: value}) {
+		if !visitor(EntryView{
+			Key:   ScopedBytes{data: key, scope: scope},
+			Value: ScopedBytes{data: value, scope: scope},
+		}) {
 			return visited, true, nil, nil
 		}
 	}
@@ -202,9 +207,9 @@ func (s *ReadSession) ScanRange(start []byte, end []byte, visitor EntryVisitor) 
 		return ScanOutcome{}, errors.New("nil entry visitor")
 	}
 	return s.ScanRangeView(start, end, func(view EntryView) bool {
-		bytes := make([]byte, len(view.Key)+len(view.Value))
-		keyEnd := copy(bytes, view.Key)
-		copy(bytes[keyEnd:], view.Value)
+		bytes := make([]byte, view.Key.Len()+view.Value.Len())
+		keyEnd := view.Key.copyTo(bytes)
+		view.Value.copyTo(bytes[keyEnd:])
 		return visitor(Entry{
 			Key:   bytes[:keyEnd:keyEnd],
 			Value: bytes[keyEnd:],

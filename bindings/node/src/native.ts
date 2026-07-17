@@ -44,6 +44,7 @@ export interface NativeConfigRecord {
   encoding: NativeEncodingRecord;
   nodeCacheMaxNodes?: string | null;
   nodeCacheMaxBytes?: string | null;
+  formatBytes?: Uint8Array | null;
 }
 
 export interface NativeParallelConfigRecord {

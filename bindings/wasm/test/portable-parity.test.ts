@@ -15,6 +15,327 @@ if (generatedPresent) {
 
 const bytes = (value: string): Uint8Array => new TextEncoder().encode(value);
 
+test("WASM versioned large values and blob GC are application-facing", { skip: !generatedPresent }, async () => {
+  const engine = api.Engine.memory(wasm);
+  const blobs = api.BlobStore.memory(wasm);
+  try {
+    const map = engine.versionedMap(bytes("large-values"));
+    await map.initialize();
+    assert.ok(map.headName().byteLength > 0);
+    assert.ok(map.versionsPrefix().byteLength > 0);
+    const first = await map.putLargeValue(blobs, bytes("document"), bytes("large-value"), { inlineThreshold: 1n });
+    assert.equal(Buffer.from(await map.getLargeValue(blobs, bytes("document")) ?? []).toString(), "large-value");
+    assert.equal((await map.putLargeValueIf(blobs, first.id, bytes("document"), bytes("new-large-value"), { inlineThreshold: 1n })).kind, "applied");
+    const snapshot = await map.snapshot();
+    assert.ok(snapshot);
+    const session = snapshot.read();
+    let blob: { kind: "blob"; cid: Uint8Array; length: bigint } | undefined;
+    assert.equal(session.withValueRefView(bytes("document"), (value) => {
+      if (value.kind === "blob") blob = value;
+    }), true);
+    assert.ok(blob);
+    assert.equal(blob.cid.byteLength, 32);
+    assert.equal(blob.length, BigInt(bytes("new-large-value").byteLength));
+    session.close();
+    snapshot.close();
+    assert.ok((await map.planBlobGc(blobs)).reachability.liveBlobCount >= 1n);
+    const sweep = map.sweepBlobGc(blobs);
+    blobs.close();
+    assert.ok((await sweep).plan.reachability.liveBlobCount >= 1n);
+  } finally {
+    blobs.close();
+    engine.close();
+  }
+});
+
+test("WASM retained search runtime reuses validated content", { skip: !generatedPresent }, async () => {
+  const engine = api.Engine.memory(wasm);
+  try {
+    const proximity = await engine.buildProximity(2, Array.from({ length: 16 }, (_, index) => ({
+      key: bytes(`runtime-vector-${index.toString().padStart(2, "0")}`),
+      vector: new Float32Array([index, 0]),
+      value: bytes(`runtime-value-${index.toString().padStart(2, "0")}`),
+    })));
+    const runtime = engine.proximitySearchRuntime();
+    try {
+      const request = { vector: new Float32Array([0, 0]), topK: 3, policy: "exact" as const };
+      const cold = await proximity.searchWithRuntime(request, runtime);
+      const warm = await proximity.searchWithRuntime(request, runtime);
+      assert.ok(cold.stats.physicalBytesRead > 0n);
+      assert.equal(warm.stats.physicalBytesRead, 0n);
+      assert.ok(runtime.stats().physicalReads > 0n);
+      runtime.clear();
+      assert.ok((await proximity.searchWithRuntime(request, runtime)).stats.physicalBytesRead > 0n);
+    } finally {
+      runtime.close();
+      proximity.close();
+    }
+  } finally {
+    engine.close();
+  }
+});
+
+test("WASM proximity promise uses native cooperative cancellation", { skip: !generatedPresent }, async () => {
+  const engine = api.Engine.memory(wasm);
+  try {
+    const proximity = await engine.buildProximity(2, Array.from({ length: 256 }, (_, index) => ({
+      key: bytes(`vector-${index.toString().padStart(4, "0")}`),
+      vector: new Float32Array([index, index % 7]),
+      value: bytes(String(index)),
+    })));
+    const runtime = engine.proximitySearchRuntime();
+    const cancellation = proximity.cancellationToken();
+    try {
+      cancellation.cancel();
+      const result = await proximity.searchCancellable(
+        { vector: new Float32Array([0, 0]), topK: 10, policy: "exact" },
+        cancellation,
+        runtime,
+      );
+      assert.equal(result.completion, "cancelled");
+      assert.deepEqual(result.neighbors, []);
+      const session = proximity.read();
+      try {
+        const sessionResult = await session.searchCancellable(
+          { vector: new Float32Array([0, 0]), topK: 10, policy: "exact" },
+          cancellation,
+          runtime,
+        );
+        assert.equal(sessionResult.completion, "cancelled");
+        assert.deepEqual(sessionResult.neighbors, []);
+      } finally {
+        session.close();
+      }
+    } finally {
+      cancellation.close();
+      runtime.close();
+      proximity.close();
+    }
+  } finally {
+    engine.close();
+  }
+});
+
+test("WASM HNSW accelerator lifecycle is portable", { skip: !generatedPresent }, async () => {
+  const engine = api.Engine.memory(wasm);
+  try {
+    const proximity = await engine.buildProximity(2, Array.from({ length: 16 }, (_, index) => ({
+      key: bytes(`vector-${index.toString().padStart(2, "0")}`),
+      vector: new Float32Array([index, 0]),
+      value: bytes(`value-${index.toString().padStart(2, "0")}`),
+    })));
+    const defaults = api.defaultHnswConfig();
+    const built = await proximity.buildHnsw({
+      config: defaults,
+      limits: api.defaultHnswBuildLimits(),
+    });
+    assert.equal(built.stats.records, 16n);
+    const request = {
+      vector: new Float32Array([0, 0]),
+      topK: 3,
+      policy: "fixed_budget" as const,
+      backend: "hnsw" as const,
+    };
+    const index = built.index;
+    assert.equal(index.isCanonical(), true);
+    assert.deepEqual(index.sourceDescriptor(), proximity.descriptor());
+    assert.deepEqual(index.config(), defaults);
+    const result = await index.search(proximity, request);
+    assert.equal(result.backend, "hnsw");
+    assert.equal(Buffer.from(result.neighbors[0].key).toString(), "vector-00");
+    const cancellation = proximity.cancellationToken();
+    try {
+      cancellation.cancel();
+      const cancelled = await index.searchCancellable(proximity, request, cancellation);
+      assert.equal(cancelled.completion, "cancelled");
+      assert.deepEqual(cancelled.neighbors, []);
+    } finally {
+      cancellation.close();
+    }
+    const manifest = index.manifest();
+    const proof = index.proveSearch(proximity, request);
+    assert.equal(proof.verify(proximity.descriptor()).result.backend, "hnsw");
+    proof.close();
+    index.close();
+    const loaded = proximity.loadHnsw(manifest);
+    assert.deepEqual(loaded.manifest(), manifest);
+    loaded.close();
+    proximity.close();
+  } finally {
+    engine.close();
+  }
+});
+
+test("WASM product quantizer lifecycle is portable and bounded", { skip: !generatedPresent }, async () => {
+  const engine = api.Engine.memory(wasm);
+  try {
+    const proximity = await engine.buildProximity(4, Array.from({ length: 16 }, (_, index) => ({
+      key: bytes(`pq-vector-${index.toString().padStart(2, "0")}`),
+      vector: new Float32Array([index, index % 3, index % 5, index % 7]),
+      value: bytes(`pq-value-${index.toString().padStart(2, "0")}`),
+    })));
+    const config = {
+      subquantizers: 2,
+      centroidsPerSubquantizer: 4,
+      trainingIterations: 2,
+      rerankMultiplier: 4,
+      seed: 0xffff_ffff_ffff_ffffn,
+      maxTrainingVectors: 16n,
+    };
+    const built = await proximity.buildPq({
+      config,
+      workerThreads: 1n,
+      limits: api.defaultPqBuildLimits(),
+    });
+    assert.equal(built.stats.encodedVectors, 16n);
+    assert.equal(built.stats.trainingVectors, 16n);
+    const request = {
+      vector: new Float32Array([0, 0, 0, 0]),
+      topK: 3,
+      policy: "fixed_budget" as const,
+      backend: "product_quantized" as const,
+    };
+    const index = built.index;
+    assert.deepEqual(index.sourceDescriptor(), proximity.descriptor());
+    assert.deepEqual(index.config(), config);
+    assert.ok(index.quality().meanSquaredError >= 0);
+    const result = await index.search(proximity, request);
+    assert.equal(result.backend, "product_quantized");
+    assert.equal(Buffer.from(result.neighbors[0].key).toString(), "pq-vector-00");
+    const manifest = index.manifest();
+    const proof = index.proveSearch(proximity, request);
+    assert.equal(proof.verify(proximity.descriptor()).result.backend, "product_quantized");
+    proof.close();
+    index.close();
+    const loaded = proximity.loadPq(manifest);
+    assert.deepEqual(loaded.manifest(), manifest);
+    loaded.close();
+    await assert.rejects(
+      proximity.buildPq({ config, workerThreads: 2n }),
+      /browser-safe WASM product quantization requires workerThreads = 1/,
+    );
+    proximity.close();
+  } finally {
+    engine.close();
+  }
+});
+
+test("WASM composite and catalog lifecycle is portable and bounded", { skip: !generatedPresent }, async () => {
+  const engine = api.Engine.memory(wasm);
+  try {
+    const baseMap = await engine.buildProximity(2, Array.from({ length: 16 }, (_, index) => ({
+      key: bytes(`composite-vector-${index.toString().padStart(2, "0")}`),
+      vector: new Float32Array([index, 0]),
+      value: bytes(`composite-value-${index.toString().padStart(2, "0")}`),
+    })));
+    const base = (await baseMap.buildHnsw()).index;
+    const current = baseMap.mutate([{
+      key: bytes("composite-vector-00"), vector: new Float32Array([0.25, 0]), value: bytes("updated"),
+    }]).map;
+    const built = await current.buildCompositeHnsw(baseMap, base);
+    assert.equal(built.reasons.length, 0);
+    assert.equal(built.stats.vectorUpdatedRecords, 1n);
+    const composite = built.accelerator!;
+    assert.deepEqual(composite.currentSourceDescriptor(), current.descriptor());
+    assert.deepEqual(composite.baseSourceDescriptor(), baseMap.descriptor());
+    assert.equal(composite.baseKind(), "hnsw");
+    assert.equal(composite.deltaCount(), 1n);
+    assert.equal(composite.shadowCount(), 1n);
+    const request = { vector: new Float32Array([0, 0]), topK: 3, policy: "fixed_budget" as const, backend: "composite" as const };
+    assert.equal((await composite.search(current, request)).backend, "composite");
+    const proof = composite.proveSearch(current, request);
+    assert.equal(proof.verify(current.descriptor()).result.backend, "composite");
+    proof.close();
+    const manifest = composite.manifest();
+    const catalog = current.buildAcceleratorCatalog({ composite });
+    assert.equal(catalog.entries().length, 1);
+    assert.equal((await catalog.search(current, request)).backend, "composite");
+    const catalogManifest = catalog.manifest();
+    catalog.close();
+    const loadedCatalog = current.loadAcceleratorCatalog(catalogManifest);
+    assert.deepEqual(loadedCatalog.manifest(), catalogManifest);
+    loadedCatalog.close();
+    composite.close();
+    const loaded = current.loadComposite(manifest);
+    assert.deepEqual(loaded.manifest(), manifest);
+    loaded.close();
+    const forced = { ...api.defaultCompositeAcceleratorConfig(), maxDeltaRecords: 0n };
+    const rebuilt = await current.buildOrRebuildCompositeHnsw(baseMap, base, { config: forced });
+    assert.equal(rebuilt.kind, "hnsw_rebuilt");
+    assert.ok(rebuilt.reasons.length > 0);
+    assert.deepEqual(rebuilt.hnsw!.sourceDescriptor(), current.descriptor());
+    rebuilt.hnsw!.close();
+    await assert.rejects(
+      current.buildOrRebuildCompositeHnsw(baseMap, base, { config: forced, rebuild: { pqWorkerThreads: 2n } }),
+      /browser-safe WASM composite PQ rebuild requires pqWorkerThreads = 1/,
+    );
+    current.close(); base.close(); baseMap.close();
+  } finally { engine.close(); }
+});
+
+test("WASM rich proximity search preserves policy filter stats session and proof", { skip: !generatedPresent }, async () => {
+  const engine = api.Engine.memory(wasm);
+  try {
+    const proximity = await engine.buildProximity(2, [
+      { key: bytes("a"), vector: new Float32Array([0, 0]), value: bytes("alpha") },
+      { key: bytes("ab"), vector: new Float32Array([1, 0]), value: bytes("alphabet") },
+      { key: bytes("b"), vector: new Float32Array([0.1, 0]), value: bytes("beta") },
+    ]);
+    const request = {
+      vector: new Float32Array([0, 0]),
+      topK: 3,
+      policy: "fixed_budget" as const,
+      budget: {
+        maxNodes: 1_000n,
+        maxCommittedBytes: 1_000_000n,
+        maxDistanceEvaluations: 1_000n,
+        maxFrontierEntries: 1_000n,
+      },
+      filter: { kind: "prefix" as const, prefix: bytes("a") },
+      kernel: "scalar_deterministic" as const,
+      backend: "auto" as const,
+    };
+    const result = await proximity.search(request);
+    assert.deepEqual(result.neighbors.map((neighbor) => Buffer.from(neighbor.key).toString()), ["a", "ab"]);
+    assert.ok(result.stats.distanceEvaluations > 0n);
+    assert.ok(result.planFormatVersion > 0);
+    const scanned: string[] = [];
+    assert.equal(proximity.scanRecords((record) => {
+      scanned.push(Buffer.from(record.key).toString());
+      return scanned.length < 2;
+    }), 2n);
+    assert.deepEqual(scanned, ["a", "ab"]);
+    let expiredKey: Uint8Array | undefined;
+    const viewed = proximity.withSearchView(new Float32Array([0, 0]), 2, (neighbors) => {
+      expiredKey = neighbors[0]!.key;
+      return neighbors.map((neighbor) => Buffer.from(neighbor.key).toString());
+    });
+    assert.deepEqual(viewed, ["a", "b"]);
+    assert.throws(() => expiredKey![0], /expired/i);
+    const session = proximity.read();
+    assert.deepEqual(
+      (await session.search(request)).neighbors.map((neighbor) => Buffer.from(neighbor.key).toString()),
+      ["a", "ab"],
+    );
+    const retained: string[] = [];
+    assert.equal(session.scanRecords((record) => {
+      retained.push(Buffer.from(record.key).toString());
+      return true;
+    }), 3n);
+    assert.deepEqual(retained, ["a", "ab", "b"]);
+    session.close();
+    const proof = proximity.proveSearch(request);
+    assert.deepEqual(
+      proof.verify(proximity.descriptor()).result.neighbors
+        .map((neighbor) => Buffer.from(neighbor.key).toString()),
+      ["a", "ab"],
+    );
+    proof.close();
+  } finally {
+    engine.close();
+  }
+});
+
 test("WASM exposes portable maps and explicit native exclusions", { skip: !generatedPresent }, async () => {
   assert.equal(typeof api.Engine, "function");
   const engine = api.Engine.memory(wasm);
@@ -54,6 +375,10 @@ test("WASM exposes portable maps and explicit native exclusions", { skip: !gener
   const proximity = await engine.buildProximity(2, [
     { key: bytes("a"), vector: new Float32Array([0, 0]), value: bytes("alpha") },
   ]);
+  proximity.clearCache();
+  const loadedProximity = await engine.loadProximity(proximity.descriptor());
+  assert.equal(Buffer.from(loadedProximity.get(bytes("a"))?.value ?? []).toString(), "alpha");
+  loadedProximity.close();
   const session = proximity.read();
   assert.equal(session.contains(bytes("a")), true);
   assert.equal(Buffer.from(session.get(bytes("a"))?.value ?? []).toString(), "alpha");
@@ -95,6 +420,15 @@ test("WASM promise wrappers own inputs and honor AbortSignal", { skip: !generate
   await pending;
   assert.equal(Buffer.from(await map.get(bytes("original-key")) ?? []).toString(), "original-value");
 
+  const snapshot = await map.snapshot();
+  assert.ok(snapshot);
+  const bundle = await snapshot.export();
+  const imported = engine.versionedMap(bytes("async-import"));
+  const pendingImport = imported.importAsHead(bundle);
+  bundle.free();
+  await pendingImport;
+  assert.equal(Buffer.from(await imported.get(bytes("original-key")) ?? []).toString(), "original-value");
+
   const controller = new AbortController();
   controller.abort();
   await assert.rejects(map.get(bytes("original-key"), controller.signal), /abort/i);
@@ -121,6 +455,37 @@ test("WASM versioned maps expose identity and historical snapshot lifecycle", { 
   assert.deepEqual(historical.version().id, first.id);
   assert.equal(Buffer.from(historical.get(bytes("k")) ?? []).toString(), "v1");
   engine.close();
+});
+
+test("WASM typed versioned map is application-facing", { skip: !generatedPresent }, async () => {
+  const engine = api.Engine.memory(wasm);
+  try {
+    const raw = engine.versionedMap(bytes("typed-users"));
+    await raw.initialize();
+    const typed = raw.typed(
+      new api.StringKeyCodec(),
+      new api.JsonValueCodec<{ score: number }>(),
+    );
+    const first = await typed.put("alice", { score: 1 });
+    assert.deepEqual(await typed.get("alice"), { score: 1 });
+    assert.deepEqual(await typed.getAt(first.id, "alice"), { score: 1 });
+    assert.deepEqual(await typed.entries(), [["alice", { score: 1 }]]);
+    const updated = await typed.putIf(first.id, "alice", { score: 2 });
+    assert.equal(updated.kind, "applied");
+    const migrated = await typed.migrateFrom(
+      updated.current!.id,
+      new api.JsonValueCodec<{ score: number }>(),
+      (value) => ({ score: value.score + 10 }),
+    );
+    assert.equal(migrated.update.kind, "applied");
+    assert.deepEqual([migrated.scannedValues, migrated.rewrittenValues], [1, 1]);
+    assert.deepEqual(await typed.get("alice"), { score: 12 });
+    assert.equal(typed.raw, raw);
+    await typed.delete("alice");
+    assert.equal(await typed.get("alice"), undefined);
+  } finally {
+    engine.close();
+  }
 });
 
 test("WASM versioned snapshots expose ordered navigation and bounded pages", { skip: !generatedPresent }, async () => {
@@ -195,6 +560,16 @@ test("WASM versioned backups restore and retention returns complete version sets
   const restored = await target.restoreBackup(backup);
   assert.deepEqual(restored.id, await source.headId());
   assert.equal(Buffer.from(await target.get(bytes("k")) ?? []).toString(), "v2");
+  const snapshot = await source.snapshot();
+  assert.ok(snapshot);
+  const bundle = await snapshot.export();
+  const importedMap = targetEngine.versionedMap(bytes("versioned-import"));
+  assert.equal((await importedMap.importAsHead(bundle)).isHead, true);
+  assert.equal(Buffer.from(await importedMap.get(bytes("k")) ?? []).toString(), "v2");
+  const timestampedMap = targetEngine.versionedMap(bytes("versioned-import-at"));
+  const timestamped = await timestampedMap.importAsHeadAtMillis(bundle, 12_345n);
+  assert.equal(timestamped.createdAtMillis, 12_345n);
+  assert.equal(Buffer.from(await timestampedMap.get(bytes("k")) ?? []).toString(), "v2");
   const pruned = await source.keepLast(1);
   assert.ok(pruned.retained.length >= 1);
   assert.ok(pruned.removed.length >= 1);
@@ -207,16 +582,59 @@ test("WASM proofs, retained sessions, and maintenance stay in Rust", { skip: !ge
   const versioned = engine.versionedMap(bytes("proofs"));
   await versioned.initialize();
   await versioned.put(bytes("k"), bytes("v"));
+  await versioned.put(bytes("ka"), bytes("v2"));
   const snapshot = await versioned.snapshot();
   assert.ok(snapshot);
   assert.equal(Buffer.from(snapshot.proveKey(bytes("k")).verify().value ?? []).toString(), "v");
-  assert.equal(snapshot.stats().itemCount, 1n);
-  assert.ok(snapshot.exportSummary().itemCount > 0n);
+  const multi = snapshot.proveKeys([bytes("k"), bytes("missing")]).verify();
+  assert.equal(multi.valid, true);
+  assert.deepEqual(multi.results.map((result: any) => result.exists), [true, false]);
+  assert.deepEqual(snapshot.proveRange(bytes("k"), bytes("l")).verify().entries.map((entry: any) => Buffer.from(entry.key).toString()), ["k", "ka"]);
+  assert.deepEqual(snapshot.provePrefix(bytes("k")).verify().entries.map((entry: any) => Buffer.from(entry.key).toString()), ["k", "ka"]);
+  const provedPage = snapshot.proveRangePage(undefined, bytes("l"), 1);
+  assert.equal(provedPage.verify().valid, true);
+  assert.deepEqual(provedPage.page().entries.map((entry: any) => Buffer.from(entry.key).toString()), ["k"]);
+  assert.equal(snapshot.stats().itemCount, 2n);
+  assert.ok((await snapshot.export()).nodeCount > 0);
   const session = snapshot.read();
+  assert.equal(Buffer.from(await session.getAsync(bytes("k")) ?? []).toString(), "v");
   assert.equal(Buffer.from(session.get(bytes("k")) ?? []).toString(), "v");
-  assert.ok(versioned.verifyCatalog().itemCount >= 2n);
+  let copiedValue: Uint8Array | undefined;
+  assert.equal(session.withValueView(bytes("k"), (value) => { copiedValue = new Uint8Array(value); }), true);
+  assert.equal(Buffer.from(copiedValue ?? []).toString(), "v");
+  let escapedValue: Uint8Array | undefined;
+  session.withValueView(bytes("k"), (value) => { escapedValue = value; });
+  assert.throws(() => escapedValue![0], /scope|expired/i);
+  assert.equal(session.withValueView(bytes("missing"), () => assert.fail("missing callback")), false);
+  let inlineRef: Uint8Array | undefined;
+  assert.equal(session.withValueRefView(bytes("k"), (value) => {
+    assert.equal(value.kind, "inline");
+    if (value.kind === "inline") inlineRef = new Uint8Array(value.value);
+  }), true);
+  assert.equal(Buffer.from(inlineRef ?? []).toString(), "v");
+  let escaped: Uint8Array | undefined;
+  const seen: string[] = [];
+  const scan = session.scanRangeView(bytes("k"), bytes("l"), (entry: any) => {
+    escaped ??= entry.key;
+    seen.push(`${Buffer.from(entry.key)}=${Buffer.from(entry.value)}`);
+    return true;
+  });
+  assert.deepEqual(scan, { visited: 2n, stopped: false });
+  assert.deepEqual(seen, ["k=v", "ka=v2"]);
+  assert.throws(() => Buffer.from(escaped!));
+  assert.deepEqual(
+    session.scanRangeView(bytes("k"), bytes("l"), () => false),
+    { visited: 1n, stopped: true },
+  );
+  const memoryGuarded = session.scanRangeView(bytes("k"), bytes("l"), (entry: any) => {
+    wasm.wasmMemory().grow(1);
+    assert.throws(() => entry.key[0]);
+    return false;
+  });
+  assert.deepEqual(memoryGuarded, { visited: 1n, stopped: true });
+  assert.ok(versioned.verifyCatalog().versionCount >= 2n);
   assert.ok((await versioned.backup()).byteLength > 0);
-  assert.ok(versioned.planGc().itemCount > 0n);
+  assert.ok(versioned.planGc().reachability.liveNodes > 0n);
 
   const registry = engine.indexRegistry();
   registry.register({ name: bytes("by_value"), generation: 1n, extractorId: "value-v1", projection: "all",
@@ -224,6 +642,21 @@ test("WASM proofs, retained sessions, and maintenance stay in Rust", { skip: !ge
   const indexed = engine.indexedMap(bytes("indexed-maintenance"), registry);
   const version: any = await indexed.put(bytes("k"), bytes("term"));
   await indexed.ensureIndex(bytes("by_value"));
+  const oldSnapshotId = (await indexed.snapshot()).id();
+  await assert.rejects(indexed.replaceIndex({
+    name: bytes("by_value"), generation: 2n, extractorId: "value-too-small-v2", projection: "all",
+    limits: { ...api.defaultSecondaryIndexLimits(), maxTermBytes: 3n },
+    extract: (_key: Uint8Array, value: Uint8Array) => [{ term: Uint8Array.from(value) }],
+  }));
+  assert.equal(indexed.health().activeIndexes[0].generation, 1n);
+  const replacement = await indexed.replaceIndex({
+    name: bytes("by_value"), generation: 2n, extractorId: "value-v2", projection: "all",
+    extract: (_key: Uint8Array, value: Uint8Array) => [{ term: Uint8Array.from(value) }],
+  });
+  assert.equal(replacement.generation, 2n);
+  assert.equal(indexed.health().activeIndexes[0].generation, 2n);
+  const historicalIndex = (await indexed.snapshotById(oldSnapshotId)).index(bytes("by_value"));
+  assert.equal((await historicalIndex.exact(bytes("term"))).length, 1);
   assert.equal(indexed.verifyIndex(bytes("by_value"), version.sourceVersion).valid, true);
   assert.ok(indexed.metrics().buildAttempts >= 1n);
   assert.ok(indexed.exportCurrent().byteLength > 0);
@@ -233,7 +666,9 @@ test("WASM proofs, retained sessions, and maintenance stay in Rust", { skip: !ge
   ]);
   assert.equal(Buffer.from(proximity.proveMembership(bytes("p")).verify(proximity.descriptor()).value ?? []).toString(), "payload");
   assert.equal(proximity.verify().recordCount, 1n);
-  const searchProof = proximity.proveSearch(new Float32Array([0, 0]), 1);
+  const searchProof = proximity.proveSearch({
+    vector: new Float32Array([0, 0]), topK: 1, policy: "exact",
+  });
   const verifiedSearch = searchProof.verify(proximity.descriptor());
   assert.equal(Buffer.from(verifiedSearch.result.neighbors[0].key).toString(), "p");
   assert.ok(verifiedSearch.replayedEvents > 0n);
@@ -268,6 +703,37 @@ test("WASM indexed maps expose batch CAS and historical snapshots", { skip: !gen
   const reopened = await indexed.snapshotById(firstId);
   assert.deepEqual(reopened.id(), firstId);
   engine.close();
+});
+
+test("WASM indexed values and bounded proximity records expose scoped views", { skip: !generatedPresent }, async () => {
+  const engine = api.Engine.memory(wasm);
+  const registry = engine.indexRegistry();
+  const indexed = engine.indexedMap(bytes("view-indexed"), registry);
+  await indexed.put(bytes("u1"), bytes("red"));
+  let escapedValue: Uint8Array | undefined;
+  assert.equal(indexed.withValueView(bytes("u1"), (value) => {
+    assert.equal(Buffer.from(value).toString(), "red");
+    escapedValue = value;
+  }), true);
+  assert.throws(() => escapedValue![0], /expired/);
+
+  const map = await engine.buildProximity(2, [
+    { key: bytes("a"), vector: new Float32Array([1, 0]), value: bytes("A") },
+    { key: bytes("b"), vector: new Float32Array([0, 1]), value: bytes("B") },
+    { key: bytes("c"), vector: new Float32Array([1, 1]), value: bytes("C") },
+    { key: bytes("d"), vector: new Float32Array([2, 2]), value: bytes("D") },
+  ]);
+  const seen: string[] = [];
+  let escapedKey: Uint8Array | undefined;
+  assert.deepEqual(map.scanRecordViews(bytes("b"), bytes("d"), (record) => {
+    seen.push(Buffer.from(record.key).toString());
+    assert.equal(record.vector.dimensions, 2);
+    escapedKey = record.key;
+    return true;
+  }), { visited: 2n, stopped: false });
+  assert.deepEqual(seen, ["b", "c"]);
+  assert.throws(() => escapedKey![0], /expired/);
+  map.close(); indexed.close(); registry.close(); engine.close();
 });
 
 test("WASM indexed maintenance and every bounded page direction are complete", { skip: !generatedPresent }, async () => {
@@ -306,4 +772,176 @@ test("WASM indexed maintenance and every bounded page direction are complete", {
   await indexed.deactivateIndex(bytes("by_value"));
   assert.equal(indexed.health().activeIndexes.length, 0);
   engine.close();
+});
+
+test("WASM versioned comparisons pin versions and page diffs", { skip: !generatedPresent }, async () => {
+  const engine = api.Engine.memory(wasm);
+  const map = engine.versionedMap(bytes("comparison"));
+  const base = await map.initialize();
+  const target = await map.put(bytes("k"), bytes("v"));
+  const comparison = map.compare(base.id, target.id);
+  assert.deepEqual(comparison.base().id, base.id);
+  assert.deepEqual(comparison.target().id, target.id);
+  assert.deepEqual(comparison.diff().map((diff: any) => Buffer.from(diff.key).toString()), ["k"]);
+  assert.deepEqual(comparison.diffPage(undefined, undefined, 1).diffs.map((diff: any) => Buffer.from(diff.key).toString()), ["k"]);
+  comparison.close();
+  engine.close();
+});
+
+test("WASM versioned history navigation, diffs, and rollback stay native", { skip: !generatedPresent }, async () => {
+  const engine = api.Engine.memory(wasm);
+  const map = engine.versionedMap(bytes("history-navigation"));
+  await map.initialize();
+  await map.put(bytes("a"), bytes("one"));
+  await map.put(bytes("ab"), bytes("two"));
+  const base = await map.put(bytes("b"), bytes("three"));
+  const target = await map.put(bytes("a"), bytes("updated"));
+  const keys = (rows: readonly { key: Uint8Array }[]) => rows.map((row) => Buffer.from(row.key).toString());
+
+  assert.deepEqual(keys(await map.range(bytes("a"), bytes("c"))), ["a", "ab", "b"]);
+  assert.deepEqual(keys(await map.prefix(bytes("a"))), ["a", "ab"]);
+  assert.equal(Buffer.from((await map.rangeAt(base.id, bytes("a"), bytes("b")))[0].value).toString(), "one");
+  assert.deepEqual(keys(await map.prefixAt(base.id, bytes("a"))), ["a", "ab"]);
+  assert.deepEqual(keys((await map.rangePage(undefined, undefined, 2)).entries), ["a", "ab"]);
+  assert.deepEqual(keys((await map.prefixPage(bytes("a"), undefined, 1)).entries), ["a"]);
+  const historicalPage = await map.prefixPageAt(base.id, bytes("a"), undefined, 1);
+  assert.deepEqual(keys(historicalPage.entries), ["a"]);
+  assert.ok(historicalPage.nextCursor != null);
+  assert.deepEqual((await map.diff(base.id, target.id)).map((row: any) => Buffer.from(row.key).toString()), ["a"]);
+  assert.deepEqual((await map.changesSince(base.id)).map((row: any) => Buffer.from(row.key).toString()), ["a"]);
+
+  const rolledBack = await map.rollbackTo(base.id);
+  assert.deepEqual(await map.headId(), rolledBack.id);
+  assert.equal(Buffer.from(await map.get(bytes("a"))).toString(), "one");
+  assert.deepEqual(await map.changesSince(base.id), []);
+  engine.close();
+});
+
+test("WASM versioned timestamped writes expose complete maintenance records", { skip: !generatedPresent }, async () => {
+  const engine = api.Engine.memory(wasm);
+  const map = engine.versionedMap(bytes("maintenance-complete"));
+  const first = await map.applyAtMillis([{ kind: "upsert", key: bytes("k"), value: bytes("one") }], 1_000n);
+  const second = (await map.applyIfAtMillis(first.id, [{ kind: "upsert", key: bytes("k"), value: bytes("two") }], 2_000n)).current!;
+  const third = await map.applyAtMillis([{ kind: "upsert", key: bytes("k"), value: bytes("three") }], 3_000n);
+
+  assert.equal(first.createdAtMillis, 1_000n);
+  assert.equal(second.createdAtMillis, 2_000n);
+  assert.equal(map.retentionPolicy().kind, "prefix");
+  const verification = map.verifyCatalog();
+  assert.deepEqual(verification.head, third.id);
+  assert.equal(verification.versionCount, 3n);
+  const plan = map.planGc();
+  assert.ok(plan.reachability.liveNodes > 0n);
+  assert.ok(plan.candidateNodes >= plan.reclaimableNodes);
+
+  const aged = map.keepForAt(3_000n, 1_500n);
+  assert.ok(aged.retained.some((id: Uint8Array) => Buffer.from(id).equals(Buffer.from(second.id))));
+  assert.ok(aged.removed.some((id: Uint8Array) => Buffer.from(id).equals(Buffer.from(first.id))));
+  assert.ok(map.keepVersions([second.id]).retained.some((id: Uint8Array) => Buffer.from(id).equals(Buffer.from(third.id))));
+  const pruned = map.pruneVersions(0n);
+  assert.deepEqual(pruned.retained, [third.id]);
+  assert.ok(pruned.removed.some((id: Uint8Array) => Buffer.from(id).equals(Buffer.from(second.id))));
+  assert.ok(map.keepFor(10_000n).retained.length >= 1);
+  assert.ok(map.sweepGc().deletedNodes >= 0n);
+  engine.close();
+});
+
+test("WASM versioned bulk publication uses native performance paths", { skip: !generatedPresent }, async () => {
+  const engine = api.Engine.memory(wasm);
+  const map = engine.versionedMap(bytes("bulk-publication"));
+  const initialized = await map.initializeSorted([{ key: bytes("a"), value: bytes("one") }, { key: bytes("b"), value: bytes("two") }]);
+  assert.equal(initialized.kind, "applied");
+  await map.append([{ kind: "upsert", key: bytes("c"), value: bytes("three") }]);
+  const parallel = await map.parallelApply([
+    { kind: "upsert", key: bytes("b"), value: bytes("updated") },
+    { kind: "upsert", key: bytes("d"), value: bytes("four") },
+  ], { maxThreads: 1n, parallelismThreshold: 1n });
+  assert.equal(parallel.stats.inputMutations, 2n);
+  const rebuilt = await map.rebuildSortedIf(parallel.version.id, [{ key: bytes("x"), value: bytes("nine") }, { key: bytes("y"), value: bytes("ten") }]);
+  assert.equal(rebuilt.kind, "applied");
+  const iterRebuilt = await map.rebuildFromEntriesIf(rebuilt.current!.id, [{ key: bytes("q"), value: bytes("queue") }, { key: bytes("p"), value: bytes("priority") }]);
+  assert.equal(iterRebuilt.kind, "applied");
+  assert.equal(Buffer.from(await map.get(bytes("p")) ?? []).toString(), "priority");
+  engine.close();
+});
+
+test("WASM versioned subscriptions resume and poll owned diffs", { skip: !generatedPresent }, async () => {
+  const engine = api.Engine.memory(wasm);
+  const map = engine.versionedMap(bytes("subscription"));
+  const initial = await map.initialize();
+  const subscription = map.subscribe();
+  assert.deepEqual(subscription.lastSeen(), initial.id);
+  assert.equal(subscription.poll(), undefined);
+  const current = await map.put(bytes("k"), bytes("v"));
+  const event = subscription.poll();
+  assert.deepEqual(event?.previous, initial.id);
+  assert.deepEqual(event?.current.id, current.id);
+  assert.deepEqual(event?.diffs.map((diff: any) => Buffer.from(diff.key).toString()), ["k"]);
+  assert.deepEqual(subscription.lastSeen(), current.id);
+  subscription.close();
+  engine.close();
+});
+
+test("WASM multi-map transactions are atomic and read staged values", { skip: !generatedPresent }, async () => {
+  const engine = api.Engine.memory(wasm);
+  const tx = engine.beginVersionedTransaction();
+  await tx.put(bytes("a"), bytes("k"), bytes("one"));
+  await tx.put(bytes("b"), bytes("k"), bytes("two"));
+  assert.equal(Buffer.from((await tx.get(bytes("a"), bytes("k")))!).toString(), "one");
+  const committed = await tx.commit();
+  assert.equal(committed.applied, true);
+  assert.equal(committed.versions.length, 2);
+  assert.equal(Buffer.from((await engine.versionedMap(bytes("a")).get(bytes("k")))!).toString(), "one");
+  assert.equal(Buffer.from((await engine.versionedMap(bytes("b")).get(bytes("k")))!).toString(), "two");
+  const rolledBack = engine.beginVersionedTransaction();
+  await rolledBack.put(bytes("a"), bytes("discard"), bytes("x"));
+  await rolledBack.rollback();
+  assert.equal(await engine.versionedMap(bytes("a")).get(bytes("discard")), undefined);
+  engine.close();
+});
+
+test("WASM pinned merges page conflicts and CAS publish", { skip: !generatedPresent }, async () => {
+  const engine = api.Engine.memory(wasm);
+  const map = engine.versionedMap(bytes("merge"));
+  const base = await map.initialize();
+  const candidate = await map.put(bytes("k"), bytes("candidate"));
+  await map.put(bytes("k"), bytes("head"));
+  const merge = map.prepareMerge(base.id, candidate.id);
+  assert.deepEqual(merge.base().id, base.id);
+  assert.deepEqual(merge.candidate().id, candidate.id);
+  assert.deepEqual(merge.conflictPage(undefined, 1).conflicts.map((row) => Buffer.from(row.key).toString()), ["k"]);
+  assert.deepEqual(merge.publish("prefer_right").current?.id, candidate.id);
+  assert.equal(Buffer.from((await map.get(bytes("k")))!).toString(), "candidate");
+  merge.close(); engine.close();
+});
+
+test("WASM proximity build exposes the single-thread contract", { skip: !generatedPresent }, async () => {
+  const engine = api.Engine.memory(wasm);
+  const records = [
+    { key: bytes("a"), vector: [0, 1], value: bytes("alpha") },
+    { key: bytes("b"), vector: [1, 0], value: bytes("beta") },
+  ];
+  const serial = await engine.buildProximity(2, records, { threads: 1 });
+  assert.equal(serial.count(), 2n);
+  await assert.rejects(
+    engine.buildProximity(2, records, { threads: 2 }),
+    /single-thread WebAssembly/,
+  );
+  serial.close(); engine.close();
+});
+
+test("WASM proximity exact reads expose scoped record views", { skip: !generatedPresent }, async () => {
+  const engine = api.Engine.memory(wasm);
+  const map = await engine.buildProximity(2, [
+    { key: bytes("a"), vector: [1.25, 2.5], value: bytes("alpha") },
+  ]);
+  let escaped: Uint8Array | undefined;
+  assert.equal(map.withRecordView(bytes("a"), (record: any) => {
+    assert.equal(record.vector.component(1), 2.5);
+    assert.deepEqual(record.vector.toFloat32Array(), new Float32Array([1.25, 2.5]));
+    assert.equal(Buffer.from(record.value).toString(), "alpha");
+    escaped = record.value;
+  }), true);
+  assert.throws(() => escaped![0], /expired/);
+  map.close(); engine.close();
 });

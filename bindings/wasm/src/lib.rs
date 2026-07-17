@@ -22,6 +22,11 @@ mod indexed;
 mod page;
 mod proximity;
 
+#[wasm_bindgen(js_name = wasmMemory)]
+pub fn wasm_memory() -> JsValue {
+    wasm_bindgen::memory()
+}
+
 #[wasm_bindgen(js_name = WasmConfig)]
 #[derive(Clone)]
 pub struct WasmConfig {
@@ -2653,7 +2658,7 @@ fn key_proof_verification_to_object(
     Ok(object)
 }
 
-fn multi_key_proof_verification_to_object(
+pub(crate) fn multi_key_proof_verification_to_object(
     verification: prolly::MultiKeyProofVerification,
 ) -> Result<Object, JsValue> {
     let object = Object::new();
@@ -2672,7 +2677,7 @@ fn multi_key_proof_verification_to_object(
     Ok(object)
 }
 
-fn range_proof_verification_to_object(
+pub(crate) fn range_proof_verification_to_object(
     verification: prolly::RangeProofVerification,
 ) -> Result<Object, JsValue> {
     let object = Object::new();
@@ -2702,7 +2707,7 @@ fn range_proof_verification_to_object(
     Ok(object)
 }
 
-fn range_page_proof_verification_to_object(
+pub(crate) fn range_page_proof_verification_to_object(
     verification: prolly::RangePageProofVerification,
 ) -> Result<Object, JsValue> {
     let object = Object::new();
@@ -2883,7 +2888,7 @@ fn bytes_array(values: Array) -> Result<Vec<Vec<u8>>, JsValue> {
         .collect()
 }
 
-fn entries_array(values: Array) -> Result<Vec<(Vec<u8>, Vec<u8>)>, JsValue> {
+pub(crate) fn entries_array(values: Array) -> Result<Vec<(Vec<u8>, Vec<u8>)>, JsValue> {
     values
         .iter()
         .map(|value| Ok((object_bytes(&value, "key")?, object_bytes(&value, "value")?)))
@@ -2894,7 +2899,7 @@ fn mutations_array(values: Array) -> Result<Vec<Mutation>, JsValue> {
     values.iter().map(mutation_from_js).collect()
 }
 
-fn parallel_config_from_js(value: &JsValue) -> Result<ParallelConfig, JsValue> {
+pub(crate) fn parallel_config_from_js(value: &JsValue) -> Result<ParallelConfig, JsValue> {
     Ok(ParallelConfig::new(
         object_usize(value, "maxThreads", "max_threads")?,
         object_usize(value, "parallelismThreshold", "parallelism_threshold")?,
@@ -3126,6 +3131,18 @@ fn borrowed_entry_object(key: &[u8], value: &[u8]) -> Result<Object, JsValue> {
     Ok(object)
 }
 
+pub(crate) fn borrowed_entry_view_object(key: &[u8], value: &[u8]) -> Result<Object, JsValue> {
+    // SAFETY: callers invoke JavaScript synchronously while both slices are
+    // borrowed. The TypeScript facade expires and hides the views before the
+    // callback returns; callbacks must not re-enter allocation-heavy WASM APIs.
+    let key = unsafe { Uint8Array::view(key) };
+    let value = unsafe { Uint8Array::view(value) };
+    let object = Object::new();
+    Reflect::set(&object, &"key".into(), &key.into())?;
+    Reflect::set(&object, &"value".into(), &value.into())?;
+    Ok(object)
+}
+
 fn borrowed_diff_to_object(diff: prolly::DiffRef<'_>) -> Result<Object, JsValue> {
     let object = Object::new();
     match diff {
@@ -3169,14 +3186,14 @@ fn borrowed_conflict_to_object(conflict: prolly::ConflictRef<'_>) -> Result<Obje
     Ok(object)
 }
 
-fn call_scan_visitor(visitor: &Function, value: Object) -> Result<bool, JsValue> {
+pub(crate) fn call_scan_visitor(visitor: &Function, value: Object) -> Result<bool, JsValue> {
     visitor
         .call1(&JsValue::UNDEFINED, &value.into())?
         .as_bool()
         .ok_or_else(|| JsValue::from_str("scan visitor must return a boolean"))
 }
 
-fn scan_callback_flow(
+pub(crate) fn scan_callback_flow(
     result: Result<bool, JsValue>,
     callback_error: &mut Option<JsValue>,
 ) -> ControlFlow<()> {
@@ -3190,7 +3207,7 @@ fn scan_callback_flow(
     }
 }
 
-fn scan_outcome_to_object(outcome: prolly::ScanOutcome<()>) -> Result<Object, JsValue> {
+pub(crate) fn scan_outcome_to_object(outcome: prolly::ScanOutcome<()>) -> Result<Object, JsValue> {
     let object = Object::new();
     Reflect::set(
         &object,

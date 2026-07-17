@@ -22,6 +22,17 @@ class _FastPageResult(ctypes.Structure):
     ]
 
 
+class _FastValueLeaseResult(ctypes.Structure):
+    _fields_ = [
+        ("status", ctypes.c_int32),
+        ("found", ctypes.c_uint8),
+        ("reserved", ctypes.c_uint8 * 3),
+        ("lease_handle", ctypes.c_uint64),
+        ("data_ptr", ctypes.POINTER(ctypes.c_uint8)),
+        ("data_len", ctypes.c_uint64),
+    ]
+
+
 class _Scope:
     def __init__(self) -> None:
         self.alive = True
@@ -53,6 +64,18 @@ class ScopedBytes:
         self._scope.check()
         return self._view.tobytes()
 
+    def subview(self, start: int, end: int | None = None) -> "ScopedBytes":
+        self._scope.check()
+        return ScopedBytes(self._view[start:end], self._scope)
+
+
+@dataclass(frozen=True)
+class ValueRefView:
+    kind: str
+    inline: ScopedBytes | None = None
+    cid: bytes | None = None
+    length: int | None = None
+
 
 @dataclass(frozen=True)
 class NeighborView:
@@ -61,6 +84,55 @@ class NeighborView:
     rank: int
     value: ScopedBytes | None
     proof: ScopedBytes | None
+
+
+class ProximityVectorView:
+    def __init__(self, view: memoryview, scope: _Scope):
+        if len(view) % 4:
+            raise ValueError("proximity vector byte length is invalid")
+        self._view = view
+        self._scope = scope
+
+    @property
+    def dimensions(self) -> int:
+        self._scope.check()
+        return len(self._view) // 4
+
+    def component(self, index: int) -> float:
+        self._scope.check()
+        if index < 0 or index >= self.dimensions:
+            raise IndexError("proximity vector index is out of range")
+        return struct.unpack_from("<f", self._view, index * 4)[0]
+
+    def to_list(self) -> list[float]:
+        return [self.component(index) for index in range(self.dimensions)]
+
+
+@dataclass(frozen=True)
+class ProximityRecordView:
+    vector: ProximityVectorView
+    value: ScopedBytes
+    key: ScopedBytes | None = None
+
+
+@dataclass(frozen=True)
+class EntryView:
+    key: ScopedBytes
+    value: ScopedBytes
+
+
+@dataclass(frozen=True)
+class ScanOutcome:
+    visited: int
+    stopped: bool
+
+
+class _FastScanOpenResult(ctypes.Structure):
+    _fields_ = [
+        ("status", ctypes.c_int32),
+        ("reserved", ctypes.c_uint32),
+        ("scan_handle", ctypes.c_uint64),
+    ]
 
 
 def _slice(arena: memoryview, offset: int, length: int) -> memoryview:
@@ -102,7 +174,233 @@ def _decode_neighbors(page: memoryview, scope: _Scope) -> tuple[NeighborView, ..
     return tuple(rows)
 
 
+def _decode_entries(
+    page: memoryview,
+    scope: _Scope,
+    record_count: int,
+    terminal: bool,
+    previous_key: bytes | None,
+) -> tuple[EntryView, ...]:
+    if len(page) < 28 or bytes(page[:4]) != b"PRPG":
+        raise ValueError("invalid packed scan page header")
+    version, kind, flags, count, table_bytes, arena_bytes = struct.unpack_from(
+        "<HHIIIQ", page, 4
+    )
+    if (
+        version != 1
+        or kind != 1
+        or count != record_count
+        or table_bytes < count * 16
+        or table_bytes % 16 != 0
+        or bool(flags & 1) != terminal
+    ):
+        raise ValueError("inconsistent packed scan page metadata")
+    arena_start = 28 + table_bytes
+    if arena_start + arena_bytes != len(page):
+        raise ValueError("packed scan page length mismatch")
+    arena = page[arena_start:]
+    rows: list[EntryView] = []
+    prior = previous_key
+    for index in range(count):
+        key_offset, key_len, value_offset, value_len = struct.unpack_from(
+            "<IIII", page, 28 + index * 16
+        )
+        key_view = _slice(arena, key_offset, key_len)
+        value_view = _slice(arena, value_offset, value_len)
+        key = key_view.tobytes()
+        if prior is not None and prior >= key:
+            raise ValueError("packed scan page keys are not strictly ordered")
+        prior = key
+        rows.append(
+            EntryView(
+                key=ScopedBytes(key_view, scope),
+                value=ScopedBytes(value_view, scope),
+            )
+        )
+    return tuple(rows)
+
+
 _R = TypeVar("_R")
+
+
+def point_read_view(
+    session_handle: int,
+    key: bytes,
+    visit: Callable[[ScopedBytes], _R],
+) -> tuple[bool, _R | None]:
+    """Expose one retained value only for the synchronous callback scope."""
+
+    if not callable(visit):
+        raise TypeError("point-read visitor must be callable")
+    library = _native._UniffiLib
+    get_lease = library.prolly_fast_read_session_get_lease
+    get_lease.argtypes = [
+        ctypes.c_uint64,
+        ctypes.POINTER(ctypes.c_uint8),
+        ctypes.c_size_t,
+    ]
+    get_lease.restype = _FastValueLeaseResult
+    release = library.prolly_fast_value_release
+    release.argtypes = [ctypes.c_uint64]
+    release.restype = None
+    key_bytes = bytes(key)
+    key_buffer = (ctypes.c_uint8 * len(key_bytes)).from_buffer_copy(key_bytes)
+    result = get_lease(
+        session_handle, key_buffer if key_bytes else None, len(key_bytes)
+    )
+    if result.status != 0:
+        raise RuntimeError(f"native retained point read failed with status {result.status}")
+    if not result.found:
+        if result.lease_handle:
+            release(result.lease_handle)
+            raise RuntimeError("missing point read returned a value lease")
+        return False, None
+    if not result.lease_handle or (result.data_len and not result.data_ptr):
+        if result.lease_handle:
+            release(result.lease_handle)
+        raise RuntimeError("native point read returned an invalid value lease")
+    scope = _Scope()
+    try:
+        view = memoryview(b"")
+        if result.data_len:
+            raw = (ctypes.c_uint8 * result.data_len).from_address(
+                ctypes.addressof(result.data_ptr.contents)
+            )
+            view = memoryview(raw).cast("B")
+        return True, visit(ScopedBytes(view, scope))
+    finally:
+        scope.close()
+        release(result.lease_handle)
+
+
+def indexed_point_read_view(
+    map_handle: int,
+    key: bytes,
+    visit: Callable[[ScopedBytes], _R],
+) -> tuple[bool, _R | None]:
+    """Expose one current-head indexed source value for the callback scope."""
+    if not callable(visit):
+        raise TypeError("indexed point-read visitor must be callable")
+    library = _native._UniffiLib
+    get_lease = library.prolly_fast_indexed_get_lease
+    get_lease.argtypes = [ctypes.c_uint64, ctypes.POINTER(ctypes.c_uint8), ctypes.c_size_t]
+    get_lease.restype = _FastValueLeaseResult
+    release = library.prolly_fast_value_release
+    release.argtypes = [ctypes.c_uint64]
+    release.restype = None
+    key_bytes = bytes(key)
+    key_buffer = (ctypes.c_uint8 * len(key_bytes)).from_buffer_copy(key_bytes)
+    result = get_lease(map_handle, key_buffer if key_bytes else None, len(key_bytes))
+    if result.status != 0:
+        raise RuntimeError(f"native indexed point read failed with status {result.status}")
+    if not result.found:
+        if result.lease_handle:
+            release(result.lease_handle)
+            raise RuntimeError("missing indexed point read returned a value lease")
+        return False, None
+    if not result.lease_handle or (result.data_len and not result.data_ptr):
+        if result.lease_handle:
+            release(result.lease_handle)
+        raise RuntimeError("native indexed point read returned an invalid value lease")
+    scope = _Scope()
+    try:
+        view = memoryview(b"")
+        if result.data_len:
+            raw = (ctypes.c_uint8 * result.data_len).from_address(
+                ctypes.addressof(result.data_ptr.contents)
+            )
+            view = memoryview(raw).cast("B")
+        return True, visit(ScopedBytes(view, scope))
+    finally:
+        scope.close()
+        release(result.lease_handle)
+
+
+def proximity_point_read_view(
+    map_handle: int,
+    key: bytes,
+    visit: Callable[[ProximityRecordView], _R],
+) -> tuple[bool, _R | None]:
+    """Expose one retained PRVR record only for the callback scope."""
+    if not callable(visit):
+        raise TypeError("proximity record visitor must be callable")
+    library = _native._UniffiLib
+    get_lease = library.prolly_fast_proximity_get_lease
+    get_lease.argtypes = [ctypes.c_uint64, ctypes.POINTER(ctypes.c_uint8), ctypes.c_size_t]
+    get_lease.restype = _FastValueLeaseResult
+    release = library.prolly_fast_value_release
+    release.argtypes = [ctypes.c_uint64]
+    release.restype = None
+    key_bytes = bytes(key)
+    key_buffer = (ctypes.c_uint8 * len(key_bytes)).from_buffer_copy(key_bytes)
+    result = get_lease(map_handle, key_buffer if key_bytes else None, len(key_bytes))
+    if result.status != 0:
+        raise RuntimeError(f"native retained proximity read failed with status {result.status}")
+    if not result.found:
+        if result.lease_handle:
+            release(result.lease_handle)
+            raise RuntimeError("missing proximity read returned a value lease")
+        return False, None
+    if not result.lease_handle or (result.data_len and not result.data_ptr):
+        if result.lease_handle:
+            release(result.lease_handle)
+        raise RuntimeError("native proximity read returned an invalid value lease")
+    scope = _Scope()
+    try:
+        raw = (ctypes.c_uint8 * result.data_len).from_address(ctypes.addressof(result.data_ptr.contents))
+        page = memoryview(raw).cast("B")
+        if len(page) < 8 or bytes(page[:6]) != b"PRVR\x02\x01":
+            raise ValueError("invalid retained proximity record header")
+        dimensions, vector_start = _read_varint(page, 6)
+        vector_end = vector_start + dimensions * 4
+        if vector_end > len(page):
+            raise ValueError("retained proximity vector is truncated")
+        value_length, value_start = _read_varint(page, vector_end)
+        if value_start + value_length != len(page):
+            raise ValueError("retained proximity value length is invalid")
+        return True, visit(ProximityRecordView(
+            ProximityVectorView(page[vector_start:vector_end], scope),
+            ScopedBytes(page[value_start:], scope),
+        ))
+    finally:
+        scope.close()
+        release(result.lease_handle)
+
+
+def _read_varint(value: memoryview, start: int) -> tuple[int, int]:
+    result = 0
+    shift = 0
+    for offset in range(start, min(len(value), start + 10)):
+        byte = value[offset]
+        result |= (byte & 0x7f) << shift
+        if not byte & 0x80:
+            return result, offset + 1
+        shift += 7
+    raise ValueError("invalid proximity record varint")
+
+
+def decode_value_ref_view(value: ScopedBytes) -> ValueRefView:
+    if len(value) < 4 or bytes(value.subview(0, 4)) != b"PLVB":
+        return ValueRefView(kind="inline", inline=value)
+    if len(value) < 6 or value[4] != 1:
+        raise ValueError("invalid or unsupported value reference header")
+    tag = value[5]
+    if tag == 0:
+        if len(value) < 14:
+            raise ValueError("inline value reference is truncated")
+        length = int.from_bytes(bytes(value.subview(6, 14)), "big")
+        if len(value) != 14 + length:
+            raise ValueError("inline value reference length does not match payload")
+        return ValueRefView(kind="inline", inline=value.subview(14))
+    if tag == 1:
+        if len(value) != 46:
+            raise ValueError("blob value reference length is invalid")
+        return ValueRefView(
+            kind="blob",
+            cid=bytes(value.subview(6, 38)),
+            length=int.from_bytes(bytes(value.subview(38, 46)), "big"),
+        )
+    raise ValueError(f"unknown value reference tag {tag}")
 
 
 def proximity_search_view(
@@ -142,3 +440,186 @@ def proximity_search_view(
     finally:
         scope.close()
         release(result.lease_handle)
+
+
+def proximity_scan_range_view(
+    map_handle: int,
+    start: bytes,
+    end: bytes | None,
+    visit: Callable[[ProximityRecordView], bool],
+    *,
+    max_records: int = 4096,
+    max_arena_bytes: int = 4 * 1024 * 1024,
+) -> ScanOutcome:
+    """Visit `[start, end)` through callback-scoped views into leased pages."""
+    if not callable(visit):
+        raise TypeError("proximity record visitor must be callable")
+    if max_records <= 0 or max_arena_bytes <= 0:
+        raise ValueError("packed scan limits must be positive")
+    library = _native._UniffiLib
+    next_page = library.prolly_fast_proximity_scan_range_page
+    next_page.argtypes = [
+        ctypes.c_uint64,
+        ctypes.POINTER(ctypes.c_uint8), ctypes.c_size_t,
+        ctypes.POINTER(ctypes.c_uint8), ctypes.c_size_t, ctypes.c_uint8,
+        ctypes.POINTER(ctypes.c_uint8), ctypes.c_size_t, ctypes.c_uint8,
+        ctypes.c_uint32, ctypes.c_uint64,
+    ]
+    next_page.restype = _FastPageResult
+    release = library.prolly_fast_page_release
+    release.argtypes = [ctypes.c_uint64]
+    release.restype = None
+    start_bytes = bytes(start)
+    end_bytes = None if end is None else bytes(end)
+    start_buffer = (ctypes.c_uint8 * len(start_bytes)).from_buffer_copy(start_bytes)
+    end_buffer = None if end_bytes is None else (ctypes.c_uint8 * len(end_bytes)).from_buffer_copy(end_bytes)
+    after: bytes | None = None
+    visited = 0
+    while True:
+        after_buffer = None if after is None else (ctypes.c_uint8 * len(after)).from_buffer_copy(after)
+        result = next_page(
+            map_handle,
+            start_buffer if start_bytes else None, len(start_bytes),
+            end_buffer if end_bytes else None, 0 if end_bytes is None else len(end_bytes), 0 if end_bytes is None else 1,
+            after_buffer if after else None, 0 if after is None else len(after), 0 if after is None else 1,
+            max_records, max_arena_bytes,
+        )
+        if result.status != 0:
+            raise RuntimeError(f"native proximity range scan failed with status {result.status}")
+        scope = _Scope()
+        try:
+            if not result.data_ptr:
+                raise ValueError("native proximity scan page pointer was null")
+            raw = (ctypes.c_uint8 * result.data_len).from_address(ctypes.addressof(result.data_ptr.contents))
+            page = memoryview(raw).cast("B")
+            if len(page) < 28 or bytes(page[:4]) != b"PRPG":
+                raise ValueError("invalid proximity scan page header")
+            version, kind, flags, count, table_bytes, arena_bytes = struct.unpack_from("<HHIIIQ", page, 4)
+            if version != 2 or kind != 8 or count != result.record_count or table_bytes != count * 24:
+                raise ValueError("invalid proximity scan page table")
+            if bool(flags & 1) != bool(result.terminal) or 28 + table_bytes + arena_bytes != len(page):
+                raise ValueError("invalid proximity scan page bounds")
+            arena = page[28 + table_bytes:]
+            previous = after
+            for index in range(count):
+                key_off, key_len, vector_off, vector_len, value_off, value_len = struct.unpack_from(
+                    "<IIIIII", page, 28 + index * 24
+                )
+                key_view = _slice(arena, key_off, key_len)
+                key = bytes(key_view)
+                if previous is not None and previous >= key:
+                    raise ValueError("proximity scan keys are not strictly ordered")
+                previous = key
+                visited += 1
+                record = ProximityRecordView(
+                    ProximityVectorView(_slice(arena, vector_off, vector_len), scope),
+                    ScopedBytes(_slice(arena, value_off, value_len), scope),
+                    ScopedBytes(key_view, scope),
+                )
+                if not visit(record):
+                    return ScanOutcome(visited=visited, stopped=True)
+            after = previous
+            if not result.terminal and count == 0:
+                raise RuntimeError("non-terminal proximity scan page made no progress")
+        finally:
+            scope.close()
+            release(result.lease_handle)
+        if result.terminal:
+            return ScanOutcome(visited=visited, stopped=False)
+
+
+def scan_range_view(
+    session_handle: int,
+    start: bytes,
+    end: bytes | None,
+    visit: Callable[[EntryView], bool],
+    *,
+    max_records: int = 4096,
+    max_arena_bytes: int = 4 * 1024 * 1024,
+) -> ScanOutcome:
+    """Visit a retained scan through callback-scoped views into native pages."""
+
+    if not callable(visit):
+        raise TypeError("visit must be callable")
+    if max_records <= 0 or max_arena_bytes <= 0:
+        raise ValueError("packed scan limits must be positive")
+    library = _native._UniffiLib
+    open_scan = library.prolly_fast_read_session_scan_open
+    open_scan.argtypes = [
+        ctypes.c_uint64,
+        ctypes.POINTER(ctypes.c_uint8),
+        ctypes.c_size_t,
+        ctypes.POINTER(ctypes.c_uint8),
+        ctypes.c_size_t,
+        ctypes.c_uint8,
+    ]
+    open_scan.restype = _FastScanOpenResult
+    next_page = library.prolly_fast_read_session_scan_next
+    next_page.argtypes = [ctypes.c_uint64, ctypes.c_uint64, ctypes.c_uint32, ctypes.c_uint64]
+    next_page.restype = _FastPageResult
+    close_scan = library.prolly_fast_scan_close
+    close_scan.argtypes = [ctypes.c_uint64]
+    close_scan.restype = None
+    release = library.prolly_fast_page_release
+    release.argtypes = [ctypes.c_uint64]
+    release.restype = None
+
+    start_bytes = bytes(start)
+    end_bytes = None if end is None else bytes(end)
+    start_buffer = (ctypes.c_uint8 * len(start_bytes)).from_buffer_copy(start_bytes)
+    end_buffer = (
+        None
+        if end_bytes is None
+        else (ctypes.c_uint8 * len(end_bytes)).from_buffer_copy(end_bytes)
+    )
+    opened = open_scan(
+        session_handle,
+        start_buffer if start_bytes else None,
+        len(start_bytes),
+        end_buffer if end_bytes else None,
+        0 if end_bytes is None else len(end_bytes),
+        0 if end_bytes is None else 1,
+    )
+    if opened.status != 0:
+        raise RuntimeError(f"native retained scan open failed with status {opened.status}")
+
+    visited = 0
+    previous_key: bytes | None = None
+    try:
+        while True:
+            result = next_page(
+                session_handle, opened.scan_handle, max_records, max_arena_bytes
+            )
+            if result.status != 0:
+                raise RuntimeError(
+                    f"native retained scan read failed with status {result.status}"
+                )
+            scope = _Scope()
+            try:
+                if not result.data_ptr:
+                    raise ValueError("native packed scan page pointer was null")
+                raw = (ctypes.c_uint8 * result.data_len).from_address(
+                    ctypes.addressof(result.data_ptr.contents)
+                )
+                rows = _decode_entries(
+                    memoryview(raw).cast("B"),
+                    scope,
+                    result.record_count,
+                    bool(result.terminal),
+                    previous_key,
+                )
+                for row in rows:
+                    visited += 1
+                    if not visit(row):
+                        return ScanOutcome(visited=visited, stopped=True)
+                if rows:
+                    previous_key = bytes(rows[-1].key)
+                elif not result.terminal:
+                    raise RuntimeError("non-terminal packed scan page made no progress")
+            finally:
+                scope.close()
+                release(result.lease_handle)
+            if result.terminal:
+                return ScanOutcome(visited=visited, stopped=False)
+    finally:
+        close_scan(opened.scan_handle)

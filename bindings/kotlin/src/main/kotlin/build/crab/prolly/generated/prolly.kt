@@ -1263,9 +1263,27 @@ external fun uniffi_prolly_bindings_checksum_func_versioned_value_to_bytes(
 ): Short
 external fun uniffi_prolly_bindings_checksum_func_open_remote_prolly_engine(
 ): Short
+external fun uniffi_prolly_bindings_checksum_func_default_secondary_index_limits(
+): Short
+external fun uniffi_prolly_bindings_checksum_func_default_composite_accelerator_config(
+): Short
+external fun uniffi_prolly_bindings_checksum_func_default_composite_build_limits(
+): Short
+external fun uniffi_prolly_bindings_checksum_func_default_composite_rebuild_options(
+): Short
 external fun uniffi_prolly_bindings_checksum_func_default_content_graph_limits(
 ): Short
+external fun uniffi_prolly_bindings_checksum_func_default_hnsw_build_limits(
+): Short
+external fun uniffi_prolly_bindings_checksum_func_default_hnsw_config(
+): Short
+external fun uniffi_prolly_bindings_checksum_func_default_pq_build_limits(
+): Short
+external fun uniffi_prolly_bindings_checksum_func_default_pq_config(
+): Short
 external fun uniffi_prolly_bindings_checksum_func_default_proximity_config(
+): Short
+external fun uniffi_prolly_bindings_checksum_func_default_proximity_search_runtime_policy(
 ): Short
 external fun uniffi_prolly_bindings_checksum_func_exact_proximity_search_request(
 ): Short
@@ -1527,6 +1545,8 @@ external fun uniffi_prolly_bindings_checksum_method_prollyengine_prove_range(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_prollyengine_prove_range_page(
 ): Short
+external fun uniffi_prolly_bindings_checksum_method_prollyengine_proximity_search_runtime(
+): Short
 external fun uniffi_prolly_bindings_checksum_method_prollyengine_publish_changed_spans_hint(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_prollyengine_publish_named_root(
@@ -1741,6 +1761,8 @@ external fun uniffi_prolly_bindings_checksum_method_bindingindexedmap_ensure_ind
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingindexedmap_export_current(
 ): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingindexedmap_fast_handle(
+): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingindexedmap_get(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingindexedmap_health(
@@ -1753,9 +1775,13 @@ external fun uniffi_prolly_bindings_checksum_method_bindingindexedmap_keep_last(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingindexedmap_metrics(
 ): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingindexedmap_plan_gc(
+): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingindexedmap_put(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingindexedmap_repair_index(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingindexedmap_replace_index(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingindexedmap_snapshot(
 ): Short
@@ -1797,6 +1823,94 @@ external fun uniffi_prolly_bindings_checksum_method_bindingsecondaryindexsnapsho
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_secondaryindexextractorcallback_extract(
 ): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_entries(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_manifest(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_prove_search(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_search(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_search_cancellable(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_search_with_runtime(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_source_descriptor(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_base_kind(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_base_source_descriptor(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_build_stats(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_config(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_current_source_descriptor(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_delta_count(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_manifest(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_prove_search(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_search(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_search_cancellable(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_search_with_runtime(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_shadow_count(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindinghnswindex_config(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindinghnswindex_is_canonical(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindinghnswindex_manifest(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindinghnswindex_prove_search(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindinghnswindex_search(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindinghnswindex_search_cancellable(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindinghnswindex_search_with_runtime(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindinghnswindex_source_descriptor(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingproductquantizer_config(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingproductquantizer_manifest(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingproductquantizer_prove_search(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingproductquantizer_quality(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingproductquantizer_search(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingproductquantizer_search_cancellable(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingproductquantizer_search_with_runtime(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingproductquantizer_source_descriptor(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingproximitycancellationtoken_cancel(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingproximitycancellationtoken_is_cancelled(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_accelerator_catalog(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_composite_hnsw(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_composite_pq(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_hnsw(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_or_rebuild_composite_hnsw(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_or_rebuild_composite_pq(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_pq(
+): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingproximitymap_clear_content_cache(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingproximitymap_config(
@@ -1810,6 +1924,14 @@ external fun uniffi_prolly_bindings_checksum_method_bindingproximitymap_descript
 external fun uniffi_prolly_bindings_checksum_method_bindingproximitymap_fast_handle(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingproximitymap_get(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingproximitymap_load_accelerator_catalog(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingproximitymap_load_composite(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingproximitymap_load_hnsw(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingproximitymap_load_pq(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingproximitymap_mutate(
 ): Short
@@ -1827,6 +1949,10 @@ external fun uniffi_prolly_bindings_checksum_method_bindingproximitymap_scan_rec
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingproximitymap_search(
 ): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingproximitymap_search_cancellable(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingproximitymap_search_with_runtime(
+): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingproximitymap_verify(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_contains_key(
@@ -1839,9 +1965,19 @@ external fun uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_search(
 ): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_search_cancellable(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_search_with_runtime(
+): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingproximitysearchproof_source_descriptor(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingproximitysearchproof_verify(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingproximitysearchruntime_clear(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingproximitysearchruntime_policy(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingproximitysearchruntime_stats(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_proximityrecordvisitorcallback_visit(
 ): Short
@@ -2150,6 +2286,8 @@ external fun uniffi_prolly_bindings_checksum_constructor_asyncprollyengine_new(
 external fun uniffi_prolly_bindings_checksum_constructor_bindingindexregistry_new(
 ): Short
 external fun uniffi_prolly_bindings_checksum_constructor_bindingindexedmap_new(
+): Short
+external fun uniffi_prolly_bindings_checksum_constructor_bindingproximitycancellationtoken_new(
 ): Short
 external fun uniffi_prolly_bindings_checksum_constructor_bindingversionedmap_new(
 ): Short
@@ -2498,6 +2636,8 @@ external fun uniffi_prolly_bindings_fn_method_prollyengine_prove_range(`ptr`: Lo
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_prollyengine_prove_range_page(`ptr`: Long,`tree`: RustBuffer.ByValue,`cursor`: RustBuffer.ByValue,`rangeEnd`: RustBuffer.ByValue,`limit`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_prollyengine_proximity_search_runtime(`ptr`: Long,`policy`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): Long
 external fun uniffi_prolly_bindings_fn_method_prollyengine_publish_changed_spans_hint(`ptr`: Long,`base`: RustBuffer.ByValue,`changed`: RustBuffer.ByValue,`spans`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): Byte
 external fun uniffi_prolly_bindings_fn_method_prollyengine_publish_named_root(`ptr`: Long,`name`: RustBuffer.ByValue,`tree`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -2748,6 +2888,8 @@ external fun uniffi_prolly_bindings_fn_method_bindingindexedmap_ensure_index(`pt
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_bindingindexedmap_export_current(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindingindexedmap_fast_handle(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+): Long
 external fun uniffi_prolly_bindings_fn_method_bindingindexedmap_get(`ptr`: Long,`key`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_bindingindexedmap_health(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -2760,9 +2902,13 @@ external fun uniffi_prolly_bindings_fn_method_bindingindexedmap_keep_last(`ptr`:
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_bindingindexedmap_metrics(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindingindexedmap_plan_gc(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_bindingindexedmap_put(`ptr`: Long,`key`: RustBuffer.ByValue,`value`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_bindingindexedmap_repair_index(`ptr`: Long,`name`: RustBuffer.ByValue,`sourceVersion`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindingindexedmap_replace_index(`ptr`: Long,`name`: RustBuffer.ByValue,`generation`: Long,`extractorId`: RustBuffer.ByValue,`projection`: RustBuffer.ByValue,`limits`: RustBuffer.ByValue,`extractor`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_bindingindexedmap_snapshot(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): Long
@@ -2818,10 +2964,120 @@ external fun uniffi_prolly_bindings_fn_init_callback_vtable_secondaryindexextrac
 ): Unit
 external fun uniffi_prolly_bindings_fn_method_secondaryindexextractorcallback_extract(`ptr`: Long,`primaryKey`: RustBuffer.ByValue,`sourceValue`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_clone_bindingacceleratorcatalog(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+): Long
+external fun uniffi_prolly_bindings_fn_free_bindingacceleratorcatalog(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+): Unit
+external fun uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_entries(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_manifest(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_prove_search(`ptr`: Long,`map`: Long,`request`: RustBuffer.ByValue,`limits`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): Long
+external fun uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_search(`ptr`: Long,`map`: Long,`request`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_search_cancellable(`ptr`: Long,`map`: Long,`request`: RustBuffer.ByValue,`runtime`: RustBuffer.ByValue,`cancellation`: Long,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_search_with_runtime(`ptr`: Long,`map`: Long,`request`: RustBuffer.ByValue,`runtime`: Long,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_source_descriptor(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_clone_bindingcompositeaccelerator(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+): Long
+external fun uniffi_prolly_bindings_fn_free_bindingcompositeaccelerator(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+): Unit
+external fun uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_base_kind(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_base_source_descriptor(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_build_stats(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_config(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_current_source_descriptor(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_delta_count(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+): Long
+external fun uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_manifest(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_prove_search(`ptr`: Long,`map`: Long,`request`: RustBuffer.ByValue,`limits`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): Long
+external fun uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_search(`ptr`: Long,`map`: Long,`request`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_search_cancellable(`ptr`: Long,`map`: Long,`request`: RustBuffer.ByValue,`runtime`: RustBuffer.ByValue,`cancellation`: Long,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_search_with_runtime(`ptr`: Long,`map`: Long,`request`: RustBuffer.ByValue,`runtime`: Long,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_shadow_count(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+): Long
+external fun uniffi_prolly_bindings_fn_clone_bindinghnswindex(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+): Long
+external fun uniffi_prolly_bindings_fn_free_bindinghnswindex(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+): Unit
+external fun uniffi_prolly_bindings_fn_method_bindinghnswindex_config(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindinghnswindex_is_canonical(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+): Byte
+external fun uniffi_prolly_bindings_fn_method_bindinghnswindex_manifest(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindinghnswindex_prove_search(`ptr`: Long,`map`: Long,`request`: RustBuffer.ByValue,`limits`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): Long
+external fun uniffi_prolly_bindings_fn_method_bindinghnswindex_search(`ptr`: Long,`map`: Long,`request`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindinghnswindex_search_cancellable(`ptr`: Long,`map`: Long,`request`: RustBuffer.ByValue,`runtime`: RustBuffer.ByValue,`cancellation`: Long,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindinghnswindex_search_with_runtime(`ptr`: Long,`map`: Long,`request`: RustBuffer.ByValue,`runtime`: Long,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindinghnswindex_source_descriptor(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_clone_bindingproductquantizer(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+): Long
+external fun uniffi_prolly_bindings_fn_free_bindingproductquantizer(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+): Unit
+external fun uniffi_prolly_bindings_fn_method_bindingproductquantizer_config(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindingproductquantizer_manifest(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindingproductquantizer_prove_search(`ptr`: Long,`map`: Long,`request`: RustBuffer.ByValue,`limits`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): Long
+external fun uniffi_prolly_bindings_fn_method_bindingproductquantizer_quality(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindingproductquantizer_search(`ptr`: Long,`map`: Long,`request`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindingproductquantizer_search_cancellable(`ptr`: Long,`map`: Long,`request`: RustBuffer.ByValue,`runtime`: RustBuffer.ByValue,`cancellation`: Long,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindingproductquantizer_search_with_runtime(`ptr`: Long,`map`: Long,`request`: RustBuffer.ByValue,`runtime`: Long,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindingproductquantizer_source_descriptor(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_clone_bindingproximitycancellationtoken(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+): Long
+external fun uniffi_prolly_bindings_fn_free_bindingproximitycancellationtoken(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+): Unit
+external fun uniffi_prolly_bindings_fn_constructor_bindingproximitycancellationtoken_new(uniffi_out_err: UniffiRustCallStatus,
+): Long
+external fun uniffi_prolly_bindings_fn_method_bindingproximitycancellationtoken_cancel(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+): Unit
+external fun uniffi_prolly_bindings_fn_method_bindingproximitycancellationtoken_is_cancelled(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+): Byte
 external fun uniffi_prolly_bindings_fn_clone_bindingproximitymap(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): Long
 external fun uniffi_prolly_bindings_fn_free_bindingproximitymap(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): Unit
+external fun uniffi_prolly_bindings_fn_method_bindingproximitymap_build_accelerator_catalog(`ptr`: Long,`hnsw`: RustBuffer.ByValue,`pq`: RustBuffer.ByValue,`composite`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): Long
+external fun uniffi_prolly_bindings_fn_method_bindingproximitymap_build_composite_hnsw(`ptr`: Long,`baseMap`: Long,`base`: Long,`config`: RustBuffer.ByValue,`limits`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindingproximitymap_build_composite_pq(`ptr`: Long,`baseMap`: Long,`base`: Long,`config`: RustBuffer.ByValue,`limits`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindingproximitymap_build_hnsw(`ptr`: Long,`config`: RustBuffer.ByValue,`limits`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindingproximitymap_build_or_rebuild_composite_hnsw(`ptr`: Long,`baseMap`: Long,`base`: Long,`config`: RustBuffer.ByValue,`limits`: RustBuffer.ByValue,`rebuild`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindingproximitymap_build_or_rebuild_composite_pq(`ptr`: Long,`baseMap`: Long,`base`: Long,`config`: RustBuffer.ByValue,`limits`: RustBuffer.ByValue,`rebuild`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindingproximitymap_build_pq(`ptr`: Long,`config`: RustBuffer.ByValue,`workerThreads`: Long,`limits`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_bindingproximitymap_clear_content_cache(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): Unit
 external fun uniffi_prolly_bindings_fn_method_bindingproximitymap_config(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -2836,6 +3092,14 @@ external fun uniffi_prolly_bindings_fn_method_bindingproximitymap_fast_handle(`p
 ): Long
 external fun uniffi_prolly_bindings_fn_method_bindingproximitymap_get(`ptr`: Long,`key`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindingproximitymap_load_accelerator_catalog(`ptr`: Long,`manifest`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): Long
+external fun uniffi_prolly_bindings_fn_method_bindingproximitymap_load_composite(`ptr`: Long,`manifest`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): Long
+external fun uniffi_prolly_bindings_fn_method_bindingproximitymap_load_hnsw(`ptr`: Long,`manifest`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): Long
+external fun uniffi_prolly_bindings_fn_method_bindingproximitymap_load_pq(`ptr`: Long,`manifest`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): Long
 external fun uniffi_prolly_bindings_fn_method_bindingproximitymap_mutate(`ptr`: Long,`mutations`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_bindingproximitymap_prove_membership(`ptr`: Long,`key`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -2851,6 +3115,10 @@ external fun uniffi_prolly_bindings_fn_method_bindingproximitymap_rebuild(`ptr`:
 external fun uniffi_prolly_bindings_fn_method_bindingproximitymap_scan_records(`ptr`: Long,`visitor`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): Long
 external fun uniffi_prolly_bindings_fn_method_bindingproximitymap_search(`ptr`: Long,`request`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindingproximitymap_search_cancellable(`ptr`: Long,`request`: RustBuffer.ByValue,`runtime`: RustBuffer.ByValue,`cancellation`: Long,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindingproximitymap_search_with_runtime(`ptr`: Long,`request`: RustBuffer.ByValue,`runtime`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_bindingproximitymap_verify(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
@@ -2868,6 +3136,10 @@ external fun uniffi_prolly_bindings_fn_method_bindingproximityreadsession_scan_r
 ): Long
 external fun uniffi_prolly_bindings_fn_method_bindingproximityreadsession_search(`ptr`: Long,`request`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindingproximityreadsession_search_cancellable(`ptr`: Long,`request`: RustBuffer.ByValue,`runtime`: RustBuffer.ByValue,`cancellation`: Long,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindingproximityreadsession_search_with_runtime(`ptr`: Long,`request`: RustBuffer.ByValue,`runtime`: Long,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_clone_bindingproximitysearchproof(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): Long
 external fun uniffi_prolly_bindings_fn_free_bindingproximitysearchproof(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -2875,6 +3147,16 @@ external fun uniffi_prolly_bindings_fn_free_bindingproximitysearchproof(`handle`
 external fun uniffi_prolly_bindings_fn_method_bindingproximitysearchproof_source_descriptor(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_bindingproximitysearchproof_verify(`ptr`: Long,`expectedDescriptor`: RustBuffer.ByValue,`limits`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_clone_bindingproximitysearchruntime(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+): Long
+external fun uniffi_prolly_bindings_fn_free_bindingproximitysearchruntime(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+): Unit
+external fun uniffi_prolly_bindings_fn_method_bindingproximitysearchruntime_clear(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+): Unit
+external fun uniffi_prolly_bindings_fn_method_bindingproximitysearchruntime_policy(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindingproximitysearchruntime_stats(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_clone_proximityrecordvisitorcallback(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): Long
@@ -3442,9 +3724,27 @@ external fun uniffi_prolly_bindings_fn_func_versioned_value_to_bytes(`record`: R
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_open_remote_prolly_engine(`store`: Long,`config`: RustBuffer.ByValue,
 ): Long
+external fun uniffi_prolly_bindings_fn_func_default_secondary_index_limits(uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_func_default_composite_accelerator_config(uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_func_default_composite_build_limits(uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_func_default_composite_rebuild_options(uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_default_content_graph_limits(uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_func_default_hnsw_build_limits(uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_func_default_hnsw_config(uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_func_default_pq_build_limits(uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_func_default_pq_config(uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_default_proximity_config(`dimensions`: Int,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_func_default_proximity_search_runtime_policy(uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_exact_proximity_search_request(`query`: RustBuffer.ByValue,`k`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
@@ -3943,10 +4243,37 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_prolly_bindings_checksum_func_open_remote_prolly_engine() != 31371.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_prolly_bindings_checksum_func_default_secondary_index_limits() != 62049.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_func_default_composite_accelerator_config() != 39819.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_func_default_composite_build_limits() != 3977.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_func_default_composite_rebuild_options() != 61172.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_prolly_bindings_checksum_func_default_content_graph_limits() != 63706.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_prolly_bindings_checksum_func_default_hnsw_build_limits() != 15978.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_func_default_hnsw_config() != 11115.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_func_default_pq_build_limits() != 40959.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_func_default_pq_config() != 62103.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_prolly_bindings_checksum_func_default_proximity_config() != 43437.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_func_default_proximity_search_runtime_policy() != 8352.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_func_exact_proximity_search_request() != 59384.toShort()) {
@@ -4339,6 +4666,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_prove_range_page() != 35557.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_proximity_search_runtime() != 6204.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_publish_changed_spans_hint() != 57418.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -4660,6 +4990,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_prolly_bindings_checksum_method_bindingindexedmap_export_current() != 22167.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingindexedmap_fast_handle() != 29036.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_prolly_bindings_checksum_method_bindingindexedmap_get() != 7518.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -4678,10 +5011,16 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_prolly_bindings_checksum_method_bindingindexedmap_metrics() != 61793.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingindexedmap_plan_gc() != 48857.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_prolly_bindings_checksum_method_bindingindexedmap_put() != 8190.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_method_bindingindexedmap_repair_index() != 41978.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingindexedmap_replace_index() != 60542.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_method_bindingindexedmap_snapshot() != 23616.toShort()) {
@@ -4744,6 +5083,138 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_prolly_bindings_checksum_method_secondaryindexextractorcallback_extract() != 330.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_entries() != 1963.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_manifest() != 7708.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_prove_search() != 60058.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_search() != 55802.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_search_cancellable() != 34098.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_search_with_runtime() != 53678.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_source_descriptor() != 29366.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_base_kind() != 38194.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_base_source_descriptor() != 27682.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_build_stats() != 13990.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_config() != 34290.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_current_source_descriptor() != 8293.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_delta_count() != 30824.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_manifest() != 60414.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_prove_search() != 23157.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_search() != 7681.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_search_cancellable() != 48784.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_search_with_runtime() != 35233.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_shadow_count() != 49297.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindinghnswindex_config() != 7633.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindinghnswindex_is_canonical() != 22092.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindinghnswindex_manifest() != 17361.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindinghnswindex_prove_search() != 59719.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindinghnswindex_search() != 59229.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindinghnswindex_search_cancellable() != 3123.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindinghnswindex_search_with_runtime() != 42474.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindinghnswindex_source_descriptor() != 54794.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingproductquantizer_config() != 33006.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingproductquantizer_manifest() != 51829.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingproductquantizer_prove_search() != 46039.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingproductquantizer_quality() != 29268.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingproductquantizer_search() != 14867.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingproductquantizer_search_cancellable() != 36527.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingproductquantizer_search_with_runtime() != 59197.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingproductquantizer_source_descriptor() != 61276.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingproximitycancellationtoken_cancel() != 22166.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingproximitycancellationtoken_is_cancelled() != 33821.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_accelerator_catalog() != 27841.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_composite_hnsw() != 60836.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_composite_pq() != 36562.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_hnsw() != 15873.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_or_rebuild_composite_hnsw() != 51755.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_or_rebuild_composite_pq() != 27287.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_pq() != 7075.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_clear_content_cache() != 42240.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -4763,6 +5234,18 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_get() != 51400.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_load_accelerator_catalog() != 29318.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_load_composite() != 64875.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_load_hnsw() != 8586.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_load_pq() != 63976.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_mutate() != 39394.toShort()) {
@@ -4789,6 +5272,12 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_search() != 3285.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_search_cancellable() != 6128.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_search_with_runtime() != 38486.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_verify() != 62601.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -4807,10 +5296,25 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_search() != 12060.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_search_cancellable() != 7278.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_search_with_runtime() != 989.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_prolly_bindings_checksum_method_bindingproximitysearchproof_source_descriptor() != 57653.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_method_bindingproximitysearchproof_verify() != 38054.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingproximitysearchruntime_clear() != 37935.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingproximitysearchruntime_policy() != 55203.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingproximitysearchruntime_stats() != 45140.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_method_proximityrecordvisitorcallback_visit() != 31782.toShort()) {
@@ -5273,6 +5777,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_constructor_bindingindexedmap_new() != 57256.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_constructor_bindingproximitycancellationtoken_new() != 17518.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_constructor_bindingversionedmap_new() != 64633.toShort()) {
@@ -7157,6 +7664,1128 @@ public object FfiConverterTypeRemoteNativeProllyTransaction: FfiConverter<Remote
 //
 
 
+public interface BindingAcceleratorCatalogInterface {
+
+    fun `entries`(): List<AcceleratorCatalogEntryRecord>
+
+    fun `manifest`(): kotlin.ByteArray
+
+    fun `proveSearch`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord, `limits`: ContentGraphLimitsRecord): BindingProximitySearchProof
+
+    fun `search`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord): ProximitySearchResultRecord
+
+    fun `searchCancellable`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord, `runtime`: BindingProximitySearchRuntime?, `cancellation`: BindingProximityCancellationToken): ProximitySearchResultRecord
+
+    fun `searchWithRuntime`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord, `runtime`: BindingProximitySearchRuntime): ProximitySearchResultRecord
+
+    fun `sourceDescriptor`(): kotlin.ByteArray
+
+    companion object
+}
+
+open class BindingAcceleratorCatalog: Disposable, AutoCloseable, BindingAcceleratorCatalogInterface
+{
+
+    @Suppress("UNUSED_PARAMETER")
+    /**
+     * @suppress
+     */
+    constructor(withHandle: UniffiWithHandle, handle: Long) {
+        this.handle = handle
+        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
+    }
+
+    /**
+     * @suppress
+     *
+     * This constructor can be used to instantiate a fake object. Only used for tests. Any
+     * attempt to actually use an object constructed this way will fail as there is no
+     * connected Rust object.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    constructor(noHandle: NoHandle) {
+        this.handle = 0
+        this.cleanable = null
+    }
+
+    protected val handle: Long
+    protected val cleanable: UniffiCleaner.Cleanable?
+
+    private val wasDestroyed = AtomicBoolean(false)
+    private val callCounter = AtomicLong(1)
+
+    override fun destroy() {
+        // Only allow a single call to this method.
+        // TODO: maybe we should log a warning if called more than once?
+        if (this.wasDestroyed.compareAndSet(false, true)) {
+            // This decrement always matches the initial count of 1 given at creation time.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    @Synchronized
+    override fun close() {
+        this.destroy()
+    }
+
+    internal inline fun <R> callWithHandle(block: (handle: Long) -> R): R {
+        // Check and increment the call counter, to keep the object alive.
+        // This needs a compare-and-set retry loop in case of concurrent updates.
+        do {
+            val c = this.callCounter.get()
+            if (c == 0L) {
+                throw IllegalStateException("${this.javaClass.simpleName} object has already been destroyed")
+            }
+            if (c == Long.MAX_VALUE) {
+                throw IllegalStateException("${this.javaClass.simpleName} call counter would overflow")
+            }
+        } while (! this.callCounter.compareAndSet(c, c + 1L))
+        // Now we can safely do the method call without the handle being freed concurrently.
+        try {
+            return block(this.uniffiCloneHandle())
+        } finally {
+            // This decrement always matches the increment we performed above.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    // Use a static inner class instead of a closure so as not to accidentally
+    // capture `this` as part of the cleanable's action.
+    private class UniffiCleanAction(private val handle: Long) : Runnable {
+        override fun run() {
+            if (handle == 0.toLong()) {
+                // Fake object created with `NoHandle`, don't try to free.
+                return;
+            }
+            uniffiRustCall { status ->
+                UniffiLib.uniffi_prolly_bindings_fn_free_bindingacceleratorcatalog(handle, status)
+            }
+        }
+    }
+
+    /**
+     * @suppress
+     */
+    fun uniffiCloneHandle(): Long {
+        if (handle == 0.toLong()) {
+            throw InternalException("uniffiCloneHandle() called on NoHandle object");
+        }
+        return uniffiRustCall() { status ->
+            UniffiLib.uniffi_prolly_bindings_fn_clone_bindingacceleratorcatalog(handle, status)
+        }
+    }
+
+    override fun `entries`(): List<AcceleratorCatalogEntryRecord> {
+            return FfiConverterSequenceTypeAcceleratorCatalogEntryRecord.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_entries(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+    override fun `manifest`(): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_manifest(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `proveSearch`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord, `limits`: ContentGraphLimitsRecord): BindingProximitySearchProof {
+            return FfiConverterTypeBindingProximitySearchProof.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_prove_search(
+        it,
+        FfiConverterTypeBindingProximityMap.lower(`map`),FfiConverterTypeProximitySearchRequestRecord.lower(`request`),FfiConverterTypeContentGraphLimitsRecord.lower(`limits`),_status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `search`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord): ProximitySearchResultRecord {
+            return FfiConverterTypeProximitySearchResultRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_search(
+        it,
+        FfiConverterTypeBindingProximityMap.lower(`map`),FfiConverterTypeProximitySearchRequestRecord.lower(`request`),_status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `searchCancellable`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord, `runtime`: BindingProximitySearchRuntime?, `cancellation`: BindingProximityCancellationToken): ProximitySearchResultRecord {
+            return FfiConverterTypeProximitySearchResultRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_search_cancellable(
+        it,
+        FfiConverterTypeBindingProximityMap.lower(`map`),FfiConverterTypeProximitySearchRequestRecord.lower(`request`),FfiConverterOptionalTypeBindingProximitySearchRuntime.lower(`runtime`),FfiConverterTypeBindingProximityCancellationToken.lower(`cancellation`),_status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `searchWithRuntime`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord, `runtime`: BindingProximitySearchRuntime): ProximitySearchResultRecord {
+            return FfiConverterTypeProximitySearchResultRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_search_with_runtime(
+        it,
+        FfiConverterTypeBindingProximityMap.lower(`map`),FfiConverterTypeProximitySearchRequestRecord.lower(`request`),FfiConverterTypeBindingProximitySearchRuntime.lower(`runtime`),_status)
+}
+    }
+    )
+    }
+
+
+    override fun `sourceDescriptor`(): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_source_descriptor(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+
+
+
+
+
+
+    /**
+     * @suppress
+     */
+    companion object
+
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeBindingAcceleratorCatalog: FfiConverter<BindingAcceleratorCatalog, Long> {
+    override fun lower(value: BindingAcceleratorCatalog): Long {
+        return value.uniffiCloneHandle()
+    }
+
+    override fun lift(value: Long): BindingAcceleratorCatalog {
+        return BindingAcceleratorCatalog(UniffiWithHandle, value)
+    }
+
+    override fun read(buf: ByteBuffer): BindingAcceleratorCatalog {
+        return lift(buf.getLong())
+    }
+
+    override fun allocationSize(value: BindingAcceleratorCatalog) = 8UL
+
+    override fun write(value: BindingAcceleratorCatalog, buf: ByteBuffer) {
+        buf.putLong(lower(value))
+    }
+}
+
+
+// This template implements a class for working with a Rust struct via a handle
+// to the live Rust struct on the other side of the FFI.
+//
+// There's some subtlety here, because we have to be careful not to operate on a Rust
+// struct after it has been dropped, and because we must expose a public API for freeing
+// theq Kotlin wrapper object in lieu of reliable finalizers. The core requirements are:
+//
+//   * Each instance holds an opaque handle to the underlying Rust struct.
+//     Method calls need to read this handle from the object's state and pass it in to
+//     the Rust FFI.
+//
+//   * When an instance is no longer needed, its handle should be passed to a
+//     special destructor function provided by the Rust FFI, which will drop the
+//     underlying Rust struct.
+//
+//   * Given an instance, calling code is expected to call the special
+//     `destroy` method in order to free it after use, either by calling it explicitly
+//     or by using a higher-level helper like the `use` method. Failing to do so risks
+//     leaking the underlying Rust struct.
+//
+//   * We can't assume that calling code will do the right thing, and must be prepared
+//     to handle Kotlin method calls executing concurrently with or even after a call to
+//     `destroy`, and to handle multiple (possibly concurrent!) calls to `destroy`.
+//
+//   * We must never allow Rust code to operate on the underlying Rust struct after
+//     the destructor has been called, and must never call the destructor more than once.
+//     Doing so may trigger memory unsafety.
+//
+//   * To mitigate many of the risks of leaking memory and use-after-free unsafety, a `Cleaner`
+//     is implemented to call the destructor when the Kotlin object becomes unreachable.
+//     This is done in a background thread. This is not a panacea, and client code should be aware that
+//      1. the thread may starve if some there are objects that have poorly performing
+//     `drop` methods or do significant work in their `drop` methods.
+//      2. the thread is shared across the whole library. This can be tuned by using `android_cleaner = true`,
+//         or `android = true` in the [`kotlin` section of the `uniffi.toml` file](https://mozilla.github.io/uniffi-rs/kotlin/configuration.html).
+//
+// If we try to implement this with mutual exclusion on access to the handle, there is the
+// possibility of a race between a method call and a concurrent call to `destroy`:
+//
+//    * Thread A starts a method call, reads the value of the handle, but is interrupted
+//      before it can pass the handle over the FFI to Rust.
+//    * Thread B calls `destroy` and frees the underlying Rust struct.
+//    * Thread A resumes, passing the already-read handle value to Rust and triggering
+//      a use-after-free.
+//
+// One possible solution would be to use a `ReadWriteLock`, with each method call taking
+// a read lock (and thus allowed to run concurrently) and the special `destroy` method
+// taking a write lock (and thus blocking on live method calls). However, we aim not to
+// generate methods with any hidden blocking semantics, and a `destroy` method that might
+// block if called incorrectly seems to meet that bar.
+//
+// So, we achieve our goals by giving each instance an associated `AtomicLong` counter to track
+// the number of in-flight method calls, and an `AtomicBoolean` flag to indicate whether `destroy`
+// has been called. These are updated according to the following rules:
+//
+//    * The initial value of the counter is 1, indicating a live object with no in-flight calls.
+//      The initial value for the flag is false.
+//
+//    * At the start of each method call, we atomically check the counter.
+//      If it is 0 then the underlying Rust struct has already been destroyed and the call is aborted.
+//      If it is nonzero them we atomically increment it by 1 and proceed with the method call.
+//
+//    * At the end of each method call, we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+//    * When `destroy` is called, we atomically flip the flag from false to true.
+//      If the flag was already true we silently fail.
+//      Otherwise we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+// Astute readers may observe that this all sounds very similar to the way that Rust's `Arc<T>` works,
+// and indeed it is, with the addition of a flag to guard against multiple calls to `destroy`.
+//
+// The overall effect is that the underlying Rust struct is destroyed only when `destroy` has been
+// called *and* all in-flight method calls have completed, avoiding violating any of the expectations
+// of the underlying Rust code.
+//
+// This makes a cleaner a better alternative to _not_ calling `destroy()` as
+// and when the object is finished with, but the abstraction is not perfect: if the Rust object's `drop`
+// method is slow, and/or there are many objects to cleanup, and it's on a low end Android device, then the cleaner
+// thread may be starved, and the app will leak memory.
+//
+// In this case, `destroy`ing manually may be a better solution.
+//
+// The cleaner can live side by side with the manual calling of `destroy`. In the order of responsiveness, uniffi objects
+// with Rust peers are reclaimed:
+//
+// 1. By calling the `destroy` method of the object, which calls `rustObject.free()`. If that doesn't happen:
+// 2. When the object becomes unreachable, AND the Cleaner thread gets to call `rustObject.free()`. If the thread is starved then:
+// 3. The memory is reclaimed when the process terminates.
+//
+// [1] https://stackoverflow.com/questions/24376768/can-java-finalize-an-object-when-it-is-still-in-scope/24380219
+//
+
+
+public interface BindingCompositeAcceleratorInterface {
+
+    fun `baseKind`(): CompositeBaseKindRecord
+
+    fun `baseSourceDescriptor`(): kotlin.ByteArray
+
+    fun `buildStats`(): CompositeBuildStatsRecord
+
+    fun `config`(): CompositeAcceleratorConfigRecord
+
+    fun `currentSourceDescriptor`(): kotlin.ByteArray
+
+    fun `deltaCount`(): kotlin.ULong
+
+    fun `manifest`(): kotlin.ByteArray
+
+    fun `proveSearch`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord, `limits`: ContentGraphLimitsRecord): BindingProximitySearchProof
+
+    fun `search`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord): ProximitySearchResultRecord
+
+    fun `searchCancellable`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord, `runtime`: BindingProximitySearchRuntime?, `cancellation`: BindingProximityCancellationToken): ProximitySearchResultRecord
+
+    fun `searchWithRuntime`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord, `runtime`: BindingProximitySearchRuntime): ProximitySearchResultRecord
+
+    fun `shadowCount`(): kotlin.ULong
+
+    companion object
+}
+
+open class BindingCompositeAccelerator: Disposable, AutoCloseable, BindingCompositeAcceleratorInterface
+{
+
+    @Suppress("UNUSED_PARAMETER")
+    /**
+     * @suppress
+     */
+    constructor(withHandle: UniffiWithHandle, handle: Long) {
+        this.handle = handle
+        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
+    }
+
+    /**
+     * @suppress
+     *
+     * This constructor can be used to instantiate a fake object. Only used for tests. Any
+     * attempt to actually use an object constructed this way will fail as there is no
+     * connected Rust object.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    constructor(noHandle: NoHandle) {
+        this.handle = 0
+        this.cleanable = null
+    }
+
+    protected val handle: Long
+    protected val cleanable: UniffiCleaner.Cleanable?
+
+    private val wasDestroyed = AtomicBoolean(false)
+    private val callCounter = AtomicLong(1)
+
+    override fun destroy() {
+        // Only allow a single call to this method.
+        // TODO: maybe we should log a warning if called more than once?
+        if (this.wasDestroyed.compareAndSet(false, true)) {
+            // This decrement always matches the initial count of 1 given at creation time.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    @Synchronized
+    override fun close() {
+        this.destroy()
+    }
+
+    internal inline fun <R> callWithHandle(block: (handle: Long) -> R): R {
+        // Check and increment the call counter, to keep the object alive.
+        // This needs a compare-and-set retry loop in case of concurrent updates.
+        do {
+            val c = this.callCounter.get()
+            if (c == 0L) {
+                throw IllegalStateException("${this.javaClass.simpleName} object has already been destroyed")
+            }
+            if (c == Long.MAX_VALUE) {
+                throw IllegalStateException("${this.javaClass.simpleName} call counter would overflow")
+            }
+        } while (! this.callCounter.compareAndSet(c, c + 1L))
+        // Now we can safely do the method call without the handle being freed concurrently.
+        try {
+            return block(this.uniffiCloneHandle())
+        } finally {
+            // This decrement always matches the increment we performed above.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    // Use a static inner class instead of a closure so as not to accidentally
+    // capture `this` as part of the cleanable's action.
+    private class UniffiCleanAction(private val handle: Long) : Runnable {
+        override fun run() {
+            if (handle == 0.toLong()) {
+                // Fake object created with `NoHandle`, don't try to free.
+                return;
+            }
+            uniffiRustCall { status ->
+                UniffiLib.uniffi_prolly_bindings_fn_free_bindingcompositeaccelerator(handle, status)
+            }
+        }
+    }
+
+    /**
+     * @suppress
+     */
+    fun uniffiCloneHandle(): Long {
+        if (handle == 0.toLong()) {
+            throw InternalException("uniffiCloneHandle() called on NoHandle object");
+        }
+        return uniffiRustCall() { status ->
+            UniffiLib.uniffi_prolly_bindings_fn_clone_bindingcompositeaccelerator(handle, status)
+        }
+    }
+
+    override fun `baseKind`(): CompositeBaseKindRecord {
+            return FfiConverterTypeCompositeBaseKindRecord.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_base_kind(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+    override fun `baseSourceDescriptor`(): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_base_source_descriptor(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+    override fun `buildStats`(): CompositeBuildStatsRecord {
+            return FfiConverterTypeCompositeBuildStatsRecord.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_build_stats(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+    override fun `config`(): CompositeAcceleratorConfigRecord {
+            return FfiConverterTypeCompositeAcceleratorConfigRecord.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_config(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+    override fun `currentSourceDescriptor`(): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_current_source_descriptor(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+    override fun `deltaCount`(): kotlin.ULong {
+            return FfiConverterULong.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_delta_count(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+    override fun `manifest`(): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_manifest(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `proveSearch`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord, `limits`: ContentGraphLimitsRecord): BindingProximitySearchProof {
+            return FfiConverterTypeBindingProximitySearchProof.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_prove_search(
+        it,
+        FfiConverterTypeBindingProximityMap.lower(`map`),FfiConverterTypeProximitySearchRequestRecord.lower(`request`),FfiConverterTypeContentGraphLimitsRecord.lower(`limits`),_status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `search`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord): ProximitySearchResultRecord {
+            return FfiConverterTypeProximitySearchResultRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_search(
+        it,
+        FfiConverterTypeBindingProximityMap.lower(`map`),FfiConverterTypeProximitySearchRequestRecord.lower(`request`),_status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `searchCancellable`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord, `runtime`: BindingProximitySearchRuntime?, `cancellation`: BindingProximityCancellationToken): ProximitySearchResultRecord {
+            return FfiConverterTypeProximitySearchResultRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_search_cancellable(
+        it,
+        FfiConverterTypeBindingProximityMap.lower(`map`),FfiConverterTypeProximitySearchRequestRecord.lower(`request`),FfiConverterOptionalTypeBindingProximitySearchRuntime.lower(`runtime`),FfiConverterTypeBindingProximityCancellationToken.lower(`cancellation`),_status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `searchWithRuntime`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord, `runtime`: BindingProximitySearchRuntime): ProximitySearchResultRecord {
+            return FfiConverterTypeProximitySearchResultRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_search_with_runtime(
+        it,
+        FfiConverterTypeBindingProximityMap.lower(`map`),FfiConverterTypeProximitySearchRequestRecord.lower(`request`),FfiConverterTypeBindingProximitySearchRuntime.lower(`runtime`),_status)
+}
+    }
+    )
+    }
+
+
+    override fun `shadowCount`(): kotlin.ULong {
+            return FfiConverterULong.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_shadow_count(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+
+
+
+
+
+
+    /**
+     * @suppress
+     */
+    companion object
+
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeBindingCompositeAccelerator: FfiConverter<BindingCompositeAccelerator, Long> {
+    override fun lower(value: BindingCompositeAccelerator): Long {
+        return value.uniffiCloneHandle()
+    }
+
+    override fun lift(value: Long): BindingCompositeAccelerator {
+        return BindingCompositeAccelerator(UniffiWithHandle, value)
+    }
+
+    override fun read(buf: ByteBuffer): BindingCompositeAccelerator {
+        return lift(buf.getLong())
+    }
+
+    override fun allocationSize(value: BindingCompositeAccelerator) = 8UL
+
+    override fun write(value: BindingCompositeAccelerator, buf: ByteBuffer) {
+        buf.putLong(lower(value))
+    }
+}
+
+
+// This template implements a class for working with a Rust struct via a handle
+// to the live Rust struct on the other side of the FFI.
+//
+// There's some subtlety here, because we have to be careful not to operate on a Rust
+// struct after it has been dropped, and because we must expose a public API for freeing
+// theq Kotlin wrapper object in lieu of reliable finalizers. The core requirements are:
+//
+//   * Each instance holds an opaque handle to the underlying Rust struct.
+//     Method calls need to read this handle from the object's state and pass it in to
+//     the Rust FFI.
+//
+//   * When an instance is no longer needed, its handle should be passed to a
+//     special destructor function provided by the Rust FFI, which will drop the
+//     underlying Rust struct.
+//
+//   * Given an instance, calling code is expected to call the special
+//     `destroy` method in order to free it after use, either by calling it explicitly
+//     or by using a higher-level helper like the `use` method. Failing to do so risks
+//     leaking the underlying Rust struct.
+//
+//   * We can't assume that calling code will do the right thing, and must be prepared
+//     to handle Kotlin method calls executing concurrently with or even after a call to
+//     `destroy`, and to handle multiple (possibly concurrent!) calls to `destroy`.
+//
+//   * We must never allow Rust code to operate on the underlying Rust struct after
+//     the destructor has been called, and must never call the destructor more than once.
+//     Doing so may trigger memory unsafety.
+//
+//   * To mitigate many of the risks of leaking memory and use-after-free unsafety, a `Cleaner`
+//     is implemented to call the destructor when the Kotlin object becomes unreachable.
+//     This is done in a background thread. This is not a panacea, and client code should be aware that
+//      1. the thread may starve if some there are objects that have poorly performing
+//     `drop` methods or do significant work in their `drop` methods.
+//      2. the thread is shared across the whole library. This can be tuned by using `android_cleaner = true`,
+//         or `android = true` in the [`kotlin` section of the `uniffi.toml` file](https://mozilla.github.io/uniffi-rs/kotlin/configuration.html).
+//
+// If we try to implement this with mutual exclusion on access to the handle, there is the
+// possibility of a race between a method call and a concurrent call to `destroy`:
+//
+//    * Thread A starts a method call, reads the value of the handle, but is interrupted
+//      before it can pass the handle over the FFI to Rust.
+//    * Thread B calls `destroy` and frees the underlying Rust struct.
+//    * Thread A resumes, passing the already-read handle value to Rust and triggering
+//      a use-after-free.
+//
+// One possible solution would be to use a `ReadWriteLock`, with each method call taking
+// a read lock (and thus allowed to run concurrently) and the special `destroy` method
+// taking a write lock (and thus blocking on live method calls). However, we aim not to
+// generate methods with any hidden blocking semantics, and a `destroy` method that might
+// block if called incorrectly seems to meet that bar.
+//
+// So, we achieve our goals by giving each instance an associated `AtomicLong` counter to track
+// the number of in-flight method calls, and an `AtomicBoolean` flag to indicate whether `destroy`
+// has been called. These are updated according to the following rules:
+//
+//    * The initial value of the counter is 1, indicating a live object with no in-flight calls.
+//      The initial value for the flag is false.
+//
+//    * At the start of each method call, we atomically check the counter.
+//      If it is 0 then the underlying Rust struct has already been destroyed and the call is aborted.
+//      If it is nonzero them we atomically increment it by 1 and proceed with the method call.
+//
+//    * At the end of each method call, we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+//    * When `destroy` is called, we atomically flip the flag from false to true.
+//      If the flag was already true we silently fail.
+//      Otherwise we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+// Astute readers may observe that this all sounds very similar to the way that Rust's `Arc<T>` works,
+// and indeed it is, with the addition of a flag to guard against multiple calls to `destroy`.
+//
+// The overall effect is that the underlying Rust struct is destroyed only when `destroy` has been
+// called *and* all in-flight method calls have completed, avoiding violating any of the expectations
+// of the underlying Rust code.
+//
+// This makes a cleaner a better alternative to _not_ calling `destroy()` as
+// and when the object is finished with, but the abstraction is not perfect: if the Rust object's `drop`
+// method is slow, and/or there are many objects to cleanup, and it's on a low end Android device, then the cleaner
+// thread may be starved, and the app will leak memory.
+//
+// In this case, `destroy`ing manually may be a better solution.
+//
+// The cleaner can live side by side with the manual calling of `destroy`. In the order of responsiveness, uniffi objects
+// with Rust peers are reclaimed:
+//
+// 1. By calling the `destroy` method of the object, which calls `rustObject.free()`. If that doesn't happen:
+// 2. When the object becomes unreachable, AND the Cleaner thread gets to call `rustObject.free()`. If the thread is starved then:
+// 3. The memory is reclaimed when the process terminates.
+//
+// [1] https://stackoverflow.com/questions/24376768/can-java-finalize-an-object-when-it-is-still-in-scope/24380219
+//
+
+
+public interface BindingHnswIndexInterface {
+
+    fun `config`(): HnswConfigRecord
+
+    fun `isCanonical`(): kotlin.Boolean
+
+    fun `manifest`(): kotlin.ByteArray
+
+    fun `proveSearch`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord, `limits`: ContentGraphLimitsRecord): BindingProximitySearchProof
+
+    fun `search`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord): ProximitySearchResultRecord
+
+    fun `searchCancellable`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord, `runtime`: BindingProximitySearchRuntime?, `cancellation`: BindingProximityCancellationToken): ProximitySearchResultRecord
+
+    fun `searchWithRuntime`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord, `runtime`: BindingProximitySearchRuntime): ProximitySearchResultRecord
+
+    fun `sourceDescriptor`(): kotlin.ByteArray
+
+    companion object
+}
+
+open class BindingHnswIndex: Disposable, AutoCloseable, BindingHnswIndexInterface
+{
+
+    @Suppress("UNUSED_PARAMETER")
+    /**
+     * @suppress
+     */
+    constructor(withHandle: UniffiWithHandle, handle: Long) {
+        this.handle = handle
+        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
+    }
+
+    /**
+     * @suppress
+     *
+     * This constructor can be used to instantiate a fake object. Only used for tests. Any
+     * attempt to actually use an object constructed this way will fail as there is no
+     * connected Rust object.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    constructor(noHandle: NoHandle) {
+        this.handle = 0
+        this.cleanable = null
+    }
+
+    protected val handle: Long
+    protected val cleanable: UniffiCleaner.Cleanable?
+
+    private val wasDestroyed = AtomicBoolean(false)
+    private val callCounter = AtomicLong(1)
+
+    override fun destroy() {
+        // Only allow a single call to this method.
+        // TODO: maybe we should log a warning if called more than once?
+        if (this.wasDestroyed.compareAndSet(false, true)) {
+            // This decrement always matches the initial count of 1 given at creation time.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    @Synchronized
+    override fun close() {
+        this.destroy()
+    }
+
+    internal inline fun <R> callWithHandle(block: (handle: Long) -> R): R {
+        // Check and increment the call counter, to keep the object alive.
+        // This needs a compare-and-set retry loop in case of concurrent updates.
+        do {
+            val c = this.callCounter.get()
+            if (c == 0L) {
+                throw IllegalStateException("${this.javaClass.simpleName} object has already been destroyed")
+            }
+            if (c == Long.MAX_VALUE) {
+                throw IllegalStateException("${this.javaClass.simpleName} call counter would overflow")
+            }
+        } while (! this.callCounter.compareAndSet(c, c + 1L))
+        // Now we can safely do the method call without the handle being freed concurrently.
+        try {
+            return block(this.uniffiCloneHandle())
+        } finally {
+            // This decrement always matches the increment we performed above.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    // Use a static inner class instead of a closure so as not to accidentally
+    // capture `this` as part of the cleanable's action.
+    private class UniffiCleanAction(private val handle: Long) : Runnable {
+        override fun run() {
+            if (handle == 0.toLong()) {
+                // Fake object created with `NoHandle`, don't try to free.
+                return;
+            }
+            uniffiRustCall { status ->
+                UniffiLib.uniffi_prolly_bindings_fn_free_bindinghnswindex(handle, status)
+            }
+        }
+    }
+
+    /**
+     * @suppress
+     */
+    fun uniffiCloneHandle(): Long {
+        if (handle == 0.toLong()) {
+            throw InternalException("uniffiCloneHandle() called on NoHandle object");
+        }
+        return uniffiRustCall() { status ->
+            UniffiLib.uniffi_prolly_bindings_fn_clone_bindinghnswindex(handle, status)
+        }
+    }
+
+    override fun `config`(): HnswConfigRecord {
+            return FfiConverterTypeHnswConfigRecord.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindinghnswindex_config(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+    override fun `isCanonical`(): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindinghnswindex_is_canonical(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+    override fun `manifest`(): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindinghnswindex_manifest(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `proveSearch`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord, `limits`: ContentGraphLimitsRecord): BindingProximitySearchProof {
+            return FfiConverterTypeBindingProximitySearchProof.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindinghnswindex_prove_search(
+        it,
+        FfiConverterTypeBindingProximityMap.lower(`map`),FfiConverterTypeProximitySearchRequestRecord.lower(`request`),FfiConverterTypeContentGraphLimitsRecord.lower(`limits`),_status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `search`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord): ProximitySearchResultRecord {
+            return FfiConverterTypeProximitySearchResultRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindinghnswindex_search(
+        it,
+        FfiConverterTypeBindingProximityMap.lower(`map`),FfiConverterTypeProximitySearchRequestRecord.lower(`request`),_status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `searchCancellable`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord, `runtime`: BindingProximitySearchRuntime?, `cancellation`: BindingProximityCancellationToken): ProximitySearchResultRecord {
+            return FfiConverterTypeProximitySearchResultRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindinghnswindex_search_cancellable(
+        it,
+        FfiConverterTypeBindingProximityMap.lower(`map`),FfiConverterTypeProximitySearchRequestRecord.lower(`request`),FfiConverterOptionalTypeBindingProximitySearchRuntime.lower(`runtime`),FfiConverterTypeBindingProximityCancellationToken.lower(`cancellation`),_status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `searchWithRuntime`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord, `runtime`: BindingProximitySearchRuntime): ProximitySearchResultRecord {
+            return FfiConverterTypeProximitySearchResultRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindinghnswindex_search_with_runtime(
+        it,
+        FfiConverterTypeBindingProximityMap.lower(`map`),FfiConverterTypeProximitySearchRequestRecord.lower(`request`),FfiConverterTypeBindingProximitySearchRuntime.lower(`runtime`),_status)
+}
+    }
+    )
+    }
+
+
+    override fun `sourceDescriptor`(): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindinghnswindex_source_descriptor(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+
+
+
+
+
+
+    /**
+     * @suppress
+     */
+    companion object
+
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeBindingHnswIndex: FfiConverter<BindingHnswIndex, Long> {
+    override fun lower(value: BindingHnswIndex): Long {
+        return value.uniffiCloneHandle()
+    }
+
+    override fun lift(value: Long): BindingHnswIndex {
+        return BindingHnswIndex(UniffiWithHandle, value)
+    }
+
+    override fun read(buf: ByteBuffer): BindingHnswIndex {
+        return lift(buf.getLong())
+    }
+
+    override fun allocationSize(value: BindingHnswIndex) = 8UL
+
+    override fun write(value: BindingHnswIndex, buf: ByteBuffer) {
+        buf.putLong(lower(value))
+    }
+}
+
+
+// This template implements a class for working with a Rust struct via a handle
+// to the live Rust struct on the other side of the FFI.
+//
+// There's some subtlety here, because we have to be careful not to operate on a Rust
+// struct after it has been dropped, and because we must expose a public API for freeing
+// theq Kotlin wrapper object in lieu of reliable finalizers. The core requirements are:
+//
+//   * Each instance holds an opaque handle to the underlying Rust struct.
+//     Method calls need to read this handle from the object's state and pass it in to
+//     the Rust FFI.
+//
+//   * When an instance is no longer needed, its handle should be passed to a
+//     special destructor function provided by the Rust FFI, which will drop the
+//     underlying Rust struct.
+//
+//   * Given an instance, calling code is expected to call the special
+//     `destroy` method in order to free it after use, either by calling it explicitly
+//     or by using a higher-level helper like the `use` method. Failing to do so risks
+//     leaking the underlying Rust struct.
+//
+//   * We can't assume that calling code will do the right thing, and must be prepared
+//     to handle Kotlin method calls executing concurrently with or even after a call to
+//     `destroy`, and to handle multiple (possibly concurrent!) calls to `destroy`.
+//
+//   * We must never allow Rust code to operate on the underlying Rust struct after
+//     the destructor has been called, and must never call the destructor more than once.
+//     Doing so may trigger memory unsafety.
+//
+//   * To mitigate many of the risks of leaking memory and use-after-free unsafety, a `Cleaner`
+//     is implemented to call the destructor when the Kotlin object becomes unreachable.
+//     This is done in a background thread. This is not a panacea, and client code should be aware that
+//      1. the thread may starve if some there are objects that have poorly performing
+//     `drop` methods or do significant work in their `drop` methods.
+//      2. the thread is shared across the whole library. This can be tuned by using `android_cleaner = true`,
+//         or `android = true` in the [`kotlin` section of the `uniffi.toml` file](https://mozilla.github.io/uniffi-rs/kotlin/configuration.html).
+//
+// If we try to implement this with mutual exclusion on access to the handle, there is the
+// possibility of a race between a method call and a concurrent call to `destroy`:
+//
+//    * Thread A starts a method call, reads the value of the handle, but is interrupted
+//      before it can pass the handle over the FFI to Rust.
+//    * Thread B calls `destroy` and frees the underlying Rust struct.
+//    * Thread A resumes, passing the already-read handle value to Rust and triggering
+//      a use-after-free.
+//
+// One possible solution would be to use a `ReadWriteLock`, with each method call taking
+// a read lock (and thus allowed to run concurrently) and the special `destroy` method
+// taking a write lock (and thus blocking on live method calls). However, we aim not to
+// generate methods with any hidden blocking semantics, and a `destroy` method that might
+// block if called incorrectly seems to meet that bar.
+//
+// So, we achieve our goals by giving each instance an associated `AtomicLong` counter to track
+// the number of in-flight method calls, and an `AtomicBoolean` flag to indicate whether `destroy`
+// has been called. These are updated according to the following rules:
+//
+//    * The initial value of the counter is 1, indicating a live object with no in-flight calls.
+//      The initial value for the flag is false.
+//
+//    * At the start of each method call, we atomically check the counter.
+//      If it is 0 then the underlying Rust struct has already been destroyed and the call is aborted.
+//      If it is nonzero them we atomically increment it by 1 and proceed with the method call.
+//
+//    * At the end of each method call, we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+//    * When `destroy` is called, we atomically flip the flag from false to true.
+//      If the flag was already true we silently fail.
+//      Otherwise we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+// Astute readers may observe that this all sounds very similar to the way that Rust's `Arc<T>` works,
+// and indeed it is, with the addition of a flag to guard against multiple calls to `destroy`.
+//
+// The overall effect is that the underlying Rust struct is destroyed only when `destroy` has been
+// called *and* all in-flight method calls have completed, avoiding violating any of the expectations
+// of the underlying Rust code.
+//
+// This makes a cleaner a better alternative to _not_ calling `destroy()` as
+// and when the object is finished with, but the abstraction is not perfect: if the Rust object's `drop`
+// method is slow, and/or there are many objects to cleanup, and it's on a low end Android device, then the cleaner
+// thread may be starved, and the app will leak memory.
+//
+// In this case, `destroy`ing manually may be a better solution.
+//
+// The cleaner can live side by side with the manual calling of `destroy`. In the order of responsiveness, uniffi objects
+// with Rust peers are reclaimed:
+//
+// 1. By calling the `destroy` method of the object, which calls `rustObject.free()`. If that doesn't happen:
+// 2. When the object becomes unreachable, AND the Cleaner thread gets to call `rustObject.free()`. If the thread is starved then:
+// 3. The memory is reclaimed when the process terminates.
+//
+// [1] https://stackoverflow.com/questions/24376768/can-java-finalize-an-object-when-it-is-still-in-scope/24380219
+//
+
+
 public interface BindingIndexRegistryInterface {
 
     fun `len`(): kotlin.ULong
@@ -7445,6 +9074,8 @@ public interface BindingIndexedMapInterface {
 
     fun `exportCurrent`(): kotlin.ByteArray
 
+    fun `fastHandle`(): kotlin.ULong
+
     fun `get`(`key`: kotlin.ByteArray): kotlin.ByteArray?
 
     fun `health`(): IndexedMapHealthRecord
@@ -7457,9 +9088,13 @@ public interface BindingIndexedMapInterface {
 
     fun `metrics`(): IndexedMapMetricsRecord
 
+    fun `planGc`(): GcPlanRecord
+
     fun `put`(`key`: kotlin.ByteArray, `value`: kotlin.ByteArray): IndexedVersionRecord
 
     fun `repairIndex`(`name`: kotlin.ByteArray, `sourceVersion`: kotlin.ByteArray): IndexVerificationRecord
+
+    fun `replaceIndex`(`name`: kotlin.ByteArray, `generation`: kotlin.ULong, `extractorId`: kotlin.String, `projection`: IndexProjectionRecord, `limits`: SecondaryIndexLimitsRecord?, `extractor`: SecondaryIndexExtractorCallback): IndexBuildResultRecord
 
     fun `snapshot`(): BindingIndexedSnapshot
 
@@ -7663,6 +9298,20 @@ open class BindingIndexedMap: Disposable, AutoCloseable, BindingIndexedMapInterf
 
 
 
+    override fun `fastHandle`(): kotlin.ULong {
+            return FfiConverterULong.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingindexedmap_fast_handle(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
     @Throws(ProllyBindingException::class)override fun `get`(`key`: kotlin.ByteArray): kotlin.ByteArray? {
             return FfiConverterOptionalByteArray.lift(
     callWithHandle {
@@ -7746,6 +9395,20 @@ open class BindingIndexedMap: Disposable, AutoCloseable, BindingIndexedMapInterf
 
 
 
+    @Throws(ProllyBindingException::class)override fun `planGc`(): GcPlanRecord {
+            return FfiConverterTypeGcPlanRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingindexedmap_plan_gc(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
     @Throws(ProllyBindingException::class)override fun `put`(`key`: kotlin.ByteArray, `value`: kotlin.ByteArray): IndexedVersionRecord {
             return FfiConverterTypeIndexedVersionRecord.lift(
     callWithHandle {
@@ -7767,6 +9430,20 @@ open class BindingIndexedMap: Disposable, AutoCloseable, BindingIndexedMapInterf
     UniffiLib.uniffi_prolly_bindings_fn_method_bindingindexedmap_repair_index(
         it,
         FfiConverterByteArray.lower(`name`),FfiConverterByteArray.lower(`sourceVersion`),_status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `replaceIndex`(`name`: kotlin.ByteArray, `generation`: kotlin.ULong, `extractorId`: kotlin.String, `projection`: IndexProjectionRecord, `limits`: SecondaryIndexLimitsRecord?, `extractor`: SecondaryIndexExtractorCallback): IndexBuildResultRecord {
+            return FfiConverterTypeIndexBuildResultRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingindexedmap_replace_index(
+        it,
+        FfiConverterByteArray.lower(`name`),FfiConverterULong.lower(`generation`),FfiConverterString.lower(`extractorId`),FfiConverterTypeIndexProjectionRecord.lower(`projection`),FfiConverterOptionalTypeSecondaryIndexLimitsRecord.lower(`limits`),FfiConverterTypeSecondaryIndexExtractorCallback.lower(`extractor`),_status)
 }
     }
     )
@@ -10189,7 +11866,652 @@ public object FfiConverterTypeBindingMapSubscription: FfiConverter<BindingMapSub
 //
 
 
+public interface BindingProductQuantizerInterface {
+
+    fun `config`(): ProductQuantizationConfigRecord
+
+    fun `manifest`(): kotlin.ByteArray
+
+    fun `proveSearch`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord, `limits`: ContentGraphLimitsRecord): BindingProximitySearchProof
+
+    fun `quality`(): ProductQuantizationQualityRecord
+
+    fun `search`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord): ProximitySearchResultRecord
+
+    fun `searchCancellable`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord, `runtime`: BindingProximitySearchRuntime?, `cancellation`: BindingProximityCancellationToken): ProximitySearchResultRecord
+
+    fun `searchWithRuntime`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord, `runtime`: BindingProximitySearchRuntime): ProximitySearchResultRecord
+
+    fun `sourceDescriptor`(): kotlin.ByteArray
+
+    companion object
+}
+
+open class BindingProductQuantizer: Disposable, AutoCloseable, BindingProductQuantizerInterface
+{
+
+    @Suppress("UNUSED_PARAMETER")
+    /**
+     * @suppress
+     */
+    constructor(withHandle: UniffiWithHandle, handle: Long) {
+        this.handle = handle
+        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
+    }
+
+    /**
+     * @suppress
+     *
+     * This constructor can be used to instantiate a fake object. Only used for tests. Any
+     * attempt to actually use an object constructed this way will fail as there is no
+     * connected Rust object.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    constructor(noHandle: NoHandle) {
+        this.handle = 0
+        this.cleanable = null
+    }
+
+    protected val handle: Long
+    protected val cleanable: UniffiCleaner.Cleanable?
+
+    private val wasDestroyed = AtomicBoolean(false)
+    private val callCounter = AtomicLong(1)
+
+    override fun destroy() {
+        // Only allow a single call to this method.
+        // TODO: maybe we should log a warning if called more than once?
+        if (this.wasDestroyed.compareAndSet(false, true)) {
+            // This decrement always matches the initial count of 1 given at creation time.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    @Synchronized
+    override fun close() {
+        this.destroy()
+    }
+
+    internal inline fun <R> callWithHandle(block: (handle: Long) -> R): R {
+        // Check and increment the call counter, to keep the object alive.
+        // This needs a compare-and-set retry loop in case of concurrent updates.
+        do {
+            val c = this.callCounter.get()
+            if (c == 0L) {
+                throw IllegalStateException("${this.javaClass.simpleName} object has already been destroyed")
+            }
+            if (c == Long.MAX_VALUE) {
+                throw IllegalStateException("${this.javaClass.simpleName} call counter would overflow")
+            }
+        } while (! this.callCounter.compareAndSet(c, c + 1L))
+        // Now we can safely do the method call without the handle being freed concurrently.
+        try {
+            return block(this.uniffiCloneHandle())
+        } finally {
+            // This decrement always matches the increment we performed above.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    // Use a static inner class instead of a closure so as not to accidentally
+    // capture `this` as part of the cleanable's action.
+    private class UniffiCleanAction(private val handle: Long) : Runnable {
+        override fun run() {
+            if (handle == 0.toLong()) {
+                // Fake object created with `NoHandle`, don't try to free.
+                return;
+            }
+            uniffiRustCall { status ->
+                UniffiLib.uniffi_prolly_bindings_fn_free_bindingproductquantizer(handle, status)
+            }
+        }
+    }
+
+    /**
+     * @suppress
+     */
+    fun uniffiCloneHandle(): Long {
+        if (handle == 0.toLong()) {
+            throw InternalException("uniffiCloneHandle() called on NoHandle object");
+        }
+        return uniffiRustCall() { status ->
+            UniffiLib.uniffi_prolly_bindings_fn_clone_bindingproductquantizer(handle, status)
+        }
+    }
+
+    override fun `config`(): ProductQuantizationConfigRecord {
+            return FfiConverterTypeProductQuantizationConfigRecord.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingproductquantizer_config(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+    override fun `manifest`(): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingproductquantizer_manifest(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `proveSearch`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord, `limits`: ContentGraphLimitsRecord): BindingProximitySearchProof {
+            return FfiConverterTypeBindingProximitySearchProof.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingproductquantizer_prove_search(
+        it,
+        FfiConverterTypeBindingProximityMap.lower(`map`),FfiConverterTypeProximitySearchRequestRecord.lower(`request`),FfiConverterTypeContentGraphLimitsRecord.lower(`limits`),_status)
+}
+    }
+    )
+    }
+
+
+    override fun `quality`(): ProductQuantizationQualityRecord {
+            return FfiConverterTypeProductQuantizationQualityRecord.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingproductquantizer_quality(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `search`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord): ProximitySearchResultRecord {
+            return FfiConverterTypeProximitySearchResultRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingproductquantizer_search(
+        it,
+        FfiConverterTypeBindingProximityMap.lower(`map`),FfiConverterTypeProximitySearchRequestRecord.lower(`request`),_status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `searchCancellable`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord, `runtime`: BindingProximitySearchRuntime?, `cancellation`: BindingProximityCancellationToken): ProximitySearchResultRecord {
+            return FfiConverterTypeProximitySearchResultRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingproductquantizer_search_cancellable(
+        it,
+        FfiConverterTypeBindingProximityMap.lower(`map`),FfiConverterTypeProximitySearchRequestRecord.lower(`request`),FfiConverterOptionalTypeBindingProximitySearchRuntime.lower(`runtime`),FfiConverterTypeBindingProximityCancellationToken.lower(`cancellation`),_status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `searchWithRuntime`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord, `runtime`: BindingProximitySearchRuntime): ProximitySearchResultRecord {
+            return FfiConverterTypeProximitySearchResultRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingproductquantizer_search_with_runtime(
+        it,
+        FfiConverterTypeBindingProximityMap.lower(`map`),FfiConverterTypeProximitySearchRequestRecord.lower(`request`),FfiConverterTypeBindingProximitySearchRuntime.lower(`runtime`),_status)
+}
+    }
+    )
+    }
+
+
+    override fun `sourceDescriptor`(): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingproductquantizer_source_descriptor(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+
+
+
+
+
+
+    /**
+     * @suppress
+     */
+    companion object
+
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeBindingProductQuantizer: FfiConverter<BindingProductQuantizer, Long> {
+    override fun lower(value: BindingProductQuantizer): Long {
+        return value.uniffiCloneHandle()
+    }
+
+    override fun lift(value: Long): BindingProductQuantizer {
+        return BindingProductQuantizer(UniffiWithHandle, value)
+    }
+
+    override fun read(buf: ByteBuffer): BindingProductQuantizer {
+        return lift(buf.getLong())
+    }
+
+    override fun allocationSize(value: BindingProductQuantizer) = 8UL
+
+    override fun write(value: BindingProductQuantizer, buf: ByteBuffer) {
+        buf.putLong(lower(value))
+    }
+}
+
+
+// This template implements a class for working with a Rust struct via a handle
+// to the live Rust struct on the other side of the FFI.
+//
+// There's some subtlety here, because we have to be careful not to operate on a Rust
+// struct after it has been dropped, and because we must expose a public API for freeing
+// theq Kotlin wrapper object in lieu of reliable finalizers. The core requirements are:
+//
+//   * Each instance holds an opaque handle to the underlying Rust struct.
+//     Method calls need to read this handle from the object's state and pass it in to
+//     the Rust FFI.
+//
+//   * When an instance is no longer needed, its handle should be passed to a
+//     special destructor function provided by the Rust FFI, which will drop the
+//     underlying Rust struct.
+//
+//   * Given an instance, calling code is expected to call the special
+//     `destroy` method in order to free it after use, either by calling it explicitly
+//     or by using a higher-level helper like the `use` method. Failing to do so risks
+//     leaking the underlying Rust struct.
+//
+//   * We can't assume that calling code will do the right thing, and must be prepared
+//     to handle Kotlin method calls executing concurrently with or even after a call to
+//     `destroy`, and to handle multiple (possibly concurrent!) calls to `destroy`.
+//
+//   * We must never allow Rust code to operate on the underlying Rust struct after
+//     the destructor has been called, and must never call the destructor more than once.
+//     Doing so may trigger memory unsafety.
+//
+//   * To mitigate many of the risks of leaking memory and use-after-free unsafety, a `Cleaner`
+//     is implemented to call the destructor when the Kotlin object becomes unreachable.
+//     This is done in a background thread. This is not a panacea, and client code should be aware that
+//      1. the thread may starve if some there are objects that have poorly performing
+//     `drop` methods or do significant work in their `drop` methods.
+//      2. the thread is shared across the whole library. This can be tuned by using `android_cleaner = true`,
+//         or `android = true` in the [`kotlin` section of the `uniffi.toml` file](https://mozilla.github.io/uniffi-rs/kotlin/configuration.html).
+//
+// If we try to implement this with mutual exclusion on access to the handle, there is the
+// possibility of a race between a method call and a concurrent call to `destroy`:
+//
+//    * Thread A starts a method call, reads the value of the handle, but is interrupted
+//      before it can pass the handle over the FFI to Rust.
+//    * Thread B calls `destroy` and frees the underlying Rust struct.
+//    * Thread A resumes, passing the already-read handle value to Rust and triggering
+//      a use-after-free.
+//
+// One possible solution would be to use a `ReadWriteLock`, with each method call taking
+// a read lock (and thus allowed to run concurrently) and the special `destroy` method
+// taking a write lock (and thus blocking on live method calls). However, we aim not to
+// generate methods with any hidden blocking semantics, and a `destroy` method that might
+// block if called incorrectly seems to meet that bar.
+//
+// So, we achieve our goals by giving each instance an associated `AtomicLong` counter to track
+// the number of in-flight method calls, and an `AtomicBoolean` flag to indicate whether `destroy`
+// has been called. These are updated according to the following rules:
+//
+//    * The initial value of the counter is 1, indicating a live object with no in-flight calls.
+//      The initial value for the flag is false.
+//
+//    * At the start of each method call, we atomically check the counter.
+//      If it is 0 then the underlying Rust struct has already been destroyed and the call is aborted.
+//      If it is nonzero them we atomically increment it by 1 and proceed with the method call.
+//
+//    * At the end of each method call, we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+//    * When `destroy` is called, we atomically flip the flag from false to true.
+//      If the flag was already true we silently fail.
+//      Otherwise we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+// Astute readers may observe that this all sounds very similar to the way that Rust's `Arc<T>` works,
+// and indeed it is, with the addition of a flag to guard against multiple calls to `destroy`.
+//
+// The overall effect is that the underlying Rust struct is destroyed only when `destroy` has been
+// called *and* all in-flight method calls have completed, avoiding violating any of the expectations
+// of the underlying Rust code.
+//
+// This makes a cleaner a better alternative to _not_ calling `destroy()` as
+// and when the object is finished with, but the abstraction is not perfect: if the Rust object's `drop`
+// method is slow, and/or there are many objects to cleanup, and it's on a low end Android device, then the cleaner
+// thread may be starved, and the app will leak memory.
+//
+// In this case, `destroy`ing manually may be a better solution.
+//
+// The cleaner can live side by side with the manual calling of `destroy`. In the order of responsiveness, uniffi objects
+// with Rust peers are reclaimed:
+//
+// 1. By calling the `destroy` method of the object, which calls `rustObject.free()`. If that doesn't happen:
+// 2. When the object becomes unreachable, AND the Cleaner thread gets to call `rustObject.free()`. If the thread is starved then:
+// 3. The memory is reclaimed when the process terminates.
+//
+// [1] https://stackoverflow.com/questions/24376768/can-java-finalize-an-object-when-it-is-still-in-scope/24380219
+//
+
+
+public interface BindingProximityCancellationTokenInterface {
+
+    fun `cancel`()
+
+    fun `isCancelled`(): kotlin.Boolean
+
+    companion object
+}
+
+open class BindingProximityCancellationToken: Disposable, AutoCloseable, BindingProximityCancellationTokenInterface
+{
+
+    @Suppress("UNUSED_PARAMETER")
+    /**
+     * @suppress
+     */
+    constructor(withHandle: UniffiWithHandle, handle: Long) {
+        this.handle = handle
+        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
+    }
+
+    /**
+     * @suppress
+     *
+     * This constructor can be used to instantiate a fake object. Only used for tests. Any
+     * attempt to actually use an object constructed this way will fail as there is no
+     * connected Rust object.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    constructor(noHandle: NoHandle) {
+        this.handle = 0
+        this.cleanable = null
+    }
+    constructor() :
+        this(UniffiWithHandle,
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_constructor_bindingproximitycancellationtoken_new(
+
+        _status)
+}
+    )
+
+    protected val handle: Long
+    protected val cleanable: UniffiCleaner.Cleanable?
+
+    private val wasDestroyed = AtomicBoolean(false)
+    private val callCounter = AtomicLong(1)
+
+    override fun destroy() {
+        // Only allow a single call to this method.
+        // TODO: maybe we should log a warning if called more than once?
+        if (this.wasDestroyed.compareAndSet(false, true)) {
+            // This decrement always matches the initial count of 1 given at creation time.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    @Synchronized
+    override fun close() {
+        this.destroy()
+    }
+
+    internal inline fun <R> callWithHandle(block: (handle: Long) -> R): R {
+        // Check and increment the call counter, to keep the object alive.
+        // This needs a compare-and-set retry loop in case of concurrent updates.
+        do {
+            val c = this.callCounter.get()
+            if (c == 0L) {
+                throw IllegalStateException("${this.javaClass.simpleName} object has already been destroyed")
+            }
+            if (c == Long.MAX_VALUE) {
+                throw IllegalStateException("${this.javaClass.simpleName} call counter would overflow")
+            }
+        } while (! this.callCounter.compareAndSet(c, c + 1L))
+        // Now we can safely do the method call without the handle being freed concurrently.
+        try {
+            return block(this.uniffiCloneHandle())
+        } finally {
+            // This decrement always matches the increment we performed above.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    // Use a static inner class instead of a closure so as not to accidentally
+    // capture `this` as part of the cleanable's action.
+    private class UniffiCleanAction(private val handle: Long) : Runnable {
+        override fun run() {
+            if (handle == 0.toLong()) {
+                // Fake object created with `NoHandle`, don't try to free.
+                return;
+            }
+            uniffiRustCall { status ->
+                UniffiLib.uniffi_prolly_bindings_fn_free_bindingproximitycancellationtoken(handle, status)
+            }
+        }
+    }
+
+    /**
+     * @suppress
+     */
+    fun uniffiCloneHandle(): Long {
+        if (handle == 0.toLong()) {
+            throw InternalException("uniffiCloneHandle() called on NoHandle object");
+        }
+        return uniffiRustCall() { status ->
+            UniffiLib.uniffi_prolly_bindings_fn_clone_bindingproximitycancellationtoken(handle, status)
+        }
+    }
+
+    override fun `cancel`()
+        =
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitycancellationtoken_cancel(
+        it,
+        _status)
+}
+    }
+
+
+
+    override fun `isCancelled`(): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitycancellationtoken_is_cancelled(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+
+
+
+
+
+
+    /**
+     * @suppress
+     */
+    companion object
+
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeBindingProximityCancellationToken: FfiConverter<BindingProximityCancellationToken, Long> {
+    override fun lower(value: BindingProximityCancellationToken): Long {
+        return value.uniffiCloneHandle()
+    }
+
+    override fun lift(value: Long): BindingProximityCancellationToken {
+        return BindingProximityCancellationToken(UniffiWithHandle, value)
+    }
+
+    override fun read(buf: ByteBuffer): BindingProximityCancellationToken {
+        return lift(buf.getLong())
+    }
+
+    override fun allocationSize(value: BindingProximityCancellationToken) = 8UL
+
+    override fun write(value: BindingProximityCancellationToken, buf: ByteBuffer) {
+        buf.putLong(lower(value))
+    }
+}
+
+
+// This template implements a class for working with a Rust struct via a handle
+// to the live Rust struct on the other side of the FFI.
+//
+// There's some subtlety here, because we have to be careful not to operate on a Rust
+// struct after it has been dropped, and because we must expose a public API for freeing
+// theq Kotlin wrapper object in lieu of reliable finalizers. The core requirements are:
+//
+//   * Each instance holds an opaque handle to the underlying Rust struct.
+//     Method calls need to read this handle from the object's state and pass it in to
+//     the Rust FFI.
+//
+//   * When an instance is no longer needed, its handle should be passed to a
+//     special destructor function provided by the Rust FFI, which will drop the
+//     underlying Rust struct.
+//
+//   * Given an instance, calling code is expected to call the special
+//     `destroy` method in order to free it after use, either by calling it explicitly
+//     or by using a higher-level helper like the `use` method. Failing to do so risks
+//     leaking the underlying Rust struct.
+//
+//   * We can't assume that calling code will do the right thing, and must be prepared
+//     to handle Kotlin method calls executing concurrently with or even after a call to
+//     `destroy`, and to handle multiple (possibly concurrent!) calls to `destroy`.
+//
+//   * We must never allow Rust code to operate on the underlying Rust struct after
+//     the destructor has been called, and must never call the destructor more than once.
+//     Doing so may trigger memory unsafety.
+//
+//   * To mitigate many of the risks of leaking memory and use-after-free unsafety, a `Cleaner`
+//     is implemented to call the destructor when the Kotlin object becomes unreachable.
+//     This is done in a background thread. This is not a panacea, and client code should be aware that
+//      1. the thread may starve if some there are objects that have poorly performing
+//     `drop` methods or do significant work in their `drop` methods.
+//      2. the thread is shared across the whole library. This can be tuned by using `android_cleaner = true`,
+//         or `android = true` in the [`kotlin` section of the `uniffi.toml` file](https://mozilla.github.io/uniffi-rs/kotlin/configuration.html).
+//
+// If we try to implement this with mutual exclusion on access to the handle, there is the
+// possibility of a race between a method call and a concurrent call to `destroy`:
+//
+//    * Thread A starts a method call, reads the value of the handle, but is interrupted
+//      before it can pass the handle over the FFI to Rust.
+//    * Thread B calls `destroy` and frees the underlying Rust struct.
+//    * Thread A resumes, passing the already-read handle value to Rust and triggering
+//      a use-after-free.
+//
+// One possible solution would be to use a `ReadWriteLock`, with each method call taking
+// a read lock (and thus allowed to run concurrently) and the special `destroy` method
+// taking a write lock (and thus blocking on live method calls). However, we aim not to
+// generate methods with any hidden blocking semantics, and a `destroy` method that might
+// block if called incorrectly seems to meet that bar.
+//
+// So, we achieve our goals by giving each instance an associated `AtomicLong` counter to track
+// the number of in-flight method calls, and an `AtomicBoolean` flag to indicate whether `destroy`
+// has been called. These are updated according to the following rules:
+//
+//    * The initial value of the counter is 1, indicating a live object with no in-flight calls.
+//      The initial value for the flag is false.
+//
+//    * At the start of each method call, we atomically check the counter.
+//      If it is 0 then the underlying Rust struct has already been destroyed and the call is aborted.
+//      If it is nonzero them we atomically increment it by 1 and proceed with the method call.
+//
+//    * At the end of each method call, we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+//    * When `destroy` is called, we atomically flip the flag from false to true.
+//      If the flag was already true we silently fail.
+//      Otherwise we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+// Astute readers may observe that this all sounds very similar to the way that Rust's `Arc<T>` works,
+// and indeed it is, with the addition of a flag to guard against multiple calls to `destroy`.
+//
+// The overall effect is that the underlying Rust struct is destroyed only when `destroy` has been
+// called *and* all in-flight method calls have completed, avoiding violating any of the expectations
+// of the underlying Rust code.
+//
+// This makes a cleaner a better alternative to _not_ calling `destroy()` as
+// and when the object is finished with, but the abstraction is not perfect: if the Rust object's `drop`
+// method is slow, and/or there are many objects to cleanup, and it's on a low end Android device, then the cleaner
+// thread may be starved, and the app will leak memory.
+//
+// In this case, `destroy`ing manually may be a better solution.
+//
+// The cleaner can live side by side with the manual calling of `destroy`. In the order of responsiveness, uniffi objects
+// with Rust peers are reclaimed:
+//
+// 1. By calling the `destroy` method of the object, which calls `rustObject.free()`. If that doesn't happen:
+// 2. When the object becomes unreachable, AND the Cleaner thread gets to call `rustObject.free()`. If the thread is starved then:
+// 3. The memory is reclaimed when the process terminates.
+//
+// [1] https://stackoverflow.com/questions/24376768/can-java-finalize-an-object-when-it-is-still-in-scope/24380219
+//
+
+
 public interface BindingProximityMapInterface {
+
+    fun `buildAcceleratorCatalog`(`hnsw`: BindingHnswIndex?, `pq`: BindingProductQuantizer?, `composite`: BindingCompositeAccelerator?): BindingAcceleratorCatalog
+
+    fun `buildCompositeHnsw`(`baseMap`: BindingProximityMap, `base`: BindingHnswIndex, `config`: CompositeAcceleratorConfigRecord, `limits`: CompositeBuildLimitsRecord): CompositeBuildOutcomeRecord
+
+    fun `buildCompositePq`(`baseMap`: BindingProximityMap, `base`: BindingProductQuantizer, `config`: CompositeAcceleratorConfigRecord, `limits`: CompositeBuildLimitsRecord): CompositeBuildOutcomeRecord
+
+    fun `buildHnsw`(`config`: HnswConfigRecord, `limits`: HnswBuildLimitsRecord): HnswBuildResultRecord
+
+    fun `buildOrRebuildCompositeHnsw`(`baseMap`: BindingProximityMap, `base`: BindingHnswIndex, `config`: CompositeAcceleratorConfigRecord, `limits`: CompositeBuildLimitsRecord, `rebuild`: CompositeRebuildOptionsRecord): CompositeBuildOrRebuildOutcomeRecord
+
+    fun `buildOrRebuildCompositePq`(`baseMap`: BindingProximityMap, `base`: BindingProductQuantizer, `config`: CompositeAcceleratorConfigRecord, `limits`: CompositeBuildLimitsRecord, `rebuild`: CompositeRebuildOptionsRecord): CompositeBuildOrRebuildOutcomeRecord
+
+    fun `buildPq`(`config`: ProductQuantizationConfigRecord, `workerThreads`: kotlin.ULong, `limits`: ProductQuantizationBuildLimitsRecord): ProductQuantizationBuildResultRecord
 
     fun `clearContentCache`()
 
@@ -10204,6 +12526,14 @@ public interface BindingProximityMapInterface {
     fun `fastHandle`(): kotlin.ULong
 
     fun `get`(`key`: kotlin.ByteArray): ExactProximityRecordRecord?
+
+    fun `loadAcceleratorCatalog`(`manifest`: kotlin.ByteArray): BindingAcceleratorCatalog
+
+    fun `loadComposite`(`manifest`: kotlin.ByteArray): BindingCompositeAccelerator
+
+    fun `loadHnsw`(`manifest`: kotlin.ByteArray): BindingHnswIndex
+
+    fun `loadPq`(`manifest`: kotlin.ByteArray): BindingProductQuantizer
 
     fun `mutate`(`mutations`: List<ProximityMutationRecord>): ProximityMutationResultRecord
 
@@ -10220,6 +12550,10 @@ public interface BindingProximityMapInterface {
     fun `scanRecords`(`visitor`: ProximityRecordVisitorCallback): kotlin.ULong
 
     fun `search`(`request`: ProximitySearchRequestRecord): ProximitySearchResultRecord
+
+    fun `searchCancellable`(`request`: ProximitySearchRequestRecord, `runtime`: BindingProximitySearchRuntime?, `cancellation`: BindingProximityCancellationToken): ProximitySearchResultRecord
+
+    fun `searchWithRuntime`(`request`: ProximitySearchRequestRecord, `runtime`: BindingProximitySearchRuntime): ProximitySearchResultRecord
 
     fun `verify`(): ProximityVerificationRecord
 
@@ -10323,6 +12657,104 @@ open class BindingProximityMap: Disposable, AutoCloseable, BindingProximityMapIn
     }
 
 
+    @Throws(ProllyBindingException::class)override fun `buildAcceleratorCatalog`(`hnsw`: BindingHnswIndex?, `pq`: BindingProductQuantizer?, `composite`: BindingCompositeAccelerator?): BindingAcceleratorCatalog {
+            return FfiConverterTypeBindingAcceleratorCatalog.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_build_accelerator_catalog(
+        it,
+        FfiConverterOptionalTypeBindingHnswIndex.lower(`hnsw`),FfiConverterOptionalTypeBindingProductQuantizer.lower(`pq`),FfiConverterOptionalTypeBindingCompositeAccelerator.lower(`composite`),_status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `buildCompositeHnsw`(`baseMap`: BindingProximityMap, `base`: BindingHnswIndex, `config`: CompositeAcceleratorConfigRecord, `limits`: CompositeBuildLimitsRecord): CompositeBuildOutcomeRecord {
+            return FfiConverterTypeCompositeBuildOutcomeRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_build_composite_hnsw(
+        it,
+        FfiConverterTypeBindingProximityMap.lower(`baseMap`),FfiConverterTypeBindingHnswIndex.lower(`base`),FfiConverterTypeCompositeAcceleratorConfigRecord.lower(`config`),FfiConverterTypeCompositeBuildLimitsRecord.lower(`limits`),_status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `buildCompositePq`(`baseMap`: BindingProximityMap, `base`: BindingProductQuantizer, `config`: CompositeAcceleratorConfigRecord, `limits`: CompositeBuildLimitsRecord): CompositeBuildOutcomeRecord {
+            return FfiConverterTypeCompositeBuildOutcomeRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_build_composite_pq(
+        it,
+        FfiConverterTypeBindingProximityMap.lower(`baseMap`),FfiConverterTypeBindingProductQuantizer.lower(`base`),FfiConverterTypeCompositeAcceleratorConfigRecord.lower(`config`),FfiConverterTypeCompositeBuildLimitsRecord.lower(`limits`),_status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `buildHnsw`(`config`: HnswConfigRecord, `limits`: HnswBuildLimitsRecord): HnswBuildResultRecord {
+            return FfiConverterTypeHnswBuildResultRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_build_hnsw(
+        it,
+        FfiConverterTypeHnswConfigRecord.lower(`config`),FfiConverterTypeHnswBuildLimitsRecord.lower(`limits`),_status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `buildOrRebuildCompositeHnsw`(`baseMap`: BindingProximityMap, `base`: BindingHnswIndex, `config`: CompositeAcceleratorConfigRecord, `limits`: CompositeBuildLimitsRecord, `rebuild`: CompositeRebuildOptionsRecord): CompositeBuildOrRebuildOutcomeRecord {
+            return FfiConverterTypeCompositeBuildOrRebuildOutcomeRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_build_or_rebuild_composite_hnsw(
+        it,
+        FfiConverterTypeBindingProximityMap.lower(`baseMap`),FfiConverterTypeBindingHnswIndex.lower(`base`),FfiConverterTypeCompositeAcceleratorConfigRecord.lower(`config`),FfiConverterTypeCompositeBuildLimitsRecord.lower(`limits`),FfiConverterTypeCompositeRebuildOptionsRecord.lower(`rebuild`),_status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `buildOrRebuildCompositePq`(`baseMap`: BindingProximityMap, `base`: BindingProductQuantizer, `config`: CompositeAcceleratorConfigRecord, `limits`: CompositeBuildLimitsRecord, `rebuild`: CompositeRebuildOptionsRecord): CompositeBuildOrRebuildOutcomeRecord {
+            return FfiConverterTypeCompositeBuildOrRebuildOutcomeRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_build_or_rebuild_composite_pq(
+        it,
+        FfiConverterTypeBindingProximityMap.lower(`baseMap`),FfiConverterTypeBindingProductQuantizer.lower(`base`),FfiConverterTypeCompositeAcceleratorConfigRecord.lower(`config`),FfiConverterTypeCompositeBuildLimitsRecord.lower(`limits`),FfiConverterTypeCompositeRebuildOptionsRecord.lower(`rebuild`),_status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `buildPq`(`config`: ProductQuantizationConfigRecord, `workerThreads`: kotlin.ULong, `limits`: ProductQuantizationBuildLimitsRecord): ProductQuantizationBuildResultRecord {
+            return FfiConverterTypeProductQuantizationBuildResultRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_build_pq(
+        it,
+        FfiConverterTypeProductQuantizationConfigRecord.lower(`config`),FfiConverterULong.lower(`workerThreads`),FfiConverterTypeProductQuantizationBuildLimitsRecord.lower(`limits`),_status)
+}
+    }
+    )
+    }
+
+
+
     @Throws(ProllyBindingException::class)override fun `clearContentCache`()
         =
     callWithHandle {
@@ -10411,6 +12843,62 @@ open class BindingProximityMap: Disposable, AutoCloseable, BindingProximityMapIn
     UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_get(
         it,
         FfiConverterByteArray.lower(`key`),_status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `loadAcceleratorCatalog`(`manifest`: kotlin.ByteArray): BindingAcceleratorCatalog {
+            return FfiConverterTypeBindingAcceleratorCatalog.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_load_accelerator_catalog(
+        it,
+        FfiConverterByteArray.lower(`manifest`),_status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `loadComposite`(`manifest`: kotlin.ByteArray): BindingCompositeAccelerator {
+            return FfiConverterTypeBindingCompositeAccelerator.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_load_composite(
+        it,
+        FfiConverterByteArray.lower(`manifest`),_status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `loadHnsw`(`manifest`: kotlin.ByteArray): BindingHnswIndex {
+            return FfiConverterTypeBindingHnswIndex.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_load_hnsw(
+        it,
+        FfiConverterByteArray.lower(`manifest`),_status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `loadPq`(`manifest`: kotlin.ByteArray): BindingProductQuantizer {
+            return FfiConverterTypeBindingProductQuantizer.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_load_pq(
+        it,
+        FfiConverterByteArray.lower(`manifest`),_status)
 }
     }
     )
@@ -10523,6 +13011,34 @@ open class BindingProximityMap: Disposable, AutoCloseable, BindingProximityMapIn
     UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_search(
         it,
         FfiConverterTypeProximitySearchRequestRecord.lower(`request`),_status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `searchCancellable`(`request`: ProximitySearchRequestRecord, `runtime`: BindingProximitySearchRuntime?, `cancellation`: BindingProximityCancellationToken): ProximitySearchResultRecord {
+            return FfiConverterTypeProximitySearchResultRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_search_cancellable(
+        it,
+        FfiConverterTypeProximitySearchRequestRecord.lower(`request`),FfiConverterOptionalTypeBindingProximitySearchRuntime.lower(`runtime`),FfiConverterTypeBindingProximityCancellationToken.lower(`cancellation`),_status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `searchWithRuntime`(`request`: ProximitySearchRequestRecord, `runtime`: BindingProximitySearchRuntime): ProximitySearchResultRecord {
+            return FfiConverterTypeProximitySearchResultRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_search_with_runtime(
+        it,
+        FfiConverterTypeProximitySearchRequestRecord.lower(`request`),FfiConverterTypeBindingProximitySearchRuntime.lower(`runtime`),_status)
 }
     }
     )
@@ -10689,6 +13205,10 @@ public interface BindingProximityReadSessionInterface {
 
     fun `search`(`request`: ProximitySearchRequestRecord): ProximitySearchResultRecord
 
+    fun `searchCancellable`(`request`: ProximitySearchRequestRecord, `runtime`: BindingProximitySearchRuntime?, `cancellation`: BindingProximityCancellationToken): ProximitySearchResultRecord
+
+    fun `searchWithRuntime`(`request`: ProximitySearchRequestRecord, `runtime`: BindingProximitySearchRuntime): ProximitySearchResultRecord
+
     companion object
 }
 
@@ -10851,6 +13371,34 @@ open class BindingProximityReadSession: Disposable, AutoCloseable, BindingProxim
     UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximityreadsession_search(
         it,
         FfiConverterTypeProximitySearchRequestRecord.lower(`request`),_status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `searchCancellable`(`request`: ProximitySearchRequestRecord, `runtime`: BindingProximitySearchRuntime?, `cancellation`: BindingProximityCancellationToken): ProximitySearchResultRecord {
+            return FfiConverterTypeProximitySearchResultRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximityreadsession_search_cancellable(
+        it,
+        FfiConverterTypeProximitySearchRequestRecord.lower(`request`),FfiConverterOptionalTypeBindingProximitySearchRuntime.lower(`runtime`),FfiConverterTypeBindingProximityCancellationToken.lower(`cancellation`),_status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `searchWithRuntime`(`request`: ProximitySearchRequestRecord, `runtime`: BindingProximitySearchRuntime): ProximitySearchResultRecord {
+            return FfiConverterTypeProximitySearchResultRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximityreadsession_search_with_runtime(
+        it,
+        FfiConverterTypeProximitySearchRequestRecord.lower(`request`),FfiConverterTypeBindingProximitySearchRuntime.lower(`runtime`),_status)
 }
     }
     )
@@ -11157,6 +13705,285 @@ public object FfiConverterTypeBindingProximitySearchProof: FfiConverter<BindingP
     override fun allocationSize(value: BindingProximitySearchProof) = 8UL
 
     override fun write(value: BindingProximitySearchProof, buf: ByteBuffer) {
+        buf.putLong(lower(value))
+    }
+}
+
+
+// This template implements a class for working with a Rust struct via a handle
+// to the live Rust struct on the other side of the FFI.
+//
+// There's some subtlety here, because we have to be careful not to operate on a Rust
+// struct after it has been dropped, and because we must expose a public API for freeing
+// theq Kotlin wrapper object in lieu of reliable finalizers. The core requirements are:
+//
+//   * Each instance holds an opaque handle to the underlying Rust struct.
+//     Method calls need to read this handle from the object's state and pass it in to
+//     the Rust FFI.
+//
+//   * When an instance is no longer needed, its handle should be passed to a
+//     special destructor function provided by the Rust FFI, which will drop the
+//     underlying Rust struct.
+//
+//   * Given an instance, calling code is expected to call the special
+//     `destroy` method in order to free it after use, either by calling it explicitly
+//     or by using a higher-level helper like the `use` method. Failing to do so risks
+//     leaking the underlying Rust struct.
+//
+//   * We can't assume that calling code will do the right thing, and must be prepared
+//     to handle Kotlin method calls executing concurrently with or even after a call to
+//     `destroy`, and to handle multiple (possibly concurrent!) calls to `destroy`.
+//
+//   * We must never allow Rust code to operate on the underlying Rust struct after
+//     the destructor has been called, and must never call the destructor more than once.
+//     Doing so may trigger memory unsafety.
+//
+//   * To mitigate many of the risks of leaking memory and use-after-free unsafety, a `Cleaner`
+//     is implemented to call the destructor when the Kotlin object becomes unreachable.
+//     This is done in a background thread. This is not a panacea, and client code should be aware that
+//      1. the thread may starve if some there are objects that have poorly performing
+//     `drop` methods or do significant work in their `drop` methods.
+//      2. the thread is shared across the whole library. This can be tuned by using `android_cleaner = true`,
+//         or `android = true` in the [`kotlin` section of the `uniffi.toml` file](https://mozilla.github.io/uniffi-rs/kotlin/configuration.html).
+//
+// If we try to implement this with mutual exclusion on access to the handle, there is the
+// possibility of a race between a method call and a concurrent call to `destroy`:
+//
+//    * Thread A starts a method call, reads the value of the handle, but is interrupted
+//      before it can pass the handle over the FFI to Rust.
+//    * Thread B calls `destroy` and frees the underlying Rust struct.
+//    * Thread A resumes, passing the already-read handle value to Rust and triggering
+//      a use-after-free.
+//
+// One possible solution would be to use a `ReadWriteLock`, with each method call taking
+// a read lock (and thus allowed to run concurrently) and the special `destroy` method
+// taking a write lock (and thus blocking on live method calls). However, we aim not to
+// generate methods with any hidden blocking semantics, and a `destroy` method that might
+// block if called incorrectly seems to meet that bar.
+//
+// So, we achieve our goals by giving each instance an associated `AtomicLong` counter to track
+// the number of in-flight method calls, and an `AtomicBoolean` flag to indicate whether `destroy`
+// has been called. These are updated according to the following rules:
+//
+//    * The initial value of the counter is 1, indicating a live object with no in-flight calls.
+//      The initial value for the flag is false.
+//
+//    * At the start of each method call, we atomically check the counter.
+//      If it is 0 then the underlying Rust struct has already been destroyed and the call is aborted.
+//      If it is nonzero them we atomically increment it by 1 and proceed with the method call.
+//
+//    * At the end of each method call, we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+//    * When `destroy` is called, we atomically flip the flag from false to true.
+//      If the flag was already true we silently fail.
+//      Otherwise we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+// Astute readers may observe that this all sounds very similar to the way that Rust's `Arc<T>` works,
+// and indeed it is, with the addition of a flag to guard against multiple calls to `destroy`.
+//
+// The overall effect is that the underlying Rust struct is destroyed only when `destroy` has been
+// called *and* all in-flight method calls have completed, avoiding violating any of the expectations
+// of the underlying Rust code.
+//
+// This makes a cleaner a better alternative to _not_ calling `destroy()` as
+// and when the object is finished with, but the abstraction is not perfect: if the Rust object's `drop`
+// method is slow, and/or there are many objects to cleanup, and it's on a low end Android device, then the cleaner
+// thread may be starved, and the app will leak memory.
+//
+// In this case, `destroy`ing manually may be a better solution.
+//
+// The cleaner can live side by side with the manual calling of `destroy`. In the order of responsiveness, uniffi objects
+// with Rust peers are reclaimed:
+//
+// 1. By calling the `destroy` method of the object, which calls `rustObject.free()`. If that doesn't happen:
+// 2. When the object becomes unreachable, AND the Cleaner thread gets to call `rustObject.free()`. If the thread is starved then:
+// 3. The memory is reclaimed when the process terminates.
+//
+// [1] https://stackoverflow.com/questions/24376768/can-java-finalize-an-object-when-it-is-still-in-scope/24380219
+//
+
+
+public interface BindingProximitySearchRuntimeInterface {
+
+    fun `clear`()
+
+    fun `policy`(): ProximitySearchRuntimePolicyRecord
+
+    fun `stats`(): ProximitySearchRuntimeStatsRecord
+
+    companion object
+}
+
+open class BindingProximitySearchRuntime: Disposable, AutoCloseable, BindingProximitySearchRuntimeInterface
+{
+
+    @Suppress("UNUSED_PARAMETER")
+    /**
+     * @suppress
+     */
+    constructor(withHandle: UniffiWithHandle, handle: Long) {
+        this.handle = handle
+        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
+    }
+
+    /**
+     * @suppress
+     *
+     * This constructor can be used to instantiate a fake object. Only used for tests. Any
+     * attempt to actually use an object constructed this way will fail as there is no
+     * connected Rust object.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    constructor(noHandle: NoHandle) {
+        this.handle = 0
+        this.cleanable = null
+    }
+
+    protected val handle: Long
+    protected val cleanable: UniffiCleaner.Cleanable?
+
+    private val wasDestroyed = AtomicBoolean(false)
+    private val callCounter = AtomicLong(1)
+
+    override fun destroy() {
+        // Only allow a single call to this method.
+        // TODO: maybe we should log a warning if called more than once?
+        if (this.wasDestroyed.compareAndSet(false, true)) {
+            // This decrement always matches the initial count of 1 given at creation time.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    @Synchronized
+    override fun close() {
+        this.destroy()
+    }
+
+    internal inline fun <R> callWithHandle(block: (handle: Long) -> R): R {
+        // Check and increment the call counter, to keep the object alive.
+        // This needs a compare-and-set retry loop in case of concurrent updates.
+        do {
+            val c = this.callCounter.get()
+            if (c == 0L) {
+                throw IllegalStateException("${this.javaClass.simpleName} object has already been destroyed")
+            }
+            if (c == Long.MAX_VALUE) {
+                throw IllegalStateException("${this.javaClass.simpleName} call counter would overflow")
+            }
+        } while (! this.callCounter.compareAndSet(c, c + 1L))
+        // Now we can safely do the method call without the handle being freed concurrently.
+        try {
+            return block(this.uniffiCloneHandle())
+        } finally {
+            // This decrement always matches the increment we performed above.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    // Use a static inner class instead of a closure so as not to accidentally
+    // capture `this` as part of the cleanable's action.
+    private class UniffiCleanAction(private val handle: Long) : Runnable {
+        override fun run() {
+            if (handle == 0.toLong()) {
+                // Fake object created with `NoHandle`, don't try to free.
+                return;
+            }
+            uniffiRustCall { status ->
+                UniffiLib.uniffi_prolly_bindings_fn_free_bindingproximitysearchruntime(handle, status)
+            }
+        }
+    }
+
+    /**
+     * @suppress
+     */
+    fun uniffiCloneHandle(): Long {
+        if (handle == 0.toLong()) {
+            throw InternalException("uniffiCloneHandle() called on NoHandle object");
+        }
+        return uniffiRustCall() { status ->
+            UniffiLib.uniffi_prolly_bindings_fn_clone_bindingproximitysearchruntime(handle, status)
+        }
+    }
+
+    override fun `clear`()
+        =
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitysearchruntime_clear(
+        it,
+        _status)
+}
+    }
+
+
+
+    override fun `policy`(): ProximitySearchRuntimePolicyRecord {
+            return FfiConverterTypeProximitySearchRuntimePolicyRecord.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitysearchruntime_policy(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+    override fun `stats`(): ProximitySearchRuntimeStatsRecord {
+            return FfiConverterTypeProximitySearchRuntimeStatsRecord.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitysearchruntime_stats(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+
+
+
+
+
+
+    /**
+     * @suppress
+     */
+    companion object
+
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeBindingProximitySearchRuntime: FfiConverter<BindingProximitySearchRuntime, Long> {
+    override fun lower(value: BindingProximitySearchRuntime): Long {
+        return value.uniffiCloneHandle()
+    }
+
+    override fun lift(value: Long): BindingProximitySearchRuntime {
+        return BindingProximitySearchRuntime(UniffiWithHandle, value)
+    }
+
+    override fun read(buf: ByteBuffer): BindingProximitySearchRuntime {
+        return lift(buf.getLong())
+    }
+
+    override fun allocationSize(value: BindingProximitySearchRuntime) = 8UL
+
+    override fun write(value: BindingProximitySearchRuntime, buf: ByteBuffer) {
         buf.putLong(lower(value))
     }
 }
@@ -17821,6 +20648,13 @@ public interface ProllyEngineInterface {
 
     fun `proveRangePage`(`tree`: TreeRecord, `cursor`: RangeCursorRecord?, `rangeEnd`: kotlin.ByteArray?, `limit`: kotlin.ULong): ProvedRangePageRecord
 
+    /**
+     * Create an engine-bound, reusable proximity search runtime. Reusing this
+     * object across searches preserves validated content-cache entries and
+     * exposes cumulative physical I/O counters.
+     */
+    fun `proximitySearchRuntime`(`policy`: ProximitySearchRuntimePolicyRecord): BindingProximitySearchRuntime
+
     fun `publishChangedSpansHint`(`base`: TreeRecord, `changed`: TreeRecord, `spans`: List<ChangedSpanRecord>): kotlin.Boolean
 
     fun `publishNamedRoot`(`name`: kotlin.ByteArray, `tree`: TreeRecord)
@@ -19328,6 +22162,25 @@ open class ProllyEngine: Disposable, AutoCloseable, ProllyEngineInterface
     UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_prove_range_page(
         it,
         FfiConverterTypeTreeRecord.lower(`tree`),FfiConverterOptionalTypeRangeCursorRecord.lower(`cursor`),FfiConverterOptionalByteArray.lower(`rangeEnd`),FfiConverterULong.lower(`limit`),_status)
+}
+    }
+    )
+    }
+
+
+
+    /**
+     * Create an engine-bound, reusable proximity search runtime. Reusing this
+     * object across searches preserves validated content-cache entries and
+     * exposes cumulative physical I/O counters.
+     */
+    @Throws(ProllyBindingException::class)override fun `proximitySearchRuntime`(`policy`: ProximitySearchRuntimePolicyRecord): BindingProximitySearchRuntime {
+            return FfiConverterTypeBindingProximitySearchRuntime.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_proximity_search_runtime(
+        it,
+        FfiConverterTypeProximitySearchRuntimePolicyRecord.lower(`policy`),_status)
 }
     }
     )
@@ -21353,6 +24206,49 @@ public object FfiConverterTypeSecondaryIndexExtractorCallback: FfiConverter<Seco
 
 
 
+data class AcceleratorCatalogEntryRecord (
+    var `kind`: CatalogAcceleratorKindRecord
+    ,
+    var `configurationFingerprint`: kotlin.ByteArray
+    ,
+    var `manifest`: kotlin.ByteArray
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeAcceleratorCatalogEntryRecord: FfiConverterRustBuffer<AcceleratorCatalogEntryRecord> {
+    override fun read(buf: ByteBuffer): AcceleratorCatalogEntryRecord {
+        return AcceleratorCatalogEntryRecord(
+            FfiConverterTypeCatalogAcceleratorKindRecord.read(buf),
+            FfiConverterByteArray.read(buf),
+            FfiConverterByteArray.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: AcceleratorCatalogEntryRecord) = (
+            FfiConverterTypeCatalogAcceleratorKindRecord.allocationSize(value.`kind`) +
+            FfiConverterByteArray.allocationSize(value.`configurationFingerprint`) +
+            FfiConverterByteArray.allocationSize(value.`manifest`)
+    )
+
+    override fun write(value: AcceleratorCatalogEntryRecord, buf: ByteBuffer) {
+            FfiConverterTypeCatalogAcceleratorKindRecord.write(value.`kind`, buf)
+            FfiConverterByteArray.write(value.`configurationFingerprint`, buf)
+            FfiConverterByteArray.write(value.`manifest`, buf)
+    }
+}
+
+
+
 data class ActiveIndexHealthRecord (
     var `name`: kotlin.ByteArray
     ,
@@ -22110,6 +25006,364 @@ public object FfiConverterTypeChangedSpanRecord: FfiConverterRustBuffer<ChangedS
 
 
 
+data class CompositeAcceleratorConfigRecord (
+    var `maxDeltaRecords`: kotlin.ULong
+    ,
+    var `maxShadowRecords`: kotlin.ULong
+    ,
+    var `maxDeltaRatioPpm`: kotlin.UInt
+    ,
+    var `maxShadowRatioPpm`: kotlin.UInt
+    ,
+    var `baseOverfetchMultiplier`: kotlin.UInt
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCompositeAcceleratorConfigRecord: FfiConverterRustBuffer<CompositeAcceleratorConfigRecord> {
+    override fun read(buf: ByteBuffer): CompositeAcceleratorConfigRecord {
+        return CompositeAcceleratorConfigRecord(
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: CompositeAcceleratorConfigRecord) = (
+            FfiConverterULong.allocationSize(value.`maxDeltaRecords`) +
+            FfiConverterULong.allocationSize(value.`maxShadowRecords`) +
+            FfiConverterUInt.allocationSize(value.`maxDeltaRatioPpm`) +
+            FfiConverterUInt.allocationSize(value.`maxShadowRatioPpm`) +
+            FfiConverterUInt.allocationSize(value.`baseOverfetchMultiplier`)
+    )
+
+    override fun write(value: CompositeAcceleratorConfigRecord, buf: ByteBuffer) {
+            FfiConverterULong.write(value.`maxDeltaRecords`, buf)
+            FfiConverterULong.write(value.`maxShadowRecords`, buf)
+            FfiConverterUInt.write(value.`maxDeltaRatioPpm`, buf)
+            FfiConverterUInt.write(value.`maxShadowRatioPpm`, buf)
+            FfiConverterUInt.write(value.`baseOverfetchMultiplier`, buf)
+    }
+}
+
+
+
+data class CompositeBuildLimitsRecord (
+    var `maxDiffEntries`: kotlin.ULong?
+    ,
+    var `maxOwnedBytes`: kotlin.ULong?
+    ,
+    var `maxEncodedOutputBytes`: kotlin.ULong?
+    ,
+    var `maxDistanceEvaluations`: kotlin.ULong?
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCompositeBuildLimitsRecord: FfiConverterRustBuffer<CompositeBuildLimitsRecord> {
+    override fun read(buf: ByteBuffer): CompositeBuildLimitsRecord {
+        return CompositeBuildLimitsRecord(
+            FfiConverterOptionalULong.read(buf),
+            FfiConverterOptionalULong.read(buf),
+            FfiConverterOptionalULong.read(buf),
+            FfiConverterOptionalULong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: CompositeBuildLimitsRecord) = (
+            FfiConverterOptionalULong.allocationSize(value.`maxDiffEntries`) +
+            FfiConverterOptionalULong.allocationSize(value.`maxOwnedBytes`) +
+            FfiConverterOptionalULong.allocationSize(value.`maxEncodedOutputBytes`) +
+            FfiConverterOptionalULong.allocationSize(value.`maxDistanceEvaluations`)
+    )
+
+    override fun write(value: CompositeBuildLimitsRecord, buf: ByteBuffer) {
+            FfiConverterOptionalULong.write(value.`maxDiffEntries`, buf)
+            FfiConverterOptionalULong.write(value.`maxOwnedBytes`, buf)
+            FfiConverterOptionalULong.write(value.`maxEncodedOutputBytes`, buf)
+            FfiConverterOptionalULong.write(value.`maxDistanceEvaluations`, buf)
+    }
+}
+
+
+
+data class CompositeBuildOrRebuildOutcomeRecord (
+    var `kind`: CompositeBuildOrRebuildKindRecord
+    ,
+    var `composite`: BindingCompositeAccelerator?
+    ,
+    var `hnsw`: BindingHnswIndex?
+    ,
+    var `pq`: BindingProductQuantizer?
+    ,
+    var `reasons`: List<FullRebuildReasonRecord>
+    ,
+    var `compositeStats`: CompositeBuildStatsRecord
+    ,
+    var `hnswStats`: HnswBuildStatsRecord?
+    ,
+    var `pqStats`: ProductQuantizationBuildStatsRecord?
+
+): Disposable{
+
+
+
+
+
+    @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
+    override fun destroy() {
+
+    Disposable.destroy(
+        this.`kind`,
+        this.`composite`,
+        this.`hnsw`,
+        this.`pq`,
+        this.`reasons`,
+        this.`compositeStats`,
+        this.`hnswStats`,
+        this.`pqStats`
+    )
+    }
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCompositeBuildOrRebuildOutcomeRecord: FfiConverterRustBuffer<CompositeBuildOrRebuildOutcomeRecord> {
+    override fun read(buf: ByteBuffer): CompositeBuildOrRebuildOutcomeRecord {
+        return CompositeBuildOrRebuildOutcomeRecord(
+            FfiConverterTypeCompositeBuildOrRebuildKindRecord.read(buf),
+            FfiConverterOptionalTypeBindingCompositeAccelerator.read(buf),
+            FfiConverterOptionalTypeBindingHnswIndex.read(buf),
+            FfiConverterOptionalTypeBindingProductQuantizer.read(buf),
+            FfiConverterSequenceTypeFullRebuildReasonRecord.read(buf),
+            FfiConverterTypeCompositeBuildStatsRecord.read(buf),
+            FfiConverterOptionalTypeHnswBuildStatsRecord.read(buf),
+            FfiConverterOptionalTypeProductQuantizationBuildStatsRecord.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: CompositeBuildOrRebuildOutcomeRecord) = (
+            FfiConverterTypeCompositeBuildOrRebuildKindRecord.allocationSize(value.`kind`) +
+            FfiConverterOptionalTypeBindingCompositeAccelerator.allocationSize(value.`composite`) +
+            FfiConverterOptionalTypeBindingHnswIndex.allocationSize(value.`hnsw`) +
+            FfiConverterOptionalTypeBindingProductQuantizer.allocationSize(value.`pq`) +
+            FfiConverterSequenceTypeFullRebuildReasonRecord.allocationSize(value.`reasons`) +
+            FfiConverterTypeCompositeBuildStatsRecord.allocationSize(value.`compositeStats`) +
+            FfiConverterOptionalTypeHnswBuildStatsRecord.allocationSize(value.`hnswStats`) +
+            FfiConverterOptionalTypeProductQuantizationBuildStatsRecord.allocationSize(value.`pqStats`)
+    )
+
+    override fun write(value: CompositeBuildOrRebuildOutcomeRecord, buf: ByteBuffer) {
+            FfiConverterTypeCompositeBuildOrRebuildKindRecord.write(value.`kind`, buf)
+            FfiConverterOptionalTypeBindingCompositeAccelerator.write(value.`composite`, buf)
+            FfiConverterOptionalTypeBindingHnswIndex.write(value.`hnsw`, buf)
+            FfiConverterOptionalTypeBindingProductQuantizer.write(value.`pq`, buf)
+            FfiConverterSequenceTypeFullRebuildReasonRecord.write(value.`reasons`, buf)
+            FfiConverterTypeCompositeBuildStatsRecord.write(value.`compositeStats`, buf)
+            FfiConverterOptionalTypeHnswBuildStatsRecord.write(value.`hnswStats`, buf)
+            FfiConverterOptionalTypeProductQuantizationBuildStatsRecord.write(value.`pqStats`, buf)
+    }
+}
+
+
+
+data class CompositeBuildOutcomeRecord (
+    var `accelerator`: BindingCompositeAccelerator?
+    ,
+    var `reasons`: List<FullRebuildReasonRecord>
+    ,
+    var `stats`: CompositeBuildStatsRecord
+
+): Disposable{
+
+
+
+
+
+    @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
+    override fun destroy() {
+
+    Disposable.destroy(
+        this.`accelerator`,
+        this.`reasons`,
+        this.`stats`
+    )
+    }
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCompositeBuildOutcomeRecord: FfiConverterRustBuffer<CompositeBuildOutcomeRecord> {
+    override fun read(buf: ByteBuffer): CompositeBuildOutcomeRecord {
+        return CompositeBuildOutcomeRecord(
+            FfiConverterOptionalTypeBindingCompositeAccelerator.read(buf),
+            FfiConverterSequenceTypeFullRebuildReasonRecord.read(buf),
+            FfiConverterTypeCompositeBuildStatsRecord.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: CompositeBuildOutcomeRecord) = (
+            FfiConverterOptionalTypeBindingCompositeAccelerator.allocationSize(value.`accelerator`) +
+            FfiConverterSequenceTypeFullRebuildReasonRecord.allocationSize(value.`reasons`) +
+            FfiConverterTypeCompositeBuildStatsRecord.allocationSize(value.`stats`)
+    )
+
+    override fun write(value: CompositeBuildOutcomeRecord, buf: ByteBuffer) {
+            FfiConverterOptionalTypeBindingCompositeAccelerator.write(value.`accelerator`, buf)
+            FfiConverterSequenceTypeFullRebuildReasonRecord.write(value.`reasons`, buf)
+            FfiConverterTypeCompositeBuildStatsRecord.write(value.`stats`, buf)
+    }
+}
+
+
+
+data class CompositeBuildStatsRecord (
+    var `diffEntries`: kotlin.ULong
+    ,
+    var `insertedRecords`: kotlin.ULong
+    ,
+    var `vectorUpdatedRecords`: kotlin.ULong
+    ,
+    var `valueOnlyRecords`: kotlin.ULong
+    ,
+    var `deletedRecords`: kotlin.ULong
+    ,
+    var `deltaRecords`: kotlin.ULong
+    ,
+    var `shadowRecords`: kotlin.ULong
+    ,
+    var `ownedBytesPeak`: kotlin.ULong
+    ,
+    var `encodedOutputBytes`: kotlin.ULong
+    ,
+    var `distanceEvaluations`: kotlin.ULong
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCompositeBuildStatsRecord: FfiConverterRustBuffer<CompositeBuildStatsRecord> {
+    override fun read(buf: ByteBuffer): CompositeBuildStatsRecord {
+        return CompositeBuildStatsRecord(
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: CompositeBuildStatsRecord) = (
+            FfiConverterULong.allocationSize(value.`diffEntries`) +
+            FfiConverterULong.allocationSize(value.`insertedRecords`) +
+            FfiConverterULong.allocationSize(value.`vectorUpdatedRecords`) +
+            FfiConverterULong.allocationSize(value.`valueOnlyRecords`) +
+            FfiConverterULong.allocationSize(value.`deletedRecords`) +
+            FfiConverterULong.allocationSize(value.`deltaRecords`) +
+            FfiConverterULong.allocationSize(value.`shadowRecords`) +
+            FfiConverterULong.allocationSize(value.`ownedBytesPeak`) +
+            FfiConverterULong.allocationSize(value.`encodedOutputBytes`) +
+            FfiConverterULong.allocationSize(value.`distanceEvaluations`)
+    )
+
+    override fun write(value: CompositeBuildStatsRecord, buf: ByteBuffer) {
+            FfiConverterULong.write(value.`diffEntries`, buf)
+            FfiConverterULong.write(value.`insertedRecords`, buf)
+            FfiConverterULong.write(value.`vectorUpdatedRecords`, buf)
+            FfiConverterULong.write(value.`valueOnlyRecords`, buf)
+            FfiConverterULong.write(value.`deletedRecords`, buf)
+            FfiConverterULong.write(value.`deltaRecords`, buf)
+            FfiConverterULong.write(value.`shadowRecords`, buf)
+            FfiConverterULong.write(value.`ownedBytesPeak`, buf)
+            FfiConverterULong.write(value.`encodedOutputBytes`, buf)
+            FfiConverterULong.write(value.`distanceEvaluations`, buf)
+    }
+}
+
+
+
+data class CompositeRebuildOptionsRecord (
+    var `hnswLimits`: HnswBuildLimitsRecord
+    ,
+    var `pqWorkerThreads`: kotlin.ULong
+    ,
+    var `pqLimits`: ProductQuantizationBuildLimitsRecord
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCompositeRebuildOptionsRecord: FfiConverterRustBuffer<CompositeRebuildOptionsRecord> {
+    override fun read(buf: ByteBuffer): CompositeRebuildOptionsRecord {
+        return CompositeRebuildOptionsRecord(
+            FfiConverterTypeHnswBuildLimitsRecord.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterTypeProductQuantizationBuildLimitsRecord.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: CompositeRebuildOptionsRecord) = (
+            FfiConverterTypeHnswBuildLimitsRecord.allocationSize(value.`hnswLimits`) +
+            FfiConverterULong.allocationSize(value.`pqWorkerThreads`) +
+            FfiConverterTypeProductQuantizationBuildLimitsRecord.allocationSize(value.`pqLimits`)
+    )
+
+    override fun write(value: CompositeRebuildOptionsRecord, buf: ByteBuffer) {
+            FfiConverterTypeHnswBuildLimitsRecord.write(value.`hnswLimits`, buf)
+            FfiConverterULong.write(value.`pqWorkerThreads`, buf)
+            FfiConverterTypeProductQuantizationBuildLimitsRecord.write(value.`pqLimits`, buf)
+    }
+}
+
+
+
 data class ConfigRecord (
     var `minChunkSize`: kotlin.ULong
     ,
@@ -22850,6 +26104,49 @@ public object FfiConverterTypeExactProximityRecordRecord: FfiConverterRustBuffer
 
 
 
+data class FullRebuildReasonRecord (
+    var `kind`: FullRebuildReasonKindRecord
+    ,
+    var `actual`: kotlin.ULong
+    ,
+    var `maximum`: kotlin.ULong
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeFullRebuildReasonRecord: FfiConverterRustBuffer<FullRebuildReasonRecord> {
+    override fun read(buf: ByteBuffer): FullRebuildReasonRecord {
+        return FullRebuildReasonRecord(
+            FfiConverterTypeFullRebuildReasonKindRecord.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FullRebuildReasonRecord) = (
+            FfiConverterTypeFullRebuildReasonKindRecord.allocationSize(value.`kind`) +
+            FfiConverterULong.allocationSize(value.`actual`) +
+            FfiConverterULong.allocationSize(value.`maximum`)
+    )
+
+    override fun write(value: FullRebuildReasonRecord, buf: ByteBuffer) {
+            FfiConverterTypeFullRebuildReasonKindRecord.write(value.`kind`, buf)
+            FfiConverterULong.write(value.`actual`, buf)
+            FfiConverterULong.write(value.`maximum`, buf)
+    }
+}
+
+
+
 data class GcPlanRecord (
     var `reachability`: GcReachabilityRecord
     ,
@@ -22999,6 +26296,227 @@ public object FfiConverterTypeGcSweepRecord: FfiConverterRustBuffer<GcSweepRecor
             FfiConverterTypeGcPlanRecord.write(value.`plan`, buf)
             FfiConverterULong.write(value.`deletedNodes`, buf)
             FfiConverterULong.write(value.`deletedBytes`, buf)
+    }
+}
+
+
+
+data class HnswBuildLimitsRecord (
+    var `maxRecords`: kotlin.ULong?
+    ,
+    var `maxOwnedBytes`: kotlin.ULong?
+    ,
+    var `maxDistanceEvaluations`: kotlin.ULong?
+    ,
+    var `workerThreads`: kotlin.ULong
+    ,
+    var `maxEncodedGraphBytes`: kotlin.ULong?
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeHnswBuildLimitsRecord: FfiConverterRustBuffer<HnswBuildLimitsRecord> {
+    override fun read(buf: ByteBuffer): HnswBuildLimitsRecord {
+        return HnswBuildLimitsRecord(
+            FfiConverterOptionalULong.read(buf),
+            FfiConverterOptionalULong.read(buf),
+            FfiConverterOptionalULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterOptionalULong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: HnswBuildLimitsRecord) = (
+            FfiConverterOptionalULong.allocationSize(value.`maxRecords`) +
+            FfiConverterOptionalULong.allocationSize(value.`maxOwnedBytes`) +
+            FfiConverterOptionalULong.allocationSize(value.`maxDistanceEvaluations`) +
+            FfiConverterULong.allocationSize(value.`workerThreads`) +
+            FfiConverterOptionalULong.allocationSize(value.`maxEncodedGraphBytes`)
+    )
+
+    override fun write(value: HnswBuildLimitsRecord, buf: ByteBuffer) {
+            FfiConverterOptionalULong.write(value.`maxRecords`, buf)
+            FfiConverterOptionalULong.write(value.`maxOwnedBytes`, buf)
+            FfiConverterOptionalULong.write(value.`maxDistanceEvaluations`, buf)
+            FfiConverterULong.write(value.`workerThreads`, buf)
+            FfiConverterOptionalULong.write(value.`maxEncodedGraphBytes`, buf)
+    }
+}
+
+
+
+data class HnswBuildResultRecord (
+    var `index`: BindingHnswIndex
+    ,
+    var `stats`: HnswBuildStatsRecord
+
+): Disposable{
+
+
+
+
+
+    @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
+    override fun destroy() {
+
+    Disposable.destroy(
+        this.`index`,
+        this.`stats`
+    )
+    }
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeHnswBuildResultRecord: FfiConverterRustBuffer<HnswBuildResultRecord> {
+    override fun read(buf: ByteBuffer): HnswBuildResultRecord {
+        return HnswBuildResultRecord(
+            FfiConverterTypeBindingHnswIndex.read(buf),
+            FfiConverterTypeHnswBuildStatsRecord.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: HnswBuildResultRecord) = (
+            FfiConverterTypeBindingHnswIndex.allocationSize(value.`index`) +
+            FfiConverterTypeHnswBuildStatsRecord.allocationSize(value.`stats`)
+    )
+
+    override fun write(value: HnswBuildResultRecord, buf: ByteBuffer) {
+            FfiConverterTypeBindingHnswIndex.write(value.`index`, buf)
+            FfiConverterTypeHnswBuildStatsRecord.write(value.`stats`, buf)
+    }
+}
+
+
+
+data class HnswBuildStatsRecord (
+    var `records`: kotlin.ULong
+    ,
+    var `distanceEvaluations`: kotlin.ULong
+    ,
+    var `directedEdges`: kotlin.ULong
+    ,
+    var `maximumLevel`: kotlin.UByte
+    ,
+    var `ownedBytes`: kotlin.ULong
+    ,
+    var `encodedGraphBytes`: kotlin.ULong
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeHnswBuildStatsRecord: FfiConverterRustBuffer<HnswBuildStatsRecord> {
+    override fun read(buf: ByteBuffer): HnswBuildStatsRecord {
+        return HnswBuildStatsRecord(
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterUByte.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: HnswBuildStatsRecord) = (
+            FfiConverterULong.allocationSize(value.`records`) +
+            FfiConverterULong.allocationSize(value.`distanceEvaluations`) +
+            FfiConverterULong.allocationSize(value.`directedEdges`) +
+            FfiConverterUByte.allocationSize(value.`maximumLevel`) +
+            FfiConverterULong.allocationSize(value.`ownedBytes`) +
+            FfiConverterULong.allocationSize(value.`encodedGraphBytes`)
+    )
+
+    override fun write(value: HnswBuildStatsRecord, buf: ByteBuffer) {
+            FfiConverterULong.write(value.`records`, buf)
+            FfiConverterULong.write(value.`distanceEvaluations`, buf)
+            FfiConverterULong.write(value.`directedEdges`, buf)
+            FfiConverterUByte.write(value.`maximumLevel`, buf)
+            FfiConverterULong.write(value.`ownedBytes`, buf)
+            FfiConverterULong.write(value.`encodedGraphBytes`, buf)
+    }
+}
+
+
+
+data class HnswConfigRecord (
+    var `maxConnections`: kotlin.UShort
+    ,
+    var `efConstruction`: kotlin.UInt
+    ,
+    var `efSearch`: kotlin.UInt
+    ,
+    var `levelBits`: kotlin.UByte
+    ,
+    var `overfetchMultiplier`: kotlin.UInt
+    ,
+    var `seed`: kotlin.ULong
+    ,
+    var `routingVectorEncoding`: HnswRoutingVectorEncodingRecord
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeHnswConfigRecord: FfiConverterRustBuffer<HnswConfigRecord> {
+    override fun read(buf: ByteBuffer): HnswConfigRecord {
+        return HnswConfigRecord(
+            FfiConverterUShort.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUByte.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterTypeHnswRoutingVectorEncodingRecord.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: HnswConfigRecord) = (
+            FfiConverterUShort.allocationSize(value.`maxConnections`) +
+            FfiConverterUInt.allocationSize(value.`efConstruction`) +
+            FfiConverterUInt.allocationSize(value.`efSearch`) +
+            FfiConverterUByte.allocationSize(value.`levelBits`) +
+            FfiConverterUInt.allocationSize(value.`overfetchMultiplier`) +
+            FfiConverterULong.allocationSize(value.`seed`) +
+            FfiConverterTypeHnswRoutingVectorEncodingRecord.allocationSize(value.`routingVectorEncoding`)
+    )
+
+    override fun write(value: HnswConfigRecord, buf: ByteBuffer) {
+            FfiConverterUShort.write(value.`maxConnections`, buf)
+            FfiConverterUInt.write(value.`efConstruction`, buf)
+            FfiConverterUInt.write(value.`efSearch`, buf)
+            FfiConverterUByte.write(value.`levelBits`, buf)
+            FfiConverterUInt.write(value.`overfetchMultiplier`, buf)
+            FfiConverterULong.write(value.`seed`, buf)
+            FfiConverterTypeHnswRoutingVectorEncodingRecord.write(value.`routingVectorEncoding`, buf)
     }
 }
 
@@ -25460,6 +28978,265 @@ public object FfiConverterTypeParallelConfigRecord: FfiConverterRustBuffer<Paral
 
 
 
+data class ProductQuantizationBuildLimitsRecord (
+    var `maxTrainingVectors`: kotlin.ULong?
+    ,
+    var `maxTrainingBytes`: kotlin.ULong?
+    ,
+    var `maxTemporaryCodeBytes`: kotlin.ULong?
+    ,
+    var `maxDistanceEvaluations`: kotlin.ULong?
+    ,
+    var `maxEncodedOutputBytes`: kotlin.ULong?
+    ,
+    var `maxWorkerThreads`: kotlin.ULong?
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeProductQuantizationBuildLimitsRecord: FfiConverterRustBuffer<ProductQuantizationBuildLimitsRecord> {
+    override fun read(buf: ByteBuffer): ProductQuantizationBuildLimitsRecord {
+        return ProductQuantizationBuildLimitsRecord(
+            FfiConverterOptionalULong.read(buf),
+            FfiConverterOptionalULong.read(buf),
+            FfiConverterOptionalULong.read(buf),
+            FfiConverterOptionalULong.read(buf),
+            FfiConverterOptionalULong.read(buf),
+            FfiConverterOptionalULong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: ProductQuantizationBuildLimitsRecord) = (
+            FfiConverterOptionalULong.allocationSize(value.`maxTrainingVectors`) +
+            FfiConverterOptionalULong.allocationSize(value.`maxTrainingBytes`) +
+            FfiConverterOptionalULong.allocationSize(value.`maxTemporaryCodeBytes`) +
+            FfiConverterOptionalULong.allocationSize(value.`maxDistanceEvaluations`) +
+            FfiConverterOptionalULong.allocationSize(value.`maxEncodedOutputBytes`) +
+            FfiConverterOptionalULong.allocationSize(value.`maxWorkerThreads`)
+    )
+
+    override fun write(value: ProductQuantizationBuildLimitsRecord, buf: ByteBuffer) {
+            FfiConverterOptionalULong.write(value.`maxTrainingVectors`, buf)
+            FfiConverterOptionalULong.write(value.`maxTrainingBytes`, buf)
+            FfiConverterOptionalULong.write(value.`maxTemporaryCodeBytes`, buf)
+            FfiConverterOptionalULong.write(value.`maxDistanceEvaluations`, buf)
+            FfiConverterOptionalULong.write(value.`maxEncodedOutputBytes`, buf)
+            FfiConverterOptionalULong.write(value.`maxWorkerThreads`, buf)
+    }
+}
+
+
+
+data class ProductQuantizationBuildResultRecord (
+    var `index`: BindingProductQuantizer
+    ,
+    var `stats`: ProductQuantizationBuildStatsRecord
+
+): Disposable{
+
+
+
+
+
+    @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
+    override fun destroy() {
+
+    Disposable.destroy(
+        this.`index`,
+        this.`stats`
+    )
+    }
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeProductQuantizationBuildResultRecord: FfiConverterRustBuffer<ProductQuantizationBuildResultRecord> {
+    override fun read(buf: ByteBuffer): ProductQuantizationBuildResultRecord {
+        return ProductQuantizationBuildResultRecord(
+            FfiConverterTypeBindingProductQuantizer.read(buf),
+            FfiConverterTypeProductQuantizationBuildStatsRecord.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: ProductQuantizationBuildResultRecord) = (
+            FfiConverterTypeBindingProductQuantizer.allocationSize(value.`index`) +
+            FfiConverterTypeProductQuantizationBuildStatsRecord.allocationSize(value.`stats`)
+    )
+
+    override fun write(value: ProductQuantizationBuildResultRecord, buf: ByteBuffer) {
+            FfiConverterTypeBindingProductQuantizer.write(value.`index`, buf)
+            FfiConverterTypeProductQuantizationBuildStatsRecord.write(value.`stats`, buf)
+    }
+}
+
+
+
+data class ProductQuantizationBuildStatsRecord (
+    var `trainingDistanceEvaluations`: kotlin.ULong
+    ,
+    var `encodingDistanceEvaluations`: kotlin.ULong
+    ,
+    var `encodedVectors`: kotlin.ULong
+    ,
+    var `trainingVectors`: kotlin.ULong
+    ,
+    var `trainingBytes`: kotlin.ULong
+    ,
+    var `encodedOutputBytes`: kotlin.ULong
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeProductQuantizationBuildStatsRecord: FfiConverterRustBuffer<ProductQuantizationBuildStatsRecord> {
+    override fun read(buf: ByteBuffer): ProductQuantizationBuildStatsRecord {
+        return ProductQuantizationBuildStatsRecord(
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: ProductQuantizationBuildStatsRecord) = (
+            FfiConverterULong.allocationSize(value.`trainingDistanceEvaluations`) +
+            FfiConverterULong.allocationSize(value.`encodingDistanceEvaluations`) +
+            FfiConverterULong.allocationSize(value.`encodedVectors`) +
+            FfiConverterULong.allocationSize(value.`trainingVectors`) +
+            FfiConverterULong.allocationSize(value.`trainingBytes`) +
+            FfiConverterULong.allocationSize(value.`encodedOutputBytes`)
+    )
+
+    override fun write(value: ProductQuantizationBuildStatsRecord, buf: ByteBuffer) {
+            FfiConverterULong.write(value.`trainingDistanceEvaluations`, buf)
+            FfiConverterULong.write(value.`encodingDistanceEvaluations`, buf)
+            FfiConverterULong.write(value.`encodedVectors`, buf)
+            FfiConverterULong.write(value.`trainingVectors`, buf)
+            FfiConverterULong.write(value.`trainingBytes`, buf)
+            FfiConverterULong.write(value.`encodedOutputBytes`, buf)
+    }
+}
+
+
+
+data class ProductQuantizationConfigRecord (
+    var `subquantizers`: kotlin.UInt
+    ,
+    var `centroidsPerSubquantizer`: kotlin.UShort
+    ,
+    var `trainingIterations`: kotlin.UShort
+    ,
+    var `rerankMultiplier`: kotlin.UInt
+    ,
+    var `seed`: kotlin.ULong
+    ,
+    var `maxTrainingVectors`: kotlin.ULong
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeProductQuantizationConfigRecord: FfiConverterRustBuffer<ProductQuantizationConfigRecord> {
+    override fun read(buf: ByteBuffer): ProductQuantizationConfigRecord {
+        return ProductQuantizationConfigRecord(
+            FfiConverterUInt.read(buf),
+            FfiConverterUShort.read(buf),
+            FfiConverterUShort.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: ProductQuantizationConfigRecord) = (
+            FfiConverterUInt.allocationSize(value.`subquantizers`) +
+            FfiConverterUShort.allocationSize(value.`centroidsPerSubquantizer`) +
+            FfiConverterUShort.allocationSize(value.`trainingIterations`) +
+            FfiConverterUInt.allocationSize(value.`rerankMultiplier`) +
+            FfiConverterULong.allocationSize(value.`seed`) +
+            FfiConverterULong.allocationSize(value.`maxTrainingVectors`)
+    )
+
+    override fun write(value: ProductQuantizationConfigRecord, buf: ByteBuffer) {
+            FfiConverterUInt.write(value.`subquantizers`, buf)
+            FfiConverterUShort.write(value.`centroidsPerSubquantizer`, buf)
+            FfiConverterUShort.write(value.`trainingIterations`, buf)
+            FfiConverterUInt.write(value.`rerankMultiplier`, buf)
+            FfiConverterULong.write(value.`seed`, buf)
+            FfiConverterULong.write(value.`maxTrainingVectors`, buf)
+    }
+}
+
+
+
+data class ProductQuantizationQualityRecord (
+    var `meanSquaredError`: kotlin.Double
+    ,
+    var `maximumSquaredError`: kotlin.Double
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeProductQuantizationQualityRecord: FfiConverterRustBuffer<ProductQuantizationQualityRecord> {
+    override fun read(buf: ByteBuffer): ProductQuantizationQualityRecord {
+        return ProductQuantizationQualityRecord(
+            FfiConverterDouble.read(buf),
+            FfiConverterDouble.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: ProductQuantizationQualityRecord) = (
+            FfiConverterDouble.allocationSize(value.`meanSquaredError`) +
+            FfiConverterDouble.allocationSize(value.`maximumSquaredError`)
+    )
+
+    override fun write(value: ProductQuantizationQualityRecord, buf: ByteBuffer) {
+            FfiConverterDouble.write(value.`meanSquaredError`, buf)
+            FfiConverterDouble.write(value.`maximumSquaredError`, buf)
+    }
+}
+
+
+
 data class ProofBundleSummaryRecord (
     var `version`: kotlin.ULong
     ,
@@ -26342,6 +30119,97 @@ public object FfiConverterTypeProximitySearchResultRecord: FfiConverterRustBuffe
             FfiConverterTypeSearchCompletionRecord.write(value.`completion`, buf)
             FfiConverterTypeSearchBackendRecord.write(value.`backend`, buf)
             FfiConverterUByte.write(value.`planFormatVersion`, buf)
+    }
+}
+
+
+
+data class ProximitySearchRuntimePolicyRecord (
+    var `maxEntries`: kotlin.ULong
+    ,
+    var `maxBytes`: kotlin.ULong
+    ,
+    var `authoritativeMaxBytes`: kotlin.ULong
+    ,
+    var `hnswMaxBytes`: kotlin.ULong
+    ,
+    var `pqMaxBytes`: kotlin.ULong
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeProximitySearchRuntimePolicyRecord: FfiConverterRustBuffer<ProximitySearchRuntimePolicyRecord> {
+    override fun read(buf: ByteBuffer): ProximitySearchRuntimePolicyRecord {
+        return ProximitySearchRuntimePolicyRecord(
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: ProximitySearchRuntimePolicyRecord) = (
+            FfiConverterULong.allocationSize(value.`maxEntries`) +
+            FfiConverterULong.allocationSize(value.`maxBytes`) +
+            FfiConverterULong.allocationSize(value.`authoritativeMaxBytes`) +
+            FfiConverterULong.allocationSize(value.`hnswMaxBytes`) +
+            FfiConverterULong.allocationSize(value.`pqMaxBytes`)
+    )
+
+    override fun write(value: ProximitySearchRuntimePolicyRecord, buf: ByteBuffer) {
+            FfiConverterULong.write(value.`maxEntries`, buf)
+            FfiConverterULong.write(value.`maxBytes`, buf)
+            FfiConverterULong.write(value.`authoritativeMaxBytes`, buf)
+            FfiConverterULong.write(value.`hnswMaxBytes`, buf)
+            FfiConverterULong.write(value.`pqMaxBytes`, buf)
+    }
+}
+
+
+
+data class ProximitySearchRuntimeStatsRecord (
+    var `physicalReads`: kotlin.ULong
+    ,
+    var `physicalBytesRead`: kotlin.ULong
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeProximitySearchRuntimeStatsRecord: FfiConverterRustBuffer<ProximitySearchRuntimeStatsRecord> {
+    override fun read(buf: ByteBuffer): ProximitySearchRuntimeStatsRecord {
+        return ProximitySearchRuntimeStatsRecord(
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: ProximitySearchRuntimeStatsRecord) = (
+            FfiConverterULong.allocationSize(value.`physicalReads`) +
+            FfiConverterULong.allocationSize(value.`physicalBytesRead`)
+    )
+
+    override fun write(value: ProximitySearchRuntimeStatsRecord, buf: ByteBuffer) {
+            FfiConverterULong.write(value.`physicalReads`, buf)
+            FfiConverterULong.write(value.`physicalBytesRead`, buf)
     }
 }
 
@@ -29858,6 +33726,111 @@ public object FfiConverterTypeAdaptiveQualityRecord: FfiConverterRustBuffer<Adap
 
 
 
+enum class CatalogAcceleratorKindRecord {
+
+    HNSW,
+    PRODUCT_QUANTIZED,
+    COMPOSITE;
+
+
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCatalogAcceleratorKindRecord: FfiConverterRustBuffer<CatalogAcceleratorKindRecord> {
+    override fun read(buf: ByteBuffer) = try {
+        CatalogAcceleratorKindRecord.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: CatalogAcceleratorKindRecord) = 4UL
+
+    override fun write(value: CatalogAcceleratorKindRecord, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
+enum class CompositeBaseKindRecord {
+
+    HNSW,
+    PRODUCT_QUANTIZED;
+
+
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCompositeBaseKindRecord: FfiConverterRustBuffer<CompositeBaseKindRecord> {
+    override fun read(buf: ByteBuffer) = try {
+        CompositeBaseKindRecord.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: CompositeBaseKindRecord) = 4UL
+
+    override fun write(value: CompositeBaseKindRecord, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
+enum class CompositeBuildOrRebuildKindRecord {
+
+    COMPOSITE,
+    NO_ACCELERATOR_REQUIRED,
+    HNSW_REBUILT,
+    PRODUCT_QUANTIZED_REBUILT;
+
+
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCompositeBuildOrRebuildKindRecord: FfiConverterRustBuffer<CompositeBuildOrRebuildKindRecord> {
+    override fun read(buf: ByteBuffer) = try {
+        CompositeBuildOrRebuildKindRecord.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: CompositeBuildOrRebuildKindRecord) = 4UL
+
+    override fun write(value: CompositeBuildOrRebuildKindRecord, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
 enum class ContentObjectKindRecord {
 
     ORDERED_NODE,
@@ -30101,6 +34074,75 @@ public object FfiConverterTypeEncodingKind: FfiConverterRustBuffer<EncodingKind>
     override fun allocationSize(value: EncodingKind) = 4UL
 
     override fun write(value: EncodingKind, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
+enum class FullRebuildReasonKindRecord {
+
+    DELTA_RECORDS,
+    SHADOW_RECORDS,
+    DELTA_RATIO,
+    SHADOW_RATIO;
+
+
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeFullRebuildReasonKindRecord: FfiConverterRustBuffer<FullRebuildReasonKindRecord> {
+    override fun read(buf: ByteBuffer) = try {
+        FullRebuildReasonKindRecord.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: FullRebuildReasonKindRecord) = 4UL
+
+    override fun write(value: FullRebuildReasonKindRecord, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
+enum class HnswRoutingVectorEncodingRecord {
+
+    FULL_F32;
+
+
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeHnswRoutingVectorEncodingRecord: FfiConverterRustBuffer<HnswRoutingVectorEncodingRecord> {
+    override fun read(buf: ByteBuffer) = try {
+        HnswRoutingVectorEncodingRecord.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: HnswRoutingVectorEncodingRecord) = 4UL
+
+    override fun write(value: HnswRoutingVectorEncodingRecord, buf: ByteBuffer) {
         buf.putInt(value.ordinal + 1)
     }
 }
@@ -31331,6 +35373,70 @@ public object FfiConverterOptionalByteArray: FfiConverterRustBuffer<kotlin.ByteA
 /**
  * @suppress
  */
+public object FfiConverterOptionalTypeBindingCompositeAccelerator: FfiConverterRustBuffer<BindingCompositeAccelerator?> {
+    override fun read(buf: ByteBuffer): BindingCompositeAccelerator? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeBindingCompositeAccelerator.read(buf)
+    }
+
+    override fun allocationSize(value: BindingCompositeAccelerator?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeBindingCompositeAccelerator.allocationSize(value)
+        }
+    }
+
+    override fun write(value: BindingCompositeAccelerator?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeBindingCompositeAccelerator.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypeBindingHnswIndex: FfiConverterRustBuffer<BindingHnswIndex?> {
+    override fun read(buf: ByteBuffer): BindingHnswIndex? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeBindingHnswIndex.read(buf)
+    }
+
+    override fun allocationSize(value: BindingHnswIndex?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeBindingHnswIndex.allocationSize(value)
+        }
+    }
+
+    override fun write(value: BindingHnswIndex?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeBindingHnswIndex.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterOptionalTypeBindingMapSnapshot: FfiConverterRustBuffer<BindingMapSnapshot?> {
     override fun read(buf: ByteBuffer): BindingMapSnapshot? {
         if (buf.get().toInt() == 0) {
@@ -31353,6 +35459,70 @@ public object FfiConverterOptionalTypeBindingMapSnapshot: FfiConverterRustBuffer
         } else {
             buf.put(1)
             FfiConverterTypeBindingMapSnapshot.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypeBindingProductQuantizer: FfiConverterRustBuffer<BindingProductQuantizer?> {
+    override fun read(buf: ByteBuffer): BindingProductQuantizer? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeBindingProductQuantizer.read(buf)
+    }
+
+    override fun allocationSize(value: BindingProductQuantizer?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeBindingProductQuantizer.allocationSize(value)
+        }
+    }
+
+    override fun write(value: BindingProductQuantizer?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeBindingProductQuantizer.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypeBindingProximitySearchRuntime: FfiConverterRustBuffer<BindingProximitySearchRuntime?> {
+    override fun read(buf: ByteBuffer): BindingProximitySearchRuntime? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeBindingProximitySearchRuntime.read(buf)
+    }
+
+    override fun allocationSize(value: BindingProximitySearchRuntime?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeBindingProximitySearchRuntime.allocationSize(value)
+        }
+    }
+
+    override fun write(value: BindingProximitySearchRuntime?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeBindingProximitySearchRuntime.write(value, buf)
         }
     }
 }
@@ -31555,6 +35725,38 @@ public object FfiConverterOptionalTypeExactProximityRecordRecord: FfiConverterRu
 /**
  * @suppress
  */
+public object FfiConverterOptionalTypeHnswBuildStatsRecord: FfiConverterRustBuffer<HnswBuildStatsRecord?> {
+    override fun read(buf: ByteBuffer): HnswBuildStatsRecord? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeHnswBuildStatsRecord.read(buf)
+    }
+
+    override fun allocationSize(value: HnswBuildStatsRecord?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeHnswBuildStatsRecord.allocationSize(value)
+        }
+    }
+
+    override fun write(value: HnswBuildStatsRecord?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeHnswBuildStatsRecord.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterOptionalTypeIndexedVersionRecord: FfiConverterRustBuffer<IndexedVersionRecord?> {
     override fun read(buf: ByteBuffer): IndexedVersionRecord? {
         if (buf.get().toInt() == 0) {
@@ -31705,6 +35907,38 @@ public object FfiConverterOptionalTypeMutationRecord: FfiConverterRustBuffer<Mut
         } else {
             buf.put(1)
             FfiConverterTypeMutationRecord.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypeProductQuantizationBuildStatsRecord: FfiConverterRustBuffer<ProductQuantizationBuildStatsRecord?> {
+    override fun read(buf: ByteBuffer): ProductQuantizationBuildStatsRecord? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeProductQuantizationBuildStatsRecord.read(buf)
+    }
+
+    override fun allocationSize(value: ProductQuantizationBuildStatsRecord?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeProductQuantizationBuildStatsRecord.allocationSize(value)
+        }
+    }
+
+    override fun write(value: ProductQuantizationBuildStatsRecord?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeProductQuantizationBuildStatsRecord.write(value, buf)
         }
     }
 }
@@ -32439,6 +36673,34 @@ public object FfiConverterSequenceByteArray: FfiConverterRustBuffer<List<kotlin.
 /**
  * @suppress
  */
+public object FfiConverterSequenceTypeAcceleratorCatalogEntryRecord: FfiConverterRustBuffer<List<AcceleratorCatalogEntryRecord>> {
+    override fun read(buf: ByteBuffer): List<AcceleratorCatalogEntryRecord> {
+        val len = buf.getInt()
+        return List<AcceleratorCatalogEntryRecord>(len) {
+            FfiConverterTypeAcceleratorCatalogEntryRecord.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<AcceleratorCatalogEntryRecord>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeAcceleratorCatalogEntryRecord.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<AcceleratorCatalogEntryRecord>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeAcceleratorCatalogEntryRecord.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterSequenceTypeActiveIndexHealthRecord: FfiConverterRustBuffer<List<ActiveIndexHealthRecord>> {
     override fun read(buf: ByteBuffer): List<ActiveIndexHealthRecord> {
         val len = buf.getInt()
@@ -32597,6 +36859,34 @@ public object FfiConverterSequenceTypeEntryRecord: FfiConverterRustBuffer<List<E
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterTypeEntryRecord.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeFullRebuildReasonRecord: FfiConverterRustBuffer<List<FullRebuildReasonRecord>> {
+    override fun read(buf: ByteBuffer): List<FullRebuildReasonRecord> {
+        val len = buf.getInt()
+        return List<FullRebuildReasonRecord>(len) {
+            FfiConverterTypeFullRebuildReasonRecord.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<FullRebuildReasonRecord>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeFullRebuildReasonRecord.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<FullRebuildReasonRecord>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeFullRebuildReasonRecord.write(it, buf)
         }
     }
 }
@@ -34870,10 +39160,90 @@ public object FfiConverterSequenceOptionalByteArray: FfiConverterRustBuffer<List
         ProllyBindingException.ErrorHandler,
     )
     }
+ fun `defaultSecondaryIndexLimits`(): SecondaryIndexLimitsRecord {
+            return FfiConverterTypeSecondaryIndexLimitsRecord.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_func_default_secondary_index_limits(
+
+        _status)
+}
+    )
+    }
+
+ fun `defaultCompositeAcceleratorConfig`(): CompositeAcceleratorConfigRecord {
+            return FfiConverterTypeCompositeAcceleratorConfigRecord.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_func_default_composite_accelerator_config(
+
+        _status)
+}
+    )
+    }
+
+ fun `defaultCompositeBuildLimits`(): CompositeBuildLimitsRecord {
+            return FfiConverterTypeCompositeBuildLimitsRecord.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_func_default_composite_build_limits(
+
+        _status)
+}
+    )
+    }
+
+ fun `defaultCompositeRebuildOptions`(): CompositeRebuildOptionsRecord {
+            return FfiConverterTypeCompositeRebuildOptionsRecord.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_func_default_composite_rebuild_options(
+
+        _status)
+}
+    )
+    }
+
  fun `defaultContentGraphLimits`(): ContentGraphLimitsRecord {
             return FfiConverterTypeContentGraphLimitsRecord.lift(
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_prolly_bindings_fn_func_default_content_graph_limits(
+
+        _status)
+}
+    )
+    }
+
+ fun `defaultHnswBuildLimits`(): HnswBuildLimitsRecord {
+            return FfiConverterTypeHnswBuildLimitsRecord.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_func_default_hnsw_build_limits(
+
+        _status)
+}
+    )
+    }
+
+ fun `defaultHnswConfig`(): HnswConfigRecord {
+            return FfiConverterTypeHnswConfigRecord.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_func_default_hnsw_config(
+
+        _status)
+}
+    )
+    }
+
+ fun `defaultPqBuildLimits`(): ProductQuantizationBuildLimitsRecord {
+            return FfiConverterTypeProductQuantizationBuildLimitsRecord.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_func_default_pq_build_limits(
+
+        _status)
+}
+    )
+    }
+
+ fun `defaultPqConfig`(): ProductQuantizationConfigRecord {
+            return FfiConverterTypeProductQuantizationConfigRecord.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_func_default_pq_config(
 
         _status)
 }
@@ -34886,6 +39256,16 @@ public object FfiConverterSequenceOptionalByteArray: FfiConverterRustBuffer<List
     UniffiLib.uniffi_prolly_bindings_fn_func_default_proximity_config(
 
         FfiConverterUInt.lower(`dimensions`),_status)
+}
+    )
+    }
+
+ fun `defaultProximitySearchRuntimePolicy`(): ProximitySearchRuntimePolicyRecord {
+            return FfiConverterTypeProximitySearchRuntimePolicyRecord.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_func_default_proximity_search_runtime_policy(
+
+        _status)
 }
     )
     }

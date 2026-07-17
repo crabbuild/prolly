@@ -1,11 +1,10 @@
 package build.crab.prolly.javaapi;
 
 import build.crab.prolly.api.PackedIndexPage;
-import java.nio.ByteBuffer;
 import java.util.List;
 
 public final class IndexPage implements AutoCloseable {
-    public record Row(ByteBuffer term, ByteBuffer primaryKey, ByteBuffer projection) {}
+    public record Row(ScopedBytes term, ScopedBytes primaryKey, ScopedBytes projection) {}
 
     private PackedIndexPage nativePage;
     private final List<Row> rows;
@@ -13,9 +12,9 @@ public final class IndexPage implements AutoCloseable {
     IndexPage(PackedIndexPage nativePage) {
         this.nativePage = nativePage;
         this.rows = nativePage.getRows().stream().map(row -> new Row(
-                row.getTerm().buffer(),
-                row.getPrimaryKey().buffer(),
-                row.getProjection() == null ? null : row.getProjection().buffer())).toList();
+                new ScopedBytes(row.getTerm()),
+                new ScopedBytes(row.getPrimaryKey()),
+                row.getProjection() == null ? null : new ScopedBytes(row.getProjection()))).toList();
     }
 
     public List<Row> rows() {

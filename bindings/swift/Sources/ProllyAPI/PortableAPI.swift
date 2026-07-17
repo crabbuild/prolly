@@ -2,6 +2,10 @@ import Foundation
 import Prolly
 import prollyFFI
 
+public func defaultSecondaryIndexLimits() -> SecondaryIndexLimitsRecord {
+    Prolly.defaultSecondaryIndexLimits()
+}
+
 public struct ProximityRecord: Sendable {
     public let key: Data
     public let vector: [Float]
@@ -12,6 +16,56 @@ public struct ProximityRecord: Sendable {
         self.vector = vector
         self.value = value
     }
+}
+
+public struct HnswBuildResult {
+    public let index: HnswIndex
+    public let stats: HnswBuildStatsRecord
+}
+
+public struct ProductQuantizationBuildResult {
+    public let index: ProductQuantizer
+    public let stats: ProductQuantizationBuildStatsRecord
+}
+
+public struct CompositeBuildOutcome {
+    public let accelerator: CompositeAccelerator?
+    public let reasons: [FullRebuildReasonRecord]
+    public let stats: CompositeBuildStatsRecord
+}
+
+public struct CompositeBuildOrRebuildOutcome {
+    public let kind: CompositeBuildOrRebuildKindRecord
+    public let composite: CompositeAccelerator?
+    public let hnsw: HnswIndex?
+    public let pq: ProductQuantizer?
+    public let reasons: [FullRebuildReasonRecord]
+    public let compositeStats: CompositeBuildStatsRecord
+    public let hnswStats: HnswBuildStatsRecord?
+    public let pqStats: ProductQuantizationBuildStatsRecord?
+}
+
+private func portableCompositeOutcome(_ result: CompositeBuildOutcomeRecord) -> CompositeBuildOutcome {
+    CompositeBuildOutcome(
+        accelerator: result.accelerator.map { CompositeAccelerator(native: $0) },
+        reasons: result.reasons,
+        stats: result.stats
+    )
+}
+
+private func portableCompositeRebuildOutcome(
+    _ result: CompositeBuildOrRebuildOutcomeRecord
+) -> CompositeBuildOrRebuildOutcome {
+    CompositeBuildOrRebuildOutcome(
+        kind: result.kind,
+        composite: result.composite.map { CompositeAccelerator(native: $0) },
+        hnsw: result.hnsw.map { HnswIndex(native: $0) },
+        pq: result.pq.map { ProductQuantizer(native: $0) },
+        reasons: result.reasons,
+        compositeStats: result.compositeStats,
+        hnswStats: result.hnswStats,
+        pqStats: result.pqStats
+    )
 }
 
 public final class Engine: @unchecked Sendable {
@@ -52,6 +106,10 @@ public final class Engine: @unchecked Sendable {
         try checkOpen()
         return VersionedMap(native: try native.versionedMap(id: Data(id)))
     }
+    public func beginVersionedTransaction() throws -> VersionedTransaction {
+        try checkOpen()
+        return VersionedTransaction(native: try native.beginVersionedTransaction())
+    }
 
     public func indexRegistry() throws -> IndexRegistry {
         try checkOpen()
@@ -85,14 +143,264 @@ public final class Engine: @unchecked Sendable {
         return ProximityMap(native: try native.loadProximityMap(descriptor: Data(descriptor)))
     }
 
+    public func proximitySearchRuntime(
+        policy: ProximitySearchRuntimePolicyRecord = defaultProximitySearchRuntimePolicy()
+    ) throws -> ProximitySearchRuntime {
+        try checkOpen()
+        return ProximitySearchRuntime(native: try native.proximitySearchRuntime(policy: policy))
+    }
+
     private func checkOpen() throws {
         if closed { throw PortableAPIError.closed("Engine") }
+    }
+}
+
+public final class ProximitySearchRuntime: @unchecked Sendable {
+    let native: BindingProximitySearchRuntime
+    private var closed = false
+
+    init(native: BindingProximitySearchRuntime) { self.native = native }
+
+    public func policy() throws -> ProximitySearchRuntimePolicyRecord {
+        try open { native.policy() }
+    }
+
+    public func stats() throws -> ProximitySearchRuntimeStatsRecord {
+        try open { native.stats() }
+    }
+
+    public func clear() throws {
+        try open { native.clear() }
+    }
+
+    public func close() { closed = true }
+
+    func checkedNative() throws -> BindingProximitySearchRuntime {
+        try open { native }
+    }
+
+    private func open<R>(_ body: () throws -> R) throws -> R {
+        if closed { throw PortableAPIError.closed("proximity search runtime") }
+        return try body()
+    }
+}
+
+public final class ProximityCancellationToken: @unchecked Sendable {
+    let native = BindingProximityCancellationToken()
+    private var closed = false
+
+    public init() {}
+
+    public var isCancelled: Bool {
+        get throws { try open { native.isCancelled() } }
+    }
+
+    public func cancel() {
+        guard !closed else { return }
+        native.cancel()
+    }
+
+    public func close() { closed = true }
+
+    func checkedNative() throws -> BindingProximityCancellationToken {
+        try open { native }
+    }
+
+    private func open<R>(_ body: () throws -> R) throws -> R {
+        if closed { throw PortableAPIError.closed("proximity cancellation token") }
+        return try body()
     }
 }
 
 public enum PortableAPIError: Error, Equatable {
     case closed(String)
     case packedPage(String)
+    case codec(String)
+}
+
+public final class BlobStore: @unchecked Sendable {
+    private let lock = NSLock()
+    private var native: ProllyBlobStore?
+
+    private init(native: ProllyBlobStore) { self.native = native }
+
+    public static func memory() -> BlobStore {
+        BlobStore(native: ProllyBlobStore.memory())
+    }
+
+    public static func file(_ path: String) throws -> BlobStore {
+        BlobStore(native: try ProllyBlobStore.file(path: path))
+    }
+
+    func checkedNative() throws -> ProllyBlobStore {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let native else { throw PortableAPIError.closed("blob store") }
+        return native
+    }
+
+    func ownedClone() throws -> ProllyBlobStore {
+        let source = try checkedNative()
+        return ProllyBlobStore(unsafeFromHandle: source.uniffiCloneHandle())
+    }
+
+    public func close() {
+        lock.lock()
+        native = nil
+        lock.unlock()
+    }
+}
+
+public protocol KeyCodec {
+    associatedtype Key
+    func encodeKey(_ key: Key) throws -> Data
+    func decodeKey(_ bytes: Data) throws -> Key
+}
+
+public protocol ValueCodec {
+    associatedtype Value
+    func encode(_ value: Value) throws -> Data
+    func decode(_ bytes: Data) throws -> Value
+}
+
+public struct StringKeyCodec: KeyCodec {
+    public init() {}
+    public func encodeKey(_ key: String) throws -> Data { Data(key.utf8) }
+    public func decodeKey(_ bytes: Data) throws -> String {
+        guard let value = String(data: bytes, encoding: .utf8) else {
+            throw PortableAPIError.codec("key is not valid UTF-8")
+        }
+        return value
+    }
+}
+
+public struct DataKeyCodec: KeyCodec {
+    public init() {}
+    public func encodeKey(_ key: Data) throws -> Data { key }
+    public func decodeKey(_ bytes: Data) throws -> Data { bytes }
+}
+
+public typealias BytesKeyCodec = DataKeyCodec
+
+public struct DataValueCodec: ValueCodec {
+    public init() {}
+    public func encode(_ value: Data) throws -> Data { value }
+    public func decode(_ bytes: Data) throws -> Data { bytes }
+}
+
+public typealias BytesValueCodec = DataValueCodec
+
+public struct StringValueCodec: ValueCodec {
+    public init() {}
+    public func encode(_ value: String) throws -> Data { Data(value.utf8) }
+    public func decode(_ bytes: Data) throws -> String {
+        guard let value = String(data: bytes, encoding: .utf8) else {
+            throw PortableAPIError.codec("value is not valid UTF-8")
+        }
+        return value
+    }
+}
+
+public struct JSONValueCodec<Value: Codable>: ValueCodec {
+    public init() {}
+    public func encode(_ value: Value) throws -> Data {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        return try encoder.encode(value)
+    }
+    public func decode(_ bytes: Data) throws -> Value {
+        try JSONDecoder().decode(Value.self, from: bytes)
+    }
+}
+
+public struct TypedEntry<Key, Value> {
+    public let key: Key
+    public let value: Value
+
+    public init(key: Key, value: Value) {
+        self.key = key
+        self.value = value
+    }
+}
+
+public struct TypedMigrationResult {
+    public let update: MapUpdateRecord
+    public let scannedValues: Int
+    public let rewrittenValues: Int
+
+    public init(update: MapUpdateRecord, scannedValues: Int, rewrittenValues: Int) {
+        self.update = update
+        self.scannedValues = scannedValues
+        self.rewrittenValues = rewrittenValues
+    }
+}
+
+public final class TypedVersionedMap<KC: KeyCodec, VC: ValueCodec> {
+    public let raw: VersionedMap
+    private let keyCodec: KC
+    private let valueCodec: VC
+
+    init(raw: VersionedMap, keyCodec: KC, valueCodec: VC) {
+        self.raw = raw
+        self.keyCodec = keyCodec
+        self.valueCodec = valueCodec
+    }
+
+    public func get(_ key: KC.Key) throws -> VC.Value? {
+        try raw.get(keyCodec.encodeKey(key)).map(valueCodec.decode)
+    }
+
+    public func get(at id: Data, key: KC.Key) throws -> VC.Value? {
+        try raw.get(at: id, key: keyCodec.encodeKey(key)).map(valueCodec.decode)
+    }
+
+    public func entries() throws -> [TypedEntry<KC.Key, VC.Value>] {
+        try raw.range().map {
+            TypedEntry(
+                key: try keyCodec.decodeKey($0.key),
+                value: try valueCodec.decode($0.value)
+            )
+        }
+    }
+
+    public func put(_ key: KC.Key, value: VC.Value) throws -> MapVersionRecord {
+        try raw.put(keyCodec.encodeKey(key), value: valueCodec.encode(value))
+    }
+
+    public func putIf(
+        expected: Data?, key: KC.Key, value: VC.Value
+    ) throws -> MapUpdateRecord {
+        try raw.putIf(
+            expected: expected,
+            key: keyCodec.encodeKey(key),
+            value: valueCodec.encode(value)
+        )
+    }
+
+    public func delete(_ key: KC.Key) throws -> MapVersionRecord {
+        try raw.delete(keyCodec.encodeKey(key))
+    }
+
+    public func migrateFrom<Source: ValueCodec>(
+        expected: Data,
+        sourceCodec: Source,
+        _ migrate: (Source.Value) throws -> VC.Value
+    ) throws -> TypedMigrationResult {
+        let entries = try raw.range(at: expected)
+        let mutations = try entries.map {
+            MutationRecord(
+                kind: .upsert,
+                key: $0.key,
+                value: try valueCodec.encode(migrate(sourceCodec.decode($0.value)))
+            )
+        }
+        let update = try raw.applyIf(expected: expected, mutations: mutations)
+        return TypedMigrationResult(
+            update: update,
+            scannedValues: entries.count,
+            rewrittenValues: entries.count
+        )
+    }
 }
 
 public final class VersionedMap: @unchecked Sendable {
@@ -101,17 +409,32 @@ public final class VersionedMap: @unchecked Sendable {
 
     init(native: BindingVersionedMap) { self.native = native }
 
+    public func typed<KC: KeyCodec, VC: ValueCodec>(
+        _ keyCodec: KC, _ valueCodec: VC
+    ) -> TypedVersionedMap<KC, VC> {
+        TypedVersionedMap(raw: self, keyCodec: keyCodec, valueCodec: valueCodec)
+    }
+
     public func close() { closed = true }
     public var id: Data { native.id() }
     public func isInitialized() throws -> Bool { try open { try native.isInitialized() } }
     public func initialize() throws -> MapVersionRecord { try open { try native.initialize() } }
+    public func initializeSorted(_ entries: [EntryRecord]) throws -> MapUpdateRecord {
+        try open { try native.initializeSorted(entries: entries.map(ownedEntry)) }
+    }
     public func head() throws -> MapVersionRecord? { try open { try native.head() } }
     public func headID() throws -> Data? { try open { try native.headId() } }
+    public func headName() -> Data { native.headName() }
+    public func versionsPrefix() -> Data { native.versionsPrefix() }
     public func version(_ id: Data) throws -> MapVersionRecord? {
         try open { try native.version(id: Data(id)) }
     }
     public func versions() throws -> [MapVersionRecord] { try open { try native.versions() } }
     public func get(_ key: Data) throws -> Data? { try open { try native.get(key: Data(key)) } }
+    public func getLargeValue(_ blobStore: BlobStore, key: Data) throws -> Data? {
+        let nativeBlobStore = try blobStore.checkedNative()
+        return try open { try native.getLargeValue(blobStore: nativeBlobStore, key: Data(key)) }
+    }
     public func contains(_ key: Data) throws -> Bool {
         try open { try native.containsKey(key: Data(key)) }
     }
@@ -124,15 +447,162 @@ public final class VersionedMap: @unchecked Sendable {
     public func getMany(at id: Data, keys: [Data]) throws -> [Data?] {
         try open { try native.getManyAt(id: Data(id), keys: keys.map { Data($0) }) }
     }
+    public func range(from start: Data = Data(), to end: Data? = nil) throws -> [EntryRecord] {
+        try open { try native.range(start: Data(start), rangeEnd: end.map { Data($0) }) }
+    }
+    public func prefix(_ prefix: Data) throws -> [EntryRecord] {
+        try open { try native.prefix(prefix: Data(prefix)) }
+    }
+    public func range(at id: Data, from start: Data = Data(), to end: Data? = nil) throws -> [EntryRecord] {
+        return try open {
+            try native.rangeAt(id: Data(id), start: Data(start), rangeEnd: end.map { Data($0) })
+        }
+    }
+    public func prefix(at id: Data, _ prefix: Data) throws -> [EntryRecord] {
+        try open { try native.prefixAt(id: Data(id), prefix: Data(prefix)) }
+    }
+    public func rangePage(
+        cursor: RangeCursorRecord? = nil,
+        to end: Data? = nil,
+        limit: UInt64 = 256
+    ) throws -> RangePageRecord {
+        try open { try native.rangePage(cursor: cursor, rangeEnd: end.map { Data($0) }, limit: limit) }
+    }
+    public func prefixPage(
+        _ prefix: Data,
+        cursor: RangeCursorRecord? = nil,
+        limit: UInt64 = 256
+    ) throws -> RangePageRecord {
+        try open { try native.prefixPage(prefix: Data(prefix), cursor: cursor, limit: limit) }
+    }
+    public func rangePage(
+        at id: Data,
+        cursor: RangeCursorRecord? = nil,
+        to end: Data? = nil,
+        limit: UInt64 = 256
+    ) throws -> RangePageRecord {
+        return try open {
+            try native.rangePageAt(id: Data(id), cursor: cursor, rangeEnd: end.map { Data($0) }, limit: limit)
+        }
+    }
+    public func prefixPage(
+        at id: Data,
+        _ prefix: Data,
+        cursor: RangeCursorRecord? = nil,
+        limit: UInt64 = 256
+    ) throws -> RangePageRecord {
+        try open {
+            try native.prefixPageAt(id: Data(id), prefix: Data(prefix), cursor: cursor, limit: limit)
+        }
+    }
+    public func diff(base: Data, target: Data) throws -> [DiffRecord] {
+        try open { try native.diff(base: Data(base), target: Data(target)) }
+    }
+    public func changes(since base: Data) throws -> [DiffRecord] {
+        try open { try native.changesSince(base: Data(base)) }
+    }
+    public func rollback(to id: Data) throws -> MapVersionRecord {
+        try open { try native.rollbackTo(id: Data(id)) }
+    }
     public func put(_ key: Data, value: Data) throws -> MapVersionRecord {
         try open { try native.put(key: Data(key), value: Data(value)) }
+    }
+    public func putLargeValue(
+        _ blobStore: BlobStore,
+        key: Data,
+        value: Data,
+        config: LargeValueConfigRecord
+    ) throws -> MapVersionRecord {
+        let nativeBlobStore = try blobStore.checkedNative()
+        return try open {
+            try native.putLargeValue(
+                blobStore: nativeBlobStore, key: Data(key), value: Data(value), config: config
+            )
+        }
+    }
+    public func putLargeValueIf(
+        _ blobStore: BlobStore,
+        expected: Data?,
+        key: Data,
+        value: Data,
+        config: LargeValueConfigRecord
+    ) throws -> MapUpdateRecord {
+        let nativeBlobStore = try blobStore.checkedNative()
+        return try open {
+            try native.putLargeValueIf(
+                blobStore: nativeBlobStore,
+                expected: expected.map { Data($0) },
+                key: Data(key),
+                value: Data(value),
+                config: config
+            )
+        }
     }
     public func apply(_ mutations: [MutationRecord]) throws -> MapVersionRecord {
         try open { try native.apply(mutations: mutations.map(ownedMutation)) }
     }
+    public func append(_ mutations: [MutationRecord]) throws -> MapVersionRecord {
+        try open { try native.append(mutations: mutations.map(ownedMutation)) }
+    }
+    public func parallelApply(
+        _ mutations: [MutationRecord],
+        config: ParallelConfigRecord
+    ) throws -> VersionedMapBatchResultRecord {
+        try open {
+            try native.parallelApply(
+                mutations: mutations.map(ownedMutation),
+                config: ParallelConfigRecord(
+                    maxThreads: config.maxThreads,
+                    parallelismThreshold: config.parallelismThreshold
+                )
+            )
+        }
+    }
+    public func rebuildSortedIf(_ expected: Data?, entries: [EntryRecord]) throws -> MapUpdateRecord {
+        try open {
+            try native.rebuildSortedIf(
+                expected: expected.map { Data($0) },
+                entries: entries.map(ownedEntry)
+            )
+        }
+    }
+    public func rebuildFromEntriesIf(_ expected: Data?, entries: [EntryRecord]) throws -> MapUpdateRecord {
+        try open {
+            try native.rebuildFromEntriesIf(
+                expected: expected.map { Data($0) },
+                entries: entries.map(ownedEntry)
+            )
+        }
+    }
+    public func rebuildFromIterIf(_ expected: Data?, entries: [EntryRecord]) throws -> MapUpdateRecord {
+        try rebuildFromEntriesIf(expected, entries: entries)
+    }
+    public func applyAtMillis(
+        _ mutations: [MutationRecord],
+        timestampMillis: UInt64
+    ) throws -> MapVersionRecord {
+        try open {
+            try native.applyAtMillis(
+                mutations: mutations.map(ownedMutation), timestampMillis: timestampMillis
+            )
+        }
+    }
     public func applyIf(expected: Data?, mutations: [MutationRecord]) throws -> MapUpdateRecord {
         try open {
             try native.applyIf(expected: expected.map { Data($0) }, mutations: mutations.map(ownedMutation))
+        }
+    }
+    public func applyIfAtMillis(
+        expected: Data?,
+        mutations: [MutationRecord],
+        timestampMillis: UInt64
+    ) throws -> MapUpdateRecord {
+        try open {
+            try native.applyIfAtMillis(
+                expected: expected.map { Data($0) },
+                mutations: mutations.map(ownedMutation),
+                timestampMillis: timestampMillis
+            )
         }
     }
     public func putIf(expected: Data?, key: Data, value: Data) throws -> MapUpdateRecord {
@@ -152,18 +622,67 @@ public final class VersionedMap: @unchecked Sendable {
     public func snapshot(at id: Data) throws -> MapSnapshot? {
         try open { try native.snapshotAt(id: Data(id)).map(MapSnapshot.init(native:)) }
     }
+    public func compare(base: Data, target: Data) throws -> MapComparison {
+        try open { MapComparison(native: try native.compare(base: Data(base), target: Data(target))) }
+    }
+    public func compareToHead(base: Data) throws -> MapComparison {
+        try open { MapComparison(native: try native.compareToHead(base: Data(base))) }
+    }
+    public func subscribe() throws -> MapSubscription {
+        try open { MapSubscription(native: try native.subscribe()) }
+    }
+    public func subscribe(from lastSeen: Data? = nil) throws -> MapSubscription {
+        try open { MapSubscription(native: try native.subscribeFrom(lastSeen: lastSeen.map { Data($0) })) }
+    }
+    public func prepareMerge(base: Data, candidate: Data) throws -> MapMerge {
+        try open { MapMerge(native: try native.prepareMerge(base: Data(base), candidate: Data(candidate))) }
+    }
     public func backup() throws -> Data { try open { try native.backup() } }
     public func restoreBackup(_ bundle: Data) throws -> MapVersionRecord {
         try open { try native.restoreBackup(bytes: Data(bundle)) }
     }
+    public func importAsHead(_ bundle: SnapshotBundleRecord) throws -> MapVersionRecord {
+        try open { try native.importAsHead(bundle: bundle) }
+    }
+    public func importAsHead(
+        _ bundle: SnapshotBundleRecord,
+        timestampMillis: UInt64
+    ) throws -> MapVersionRecord {
+        try open {
+            try native.importAsHeadAtMillis(bundle: bundle, timestampMillis: timestampMillis)
+        }
+    }
     public func keepLast(_ count: UInt64) throws -> VersionPruneRecord {
         try open { try native.keepLast(count: count) }
+    }
+    public func pruneVersions(_ keepLatest: UInt64) throws -> VersionPruneRecord {
+        try open { try native.pruneVersions(keepLatest: keepLatest) }
+    }
+    public func keepForAt(nowMillis: UInt64, maxAgeMillis: UInt64) throws -> VersionPruneRecord {
+        try open { try native.keepForAt(nowMillis: nowMillis, maxAgeMillis: maxAgeMillis) }
+    }
+    public func keepFor(maxAgeMillis: UInt64) throws -> VersionPruneRecord {
+        try open { try native.keepFor(maxAgeMillis: maxAgeMillis) }
+    }
+    public func keepVersions(_ ids: [Data]) throws -> VersionPruneRecord {
+        try open { try native.keepVersions(ids: ids.map { Data($0) }) }
+    }
+    public func retentionPolicy() -> NamedRootRetentionRecord {
+        native.retentionPolicy()
     }
     public func verifyCatalog() throws -> MapCatalogVerificationRecord {
         try open { try native.verifyCatalog() }
     }
     public func planGC() throws -> GcPlanRecord { try open { try native.planGc() } }
     public func sweepGC() throws -> GcSweepRecord { try open { try native.sweepGc() } }
+    public func planBlobGC(_ blobStore: BlobStore) throws -> BlobGcPlanRecord {
+        let nativeBlobStore = try blobStore.checkedNative()
+        return try open { try native.planBlobGc(blobStore: nativeBlobStore) }
+    }
+    public func sweepBlobGC(_ blobStore: BlobStore) throws -> BlobGcSweepRecord {
+        let nativeBlobStore = try blobStore.checkedNative()
+        return try open { try native.sweepBlobGc(blobStore: nativeBlobStore) }
+    }
 
     public func putAsync(_ key: Data, value: Data) -> Task<MapVersionRecord, Error> {
         let copiedKey = Data(key)
@@ -174,8 +693,220 @@ public final class VersionedMap: @unchecked Sendable {
         }
     }
 
+    public func initializeAsync() -> Task<MapVersionRecord, Error> {
+        Task { try Task.checkCancellation(); return try self.initialize() }
+    }
+    public func headAsync() -> Task<MapVersionRecord?, Error> {
+        Task { try Task.checkCancellation(); return try self.head() }
+    }
+    public func versionAsync(_ id: Data) -> Task<MapVersionRecord?, Error> {
+        let owned = Data(id)
+        return Task { try Task.checkCancellation(); return try self.version(owned) }
+    }
+    public func getAsync(_ key: Data) -> Task<Data?, Error> {
+        let owned = Data(key)
+        return Task { try Task.checkCancellation(); return try self.get(owned) }
+    }
+    public func getLargeValueAsync(
+        _ blobStore: BlobStore,
+        key: Data
+    ) throws -> Task<Data?, Error> {
+        let ownedBlobStore = try blobStore.ownedClone()
+        let owned = Data(key)
+        return Task {
+            try Task.checkCancellation()
+            return try self.open {
+                try self.native.getLargeValue(blobStore: ownedBlobStore, key: owned)
+            }
+        }
+    }
+    public func applyAsync(_ mutations: [MutationRecord]) -> Task<MapVersionRecord, Error> {
+        let owned = mutations.map(ownedMutation)
+        return Task { try Task.checkCancellation(); return try self.apply(owned) }
+    }
+    public func deleteAsync(_ key: Data) -> Task<MapVersionRecord, Error> {
+        let owned = Data(key)
+        return Task { try Task.checkCancellation(); return try self.delete(owned) }
+    }
+    public func putLargeValueAsync(
+        _ blobStore: BlobStore,
+        key: Data,
+        value: Data,
+        config: LargeValueConfigRecord
+    ) throws -> Task<MapVersionRecord, Error> {
+        let ownedBlobStore = try blobStore.ownedClone()
+        let ownedKey = Data(key), ownedValue = Data(value), ownedConfig = config
+        return Task {
+            try Task.checkCancellation()
+            return try self.open {
+                try self.native.putLargeValue(
+                    blobStore: ownedBlobStore,
+                    key: ownedKey,
+                    value: ownedValue,
+                    config: ownedConfig
+                )
+            }
+        }
+    }
+    public func putLargeValueIfAsync(
+        _ blobStore: BlobStore,
+        expected: Data?,
+        key: Data,
+        value: Data,
+        config: LargeValueConfigRecord
+    ) throws -> Task<MapUpdateRecord, Error> {
+        let ownedBlobStore = try blobStore.ownedClone()
+        let ownedExpected = expected.map { Data($0) }
+        let ownedKey = Data(key), ownedValue = Data(value), ownedConfig = config
+        return Task {
+            try Task.checkCancellation()
+            return try self.open {
+                try self.native.putLargeValueIf(
+                    blobStore: ownedBlobStore,
+                    expected: ownedExpected,
+                    key: ownedKey,
+                    value: ownedValue,
+                    config: ownedConfig
+                )
+            }
+        }
+    }
+    public func planBlobGCAsync(_ blobStore: BlobStore) throws -> Task<BlobGcPlanRecord, Error> {
+        let ownedBlobStore = try blobStore.ownedClone()
+        return Task {
+            try Task.checkCancellation()
+            return try self.open { try self.native.planBlobGc(blobStore: ownedBlobStore) }
+        }
+    }
+    public func sweepBlobGCAsync(_ blobStore: BlobStore) throws -> Task<BlobGcSweepRecord, Error> {
+        let ownedBlobStore = try blobStore.ownedClone()
+        return Task {
+            try Task.checkCancellation()
+            return try self.open { try self.native.sweepBlobGc(blobStore: ownedBlobStore) }
+        }
+    }
+    public func snapshotAsync() -> Task<MapSnapshot?, Error> {
+        Task { try Task.checkCancellation(); return try self.snapshot() }
+    }
+    public func snapshotAtAsync(_ id: Data) -> Task<MapSnapshot?, Error> {
+        let owned = Data(id)
+        return Task { try Task.checkCancellation(); return try self.snapshot(at: owned) }
+    }
+    public func importAsHeadAsync(
+        _ bundle: SnapshotBundleRecord
+    ) -> Task<MapVersionRecord, Error> {
+        let owned = bundle
+        return Task { try Task.checkCancellation(); return try self.importAsHead(owned) }
+    }
+    public func importAsHeadAsync(
+        _ bundle: SnapshotBundleRecord,
+        timestampMillis: UInt64
+    ) -> Task<MapVersionRecord, Error> {
+        let owned = bundle
+        return Task {
+            try Task.checkCancellation()
+            return try self.importAsHead(owned, timestampMillis: timestampMillis)
+        }
+    }
+    public func subscribeAsync(from lastSeen: Data? = nil) -> Task<MapSubscription, Error> {
+        let owned = lastSeen.map { Data($0) }
+        return Task { try Task.checkCancellation(); return try self.subscribe(from: owned) }
+    }
+
     private func open<R>(_ body: () throws -> R) throws -> R {
         if closed { throw PortableAPIError.closed("VersionedMap") }
+        return try body()
+    }
+}
+
+public final class VersionedTransaction: @unchecked Sendable {
+    private var native: BindingVersionedTransaction?
+    init(native: BindingVersionedTransaction) { self.native = native }
+    private func open() throws -> BindingVersionedTransaction {
+        guard let native else { throw PortableAPIError.closed("VersionedTransaction") }
+        return native
+    }
+    public func head(mapID: Data) throws -> MapVersionRecord? { try open().head(mapId: Data(mapID)) }
+    public func get(mapID: Data, key: Data) throws -> Data? {
+        try open().get(mapId: Data(mapID), key: Data(key))
+    }
+    public func apply(mapID: Data, mutations: [MutationRecord]) throws -> MapVersionRecord {
+        try open().apply(mapId: Data(mapID), mutations: mutations.map(ownedMutation))
+    }
+    public func applyIf(mapID: Data, expected: Data?, mutations: [MutationRecord]) throws -> MapUpdateRecord {
+        try open().applyIf(mapId: Data(mapID), expected: expected.map { Data($0) }, mutations: mutations.map(ownedMutation))
+    }
+    public func put(mapID: Data, key: Data, value: Data) throws -> MapVersionRecord {
+        try open().put(mapId: Data(mapID), key: Data(key), value: Data(value))
+    }
+    public func delete(mapID: Data, key: Data) throws -> MapVersionRecord {
+        try open().delete(mapId: Data(mapID), key: Data(key))
+    }
+    public func commit() throws -> VersionedTransactionCommitRecord {
+        let result = try open().commit()
+        close()
+        return result
+    }
+    public func rollback() throws { try open().rollback(); close() }
+    public func close() { native = nil }
+}
+
+public final class MapComparison: @unchecked Sendable {
+    let native: BindingMapComparison
+    private var closed = false
+    init(native: BindingMapComparison) { self.native = native }
+    public func close() { closed = true }
+    public var base: MapVersionRecord { native.base() }
+    public var target: MapVersionRecord { native.target() }
+    public func diff() throws -> [DiffRecord] { try open { try native.diff() } }
+    public func diffPage(
+        cursor: RangeCursorRecord? = nil,
+        end: Data? = nil,
+        limit: UInt64 = 256
+    ) throws -> DiffPageRecord {
+        try open { try native.diffPage(cursor: cursor, rangeEnd: end.map { Data($0) }, limit: limit) }
+    }
+    private func open<R>(_ body: () throws -> R) throws -> R {
+        if closed { throw PortableAPIError.closed("MapComparison") }
+        return try body()
+    }
+}
+
+public final class MapSubscription: @unchecked Sendable {
+    let native: BindingMapSubscription
+    private var closed = false
+    init(native: BindingMapSubscription) { self.native = native }
+    public func close() { closed = true }
+    public var lastSeen: Data? { get throws { try open { try native.lastSeen() } } }
+    public func poll() throws -> MapChangeEventRecord? { try open { try native.poll() } }
+    public func pollAsync() -> Task<MapChangeEventRecord?, Error> {
+        Task { try Task.checkCancellation(); return try self.poll() }
+    }
+    private func open<R>(_ body: () throws -> R) throws -> R {
+        if closed { throw PortableAPIError.closed("MapSubscription") }
+        return try body()
+    }
+}
+
+public final class MapMerge: @unchecked Sendable {
+    let native: BindingMapMerge
+    private var closed = false
+    init(native: BindingMapMerge) { self.native = native }
+    public func close() { closed = true }
+    public var base: MapVersionRecord { native.base() }
+    public var head: MapVersionRecord { native.head() }
+    public var candidate: MapVersionRecord { native.candidate() }
+    public func merge(resolver: String? = nil) throws -> TreeRecord {
+        try open { try native.merge(resolver: resolver) }
+    }
+    public func conflictPage(cursor: RangeCursorRecord? = nil, limit: UInt64 = 256) throws -> ConflictPageRecord {
+        try open { try native.conflictPage(cursor: cursor, limit: limit) }
+    }
+    public func publish(resolver: String? = nil) throws -> MapUpdateRecord {
+        try open { try native.publish(resolver: resolver) }
+    }
+    private func open<R>(_ body: () throws -> R) throws -> R {
+        if closed { throw PortableAPIError.closed("MapMerge") }
         return try body()
     }
 }
@@ -186,6 +917,10 @@ private func ownedMutation(_ mutation: MutationRecord) -> MutationRecord {
         key: Data(mutation.key),
         value: mutation.value.map { Data($0) }
     )
+}
+
+private func ownedEntry(_ entry: EntryRecord) -> EntryRecord {
+    EntryRecord(key: Data(entry.key), value: Data(entry.value))
 }
 
 public final class MapSnapshot: @unchecked Sendable {
@@ -257,9 +992,62 @@ public final class MapSnapshot: @unchecked Sendable {
     public func proveRange(from start: Data = Data(), to end: Data? = nil) throws -> RangeProofRecord {
         try open { try native.proveRange(start: Data(start), rangeEnd: end.map { Data($0) }) }
     }
+    public func provePrefix(_ prefix: Data) throws -> RangeProofRecord {
+        try open { try native.provePrefix(prefix: Data(prefix)) }
+    }
+    public func proveRangePage(
+        cursor: RangeCursorRecord? = nil,
+        to end: Data? = nil,
+        limit: UInt64 = 256
+    ) throws -> ProvedRangePageRecord {
+        try open {
+            try native.proveRangePage(
+                cursor: cursor, rangeEnd: end.map { Data($0) }, limit: limit
+            )
+        }
+    }
     public func stats() throws -> TreeStatsRecord { try open { try native.stats() } }
     public func export() throws -> SnapshotBundleRecord { try open { try native.export() } }
     public func read() throws -> ReadSession { try open { ReadSession(native: try native.readSession()) } }
+
+    public func getAsync(_ key: Data) -> Task<Data?, Error> {
+        let owned = Data(key)
+        return Task { try Task.checkCancellation(); return try self.get(owned) }
+    }
+    public func getManyAsync(_ keys: [Data]) -> Task<[Data?], Error> {
+        let owned = keys.map { Data($0) }
+        return Task { try Task.checkCancellation(); return try self.getMany(owned) }
+    }
+    public func rangeAsync(from start: Data = Data(), to end: Data? = nil) -> Task<[EntryRecord], Error> {
+        let ownedStart = Data(start), ownedEnd = end.map { Data($0) }
+        return Task { try Task.checkCancellation(); return try self.range(from: ownedStart, to: ownedEnd) }
+    }
+    public func prefixAsync(_ prefix: Data) -> Task<[EntryRecord], Error> {
+        let owned = Data(prefix)
+        return Task { try Task.checkCancellation(); return try self.prefix(owned) }
+    }
+    public func proveKeyAsync(_ key: Data) -> Task<KeyProofRecord, Error> {
+        let owned = Data(key)
+        return Task { try Task.checkCancellation(); return try self.proveKey(owned) }
+    }
+    public func proveKeysAsync(_ keys: [Data]) -> Task<MultiKeyProofRecord, Error> {
+        let owned = keys.map { Data($0) }
+        return Task { try Task.checkCancellation(); return try self.proveKeys(owned) }
+    }
+    public func proveRangeAsync(from start: Data = Data(), to end: Data? = nil) -> Task<RangeProofRecord, Error> {
+        let ownedStart = Data(start), ownedEnd = end.map { Data($0) }
+        return Task { try Task.checkCancellation(); return try self.proveRange(from: ownedStart, to: ownedEnd) }
+    }
+    public func provePrefixAsync(_ prefix: Data) -> Task<RangeProofRecord, Error> {
+        let owned = Data(prefix)
+        return Task { try Task.checkCancellation(); return try self.provePrefix(owned) }
+    }
+    public func statsAsync() -> Task<TreeStatsRecord, Error> {
+        Task { try Task.checkCancellation(); return try self.stats() }
+    }
+    public func exportAsync() -> Task<SnapshotBundleRecord, Error> {
+        Task { try Task.checkCancellation(); return try self.export() }
+    }
 
     private func open<R>(_ body: () throws -> R) throws -> R {
         if closed { throw PortableAPIError.closed("MapSnapshot") }
@@ -275,6 +1063,37 @@ public final class ReadSession: @unchecked Sendable {
     public func get(_ key: Data) throws -> Data? { try open { try native.get(key: Data(key)) } }
     public func getMany(_ keys: [Data]) throws -> [Data?] {
         try open { try native.getMany(keys: keys.map { Data($0) }) }
+    }
+    public func withValueView(
+        _ key: Data,
+        _ body: (ScopedBytes) throws -> Void
+    ) throws -> Bool {
+        try open { try withReadValueView(handle: native.fastHandle(), key: key, body) }
+    }
+    public func withValueRefView(
+        _ key: Data,
+        _ body: (ValueRefView) throws -> Void
+    ) throws -> Bool {
+        try withValueView(key) { value in try body(decodeValueRefView(value)) }
+    }
+    public func getAsync(_ key: Data) -> Task<Data?, Error> {
+        let owned = Data(key)
+        return Task { try Task.checkCancellation(); return try self.get(owned) }
+    }
+    public func getManyAsync(_ keys: [Data]) -> Task<[Data?], Error> {
+        let owned = keys.map { Data($0) }
+        return Task { try Task.checkCancellation(); return try self.getMany(owned) }
+    }
+    public func scanRangeView(
+        from start: Data = Data(),
+        to end: Data? = nil,
+        _ body: (ReadEntryView) throws -> Bool
+    ) throws -> ReadScanOutcome {
+        try open {
+            try withReadScanView(
+                handle: native.fastHandle(), start: Data(start), end: end.map { Data($0) }, body
+            )
+        }
     }
     private func open<R>(_ body: () throws -> R) throws -> R {
         if closed { throw PortableAPIError.closed("ReadSession") }
@@ -314,10 +1133,16 @@ public final class IndexRegistry: @unchecked Sendable {
 
 public final class IndexedMap: @unchecked Sendable {
     let native: BindingIndexedMap
+    private var extractors: [ExtractorAdapter] = []
     init(native: BindingIndexedMap) { self.native = native }
     public var id: Data { native.id() }
     public func ensureIndex(_ name: Data) throws -> IndexBuildResultRecord { try native.ensureIndex(name: Data(name)) }
     public func get(_ key: Data) throws -> Data? { try native.get(key: Data(key)) }
+    public func withValueView(
+        _ key: Data, _ body: (ScopedBytes) throws -> Void
+    ) throws -> Bool {
+        try withIndexedValueView(handle: native.fastHandle(), key: Data(key), body)
+    }
     public func put(_ key: Data, value: Data) throws -> IndexedVersionRecord {
         try native.put(key: Data(key), value: Data(value))
     }
@@ -346,6 +1171,21 @@ public final class IndexedMap: @unchecked Sendable {
     public func repairIndex(_ name: Data, sourceVersion: Data) throws -> IndexVerificationRecord {
         try native.repairIndex(name: Data(name), sourceVersion: Data(sourceVersion))
     }
+    public func replaceIndex(
+        _ name: Data,
+        generation: UInt64,
+        extractorID: String,
+        projection: IndexProjectionRecord,
+        limits: SecondaryIndexLimitsRecord? = nil,
+        extractor: @escaping @Sendable (Data, Data) throws -> [IndexEntryRecord]
+    ) throws -> IndexBuildResultRecord {
+        let adapter = ExtractorAdapter(body: extractor)
+        extractors.append(adapter)
+        return try native.replaceIndex(
+            name: Data(name), generation: generation, extractorId: extractorID,
+            projection: projection, limits: limits, extractor: adapter
+        )
+    }
     public func deactivateIndex(_ name: Data) throws -> IndexedVersionRecord {
         try native.deactivateIndex(name: Data(name))
     }
@@ -355,6 +1195,30 @@ public final class IndexedMap: @unchecked Sendable {
     }
     public func keepLast(_ count: UInt64) throws -> IndexedRetentionRecord {
         try native.keepLast(count: count)
+    }
+    public func planGC() throws -> GcPlanRecord { try native.planGc() }
+    public func getAsync(_ key: Data) -> Task<Data?, Error> {
+        let owned = Data(key)
+        return Task { try Task.checkCancellation(); return try self.get(owned) }
+    }
+    public func putAsync(_ key: Data, value: Data) -> Task<IndexedVersionRecord, Error> {
+        let ownedKey = Data(key), ownedValue = Data(value)
+        return Task { try Task.checkCancellation(); return try self.put(ownedKey, value: ownedValue) }
+    }
+    public func applyAsync(_ mutations: [MutationRecord]) -> Task<IndexedVersionRecord, Error> {
+        let owned = mutations.map(ownedMutation)
+        return Task { try Task.checkCancellation(); return try self.apply(owned) }
+    }
+    public func deleteAsync(_ key: Data) -> Task<IndexedVersionRecord, Error> {
+        let owned = Data(key)
+        return Task { try Task.checkCancellation(); return try self.delete(owned) }
+    }
+    public func ensureIndexAsync(_ name: Data) -> Task<IndexBuildResultRecord, Error> {
+        let owned = Data(name)
+        return Task { try Task.checkCancellation(); return try self.ensureIndex(owned) }
+    }
+    public func snapshotAsync() -> Task<IndexedSnapshot, Error> {
+        Task { try Task.checkCancellation(); return try self.snapshot() }
     }
 }
 
@@ -424,6 +1288,436 @@ public struct ScopedBytes: RandomAccessCollection {
         precondition(position >= 0 && position < countValue)
         return page[offset + position]
     }
+
+    fileprivate func subview(from start: Int, count: Int? = nil) -> ScopedBytes {
+        precondition(scope.alive, "packed page view escaped its callback scope")
+        let length = count ?? (countValue - start)
+        precondition(start >= 0 && length >= 0 && start <= countValue && length <= countValue - start)
+        return ScopedBytes(page: page, offset: offset + start, count: length, scope: scope)
+    }
+}
+
+public enum ValueRefView {
+    case inline(ScopedBytes)
+    case blob(cid: Data, length: UInt64)
+}
+
+public struct ProximityVectorView: RandomAccessCollection {
+    public typealias Index = Int
+    public typealias Element = Float
+    private let bytes: ScopedBytes
+    fileprivate init(bytes: ScopedBytes) { self.bytes = bytes }
+    public var startIndex: Int { 0 }
+    public var endIndex: Int { bytes.count / 4 }
+    public subscript(position: Int) -> Float {
+        precondition(position >= 0 && position < endIndex)
+        let offset = position * 4
+        let bits = UInt32(bytes[offset]) | UInt32(bytes[offset + 1]) << 8 |
+            UInt32(bytes[offset + 2]) << 16 | UInt32(bytes[offset + 3]) << 24
+        return Float(bitPattern: bits)
+    }
+}
+
+public struct ProximityRecordView {
+    public let vector: ProximityVectorView
+    public let value: ScopedBytes
+}
+
+public struct ProximityScanRecordView {
+    public let key: ScopedBytes
+    public let vector: ProximityVectorView
+    public let value: ScopedBytes
+}
+
+/// Read-only native page views valid only until the scan callback returns.
+public struct ReadEntryView {
+    public let key: ScopedBytes
+    public let value: ScopedBytes
+}
+
+public struct ReadScanOutcome: Equatable, Sendable {
+    public let visited: UInt64
+    public let stopped: Bool
+
+    public init(visited: UInt64, stopped: Bool) {
+        self.visited = visited
+        self.stopped = stopped
+    }
+}
+
+private func withReadValueView(
+    handle: UInt64,
+    key: Data,
+    _ body: (ScopedBytes) throws -> Void
+) throws -> Bool {
+    let result = key.withUnsafeBytes { buffer in
+        prolly_fast_read_session_get_lease(
+            handle,
+            buffer.bindMemory(to: UInt8.self).baseAddress,
+            buffer.count
+        )
+    }
+    guard result.status == 0 else {
+        throw PortableAPIError.packedPage(
+            "native retained point read failed with status \(result.status)"
+        )
+    }
+    guard result.found != 0 else {
+        if result.lease_handle != 0 { prolly_fast_value_release(result.lease_handle) }
+        guard result.lease_handle == 0 else {
+            throw PortableAPIError.packedPage("missing point read returned a value lease")
+        }
+        return false
+    }
+    guard result.lease_handle != 0,
+          result.data_len <= UInt64(Int.max),
+          result.data_len == 0 || result.data_ptr != nil else {
+        if result.lease_handle != 0 { prolly_fast_value_release(result.lease_handle) }
+        throw PortableAPIError.packedPage("native point read returned an invalid value lease")
+    }
+    defer { prolly_fast_value_release(result.lease_handle) }
+    let scope = PageScope()
+    defer { scope.alive = false }
+    let value = UnsafeRawBufferPointer(
+        start: result.data_ptr.map(UnsafeRawPointer.init), count: Int(result.data_len)
+    )
+    try body(ScopedBytes(page: value, offset: 0, count: value.count, scope: scope))
+    return true
+}
+
+private func withIndexedValueView(
+    handle: UInt64,
+    key: Data,
+    _ body: (ScopedBytes) throws -> Void
+) throws -> Bool {
+    let result = key.withUnsafeBytes { buffer in
+        prolly_fast_indexed_get_lease(
+            handle, buffer.bindMemory(to: UInt8.self).baseAddress, buffer.count
+        )
+    }
+    guard result.status == 0 else {
+        throw PortableAPIError.packedPage("native indexed point read failed with status \(result.status)")
+    }
+    guard result.found != 0 else {
+        if result.lease_handle != 0 { prolly_fast_value_release(result.lease_handle) }
+        guard result.lease_handle == 0 else {
+            throw PortableAPIError.packedPage("missing indexed point read returned a value lease")
+        }
+        return false
+    }
+    guard result.lease_handle != 0, result.data_len <= UInt64(Int.max),
+          result.data_len == 0 || result.data_ptr != nil else {
+        if result.lease_handle != 0 { prolly_fast_value_release(result.lease_handle) }
+        throw PortableAPIError.packedPage("native indexed point read returned an invalid value lease")
+    }
+    defer { prolly_fast_value_release(result.lease_handle) }
+    let scope = PageScope()
+    defer { scope.alive = false }
+    let value = UnsafeRawBufferPointer(
+        start: result.data_ptr.map(UnsafeRawPointer.init), count: Int(result.data_len)
+    )
+    try body(ScopedBytes(page: value, offset: 0, count: value.count, scope: scope))
+    return true
+}
+
+private func withProximityRecordView(
+    handle: UInt64,
+    key: Data,
+    _ body: (ProximityRecordView) throws -> Void
+) throws -> Bool {
+    let result = key.withUnsafeBytes { buffer in
+        prolly_fast_proximity_get_lease(
+            handle, buffer.bindMemory(to: UInt8.self).baseAddress, buffer.count
+        )
+    }
+    guard result.status == 0 else {
+        throw PortableAPIError.packedPage("native retained proximity read failed with status \(result.status)")
+    }
+    guard result.found != 0 else {
+        if result.lease_handle != 0 { prolly_fast_value_release(result.lease_handle) }
+        guard result.lease_handle == 0 else {
+            throw PortableAPIError.packedPage("missing proximity read returned a value lease")
+        }
+        return false
+    }
+    guard result.lease_handle != 0, result.data_len <= UInt64(Int.max),
+          result.data_len >= 8, result.data_ptr != nil else {
+        if result.lease_handle != 0 { prolly_fast_value_release(result.lease_handle) }
+        throw PortableAPIError.packedPage("native proximity read returned an invalid value lease")
+    }
+    defer { prolly_fast_value_release(result.lease_handle) }
+    let page = UnsafeRawBufferPointer(start: result.data_ptr.map(UnsafeRawPointer.init), count: Int(result.data_len))
+    guard Array(page.prefix(6)) == [0x50, 0x52, 0x56, 0x52, 2, 1] else {
+        throw PortableAPIError.packedPage("invalid retained proximity record header")
+    }
+    let (dimensions, vectorStart) = try readProximityVarint(page, from: 6)
+    guard dimensions <= UInt64(Int.max / 4) else {
+        throw PortableAPIError.packedPage("proximity dimensions exceed this platform")
+    }
+    let vectorBytes = Int(dimensions) * 4
+    guard vectorStart + vectorBytes <= page.count else {
+        throw PortableAPIError.packedPage("retained proximity vector is truncated")
+    }
+    let (valueLength, valueStart) = try readProximityVarint(page, from: vectorStart + vectorBytes)
+    guard valueLength <= UInt64(Int.max), valueStart + Int(valueLength) == page.count else {
+        throw PortableAPIError.packedPage("retained proximity value length is invalid")
+    }
+    let scope = PageScope()
+    defer { scope.alive = false }
+    let vector = ScopedBytes(page: page, offset: vectorStart, count: vectorBytes, scope: scope)
+    let value = ScopedBytes(page: page, offset: valueStart, count: Int(valueLength), scope: scope)
+    try body(ProximityRecordView(vector: ProximityVectorView(bytes: vector), value: value))
+    return true
+}
+
+private func readProximityVarint(
+    _ bytes: UnsafeRawBufferPointer, from start: Int
+) throws -> (UInt64, Int) {
+    var value: UInt64 = 0, shift: UInt64 = 0, offset = start
+    while offset < bytes.count && shift < 64 {
+        let byte = bytes[offset]
+        offset += 1
+        value |= UInt64(byte & 0x7f) << shift
+        if byte & 0x80 == 0 { return (value, offset) }
+        shift += 7
+    }
+    throw PortableAPIError.packedPage("invalid proximity record varint")
+}
+
+private func decodeValueRefView(_ value: ScopedBytes) throws -> ValueRefView {
+    let magic: [UInt8] = [0x50, 0x4c, 0x56, 0x42]
+    if value.count < 4 || !zip(value.prefix(4), magic).allSatisfy({ $0 == $1 }) {
+        return .inline(value)
+    }
+    guard value.count >= 6, value[4] == 1 else {
+        throw PortableAPIError.packedPage("invalid or unsupported value reference header")
+    }
+    switch value[5] {
+    case 0:
+        guard value.count >= 14 else {
+            throw PortableAPIError.packedPage("inline value reference is truncated")
+        }
+        let length = readBigEndianUInt64(value, from: 6)
+        guard length <= UInt64(Int.max), value.count == 14 + Int(length) else {
+            throw PortableAPIError.packedPage("inline value reference length does not match payload")
+        }
+        return .inline(value.subview(from: 14, count: Int(length)))
+    case 1:
+        guard value.count == 46 else {
+            throw PortableAPIError.packedPage("blob value reference length is invalid")
+        }
+        return .blob(cid: Data(value.subview(from: 6, count: 32)), length: readBigEndianUInt64(value, from: 38))
+    default:
+        throw PortableAPIError.packedPage("unknown value reference tag \(value[5])")
+    }
+}
+
+private func readBigEndianUInt64(_ value: ScopedBytes, from start: Int) -> UInt64 {
+    (0..<8).reduce(0) { result, index in
+        (result << 8) | UInt64(value[start + index])
+    }
+}
+
+private func withReadScanView(
+    handle: UInt64,
+    start: Data,
+    end: Data?,
+    _ body: (ReadEntryView) throws -> Bool
+) throws -> ReadScanOutcome {
+    let endBytes = end ?? Data()
+    let opened = start.withUnsafeBytes { startBuffer in
+        endBytes.withUnsafeBytes { endBuffer in
+            prolly_fast_read_session_scan_open(
+                handle,
+                startBuffer.bindMemory(to: UInt8.self).baseAddress,
+                startBuffer.count,
+                endBuffer.bindMemory(to: UInt8.self).baseAddress,
+                endBuffer.count,
+                end == nil ? 0 : 1
+            )
+        }
+    }
+    guard opened.status == 0 else {
+        throw PortableAPIError.packedPage("native retained scan open failed with status \(opened.status)")
+    }
+    defer { prolly_fast_scan_close(opened.scan_handle) }
+
+    var visited: UInt64 = 0
+    var previousPageKey: Data?
+    while true {
+        let result = prolly_fast_read_session_scan_next(
+            handle, opened.scan_handle, 4096, 4 * 1024 * 1024
+        )
+        guard result.status == 0, let pointer = result.data_ptr else {
+            throw PortableAPIError.packedPage("native retained scan read failed with status \(result.status)")
+        }
+        let pageOutcome = try { () throws -> (stopped: Bool, lastKey: Data?) in
+            defer { prolly_fast_page_release(result.lease_handle) }
+            let page = UnsafeRawBufferPointer(
+                start: UnsafeRawPointer(pointer), count: Int(result.data_len)
+            )
+            guard page.count >= 28,
+                  page[0] == 0x50, page[1] == 0x52, page[2] == 0x50, page[3] == 0x47,
+                  readUInt16(page, 4) == 1, readUInt16(page, 6) == 1 else {
+                throw PortableAPIError.packedPage("invalid retained packed scan header")
+            }
+            let flags = readUInt32(page, 8)
+            let count = Int(readUInt32(page, 12))
+            let tableBytes = Int(readUInt32(page, 16))
+            let arenaBytes = Int(readUInt64(page, 20))
+            guard count == Int(result.record_count), tableBytes >= count * 16,
+                  tableBytes % 16 == 0,
+                  (flags & 1 != 0) == (result.terminal != 0),
+                  28 + tableBytes + arenaBytes == page.count else {
+                throw PortableAPIError.packedPage("invalid retained packed scan bounds")
+            }
+
+            let scope = PageScope()
+            defer { scope.alive = false }
+            let arenaStart = 28 + tableBytes
+            var previousView: ScopedBytes?
+            for index in 0..<count {
+                let base = 28 + index * 16
+                let keyOffset = Int(readUInt32(page, base))
+                let keyLength = Int(readUInt32(page, base + 4))
+                let valueOffset = Int(readUInt32(page, base + 8))
+                let valueLength = Int(readUInt32(page, base + 12))
+                guard packedRangeIsValid(keyOffset, keyLength, arenaBytes),
+                      packedRangeIsValid(valueOffset, valueLength, arenaBytes) else {
+                    throw PortableAPIError.packedPage("retained scan field exceeds arena")
+                }
+                let key = ScopedBytes(
+                    page: page, offset: arenaStart + keyOffset, count: keyLength, scope: scope
+                )
+                let value = ScopedBytes(
+                    page: page, offset: arenaStart + valueOffset, count: valueLength, scope: scope
+                )
+                let ordered: Bool
+                if let previousView {
+                    ordered = compareUnsigned(previousView, key) < 0
+                } else if let previousPageKey {
+                    ordered = compareUnsigned(previousPageKey, key) < 0
+                } else {
+                    ordered = true
+                }
+                guard ordered else {
+                    throw PortableAPIError.packedPage("retained scan keys are not strictly ordered")
+                }
+                previousView = key
+                visited += 1
+                if try !body(ReadEntryView(key: key, value: value)) {
+                    return (true, nil)
+                }
+            }
+            return (false, previousView.map { Data($0) })
+        }()
+        if pageOutcome.stopped { return ReadScanOutcome(visited: visited, stopped: true) }
+        if result.terminal != 0 { return ReadScanOutcome(visited: visited, stopped: false) }
+        guard let lastKey = pageOutcome.lastKey else {
+            throw PortableAPIError.packedPage("non-terminal retained scan made no progress")
+        }
+        previousPageKey = lastKey
+    }
+}
+
+private func withProximityRecordRangeView(
+    handle: UInt64, start: Data, end: Data?,
+    _ body: (ProximityScanRecordView) throws -> Bool
+) throws -> ReadScanOutcome {
+    var visited: UInt64 = 0
+    var after: Data?
+    while true {
+        let endBytes = end ?? Data()
+        let afterBytes = after ?? Data()
+        let result = start.withUnsafeBytes { startBuffer in
+            endBytes.withUnsafeBytes { endBuffer in
+                afterBytes.withUnsafeBytes { afterBuffer in
+                    prolly_fast_proximity_scan_range_page(
+                        handle,
+                        startBuffer.bindMemory(to: UInt8.self).baseAddress, startBuffer.count,
+                        endBuffer.bindMemory(to: UInt8.self).baseAddress, endBuffer.count,
+                        end == nil ? 0 : 1,
+                        afterBuffer.bindMemory(to: UInt8.self).baseAddress, afterBuffer.count,
+                        after == nil ? 0 : 1,
+                        4096, 4 * 1024 * 1024
+                    )
+                }
+            }
+        }
+        guard result.status == 0, let pointer = result.data_ptr,
+              result.data_len <= UInt64(Int.max), result.lease_handle != 0 else {
+            if result.lease_handle != 0 { prolly_fast_page_release(result.lease_handle) }
+            throw PortableAPIError.packedPage("native proximity range scan failed with status \(result.status)")
+        }
+        var stopped = false
+        var lastKey: Data?
+        try { () throws -> Void in
+            defer { prolly_fast_page_release(result.lease_handle) }
+            let page = UnsafeRawBufferPointer(start: UnsafeRawPointer(pointer), count: Int(result.data_len))
+            guard page.count >= 28,
+                  page[0] == 0x50, page[1] == 0x52, page[2] == 0x50, page[3] == 0x47,
+                  readUInt16(page, 4) == 2, readUInt16(page, 6) == 8 else {
+                throw PortableAPIError.packedPage("invalid proximity record page header")
+            }
+            let flags = readUInt32(page, 8)
+            let count = Int(readUInt32(page, 12))
+            let tableBytes = Int(readUInt32(page, 16))
+            let arenaBytes = Int(readUInt64(page, 20))
+            guard count == Int(result.record_count), tableBytes == count * 24,
+                  (flags & 1 != 0) == (result.terminal != 0),
+                  28 + tableBytes + arenaBytes == page.count else {
+                throw PortableAPIError.packedPage("invalid proximity record page bounds")
+            }
+            let arenaStart = 28 + tableBytes
+            let scope = PageScope()
+            defer { scope.alive = false }
+            for index in 0..<count {
+                let base = 28 + index * 24
+                let keyOffset = Int(readUInt32(page, base)); let keyLength = Int(readUInt32(page, base + 4))
+                let vectorOffset = Int(readUInt32(page, base + 8)); let vectorLength = Int(readUInt32(page, base + 12))
+                let valueOffset = Int(readUInt32(page, base + 16)); let valueLength = Int(readUInt32(page, base + 20))
+                guard packedRangeIsValid(keyOffset, keyLength, arenaBytes),
+                      packedRangeIsValid(vectorOffset, vectorLength, arenaBytes), vectorLength % 4 == 0,
+                      packedRangeIsValid(valueOffset, valueLength, arenaBytes) else {
+                    throw PortableAPIError.packedPage("proximity record field exceeds page arena")
+                }
+                let key = ScopedBytes(page: page, offset: arenaStart + keyOffset, count: keyLength, scope: scope)
+                let vector = ScopedBytes(page: page, offset: arenaStart + vectorOffset, count: vectorLength, scope: scope)
+                let value = ScopedBytes(page: page, offset: arenaStart + valueOffset, count: valueLength, scope: scope)
+                lastKey = Data(key)
+                visited += 1
+                if try !body(ProximityScanRecordView(key: key, vector: ProximityVectorView(bytes: vector), value: value)) {
+                    stopped = true
+                    break
+                }
+            }
+        }()
+        if stopped { return ReadScanOutcome(visited: visited, stopped: true) }
+        if result.terminal != 0 { return ReadScanOutcome(visited: visited, stopped: false) }
+        guard let lastKey else {
+            throw PortableAPIError.packedPage("non-terminal proximity record page made no progress")
+        }
+        after = lastKey
+    }
+}
+
+private func packedRangeIsValid(_ offset: Int, _ length: Int, _ arenaBytes: Int) -> Bool {
+    offset >= 0 && length >= 0 && offset <= arenaBytes && length <= arenaBytes - offset
+}
+
+private func compareUnsigned<L: Collection, R: Collection>(_ left: L, _ right: R) -> Int
+where L.Element == UInt8, R.Element == UInt8 {
+    var leftIndex = left.startIndex
+    var rightIndex = right.startIndex
+    while leftIndex != left.endIndex && rightIndex != right.endIndex {
+        let lhs = left[leftIndex]
+        let rhs = right[rightIndex]
+        if lhs != rhs { return lhs < rhs ? -1 : 1 }
+        left.formIndex(after: &leftIndex)
+        right.formIndex(after: &rightIndex)
+    }
+    if leftIndex == left.endIndex && rightIndex == right.endIndex { return 0 }
+    return leftIndex == left.endIndex ? -1 : 1
 }
 
 public struct NeighborView {
@@ -434,6 +1728,32 @@ public struct NeighborView {
     public let proof: ScopedBytes?
 }
 
+private func ownedSearchRequest(_ request: ProximitySearchRequestRecord) -> ProximitySearchRequestRecord {
+    ProximitySearchRequestRecord(
+        query: Array(request.query),
+        k: request.k,
+        policy: request.policy,
+        adaptiveQuality: request.adaptiveQuality,
+        budget: SearchBudgetRecord(
+            maxNodes: request.budget.maxNodes,
+            maxCommittedBytes: request.budget.maxCommittedBytes,
+            maxDistanceEvaluations: request.budget.maxDistanceEvaluations,
+            maxFrontierEntries: request.budget.maxFrontierEntries
+        ),
+        filter: ProximityFilterRecord(
+            kind: request.filter.kind,
+            start: request.filter.start.map { Data($0) },
+            rangeEnd: request.filter.rangeEnd.map { Data($0) },
+            prefix: request.filter.prefix.map { Data($0) },
+            eligibleKeys: request.filter.eligibleKeys.map { Data($0) }
+        ),
+        kernel: request.kernel,
+        backend: request.backend,
+        hnswEfSearch: request.hnswEfSearch,
+        pqRerankMultiplier: request.pqRerankMultiplier
+    )
+}
+
 public final class ProximityMap: @unchecked Sendable {
     let native: BindingProximityMap
     init(native: BindingProximityMap) { self.native = native }
@@ -441,12 +1761,157 @@ public final class ProximityMap: @unchecked Sendable {
     public var descriptor: Data { native.descriptor() }
     public var count: UInt64 { get throws { try native.count() } }
     public var config: ProximityConfigRecord { get throws { try native.config() } }
+    public func buildHnsw(
+        config: HnswConfigRecord = defaultHnswConfig(),
+        limits: HnswBuildLimitsRecord = defaultHnswBuildLimits()
+    ) throws -> HnswBuildResult {
+        let result = try native.buildHnsw(config: config, limits: limits)
+        return HnswBuildResult(index: HnswIndex(native: result.index), stats: result.stats)
+    }
+    public func loadHnsw(_ manifest: Data) throws -> HnswIndex {
+        HnswIndex(native: try native.loadHnsw(manifest: Data(manifest)))
+    }
+    public func buildPq(
+        config: ProductQuantizationConfigRecord = defaultPqConfig(),
+        workerThreads: UInt64 = 1,
+        limits: ProductQuantizationBuildLimitsRecord = defaultPqBuildLimits()
+    ) throws -> ProductQuantizationBuildResult {
+        let result = try native.buildPq(
+            config: config,
+            workerThreads: workerThreads,
+            limits: limits
+        )
+        return ProductQuantizationBuildResult(
+            index: ProductQuantizer(native: result.index),
+            stats: result.stats
+        )
+    }
+    public func loadPq(_ manifest: Data) throws -> ProductQuantizer {
+        ProductQuantizer(native: try native.loadPq(manifest: Data(manifest)))
+    }
+    public func buildCompositeHnsw(
+        baseMap: ProximityMap,
+        base: HnswIndex,
+        config: CompositeAcceleratorConfigRecord = defaultCompositeAcceleratorConfig(),
+        limits: CompositeBuildLimitsRecord = defaultCompositeBuildLimits()
+    ) throws -> CompositeBuildOutcome {
+        portableCompositeOutcome(try native.buildCompositeHnsw(
+            baseMap: baseMap.native, base: base.native, config: config, limits: limits
+        ))
+    }
+    public func buildCompositePq(
+        baseMap: ProximityMap,
+        base: ProductQuantizer,
+        config: CompositeAcceleratorConfigRecord = defaultCompositeAcceleratorConfig(),
+        limits: CompositeBuildLimitsRecord = defaultCompositeBuildLimits()
+    ) throws -> CompositeBuildOutcome {
+        portableCompositeOutcome(try native.buildCompositePq(
+            baseMap: baseMap.native, base: base.native, config: config, limits: limits
+        ))
+    }
+    public func buildOrRebuildCompositeHnsw(
+        baseMap: ProximityMap,
+        base: HnswIndex,
+        config: CompositeAcceleratorConfigRecord = defaultCompositeAcceleratorConfig(),
+        limits: CompositeBuildLimitsRecord = defaultCompositeBuildLimits(),
+        rebuild: CompositeRebuildOptionsRecord = defaultCompositeRebuildOptions()
+    ) throws -> CompositeBuildOrRebuildOutcome {
+        portableCompositeRebuildOutcome(try native.buildOrRebuildCompositeHnsw(
+            baseMap: baseMap.native, base: base.native, config: config,
+            limits: limits, rebuild: rebuild
+        ))
+    }
+    public func buildOrRebuildCompositePq(
+        baseMap: ProximityMap,
+        base: ProductQuantizer,
+        config: CompositeAcceleratorConfigRecord = defaultCompositeAcceleratorConfig(),
+        limits: CompositeBuildLimitsRecord = defaultCompositeBuildLimits(),
+        rebuild: CompositeRebuildOptionsRecord = defaultCompositeRebuildOptions()
+    ) throws -> CompositeBuildOrRebuildOutcome {
+        portableCompositeRebuildOutcome(try native.buildOrRebuildCompositePq(
+            baseMap: baseMap.native, base: base.native, config: config,
+            limits: limits, rebuild: rebuild
+        ))
+    }
+    public func loadComposite(_ manifest: Data) throws -> CompositeAccelerator {
+        CompositeAccelerator(native: try native.loadComposite(manifest: Data(manifest)))
+    }
+    public func buildAcceleratorCatalog(
+        hnsw: HnswIndex? = nil,
+        pq: ProductQuantizer? = nil,
+        composite: CompositeAccelerator? = nil
+    ) throws -> AcceleratorCatalog {
+        AcceleratorCatalog(native: try native.buildAcceleratorCatalog(
+            hnsw: hnsw?.native, pq: pq?.native, composite: composite?.native
+        ))
+    }
+    public func loadAcceleratorCatalog(_ manifest: Data) throws -> AcceleratorCatalog {
+        AcceleratorCatalog(native: try native.loadAcceleratorCatalog(manifest: Data(manifest)))
+    }
     public func get(_ key: Data) throws -> ExactProximityRecordRecord? { try native.get(key: Data(key)) }
+    public func withRecordView(
+        _ key: Data, _ body: (ProximityRecordView) throws -> Void
+    ) throws -> Bool {
+        try withProximityRecordView(handle: native.fastHandle(), key: Data(key), body)
+    }
     public func contains(_ key: Data) throws -> Bool { try native.containsKey(key: Data(key)) }
+    public func search(_ request: ProximitySearchRequestRecord) throws -> ProximitySearchResultRecord {
+        let session = try read()
+        defer { session.close() }
+        return try session.search(request)
+    }
+    public func search(
+        _ request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime
+    ) throws -> ProximitySearchResultRecord {
+        try native.searchWithRuntime(
+            request: ownedSearchRequest(request), runtime: runtime.checkedNative()
+        )
+    }
+    public func searchCancellable(
+        _ request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime? = nil,
+        cancellation: ProximityCancellationToken
+    ) throws -> ProximitySearchResultRecord {
+        try native.searchCancellable(
+            request: ownedSearchRequest(request),
+            runtime: try runtime?.checkedNative(),
+            cancellation: cancellation.checkedNative()
+        )
+    }
+    public func searchAsync(
+        _ request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime? = nil,
+        cancellation: ProximityCancellationToken? = nil
+    ) -> Task<ProximitySearchResultRecord, Error> {
+        let owned = ownedSearchRequest(request)
+        let token = cancellation ?? ProximityCancellationToken()
+        return Task {
+            try await withTaskCancellationHandler {
+                try searchCancellable(owned, runtime: runtime, cancellation: token)
+            } onCancel: {
+                token.cancel()
+            }
+        }
+    }
     public func searchExact(_ query: [Float], k: UInt64) throws -> ProximitySearchResultRecord {
         let session = try read()
         defer { session.close() }
         return try session.searchExact(query, k: k)
+    }
+
+    public func scanRecords(
+        _ visitor: @escaping (ProximityRecord) -> Bool
+    ) throws -> UInt64 {
+        try native.scanRecords(visitor: ClosureProximityRecordVisitor(visitor))
+    }
+    public func scanRecordViews(
+        from start: Data = Data(), to end: Data? = nil,
+        _ body: (ProximityScanRecordView) throws -> Bool
+    ) throws -> ReadScanOutcome {
+        try withProximityRecordRangeView(
+            handle: native.fastHandle(), start: Data(start), end: end.map { Data($0) }, body
+        )
     }
     public func read() throws -> ProximityReadSession { ProximityReadSession(native: try native.readSession()) }
     public func verify() throws -> ProximityVerificationRecord { try native.verify() }
@@ -466,7 +1931,9 @@ public final class ProximityMap: @unchecked Sendable {
         _ request: ProximitySearchRequestRecord,
         limits: ContentGraphLimitsRecord = defaultContentGraphLimits()
     ) throws -> ProximitySearchProof {
-        ProximitySearchProof(native: try native.proveSearch(request: request, limits: limits))
+        ProximitySearchProof(
+            native: try native.proveSearch(request: ownedSearchRequest(request), limits: limits)
+        )
     }
     public func proveSearchExact(
         _ query: [Float],
@@ -491,6 +1958,313 @@ public final class ProximityMap: @unchecked Sendable {
         defer { session.close() }
         return try session.withSearchView(query: query, k: k, body)
     }
+}
+
+public final class HnswIndex: @unchecked Sendable {
+    let native: BindingHnswIndex
+    private var closed = false
+    init(native: BindingHnswIndex) { self.native = native }
+
+    public var manifest: Data {
+        precondition(!closed, "HNSW index is closed")
+        return Data(native.manifest())
+    }
+    public var sourceDescriptor: Data {
+        precondition(!closed, "HNSW index is closed")
+        return Data(native.sourceDescriptor())
+    }
+    public var config: HnswConfigRecord {
+        precondition(!closed, "HNSW index is closed")
+        return native.config()
+    }
+    public var isCanonical: Bool {
+        precondition(!closed, "HNSW index is closed")
+        return native.isCanonical()
+    }
+    public func search(
+        _ map: ProximityMap,
+        request: ProximitySearchRequestRecord
+    ) throws -> ProximitySearchResultRecord {
+        guard !closed else { throw PortableAPIError.closed("HNSW index") }
+        return try native.search(map: map.native, request: ownedSearchRequest(request))
+    }
+    public func search(
+        _ map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime
+    ) throws -> ProximitySearchResultRecord {
+        guard !closed else { throw PortableAPIError.closed("HNSW index") }
+        return try native.searchWithRuntime(
+            map: map.native, request: ownedSearchRequest(request), runtime: runtime.checkedNative()
+        )
+    }
+    public func searchCancellable(
+        _ map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime? = nil,
+        cancellation: ProximityCancellationToken
+    ) throws -> ProximitySearchResultRecord {
+        guard !closed else { throw PortableAPIError.closed("HNSW index") }
+        return try native.searchCancellable(
+            map: map.native,
+            request: ownedSearchRequest(request),
+            runtime: try runtime?.checkedNative(),
+            cancellation: cancellation.checkedNative()
+        )
+    }
+    public func searchAsync(
+        _ map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime? = nil,
+        cancellation: ProximityCancellationToken? = nil
+    ) -> Task<ProximitySearchResultRecord, Error> {
+        let owned = ownedSearchRequest(request)
+        let token = cancellation ?? ProximityCancellationToken()
+        return Task {
+            try await withTaskCancellationHandler {
+                try searchCancellable(map, request: owned, runtime: runtime, cancellation: token)
+            } onCancel: { token.cancel() }
+        }
+    }
+    public func proveSearch(
+        _ map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        limits: ContentGraphLimitsRecord = defaultContentGraphLimits()
+    ) throws -> ProximitySearchProof {
+        guard !closed else { throw PortableAPIError.closed("HNSW index") }
+        return ProximitySearchProof(
+            native: try native.proveSearch(
+                map: map.native,
+                request: ownedSearchRequest(request),
+                limits: limits
+            )
+        )
+    }
+    public func close() { closed = true }
+}
+
+public final class ProductQuantizer: @unchecked Sendable {
+    let native: BindingProductQuantizer
+    private var closed = false
+    init(native: BindingProductQuantizer) { self.native = native }
+
+    public var manifest: Data {
+        precondition(!closed, "product quantizer is closed")
+        return Data(native.manifest())
+    }
+    public var sourceDescriptor: Data {
+        precondition(!closed, "product quantizer is closed")
+        return Data(native.sourceDescriptor())
+    }
+    public var config: ProductQuantizationConfigRecord {
+        precondition(!closed, "product quantizer is closed")
+        return native.config()
+    }
+    public var quality: ProductQuantizationQualityRecord {
+        precondition(!closed, "product quantizer is closed")
+        return native.quality()
+    }
+    public func search(
+        _ map: ProximityMap,
+        request: ProximitySearchRequestRecord
+    ) throws -> ProximitySearchResultRecord {
+        guard !closed else { throw PortableAPIError.closed("product quantizer") }
+        return try native.search(map: map.native, request: ownedSearchRequest(request))
+    }
+    public func search(
+        _ map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime
+    ) throws -> ProximitySearchResultRecord {
+        guard !closed else { throw PortableAPIError.closed("product quantizer") }
+        return try native.searchWithRuntime(
+            map: map.native, request: ownedSearchRequest(request), runtime: runtime.checkedNative()
+        )
+    }
+    public func searchCancellable(
+        _ map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime? = nil,
+        cancellation: ProximityCancellationToken
+    ) throws -> ProximitySearchResultRecord {
+        guard !closed else { throw PortableAPIError.closed("product quantizer") }
+        return try native.searchCancellable(
+            map: map.native,
+            request: ownedSearchRequest(request),
+            runtime: try runtime?.checkedNative(),
+            cancellation: cancellation.checkedNative()
+        )
+    }
+    public func searchAsync(
+        _ map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime? = nil,
+        cancellation: ProximityCancellationToken? = nil
+    ) -> Task<ProximitySearchResultRecord, Error> {
+        let owned = ownedSearchRequest(request)
+        let token = cancellation ?? ProximityCancellationToken()
+        return Task {
+            try await withTaskCancellationHandler {
+                try searchCancellable(map, request: owned, runtime: runtime, cancellation: token)
+            } onCancel: { token.cancel() }
+        }
+    }
+    public func proveSearch(
+        _ map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        limits: ContentGraphLimitsRecord = defaultContentGraphLimits()
+    ) throws -> ProximitySearchProof {
+        guard !closed else { throw PortableAPIError.closed("product quantizer") }
+        return ProximitySearchProof(
+            native: try native.proveSearch(
+                map: map.native,
+                request: ownedSearchRequest(request),
+                limits: limits
+            )
+        )
+    }
+    public func close() { closed = true }
+}
+
+public final class CompositeAccelerator: @unchecked Sendable {
+    let native: BindingCompositeAccelerator
+    private var closed = false
+    init(native: BindingCompositeAccelerator) { self.native = native }
+
+    public var manifest: Data { precondition(!closed); return Data(native.manifest()) }
+    public var currentSourceDescriptor: Data {
+        precondition(!closed); return Data(native.currentSourceDescriptor())
+    }
+    public var baseSourceDescriptor: Data {
+        precondition(!closed); return Data(native.baseSourceDescriptor())
+    }
+    public var baseKind: CompositeBaseKindRecord { precondition(!closed); return native.baseKind() }
+    public var deltaCount: UInt64 { precondition(!closed); return native.deltaCount() }
+    public var shadowCount: UInt64 { precondition(!closed); return native.shadowCount() }
+    public var config: CompositeAcceleratorConfigRecord { precondition(!closed); return native.config() }
+    public var buildStats: CompositeBuildStatsRecord { precondition(!closed); return native.buildStats() }
+    public func search(
+        _ map: ProximityMap,
+        request: ProximitySearchRequestRecord
+    ) throws -> ProximitySearchResultRecord {
+        guard !closed else { throw PortableAPIError.closed("composite accelerator") }
+        return try native.search(map: map.native, request: ownedSearchRequest(request))
+    }
+    public func search(
+        _ map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime
+    ) throws -> ProximitySearchResultRecord {
+        guard !closed else { throw PortableAPIError.closed("composite accelerator") }
+        return try native.searchWithRuntime(
+            map: map.native, request: ownedSearchRequest(request), runtime: runtime.checkedNative()
+        )
+    }
+    public func searchCancellable(
+        _ map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime? = nil,
+        cancellation: ProximityCancellationToken
+    ) throws -> ProximitySearchResultRecord {
+        guard !closed else { throw PortableAPIError.closed("composite accelerator") }
+        return try native.searchCancellable(
+            map: map.native,
+            request: ownedSearchRequest(request),
+            runtime: try runtime?.checkedNative(),
+            cancellation: cancellation.checkedNative()
+        )
+    }
+    public func searchAsync(
+        _ map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime? = nil,
+        cancellation: ProximityCancellationToken? = nil
+    ) -> Task<ProximitySearchResultRecord, Error> {
+        let owned = ownedSearchRequest(request)
+        let token = cancellation ?? ProximityCancellationToken()
+        return Task {
+            try await withTaskCancellationHandler {
+                try searchCancellable(map, request: owned, runtime: runtime, cancellation: token)
+            } onCancel: { token.cancel() }
+        }
+    }
+    public func proveSearch(
+        _ map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        limits: ContentGraphLimitsRecord = defaultContentGraphLimits()
+    ) throws -> ProximitySearchProof {
+        guard !closed else { throw PortableAPIError.closed("composite accelerator") }
+        return ProximitySearchProof(native: try native.proveSearch(
+            map: map.native, request: ownedSearchRequest(request), limits: limits
+        ))
+    }
+    public func close() { closed = true }
+}
+
+public final class AcceleratorCatalog: @unchecked Sendable {
+    let native: BindingAcceleratorCatalog
+    private var closed = false
+    init(native: BindingAcceleratorCatalog) { self.native = native }
+
+    public var manifest: Data { precondition(!closed); return Data(native.manifest()) }
+    public var sourceDescriptor: Data { precondition(!closed); return Data(native.sourceDescriptor()) }
+    public var entries: [AcceleratorCatalogEntryRecord] { precondition(!closed); return native.entries() }
+    public func search(
+        _ map: ProximityMap,
+        request: ProximitySearchRequestRecord
+    ) throws -> ProximitySearchResultRecord {
+        guard !closed else { throw PortableAPIError.closed("accelerator catalog") }
+        return try native.search(map: map.native, request: ownedSearchRequest(request))
+    }
+    public func search(
+        _ map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime
+    ) throws -> ProximitySearchResultRecord {
+        guard !closed else { throw PortableAPIError.closed("accelerator catalog") }
+        return try native.searchWithRuntime(
+            map: map.native, request: ownedSearchRequest(request), runtime: runtime.checkedNative()
+        )
+    }
+    public func searchCancellable(
+        _ map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime? = nil,
+        cancellation: ProximityCancellationToken
+    ) throws -> ProximitySearchResultRecord {
+        guard !closed else { throw PortableAPIError.closed("accelerator catalog") }
+        return try native.searchCancellable(
+            map: map.native,
+            request: ownedSearchRequest(request),
+            runtime: try runtime?.checkedNative(),
+            cancellation: cancellation.checkedNative()
+        )
+    }
+    public func searchAsync(
+        _ map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime? = nil,
+        cancellation: ProximityCancellationToken? = nil
+    ) -> Task<ProximitySearchResultRecord, Error> {
+        let owned = ownedSearchRequest(request)
+        let token = cancellation ?? ProximityCancellationToken()
+        return Task {
+            try await withTaskCancellationHandler {
+                try searchCancellable(map, request: owned, runtime: runtime, cancellation: token)
+            } onCancel: { token.cancel() }
+        }
+    }
+    public func proveSearch(
+        _ map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        limits: ContentGraphLimitsRecord = defaultContentGraphLimits()
+    ) throws -> ProximitySearchProof {
+        guard !closed else { throw PortableAPIError.closed("accelerator catalog") }
+        return ProximitySearchProof(native: try native.proveSearch(
+            map: map.native, request: ownedSearchRequest(request), limits: limits
+        ))
+    }
+    public func close() { closed = true }
 }
 
 private func withProximitySearchView<R>(
@@ -556,10 +2330,69 @@ public final class ProximityReadSession: @unchecked Sendable {
     private var closed = false
     init(native: BindingProximityReadSession) { self.native = native }
     public func get(_ key: Data) throws -> ExactProximityRecordRecord? { try native.get(key: Data(key)) }
-    public func contains(_ key: Data) throws -> Bool { try native.containsKey(key: Data(key)) }
-    public func searchExact(_ query: [Float], k: UInt64) throws -> ProximitySearchResultRecord {
+    public func withRecordView(
+        _ key: Data, _ body: (ProximityRecordView) throws -> Void
+    ) throws -> Bool {
         guard !closed else { throw PortableAPIError.closed("proximity read session") }
-        return try native.search(request: exactProximitySearchRequest(query: query, k: k))
+        return try withProximityRecordView(handle: native.fastHandle(), key: Data(key), body)
+    }
+    public func contains(_ key: Data) throws -> Bool { try native.containsKey(key: Data(key)) }
+    public func search(_ request: ProximitySearchRequestRecord) throws -> ProximitySearchResultRecord {
+        guard !closed else { throw PortableAPIError.closed("proximity read session") }
+        return try native.search(request: ownedSearchRequest(request))
+    }
+    public func search(
+        _ request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime
+    ) throws -> ProximitySearchResultRecord {
+        guard !closed else { throw PortableAPIError.closed("proximity read session") }
+        return try native.searchWithRuntime(
+            request: ownedSearchRequest(request), runtime: runtime.checkedNative()
+        )
+    }
+    public func searchCancellable(
+        _ request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime? = nil,
+        cancellation: ProximityCancellationToken
+    ) throws -> ProximitySearchResultRecord {
+        guard !closed else { throw PortableAPIError.closed("proximity read session") }
+        return try native.searchCancellable(
+            request: ownedSearchRequest(request),
+            runtime: try runtime?.checkedNative(),
+            cancellation: cancellation.checkedNative()
+        )
+    }
+    public func searchAsync(
+        _ request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime? = nil,
+        cancellation: ProximityCancellationToken? = nil
+    ) -> Task<ProximitySearchResultRecord, Error> {
+        let owned = ownedSearchRequest(request)
+        let token = cancellation ?? ProximityCancellationToken()
+        return Task {
+            try await withTaskCancellationHandler {
+                try searchCancellable(owned, runtime: runtime, cancellation: token)
+            } onCancel: { token.cancel() }
+        }
+    }
+
+    public func scanRecords(
+        _ visitor: @escaping (ProximityRecord) -> Bool
+    ) throws -> UInt64 {
+        guard !closed else { throw PortableAPIError.closed("proximity read session") }
+        return try native.scanRecords(visitor: ClosureProximityRecordVisitor(visitor))
+    }
+    public func scanRecordViews(
+        from start: Data = Data(), to end: Data? = nil,
+        _ body: (ProximityScanRecordView) throws -> Bool
+    ) throws -> ReadScanOutcome {
+        guard !closed else { throw PortableAPIError.closed("proximity read session") }
+        return try withProximityRecordRangeView(
+            handle: native.fastHandle(), start: Data(start), end: end.map { Data($0) }, body
+        )
+    }
+    public func searchExact(_ query: [Float], k: UInt64) throws -> ProximitySearchResultRecord {
+        try search(exactProximitySearchRequest(query: query, k: k))
     }
     public func withSearchView<R>(
         query: [Float],
@@ -570,6 +2403,18 @@ public final class ProximityReadSession: @unchecked Sendable {
         return try withProximitySearchView(handle: native.fastHandle(), query: query, k: k, body)
     }
     public func close() { closed = true }
+}
+
+private final class ClosureProximityRecordVisitor: ProximityRecordVisitorCallback, @unchecked Sendable {
+    private let visitor: (ProximityRecord) -> Bool
+
+    init(_ visitor: @escaping (ProximityRecord) -> Bool) {
+        self.visitor = visitor
+    }
+
+    func visit(record: ProximityRecordRecord) -> Bool {
+        visitor(ProximityRecord(key: record.key, vector: record.vector, value: record.value))
+    }
 }
 
 public final class ProximitySearchProof: @unchecked Sendable {
@@ -596,6 +2441,20 @@ public final class ProximitySearchProof: @unchecked Sendable {
 public enum Proofs {
     public static func verify(_ proof: KeyProofRecord) throws -> KeyProofVerificationRecord {
         try verifyKeyProof(proof: proof)
+    }
+
+    public static func verify(_ proof: MultiKeyProofRecord) throws -> MultiKeyProofVerificationRecord {
+        try verifyMultiKeyProof(proof: proof)
+    }
+
+    public static func verify(_ proof: RangeProofRecord) throws -> RangeProofVerificationRecord {
+        try verifyRangeProof(proof: proof)
+    }
+
+    public static func verify(
+        _ proof: RangePageProofRecord
+    ) throws -> RangePageProofVerificationRecord {
+        try verifyRangePageProof(proof: proof)
     }
 
     public static func verify(

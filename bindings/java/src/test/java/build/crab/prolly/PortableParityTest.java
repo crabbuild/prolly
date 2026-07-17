@@ -4,25 +4,420 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import build.crab.prolly.javaapi.Engine;
+import build.crab.prolly.javaapi.CompositeAcceleratorConfig;
+import build.crab.prolly.javaapi.HnswBuildLimits;
+import build.crab.prolly.javaapi.HnswConfig;
 import build.crab.prolly.javaapi.IndexEntry;
 import build.crab.prolly.javaapi.IndexProjection;
 import build.crab.prolly.javaapi.IndexedMutation;
+import build.crab.prolly.javaapi.IndexedSnapshotId;
 import build.crab.prolly.javaapi.IndexedUpdateKind;
 import build.crab.prolly.javaapi.MapMutation;
+import build.crab.prolly.javaapi.MapEntry;
 import build.crab.prolly.javaapi.MapUpdateKind;
+import build.crab.prolly.javaapi.ParallelConfig;
 import build.crab.prolly.javaapi.ProximityRecord;
+import build.crab.prolly.javaapi.ProximityScanRecordView;
+import build.crab.prolly.javaapi.ProximityCancellationToken;
 import build.crab.prolly.javaapi.ProximityMutation;
+import build.crab.prolly.javaapi.ProductQuantizationConfig;
 import build.crab.prolly.javaapi.Proofs;
 import build.crab.prolly.javaapi.SearchRequest;
-import java.nio.ByteBuffer;
+import build.crab.prolly.javaapi.ScopedBytes;
+import build.crab.prolly.javaapi.ReadScanOutcome;
+import build.crab.prolly.javaapi.SecondaryIndexLimits;
+import build.crab.prolly.javaapi.StringKeyCodec;
+import build.crab.prolly.javaapi.StringValueCodec;
+import build.crab.prolly.javaapi.ValueRefView;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
 class PortableParityTest {
+    @Test
+    void typedVersionedMapIsApplicationFacing() {
+        Prolly.useLocalDebugLibrary();
+        try (Engine engine = Engine.memory(); var raw = engine.versionedMap(bytes("typed-users"))) {
+            raw.initialize();
+            var typed = raw.typed(StringKeyCodec.INSTANCE, StringValueCodec.INSTANCE);
+            var first = typed.put("alice", "score:1");
+            assertEquals("score:1", typed.get("alice").orElseThrow());
+            assertEquals("score:1", typed.getAt(first.id(), "alice").orElseThrow());
+            assertEquals(List.of(new build.crab.prolly.javaapi.TypedEntry<>("alice", "score:1")), typed.entries());
+            var updated = typed.putIf(first.id(), "alice", "score:2");
+            assertEquals(MapUpdateKind.APPLIED, updated.kind());
+            var migrated = typed.migrateFrom(
+                    updated.current().id(), StringValueCodec.INSTANCE, value -> value + ":active");
+            assertEquals(MapUpdateKind.APPLIED, migrated.update().kind());
+            assertEquals(1, migrated.scannedValues());
+            assertEquals(1, migrated.rewrittenValues());
+            assertEquals("score:2:active", typed.get("alice").orElseThrow());
+            assertTrue(typed.raw() == raw);
+            typed.delete("alice");
+            assertTrue(typed.get("alice").isEmpty());
+        }
+    }
+
+    @Test
+    void versionedLargeValuesAndBlobGcAreApplicationFacing() {
+        Prolly.useLocalDebugLibrary();
+        try (Engine engine = Engine.memory();
+                build.crab.prolly.javaapi.BlobStore blobs =
+                        build.crab.prolly.javaapi.BlobStore.memory();
+                var versioned = engine.versionedMap(bytes("large-values"))) {
+            versioned.initialize();
+            assertFalse(versioned.headName().length == 0);
+            assertFalse(versioned.versionsPrefix().length == 0);
+            var first = versioned.putLargeValue(blobs, bytes("document"), bytes("large-value"), 1);
+            assertArrayEquals(bytes("large-value"), versioned.getLargeValue(blobs, bytes("document")).orElseThrow());
+            var updated = versioned.putLargeValueIf(
+                    blobs, first.id(), bytes("document"), bytes("new-large-value"), 1);
+            assertEquals(MapUpdateKind.APPLIED, updated.kind());
+            try (var snapshot = versioned.snapshot(); var session = snapshot.read()) {
+                var captured = new java.util.concurrent.atomic.AtomicReference<ValueRefView.Blob>();
+                assertTrue(session.getValueRefView(bytes("document"), value -> {
+                    if (value instanceof ValueRefView.Blob blob) captured.set(blob);
+                }));
+                var blob = captured.get();
+                assertEquals(32, blob.cid().length);
+                assertEquals(bytes("new-large-value").length, blob.length());
+            }
+            assertTrue(versioned.planBlobGc(blobs).reachability().liveBlobCount() >= 1);
+            var sweep = versioned.sweepBlobGcAsync(blobs);
+            blobs.close();
+            assertTrue(sweep.join().plan().reachability().liveBlobCount() >= 1);
+        }
+    }
+
+    @Test
+    void retainedSearchRuntimeReusesValidatedContent() throws Exception {
+        Prolly.useLocalDebugLibrary();
+        var records = new ArrayList<ProximityRecord>();
+        for (int index = 0; index < 16; index++) {
+            records.add(new ProximityRecord(
+                    bytes(String.format("vector-%02d", index)),
+                    new float[] {index, 0},
+                    bytes(String.format("value-%02d", index))));
+        }
+        try (Engine engine = Engine.memory();
+             var proximity = engine.buildProximity(2, records);
+             var index = proximity.buildHnsw().index();
+             var runtime = engine.proximitySearchRuntime()) {
+            var request = SearchRequest.fixedBudget(
+                    new float[] {0, 0},
+                    3,
+                    SearchRequest.SearchBudget.unlimited(),
+                    SearchRequest.SearchFilter.all(),
+                    SearchRequest.Kernel.AUTO_DETERMINISTIC,
+                    SearchRequest.Backend.HNSW);
+            var cold = index.searchWithRuntime(proximity, request, runtime);
+            assertTrue(cold.stats().physicalBytesRead() > 0);
+            var coldStats = runtime.stats();
+            assertTrue(coldStats.physicalReads() > 0);
+            var warm = index.searchWithRuntime(proximity, request, runtime);
+            assertEquals(0, warm.stats().physicalBytesRead());
+            assertArrayEquals(cold.neighbors().get(0).key(), warm.neighbors().get(0).key());
+            assertEquals(coldStats, runtime.stats());
+            runtime.clear();
+            assertTrue(index.searchWithRuntime(proximity, request, runtime)
+                    .stats().physicalBytesRead() > 0);
+        }
+    }
+
+    @Test
+    void proximityFutureUsesNativeCooperativeCancellation() throws Exception {
+        Prolly.useLocalDebugLibrary();
+        var records = new ArrayList<ProximityRecord>();
+        for (int index = 0; index < 256; index++) {
+            records.add(new ProximityRecord(
+                    bytes(String.format("vector-%04d", index)),
+                    new float[] {index, index % 7},
+                    bytes(Integer.toString(index))));
+        }
+        try (Engine engine = Engine.memory();
+             var proximity = engine.buildProximity(2, records);
+             var runtime = engine.proximitySearchRuntime();
+             var cancellation = new ProximityCancellationToken()) {
+            cancellation.cancel();
+            var result = proximity.searchAsync(
+                    SearchRequest.exact(new float[] {0, 0}, 10),
+                    runtime,
+                    cancellation).get();
+            assertEquals("cancelled", result.completion());
+            assertTrue(result.neighbors().isEmpty());
+            try (var session = proximity.read()) {
+                var sessionResult = session.searchAsync(
+                        SearchRequest.exact(new float[] {0, 0}, 10),
+                        runtime,
+                        cancellation).get();
+                assertEquals("cancelled", sessionResult.completion());
+                assertTrue(sessionResult.neighbors().isEmpty());
+            }
+        }
+    }
+
+    @Test
+    void productQuantizerLifecycleIsPortableAndBounded() throws Exception {
+        Prolly.useLocalDebugLibrary();
+        var records = new ArrayList<ProximityRecord>();
+        for (int index = 0; index < 16; index++) {
+            records.add(new ProximityRecord(
+                    bytes(String.format("vector-%02d", index)),
+                    new float[] {index, index % 3, 0, 1},
+                    bytes(String.format("value-%02d", index))));
+        }
+        try (Engine engine = Engine.memory(); var proximity = engine.buildProximity(4, records)) {
+            var config = new ProductQuantizationConfig(2, 4, 2, 4, -1L, 16);
+            var built = proximity.buildPq(config, 2);
+            assertEquals(16L, built.stats().encodedVectors());
+            var request = SearchRequest.fixedBudget(
+                    new float[] {0, 0, 0, 1},
+                    3,
+                    SearchRequest.SearchBudget.unlimited(),
+                    SearchRequest.SearchFilter.all(),
+                    SearchRequest.Kernel.AUTO_DETERMINISTIC,
+                    SearchRequest.Backend.PRODUCT_QUANTIZED);
+            byte[] manifest;
+            try (var index = built.index()) {
+                assertEquals(config, index.config());
+                assertArrayEquals(proximity.descriptor(), index.sourceDescriptor());
+                assertTrue(index.quality().meanSquaredError() >= 0.0);
+                var result = index.search(proximity, request);
+                assertEquals("product_quantized", result.backend());
+                assertArrayEquals(bytes("vector-00"), result.neighbors().get(0).key());
+                manifest = index.manifest();
+                try (var proof = index.proveSearch(proximity, request)) {
+                    assertEquals(
+                            SearchBackendRecord.PRODUCT_QUANTIZED,
+                            proof.verify(proximity.descriptor()).getResult().getBackend());
+                }
+            }
+            try (var loaded = proximity.loadPq(manifest)) {
+                assertArrayEquals(manifest, loaded.manifest());
+            }
+        }
+    }
+
+    @Test
+    void hnswAcceleratorLifecycleIsPortable() throws Exception {
+        Prolly.useLocalDebugLibrary();
+        var records = new ArrayList<ProximityRecord>();
+        for (int index = 0; index < 16; index++) {
+            records.add(new ProximityRecord(
+                    bytes(String.format("vector-%02d", index)),
+                    new float[] {index, 0},
+                    bytes(String.format("value-%02d", index))));
+        }
+        try (Engine engine = Engine.memory(); var proximity = engine.buildProximity(2, records)) {
+            var defaults = HnswConfig.defaults();
+            var fullWidthSeed = new HnswConfig(
+                    defaults.maxConnections(),
+                    defaults.efConstruction(),
+                    defaults.efSearch(),
+                    defaults.levelBits(),
+                    defaults.overfetchMultiplier(),
+                    -1L,
+                    defaults.routingVectorEncoding());
+            var built = proximity.buildHnsw(fullWidthSeed, HnswBuildLimits.defaults());
+            assertEquals(16L, built.stats().records());
+            var request = SearchRequest.fixedBudget(
+                    new float[] {0, 0},
+                    3,
+                    SearchRequest.SearchBudget.unlimited(),
+                    SearchRequest.SearchFilter.all(),
+                    SearchRequest.Kernel.AUTO_DETERMINISTIC,
+                    SearchRequest.Backend.HNSW);
+            byte[] manifest;
+            try (var index = built.index()) {
+                assertEquals(-1L, index.config().seed(), "Java long preserves all Rust u64 seed bits");
+                assertTrue(index.isCanonical());
+                assertArrayEquals(proximity.descriptor(), index.sourceDescriptor());
+                var result = index.search(proximity, request);
+                assertEquals("hnsw", result.backend());
+                assertArrayEquals(bytes("vector-00"), result.neighbors().get(0).key());
+                try (var cancellation = new ProximityCancellationToken()) {
+                    cancellation.cancel();
+                    var cancelled = index.searchCancellable(
+                            proximity, request, null, cancellation);
+                    assertEquals("cancelled", cancelled.completion());
+                    assertTrue(cancelled.neighbors().isEmpty());
+                }
+                manifest = index.manifest();
+                try (var proof = index.proveSearch(proximity, request)) {
+                    assertEquals(
+                            SearchBackendRecord.HNSW,
+                            proof.verify(proximity.descriptor()).getResult().getBackend());
+                }
+            }
+            try (var loaded = proximity.loadHnsw(manifest)) {
+                assertArrayEquals(manifest, loaded.manifest());
+            }
+        }
+    }
+
+    @Test
+    void compositeAndCatalogLifecycleIsPortableAndBounded() throws Exception {
+        Prolly.useLocalDebugLibrary();
+        var records = new ArrayList<ProximityRecord>();
+        for (int index = 0; index < 16; index++) {
+            records.add(new ProximityRecord(
+                    bytes(String.format("vector-%02d", index)),
+                    new float[] {index, 0},
+                    bytes(String.format("value-%02d", index))));
+        }
+        try (Engine engine = Engine.memory(); var baseMap = engine.buildProximity(2, records)) {
+            var baseBuild = baseMap.buildHnsw();
+            try (var base = baseBuild.index()) {
+                var mutation = baseMap.mutate(List.of(ProximityMutation.upsert(
+                        bytes("vector-00"), new float[] {0.25f, 0}, bytes("updated"))));
+                try (var current = mutation.map()) {
+                    var built = current.buildCompositeHnsw(baseMap, base);
+                    assertTrue(built.reasons().isEmpty());
+                    assertEquals(1L, built.stats().vectorUpdatedRecords());
+                    var request = SearchRequest.fixedBudget(
+                            new float[] {0, 0},
+                            3,
+                            SearchRequest.SearchBudget.unlimited(),
+                            SearchRequest.SearchFilter.all(),
+                            SearchRequest.Kernel.AUTO_DETERMINISTIC,
+                            SearchRequest.Backend.COMPOSITE);
+                    byte[] compositeManifest;
+                    try (var composite = built.accelerator()) {
+                        assertArrayEquals(current.descriptor(), composite.currentSourceDescriptor());
+                        assertArrayEquals(baseMap.descriptor(), composite.baseSourceDescriptor());
+                        assertEquals("HNSW", composite.baseKind());
+                        assertEquals(1L, composite.deltaCount());
+                        assertEquals(1L, composite.shadowCount());
+                        assertEquals("composite", composite.search(current, request).backend());
+                        try (var proof = composite.proveSearch(current, request)) {
+                            assertEquals(
+                                    SearchBackendRecord.COMPOSITE,
+                                    proof.verify(current.descriptor()).getResult().getBackend());
+                        }
+                        compositeManifest = composite.manifest();
+                        try (var catalog = current.buildAcceleratorCatalog(null, null, composite)) {
+                            assertEquals(1, catalog.entries().size());
+                            assertEquals("composite", catalog.search(current, request).backend());
+                            var catalogManifest = catalog.manifest();
+                            try (var loaded = current.loadAcceleratorCatalog(catalogManifest)) {
+                                assertArrayEquals(catalogManifest, loaded.manifest());
+                            }
+                        }
+                    }
+                    try (var loaded = current.loadComposite(compositeManifest)) {
+                        assertArrayEquals(compositeManifest, loaded.manifest());
+                    }
+
+                    var defaults = CompositeAcceleratorConfig.defaults();
+                    var forced = new CompositeAcceleratorConfig(
+                            0,
+                            defaults.maxShadowRecords(),
+                            defaults.maxDeltaRatioPpm(),
+                            defaults.maxShadowRatioPpm(),
+                            defaults.baseOverfetchMultiplier());
+                    var rebuilt = current.buildOrRebuildCompositeHnsw(baseMap, base, forced);
+                    assertEquals(
+                            build.crab.prolly.javaapi.CompositeBuildOrRebuildOutcome.Kind.HNSW_REBUILT,
+                            rebuilt.kind());
+                    assertFalse(rebuilt.reasons().isEmpty());
+                    try (var rebuiltIndex = rebuilt.hnsw()) {
+                        assertArrayEquals(current.descriptor(), rebuiltIndex.sourceDescriptor());
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    void richProximitySearchPreservesPolicyFilterStatsSessionAndProof() throws Exception {
+        Prolly.useLocalDebugLibrary();
+        try (Engine engine = Engine.memory();
+             var proximity = engine.buildProximity(2, List.of(
+                     new ProximityRecord(bytes("a"), new float[] {0, 0}, bytes("alpha")),
+                     new ProximityRecord(bytes("ab"), new float[] {1, 0}, bytes("alphabet")),
+                     new ProximityRecord(bytes("b"), new float[] {0.1f, 0}, bytes("beta"))))) {
+            proximity.clearCache();
+            try (var loaded = engine.loadProximity(proximity.descriptor())) {
+                assertArrayEquals(bytes("alpha"), loaded.get(bytes("a")).getValue());
+            }
+            var request = SearchRequest.fixedBudget(
+                    new float[] {0, 0},
+                    3,
+                    new SearchRequest.SearchBudget(1_000L, 1_000_000L, 1_000L, 1_000L),
+                    SearchRequest.SearchFilter.prefix(bytes("a")),
+                    SearchRequest.Kernel.SCALAR_DETERMINISTIC,
+                    SearchRequest.Backend.AUTO);
+
+            var result = proximity.search(request);
+            assertEquals(List.of("a", "ab"), result.neighbors().stream()
+                    .map(neighbor -> new String(neighbor.key(), StandardCharsets.UTF_8)).toList());
+            assertTrue(result.stats().distanceEvaluations() > 0);
+            assertTrue(result.planFormatVersion() > 0);
+            var scanned = new ArrayList<String>();
+            assertEquals(2, proximity.scanRecords(record -> {
+                scanned.add(new String(record.key(), StandardCharsets.UTF_8));
+                return scanned.size() < 2;
+            }));
+            assertEquals(List.of("a", "ab"), scanned);
+            var rangeViews = new ArrayList<String>();
+            ProximityScanRecordView[] escapedRange = new ProximityScanRecordView[1];
+            var rangeOutcome = proximity.scanRecordViews(bytes("ab"), bytes("c"), record -> {
+                escapedRange[0] = record;
+                rangeViews.add(new String(record.key().copy(), StandardCharsets.UTF_8));
+                return true;
+            });
+            assertEquals(new ReadScanOutcome(2, false), rangeOutcome);
+            assertEquals(List.of("ab", "b"), rangeViews);
+            assertThrows(IllegalStateException.class, () -> escapedRange[0].key().copy());
+            try (var session = proximity.read()) {
+                assertEquals(List.of("a", "ab"), session.search(request).neighbors().stream()
+                        .map(neighbor -> new String(neighbor.key(), StandardCharsets.UTF_8)).toList());
+                var retained = new ArrayList<String>();
+                assertEquals(3, session.scanRecords(record -> {
+                    retained.add(new String(record.key(), StandardCharsets.UTF_8));
+                    return true;
+                }));
+                assertEquals(List.of("a", "ab", "b"), retained);
+            }
+            try (var proof = proximity.proveSearch(request)) {
+                assertEquals(List.of("a", "ab"), proof.verify(proximity.descriptor())
+                        .getResult().getNeighbors().stream()
+                        .map(neighbor -> new String(neighbor.getKey(), StandardCharsets.UTF_8)).toList());
+            }
+        }
+    }
+
+    @Test
+    void versionedBulkPublicationUsesNativePerformancePaths() {
+        Prolly.useLocalDebugLibrary();
+        try (Engine engine = Engine.memory(); var map = engine.versionedMap(bytes("bulk-publication"))) {
+            var initialized = map.initializeSorted(List.of(
+                    new MapEntry(bytes("a"), bytes("one")),
+                    new MapEntry(bytes("b"), bytes("two"))));
+            assertEquals(MapUpdateKind.APPLIED, initialized.kind());
+            map.append(List.of(MapMutation.upsert(bytes("c"), bytes("three"))));
+            var parallel = map.parallelApply(List.of(
+                    MapMutation.upsert(bytes("b"), bytes("updated")),
+                    MapMutation.upsert(bytes("d"), bytes("four"))), new ParallelConfig(1, 1));
+            assertEquals(2L, parallel.stats().inputMutations());
+            var rebuilt = map.rebuildSortedIf(parallel.version().id(), List.of(
+                    new MapEntry(bytes("x"), bytes("nine")),
+                    new MapEntry(bytes("y"), bytes("ten"))));
+            assertEquals(MapUpdateKind.APPLIED, rebuilt.kind());
+            var iterRebuilt = map.rebuildFromEntriesIf(rebuilt.current().id(), List.of(
+                    new MapEntry(bytes("q"), bytes("queue")),
+                    new MapEntry(bytes("p"), bytes("priority"))));
+            assertEquals(MapUpdateKind.APPLIED, iterRebuilt.kind());
+            assertArrayEquals(bytes("priority"), map.get(bytes("p")).orElseThrow());
+        }
+    }
+
     @Test
     void versionedSnapshotsExposeOrderedNavigationAndBoundedPages() {
         Prolly.useLocalDebugLibrary();
@@ -70,19 +465,21 @@ class PortableParityTest {
                         (key, value) -> List.of(new IndexEntry(value, null)));
                 try (var indexed = engine.indexedMap(bytes("members"), registry)) {
                     indexed.put(bytes("u1"), bytes("red"));
+                    ScopedBytes[] escapedValue = new ScopedBytes[1];
+                    assertTrue(indexed.getView(bytes("u1"), value -> {
+                        escapedValue[0] = value;
+                        assertArrayEquals(bytes("red"), value.copy());
+                    }));
+                    assertThrows(IllegalStateException.class, () -> escapedValue[0].copy());
                     indexed.put(bytes("u2"), bytes("red"));
                     indexed.ensureIndex(bytes("by_team"));
                     try (var snapshot = indexed.snapshot();
                          var index = snapshot.index(bytes("by_team"));
                          var page = index.exactPage(bytes("red"), 2)) {
                         assertEquals(2, page.rows().size());
-                        ByteBuffer primaryKey = page.rows().get(0).primaryKey();
-                        byte[] key = new byte[primaryKey.remaining()];
-                        primaryKey.get(key);
+                        byte[] key = page.rows().get(0).primaryKey().copy();
                         assertArrayEquals(bytes("u1"), key);
-                        ByteBuffer secondPrimaryKey = page.rows().get(1).primaryKey();
-                        byte[] secondKey = new byte[secondPrimaryKey.remaining()];
-                        secondPrimaryKey.get(secondKey);
+                        byte[] secondKey = page.rows().get(1).primaryKey().copy();
                         assertArrayEquals(bytes("u2"), secondKey);
                     }
                 }
@@ -104,6 +501,7 @@ class PortableParityTest {
         Prolly.useLocalDebugLibrary();
         try (Engine engine = Engine.memory(); var map = engine.versionedMap(bytes("async"))) {
             map.initialize();
+            var subscription = map.subscribeAsync().get();
             byte[] key = bytes("original-key");
             byte[] value = bytes("original-value");
             var future = map.putAsync(key, value);
@@ -111,6 +509,22 @@ class PortableParityTest {
             value[0] = 'x';
             future.get();
             assertArrayEquals(bytes("original-value"), map.get(bytes("original-key")).orElseThrow());
+            var head = map.headAsync().get().orElseThrow();
+            try (var snapshot = map.snapshotAtAsync(head.id()).get()) {
+                assertArrayEquals(bytes("original-value"), snapshot.getAsync(bytes("original-key")).get().orElseThrow());
+                var bundle = snapshot.exportAsync().get();
+                try (var imported = engine.versionedMap(bytes("async-import"))) {
+                    var pendingImport = imported.importAsHeadAsync(bundle);
+                    bundle.getNodes().get(0).getBytes()[0] = 0;
+                    pendingImport.get();
+                    assertArrayEquals(bytes("original-value"), imported.get(bytes("original-key")).orElseThrow());
+                }
+                try (var session = snapshot.read()) {
+                    assertArrayEquals(bytes("original-value"), session.getAsync(bytes("original-key")).get().orElseThrow());
+                }
+            }
+            assertTrue(subscription.pollAsync().get().isPresent());
+            subscription.close();
         }
     }
 
@@ -120,17 +534,50 @@ class PortableParityTest {
         try (Engine engine = Engine.memory(); var versioned = engine.versionedMap(bytes("proofs"))) {
             versioned.initialize();
             versioned.put(bytes("k"), bytes("v"));
+            versioned.put(bytes("ka"), bytes("v2"));
             try (var snapshot = versioned.snapshot(); var session = snapshot.read()) {
                 var verified = Proofs.verify(snapshot.proveKey(bytes("k")));
                 assertTrue(verified.getValid());
                 assertArrayEquals(bytes("v"), verified.getValue());
-                assertEquals(1, snapshot.entryCount());
+                var multi = Proofs.verify(snapshot.proveKeys(List.of(bytes("k"), bytes("missing"))));
+                assertEquals(List.of(true, false), multi.getResults().stream().map(result -> result.getExists()).toList());
+                assertEquals(List.of("k", "ka"), Proofs.verify(snapshot.proveRange(bytes("k"), bytes("l"))).getEntries().stream().map(entry -> new String(entry.getKey())).toList());
+                assertEquals(List.of("k", "ka"), Proofs.verify(snapshot.provePrefix(bytes("k"))).getEntries().stream().map(entry -> new String(entry.getKey())).toList());
+                var provedPage = snapshot.proveRangePage(null, bytes("l"), 1);
+                assertTrue(Proofs.verify(provedPage.getProof()).getValid());
+                assertEquals(List.of("k"), provedPage.getPage().getEntries().stream().map(entry -> new String(entry.getKey())).toList());
+                assertEquals(2, snapshot.entryCount());
                 assertFalse(snapshot.export().getNodes().isEmpty());
                 assertArrayEquals(bytes("v"), session.get(bytes("k")).orElseThrow());
+                var copiedValue = new AtomicReference<byte[]>();
+                assertTrue(session.getView(bytes("k"), value -> copiedValue.set(value.copy())));
+                assertArrayEquals(bytes("v"), copiedValue.get());
+                var escapedValue = new AtomicReference<ScopedBytes>();
+                assertTrue(session.getView(bytes("k"), escapedValue::set));
+                assertThrows(IllegalStateException.class, () -> escapedValue.get().copy());
+                assertFalse(session.getView(bytes("missing"), value -> {}));
+                var inlineRef = new AtomicReference<byte[]>();
+                assertTrue(session.getValueRefView(bytes("k"), value -> inlineRef.set(
+                        ((build.crab.prolly.javaapi.ValueRefView.Inline) value).value().copy())));
+                assertArrayEquals(bytes("v"), inlineRef.get());
+                var escaped = new AtomicReference<ScopedBytes>();
+                var seen = new ArrayList<String>();
+                var scan = session.scanRangeView(bytes("k"), bytes("l"), entry -> {
+                    escaped.compareAndSet(null, entry.key());
+                    seen.add(new String(entry.key().copy()) + "=" + new String(entry.value().copy()));
+                    return true;
+                });
+                assertEquals(2, scan.visited());
+                assertFalse(scan.stopped());
+                assertEquals(List.of("k=v", "ka=v2"), seen);
+                assertThrows(IllegalStateException.class, () -> escaped.get().copy());
+                assertEquals(
+                        new build.crab.prolly.javaapi.ReadScanOutcome(1, true),
+                        session.scanRangeView(bytes("k"), bytes("l"), entry -> false));
             }
             assertTrue(versioned.catalogVersionCount() >= 2);
             assertFalse(versioned.backup().length == 0);
-            assertFalse(versioned.planGc().getReachability().getLiveCids().isEmpty());
+            assertFalse(versioned.planGc().reachability().liveCids().isEmpty());
 
             try (var registry = engine.indexRegistry()) {
                 registry.register(bytes("by_value"), 1, "value-v1", IndexProjection.ALL,
@@ -138,6 +585,24 @@ class PortableParityTest {
                 try (var indexed = engine.indexedMap(bytes("indexed-maintenance"), registry)) {
                     var version = indexed.put(bytes("k"), bytes("term"));
                     indexed.ensureIndex(bytes("by_value"));
+                    IndexedSnapshotId oldSnapshotId;
+                    try (var oldSnapshot = indexed.snapshot()) {
+                        oldSnapshotId = oldSnapshot.id();
+                    }
+                    assertThrows(ProllyBindingException.Internal.class, () -> indexed.replaceIndex(
+                            bytes("by_value"), 2, "value-too-small-v2", IndexProjection.ALL,
+                            SecondaryIndexLimits.defaults().withMaxTermBytes(3),
+                            (key, value) -> List.of(new IndexEntry(value, null))));
+                    assertEquals(1, indexed.health().activeIndexes().get(0).generation());
+                    var replacement = indexed.replaceIndex(
+                            bytes("by_value"), 2, "value-v2", IndexProjection.ALL,
+                            (key, value) -> List.of(new IndexEntry(value, null)));
+                    assertEquals(2, replacement.generation());
+                    assertEquals(2, indexed.health().activeIndexes().get(0).generation());
+                    try (var historical = indexed.snapshotById(oldSnapshotId);
+                         var historicalIndex = historical.index(bytes("by_value"))) {
+                        assertEquals(1, historicalIndex.exact(bytes("term")).size());
+                    }
                     assertTrue(indexed.verifyIndex(bytes("by_value"), version.sourceVersion()).valid());
                     assertTrue(indexed.buildAttempts() >= 1);
                     assertFalse(indexed.exportCurrent().length == 0);
@@ -318,13 +783,173 @@ class PortableParityTest {
             var restored = target.restoreBackup(source.backup());
             assertArrayEquals(source.headId().orElseThrow(), restored.id());
             assertArrayEquals(bytes("v2"), target.get(bytes("k")).orElseThrow());
+            build.crab.prolly.SnapshotBundleRecord bundle;
+            try (var snapshot = source.snapshot()) {
+                bundle = snapshot.export();
+            }
+            try (var importedMap = targetEngine.versionedMap(bytes("versioned-import"));
+                    var timestampedMap = targetEngine.versionedMap(bytes("versioned-import-at"))) {
+                assertTrue(importedMap.importAsHead(bundle).head());
+                assertArrayEquals(bytes("v2"), importedMap.get(bytes("k")).orElseThrow());
+                var timestamped = timestampedMap.importAsHead(bundle, 12_345L);
+                assertEquals(12_345L, timestamped.createdAtMillis().orElseThrow());
+                assertArrayEquals(bytes("v2"), timestampedMap.get(bytes("k")).orElseThrow());
+            }
             var pruned = source.keepLast(1);
             assertFalse(pruned.retained().isEmpty());
             assertFalse(pruned.removed().isEmpty());
         }
     }
 
+    @Test
+    void versionedComparisonsPinVersionsAndPageDiffs() {
+        Prolly.useLocalDebugLibrary();
+        try (Engine engine = Engine.memory(); var map = engine.versionedMap(bytes("comparison"))) {
+            var base = map.initialize();
+            var target = map.put(bytes("k"), bytes("v"));
+            try (var comparison = map.compare(base.id(), target.id())) {
+                assertArrayEquals(base.id(), comparison.base().id());
+                assertArrayEquals(target.id(), comparison.target().id());
+                assertEquals(List.of("k"), comparison.diff().stream().map(diff -> new String(diff.getKey())).toList());
+                assertEquals(List.of("k"), comparison.diffPage(1).getDiffs().stream().map(diff -> new String(diff.getKey())).toList());
+            }
+        }
+    }
+
+    @Test
+    void versionedHistoryNavigationDiffAndRollbackStayNative() {
+        Prolly.useLocalDebugLibrary();
+        try (Engine engine = Engine.memory(); var map = engine.versionedMap(bytes("history-navigation"))) {
+            map.initialize();
+            map.put(bytes("a"), bytes("one"));
+            map.put(bytes("ab"), bytes("two"));
+            var base = map.put(bytes("b"), bytes("three"));
+            var target = map.put(bytes("a"), bytes("updated"));
+
+            assertEquals(List.of("a", "ab", "b"), map.range(bytes("a"), bytes("c")).stream().map(row -> new String(row.getKey())).toList());
+            assertEquals(List.of("a", "ab"), map.prefix(bytes("a")).stream().map(row -> new String(row.getKey())).toList());
+            assertArrayEquals(bytes("one"), map.rangeAt(base.id(), bytes("a"), bytes("b")).get(0).getValue());
+            assertEquals(List.of("a", "ab"), map.prefixAt(base.id(), bytes("a")).stream().map(row -> new String(row.getKey())).toList());
+            assertEquals(List.of("a", "ab"), map.rangePage(null, null, 2).getEntries().stream().map(row -> new String(row.getKey())).toList());
+            assertEquals(List.of("a"), map.prefixPage(bytes("a"), null, 1).getEntries().stream().map(row -> new String(row.getKey())).toList());
+            var historicalPage = map.prefixPageAt(base.id(), bytes("a"), null, 1);
+            assertEquals(List.of("a"), historicalPage.getEntries().stream().map(row -> new String(row.getKey())).toList());
+            assertNotNull(historicalPage.getNextCursor());
+            assertEquals(List.of("a"), map.diff(base.id(), target.id()).stream().map(row -> new String(row.getKey())).toList());
+            assertEquals(List.of("a"), map.changesSince(base.id()).stream().map(row -> new String(row.getKey())).toList());
+
+            var rolledBack = map.rollbackTo(base.id());
+            assertArrayEquals(rolledBack.id(), map.headId().orElseThrow());
+            assertArrayEquals(bytes("one"), map.get(bytes("a")).orElseThrow());
+            assertTrue(map.changesSince(base.id()).isEmpty());
+        }
+    }
+
+    @Test
+    void versionedTimestampedWritesExposeCompleteMaintenanceAndRetentionRecords() {
+        Prolly.useLocalDebugLibrary();
+        try (Engine engine = Engine.memory(); var map = engine.versionedMap(bytes("maintenance-complete"))) {
+            var first = map.applyAtMillis(List.of(MapMutation.upsert(bytes("k"), bytes("one"))), 1_000);
+            var second = map.applyIfAtMillis(first.id(), List.of(MapMutation.upsert(bytes("k"), bytes("two"))), 2_000).current();
+            var third = map.applyAtMillis(List.of(MapMutation.upsert(bytes("k"), bytes("three"))), 3_000);
+
+        assertEquals(1_000L, first.createdAtMillis().orElseThrow());
+        assertEquals(2_000L, second.createdAtMillis().orElseThrow());
+            assertEquals(NamedRootRetentionKind.PREFIX, map.retentionPolicy().getKind());
+            var verification = map.verifyCatalog();
+            assertArrayEquals(third.id(), verification.getHead());
+            assertEquals(3, map.catalogVersionCount());
+            var plan = map.planGc();
+            assertTrue(plan.reachability().liveNodes() > 0);
+            assertTrue(plan.candidateNodes() >= plan.reclaimableNodes());
+
+            var aged = map.keepForAt(3_000, 1_500);
+            assertTrue(aged.retained().stream().anyMatch(id -> java.util.Arrays.equals(id, second.id())));
+            assertTrue(aged.removed().stream().anyMatch(id -> java.util.Arrays.equals(id, first.id())));
+            var explicit = map.keepVersions(List.of(second.id()));
+            assertTrue(explicit.retained().stream().anyMatch(id -> java.util.Arrays.equals(id, third.id())));
+            var pruned = map.pruneVersions(0);
+            assertEquals(1, pruned.retained().size());
+            assertArrayEquals(third.id(), pruned.retained().get(0));
+            assertTrue(pruned.removed().stream().anyMatch(id -> java.util.Arrays.equals(id, second.id())));
+            assertFalse(map.keepFor(10_000).retained().isEmpty());
+            assertTrue(map.sweepGc().deletedNodes() >= 0);
+        }
+    }
+
+    @Test
+    void versionedSubscriptionsResumeAndPollOwnedDiffs() {
+        Prolly.useLocalDebugLibrary();
+        try (Engine engine = Engine.memory(); var map = engine.versionedMap(bytes("subscription"))) {
+            var initial = map.initialize();
+            try (var subscription = map.subscribe()) {
+                assertArrayEquals(initial.id(), subscription.lastSeen().orElseThrow());
+                assertTrue(subscription.poll().isEmpty());
+                var current = map.put(bytes("k"), bytes("v"));
+                var event = subscription.poll().orElseThrow();
+                assertArrayEquals(initial.id(), event.getPrevious());
+                assertArrayEquals(current.id(), event.getCurrent().getId());
+                assertEquals(List.of("k"), event.getDiffs().stream().map(diff -> new String(diff.getKey())).toList());
+                assertArrayEquals(current.id(), subscription.lastSeen().orElseThrow());
+            }
+        }
+    }
+
+    @Test
+    void multiMapTransactionsAreAtomicAndReadStagedValues() {
+        Prolly.useLocalDebugLibrary();
+        try (Engine engine = Engine.memory()) {
+            try (var tx = engine.beginVersionedTransaction()) {
+                tx.put(bytes("a"), bytes("k"), bytes("one"));
+                tx.put(bytes("b"), bytes("k"), bytes("two"));
+                assertArrayEquals(bytes("one"), tx.get(bytes("a"), bytes("k")).orElseThrow());
+                var committed = tx.commit();
+                assertTrue(committed.applied());
+                assertEquals(2, committed.versions().size());
+            }
+            try (var a = engine.versionedMap(bytes("a")); var b = engine.versionedMap(bytes("b"))) {
+                assertArrayEquals(bytes("one"), a.get(bytes("k")).orElseThrow());
+                assertArrayEquals(bytes("two"), b.get(bytes("k")).orElseThrow());
+            }
+            try (var tx = engine.beginVersionedTransaction()) {
+                tx.put(bytes("a"), bytes("discard"), bytes("x"));
+                tx.rollback();
+            }
+            try (var a = engine.versionedMap(bytes("a"))) { assertTrue(a.get(bytes("discard")).isEmpty()); }
+        }
+    }
+
+    @Test
+    void pinnedMergesPageConflictsAndCasPublish() {
+        Prolly.useLocalDebugLibrary();
+        try (Engine engine = Engine.memory(); var map = engine.versionedMap(bytes("merge"))) {
+            var base = map.initialize();
+            var candidate = map.put(bytes("k"), bytes("candidate"));
+            map.put(bytes("k"), bytes("head"));
+            try (var merge = map.prepareMerge(base.id(), candidate.id())) {
+                assertArrayEquals(base.id(), merge.base().id());
+                assertArrayEquals(candidate.id(), merge.candidate().id());
+                assertEquals(List.of("k"), merge.conflictPage(null, 1).getConflicts().stream().map(row -> new String(row.getKey())).toList());
+                assertArrayEquals(candidate.id(), merge.publish("prefer_right").current().id());
+            }
+            assertArrayEquals(bytes("candidate"), map.get(bytes("k")).orElseThrow());
+        }
+    }
+
     private static byte[] bytes(String value) {
         return value.getBytes(StandardCharsets.UTF_8);
+    }
+
+    @Test
+    void proximityBuildAcceptsExplicitWorkerLimit() {
+        Prolly.useLocalDebugLibrary();
+        var records = List.of(
+                new ProximityRecord(bytes("a"), new float[]{0, 1}, bytes("alpha")),
+                new ProximityRecord(bytes("b"), new float[]{1, 0}, bytes("beta")));
+        try (Engine engine = Engine.memory();
+             var serial = engine.buildProximity(2, records, 1);
+             var parallel = engine.buildProximity(2, records, 2)) {
+            assertArrayEquals(serial.descriptor(), parallel.descriptor());
+        }
     }
 }

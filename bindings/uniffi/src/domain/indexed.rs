@@ -9,7 +9,7 @@ use prolly::{
     SecondaryIndexRegistry,
 };
 
-use crate::{BindingEngine, MutationRecord, ProllyBindingError, ProllyEngine};
+use crate::{BindingEngine, GcPlanRecord, MutationRecord, ProllyBindingError, ProllyEngine};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, uniffi::Enum)]
 pub enum IndexProjectionRecord {
@@ -86,6 +86,11 @@ impl From<SecondaryIndexLimits> for SecondaryIndexLimitsRecord {
     }
 }
 
+#[uniffi::export]
+pub fn default_secondary_index_limits() -> SecondaryIndexLimitsRecord {
+    SecondaryIndexLimits::default().into()
+}
+
 fn limits_from_record(
     value: SecondaryIndexLimitsRecord,
 ) -> Result<SecondaryIndexLimits, ProllyBindingError> {
@@ -137,6 +142,37 @@ pub trait SecondaryIndexExtractorCallback: Send + Sync {
     ) -> Result<Vec<IndexEntryRecord>, ProllyBindingError>;
 }
 
+fn secondary_index_from_callback(
+    name: Vec<u8>,
+    generation: u64,
+    extractor_id: String,
+    projection: IndexProjectionRecord,
+    limits: Option<SecondaryIndexLimitsRecord>,
+    extractor: Arc<dyn SecondaryIndexExtractorCallback>,
+) -> Result<SecondaryIndex, ProllyBindingError> {
+    let limits = limits
+        .map(limits_from_record)
+        .transpose()?
+        .unwrap_or_default();
+    Ok(SecondaryIndex::builder(name, generation, extractor_id)
+        .projection(projection.into())
+        .limits(limits)
+        .extract(move |primary_key, source_value| {
+            extractor
+                .extract(primary_key.to_vec(), source_value.to_vec())
+                .map(|entries| {
+                    entries
+                        .into_iter()
+                        .map(|entry| SecondaryIndexEntry {
+                            term: entry.term,
+                            projection: entry.projection,
+                        })
+                        .collect()
+                })
+                .map_err(|error| SecondaryIndexError::new(error.to_string()))
+        })?)
+}
+
 #[derive(uniffi::Object)]
 pub struct BindingIndexRegistry {
     inner: Mutex<SecondaryIndexRegistry>,
@@ -177,27 +213,14 @@ impl BindingIndexRegistry {
         limits: Option<SecondaryIndexLimitsRecord>,
         extractor: Arc<dyn SecondaryIndexExtractorCallback>,
     ) -> Result<(), ProllyBindingError> {
-        let limits = limits
-            .map(limits_from_record)
-            .transpose()?
-            .unwrap_or_default();
-        let definition = SecondaryIndex::builder(name, generation, extractor_id)
-            .projection(projection.into())
-            .limits(limits)
-            .extract(move |primary_key, source_value| {
-                extractor
-                    .extract(primary_key.to_vec(), source_value.to_vec())
-                    .map(|entries| {
-                        entries
-                            .into_iter()
-                            .map(|entry| SecondaryIndexEntry {
-                                term: entry.term,
-                                projection: entry.projection,
-                            })
-                            .collect()
-                    })
-                    .map_err(|error| SecondaryIndexError::new(error.to_string()))
-            })?;
+        let definition = secondary_index_from_callback(
+            name,
+            generation,
+            extractor_id,
+            projection,
+            limits,
+            extractor,
+        )?;
         let mut registry = self
             .inner
             .lock()
@@ -537,20 +560,20 @@ macro_rules! with_indexed_map {
     ($self:expr, $map:ident, $body:block) => {{
         match &$self.engine.inner {
             BindingEngine::Memory(engine) => {
-                let $map = engine.indexed_map(&$self.id, $self.registry.clone())?;
+                let $map = engine.indexed_map(&$self.id, $self.registry_snapshot()?)?;
                 let result = $body;
                 $self.capture_metrics($map.metrics())?;
                 result
             }
             BindingEngine::File(engine) => {
-                let $map = engine.indexed_map(&$self.id, $self.registry.clone())?;
+                let $map = engine.indexed_map(&$self.id, $self.registry_snapshot()?)?;
                 let result = $body;
                 $self.capture_metrics($map.metrics())?;
                 result
             }
             #[cfg(feature = "sqlite")]
             BindingEngine::Sqlite(engine) => {
-                let $map = engine.indexed_map(&$self.id, $self.registry.clone())?;
+                let $map = engine.indexed_map(&$self.id, $self.registry_snapshot()?)?;
                 let result = $body;
                 $self.capture_metrics($map.metrics())?;
                 result
@@ -566,11 +589,97 @@ macro_rules! with_indexed_map {
 pub struct BindingIndexedMap {
     engine: Arc<ProllyEngine>,
     id: Vec<u8>,
-    registry: SecondaryIndexRegistry,
-    metrics: Mutex<IndexedMapMetricsRecord>,
+    registry: Arc<Mutex<SecondaryIndexRegistry>>,
+    metrics: Arc<Mutex<IndexedMapMetricsRecord>>,
+    fast_handle: AtomicU64,
+}
+
+pub(crate) struct BindingIndexedFastTarget {
+    engine: Arc<ProllyEngine>,
+    id: Vec<u8>,
+    registry: Arc<Mutex<SecondaryIndexRegistry>>,
+    metrics: Arc<Mutex<IndexedMapMetricsRecord>>,
+}
+
+impl BindingIndexedFastTarget {
+    pub(crate) fn get_lease(
+        &self,
+        key: &[u8],
+    ) -> Result<Option<prolly::OwnedValueLease>, ProllyBindingError> {
+        let registry = self
+            .registry
+            .lock()
+            .map_err(|_| ProllyBindingError::Internal {
+                reason: "indexed-map registry is poisoned".to_string(),
+            })?
+            .clone();
+        let (lease, metrics) = match &self.engine.inner {
+            BindingEngine::Memory(engine) => {
+                let map = engine.indexed_map(&self.id, registry)?;
+                let lease = map.source().get_lease(key)?;
+                (lease, map.metrics())
+            }
+            BindingEngine::File(engine) => {
+                let map = engine.indexed_map(&self.id, registry)?;
+                let lease = map.source().get_lease(key)?;
+                (lease, map.metrics())
+            }
+            #[cfg(feature = "sqlite")]
+            BindingEngine::Sqlite(engine) => {
+                let map = engine.indexed_map(&self.id, registry)?;
+                let lease = map.source().get_lease(key)?;
+                (lease, map.metrics())
+            }
+            BindingEngine::Host(_) => {
+                return Err(ProllyBindingError::Internal {
+                    reason: "custom host stores do not expose indexed-map transactions".to_string(),
+                })
+            }
+        };
+        self.metrics
+            .lock()
+            .map_err(|_| ProllyBindingError::Internal {
+                reason: "indexed-map metrics are poisoned".to_string(),
+            })?
+            .add(metrics);
+        Ok(lease)
+    }
 }
 
 impl BindingIndexedMap {
+    pub(crate) fn fast_target(&self) -> BindingIndexedFastTarget {
+        BindingIndexedFastTarget {
+            engine: self.engine.clone(),
+            id: self.id.clone(),
+            registry: self.registry.clone(),
+            metrics: self.metrics.clone(),
+        }
+    }
+
+    fn registry_snapshot(&self) -> Result<SecondaryIndexRegistry, ProllyBindingError> {
+        self.registry
+            .lock()
+            .map(|registry| registry.clone())
+            .map_err(|_| ProllyBindingError::Internal {
+                reason: "indexed-map registry is poisoned".to_string(),
+            })
+    }
+
+    fn replace_registry_definition(
+        &self,
+        _name: &[u8],
+        replacement: SecondaryIndex,
+    ) -> Result<(), ProllyBindingError> {
+        let mut registry = self
+            .registry
+            .lock()
+            .map_err(|_| ProllyBindingError::Internal {
+                reason: "indexed-map registry is poisoned".to_string(),
+            })?;
+        *registry = registry.clone().replace(replacement)?;
+        Ok(())
+    }
+
     fn capture_metrics(
         &self,
         metrics: IndexedMapMetricsSnapshot,
@@ -601,13 +710,32 @@ impl BindingIndexedMap {
         Ok(Self {
             engine,
             id,
-            registry: registry.snapshot()?,
-            metrics: Mutex::new(IndexedMapMetricsRecord::default()),
+            registry: Arc::new(Mutex::new(registry.snapshot()?)),
+            metrics: Arc::new(Mutex::new(IndexedMapMetricsRecord::default())),
+            fast_handle: AtomicU64::new(0),
         })
     }
 
     pub fn id(&self) -> Vec<u8> {
         self.id.clone()
+    }
+
+    pub fn fast_handle(&self) -> u64 {
+        let current = self.fast_handle.load(Ordering::Acquire);
+        if current != 0 {
+            return current;
+        }
+        let handle = crate::fast_abi::register_indexed_map(self);
+        match self
+            .fast_handle
+            .compare_exchange(0, handle, Ordering::AcqRel, Ordering::Acquire)
+        {
+            Ok(_) => handle,
+            Err(winner) => {
+                crate::fast_abi::unregister_indexed_map(handle);
+                winner
+            }
+        }
     }
 
     pub fn ensure_index(
@@ -733,6 +861,40 @@ impl BindingIndexedMap {
         })
     }
 
+    pub fn replace_index(
+        &self,
+        name: Vec<u8>,
+        generation: u64,
+        extractor_id: String,
+        projection: IndexProjectionRecord,
+        limits: Option<SecondaryIndexLimitsRecord>,
+        extractor: Arc<dyn SecondaryIndexExtractorCallback>,
+    ) -> Result<IndexBuildResultRecord, ProllyBindingError> {
+        let definition = secondary_index_from_callback(
+            name.clone(),
+            generation,
+            extractor_id,
+            projection,
+            limits,
+            extractor,
+        )?;
+        let retained_definition = definition.clone();
+        let replacement_name = name.clone();
+        with_indexed_map!(self, map, {
+            let result = map.replace_index(name, definition)?;
+            self.replace_registry_definition(&replacement_name, retained_definition)?;
+            Ok(IndexBuildResultRecord {
+                source_version: result.source_version.into_cid().0.to_vec(),
+                index_version: result.index_version.into_cid().0.to_vec(),
+                catalog_version: result.catalog_version.into_cid().0.to_vec(),
+                generation: result.generation,
+                entries: result.entries as u64,
+                attempts: result.attempts as u64,
+                activated: result.activated,
+            })
+        })
+    }
+
     pub fn deactivate_index(
         &self,
         name: Vec<u8>,
@@ -750,7 +912,7 @@ impl BindingIndexedMap {
             Ok(Arc::new(BindingIndexedSnapshot {
                 engine: self.engine.clone(),
                 id: self.id.clone(),
-                registry: self.registry.clone(),
+                registry: self.registry_snapshot()?,
                 snapshot_id: snapshot.id().clone().into(),
             }))
         })
@@ -766,7 +928,7 @@ impl BindingIndexedMap {
             Ok(Arc::new(BindingIndexedSnapshot {
                 engine: self.engine.clone(),
                 id: self.id.clone(),
-                registry: self.registry.clone(),
+                registry: self.registry_snapshot()?,
                 snapshot_id: snapshot.id().clone().into(),
             }))
         })
@@ -782,7 +944,7 @@ impl BindingIndexedMap {
             Ok(Arc::new(BindingIndexedSnapshot {
                 engine: self.engine.clone(),
                 id: self.id.clone(),
-                registry: self.registry.clone(),
+                registry: self.registry_snapshot()?,
                 snapshot_id,
             }))
         })
@@ -813,6 +975,18 @@ impl BindingIndexedMap {
         with_indexed_map!(self, map, {
             map.keep_last(count).map(Into::into).map_err(Into::into)
         })
+    }
+
+    pub fn plan_gc(&self) -> Result<GcPlanRecord, ProllyBindingError> {
+        with_indexed_map!(self, map, {
+            GcPlanRecord::try_from(map.plan_indexed_gc()?)
+        })
+    }
+}
+
+impl Drop for BindingIndexedMap {
+    fn drop(&mut self) {
+        crate::fast_abi::unregister_indexed_map(self.fast_handle.load(Ordering::Relaxed));
     }
 }
 
@@ -1122,9 +1296,31 @@ mod tests {
         assert!(metrics.records_extracted >= 1);
         map.delete(b"u1".to_vec()).unwrap();
         assert!(map.get(b"u1".to_vec()).unwrap().is_none());
-        let historical = map.snapshot_by_id(historical_id).unwrap();
+        let historical = map.snapshot_by_id(historical_id.clone()).unwrap();
         assert_eq!(
             historical
+                .index(b"by_team".to_vec())
+                .unwrap()
+                .exact(b"red".to_vec())
+                .unwrap()
+                .len(),
+            1
+        );
+        let replacement = map
+            .replace_index(
+                b"by_team".to_vec(),
+                2,
+                "tests.users.by-team/v2".to_string(),
+                IndexProjectionRecord::Include,
+                None,
+                Arc::new(TeamExtractor),
+            )
+            .unwrap();
+        assert_eq!(replacement.generation, 2);
+        assert_eq!(map.health().unwrap().active_indexes[0].generation, 2);
+        assert_eq!(
+            map.snapshot_by_id(historical_id)
+                .unwrap()
                 .index(b"by_team".to_vec())
                 .unwrap()
                 .exact(b"red".to_vec())
@@ -1139,6 +1335,7 @@ mod tests {
             .unwrap()
             .retained_source_versions
             .is_empty());
+        assert!(map.plan_gc().unwrap().reachability.live_nodes > 0);
 
         let stale = map.health().unwrap().source_version.unwrap();
         map.put(b"u2".to_vec(), b"next".to_vec()).unwrap();

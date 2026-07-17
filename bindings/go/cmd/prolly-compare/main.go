@@ -164,7 +164,7 @@ func runScenario(args arguments) scenarioResult {
 		must(err)
 		scanStarted := time.Now()
 		outcome, err = session.ScanRangeView([]byte{}, nil, func(entry prolly.EntryView) bool {
-			scannedBytes += len(entry.Key) + len(entry.Value)
+			scannedBytes += entry.Key.Len() + entry.Value.Len()
 			scanCount++
 			return true
 		})

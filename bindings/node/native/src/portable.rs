@@ -1,27 +1,287 @@
 use super::{
-    to_napi_error, NativeProllyEngine, NodeEntryRecord, NodeMutationRecord, NodeRangeCursorRecord,
-    NodeRangePageRecord, NodeReverseCursorRecord, NodeReversePageRecord, NodeTreeRecord,
+    to_napi_error, NativeProllyBlobStore, NativeProllyEngine, NodeBatchApplyStatsRecord,
+    NodeBlobGcPlanRecord, NodeBlobGcSweepRecord, NodeConflictPageRecord, NodeDiffPageRecord,
+    NodeDiffRecord, NodeEntryRecord, NodeGcPlanRecord, NodeGcSweepRecord,
+    NodeLargeValueConfigRecord, NodeMultiKeyProofVerificationRecord, NodeMutationRecord,
+    NodeNamedRootRetentionRecord, NodeParallelConfigRecord, NodeRangeCursorRecord,
+    NodeRangePageProofVerificationRecord, NodeRangePageRecord, NodeRangeProofVerificationRecord,
+    NodeReverseCursorRecord, NodeReversePageRecord, NodeSnapshotBundleRecord, NodeTreeRecord,
 };
-use napi::bindgen_prelude::{Buffer, Env, Error, Float32Array, FunctionRef, Result, Status};
+use napi::bindgen_prelude::{
+    AsyncTask, Buffer, Env, Error, Float32Array, FunctionRef, Result, Status, Task,
+};
+use napi::JsObject;
 use napi_derive::napi;
 use prolly_bindings::{
-    default_content_graph_limits, default_proximity_config, exact_proximity_search_request,
-    verify_key_proof, verify_proximity_membership_proof, verify_proximity_structure_proof,
-    ActiveIndexHealthRecord, BindingIndexRegistry, BindingIndexedMap, BindingIndexedSnapshot,
-    BindingMapSnapshot, BindingProximityMap, BindingProximityReadSession,
-    BindingProximitySearchProof, BindingSecondaryIndexSnapshot, BindingVersionedMap,
-    DistanceMetricRecord, ExactProximityRecordRecord, IndexBuildResultRecord, IndexEntryRecord,
-    IndexMatchRecord, IndexPageRecord, IndexProjectionRecord, IndexVerificationRecord,
-    IndexedMapHealthRecord, IndexedMapMetricsRecord, IndexedRetentionRecord,
-    IndexedSnapshotIdRecord, IndexedSourceRecord, IndexedUpdateKind, IndexedUpdateRecord,
-    IndexedVersionRecord, KeyProofRecord, MapUpdateKind, MapUpdateRecord, MapVersionRecord,
-    ProllyBindingError, ProllyReadSession, ProximityConfigRecord, ProximityMembershipProofRecord,
-    ProximityMutationRecord, ProximityMutationStatsRecord, ProximityNeighborRecord,
-    ProximityRecordRecord, ProximitySearchClaimKindRecord, ProximitySearchResultRecord,
-    ProximityStructuralProofRecord, ProximityVerificationRecord, SearchBackendRecord,
-    SearchCompletionRecord, SecondaryIndexExtractorCallback, VersionPruneRecord,
+    default_composite_accelerator_config, default_composite_build_limits,
+    default_composite_rebuild_options, default_config, default_content_graph_limits,
+    default_hnsw_build_limits, default_hnsw_config, default_pq_build_limits, default_pq_config,
+    default_proximity_config, default_proximity_search_runtime_policy, verify_key_proof,
+    verify_multi_key_proof, verify_proximity_membership_proof, verify_proximity_structure_proof,
+    verify_range_page_proof, verify_range_proof, AcceleratorCatalogEntryRecord,
+    ActiveIndexHealthRecord, AdaptiveQualityRecord, BindingAcceleratorCatalog,
+    BindingCompositeAccelerator, BindingHnswIndex, BindingIndexRegistry, BindingIndexedMap,
+    BindingIndexedSnapshot, BindingMapComparison, BindingMapMerge, BindingMapSnapshot,
+    BindingMapSubscription, BindingProductQuantizer, BindingProximityCancellationToken,
+    BindingProximityMap, BindingProximityReadSession, BindingProximitySearchProof,
+    BindingProximitySearchRuntime, BindingSecondaryIndexSnapshot, BindingVersionedMap,
+    BindingVersionedTransaction, CatalogAcceleratorKindRecord, CompositeAcceleratorConfigRecord,
+    CompositeBaseKindRecord, CompositeBuildLimitsRecord, CompositeBuildOrRebuildKindRecord,
+    CompositeBuildOrRebuildOutcomeRecord, CompositeBuildOutcomeRecord, CompositeBuildStatsRecord,
+    CompositeRebuildOptionsRecord, DistanceMetricRecord, ExactProximityRecordRecord,
+    FullRebuildReasonKindRecord, FullRebuildReasonRecord, HnswBuildLimitsRecord,
+    HnswBuildStatsRecord, HnswConfigRecord, HnswRoutingVectorEncodingRecord,
+    IndexBuildResultRecord, IndexEntryRecord, IndexMatchRecord, IndexPageRecord,
+    IndexProjectionRecord, IndexVerificationRecord, IndexedMapHealthRecord,
+    IndexedMapMetricsRecord, IndexedRetentionRecord, IndexedSnapshotIdRecord, IndexedSourceRecord,
+    IndexedUpdateKind, IndexedUpdateRecord, IndexedVersionRecord, KeyProofRecord, MapUpdateKind,
+    MapUpdateRecord, MapVersionRecord, MultiKeyProofRecord, ProductQuantizationBuildLimitsRecord,
+    ProductQuantizationBuildStatsRecord, ProductQuantizationConfigRecord,
+    ProductQuantizationQualityRecord, ProllyBindingError, ProllyReadSession, ProvedRangePageRecord,
+    ProximityConfigRecord, ProximityFilterKind, ProximityFilterRecord,
+    ProximityMembershipProofRecord, ProximityMutationRecord, ProximityMutationStatsRecord,
+    ProximityNeighborRecord, ProximityRecordRecord, ProximityRecordVisitorCallback,
+    ProximitySearchClaimKindRecord, ProximitySearchRequestRecord, ProximitySearchResultRecord,
+    ProximitySearchRuntimePolicyRecord, ProximitySearchRuntimeStatsRecord,
+    ProximityStructuralProofRecord, ProximityVerificationRecord, QueryKernelRecord,
+    RangeProofRecord, SearchBackendRecord, SearchBudgetRecord, SearchCompletionRecord,
+    SearchPolicyKind, SecondaryIndexExtractorCallback, SecondaryIndexLimitsRecord,
+    VersionPruneRecord,
 };
 use std::sync::Arc;
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct NodeFastPageResult {
+    status: i32,
+    terminal: u8,
+    reserved: [u8; 3],
+    record_count: u32,
+    lease_handle: u64,
+    data_ptr: *const u8,
+    data_len: u64,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct NodeFastScanOpenResult {
+    status: i32,
+    reserved: u32,
+    scan_handle: u64,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct NodeFastValueLeaseResult {
+    status: i32,
+    found: u8,
+    reserved: [u8; 3],
+    lease_handle: u64,
+    data_ptr: *const u8,
+    data_len: u64,
+}
+
+extern "C" {
+    fn prolly_fast_read_session_scan_open(
+        session_handle: u64,
+        start_ptr: *const u8,
+        start_len: usize,
+        end_ptr: *const u8,
+        end_len: usize,
+        has_end: u8,
+    ) -> NodeFastScanOpenResult;
+    fn prolly_fast_read_session_scan_next(
+        session_handle: u64,
+        scan_handle: u64,
+        max_records: u32,
+        max_arena_bytes: u64,
+    ) -> NodeFastPageResult;
+    fn prolly_fast_proximity_search(
+        map_handle: u64,
+        query_ptr: *const f32,
+        dimensions: usize,
+        k: u32,
+        max_arena_bytes: u64,
+    ) -> NodeFastPageResult;
+    fn prolly_fast_proximity_scan_range_page(
+        map_handle: u64,
+        start_ptr: *const u8,
+        start_len: usize,
+        end_ptr: *const u8,
+        end_len: usize,
+        has_end: u8,
+        after_ptr: *const u8,
+        after_len: usize,
+        has_after: u8,
+        max_records: u32,
+        max_arena_bytes: u64,
+    ) -> NodeFastPageResult;
+    fn prolly_fast_scan_close(scan_handle: u64);
+    fn prolly_fast_page_release(lease_handle: u64);
+    fn prolly_fast_read_session_get_lease(
+        session_handle: u64,
+        key_ptr: *const u8,
+        key_len: usize,
+    ) -> NodeFastValueLeaseResult;
+    fn prolly_fast_proximity_get_lease(
+        map_handle: u64,
+        key_ptr: *const u8,
+        key_len: usize,
+    ) -> NodeFastValueLeaseResult;
+    fn prolly_fast_indexed_get_lease(
+        map_handle: u64,
+        key_ptr: *const u8,
+        key_len: usize,
+    ) -> NodeFastValueLeaseResult;
+    fn prolly_fast_value_release(lease_handle: u64);
+}
+
+struct NodeFastScanGuard(u64);
+
+impl Drop for NodeFastScanGuard {
+    fn drop(&mut self) {
+        unsafe { prolly_fast_scan_close(self.0) };
+    }
+}
+
+struct NodeFastPageGuard(u64);
+
+impl Drop for NodeFastPageGuard {
+    fn drop(&mut self) {
+        unsafe { prolly_fast_page_release(self.0) };
+    }
+}
+
+struct NodeFastValueGuard(u64);
+
+impl Drop for NodeFastValueGuard {
+    fn drop(&mut self) {
+        unsafe { prolly_fast_value_release(self.0) };
+    }
+}
+
+fn with_proximity_record_view(
+    env: Env,
+    map_handle: u64,
+    key: &Buffer,
+    visit: FunctionRef<JsObject, ()>,
+) -> Result<bool> {
+    if map_handle == 0 {
+        return Err(Error::new(
+            Status::GenericFailure,
+            "native proximity handle is closed",
+        ));
+    }
+    let result = unsafe { prolly_fast_proximity_get_lease(map_handle, key.as_ptr(), key.len()) };
+    if result.status != 0 {
+        return Err(Error::new(
+            Status::GenericFailure,
+            format!(
+                "native retained proximity read failed with status {}",
+                result.status
+            ),
+        ));
+    }
+    if result.found == 0 {
+        if result.lease_handle != 0 {
+            unsafe { prolly_fast_value_release(result.lease_handle) };
+            return Err(Error::new(
+                Status::GenericFailure,
+                "missing proximity read returned a value lease",
+            ));
+        }
+        return Ok(false);
+    }
+    let length = usize::try_from(result.data_len).map_err(|_| {
+        Error::new(
+            Status::GenericFailure,
+            "proximity record exceeds the host address space",
+        )
+    })?;
+    if result.lease_handle == 0 || (length != 0 && result.data_ptr.is_null()) {
+        if result.lease_handle != 0 {
+            unsafe { prolly_fast_value_release(result.lease_handle) };
+        }
+        return Err(Error::new(
+            Status::GenericFailure,
+            "native proximity read returned an invalid value lease",
+        ));
+    }
+    let _lease = NodeFastValueGuard(result.lease_handle);
+    let argument = if length == 0 {
+        env.create_buffer(0)?.into_unknown().coerce_to_object()?
+    } else {
+        unsafe {
+            env.create_buffer_with_borrowed_data(
+                result.data_ptr.cast_mut(),
+                length,
+                (),
+                |(), _env| {},
+            )?
+        }
+        .into_unknown()
+        .coerce_to_object()?
+    };
+    visit.borrow_back(&env)?.call(argument)?;
+    Ok(true)
+}
+
+fn with_proximity_record_range_page(
+    env: Env,
+    map_handle: u64,
+    start: &Buffer,
+    end: Option<&Buffer>,
+    after: Option<&Buffer>,
+    max_records: u32,
+    visit: FunctionRef<JsObject, ()>,
+) -> Result<()> {
+    let (end_ptr, end_len, has_end) = end
+        .map(|value| (value.as_ptr(), value.len(), 1))
+        .unwrap_or((std::ptr::null(), 0, 0));
+    let (after_ptr, after_len, has_after) = after
+        .map(|value| (value.as_ptr(), value.len(), 1))
+        .unwrap_or((std::ptr::null(), 0, 0));
+    let page = unsafe {
+        prolly_fast_proximity_scan_range_page(
+            map_handle,
+            start.as_ptr(),
+            start.len(),
+            end_ptr,
+            end_len,
+            has_end,
+            after_ptr,
+            after_len,
+            has_after,
+            max_records,
+            4 * 1024 * 1024,
+        )
+    };
+    if page.status != 0 || page.lease_handle == 0 || page.data_ptr.is_null() {
+        return Err(Error::new(
+            Status::GenericFailure,
+            format!(
+                "native proximity range page failed with status {}",
+                page.status
+            ),
+        ));
+    }
+    let _page = NodeFastPageGuard(page.lease_handle);
+    let length = usize::try_from(page.data_len).map_err(|_| {
+        Error::new(
+            Status::GenericFailure,
+            "native proximity page exceeds the host address space",
+        )
+    })?;
+    let borrowed = unsafe {
+        env.create_buffer_with_borrowed_data(page.data_ptr.cast_mut(), length, (), |(), _env| {})?
+    };
+    let mut argument = env.create_object()?;
+    argument.set_named_property("bytes", borrowed.into_unknown())?;
+    argument.set_named_property("recordCount", page.record_count)?;
+    argument.set_named_property("terminal", page.terminal != 0)?;
+    visit.borrow_back(&env)?.call(argument)?;
+    Ok(())
+}
 
 #[napi(object)]
 pub struct NodePortableMapVersion {
@@ -384,6 +644,58 @@ pub struct NodePortableProximityRecord {
     pub value: Buffer,
 }
 
+impl From<ProximityRecordRecord> for NodePortableProximityRecord {
+    fn from(value: ProximityRecordRecord) -> Self {
+        Self {
+            key: Buffer::from(value.key),
+            vector: Float32Array::from(value.vector),
+            value: Buffer::from(value.value),
+        }
+    }
+}
+
+type NodePortableProximityRecordVisitor = FunctionRef<NodePortableProximityRecord, bool>;
+
+struct NodeProximityRecordVisitor {
+    env: Env,
+    callback: NodePortableProximityRecordVisitor,
+    callback_error: Arc<std::sync::Mutex<Option<String>>>,
+}
+
+unsafe impl Send for NodeProximityRecordVisitor {}
+unsafe impl Sync for NodeProximityRecordVisitor {}
+
+impl ProximityRecordVisitorCallback for NodeProximityRecordVisitor {
+    fn visit(&self, record: ProximityRecordRecord) -> bool {
+        if self
+            .callback_error
+            .lock()
+            .map(|guard| guard.is_some())
+            .unwrap_or(true)
+        {
+            return false;
+        }
+        let result = self
+            .callback
+            .borrow_back(&self.env)
+            .map_err(|error| error.to_string())
+            .and_then(|function| {
+                function
+                    .call(record.into())
+                    .map_err(|error| error.to_string())
+            });
+        match result {
+            Ok(should_continue) => should_continue,
+            Err(error) => {
+                if let Ok(mut guard) = self.callback_error.lock() {
+                    *guard = Some(error);
+                }
+                false
+            }
+        }
+    }
+}
+
 #[napi(object)]
 pub struct NodePortableExactProximityRecord {
     pub vector: Vec<f64>,
@@ -545,6 +857,627 @@ pub struct NodePortableNeighbor {
     pub distance: f64,
 }
 
+#[napi(object)]
+pub struct NodePortableSearchBudget {
+    pub max_nodes: Option<String>,
+    pub max_committed_bytes: Option<String>,
+    pub max_distance_evaluations: Option<String>,
+    pub max_frontier_entries: Option<String>,
+}
+
+#[napi(object)]
+pub struct NodePortableSearchFilter {
+    pub kind: String,
+    pub start: Option<Buffer>,
+    pub range_end: Option<Buffer>,
+    pub prefix: Option<Buffer>,
+    pub eligible_keys: Vec<Buffer>,
+}
+
+#[napi(object)]
+pub struct NodePortableSearchRequest {
+    pub query: Float32Array,
+    pub k: String,
+    pub policy: String,
+    pub adaptive_quality: Option<String>,
+    pub budget: NodePortableSearchBudget,
+    pub filter: NodePortableSearchFilter,
+    pub kernel: String,
+    pub backend: String,
+    pub hnsw_ef_search: Option<u32>,
+    pub pq_rerank_multiplier: Option<u16>,
+}
+
+fn parse_u64(value: String, name: &str) -> Result<u64> {
+    value
+        .parse::<u64>()
+        .map_err(|error| Error::new(Status::InvalidArg, format!("invalid {name} value: {error}")))
+}
+
+fn parse_optional_u64(value: Option<String>, name: &str) -> Result<Option<u64>> {
+    value.map(|value| parse_u64(value, name)).transpose()
+}
+
+#[napi(object)]
+pub struct NodePortableHnswConfig {
+    pub max_connections: u32,
+    pub ef_construction: u32,
+    pub ef_search: u32,
+    pub level_bits: u32,
+    pub overfetch_multiplier: u32,
+    pub seed: String,
+    pub routing_vector_encoding: String,
+}
+
+impl From<HnswConfigRecord> for NodePortableHnswConfig {
+    fn from(value: HnswConfigRecord) -> Self {
+        Self {
+            max_connections: u32::from(value.max_connections),
+            ef_construction: value.ef_construction,
+            ef_search: value.ef_search,
+            level_bits: u32::from(value.level_bits),
+            overfetch_multiplier: value.overfetch_multiplier,
+            seed: value.seed.to_string(),
+            routing_vector_encoding: match value.routing_vector_encoding {
+                HnswRoutingVectorEncodingRecord::FullF32 => "full_f32",
+            }
+            .to_string(),
+        }
+    }
+}
+
+impl TryFrom<NodePortableHnswConfig> for HnswConfigRecord {
+    type Error = Error;
+
+    fn try_from(value: NodePortableHnswConfig) -> Result<Self> {
+        Ok(Self {
+            max_connections: value
+                .max_connections
+                .try_into()
+                .map_err(|_| Error::new(Status::InvalidArg, "maxConnections must fit in uint16"))?,
+            ef_construction: value.ef_construction,
+            ef_search: value.ef_search,
+            level_bits: value
+                .level_bits
+                .try_into()
+                .map_err(|_| Error::new(Status::InvalidArg, "levelBits must fit in uint8"))?,
+            overfetch_multiplier: value.overfetch_multiplier,
+            seed: parse_u64(value.seed, "seed")?,
+            routing_vector_encoding: match value.routing_vector_encoding.as_str() {
+                "full_f32" => HnswRoutingVectorEncodingRecord::FullF32,
+                other => {
+                    return Err(Error::new(
+                        Status::InvalidArg,
+                        format!("unknown HNSW routing-vector encoding: {other}"),
+                    ))
+                }
+            },
+        })
+    }
+}
+
+#[napi(object)]
+pub struct NodePortableHnswBuildLimits {
+    pub max_records: Option<String>,
+    pub max_owned_bytes: Option<String>,
+    pub max_distance_evaluations: Option<String>,
+    pub worker_threads: String,
+    pub max_encoded_graph_bytes: Option<String>,
+}
+
+impl TryFrom<NodePortableHnswBuildLimits> for HnswBuildLimitsRecord {
+    type Error = Error;
+
+    fn try_from(value: NodePortableHnswBuildLimits) -> Result<Self> {
+        Ok(Self {
+            max_records: parse_optional_u64(value.max_records, "maxRecords")?,
+            max_owned_bytes: parse_optional_u64(value.max_owned_bytes, "maxOwnedBytes")?,
+            max_distance_evaluations: parse_optional_u64(
+                value.max_distance_evaluations,
+                "maxDistanceEvaluations",
+            )?,
+            worker_threads: parse_u64(value.worker_threads, "workerThreads")?,
+            max_encoded_graph_bytes: parse_optional_u64(
+                value.max_encoded_graph_bytes,
+                "maxEncodedGraphBytes",
+            )?,
+        })
+    }
+}
+
+#[napi(object)]
+pub struct NodePortableHnswBuildStats {
+    pub records: String,
+    pub distance_evaluations: String,
+    pub directed_edges: String,
+    pub maximum_level: u32,
+    pub owned_bytes: String,
+    pub encoded_graph_bytes: String,
+}
+
+impl From<HnswBuildStatsRecord> for NodePortableHnswBuildStats {
+    fn from(value: HnswBuildStatsRecord) -> Self {
+        Self {
+            records: value.records.to_string(),
+            distance_evaluations: value.distance_evaluations.to_string(),
+            directed_edges: value.directed_edges.to_string(),
+            maximum_level: u32::from(value.maximum_level),
+            owned_bytes: value.owned_bytes.to_string(),
+            encoded_graph_bytes: value.encoded_graph_bytes.to_string(),
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NodePortablePqConfig {
+    pub subquantizers: u32,
+    pub centroids_per_subquantizer: u32,
+    pub training_iterations: u32,
+    pub rerank_multiplier: u32,
+    pub seed: String,
+    pub max_training_vectors: String,
+}
+
+impl From<ProductQuantizationConfigRecord> for NodePortablePqConfig {
+    fn from(value: ProductQuantizationConfigRecord) -> Self {
+        Self {
+            subquantizers: value.subquantizers,
+            centroids_per_subquantizer: u32::from(value.centroids_per_subquantizer),
+            training_iterations: u32::from(value.training_iterations),
+            rerank_multiplier: value.rerank_multiplier,
+            seed: value.seed.to_string(),
+            max_training_vectors: value.max_training_vectors.to_string(),
+        }
+    }
+}
+
+impl TryFrom<NodePortablePqConfig> for ProductQuantizationConfigRecord {
+    type Error = Error;
+
+    fn try_from(value: NodePortablePqConfig) -> Result<Self> {
+        Ok(Self {
+            subquantizers: value.subquantizers,
+            centroids_per_subquantizer: value.centroids_per_subquantizer.try_into().map_err(
+                |_| {
+                    Error::new(
+                        Status::InvalidArg,
+                        "centroidsPerSubquantizer must fit in uint16",
+                    )
+                },
+            )?,
+            training_iterations: value.training_iterations.try_into().map_err(|_| {
+                Error::new(Status::InvalidArg, "trainingIterations must fit in uint16")
+            })?,
+            rerank_multiplier: value.rerank_multiplier,
+            seed: parse_u64(value.seed, "seed")?,
+            max_training_vectors: parse_u64(value.max_training_vectors, "maxTrainingVectors")?,
+        })
+    }
+}
+
+#[napi(object)]
+pub struct NodePortablePqBuildLimits {
+    pub max_training_vectors: Option<String>,
+    pub max_training_bytes: Option<String>,
+    pub max_temporary_code_bytes: Option<String>,
+    pub max_distance_evaluations: Option<String>,
+    pub max_encoded_output_bytes: Option<String>,
+    pub max_worker_threads: Option<String>,
+}
+
+impl TryFrom<NodePortablePqBuildLimits> for ProductQuantizationBuildLimitsRecord {
+    type Error = Error;
+
+    fn try_from(value: NodePortablePqBuildLimits) -> Result<Self> {
+        Ok(Self {
+            max_training_vectors: parse_optional_u64(
+                value.max_training_vectors,
+                "maxTrainingVectors",
+            )?,
+            max_training_bytes: parse_optional_u64(value.max_training_bytes, "maxTrainingBytes")?,
+            max_temporary_code_bytes: parse_optional_u64(
+                value.max_temporary_code_bytes,
+                "maxTemporaryCodeBytes",
+            )?,
+            max_distance_evaluations: parse_optional_u64(
+                value.max_distance_evaluations,
+                "maxDistanceEvaluations",
+            )?,
+            max_encoded_output_bytes: parse_optional_u64(
+                value.max_encoded_output_bytes,
+                "maxEncodedOutputBytes",
+            )?,
+            max_worker_threads: parse_optional_u64(value.max_worker_threads, "maxWorkerThreads")?,
+        })
+    }
+}
+
+#[napi(object)]
+pub struct NodePortablePqBuildStats {
+    pub training_distance_evaluations: String,
+    pub encoding_distance_evaluations: String,
+    pub encoded_vectors: String,
+    pub training_vectors: String,
+    pub training_bytes: String,
+    pub encoded_output_bytes: String,
+}
+
+impl From<ProductQuantizationBuildStatsRecord> for NodePortablePqBuildStats {
+    fn from(value: ProductQuantizationBuildStatsRecord) -> Self {
+        Self {
+            training_distance_evaluations: value.training_distance_evaluations.to_string(),
+            encoding_distance_evaluations: value.encoding_distance_evaluations.to_string(),
+            encoded_vectors: value.encoded_vectors.to_string(),
+            training_vectors: value.training_vectors.to_string(),
+            training_bytes: value.training_bytes.to_string(),
+            encoded_output_bytes: value.encoded_output_bytes.to_string(),
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NodePortablePqQuality {
+    pub mean_squared_error: f64,
+    pub maximum_squared_error: f64,
+}
+
+impl From<ProductQuantizationQualityRecord> for NodePortablePqQuality {
+    fn from(value: ProductQuantizationQualityRecord) -> Self {
+        Self {
+            mean_squared_error: value.mean_squared_error,
+            maximum_squared_error: value.maximum_squared_error,
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NodePortableCompositeConfig {
+    pub max_delta_records: String,
+    pub max_shadow_records: String,
+    pub max_delta_ratio_ppm: u32,
+    pub max_shadow_ratio_ppm: u32,
+    pub base_overfetch_multiplier: u32,
+}
+
+impl From<CompositeAcceleratorConfigRecord> for NodePortableCompositeConfig {
+    fn from(value: CompositeAcceleratorConfigRecord) -> Self {
+        Self {
+            max_delta_records: value.max_delta_records.to_string(),
+            max_shadow_records: value.max_shadow_records.to_string(),
+            max_delta_ratio_ppm: value.max_delta_ratio_ppm,
+            max_shadow_ratio_ppm: value.max_shadow_ratio_ppm,
+            base_overfetch_multiplier: value.base_overfetch_multiplier,
+        }
+    }
+}
+
+impl TryFrom<NodePortableCompositeConfig> for CompositeAcceleratorConfigRecord {
+    type Error = Error;
+
+    fn try_from(value: NodePortableCompositeConfig) -> Result<Self> {
+        Ok(Self {
+            max_delta_records: parse_u64(value.max_delta_records, "maxDeltaRecords")?,
+            max_shadow_records: parse_u64(value.max_shadow_records, "maxShadowRecords")?,
+            max_delta_ratio_ppm: value.max_delta_ratio_ppm,
+            max_shadow_ratio_ppm: value.max_shadow_ratio_ppm,
+            base_overfetch_multiplier: value.base_overfetch_multiplier,
+        })
+    }
+}
+
+#[napi(object)]
+pub struct NodePortableCompositeBuildLimits {
+    pub max_diff_entries: Option<String>,
+    pub max_owned_bytes: Option<String>,
+    pub max_encoded_output_bytes: Option<String>,
+    pub max_distance_evaluations: Option<String>,
+}
+
+impl From<CompositeBuildLimitsRecord> for NodePortableCompositeBuildLimits {
+    fn from(value: CompositeBuildLimitsRecord) -> Self {
+        Self {
+            max_diff_entries: value.max_diff_entries.map(|value| value.to_string()),
+            max_owned_bytes: value.max_owned_bytes.map(|value| value.to_string()),
+            max_encoded_output_bytes: value
+                .max_encoded_output_bytes
+                .map(|value| value.to_string()),
+            max_distance_evaluations: value
+                .max_distance_evaluations
+                .map(|value| value.to_string()),
+        }
+    }
+}
+
+impl TryFrom<NodePortableCompositeBuildLimits> for CompositeBuildLimitsRecord {
+    type Error = Error;
+
+    fn try_from(value: NodePortableCompositeBuildLimits) -> Result<Self> {
+        Ok(Self {
+            max_diff_entries: parse_optional_u64(value.max_diff_entries, "maxDiffEntries")?,
+            max_owned_bytes: parse_optional_u64(value.max_owned_bytes, "maxOwnedBytes")?,
+            max_encoded_output_bytes: parse_optional_u64(
+                value.max_encoded_output_bytes,
+                "maxEncodedOutputBytes",
+            )?,
+            max_distance_evaluations: parse_optional_u64(
+                value.max_distance_evaluations,
+                "maxDistanceEvaluations",
+            )?,
+        })
+    }
+}
+
+#[napi(object)]
+pub struct NodePortableCompositeBuildStats {
+    pub diff_entries: String,
+    pub inserted_records: String,
+    pub vector_updated_records: String,
+    pub value_only_records: String,
+    pub deleted_records: String,
+    pub delta_records: String,
+    pub shadow_records: String,
+    pub owned_bytes_peak: String,
+    pub encoded_output_bytes: String,
+    pub distance_evaluations: String,
+}
+
+impl From<CompositeBuildStatsRecord> for NodePortableCompositeBuildStats {
+    fn from(value: CompositeBuildStatsRecord) -> Self {
+        Self {
+            diff_entries: value.diff_entries.to_string(),
+            inserted_records: value.inserted_records.to_string(),
+            vector_updated_records: value.vector_updated_records.to_string(),
+            value_only_records: value.value_only_records.to_string(),
+            deleted_records: value.deleted_records.to_string(),
+            delta_records: value.delta_records.to_string(),
+            shadow_records: value.shadow_records.to_string(),
+            owned_bytes_peak: value.owned_bytes_peak.to_string(),
+            encoded_output_bytes: value.encoded_output_bytes.to_string(),
+            distance_evaluations: value.distance_evaluations.to_string(),
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NodePortableFullRebuildReason {
+    pub kind: String,
+    pub actual: String,
+    pub maximum: String,
+}
+
+impl From<FullRebuildReasonRecord> for NodePortableFullRebuildReason {
+    fn from(value: FullRebuildReasonRecord) -> Self {
+        Self {
+            kind: match value.kind {
+                FullRebuildReasonKindRecord::DeltaRecords => "delta_records",
+                FullRebuildReasonKindRecord::ShadowRecords => "shadow_records",
+                FullRebuildReasonKindRecord::DeltaRatio => "delta_ratio",
+                FullRebuildReasonKindRecord::ShadowRatio => "shadow_ratio",
+            }
+            .to_string(),
+            actual: value.actual.to_string(),
+            maximum: value.maximum.to_string(),
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NodePortableCompositeRebuildOptions {
+    pub hnsw_limits: NodePortableHnswBuildLimits,
+    pub pq_worker_threads: String,
+    pub pq_limits: NodePortablePqBuildLimits,
+}
+
+impl TryFrom<NodePortableCompositeRebuildOptions> for CompositeRebuildOptionsRecord {
+    type Error = Error;
+
+    fn try_from(value: NodePortableCompositeRebuildOptions) -> Result<Self> {
+        Ok(Self {
+            hnsw_limits: value.hnsw_limits.try_into()?,
+            pq_worker_threads: parse_u64(value.pq_worker_threads, "pqWorkerThreads")?,
+            pq_limits: value.pq_limits.try_into()?,
+        })
+    }
+}
+
+#[napi(object)]
+pub struct NodePortableCatalogEntry {
+    pub kind: String,
+    pub configuration_fingerprint: Buffer,
+    pub manifest: Buffer,
+}
+
+impl From<AcceleratorCatalogEntryRecord> for NodePortableCatalogEntry {
+    fn from(value: AcceleratorCatalogEntryRecord) -> Self {
+        Self {
+            kind: match value.kind {
+                CatalogAcceleratorKindRecord::Hnsw => "hnsw",
+                CatalogAcceleratorKindRecord::ProductQuantized => "product_quantized",
+                CatalogAcceleratorKindRecord::Composite => "composite",
+            }
+            .to_string(),
+            configuration_fingerprint: Buffer::from(value.configuration_fingerprint),
+            manifest: Buffer::from(value.manifest),
+        }
+    }
+}
+
+impl TryFrom<NodePortableSearchRequest> for ProximitySearchRequestRecord {
+    type Error = Error;
+
+    fn try_from(value: NodePortableSearchRequest) -> Result<Self> {
+        let policy = match value.policy.as_str() {
+            "exact" => SearchPolicyKind::Exact,
+            "fixed_budget" => SearchPolicyKind::FixedBudget,
+            "adaptive" => SearchPolicyKind::Adaptive,
+            other => {
+                return Err(Error::new(
+                    Status::InvalidArg,
+                    format!("unknown search policy: {other}"),
+                ))
+            }
+        };
+        let adaptive_quality = value
+            .adaptive_quality
+            .map(|quality| match quality.as_str() {
+                "fast" => Ok(AdaptiveQualityRecord::Fast),
+                "balanced" => Ok(AdaptiveQualityRecord::Balanced),
+                "high_recall" => Ok(AdaptiveQualityRecord::HighRecall),
+                other => Err(Error::new(
+                    Status::InvalidArg,
+                    format!("unknown adaptive quality: {other}"),
+                )),
+            })
+            .transpose()?;
+        let filter = ProximityFilterRecord {
+            kind: match value.filter.kind.as_str() {
+                "all" => ProximityFilterKind::All,
+                "key_range" => ProximityFilterKind::KeyRange,
+                "prefix" => ProximityFilterKind::Prefix,
+                "eligible_keys" => ProximityFilterKind::EligibleKeys,
+                other => {
+                    return Err(Error::new(
+                        Status::InvalidArg,
+                        format!("unknown proximity filter: {other}"),
+                    ))
+                }
+            },
+            start: value.filter.start.map(|value| value.to_vec()),
+            range_end: value.filter.range_end.map(|value| value.to_vec()),
+            prefix: value.filter.prefix.map(|value| value.to_vec()),
+            eligible_keys: value
+                .filter
+                .eligible_keys
+                .into_iter()
+                .map(|value| value.to_vec())
+                .collect(),
+        };
+        let kernel = match value.kernel.as_str() {
+            "scalar_deterministic" => QueryKernelRecord::ScalarDeterministic,
+            "simd_deterministic" => QueryKernelRecord::SimdDeterministic,
+            "auto_deterministic" => QueryKernelRecord::AutoDeterministic,
+            other => {
+                return Err(Error::new(
+                    Status::InvalidArg,
+                    format!("unknown query kernel: {other}"),
+                ))
+            }
+        };
+        let backend = match value.backend.as_str() {
+            "native" => SearchBackendRecord::Native,
+            "product_quantized" => SearchBackendRecord::ProductQuantized,
+            "hnsw" => SearchBackendRecord::Hnsw,
+            "composite" => SearchBackendRecord::Composite,
+            "auto" => SearchBackendRecord::Auto,
+            other => {
+                return Err(Error::new(
+                    Status::InvalidArg,
+                    format!("unknown search backend: {other}"),
+                ))
+            }
+        };
+        Ok(Self {
+            query: value.query.to_vec(),
+            k: parse_u64(value.k, "top-k")?,
+            policy,
+            adaptive_quality,
+            budget: SearchBudgetRecord {
+                max_nodes: parse_optional_u64(value.budget.max_nodes, "max_nodes")?,
+                max_committed_bytes: parse_optional_u64(
+                    value.budget.max_committed_bytes,
+                    "max_committed_bytes",
+                )?,
+                max_distance_evaluations: parse_optional_u64(
+                    value.budget.max_distance_evaluations,
+                    "max_distance_evaluations",
+                )?,
+                max_frontier_entries: parse_optional_u64(
+                    value.budget.max_frontier_entries,
+                    "max_frontier_entries",
+                )?,
+            },
+            filter,
+            kernel,
+            backend,
+            hnsw_ef_search: value.hnsw_ef_search,
+            pq_rerank_multiplier: value.pq_rerank_multiplier,
+        })
+    }
+}
+
+#[napi(object)]
+pub struct NodePortableSearchStats {
+    pub levels_visited: String,
+    pub nodes_read: String,
+    pub bytes_read: String,
+    pub physical_bytes_read: String,
+    pub committed_bytes: String,
+    pub distance_evaluations: String,
+    pub quantized_distance_evaluations: String,
+    pub reranked_candidates: String,
+    pub frontier_peak: String,
+    pub candidate_handles_peak: String,
+    pub candidate_retained_bytes_peak: String,
+}
+
+#[napi(object)]
+pub struct NodePortableProximitySearchRuntimePolicy {
+    pub max_entries: String,
+    pub max_bytes: String,
+    pub authoritative_max_bytes: String,
+    pub hnsw_max_bytes: String,
+    pub pq_max_bytes: String,
+}
+
+impl From<ProximitySearchRuntimePolicyRecord> for NodePortableProximitySearchRuntimePolicy {
+    fn from(value: ProximitySearchRuntimePolicyRecord) -> Self {
+        Self {
+            max_entries: value.max_entries.to_string(),
+            max_bytes: value.max_bytes.to_string(),
+            authoritative_max_bytes: value.authoritative_max_bytes.to_string(),
+            hnsw_max_bytes: value.hnsw_max_bytes.to_string(),
+            pq_max_bytes: value.pq_max_bytes.to_string(),
+        }
+    }
+}
+
+impl TryFrom<NodePortableProximitySearchRuntimePolicy> for ProximitySearchRuntimePolicyRecord {
+    type Error = Error;
+
+    fn try_from(value: NodePortableProximitySearchRuntimePolicy) -> Result<Self> {
+        Ok(Self {
+            max_entries: parse_u64(value.max_entries, "maxEntries")?,
+            max_bytes: parse_u64(value.max_bytes, "maxBytes")?,
+            authoritative_max_bytes: parse_u64(
+                value.authoritative_max_bytes,
+                "authoritativeMaxBytes",
+            )?,
+            hnsw_max_bytes: parse_u64(value.hnsw_max_bytes, "hnswMaxBytes")?,
+            pq_max_bytes: parse_u64(value.pq_max_bytes, "pqMaxBytes")?,
+        })
+    }
+}
+
+#[napi(object)]
+pub struct NodePortableProximitySearchRuntimeStats {
+    pub physical_reads: String,
+    pub physical_bytes_read: String,
+}
+
+impl From<ProximitySearchRuntimeStatsRecord> for NodePortableProximitySearchRuntimeStats {
+    fn from(value: ProximitySearchRuntimeStatsRecord) -> Self {
+        Self {
+            physical_reads: value.physical_reads.to_string(),
+            physical_bytes_read: value.physical_bytes_read.to_string(),
+        }
+    }
+}
+
+#[napi(js_name = "defaultProximitySearchRuntimePolicy")]
+pub fn node_default_proximity_search_runtime_policy() -> NodePortableProximitySearchRuntimePolicy {
+    default_proximity_search_runtime_policy().into()
+}
+
 impl From<ProximityNeighborRecord> for NodePortableNeighbor {
     fn from(value: ProximityNeighborRecord) -> Self {
         Self {
@@ -558,8 +1491,10 @@ impl From<ProximityNeighborRecord> for NodePortableNeighbor {
 #[napi(object)]
 pub struct NodePortableSearchResult {
     pub neighbors: Vec<NodePortableNeighbor>,
+    pub stats: NodePortableSearchStats,
     pub completion: String,
     pub backend: String,
+    pub plan_format_version: u8,
 }
 
 #[napi(object)]
@@ -583,6 +1518,41 @@ pub struct NodePortableMaintenanceSummary {
     pub byte_count: String,
 }
 
+#[napi(object)]
+pub struct NodePortableCatalogVerification {
+    pub head: Buffer,
+    pub version_count: String,
+    pub reachable_nodes: String,
+    pub reachable_bytes: String,
+}
+
+#[napi(object)]
+pub struct NodePortableVersionedMapBatchResult {
+    pub version: NodePortableMapVersion,
+    pub stats: NodeBatchApplyStatsRecord,
+}
+
+#[napi(object)]
+pub struct NodePortableReadScanOutcome {
+    pub visited: String,
+    pub stopped: bool,
+}
+
+#[napi(object)]
+pub struct NodePortableMapChangeEvent {
+    pub previous: Option<Buffer>,
+    pub current: NodePortableMapVersion,
+    pub diffs: Vec<NodeDiffRecord>,
+}
+
+#[napi(object)]
+pub struct NodePortableVersionedTransactionCommit {
+    pub applied: bool,
+    pub versions: Vec<NodePortableMapVersion>,
+    pub conflict_map_id: Option<Buffer>,
+    pub conflict_current: Option<NodePortableMapVersion>,
+}
+
 impl From<ProximitySearchResultRecord> for NodePortableSearchResult {
     fn from(value: ProximitySearchResultRecord) -> Self {
         let completion = match value.completion {
@@ -601,8 +1571,28 @@ impl From<ProximitySearchResultRecord> for NodePortableSearchResult {
         };
         Self {
             neighbors: value.neighbors.into_iter().map(Into::into).collect(),
+            stats: NodePortableSearchStats {
+                levels_visited: value.stats.levels_visited.to_string(),
+                nodes_read: value.stats.nodes_read.to_string(),
+                bytes_read: value.stats.bytes_read.to_string(),
+                physical_bytes_read: value.stats.physical_bytes_read.to_string(),
+                committed_bytes: value.stats.committed_bytes.to_string(),
+                distance_evaluations: value.stats.distance_evaluations.to_string(),
+                quantized_distance_evaluations: value
+                    .stats
+                    .quantized_distance_evaluations
+                    .to_string(),
+                reranked_candidates: value.stats.reranked_candidates.to_string(),
+                frontier_peak: value.stats.frontier_peak.to_string(),
+                candidate_handles_peak: value.stats.candidate_handles_peak.to_string(),
+                candidate_retained_bytes_peak: value
+                    .stats
+                    .candidate_retained_bytes_peak
+                    .to_string(),
+            },
             completion: completion.to_string(),
             backend: backend.to_string(),
+            plan_format_version: value.plan_format_version,
         }
     }
 }
@@ -613,6 +1603,64 @@ type NodePortableIndexExtractor =
 struct NodeIndexExtractor {
     env: Env,
     callback: NodePortableIndexExtractor,
+}
+
+#[napi(object)]
+pub struct NodePortableSecondaryIndexLimits {
+    pub max_term_bytes: String,
+    pub max_projection_bytes: String,
+    pub max_all_value_bytes: String,
+    pub max_terms_per_record: String,
+    pub max_projected_bytes_per_record: String,
+    pub max_derived_mutations_per_transaction: String,
+    pub max_projected_bytes_per_transaction: String,
+    pub max_indexes: String,
+    pub build_page_size: String,
+    pub max_temporary_sort_bytes: String,
+    pub max_bundle_nodes: String,
+    pub max_bundle_bytes: String,
+    pub max_verification_entries: String,
+    pub max_write_retries: String,
+    pub max_build_retries: String,
+}
+
+impl TryFrom<NodePortableSecondaryIndexLimits> for SecondaryIndexLimitsRecord {
+    type Error = Error;
+
+    fn try_from(value: NodePortableSecondaryIndexLimits) -> Result<Self> {
+        Ok(Self {
+            max_term_bytes: parse_u64(value.max_term_bytes, "maxTermBytes")?,
+            max_projection_bytes: parse_u64(value.max_projection_bytes, "maxProjectionBytes")?,
+            max_all_value_bytes: parse_u64(value.max_all_value_bytes, "maxAllValueBytes")?,
+            max_terms_per_record: parse_u64(value.max_terms_per_record, "maxTermsPerRecord")?,
+            max_projected_bytes_per_record: parse_u64(
+                value.max_projected_bytes_per_record,
+                "maxProjectedBytesPerRecord",
+            )?,
+            max_derived_mutations_per_transaction: parse_u64(
+                value.max_derived_mutations_per_transaction,
+                "maxDerivedMutationsPerTransaction",
+            )?,
+            max_projected_bytes_per_transaction: parse_u64(
+                value.max_projected_bytes_per_transaction,
+                "maxProjectedBytesPerTransaction",
+            )?,
+            max_indexes: parse_u64(value.max_indexes, "maxIndexes")?,
+            build_page_size: parse_u64(value.build_page_size, "buildPageSize")?,
+            max_temporary_sort_bytes: parse_u64(
+                value.max_temporary_sort_bytes,
+                "maxTemporarySortBytes",
+            )?,
+            max_bundle_nodes: parse_u64(value.max_bundle_nodes, "maxBundleNodes")?,
+            max_bundle_bytes: parse_u64(value.max_bundle_bytes, "maxBundleBytes")?,
+            max_verification_entries: parse_u64(
+                value.max_verification_entries,
+                "maxVerificationEntries",
+            )?,
+            max_write_retries: parse_u64(value.max_write_retries, "maxWriteRetries")?,
+            max_build_retries: parse_u64(value.max_build_retries, "maxBuildRetries")?,
+        })
+    }
 }
 
 // FunctionRef is a persistent Node reference. Index extraction is currently
@@ -666,6 +1714,16 @@ impl NativePortableVersionedMap {
         Buffer::from(self.inner.id())
     }
 
+    #[napi(js_name = "headName")]
+    pub fn head_name(&self) -> Buffer {
+        Buffer::from(self.inner.head_name())
+    }
+
+    #[napi(js_name = "versionsPrefix")]
+    pub fn versions_prefix(&self) -> Buffer {
+        Buffer::from(self.inner.versions_prefix())
+    }
+
     #[napi(js_name = "isInitialized")]
     pub fn is_initialized(&self) -> Result<bool> {
         self.inner.is_initialized().map_err(to_napi_error)
@@ -675,6 +1733,17 @@ impl NativePortableVersionedMap {
     pub fn initialize(&self) -> Result<NodePortableMapVersion> {
         self.inner
             .initialize()
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "initializeSorted")]
+    pub fn initialize_sorted(
+        &self,
+        entries: Vec<NodeEntryRecord>,
+    ) -> Result<NodePortableMapUpdate> {
+        self.inner
+            .initialize_sorted(entries.into_iter().map(Into::into).collect())
             .map(Into::into)
             .map_err(to_napi_error)
     }
@@ -715,6 +1784,18 @@ impl NativePortableVersionedMap {
     pub fn get(&self, key: Buffer) -> Result<Option<Buffer>> {
         self.inner
             .get(key.to_vec())
+            .map(|value| value.map(Buffer::from))
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "getLargeValue")]
+    pub fn get_large_value(
+        &self,
+        blob_store: &NativeProllyBlobStore,
+        key: Buffer,
+    ) -> Result<Option<Buffer>> {
+        self.inner
+            .get_large_value(blob_store.inner.clone(), key.to_vec())
             .map(|value| value.map(Buffer::from))
             .map_err(to_napi_error)
     }
@@ -762,9 +1843,161 @@ impl NativePortableVersionedMap {
     }
 
     #[napi]
+    pub fn range(&self, start: Buffer, end: Option<Buffer>) -> Result<Vec<NodeEntryRecord>> {
+        self.inner
+            .range(start.to_vec(), end.map(|value| value.to_vec()))
+            .map(|entries| entries.into_iter().map(Into::into).collect())
+            .map_err(to_napi_error)
+    }
+
+    #[napi]
+    pub fn prefix(&self, prefix: Buffer) -> Result<Vec<NodeEntryRecord>> {
+        self.inner
+            .prefix(prefix.to_vec())
+            .map(|entries| entries.into_iter().map(Into::into).collect())
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "rangeAt")]
+    pub fn range_at(
+        &self,
+        id: Buffer,
+        start: Buffer,
+        end: Option<Buffer>,
+    ) -> Result<Vec<NodeEntryRecord>> {
+        self.inner
+            .range_at(id.to_vec(), start.to_vec(), end.map(|value| value.to_vec()))
+            .map(|entries| entries.into_iter().map(Into::into).collect())
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "prefixAt")]
+    pub fn prefix_at(&self, id: Buffer, prefix: Buffer) -> Result<Vec<NodeEntryRecord>> {
+        self.inner
+            .prefix_at(id.to_vec(), prefix.to_vec())
+            .map(|entries| entries.into_iter().map(Into::into).collect())
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "rangePage")]
+    pub fn range_page(
+        &self,
+        cursor: Option<NodeRangeCursorRecord>,
+        end: Option<Buffer>,
+        limit: String,
+    ) -> Result<NodeRangePageRecord> {
+        self.inner
+            .range_page(
+                cursor.map(Into::into),
+                end.map(|value| value.to_vec()),
+                parse_index_page_limit(&limit)?,
+            )
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "prefixPage")]
+    pub fn prefix_page(
+        &self,
+        prefix: Buffer,
+        cursor: Option<NodeRangeCursorRecord>,
+        limit: String,
+    ) -> Result<NodeRangePageRecord> {
+        self.inner
+            .prefix_page(
+                prefix.to_vec(),
+                cursor.map(Into::into),
+                parse_index_page_limit(&limit)?,
+            )
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "rangePageAt")]
+    pub fn range_page_at(
+        &self,
+        id: Buffer,
+        cursor: Option<NodeRangeCursorRecord>,
+        end: Option<Buffer>,
+        limit: String,
+    ) -> Result<NodeRangePageRecord> {
+        self.inner
+            .range_page_at(
+                id.to_vec(),
+                cursor.map(Into::into),
+                end.map(|value| value.to_vec()),
+                parse_index_page_limit(&limit)?,
+            )
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "prefixPageAt")]
+    pub fn prefix_page_at(
+        &self,
+        id: Buffer,
+        prefix: Buffer,
+        cursor: Option<NodeRangeCursorRecord>,
+        limit: String,
+    ) -> Result<NodeRangePageRecord> {
+        self.inner
+            .prefix_page_at(
+                id.to_vec(),
+                prefix.to_vec(),
+                cursor.map(Into::into),
+                parse_index_page_limit(&limit)?,
+            )
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi]
+    pub fn diff(&self, base: Buffer, target: Buffer) -> Result<Vec<NodeDiffRecord>> {
+        self.inner
+            .diff(base.to_vec(), target.to_vec())
+            .map(|diffs| diffs.into_iter().map(Into::into).collect())
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "changesSince")]
+    pub fn changes_since(&self, base: Buffer) -> Result<Vec<NodeDiffRecord>> {
+        self.inner
+            .changes_since(base.to_vec())
+            .map(|diffs| diffs.into_iter().map(Into::into).collect())
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "rollbackTo")]
+    pub fn rollback_to(&self, id: Buffer) -> Result<NodePortableMapVersion> {
+        self.inner
+            .rollback_to(id.to_vec())
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi]
     pub fn put(&self, key: Buffer, value: Buffer) -> Result<NodePortableMapVersion> {
         self.inner
             .put(key.to_vec(), value.to_vec())
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "putLargeValue")]
+    pub fn put_large_value(
+        &self,
+        blob_store: &NativeProllyBlobStore,
+        key: Buffer,
+        value: Buffer,
+        config: NodeLargeValueConfigRecord,
+    ) -> Result<NodePortableMapVersion> {
+        self.inner
+            .put_large_value(
+                blob_store.inner.clone(),
+                key.to_vec(),
+                value.to_vec(),
+                config.try_into()?,
+            )
             .map(Into::into)
             .map_err(to_napi_error)
     }
@@ -777,6 +2010,90 @@ impl NativePortableVersionedMap {
             .collect::<Result<Vec<_>>>()?;
         self.inner
             .apply(mutations)
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi]
+    pub fn append(&self, mutations: Vec<NodeMutationRecord>) -> Result<NodePortableMapVersion> {
+        let mutations = mutations
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect::<Result<Vec<_>>>()?;
+        self.inner
+            .append(mutations)
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "parallelApply")]
+    pub fn parallel_apply(
+        &self,
+        mutations: Vec<NodeMutationRecord>,
+        config: NodeParallelConfigRecord,
+    ) -> Result<NodePortableVersionedMapBatchResult> {
+        let mutations = mutations
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect::<Result<Vec<_>>>()?;
+        let result = self
+            .inner
+            .parallel_apply(mutations, config.try_into()?)
+            .map_err(to_napi_error)?;
+        Ok(NodePortableVersionedMapBatchResult {
+            version: result.version.into(),
+            stats: result.stats.into(),
+        })
+    }
+
+    #[napi(js_name = "rebuildSortedIf")]
+    pub fn rebuild_sorted_if(
+        &self,
+        expected: Option<Buffer>,
+        entries: Vec<NodeEntryRecord>,
+    ) -> Result<NodePortableMapUpdate> {
+        self.inner
+            .rebuild_sorted_if(
+                expected.map(|value| value.to_vec()),
+                entries.into_iter().map(Into::into).collect(),
+            )
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "rebuildFromEntriesIf")]
+    pub fn rebuild_from_entries_if(
+        &self,
+        expected: Option<Buffer>,
+        entries: Vec<NodeEntryRecord>,
+    ) -> Result<NodePortableMapUpdate> {
+        self.inner
+            .rebuild_from_entries_if(
+                expected.map(|value| value.to_vec()),
+                entries.into_iter().map(Into::into).collect(),
+            )
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "applyAtMillis")]
+    pub fn apply_at_millis(
+        &self,
+        mutations: Vec<NodeMutationRecord>,
+        timestamp_millis: String,
+    ) -> Result<NodePortableMapVersion> {
+        let mutations = mutations
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect::<Result<Vec<_>>>()?;
+        let timestamp_millis = timestamp_millis.parse::<u64>().map_err(|_| {
+            Error::new(
+                Status::InvalidArg,
+                "timestamp must be an unsigned 64-bit integer",
+            )
+        })?;
+        self.inner
+            .apply_at_millis(mutations, timestamp_millis)
             .map(Into::into)
             .map_err(to_napi_error)
     }
@@ -797,6 +2114,33 @@ impl NativePortableVersionedMap {
             .map_err(to_napi_error)
     }
 
+    #[napi(js_name = "applyIfAtMillis")]
+    pub fn apply_if_at_millis(
+        &self,
+        expected: Option<Buffer>,
+        mutations: Vec<NodeMutationRecord>,
+        timestamp_millis: String,
+    ) -> Result<NodePortableMapUpdate> {
+        let mutations = mutations
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect::<Result<Vec<_>>>()?;
+        let timestamp_millis = timestamp_millis.parse::<u64>().map_err(|_| {
+            Error::new(
+                Status::InvalidArg,
+                "timestamp must be an unsigned 64-bit integer",
+            )
+        })?;
+        self.inner
+            .apply_if_at_millis(
+                expected.map(|value| value.to_vec()),
+                mutations,
+                timestamp_millis,
+            )
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
     #[napi(js_name = "putIf")]
     pub fn put_if(
         &self,
@@ -809,6 +2153,27 @@ impl NativePortableVersionedMap {
                 expected.map(|value| value.to_vec()),
                 key.to_vec(),
                 value.to_vec(),
+            )
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "putLargeValueIf")]
+    pub fn put_large_value_if(
+        &self,
+        blob_store: &NativeProllyBlobStore,
+        expected: Option<Buffer>,
+        key: Buffer,
+        value: Buffer,
+        config: NodeLargeValueConfigRecord,
+    ) -> Result<NodePortableMapUpdate> {
+        self.inner
+            .put_large_value_if(
+                blob_store.inner.clone(),
+                expected.map(|value| value.to_vec()),
+                key.to_vec(),
+                value.to_vec(),
+                config.try_into()?,
             )
             .map(Into::into)
             .map_err(to_napi_error)
@@ -851,6 +2216,49 @@ impl NativePortableVersionedMap {
     }
 
     #[napi]
+    pub fn compare(&self, base: Buffer, target: Buffer) -> Result<NativePortableMapComparison> {
+        self.inner
+            .compare(base.to_vec(), target.to_vec())
+            .map(|inner| NativePortableMapComparison { inner })
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "compareToHead")]
+    pub fn compare_to_head(&self, base: Buffer) -> Result<NativePortableMapComparison> {
+        self.inner
+            .compare_to_head(base.to_vec())
+            .map(|inner| NativePortableMapComparison { inner })
+            .map_err(to_napi_error)
+    }
+
+    #[napi]
+    pub fn subscribe(&self) -> Result<NativePortableMapSubscription> {
+        self.inner
+            .subscribe()
+            .map(|inner| NativePortableMapSubscription { inner })
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "subscribeFrom")]
+    pub fn subscribe_from(
+        &self,
+        last_seen: Option<Buffer>,
+    ) -> Result<NativePortableMapSubscription> {
+        self.inner
+            .subscribe_from(last_seen.map(|value| value.to_vec()))
+            .map(|inner| NativePortableMapSubscription { inner })
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "prepareMerge")]
+    pub fn prepare_merge(&self, base: Buffer, candidate: Buffer) -> Result<NativePortableMapMerge> {
+        self.inner
+            .prepare_merge(base.to_vec(), candidate.to_vec())
+            .map(|inner| NativePortableMapMerge { inner })
+            .map_err(to_napi_error)
+    }
+
+    #[napi]
     pub fn backup(&self) -> Result<Buffer> {
         self.inner.backup().map(Buffer::from).map_err(to_napi_error)
     }
@@ -863,6 +2271,35 @@ impl NativePortableVersionedMap {
             .map_err(to_napi_error)
     }
 
+    #[napi(js_name = "importAsHead")]
+    pub fn import_as_head(
+        &self,
+        bundle: NodeSnapshotBundleRecord,
+    ) -> Result<NodePortableMapVersion> {
+        self.inner
+            .import_as_head(bundle.into_binding(default_config()))
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "importAsHeadAtMillis")]
+    pub fn import_as_head_at_millis(
+        &self,
+        bundle: NodeSnapshotBundleRecord,
+        timestamp_millis: String,
+    ) -> Result<NodePortableMapVersion> {
+        let timestamp_millis = timestamp_millis.parse::<u64>().map_err(|_| {
+            Error::new(
+                Status::InvalidArg,
+                "timestamp must be an unsigned 64-bit integer",
+            )
+        })?;
+        self.inner
+            .import_as_head_at_millis(bundle.into_binding(default_config()), timestamp_millis)
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
     #[napi(js_name = "keepLast")]
     pub fn keep_last(&self, count: u32) -> Result<NodePortableVersionPrune> {
         self.inner
@@ -871,26 +2308,337 @@ impl NativePortableVersionedMap {
             .map_err(to_napi_error)
     }
 
+    #[napi(js_name = "pruneVersions")]
+    pub fn prune_versions(&self, keep_latest: String) -> Result<NodePortableVersionPrune> {
+        self.inner
+            .prune_versions(parse_index_page_limit(&keep_latest)?)
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "keepForAt")]
+    pub fn keep_for_at(
+        &self,
+        now_millis: String,
+        max_age_millis: String,
+    ) -> Result<NodePortableVersionPrune> {
+        self.inner
+            .keep_for_at(
+                parse_index_page_limit(&now_millis)?,
+                parse_index_page_limit(&max_age_millis)?,
+            )
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "keepFor")]
+    pub fn keep_for(&self, max_age_millis: String) -> Result<NodePortableVersionPrune> {
+        self.inner
+            .keep_for(parse_index_page_limit(&max_age_millis)?)
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "keepVersions")]
+    pub fn keep_versions(&self, ids: Vec<Buffer>) -> Result<NodePortableVersionPrune> {
+        self.inner
+            .keep_versions(ids.into_iter().map(|id| id.to_vec()).collect())
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "retentionPolicy")]
+    pub fn retention_policy(&self) -> NodeNamedRootRetentionRecord {
+        self.inner.retention_policy().into()
+    }
+
     #[napi(js_name = "verifyCatalog")]
-    pub fn verify_catalog(&self) -> Result<NodePortableMaintenanceSummary> {
+    pub fn verify_catalog(&self) -> Result<NodePortableCatalogVerification> {
         self.inner
             .verify_catalog()
-            .map(|value| NodePortableMaintenanceSummary {
-                item_count: value.version_count.to_string(),
-                byte_count: value.reachable_bytes.to_string(),
+            .map(|value| NodePortableCatalogVerification {
+                head: Buffer::from(value.head),
+                version_count: value.version_count.to_string(),
+                reachable_nodes: value.reachable_nodes.to_string(),
+                reachable_bytes: value.reachable_bytes.to_string(),
             })
             .map_err(to_napi_error)
     }
 
     #[napi(js_name = "planGc")]
-    pub fn plan_gc(&self) -> Result<NodePortableMaintenanceSummary> {
+    pub fn plan_gc(&self) -> Result<NodeGcPlanRecord> {
+        self.inner.plan_gc().map(Into::into).map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "sweepGc")]
+    pub fn sweep_gc(&self) -> Result<NodeGcSweepRecord> {
+        self.inner.sweep_gc().map(Into::into).map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "planBlobGc")]
+    pub fn plan_blob_gc(&self, blob_store: &NativeProllyBlobStore) -> Result<NodeBlobGcPlanRecord> {
         self.inner
-            .plan_gc()
-            .map(|value| NodePortableMaintenanceSummary {
-                item_count: value.reachability.live_nodes.to_string(),
-                byte_count: value.reclaimable_bytes.to_string(),
+            .plan_blob_gc(blob_store.inner.clone())
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "sweepBlobGc")]
+    pub fn sweep_blob_gc(
+        &self,
+        blob_store: &NativeProllyBlobStore,
+    ) -> Result<NodeBlobGcSweepRecord> {
+        self.inner
+            .sweep_blob_gc(blob_store.inner.clone())
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+}
+
+#[napi]
+pub struct NativePortableMapComparison {
+    inner: Arc<BindingMapComparison>,
+}
+
+#[napi]
+impl NativePortableMapComparison {
+    #[napi]
+    pub fn base(&self) -> NodePortableMapVersion {
+        self.inner.base().into()
+    }
+
+    #[napi]
+    pub fn target(&self) -> NodePortableMapVersion {
+        self.inner.target().into()
+    }
+
+    #[napi]
+    pub fn diff(&self) -> Result<Vec<NodeDiffRecord>> {
+        self.inner
+            .diff()
+            .map(|diffs| diffs.into_iter().map(Into::into).collect())
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "diffPage")]
+    pub fn diff_page(
+        &self,
+        cursor: Option<NodeRangeCursorRecord>,
+        end: Option<Buffer>,
+        limit: String,
+    ) -> Result<NodeDiffPageRecord> {
+        let limit = limit.parse::<u64>().map_err(|_| {
+            Error::new(
+                Status::InvalidArg,
+                "diff page limit must be an unsigned 64-bit integer",
+            )
+        })?;
+        self.inner
+            .diff_page(
+                cursor.map(Into::into),
+                end.map(|value| value.to_vec()),
+                limit,
+            )
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+}
+
+#[napi]
+pub struct NativePortableMapSubscription {
+    inner: Arc<BindingMapSubscription>,
+}
+
+#[napi]
+impl NativePortableMapSubscription {
+    #[napi(js_name = "lastSeen")]
+    pub fn last_seen(&self) -> Result<Option<Buffer>> {
+        self.inner
+            .last_seen()
+            .map(|value| value.map(Buffer::from))
+            .map_err(to_napi_error)
+    }
+
+    #[napi]
+    pub fn poll(&self) -> Result<Option<NodePortableMapChangeEvent>> {
+        self.inner
+            .poll()
+            .map(|event| {
+                event.map(|event| NodePortableMapChangeEvent {
+                    previous: event.previous.map(Buffer::from),
+                    current: event.current.into(),
+                    diffs: event.diffs.into_iter().map(Into::into).collect(),
+                })
             })
             .map_err(to_napi_error)
+    }
+}
+
+#[napi]
+pub struct NativePortableMapMerge {
+    inner: Arc<BindingMapMerge>,
+}
+
+#[napi]
+impl NativePortableMapMerge {
+    #[napi]
+    pub fn base(&self) -> NodePortableMapVersion {
+        self.inner.base().into()
+    }
+
+    #[napi]
+    pub fn head(&self) -> NodePortableMapVersion {
+        self.inner.head().into()
+    }
+
+    #[napi]
+    pub fn candidate(&self) -> NodePortableMapVersion {
+        self.inner.candidate().into()
+    }
+
+    #[napi]
+    pub fn merge(&self, resolver: Option<String>) -> Result<NodeTreeRecord> {
+        self.inner
+            .merge(resolver)
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "conflictPage")]
+    pub fn conflict_page(
+        &self,
+        cursor: Option<NodeRangeCursorRecord>,
+        limit: String,
+    ) -> Result<NodeConflictPageRecord> {
+        let limit = limit.parse::<u64>().map_err(|_| {
+            Error::new(
+                Status::InvalidArg,
+                "conflict page limit must be an unsigned 64-bit integer",
+            )
+        })?;
+        self.inner
+            .conflict_page(cursor.map(Into::into), limit)
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi]
+    pub fn publish(&self, resolver: Option<String>) -> Result<NodePortableMapUpdate> {
+        self.inner
+            .publish(resolver)
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+}
+
+#[napi]
+pub struct NativePortableVersionedTransaction {
+    inner: Option<Arc<BindingVersionedTransaction>>,
+}
+
+impl NativePortableVersionedTransaction {
+    fn open(&self) -> Result<&Arc<BindingVersionedTransaction>> {
+        self.inner
+            .as_ref()
+            .ok_or_else(|| Error::new(Status::GenericFailure, "versioned transaction is completed"))
+    }
+}
+
+#[napi]
+impl NativePortableVersionedTransaction {
+    #[napi]
+    pub fn head(&self, map_id: Buffer) -> Result<Option<NodePortableMapVersion>> {
+        self.open()?
+            .head(map_id.to_vec())
+            .map(|value| value.map(Into::into))
+            .map_err(to_napi_error)
+    }
+
+    #[napi]
+    pub fn get(&self, map_id: Buffer, key: Buffer) -> Result<Option<Buffer>> {
+        self.open()?
+            .get(map_id.to_vec(), key.to_vec())
+            .map(|value| value.map(Buffer::from))
+            .map_err(to_napi_error)
+    }
+
+    #[napi]
+    pub fn apply(
+        &self,
+        map_id: Buffer,
+        mutations: Vec<NodeMutationRecord>,
+    ) -> Result<NodePortableMapVersion> {
+        let mutations = mutations
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect::<Result<Vec<_>>>()?;
+        self.open()?
+            .apply(map_id.to_vec(), mutations)
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "applyIf")]
+    pub fn apply_if(
+        &self,
+        map_id: Buffer,
+        expected: Option<Buffer>,
+        mutations: Vec<NodeMutationRecord>,
+    ) -> Result<NodePortableMapUpdate> {
+        let mutations = mutations
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect::<Result<Vec<_>>>()?;
+        self.open()?
+            .apply_if(
+                map_id.to_vec(),
+                expected.map(|value| value.to_vec()),
+                mutations,
+            )
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi]
+    pub fn put(
+        &self,
+        map_id: Buffer,
+        key: Buffer,
+        value: Buffer,
+    ) -> Result<NodePortableMapVersion> {
+        self.open()?
+            .put(map_id.to_vec(), key.to_vec(), value.to_vec())
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi]
+    pub fn delete(&self, map_id: Buffer, key: Buffer) -> Result<NodePortableMapVersion> {
+        self.open()?
+            .delete(map_id.to_vec(), key.to_vec())
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi]
+    pub fn commit(&mut self) -> Result<NodePortableVersionedTransactionCommit> {
+        let result = self.open()?.commit();
+        self.inner = None;
+        result
+            .map(|value| NodePortableVersionedTransactionCommit {
+                applied: value.applied,
+                versions: value.versions.into_iter().map(Into::into).collect(),
+                conflict_map_id: value.conflict_map_id.map(Buffer::from),
+                conflict_current: value.conflict_current.map(Into::into),
+            })
+            .map_err(to_napi_error)
+    }
+
+    #[napi]
+    pub fn rollback(&mut self) -> Result<()> {
+        let result = self.open()?.rollback();
+        self.inner = None;
+        result.map_err(to_napi_error)
     }
 }
 
@@ -1061,6 +2809,51 @@ impl NativePortableMapSnapshot {
             .map_err(to_napi_error)
     }
 
+    #[napi(js_name = "proveKeys")]
+    pub fn prove_keys(&self, keys: Vec<Buffer>) -> Result<NativePortableMultiKeyProof> {
+        self.inner
+            .prove_keys(keys.into_iter().map(|key| key.to_vec()).collect())
+            .map(|inner| NativePortableMultiKeyProof { inner })
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "proveRange")]
+    pub fn prove_range(
+        &self,
+        start: Buffer,
+        end: Option<Buffer>,
+    ) -> Result<NativePortableRangeProof> {
+        self.inner
+            .prove_range(start.to_vec(), end.map(|value| value.to_vec()))
+            .map(|inner| NativePortableRangeProof { inner })
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "provePrefix")]
+    pub fn prove_prefix(&self, prefix: Buffer) -> Result<NativePortableRangeProof> {
+        self.inner
+            .prove_prefix(prefix.to_vec())
+            .map(|inner| NativePortableRangeProof { inner })
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "proveRangePage")]
+    pub fn prove_range_page(
+        &self,
+        cursor: Option<NodeRangeCursorRecord>,
+        end: Option<Buffer>,
+        limit: String,
+    ) -> Result<NativePortableProvedRangePage> {
+        self.inner
+            .prove_range_page(
+                cursor.map(Into::into),
+                end.map(|value| value.to_vec()),
+                parse_index_page_limit(&limit)?,
+            )
+            .map(|inner| NativePortableProvedRangePage { inner })
+            .map_err(to_napi_error)
+    }
+
     #[napi]
     pub fn stats(&self) -> Result<NodePortableMaintenanceSummary> {
         self.inner
@@ -1073,19 +2866,8 @@ impl NativePortableMapSnapshot {
     }
 
     #[napi]
-    pub fn export(&self) -> Result<NodePortableMaintenanceSummary> {
-        self.inner
-            .export()
-            .map(|value| NodePortableMaintenanceSummary {
-                item_count: value.nodes.len().to_string(),
-                byte_count: value
-                    .nodes
-                    .iter()
-                    .map(|node| node.bytes.len() as u64)
-                    .sum::<u64>()
-                    .to_string(),
-            })
-            .map_err(to_napi_error)
+    pub fn export(&self) -> Result<NodeSnapshotBundleRecord> {
+        self.inner.export().map(Into::into).map_err(to_napi_error)
     }
 
     #[napi]
@@ -1111,6 +2893,193 @@ impl NativePortableReadSession {
             .map(|value| value.map(Buffer::from))
             .map_err(to_napi_error)
     }
+
+    #[napi(js_name = "withValueView")]
+    pub fn with_value_view(
+        &self,
+        env: Env,
+        key: Buffer,
+        visit: FunctionRef<JsObject, ()>,
+    ) -> Result<bool> {
+        let session_handle = self.inner.fast_handle();
+        if session_handle == 0 {
+            return Err(Error::new(
+                Status::GenericFailure,
+                "native retained read session is closed",
+            ));
+        }
+        let result =
+            unsafe { prolly_fast_read_session_get_lease(session_handle, key.as_ptr(), key.len()) };
+        if result.status != 0 {
+            return Err(Error::new(
+                Status::GenericFailure,
+                format!(
+                    "native retained point read failed with status {}",
+                    result.status
+                ),
+            ));
+        }
+        if result.found == 0 {
+            if result.lease_handle != 0 {
+                unsafe { prolly_fast_value_release(result.lease_handle) };
+                return Err(Error::new(
+                    Status::GenericFailure,
+                    "missing point read returned a value lease",
+                ));
+            }
+            return Ok(false);
+        }
+        let length = usize::try_from(result.data_len).map_err(|_| {
+            Error::new(
+                Status::GenericFailure,
+                "native point read exceeds the host address space",
+            )
+        })?;
+        if result.lease_handle == 0 || (length != 0 && result.data_ptr.is_null()) {
+            if result.lease_handle != 0 {
+                unsafe { prolly_fast_value_release(result.lease_handle) };
+            }
+            return Err(Error::new(
+                Status::GenericFailure,
+                "native point read returned an invalid value lease",
+            ));
+        }
+        let _lease = NodeFastValueGuard(result.lease_handle);
+        let argument = if length == 0 {
+            env.create_buffer(0)?.into_unknown().coerce_to_object()?
+        } else {
+            unsafe {
+                env.create_buffer_with_borrowed_data(
+                    result.data_ptr.cast_mut(),
+                    length,
+                    (),
+                    |(), _env| {},
+                )?
+            }
+            .into_unknown()
+            .coerce_to_object()?
+        };
+        visit.borrow_back(&env)?.call(argument)?;
+        Ok(true)
+    }
+
+    #[napi(js_name = "scanRangePages")]
+    pub fn scan_range_pages(
+        &self,
+        env: Env,
+        start: Buffer,
+        end: Option<Buffer>,
+        visit: FunctionRef<JsObject, u32>,
+    ) -> Result<NodePortableReadScanOutcome> {
+        let session_handle = self.inner.fast_handle();
+        if session_handle == 0 {
+            return Err(Error::new(
+                Status::GenericFailure,
+                "native retained read session is closed".to_string(),
+            ));
+        }
+        let (end_ptr, end_len, has_end) = match end.as_ref() {
+            Some(end) => (end.as_ptr(), end.len(), 1),
+            None => (std::ptr::null(), 0, 0),
+        };
+        let opened = unsafe {
+            prolly_fast_read_session_scan_open(
+                session_handle,
+                start.as_ptr(),
+                start.len(),
+                end_ptr,
+                end_len,
+                has_end,
+            )
+        };
+        if opened.status != 0 || opened.scan_handle == 0 {
+            return Err(Error::new(
+                Status::GenericFailure,
+                format!(
+                    "native retained scan open failed with status {}",
+                    opened.status
+                ),
+            ));
+        }
+        let _scan = NodeFastScanGuard(opened.scan_handle);
+        let function = visit.borrow_back(&env)?;
+        let mut visited = 0_u64;
+        loop {
+            let page = unsafe {
+                prolly_fast_read_session_scan_next(
+                    session_handle,
+                    opened.scan_handle,
+                    4096,
+                    4 * 1024 * 1024,
+                )
+            };
+            if page.status != 0 {
+                return Err(Error::new(
+                    Status::GenericFailure,
+                    format!(
+                        "native retained scan read failed with status {}",
+                        page.status
+                    ),
+                ));
+            }
+            let _page = NodeFastPageGuard(page.lease_handle);
+            if page.data_ptr.is_null() {
+                return Err(Error::new(
+                    Status::GenericFailure,
+                    "native retained scan returned a null page".to_string(),
+                ));
+            }
+            let length = usize::try_from(page.data_len).map_err(|_| {
+                Error::new(
+                    Status::GenericFailure,
+                    "native retained scan page exceeds the host address space".to_string(),
+                )
+            })?;
+            let borrowed = unsafe {
+                env.create_buffer_with_borrowed_data(
+                    page.data_ptr.cast_mut(),
+                    length,
+                    (),
+                    |(), _env| {},
+                )?
+            };
+            let mut argument = env.create_object()?;
+            argument.set_named_property("bytes", borrowed.into_unknown())?;
+            argument.set_named_property("recordCount", page.record_count)?;
+            argument.set_named_property("terminal", page.terminal != 0)?;
+            let consumed = function.call(argument)?;
+            if consumed > page.record_count {
+                return Err(Error::new(
+                    Status::InvalidArg,
+                    "packed scan visitor consumed more records than the page contains".to_string(),
+                ));
+            }
+            visited = visited.checked_add(u64::from(consumed)).ok_or_else(|| {
+                Error::new(
+                    Status::GenericFailure,
+                    "packed scan visit count overflow".to_string(),
+                )
+            })?;
+            if consumed < page.record_count {
+                return Ok(NodePortableReadScanOutcome {
+                    visited: visited.to_string(),
+                    stopped: true,
+                });
+            }
+            if page.terminal != 0 {
+                return Ok(NodePortableReadScanOutcome {
+                    visited: visited.to_string(),
+                    stopped: false,
+                });
+            }
+            if page.record_count == 0 {
+                return Err(Error::new(
+                    Status::GenericFailure,
+                    "non-terminal packed scan page made no progress".to_string(),
+                ));
+            }
+        }
+    }
 }
 
 #[napi]
@@ -1128,6 +3097,56 @@ impl NativePortableKeyProof {
                 exists: value.exists,
                 value: value.value.map(Buffer::from),
             })
+            .map_err(to_napi_error)
+    }
+}
+
+#[napi]
+pub struct NativePortableMultiKeyProof {
+    inner: MultiKeyProofRecord,
+}
+
+#[napi]
+impl NativePortableMultiKeyProof {
+    #[napi]
+    pub fn verify(&self) -> Result<NodeMultiKeyProofVerificationRecord> {
+        verify_multi_key_proof(self.inner.clone())
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+}
+
+#[napi]
+pub struct NativePortableRangeProof {
+    inner: RangeProofRecord,
+}
+
+#[napi]
+impl NativePortableRangeProof {
+    #[napi]
+    pub fn verify(&self) -> Result<NodeRangeProofVerificationRecord> {
+        verify_range_proof(self.inner.clone())
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+}
+
+#[napi]
+pub struct NativePortableProvedRangePage {
+    inner: ProvedRangePageRecord,
+}
+
+#[napi]
+impl NativePortableProvedRangePage {
+    #[napi]
+    pub fn page(&self) -> NodeRangePageRecord {
+        self.inner.page.clone().into()
+    }
+
+    #[napi]
+    pub fn verify(&self) -> Result<NodeRangePageProofVerificationRecord> {
+        verify_range_page_proof(self.inner.proof.clone())
+            .map(Into::into)
             .map_err(to_napi_error)
     }
 }
@@ -1155,6 +3174,7 @@ impl NativePortableIndexRegistry {
         generation: String,
         extractor_id: String,
         projection: String,
+        limits: Option<NodePortableSecondaryIndexLimits>,
         extractor: NodePortableIndexExtractor,
     ) -> Result<()> {
         let generation = generation.parse::<u64>().map_err(|error| {
@@ -1180,7 +3200,7 @@ impl NativePortableIndexRegistry {
                 generation,
                 extractor_id,
                 projection,
-                None,
+                limits.map(TryInto::try_into).transpose()?,
                 Arc::new(NodeIndexExtractor {
                     env: self.env,
                     callback: extractor,
@@ -1193,6 +3213,7 @@ impl NativePortableIndexRegistry {
 #[napi]
 pub struct NativePortableIndexedMap {
     inner: Arc<BindingIndexedMap>,
+    env: Env,
 }
 
 #[napi]
@@ -1208,6 +3229,69 @@ impl NativePortableIndexedMap {
             .get(key.to_vec())
             .map(|value| value.map(Buffer::from))
             .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "withValueView")]
+    pub fn with_value_view(
+        &self,
+        env: Env,
+        key: Buffer,
+        visit: FunctionRef<JsObject, ()>,
+    ) -> Result<bool> {
+        let result = unsafe {
+            prolly_fast_indexed_get_lease(self.inner.fast_handle(), key.as_ptr(), key.len())
+        };
+        if result.status != 0 {
+            return Err(Error::new(
+                Status::GenericFailure,
+                format!(
+                    "native indexed point read failed with status {}",
+                    result.status
+                ),
+            ));
+        }
+        if result.found == 0 {
+            if result.lease_handle != 0 {
+                unsafe { prolly_fast_value_release(result.lease_handle) };
+                return Err(Error::new(
+                    Status::GenericFailure,
+                    "missing indexed point read returned a value lease",
+                ));
+            }
+            return Ok(false);
+        }
+        let length = usize::try_from(result.data_len).map_err(|_| {
+            Error::new(
+                Status::GenericFailure,
+                "indexed point read exceeds the host address space",
+            )
+        })?;
+        if result.lease_handle == 0 || (length != 0 && result.data_ptr.is_null()) {
+            if result.lease_handle != 0 {
+                unsafe { prolly_fast_value_release(result.lease_handle) };
+            }
+            return Err(Error::new(
+                Status::GenericFailure,
+                "native indexed point read returned an invalid value lease",
+            ));
+        }
+        let _lease = NodeFastValueGuard(result.lease_handle);
+        let argument = if length == 0 {
+            env.create_buffer(0)?.into_unknown().coerce_to_object()?
+        } else {
+            unsafe {
+                env.create_buffer_with_borrowed_data(
+                    result.data_ptr.cast_mut(),
+                    length,
+                    (),
+                    |(), _env| {},
+                )?
+            }
+            .into_unknown()
+            .coerce_to_object()?
+        };
+        visit.borrow_back(&env)?.call(argument)?;
+        Ok(true)
     }
 
     #[napi]
@@ -1366,6 +3450,49 @@ impl NativePortableIndexedMap {
             .map_err(|error| Error::new(Status::InvalidArg, error.to_string()))?;
         self.inner
             .keep_last(count)
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "planGc")]
+    pub fn plan_gc(&self) -> Result<NodeGcPlanRecord> {
+        self.inner.plan_gc().map(Into::into).map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "replaceIndex")]
+    pub fn replace_index(
+        &self,
+        name: Buffer,
+        generation: String,
+        extractor_id: String,
+        projection: String,
+        limits: Option<NodePortableSecondaryIndexLimits>,
+        extractor: NodePortableIndexExtractor,
+    ) -> Result<NodePortableIndexBuildResult> {
+        let generation = generation.parse::<u64>().map_err(|error| {
+            Error::new(
+                Status::InvalidArg,
+                format!("invalid index generation: {error}"),
+            )
+        })?;
+        let projection = match projection.as_str() {
+            "keys_only" => IndexProjectionRecord::KeysOnly,
+            "include" => IndexProjectionRecord::Include,
+            "all" => IndexProjectionRecord::All,
+            _ => return Err(Error::new(Status::InvalidArg, "invalid index projection")),
+        };
+        self.inner
+            .replace_index(
+                name.to_vec(),
+                generation,
+                extractor_id,
+                projection,
+                limits.map(TryInto::try_into).transpose()?,
+                Arc::new(NodeIndexExtractor {
+                    env: self.env,
+                    callback: extractor,
+                }),
+            )
             .map(Into::into)
             .map_err(to_napi_error)
     }
@@ -1547,12 +3674,894 @@ fn parse_index_page_limit(limit: &str) -> Result<u64> {
 }
 
 #[napi]
+pub struct NativePortableProximitySearchRuntime {
+    inner: Arc<BindingProximitySearchRuntime>,
+}
+
+#[napi]
+pub struct NativePortableProximityCancellationToken {
+    inner: Arc<BindingProximityCancellationToken>,
+}
+
+#[napi]
+impl NativePortableProximityCancellationToken {
+    #[napi(constructor)]
+    pub fn new() -> Self {
+        Self {
+            inner: Arc::new(BindingProximityCancellationToken::new()),
+        }
+    }
+
+    #[napi]
+    pub fn cancel(&self) {
+        self.inner.cancel();
+    }
+
+    #[napi(js_name = "isCancelled")]
+    pub fn is_cancelled(&self) -> bool {
+        self.inner.is_cancelled()
+    }
+}
+
+pub struct NodePortableProximitySearchTask {
+    target: NodePortableProximitySearchTarget,
+    request: ProximitySearchRequestRecord,
+    runtime: Option<Arc<BindingProximitySearchRuntime>>,
+    cancellation: Arc<BindingProximityCancellationToken>,
+}
+
+enum NodePortableProximitySearchTarget {
+    Map(Arc<BindingProximityMap>),
+    Session(Arc<BindingProximityReadSession>),
+    Hnsw(Arc<BindingHnswIndex>, Arc<BindingProximityMap>),
+    ProductQuantized(Arc<BindingProductQuantizer>, Arc<BindingProximityMap>),
+    Composite(Arc<BindingCompositeAccelerator>, Arc<BindingProximityMap>),
+    Catalog(Arc<BindingAcceleratorCatalog>, Arc<BindingProximityMap>),
+}
+
+impl Task for NodePortableProximitySearchTask {
+    type Output = ProximitySearchResultRecord;
+    type JsValue = NodePortableSearchResult;
+
+    fn compute(&mut self) -> Result<Self::Output> {
+        let result = match &self.target {
+            NodePortableProximitySearchTarget::Map(map) => map.search_cancellable(
+                self.request.clone(),
+                self.runtime.clone(),
+                Arc::clone(&self.cancellation),
+            ),
+            NodePortableProximitySearchTarget::Session(session) => session.search_cancellable(
+                self.request.clone(),
+                self.runtime.clone(),
+                Arc::clone(&self.cancellation),
+            ),
+            NodePortableProximitySearchTarget::Hnsw(index, map) => index.search_cancellable(
+                Arc::clone(map),
+                self.request.clone(),
+                self.runtime.clone(),
+                Arc::clone(&self.cancellation),
+            ),
+            NodePortableProximitySearchTarget::ProductQuantized(index, map) => index
+                .search_cancellable(
+                    Arc::clone(map),
+                    self.request.clone(),
+                    self.runtime.clone(),
+                    Arc::clone(&self.cancellation),
+                ),
+            NodePortableProximitySearchTarget::Composite(index, map) => index.search_cancellable(
+                Arc::clone(map),
+                self.request.clone(),
+                self.runtime.clone(),
+                Arc::clone(&self.cancellation),
+            ),
+            NodePortableProximitySearchTarget::Catalog(catalog, map) => catalog.search_cancellable(
+                Arc::clone(map),
+                self.request.clone(),
+                self.runtime.clone(),
+                Arc::clone(&self.cancellation),
+            ),
+        };
+        result.map_err(to_napi_error)
+    }
+
+    fn resolve(&mut self, _env: Env, output: Self::Output) -> Result<Self::JsValue> {
+        Ok(output.into())
+    }
+}
+
+#[napi]
+impl NativePortableProximitySearchRuntime {
+    #[napi]
+    pub fn policy(&self) -> NodePortableProximitySearchRuntimePolicy {
+        self.inner.policy().into()
+    }
+
+    #[napi]
+    pub fn stats(&self) -> NodePortableProximitySearchRuntimeStats {
+        self.inner.stats().into()
+    }
+
+    #[napi]
+    pub fn clear(&self) {
+        self.inner.clear();
+    }
+}
+
+#[napi]
+pub struct NativePortableHnswBuildResult {
+    index: Arc<BindingHnswIndex>,
+    stats: HnswBuildStatsRecord,
+}
+
+#[napi]
+impl NativePortableHnswBuildResult {
+    #[napi]
+    pub fn index(&self) -> NativePortableHnswIndex {
+        NativePortableHnswIndex {
+            inner: Arc::clone(&self.index),
+        }
+    }
+
+    #[napi]
+    pub fn stats(&self) -> NodePortableHnswBuildStats {
+        self.stats.clone().into()
+    }
+}
+
+#[napi]
+pub struct NativePortableHnswIndex {
+    inner: Arc<BindingHnswIndex>,
+}
+
+#[napi]
+impl NativePortableHnswIndex {
+    #[napi]
+    pub fn manifest(&self) -> Buffer {
+        Buffer::from(self.inner.manifest())
+    }
+
+    #[napi(js_name = "sourceDescriptor")]
+    pub fn source_descriptor(&self) -> Buffer {
+        Buffer::from(self.inner.source_descriptor())
+    }
+
+    #[napi]
+    pub fn config(&self) -> NodePortableHnswConfig {
+        self.inner.config().into()
+    }
+
+    #[napi(js_name = "isCanonical")]
+    pub fn is_canonical(&self) -> bool {
+        self.inner.is_canonical()
+    }
+
+    #[napi]
+    pub fn search(
+        &self,
+        map: &NativePortableProximityMap,
+        request: NodePortableSearchRequest,
+    ) -> Result<NodePortableSearchResult> {
+        self.inner
+            .search(Arc::clone(&map.inner), request.try_into()?)
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "searchWithRuntime")]
+    pub fn search_with_runtime(
+        &self,
+        map: &NativePortableProximityMap,
+        request: NodePortableSearchRequest,
+        runtime: &NativePortableProximitySearchRuntime,
+    ) -> Result<NodePortableSearchResult> {
+        self.inner
+            .search_with_runtime(
+                Arc::clone(&map.inner),
+                request.try_into()?,
+                Arc::clone(&runtime.inner),
+            )
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "searchCancellable")]
+    pub fn search_cancellable(
+        &self,
+        map: &NativePortableProximityMap,
+        request: NodePortableSearchRequest,
+        runtime: Option<&NativePortableProximitySearchRuntime>,
+        cancellation: &NativePortableProximityCancellationToken,
+    ) -> Result<AsyncTask<NodePortableProximitySearchTask>> {
+        Ok(AsyncTask::new(NodePortableProximitySearchTask {
+            target: NodePortableProximitySearchTarget::Hnsw(
+                Arc::clone(&self.inner),
+                Arc::clone(&map.inner),
+            ),
+            request: request.try_into()?,
+            runtime: runtime.map(|value| Arc::clone(&value.inner)),
+            cancellation: Arc::clone(&cancellation.inner),
+        }))
+    }
+
+    #[napi(js_name = "proveSearch")]
+    pub fn prove_search(
+        &self,
+        map: &NativePortableProximityMap,
+        request: NodePortableSearchRequest,
+    ) -> Result<NativePortableProximitySearchProof> {
+        self.inner
+            .prove_search(
+                Arc::clone(&map.inner),
+                request.try_into()?,
+                default_content_graph_limits(),
+            )
+            .map(|inner| NativePortableProximitySearchProof { inner })
+            .map_err(to_napi_error)
+    }
+}
+
+#[napi]
+pub struct NativePortablePqBuildResult {
+    index: Arc<BindingProductQuantizer>,
+    stats: ProductQuantizationBuildStatsRecord,
+}
+
+#[napi]
+impl NativePortablePqBuildResult {
+    #[napi]
+    pub fn index(&self) -> NativePortableProductQuantizer {
+        NativePortableProductQuantizer {
+            inner: Arc::clone(&self.index),
+        }
+    }
+
+    #[napi]
+    pub fn stats(&self) -> NodePortablePqBuildStats {
+        self.stats.clone().into()
+    }
+}
+
+#[napi]
+pub struct NativePortableProductQuantizer {
+    inner: Arc<BindingProductQuantizer>,
+}
+
+#[napi]
+impl NativePortableProductQuantizer {
+    #[napi]
+    pub fn manifest(&self) -> Buffer {
+        Buffer::from(self.inner.manifest())
+    }
+
+    #[napi(js_name = "sourceDescriptor")]
+    pub fn source_descriptor(&self) -> Buffer {
+        Buffer::from(self.inner.source_descriptor())
+    }
+
+    #[napi]
+    pub fn config(&self) -> NodePortablePqConfig {
+        self.inner.config().into()
+    }
+
+    #[napi]
+    pub fn quality(&self) -> NodePortablePqQuality {
+        self.inner.quality().into()
+    }
+
+    #[napi]
+    pub fn search(
+        &self,
+        map: &NativePortableProximityMap,
+        request: NodePortableSearchRequest,
+    ) -> Result<NodePortableSearchResult> {
+        self.inner
+            .search(Arc::clone(&map.inner), request.try_into()?)
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "searchWithRuntime")]
+    pub fn search_with_runtime(
+        &self,
+        map: &NativePortableProximityMap,
+        request: NodePortableSearchRequest,
+        runtime: &NativePortableProximitySearchRuntime,
+    ) -> Result<NodePortableSearchResult> {
+        self.inner
+            .search_with_runtime(
+                Arc::clone(&map.inner),
+                request.try_into()?,
+                Arc::clone(&runtime.inner),
+            )
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "searchCancellable")]
+    pub fn search_cancellable(
+        &self,
+        map: &NativePortableProximityMap,
+        request: NodePortableSearchRequest,
+        runtime: Option<&NativePortableProximitySearchRuntime>,
+        cancellation: &NativePortableProximityCancellationToken,
+    ) -> Result<AsyncTask<NodePortableProximitySearchTask>> {
+        Ok(AsyncTask::new(NodePortableProximitySearchTask {
+            target: NodePortableProximitySearchTarget::ProductQuantized(
+                Arc::clone(&self.inner),
+                Arc::clone(&map.inner),
+            ),
+            request: request.try_into()?,
+            runtime: runtime.map(|value| Arc::clone(&value.inner)),
+            cancellation: Arc::clone(&cancellation.inner),
+        }))
+    }
+
+    #[napi(js_name = "proveSearch")]
+    pub fn prove_search(
+        &self,
+        map: &NativePortableProximityMap,
+        request: NodePortableSearchRequest,
+    ) -> Result<NativePortableProximitySearchProof> {
+        self.inner
+            .prove_search(
+                Arc::clone(&map.inner),
+                request.try_into()?,
+                default_content_graph_limits(),
+            )
+            .map(|inner| NativePortableProximitySearchProof { inner })
+            .map_err(to_napi_error)
+    }
+}
+
+#[napi]
+pub struct NativePortableCompositeBuildResult {
+    accelerator: Option<Arc<BindingCompositeAccelerator>>,
+    reasons: Vec<FullRebuildReasonRecord>,
+    stats: CompositeBuildStatsRecord,
+}
+
+impl From<CompositeBuildOutcomeRecord> for NativePortableCompositeBuildResult {
+    fn from(value: CompositeBuildOutcomeRecord) -> Self {
+        Self {
+            accelerator: value.accelerator,
+            reasons: value.reasons,
+            stats: value.stats,
+        }
+    }
+}
+
+#[napi]
+impl NativePortableCompositeBuildResult {
+    #[napi]
+    pub fn accelerator(&self) -> Option<NativePortableCompositeAccelerator> {
+        self.accelerator
+            .as_ref()
+            .map(|inner| NativePortableCompositeAccelerator {
+                inner: Arc::clone(inner),
+            })
+    }
+
+    #[napi]
+    pub fn reasons(&self) -> Vec<NodePortableFullRebuildReason> {
+        self.reasons.clone().into_iter().map(Into::into).collect()
+    }
+
+    #[napi]
+    pub fn stats(&self) -> NodePortableCompositeBuildStats {
+        self.stats.clone().into()
+    }
+}
+
+#[napi]
+pub struct NativePortableCompositeBuildOrRebuildResult {
+    inner: CompositeBuildOrRebuildOutcomeRecord,
+}
+
+#[napi]
+impl NativePortableCompositeBuildOrRebuildResult {
+    #[napi]
+    pub fn kind(&self) -> String {
+        match self.inner.kind {
+            CompositeBuildOrRebuildKindRecord::Composite => "composite",
+            CompositeBuildOrRebuildKindRecord::NoAcceleratorRequired => "no_accelerator_required",
+            CompositeBuildOrRebuildKindRecord::HnswRebuilt => "hnsw_rebuilt",
+            CompositeBuildOrRebuildKindRecord::ProductQuantizedRebuilt => {
+                "product_quantized_rebuilt"
+            }
+        }
+        .to_string()
+    }
+
+    #[napi]
+    pub fn composite(&self) -> Option<NativePortableCompositeAccelerator> {
+        self.inner
+            .composite
+            .as_ref()
+            .map(|inner| NativePortableCompositeAccelerator {
+                inner: Arc::clone(inner),
+            })
+    }
+
+    #[napi]
+    pub fn hnsw(&self) -> Option<NativePortableHnswIndex> {
+        self.inner
+            .hnsw
+            .as_ref()
+            .map(|inner| NativePortableHnswIndex {
+                inner: Arc::clone(inner),
+            })
+    }
+
+    #[napi]
+    pub fn pq(&self) -> Option<NativePortableProductQuantizer> {
+        self.inner
+            .pq
+            .as_ref()
+            .map(|inner| NativePortableProductQuantizer {
+                inner: Arc::clone(inner),
+            })
+    }
+
+    #[napi]
+    pub fn reasons(&self) -> Vec<NodePortableFullRebuildReason> {
+        self.inner
+            .reasons
+            .clone()
+            .into_iter()
+            .map(Into::into)
+            .collect()
+    }
+
+    #[napi(js_name = "compositeStats")]
+    pub fn composite_stats(&self) -> NodePortableCompositeBuildStats {
+        self.inner.composite_stats.clone().into()
+    }
+
+    #[napi(js_name = "hnswStats")]
+    pub fn hnsw_stats(&self) -> Option<NodePortableHnswBuildStats> {
+        self.inner.hnsw_stats.clone().map(Into::into)
+    }
+
+    #[napi(js_name = "pqStats")]
+    pub fn pq_stats(&self) -> Option<NodePortablePqBuildStats> {
+        self.inner.pq_stats.clone().map(Into::into)
+    }
+}
+
+#[napi]
+pub struct NativePortableCompositeAccelerator {
+    inner: Arc<BindingCompositeAccelerator>,
+}
+
+#[napi]
+impl NativePortableCompositeAccelerator {
+    #[napi]
+    pub fn manifest(&self) -> Buffer {
+        Buffer::from(self.inner.manifest())
+    }
+
+    #[napi(js_name = "currentSourceDescriptor")]
+    pub fn current_source_descriptor(&self) -> Buffer {
+        Buffer::from(self.inner.current_source_descriptor())
+    }
+
+    #[napi(js_name = "baseSourceDescriptor")]
+    pub fn base_source_descriptor(&self) -> Buffer {
+        Buffer::from(self.inner.base_source_descriptor())
+    }
+
+    #[napi(js_name = "baseKind")]
+    pub fn base_kind(&self) -> String {
+        match self.inner.base_kind() {
+            CompositeBaseKindRecord::Hnsw => "hnsw",
+            CompositeBaseKindRecord::ProductQuantized => "product_quantized",
+        }
+        .to_string()
+    }
+
+    #[napi(js_name = "deltaCount")]
+    pub fn delta_count(&self) -> String {
+        self.inner.delta_count().to_string()
+    }
+
+    #[napi(js_name = "shadowCount")]
+    pub fn shadow_count(&self) -> String {
+        self.inner.shadow_count().to_string()
+    }
+
+    #[napi]
+    pub fn config(&self) -> NodePortableCompositeConfig {
+        self.inner.config().into()
+    }
+
+    #[napi(js_name = "buildStats")]
+    pub fn build_stats(&self) -> NodePortableCompositeBuildStats {
+        self.inner.build_stats().into()
+    }
+
+    #[napi]
+    pub fn search(
+        &self,
+        map: &NativePortableProximityMap,
+        request: NodePortableSearchRequest,
+    ) -> Result<NodePortableSearchResult> {
+        self.inner
+            .search(Arc::clone(&map.inner), request.try_into()?)
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "searchWithRuntime")]
+    pub fn search_with_runtime(
+        &self,
+        map: &NativePortableProximityMap,
+        request: NodePortableSearchRequest,
+        runtime: &NativePortableProximitySearchRuntime,
+    ) -> Result<NodePortableSearchResult> {
+        self.inner
+            .search_with_runtime(
+                Arc::clone(&map.inner),
+                request.try_into()?,
+                Arc::clone(&runtime.inner),
+            )
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "searchCancellable")]
+    pub fn search_cancellable(
+        &self,
+        map: &NativePortableProximityMap,
+        request: NodePortableSearchRequest,
+        runtime: Option<&NativePortableProximitySearchRuntime>,
+        cancellation: &NativePortableProximityCancellationToken,
+    ) -> Result<AsyncTask<NodePortableProximitySearchTask>> {
+        Ok(AsyncTask::new(NodePortableProximitySearchTask {
+            target: NodePortableProximitySearchTarget::Composite(
+                Arc::clone(&self.inner),
+                Arc::clone(&map.inner),
+            ),
+            request: request.try_into()?,
+            runtime: runtime.map(|value| Arc::clone(&value.inner)),
+            cancellation: Arc::clone(&cancellation.inner),
+        }))
+    }
+
+    #[napi(js_name = "proveSearch")]
+    pub fn prove_search(
+        &self,
+        map: &NativePortableProximityMap,
+        request: NodePortableSearchRequest,
+    ) -> Result<NativePortableProximitySearchProof> {
+        self.inner
+            .prove_search(
+                Arc::clone(&map.inner),
+                request.try_into()?,
+                default_content_graph_limits(),
+            )
+            .map(|inner| NativePortableProximitySearchProof { inner })
+            .map_err(to_napi_error)
+    }
+}
+
+#[napi]
+pub struct NativePortableAcceleratorCatalog {
+    inner: Arc<BindingAcceleratorCatalog>,
+}
+
+#[napi]
+impl NativePortableAcceleratorCatalog {
+    #[napi]
+    pub fn manifest(&self) -> Buffer {
+        Buffer::from(self.inner.manifest())
+    }
+
+    #[napi(js_name = "sourceDescriptor")]
+    pub fn source_descriptor(&self) -> Buffer {
+        Buffer::from(self.inner.source_descriptor())
+    }
+
+    #[napi]
+    pub fn entries(&self) -> Vec<NodePortableCatalogEntry> {
+        self.inner.entries().into_iter().map(Into::into).collect()
+    }
+
+    #[napi]
+    pub fn search(
+        &self,
+        map: &NativePortableProximityMap,
+        request: NodePortableSearchRequest,
+    ) -> Result<NodePortableSearchResult> {
+        self.inner
+            .search(Arc::clone(&map.inner), request.try_into()?)
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "searchWithRuntime")]
+    pub fn search_with_runtime(
+        &self,
+        map: &NativePortableProximityMap,
+        request: NodePortableSearchRequest,
+        runtime: &NativePortableProximitySearchRuntime,
+    ) -> Result<NodePortableSearchResult> {
+        self.inner
+            .search_with_runtime(
+                Arc::clone(&map.inner),
+                request.try_into()?,
+                Arc::clone(&runtime.inner),
+            )
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "searchCancellable")]
+    pub fn search_cancellable(
+        &self,
+        map: &NativePortableProximityMap,
+        request: NodePortableSearchRequest,
+        runtime: Option<&NativePortableProximitySearchRuntime>,
+        cancellation: &NativePortableProximityCancellationToken,
+    ) -> Result<AsyncTask<NodePortableProximitySearchTask>> {
+        Ok(AsyncTask::new(NodePortableProximitySearchTask {
+            target: NodePortableProximitySearchTarget::Catalog(
+                Arc::clone(&self.inner),
+                Arc::clone(&map.inner),
+            ),
+            request: request.try_into()?,
+            runtime: runtime.map(|value| Arc::clone(&value.inner)),
+            cancellation: Arc::clone(&cancellation.inner),
+        }))
+    }
+
+    #[napi(js_name = "proveSearch")]
+    pub fn prove_search(
+        &self,
+        map: &NativePortableProximityMap,
+        request: NodePortableSearchRequest,
+    ) -> Result<NativePortableProximitySearchProof> {
+        self.inner
+            .prove_search(
+                Arc::clone(&map.inner),
+                request.try_into()?,
+                default_content_graph_limits(),
+            )
+            .map(|inner| NativePortableProximitySearchProof { inner })
+            .map_err(to_napi_error)
+    }
+}
+
+#[napi]
 pub struct NativePortableProximityMap {
     inner: Arc<BindingProximityMap>,
 }
 
 #[napi]
 impl NativePortableProximityMap {
+    #[napi(js_name = "clearContentCache")]
+    pub fn clear_content_cache(&self) -> Result<()> {
+        self.inner.clear_content_cache().map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "buildHnsw")]
+    pub fn build_hnsw(
+        &self,
+        config: Option<NodePortableHnswConfig>,
+        limits: Option<NodePortableHnswBuildLimits>,
+    ) -> Result<NativePortableHnswBuildResult> {
+        let config = config
+            .map(TryInto::try_into)
+            .transpose()?
+            .unwrap_or_else(default_hnsw_config);
+        let limits = limits
+            .map(TryInto::try_into)
+            .transpose()?
+            .unwrap_or_else(default_hnsw_build_limits);
+        self.inner
+            .build_hnsw(config, limits)
+            .map(|value| NativePortableHnswBuildResult {
+                index: value.index,
+                stats: value.stats,
+            })
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "loadHnsw")]
+    pub fn load_hnsw(&self, manifest: Buffer) -> Result<NativePortableHnswIndex> {
+        self.inner
+            .load_hnsw(manifest.to_vec())
+            .map(|inner| NativePortableHnswIndex { inner })
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "buildPq")]
+    pub fn build_pq(
+        &self,
+        config: Option<NodePortablePqConfig>,
+        worker_threads: String,
+        limits: Option<NodePortablePqBuildLimits>,
+    ) -> Result<NativePortablePqBuildResult> {
+        let config = config
+            .map(TryInto::try_into)
+            .transpose()?
+            .unwrap_or_else(default_pq_config);
+        let limits = limits
+            .map(TryInto::try_into)
+            .transpose()?
+            .unwrap_or_else(default_pq_build_limits);
+        self.inner
+            .build_pq(config, parse_u64(worker_threads, "workerThreads")?, limits)
+            .map(|value| NativePortablePqBuildResult {
+                index: value.index,
+                stats: value.stats,
+            })
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "loadPq")]
+    pub fn load_pq(&self, manifest: Buffer) -> Result<NativePortableProductQuantizer> {
+        self.inner
+            .load_pq(manifest.to_vec())
+            .map(|inner| NativePortableProductQuantizer { inner })
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "buildCompositeHnsw")]
+    pub fn build_composite_hnsw(
+        &self,
+        base_map: &NativePortableProximityMap,
+        base: &NativePortableHnswIndex,
+        config: Option<NodePortableCompositeConfig>,
+        limits: Option<NodePortableCompositeBuildLimits>,
+    ) -> Result<NativePortableCompositeBuildResult> {
+        let config = config
+            .map(TryInto::try_into)
+            .transpose()?
+            .unwrap_or_else(default_composite_accelerator_config);
+        let limits = limits
+            .map(TryInto::try_into)
+            .transpose()?
+            .unwrap_or_else(default_composite_build_limits);
+        self.inner
+            .build_composite_hnsw(
+                Arc::clone(&base_map.inner),
+                Arc::clone(&base.inner),
+                config,
+                limits,
+            )
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "buildCompositePq")]
+    pub fn build_composite_pq(
+        &self,
+        base_map: &NativePortableProximityMap,
+        base: &NativePortableProductQuantizer,
+        config: Option<NodePortableCompositeConfig>,
+        limits: Option<NodePortableCompositeBuildLimits>,
+    ) -> Result<NativePortableCompositeBuildResult> {
+        let config = config
+            .map(TryInto::try_into)
+            .transpose()?
+            .unwrap_or_else(default_composite_accelerator_config);
+        let limits = limits
+            .map(TryInto::try_into)
+            .transpose()?
+            .unwrap_or_else(default_composite_build_limits);
+        self.inner
+            .build_composite_pq(
+                Arc::clone(&base_map.inner),
+                Arc::clone(&base.inner),
+                config,
+                limits,
+            )
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "buildOrRebuildCompositeHnsw")]
+    pub fn build_or_rebuild_composite_hnsw(
+        &self,
+        base_map: &NativePortableProximityMap,
+        base: &NativePortableHnswIndex,
+        config: Option<NodePortableCompositeConfig>,
+        limits: Option<NodePortableCompositeBuildLimits>,
+        rebuild: Option<NodePortableCompositeRebuildOptions>,
+    ) -> Result<NativePortableCompositeBuildOrRebuildResult> {
+        let config = config
+            .map(TryInto::try_into)
+            .transpose()?
+            .unwrap_or_else(default_composite_accelerator_config);
+        let limits = limits
+            .map(TryInto::try_into)
+            .transpose()?
+            .unwrap_or_else(default_composite_build_limits);
+        let rebuild = rebuild
+            .map(TryInto::try_into)
+            .transpose()?
+            .unwrap_or_else(default_composite_rebuild_options);
+        self.inner
+            .build_or_rebuild_composite_hnsw(
+                Arc::clone(&base_map.inner),
+                Arc::clone(&base.inner),
+                config,
+                limits,
+                rebuild,
+            )
+            .map(|inner| NativePortableCompositeBuildOrRebuildResult { inner })
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "buildOrRebuildCompositePq")]
+    pub fn build_or_rebuild_composite_pq(
+        &self,
+        base_map: &NativePortableProximityMap,
+        base: &NativePortableProductQuantizer,
+        config: Option<NodePortableCompositeConfig>,
+        limits: Option<NodePortableCompositeBuildLimits>,
+        rebuild: Option<NodePortableCompositeRebuildOptions>,
+    ) -> Result<NativePortableCompositeBuildOrRebuildResult> {
+        let config = config
+            .map(TryInto::try_into)
+            .transpose()?
+            .unwrap_or_else(default_composite_accelerator_config);
+        let limits = limits
+            .map(TryInto::try_into)
+            .transpose()?
+            .unwrap_or_else(default_composite_build_limits);
+        let rebuild = rebuild
+            .map(TryInto::try_into)
+            .transpose()?
+            .unwrap_or_else(default_composite_rebuild_options);
+        self.inner
+            .build_or_rebuild_composite_pq(
+                Arc::clone(&base_map.inner),
+                Arc::clone(&base.inner),
+                config,
+                limits,
+                rebuild,
+            )
+            .map(|inner| NativePortableCompositeBuildOrRebuildResult { inner })
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "loadComposite")]
+    pub fn load_composite(&self, manifest: Buffer) -> Result<NativePortableCompositeAccelerator> {
+        self.inner
+            .load_composite(manifest.to_vec())
+            .map(|inner| NativePortableCompositeAccelerator { inner })
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "buildAcceleratorCatalog")]
+    pub fn build_accelerator_catalog(
+        &self,
+        hnsw: Option<&NativePortableHnswIndex>,
+        pq: Option<&NativePortableProductQuantizer>,
+        composite: Option<&NativePortableCompositeAccelerator>,
+    ) -> Result<NativePortableAcceleratorCatalog> {
+        self.inner
+            .build_accelerator_catalog(
+                hnsw.map(|value| Arc::clone(&value.inner)),
+                pq.map(|value| Arc::clone(&value.inner)),
+                composite.map(|value| Arc::clone(&value.inner)),
+            )
+            .map(|inner| NativePortableAcceleratorCatalog { inner })
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "loadAcceleratorCatalog")]
+    pub fn load_accelerator_catalog(
+        &self,
+        manifest: Buffer,
+    ) -> Result<NativePortableAcceleratorCatalog> {
+        self.inner
+            .load_accelerator_catalog(manifest.to_vec())
+            .map(|inner| NativePortableAcceleratorCatalog { inner })
+            .map_err(to_napi_error)
+    }
+
     #[napi]
     pub fn read(&self) -> Result<NativePortableProximityReadSession> {
         self.inner
@@ -1582,18 +4591,108 @@ impl NativePortableProximityMap {
             .map_err(to_napi_error)
     }
 
+    #[napi(js_name = "withRecordView")]
+    pub fn with_record_view(
+        &self,
+        env: Env,
+        key: Buffer,
+        visit: FunctionRef<JsObject, ()>,
+    ) -> Result<bool> {
+        with_proximity_record_view(env, self.inner.fast_handle(), &key, visit)
+    }
+
+    #[napi(
+        js_name = "withRecordRangePage",
+        ts_args_type = "start: Buffer, end: Buffer | undefined, after: Buffer | undefined, maxRecords: number, visitor: (page: { bytes: Buffer; recordCount: number; terminal: boolean }) => void"
+    )]
+    pub fn with_record_range_page(
+        &self,
+        env: Env,
+        start: Buffer,
+        end: Option<Buffer>,
+        after: Option<Buffer>,
+        max_records: u32,
+        visit: FunctionRef<JsObject, ()>,
+    ) -> Result<()> {
+        with_proximity_record_range_page(
+            env,
+            self.inner.fast_handle(),
+            &start,
+            end.as_ref(),
+            after.as_ref(),
+            max_records,
+            visit,
+        )
+    }
+
     #[napi]
     pub fn contains(&self, key: Buffer) -> Result<bool> {
         self.inner.contains_key(key.to_vec()).map_err(to_napi_error)
     }
 
+    #[napi(
+        js_name = "scanRecords",
+        ts_args_type = "visitor: (record: NodePortableProximityRecord) => boolean"
+    )]
+    pub fn scan_records(
+        &self,
+        env: Env,
+        visitor: NodePortableProximityRecordVisitor,
+    ) -> Result<String> {
+        let callback_error = Arc::new(std::sync::Mutex::new(None));
+        let visited = self
+            .inner
+            .scan_records(Arc::new(NodeProximityRecordVisitor {
+                env,
+                callback: visitor,
+                callback_error: Arc::clone(&callback_error),
+            }));
+        if let Ok(mut error) = callback_error.lock() {
+            if let Some(error) = error.take() {
+                return Err(Error::new(Status::GenericFailure, error));
+            }
+        }
+        visited
+            .map(|value| value.to_string())
+            .map_err(to_napi_error)
+    }
+
     #[napi]
-    pub fn search(&self, query: Float32Array, k: String) -> Result<NodePortableSearchResult> {
-        let k = k.parse::<u64>().map_err(|error| {
-            Error::new(Status::InvalidArg, format!("invalid top-k value: {error}"))
-        })?;
+    pub fn search(&self, request: NodePortableSearchRequest) -> Result<NodePortableSearchResult> {
         self.inner
-            .search(exact_proximity_search_request(query.to_vec(), k))
+            .search(request.try_into()?)
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "cancellationToken")]
+    pub fn cancellation_token(&self) -> NativePortableProximityCancellationToken {
+        NativePortableProximityCancellationToken::new()
+    }
+
+    #[napi(js_name = "searchCancellable")]
+    pub fn search_cancellable(
+        &self,
+        request: NodePortableSearchRequest,
+        runtime: Option<&NativePortableProximitySearchRuntime>,
+        cancellation: &NativePortableProximityCancellationToken,
+    ) -> Result<AsyncTask<NodePortableProximitySearchTask>> {
+        Ok(AsyncTask::new(NodePortableProximitySearchTask {
+            target: NodePortableProximitySearchTarget::Map(Arc::clone(&self.inner)),
+            request: request.try_into()?,
+            runtime: runtime.map(|runtime| Arc::clone(&runtime.inner)),
+            cancellation: Arc::clone(&cancellation.inner),
+        }))
+    }
+
+    #[napi(js_name = "searchWithRuntime")]
+    pub fn search_with_runtime(
+        &self,
+        request: NodePortableSearchRequest,
+        runtime: &NativePortableProximitySearchRuntime,
+    ) -> Result<NodePortableSearchResult> {
+        self.inner
+            .search_with_runtime(request.try_into()?, Arc::clone(&runtime.inner))
             .map(Into::into)
             .map_err(to_napi_error)
     }
@@ -1670,17 +4769,10 @@ impl NativePortableProximityMap {
     #[napi(js_name = "proveSearch")]
     pub fn prove_search(
         &self,
-        query: Float32Array,
-        k: String,
+        request: NodePortableSearchRequest,
     ) -> Result<NativePortableProximitySearchProof> {
-        let k = k.parse::<u64>().map_err(|error| {
-            Error::new(Status::InvalidArg, format!("invalid top-k value: {error}"))
-        })?;
         self.inner
-            .prove_search(
-                exact_proximity_search_request(query.to_vec(), k),
-                default_content_graph_limits(),
-            )
+            .prove_search(request.try_into()?, default_content_graph_limits())
             .map(|inner| NativePortableProximitySearchProof { inner })
             .map_err(to_napi_error)
     }
@@ -1720,14 +4812,43 @@ pub struct NativePortableProximityReadSession {
 #[napi]
 impl NativePortableProximityReadSession {
     #[napi]
-    pub fn search(&self, query: Float32Array, k: String) -> Result<NodePortableSearchResult> {
-        let k = k.parse::<u64>().map_err(|error| {
-            Error::new(Status::InvalidArg, format!("invalid top-k value: {error}"))
-        })?;
+    pub fn search(&self, request: NodePortableSearchRequest) -> Result<NodePortableSearchResult> {
         self.inner
-            .search(exact_proximity_search_request(query.to_vec(), k))
+            .search(request.try_into()?)
             .map(Into::into)
             .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "searchWithRuntime")]
+    pub fn search_with_runtime(
+        &self,
+        request: NodePortableSearchRequest,
+        runtime: &NativePortableProximitySearchRuntime,
+    ) -> Result<NodePortableSearchResult> {
+        self.inner
+            .search_with_runtime(request.try_into()?, Arc::clone(&runtime.inner))
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "cancellationToken")]
+    pub fn cancellation_token(&self) -> NativePortableProximityCancellationToken {
+        NativePortableProximityCancellationToken::new()
+    }
+
+    #[napi(js_name = "searchCancellable")]
+    pub fn search_cancellable(
+        &self,
+        request: NodePortableSearchRequest,
+        runtime: Option<&NativePortableProximitySearchRuntime>,
+        cancellation: &NativePortableProximityCancellationToken,
+    ) -> Result<AsyncTask<NodePortableProximitySearchTask>> {
+        Ok(AsyncTask::new(NodePortableProximitySearchTask {
+            target: NodePortableProximitySearchTarget::Session(Arc::clone(&self.inner)),
+            request: request.try_into()?,
+            runtime: runtime.map(|value| Arc::clone(&value.inner)),
+            cancellation: Arc::clone(&cancellation.inner),
+        }))
     }
 
     #[napi]
@@ -1738,9 +4859,130 @@ impl NativePortableProximityReadSession {
             .map_err(to_napi_error)
     }
 
+    #[napi(js_name = "withRecordView")]
+    pub fn with_record_view(
+        &self,
+        env: Env,
+        key: Buffer,
+        visit: FunctionRef<JsObject, ()>,
+    ) -> Result<bool> {
+        with_proximity_record_view(env, self.inner.fast_handle(), &key, visit)
+    }
+
+    #[napi(
+        js_name = "withRecordRangePage",
+        ts_args_type = "start: Buffer, end: Buffer | undefined, after: Buffer | undefined, maxRecords: number, visitor: (page: { bytes: Buffer; recordCount: number; terminal: boolean }) => void"
+    )]
+    pub fn with_record_range_page(
+        &self,
+        env: Env,
+        start: Buffer,
+        end: Option<Buffer>,
+        after: Option<Buffer>,
+        max_records: u32,
+        visit: FunctionRef<JsObject, ()>,
+    ) -> Result<()> {
+        with_proximity_record_range_page(
+            env,
+            self.inner.fast_handle(),
+            &start,
+            end.as_ref(),
+            after.as_ref(),
+            max_records,
+            visit,
+        )
+    }
+
     #[napi]
     pub fn contains(&self, key: Buffer) -> Result<bool> {
         self.inner.contains_key(key.to_vec()).map_err(to_napi_error)
+    }
+
+    #[napi(
+        js_name = "scanRecords",
+        ts_args_type = "visitor: (record: NodePortableProximityRecord) => boolean"
+    )]
+    pub fn scan_records(
+        &self,
+        env: Env,
+        visitor: NodePortableProximityRecordVisitor,
+    ) -> Result<String> {
+        let callback_error = Arc::new(std::sync::Mutex::new(None));
+        let visited = self
+            .inner
+            .scan_records(Arc::new(NodeProximityRecordVisitor {
+                env,
+                callback: visitor,
+                callback_error: Arc::clone(&callback_error),
+            }));
+        if let Ok(mut error) = callback_error.lock() {
+            if let Some(error) = error.take() {
+                return Err(Error::new(Status::GenericFailure, error));
+            }
+        }
+        visited
+            .map(|value| value.to_string())
+            .map_err(to_napi_error)
+    }
+
+    #[napi(
+        js_name = "withSearchPage",
+        ts_args_type = "query: Float32Array, k: number, visitor: (page: { bytes: Buffer; recordCount: number; terminal: boolean }) => boolean"
+    )]
+    pub fn with_search_page(
+        &self,
+        env: Env,
+        query: Float32Array,
+        k: u32,
+        visitor: FunctionRef<JsObject, bool>,
+    ) -> Result<()> {
+        if query.is_empty() || k == 0 {
+            return Err(Error::new(
+                Status::InvalidArg,
+                "proximity search view requires a non-empty query and positive k".to_string(),
+            ));
+        }
+        let handle = self.inner.fast_handle();
+        if handle == 0 {
+            return Err(Error::new(
+                Status::GenericFailure,
+                "native proximity read session is closed".to_string(),
+            ));
+        }
+        let page = unsafe {
+            prolly_fast_proximity_search(handle, query.as_ptr(), query.len(), k, 64 * 1024 * 1024)
+        };
+        if page.status != 0 || page.lease_handle == 0 || page.data_ptr.is_null() {
+            return Err(Error::new(
+                Status::GenericFailure,
+                format!(
+                    "native proximity search page failed with status {}",
+                    page.status
+                ),
+            ));
+        }
+        let _page = NodeFastPageGuard(page.lease_handle);
+        let length = usize::try_from(page.data_len).map_err(|_| {
+            Error::new(
+                Status::GenericFailure,
+                "native proximity page exceeds the host address space".to_string(),
+            )
+        })?;
+        let borrowed = unsafe {
+            env.create_buffer_with_borrowed_data(
+                page.data_ptr.cast_mut(),
+                length,
+                (),
+                |(), _env| {},
+            )?
+        };
+        let mut argument = env.create_object()?;
+        argument.set_named_property("bytes", borrowed.into_unknown())?;
+        argument.set_named_property("recordCount", page.record_count)?;
+        argument.set_named_property("terminal", page.terminal != 0)?;
+        let function = visitor.borrow_back(&env)?;
+        function.call(argument)?;
+        Ok(())
     }
 
     #[napi(js_name = "fastHandle")]
@@ -1800,6 +5042,31 @@ impl NativePortableProximitySearchProof {
 
 #[napi]
 impl NativeProllyEngine {
+    #[napi(js_name = "proximitySearchRuntime")]
+    pub fn portable_proximity_search_runtime(
+        &self,
+        policy: Option<NodePortableProximitySearchRuntimePolicy>,
+    ) -> Result<NativePortableProximitySearchRuntime> {
+        let policy = policy
+            .map(TryInto::try_into)
+            .transpose()?
+            .unwrap_or_else(default_proximity_search_runtime_policy);
+        self.inner
+            .proximity_search_runtime(policy)
+            .map(|inner| NativePortableProximitySearchRuntime { inner })
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "beginVersionedTransaction")]
+    pub fn portable_begin_versioned_transaction(
+        &self,
+    ) -> Result<NativePortableVersionedTransaction> {
+        self.inner
+            .begin_versioned_transaction()
+            .map(|inner| NativePortableVersionedTransaction { inner: Some(inner) })
+            .map_err(to_napi_error)
+    }
+
     #[napi(js_name = "versionedMap")]
     pub fn portable_versioned_map(&self, id: Buffer) -> Result<NativePortableVersionedMap> {
         self.inner
@@ -1816,7 +5083,10 @@ impl NativeProllyEngine {
     ) -> Result<NativePortableIndexedMap> {
         self.inner
             .indexed_map(id.to_vec(), Arc::clone(&registry.inner))
-            .map(|inner| NativePortableIndexedMap { inner })
+            .map(|inner| NativePortableIndexedMap {
+                inner,
+                env: registry.env,
+            })
             .map_err(to_napi_error)
     }
 
@@ -1825,6 +5095,7 @@ impl NativeProllyEngine {
         &self,
         dimensions: u32,
         records: Vec<NodePortableProximityRecord>,
+        threads: u32,
     ) -> Result<NativePortableProximityMap> {
         let records = records
             .into_iter()
@@ -1835,7 +5106,22 @@ impl NativeProllyEngine {
             })
             .collect();
         self.inner
-            .build_proximity_map(default_proximity_config(dimensions), records, None)
+            .build_proximity_map(
+                default_proximity_config(dimensions),
+                records,
+                Some(u64::from(threads)),
+            )
+            .map(|inner| NativePortableProximityMap { inner })
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "loadProximity")]
+    pub fn portable_load_proximity(
+        &self,
+        descriptor: Buffer,
+    ) -> Result<NativePortableProximityMap> {
+        self.inner
+            .load_proximity_map(descriptor.to_vec())
             .map(|inner| NativePortableProximityMap { inner })
             .map_err(to_napi_error)
     }

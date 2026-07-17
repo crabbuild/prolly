@@ -178,10 +178,154 @@ export interface NodePortableNeighbor {
   value: Buffer
   distance: number
 }
+export interface NodePortableSearchBudget {
+  maxNodes?: string
+  maxCommittedBytes?: string
+  maxDistanceEvaluations?: string
+  maxFrontierEntries?: string
+}
+export interface NodePortableSearchFilter {
+  kind: string
+  start?: Buffer
+  rangeEnd?: Buffer
+  prefix?: Buffer
+  eligibleKeys: Array<Buffer>
+}
+export interface NodePortableSearchRequest {
+  query: Float32Array
+  k: string
+  policy: string
+  adaptiveQuality?: string
+  budget: NodePortableSearchBudget
+  filter: NodePortableSearchFilter
+  kernel: string
+  backend: string
+  hnswEfSearch?: number
+  pqRerankMultiplier?: number
+}
+export interface NodePortableHnswConfig {
+  maxConnections: number
+  efConstruction: number
+  efSearch: number
+  levelBits: number
+  overfetchMultiplier: number
+  seed: string
+  routingVectorEncoding: string
+}
+export interface NodePortableHnswBuildLimits {
+  maxRecords?: string
+  maxOwnedBytes?: string
+  maxDistanceEvaluations?: string
+  workerThreads: string
+  maxEncodedGraphBytes?: string
+}
+export interface NodePortableHnswBuildStats {
+  records: string
+  distanceEvaluations: string
+  directedEdges: string
+  maximumLevel: number
+  ownedBytes: string
+  encodedGraphBytes: string
+}
+export interface NodePortablePqConfig {
+  subquantizers: number
+  centroidsPerSubquantizer: number
+  trainingIterations: number
+  rerankMultiplier: number
+  seed: string
+  maxTrainingVectors: string
+}
+export interface NodePortablePqBuildLimits {
+  maxTrainingVectors?: string
+  maxTrainingBytes?: string
+  maxTemporaryCodeBytes?: string
+  maxDistanceEvaluations?: string
+  maxEncodedOutputBytes?: string
+  maxWorkerThreads?: string
+}
+export interface NodePortablePqBuildStats {
+  trainingDistanceEvaluations: string
+  encodingDistanceEvaluations: string
+  encodedVectors: string
+  trainingVectors: string
+  trainingBytes: string
+  encodedOutputBytes: string
+}
+export interface NodePortablePqQuality {
+  meanSquaredError: number
+  maximumSquaredError: number
+}
+export interface NodePortableCompositeConfig {
+  maxDeltaRecords: string
+  maxShadowRecords: string
+  maxDeltaRatioPpm: number
+  maxShadowRatioPpm: number
+  baseOverfetchMultiplier: number
+}
+export interface NodePortableCompositeBuildLimits {
+  maxDiffEntries?: string
+  maxOwnedBytes?: string
+  maxEncodedOutputBytes?: string
+  maxDistanceEvaluations?: string
+}
+export interface NodePortableCompositeBuildStats {
+  diffEntries: string
+  insertedRecords: string
+  vectorUpdatedRecords: string
+  valueOnlyRecords: string
+  deletedRecords: string
+  deltaRecords: string
+  shadowRecords: string
+  ownedBytesPeak: string
+  encodedOutputBytes: string
+  distanceEvaluations: string
+}
+export interface NodePortableFullRebuildReason {
+  kind: string
+  actual: string
+  maximum: string
+}
+export interface NodePortableCompositeRebuildOptions {
+  hnswLimits: NodePortableHnswBuildLimits
+  pqWorkerThreads: string
+  pqLimits: NodePortablePqBuildLimits
+}
+export interface NodePortableCatalogEntry {
+  kind: string
+  configurationFingerprint: Buffer
+  manifest: Buffer
+}
+export interface NodePortableSearchStats {
+  levelsVisited: string
+  nodesRead: string
+  bytesRead: string
+  physicalBytesRead: string
+  committedBytes: string
+  distanceEvaluations: string
+  quantizedDistanceEvaluations: string
+  rerankedCandidates: string
+  frontierPeak: string
+  candidateHandlesPeak: string
+  candidateRetainedBytesPeak: string
+}
+export interface NodePortableProximitySearchRuntimePolicy {
+  maxEntries: string
+  maxBytes: string
+  authoritativeMaxBytes: string
+  hnswMaxBytes: string
+  pqMaxBytes: string
+}
+export interface NodePortableProximitySearchRuntimeStats {
+  physicalReads: string
+  physicalBytesRead: string
+}
+export declare function defaultProximitySearchRuntimePolicy(): NodePortableProximitySearchRuntimePolicy
 export interface NodePortableSearchResult {
   neighbors: Array<NodePortableNeighbor>
+  stats: NodePortableSearchStats
   completion: string
   backend: string
+  planFormatVersion: number
 }
 export interface NodePortableSearchProofVerification {
   result: NodePortableSearchResult
@@ -197,6 +341,48 @@ export interface NodePortableProofVerification {
 export interface NodePortableMaintenanceSummary {
   itemCount: string
   byteCount: string
+}
+export interface NodePortableCatalogVerification {
+  head: Buffer
+  versionCount: string
+  reachableNodes: string
+  reachableBytes: string
+}
+export interface NodePortableVersionedMapBatchResult {
+  version: NodePortableMapVersion
+  stats: NodeBatchApplyStatsRecord
+}
+export interface NodePortableReadScanOutcome {
+  visited: string
+  stopped: boolean
+}
+export interface NodePortableMapChangeEvent {
+  previous?: Buffer
+  current: NodePortableMapVersion
+  diffs: Array<NodeDiffRecord>
+}
+export interface NodePortableVersionedTransactionCommit {
+  applied: boolean
+  versions: Array<NodePortableMapVersion>
+  conflictMapId?: Buffer
+  conflictCurrent?: NodePortableMapVersion
+}
+export interface NodePortableSecondaryIndexLimits {
+  maxTermBytes: string
+  maxProjectionBytes: string
+  maxAllValueBytes: string
+  maxTermsPerRecord: string
+  maxProjectedBytesPerRecord: string
+  maxDerivedMutationsPerTransaction: string
+  maxProjectedBytesPerTransaction: string
+  maxIndexes: string
+  buildPageSize: string
+  maxTemporarySortBytes: string
+  maxBundleNodes: string
+  maxBundleBytes: string
+  maxVerificationEntries: string
+  maxWriteRetries: string
+  maxBuildRetries: string
 }
 export interface NodeRemoteStoreCapabilitiesRecord {
   nativeBatchReads: boolean
@@ -984,30 +1170,96 @@ export declare class NodePortableProximityMutationResult {
 }
 export declare class NativePortableVersionedMap {
   id(): Buffer
+  headName(): Buffer
+  versionsPrefix(): Buffer
   isInitialized(): boolean
   initialize(): NodePortableMapVersion
+  initializeSorted(entries: Array<NodeEntryRecord>): NodePortableMapUpdate
   head(): NodePortableMapVersion | null
   headId(): Buffer | null
   version(id: Buffer): NodePortableMapVersion | null
   versions(): Array<NodePortableMapVersion>
   get(key: Buffer): Buffer | null
+  getLargeValue(blobStore: NativeProllyBlobStore, key: Buffer): Buffer | null
   containsKey(key: Buffer): boolean
   getMany(keys: Array<Buffer>): Array<Buffer | undefined | null>
   getAt(id: Buffer, key: Buffer): Buffer | null
   getManyAt(id: Buffer, keys: Array<Buffer>): Array<Buffer | undefined | null>
+  range(start: Buffer, end?: Buffer | undefined | null): Array<NodeEntryRecord>
+  prefix(prefix: Buffer): Array<NodeEntryRecord>
+  rangeAt(id: Buffer, start: Buffer, end?: Buffer | undefined | null): Array<NodeEntryRecord>
+  prefixAt(id: Buffer, prefix: Buffer): Array<NodeEntryRecord>
+  rangePage(cursor: NodeRangeCursorRecord | undefined | null, end: Buffer | undefined | null, limit: string): NodeRangePageRecord
+  prefixPage(prefix: Buffer, cursor: NodeRangeCursorRecord | undefined | null, limit: string): NodeRangePageRecord
+  rangePageAt(id: Buffer, cursor: NodeRangeCursorRecord | undefined | null, end: Buffer | undefined | null, limit: string): NodeRangePageRecord
+  prefixPageAt(id: Buffer, prefix: Buffer, cursor: NodeRangeCursorRecord | undefined | null, limit: string): NodeRangePageRecord
+  diff(base: Buffer, target: Buffer): Array<NodeDiffRecord>
+  changesSince(base: Buffer): Array<NodeDiffRecord>
+  rollbackTo(id: Buffer): NodePortableMapVersion
   put(key: Buffer, value: Buffer): NodePortableMapVersion
+  putLargeValue(blobStore: NativeProllyBlobStore, key: Buffer, value: Buffer, config: NodeLargeValueConfigRecord): NodePortableMapVersion
   apply(mutations: Array<NodeMutationRecord>): NodePortableMapVersion
+  append(mutations: Array<NodeMutationRecord>): NodePortableMapVersion
+  parallelApply(mutations: Array<NodeMutationRecord>, config: NodeParallelConfigRecord): NodePortableVersionedMapBatchResult
+  rebuildSortedIf(expected: Buffer | undefined | null, entries: Array<NodeEntryRecord>): NodePortableMapUpdate
+  rebuildFromEntriesIf(expected: Buffer | undefined | null, entries: Array<NodeEntryRecord>): NodePortableMapUpdate
+  applyAtMillis(mutations: Array<NodeMutationRecord>, timestampMillis: string): NodePortableMapVersion
   applyIf(expected: Buffer | undefined | null, mutations: Array<NodeMutationRecord>): NodePortableMapUpdate
+  applyIfAtMillis(expected: Buffer | undefined | null, mutations: Array<NodeMutationRecord>, timestampMillis: string): NodePortableMapUpdate
   putIf(expected: Buffer | undefined | null, key: Buffer, value: Buffer): NodePortableMapUpdate
+  putLargeValueIf(blobStore: NativeProllyBlobStore, expected: Buffer | undefined | null, key: Buffer, value: Buffer, config: NodeLargeValueConfigRecord): NodePortableMapUpdate
   deleteIf(expected: Buffer | undefined | null, key: Buffer): NodePortableMapUpdate
   delete(key: Buffer): NodePortableMapVersion
   snapshot(): NativePortableMapSnapshot | null
   snapshotAt(id: Buffer): NativePortableMapSnapshot | null
+  compare(base: Buffer, target: Buffer): NativePortableMapComparison
+  compareToHead(base: Buffer): NativePortableMapComparison
+  subscribe(): NativePortableMapSubscription
+  subscribeFrom(lastSeen?: Buffer | undefined | null): NativePortableMapSubscription
+  prepareMerge(base: Buffer, candidate: Buffer): NativePortableMapMerge
   backup(): Buffer
   restoreBackup(bytes: Buffer): NodePortableMapVersion
+  importAsHead(bundle: NodeSnapshotBundleRecord): NodePortableMapVersion
+  importAsHeadAtMillis(bundle: NodeSnapshotBundleRecord, timestampMillis: string): NodePortableMapVersion
   keepLast(count: number): NodePortableVersionPrune
-  verifyCatalog(): NodePortableMaintenanceSummary
-  planGc(): NodePortableMaintenanceSummary
+  pruneVersions(keepLatest: string): NodePortableVersionPrune
+  keepForAt(nowMillis: string, maxAgeMillis: string): NodePortableVersionPrune
+  keepFor(maxAgeMillis: string): NodePortableVersionPrune
+  keepVersions(ids: Array<Buffer>): NodePortableVersionPrune
+  retentionPolicy(): NodeNamedRootRetentionRecord
+  verifyCatalog(): NodePortableCatalogVerification
+  planGc(): NodeGcPlanRecord
+  sweepGc(): NodeGcSweepRecord
+  planBlobGc(blobStore: NativeProllyBlobStore): NodeBlobGcPlanRecord
+  sweepBlobGc(blobStore: NativeProllyBlobStore): NodeBlobGcSweepRecord
+}
+export declare class NativePortableMapComparison {
+  base(): NodePortableMapVersion
+  target(): NodePortableMapVersion
+  diff(): Array<NodeDiffRecord>
+  diffPage(cursor: NodeRangeCursorRecord | undefined | null, end: Buffer | undefined | null, limit: string): NodeDiffPageRecord
+}
+export declare class NativePortableMapSubscription {
+  lastSeen(): Buffer | null
+  poll(): NodePortableMapChangeEvent | null
+}
+export declare class NativePortableMapMerge {
+  base(): NodePortableMapVersion
+  head(): NodePortableMapVersion
+  candidate(): NodePortableMapVersion
+  merge(resolver?: string | undefined | null): NodeTreeRecord
+  conflictPage(cursor: NodeRangeCursorRecord | undefined | null, limit: string): NodeConflictPageRecord
+  publish(resolver?: string | undefined | null): NodePortableMapUpdate
+}
+export declare class NativePortableVersionedTransaction {
+  head(mapId: Buffer): NodePortableMapVersion | null
+  get(mapId: Buffer, key: Buffer): Buffer | null
+  apply(mapId: Buffer, mutations: Array<NodeMutationRecord>): NodePortableMapVersion
+  applyIf(mapId: Buffer, expected: Buffer | undefined | null, mutations: Array<NodeMutationRecord>): NodePortableMapUpdate
+  put(mapId: Buffer, key: Buffer, value: Buffer): NodePortableMapVersion
+  delete(mapId: Buffer, key: Buffer): NodePortableMapVersion
+  commit(): NodePortableVersionedTransactionCommit
+  rollback(): void
 }
 export declare class NativePortableMapSnapshot {
   id(): Buffer
@@ -1026,23 +1278,40 @@ export declare class NativePortableMapSnapshot {
   reversePage(cursor: NodeReverseCursorRecord | undefined | null, start: Buffer, limit: string): NodeReversePageRecord
   prefixReversePage(prefix: Buffer, cursor: NodeReverseCursorRecord | undefined | null, limit: string): NodeReversePageRecord
   proveKey(key: Buffer): NativePortableKeyProof
+  proveKeys(keys: Array<Buffer>): NativePortableMultiKeyProof
+  proveRange(start: Buffer, end?: Buffer | undefined | null): NativePortableRangeProof
+  provePrefix(prefix: Buffer): NativePortableRangeProof
+  proveRangePage(cursor: NodeRangeCursorRecord | undefined | null, end: Buffer | undefined | null, limit: string): NativePortableProvedRangePage
   stats(): NodePortableMaintenanceSummary
-  export(): NodePortableMaintenanceSummary
+  export(): NodeSnapshotBundleRecord
   read(): NativePortableReadSession
 }
 export declare class NativePortableReadSession {
   get(key: Buffer): Buffer | null
+  withValueView(key: Buffer, visit: (arg: object) => void): boolean
+  scanRangePages(start: Buffer, end: Buffer | undefined | null, visit: (arg: object) => number): NodePortableReadScanOutcome
 }
 export declare class NativePortableKeyProof {
   verify(): NodePortableProofVerification
 }
+export declare class NativePortableMultiKeyProof {
+  verify(): NodeMultiKeyProofVerificationRecord
+}
+export declare class NativePortableRangeProof {
+  verify(): NodeRangeProofVerificationRecord
+}
+export declare class NativePortableProvedRangePage {
+  page(): NodeRangePageRecord
+  verify(): NodeRangePageProofVerificationRecord
+}
 export declare class NativePortableIndexRegistry {
   constructor()
-  register(name: Buffer, generation: string, extractorId: string, projection: string, extractor: NodePortableIndexExtractor): void
+  register(name: Buffer, generation: string, extractorId: string, projection: string, limits: NodePortableSecondaryIndexLimits | undefined | null, extractor: NodePortableIndexExtractor): void
 }
 export declare class NativePortableIndexedMap {
   id(): Buffer
   get(key: Buffer): Buffer | null
+  withValueView(key: Buffer, visit: (arg: object) => void): boolean
   put(key: Buffer, value: Buffer): NodePortableIndexedVersion
   apply(mutations: Array<NodeMutationRecord>): NodePortableIndexedVersion
   applyIf(expectedSource: Buffer | undefined | null, mutations: Array<NodeMutationRecord>): NodePortableIndexedUpdate
@@ -1060,6 +1329,8 @@ export declare class NativePortableIndexedMap {
   exportCurrent(): Buffer
   importCurrent(bundle: Buffer, expectedSource?: Buffer | undefined | null): NodePortableIndexedVersion
   keepLast(count: string): NodePortableIndexedRetention
+  planGc(): NodeGcPlanRecord
+  replaceIndex(name: Buffer, generation: string, extractorId: string, projection: string, limits: NodePortableSecondaryIndexLimits | undefined | null, extractor: NodePortableIndexExtractor): NodePortableIndexBuildResult
 }
 export declare class NativePortableIndexedSnapshot {
   id(): NodePortableIndexedSnapshotId
@@ -1079,28 +1350,129 @@ export declare class NativePortableSecondaryIndex {
   rangePage(start: Buffer, end: Buffer | undefined | null, cursor: Buffer | undefined | null, limit: string): NodePortableIndexPage
   rangeReversePage(start: Buffer, end: Buffer | undefined | null, cursor: Buffer | undefined | null, limit: string): NodePortableIndexPage
 }
+export declare class NativePortableProximitySearchRuntime {
+  policy(): NodePortableProximitySearchRuntimePolicy
+  stats(): NodePortableProximitySearchRuntimeStats
+  clear(): void
+}
+export declare class NativePortableProximityCancellationToken {
+  constructor()
+  cancel(): void
+  isCancelled(): boolean
+}
+export declare class NativePortableHnswBuildResult {
+  index(): NativePortableHnswIndex
+  stats(): NodePortableHnswBuildStats
+}
+export declare class NativePortableHnswIndex {
+  manifest(): Buffer
+  sourceDescriptor(): Buffer
+  config(): NodePortableHnswConfig
+  isCanonical(): boolean
+  search(map: NativePortableProximityMap, request: NodePortableSearchRequest): NodePortableSearchResult
+  searchWithRuntime(map: NativePortableProximityMap, request: NodePortableSearchRequest, runtime: NativePortableProximitySearchRuntime): NodePortableSearchResult
+  searchCancellable(map: NativePortableProximityMap, request: NodePortableSearchRequest, runtime: NativePortableProximitySearchRuntime | undefined | null, cancellation: NativePortableProximityCancellationToken): Promise<unknown>
+  proveSearch(map: NativePortableProximityMap, request: NodePortableSearchRequest): NativePortableProximitySearchProof
+}
+export declare class NativePortablePqBuildResult {
+  index(): NativePortableProductQuantizer
+  stats(): NodePortablePqBuildStats
+}
+export declare class NativePortableProductQuantizer {
+  manifest(): Buffer
+  sourceDescriptor(): Buffer
+  config(): NodePortablePqConfig
+  quality(): NodePortablePqQuality
+  search(map: NativePortableProximityMap, request: NodePortableSearchRequest): NodePortableSearchResult
+  searchWithRuntime(map: NativePortableProximityMap, request: NodePortableSearchRequest, runtime: NativePortableProximitySearchRuntime): NodePortableSearchResult
+  searchCancellable(map: NativePortableProximityMap, request: NodePortableSearchRequest, runtime: NativePortableProximitySearchRuntime | undefined | null, cancellation: NativePortableProximityCancellationToken): Promise<unknown>
+  proveSearch(map: NativePortableProximityMap, request: NodePortableSearchRequest): NativePortableProximitySearchProof
+}
+export declare class NativePortableCompositeBuildResult {
+  accelerator(): NativePortableCompositeAccelerator | null
+  reasons(): Array<NodePortableFullRebuildReason>
+  stats(): NodePortableCompositeBuildStats
+}
+export declare class NativePortableCompositeBuildOrRebuildResult {
+  kind(): string
+  composite(): NativePortableCompositeAccelerator | null
+  hnsw(): NativePortableHnswIndex | null
+  pq(): NativePortableProductQuantizer | null
+  reasons(): Array<NodePortableFullRebuildReason>
+  compositeStats(): NodePortableCompositeBuildStats
+  hnswStats(): NodePortableHnswBuildStats | null
+  pqStats(): NodePortablePqBuildStats | null
+}
+export declare class NativePortableCompositeAccelerator {
+  manifest(): Buffer
+  currentSourceDescriptor(): Buffer
+  baseSourceDescriptor(): Buffer
+  baseKind(): string
+  deltaCount(): string
+  shadowCount(): string
+  config(): NodePortableCompositeConfig
+  buildStats(): NodePortableCompositeBuildStats
+  search(map: NativePortableProximityMap, request: NodePortableSearchRequest): NodePortableSearchResult
+  searchWithRuntime(map: NativePortableProximityMap, request: NodePortableSearchRequest, runtime: NativePortableProximitySearchRuntime): NodePortableSearchResult
+  searchCancellable(map: NativePortableProximityMap, request: NodePortableSearchRequest, runtime: NativePortableProximitySearchRuntime | undefined | null, cancellation: NativePortableProximityCancellationToken): Promise<unknown>
+  proveSearch(map: NativePortableProximityMap, request: NodePortableSearchRequest): NativePortableProximitySearchProof
+}
+export declare class NativePortableAcceleratorCatalog {
+  manifest(): Buffer
+  sourceDescriptor(): Buffer
+  entries(): Array<NodePortableCatalogEntry>
+  search(map: NativePortableProximityMap, request: NodePortableSearchRequest): NodePortableSearchResult
+  searchWithRuntime(map: NativePortableProximityMap, request: NodePortableSearchRequest, runtime: NativePortableProximitySearchRuntime): NodePortableSearchResult
+  searchCancellable(map: NativePortableProximityMap, request: NodePortableSearchRequest, runtime: NativePortableProximitySearchRuntime | undefined | null, cancellation: NativePortableProximityCancellationToken): Promise<unknown>
+  proveSearch(map: NativePortableProximityMap, request: NodePortableSearchRequest): NativePortableProximitySearchProof
+}
 export declare class NativePortableProximityMap {
+  clearContentCache(): void
+  buildHnsw(config?: NodePortableHnswConfig | undefined | null, limits?: NodePortableHnswBuildLimits | undefined | null): NativePortableHnswBuildResult
+  loadHnsw(manifest: Buffer): NativePortableHnswIndex
+  buildPq(config: NodePortablePqConfig | undefined | null, workerThreads: string, limits?: NodePortablePqBuildLimits | undefined | null): NativePortablePqBuildResult
+  loadPq(manifest: Buffer): NativePortableProductQuantizer
+  buildCompositeHnsw(baseMap: NativePortableProximityMap, base: NativePortableHnswIndex, config?: NodePortableCompositeConfig | undefined | null, limits?: NodePortableCompositeBuildLimits | undefined | null): NativePortableCompositeBuildResult
+  buildCompositePq(baseMap: NativePortableProximityMap, base: NativePortableProductQuantizer, config?: NodePortableCompositeConfig | undefined | null, limits?: NodePortableCompositeBuildLimits | undefined | null): NativePortableCompositeBuildResult
+  buildOrRebuildCompositeHnsw(baseMap: NativePortableProximityMap, base: NativePortableHnswIndex, config?: NodePortableCompositeConfig | undefined | null, limits?: NodePortableCompositeBuildLimits | undefined | null, rebuild?: NodePortableCompositeRebuildOptions | undefined | null): NativePortableCompositeBuildOrRebuildResult
+  buildOrRebuildCompositePq(baseMap: NativePortableProximityMap, base: NativePortableProductQuantizer, config?: NodePortableCompositeConfig | undefined | null, limits?: NodePortableCompositeBuildLimits | undefined | null, rebuild?: NodePortableCompositeRebuildOptions | undefined | null): NativePortableCompositeBuildOrRebuildResult
+  loadComposite(manifest: Buffer): NativePortableCompositeAccelerator
+  buildAcceleratorCatalog(hnsw?: NativePortableHnswIndex | undefined | null, pq?: NativePortableProductQuantizer | undefined | null, composite?: NativePortableCompositeAccelerator | undefined | null): NativePortableAcceleratorCatalog
+  loadAcceleratorCatalog(manifest: Buffer): NativePortableAcceleratorCatalog
   read(): NativePortableProximityReadSession
   count(): string
   config(): NodePortableProximityConfig
   get(key: Buffer): NodePortableExactProximityRecord | null
+  withRecordView(key: Buffer, visit: (arg: object) => void): boolean
+  withRecordRangePage(start: Buffer, end: Buffer | undefined, after: Buffer | undefined, maxRecords: number, visitor: (page: { bytes: Buffer; recordCount: number; terminal: boolean }) => void): void
   contains(key: Buffer): boolean
-  search(query: Float32Array, k: string): NodePortableSearchResult
+  scanRecords(visitor: (record: NodePortableProximityRecord) => boolean): string
+  search(request: NodePortableSearchRequest): NodePortableSearchResult
+  cancellationToken(): NativePortableProximityCancellationToken
+  searchCancellable(request: NodePortableSearchRequest, runtime: NativePortableProximitySearchRuntime | undefined | null, cancellation: NativePortableProximityCancellationToken): Promise<unknown>
+  searchWithRuntime(request: NodePortableSearchRequest, runtime: NativePortableProximitySearchRuntime): NodePortableSearchResult
   descriptor(): Buffer
   verify(): NodePortableProximityVerification
   mutate(mutations: Array<NodePortableProximityMutation>): NodePortableProximityMutationResult
   rebuild(mutations: Array<NodePortableProximityMutation>): NativePortableProximityMap
   proveMembership(key: Buffer): NativePortableProximityProof
   proveStructure(): NativePortableProximityStructuralProof
-  proveSearch(query: Float32Array, k: string): NativePortableProximitySearchProof
+  proveSearch(request: NodePortableSearchRequest): NativePortableProximitySearchProof
 }
 export declare class NativePortableProximityStructuralProof {
   verify(expectedDescriptor?: Buffer | undefined | null): NodePortableStructuralVerification
 }
 export declare class NativePortableProximityReadSession {
-  search(query: Float32Array, k: string): NodePortableSearchResult
+  search(request: NodePortableSearchRequest): NodePortableSearchResult
+  searchWithRuntime(request: NodePortableSearchRequest, runtime: NativePortableProximitySearchRuntime): NodePortableSearchResult
+  cancellationToken(): NativePortableProximityCancellationToken
+  searchCancellable(request: NodePortableSearchRequest, runtime: NativePortableProximitySearchRuntime | undefined | null, cancellation: NativePortableProximityCancellationToken): Promise<unknown>
   get(key: Buffer): NodePortableExactProximityRecord | null
+  withRecordView(key: Buffer, visit: (arg: object) => void): boolean
+  withRecordRangePage(start: Buffer, end: Buffer | undefined, after: Buffer | undefined, maxRecords: number, visitor: (page: { bytes: Buffer; recordCount: number; terminal: boolean }) => void): void
   contains(key: Buffer): boolean
+  scanRecords(visitor: (record: NodePortableProximityRecord) => boolean): string
+  withSearchPage(query: Float32Array, k: number, visitor: (page: { bytes: Buffer; recordCount: number; terminal: boolean }) => boolean): void
   fastHandle(): string
 }
 export declare class NativePortableProximityProof {
@@ -1171,9 +1543,12 @@ export declare class NativeProllyTransaction {
   rollback(): void
 }
 export declare class NativeProllyEngine {
+  proximitySearchRuntime(policy?: NodePortableProximitySearchRuntimePolicy | undefined | null): NativePortableProximitySearchRuntime
+  beginVersionedTransaction(): NativePortableVersionedTransaction
   versionedMap(id: Buffer): NativePortableVersionedMap
   indexedMap(id: Buffer, registry: NativePortableIndexRegistry): NativePortableIndexedMap
-  buildProximity(dimensions: number, records: Array<NodePortableProximityRecord>): NativePortableProximityMap
+  buildProximity(dimensions: number, records: Array<NodePortableProximityRecord>, threads: number): NativePortableProximityMap
+  loadProximity(descriptor: Buffer): NativePortableProximityMap
   static memory(): NativeProllyEngine
   static memoryWithConfigJson(configJson: string): NativeProllyEngine
   static customStore(store: NativeHostStore): NativeProllyEngine

@@ -1,35 +1,126 @@
 package prolly
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"io"
 	"math"
-	"sync/atomic"
+	"sync"
 )
 
 var ErrViewExpired = errors.New("packed page view escaped its callback scope")
 
-type viewScope struct{ expired atomic.Bool }
+type viewScope struct {
+	mu    sync.RWMutex
+	alive bool
+}
+
+func newViewScope() *viewScope { return &viewScope{alive: true} }
+
+func (s *viewScope) close() {
+	s.mu.Lock()
+	s.alive = false
+	s.mu.Unlock()
+}
 
 type ScopedBytes struct {
 	data  []byte
 	scope *viewScope
 }
 
+// Bytes returns an owned copy, or nil after the callback scope expires.
+// Use Len, At, Equal, Compare, or WriteTo to inspect the live view without a copy.
 func (v ScopedBytes) Bytes() []byte {
-	if v.scope == nil || v.scope.expired.Load() {
-		return nil
-	}
-	return v.data
+	value, _ := v.Copy()
+	return value
 }
 
 func (v ScopedBytes) Copy() ([]byte, error) {
-	if v.scope == nil || v.scope.expired.Load() {
-		return nil, ErrViewExpired
+	var result []byte
+	err := v.withData(func(data []byte) { result = append([]byte(nil), data...) })
+	return result, err
+}
+
+func (v ScopedBytes) withData(read func([]byte)) error {
+	if v.scope == nil {
+		return ErrViewExpired
 	}
-	return append([]byte(nil), v.data...), nil
+	v.scope.mu.RLock()
+	defer v.scope.mu.RUnlock()
+	if !v.scope.alive {
+		return ErrViewExpired
+	}
+	read(v.data)
+	return nil
+}
+
+func (v ScopedBytes) mustWithData(read func([]byte)) {
+	if err := v.withData(read); err != nil {
+		panic(err)
+	}
+}
+
+func (v ScopedBytes) Len() int {
+	length := 0
+	v.mustWithData(func(data []byte) { length = len(data) })
+	return length
+}
+
+func (v ScopedBytes) At(index int) byte {
+	var value byte
+	v.mustWithData(func(data []byte) { value = data[index] })
+	return value
+}
+
+func (v ScopedBytes) AppendTo(destination []byte) []byte {
+	v.mustWithData(func(data []byte) { destination = append(destination, data...) })
+	return destination
+}
+
+func (v ScopedBytes) Equal(other []byte) bool {
+	equal := false
+	v.mustWithData(func(data []byte) { equal = bytes.Equal(data, other) })
+	return equal
+}
+
+func (v ScopedBytes) Compare(other []byte) int {
+	comparison := 0
+	v.mustWithData(func(data []byte) { comparison = bytes.Compare(data, other) })
+	return comparison
+}
+
+func (v ScopedBytes) String() string {
+	var result string
+	v.mustWithData(func(data []byte) { result = string(data) })
+	return result
+}
+
+// WriteTo writes the view synchronously without an intermediate copy. As
+// required by io.Writer, the writer must not retain the supplied byte slice.
+func (v ScopedBytes) WriteTo(writer io.Writer) (int64, error) {
+	if writer == nil {
+		return 0, errors.New("nil scoped-bytes writer")
+	}
+	var written int
+	var writeErr error
+	if err := v.withData(func(data []byte) {
+		written, writeErr = writer.Write(data)
+		if writeErr == nil && written != len(data) {
+			writeErr = io.ErrShortWrite
+		}
+	}); err != nil {
+		return 0, err
+	}
+	return int64(written), writeErr
+}
+
+func (v ScopedBytes) copyTo(destination []byte) int {
+	written := 0
+	v.mustWithData(func(data []byte) { written = copy(destination, data) })
+	return written
 }
 
 type IndexQuery struct {
@@ -150,10 +241,10 @@ func (i *SecondaryIndex) QueryView(ctx context.Context, query IndexQuery, visit 
 		if err != nil {
 			return err
 		}
-		scope := &viewScope{}
+		scope := newViewScope()
 		rows, decodeErr := decodeIndexViews(page.data, scope)
 		if decodeErr != nil {
-			scope.expired.Store(true)
+			scope.close()
 			page.Close()
 			return decodeErr
 		}
@@ -164,7 +255,7 @@ func (i *SecondaryIndex) QueryView(ctx context.Context, query IndexQuery, visit 
 				break
 			}
 		}
-		scope.expired.Store(true)
+		scope.close()
 		terminal := page.terminal
 		page.Close()
 		if !keepGoing || terminal {
@@ -211,6 +302,42 @@ func decodeNeighborViews(page []byte, scope *viewScope) ([]NeighborView, error) 
 			proof = &field
 		}
 		rows = append(rows, NeighborView{key, value, proof, math.Float64frombits(binary.LittleEndian.Uint64(page[base+12 : base+20])), binary.LittleEndian.Uint32(page[base+20 : base+24])})
+	}
+	return rows, nil
+}
+
+func decodeProximityRecordViews(page []byte, scope *viewScope) ([]ProximityScanRecordView, error) {
+	header, err := parsePackedHeader(page, 8, 24)
+	if err != nil {
+		return nil, err
+	}
+	arenaStart := 28 + header.tableBytes
+	rows := make([]ProximityScanRecordView, 0, header.count)
+	for index := 0; index < header.count; index++ {
+		base := 28 + index*24
+		field := func(offsetAt int) (ScopedBytes, error) {
+			return scopedArenaField(page, arenaStart, header.arenaBytes,
+				int(binary.LittleEndian.Uint32(page[base+offsetAt:base+offsetAt+4])),
+				int(binary.LittleEndian.Uint32(page[base+offsetAt+4:base+offsetAt+8])), scope)
+		}
+		key, err := field(0)
+		if err != nil {
+			return nil, err
+		}
+		vector, err := field(8)
+		if err != nil {
+			return nil, err
+		}
+		value, err := field(16)
+		if err != nil {
+			return nil, err
+		}
+		if vector.Len()%4 != 0 {
+			return nil, errors.New("proximity vector byte length is invalid")
+		}
+		rows = append(rows, ProximityScanRecordView{
+			Key: key, Vector: ProximityVectorView{raw: vector.data, scope: scope}, Value: value,
+		})
 	}
 	return rows, nil
 }

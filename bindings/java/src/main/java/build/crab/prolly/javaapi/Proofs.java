@@ -8,6 +8,21 @@ public final class Proofs {
         return build.crab.prolly.api.JavaPortableBridge.verify(proof);
     }
 
+    public static build.crab.prolly.MultiKeyProofVerificationRecord verify(
+            build.crab.prolly.MultiKeyProofRecord proof) {
+        return build.crab.prolly.api.JavaPortableBridge.verifyMultiKey(proof);
+    }
+
+    public static build.crab.prolly.RangeProofVerificationRecord verify(
+            build.crab.prolly.RangeProofRecord proof) {
+        return build.crab.prolly.api.JavaPortableBridge.verifyRange(proof);
+    }
+
+    public static build.crab.prolly.RangePageProofVerificationRecord verify(
+            build.crab.prolly.RangePageProofRecord proof) {
+        return build.crab.prolly.api.JavaPortableBridge.verifyRangePage(proof);
+    }
+
     public static build.crab.prolly.ProximityMembershipVerificationRecord verify(
             build.crab.prolly.ProximityMembershipProofRecord proof,
             byte[] expectedDescriptor) {

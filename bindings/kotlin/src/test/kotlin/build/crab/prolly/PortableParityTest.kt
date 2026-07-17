@@ -2,16 +2,405 @@ package build.crab.prolly
 
 import build.crab.prolly.api.Engine
 import build.crab.prolly.api.ProximityRecord
+import build.crab.prolly.api.ProximityCancellationToken
+import build.crab.prolly.api.StringKeyCodec
+import build.crab.prolly.api.StringValueCodec
+import build.crab.prolly.api.ValueRefView
 import build.crab.prolly.api.verifyKeyProof
+import build.crab.prolly.api.verifyMultiKeyProof
+import build.crab.prolly.api.verifyRangePageProof
+import build.crab.prolly.api.verifyRangeProof
 import build.crab.prolly.api.verifyProximityMembershipProof
 import build.crab.prolly.api.verifyProximityStructureProof
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.async
+import kotlinx.coroutines.CoroutineStart
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 
 class PortableParityTest {
+    @Test
+    fun typedVersionedMapIsApplicationFacing() {
+        ProllyNative.useLocalDebugLibrary()
+        Engine.memory().use { engine ->
+            engine.versionedMap("typed-users".bytes()).use { raw ->
+                raw.initialize()
+                val typed = raw.typed(StringKeyCodec, StringValueCodec)
+                val first = typed.put("alice", "score:1")
+                assertEquals("score:1", typed.get("alice"))
+                assertEquals("score:1", typed.getAt(first.id, "alice"))
+                assertEquals(listOf("alice" to "score:1"), typed.entries())
+                val updated = typed.putIf(first.id, "alice", "score:2")
+                assertEquals(MapUpdateKind.APPLIED, updated.kind)
+                val migrated = typed.migrateFrom(updated.current!!.id, StringValueCodec) {
+                    value -> "$value:active"
+                }
+                assertEquals(MapUpdateKind.APPLIED, migrated.update.kind)
+                assertEquals(1 to 1, migrated.scannedValues to migrated.rewrittenValues)
+                assertEquals("score:2:active", typed.get("alice"))
+                assertSame(raw, typed.raw)
+                typed.delete("alice")
+                assertEquals(null, typed.get("alice"))
+            }
+        }
+    }
+
+    @Test
+    fun versionedLargeValuesAndBlobGcAreApplicationFacing() {
+        ProllyNative.useLocalDebugLibrary()
+        Engine.memory().use { engine ->
+            ProllyBlobStore.memory().use { blobs ->
+                engine.versionedMap("large-values".bytes()).use { versioned ->
+                    versioned.initialize()
+                    assertEquals(true, versioned.headName().isNotEmpty())
+                    assertEquals(true, versioned.versionsPrefix().isNotEmpty())
+                    val config = LargeValueConfigRecord(1uL)
+                    val first = versioned.putLargeValue(blobs, "document".bytes(), "large-value".bytes(), config)
+                    assertArrayEquals("large-value".bytes(), versioned.getLargeValue(blobs, "document".bytes()))
+                    val updated = versioned.putLargeValueIf(
+                        blobs, first.id, "document".bytes(), "new-large-value".bytes(), config,
+                    )
+                    assertEquals(MapUpdateKind.APPLIED, updated.kind)
+                    versioned.snapshot()!!.use { snapshot ->
+                        snapshot.read().use { session ->
+                            var blob: ValueRefView.Blob? = null
+                            assertEquals(true, session.getValueRefView("document".bytes()) { value ->
+                                if (value is ValueRefView.Blob) blob = value
+                            })
+                            assertEquals(32, blob!!.cid.size)
+                            assertEquals("new-large-value".bytes().size.toULong(), blob!!.length.toULong())
+                        }
+                    }
+                    assertEquals(true, versioned.planBlobGc(blobs).reachability.liveBlobCount >= 1uL)
+                    assertEquals(true, versioned.sweepBlobGc(blobs).plan.reachability.liveBlobCount >= 1uL)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun retainedSearchRuntimeReusesValidatedContent() {
+        ProllyNative.useLocalDebugLibrary()
+        Engine.memory().use { engine ->
+            engine.buildProximity(
+                2u,
+                (0 until 16).map { index ->
+                    ProximityRecord(
+                        "vector-%02d".format(index).bytes(),
+                        listOf(index.toFloat(), 0f),
+                        "value-%02d".format(index).bytes(),
+                    )
+                },
+            ).use { proximity ->
+                proximity.buildHnsw().index.use { index ->
+                    val request = exactProximitySearchRequest(listOf(0f, 0f), 3uL).copy(
+                        policy = SearchPolicyKind.FIXED_BUDGET,
+                        backend = SearchBackendRecord.HNSW,
+                    )
+                    engine.proximitySearchRuntime().use { runtime ->
+                        val cold = index.searchWithRuntime(proximity, request, runtime)
+                        assertEquals(true, cold.stats.physicalBytesRead > 0uL)
+                        val coldStats = runtime.stats
+                        assertEquals(true, coldStats.physicalReads > 0uL)
+                        val warm = index.searchWithRuntime(proximity, request, runtime)
+                        assertEquals(
+                            cold.neighbors.map { it.distance },
+                            warm.neighbors.map { it.distance },
+                        )
+                        cold.neighbors.zip(warm.neighbors).forEach { (left, right) ->
+                            assertArrayEquals(left.key, right.key)
+                            assertArrayEquals(left.value, right.value)
+                        }
+                        assertEquals(0uL, warm.stats.physicalBytesRead)
+                        assertEquals(coldStats, runtime.stats)
+                        runtime.clear()
+                        assertEquals(
+                            true,
+                            index.searchWithRuntime(proximity, request, runtime)
+                                .stats.physicalBytesRead > 0uL,
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun compositeAndCatalogLifecycleIsPortableAndBounded() {
+        ProllyNative.useLocalDebugLibrary()
+        Engine.memory().use { engine ->
+            engine.buildProximity(
+                2u,
+                (0 until 16).map { index ->
+                    ProximityRecord(
+                        "vector-%02d".format(index).bytes(),
+                        listOf(index.toFloat(), 0f),
+                        "value-%02d".format(index).bytes(),
+                    )
+                },
+            ).use { base ->
+                base.buildHnsw().index.use { hnsw ->
+                    val (current, _) = base.mutate(
+                        listOf(ProximityMutationRecord("vector-00".bytes(), listOf(0.25f, 0f), "updated".bytes())),
+                    )
+                    current.use {
+                        val built = current.buildCompositeHnsw(base, hnsw)
+                        assertEquals(1uL, built.stats.vectorUpdatedRecords)
+                        assertEquals(0, built.reasons.size)
+                        built.accelerator!!.use { composite ->
+                            assertEquals(CompositeBaseKindRecord.HNSW, composite.baseKind)
+                            assertArrayEquals(current.descriptor, composite.currentSourceDescriptor)
+                            assertArrayEquals(base.descriptor, composite.baseSourceDescriptor)
+                            assertEquals(1uL, composite.deltaCount)
+                            assertEquals(1uL, composite.shadowCount)
+                            val request = exactProximitySearchRequest(listOf(0f, 0f), 3uL).copy(
+                                policy = SearchPolicyKind.FIXED_BUDGET,
+                                backend = SearchBackendRecord.COMPOSITE,
+                            )
+                            assertEquals(
+                                SearchBackendRecord.COMPOSITE,
+                                composite.search(current, request).backend,
+                            )
+                            composite.proveSearch(current, request).use { proof ->
+                                assertEquals(
+                                    SearchBackendRecord.COMPOSITE,
+                                    proof.verify(current.descriptor).result.backend,
+                                )
+                            }
+                            val manifest = composite.manifest
+                            current.buildAcceleratorCatalog(composite = composite).use { catalog ->
+                                assertArrayEquals(current.descriptor, catalog.sourceDescriptor)
+                                assertEquals(CatalogAcceleratorKindRecord.COMPOSITE, catalog.entries.single().kind)
+                                assertEquals(
+                                    SearchBackendRecord.COMPOSITE,
+                                    catalog.search(current, request).backend,
+                                )
+                                current.loadAcceleratorCatalog(catalog.manifest).use { loaded ->
+                                    assertArrayEquals(catalog.manifest, loaded.manifest)
+                                }
+                            }
+                            current.loadComposite(manifest).use { loaded ->
+                                assertArrayEquals(manifest, loaded.manifest)
+                            }
+                        }
+                        val forced = defaultCompositeAcceleratorConfig().copy(maxDeltaRecords = 0uL)
+                        val rebuilt = current.buildOrRebuildCompositeHnsw(base, hnsw, forced)
+                        assertEquals(CompositeBuildOrRebuildKindRecord.HNSW_REBUILT, rebuilt.kind)
+                        rebuilt.hnsw!!.close()
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun productQuantizerLifecycleIsPortableAndBounded() {
+        ProllyNative.useLocalDebugLibrary()
+        Engine.memory().use { engine ->
+            engine.buildProximity(
+                4u,
+                (0 until 16).map { index ->
+                    ProximityRecord(
+                        "vector-%02d".format(index).bytes(),
+                        listOf(index.toFloat(), (index % 3).toFloat(), 0f, 1f),
+                        "value-%02d".format(index).bytes(),
+                    )
+                },
+            ).use { proximity ->
+                val config = ProductQuantizationConfigRecord(
+                    subquantizers = 2u,
+                    centroidsPerSubquantizer = 4u,
+                    trainingIterations = 2u,
+                    rerankMultiplier = 4u,
+                    seed = ULong.MAX_VALUE,
+                    maxTrainingVectors = 16uL,
+                )
+                val built = proximity.buildPq(config, workerThreads = 2uL)
+                assertEquals(16uL, built.stats.encodedVectors)
+                val request = exactProximitySearchRequest(
+                    listOf(0f, 0f, 0f, 1f), 3uL,
+                ).copy(
+                    policy = SearchPolicyKind.FIXED_BUDGET,
+                    backend = SearchBackendRecord.PRODUCT_QUANTIZED,
+                )
+                built.index.use { index ->
+                    assertEquals(config, index.config)
+                    assertArrayEquals(proximity.descriptor, index.sourceDescriptor)
+                    assertEquals(true, index.quality.meanSquaredError >= 0.0)
+                    val result = index.search(proximity, request)
+                    assertEquals(SearchBackendRecord.PRODUCT_QUANTIZED, result.backend)
+                    assertArrayEquals("vector-00".bytes(), result.neighbors.first().key)
+                    val manifest = index.manifest
+                    index.proveSearch(proximity, request).use { proof ->
+                        assertEquals(
+                            SearchBackendRecord.PRODUCT_QUANTIZED,
+                            proof.verify(proximity.descriptor).result.backend,
+                        )
+                    }
+                    proximity.loadPq(manifest).use { loaded ->
+                        assertArrayEquals(manifest, loaded.manifest)
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun hnswAcceleratorLifecycleIsPortable() {
+        ProllyNative.useLocalDebugLibrary()
+        Engine.memory().use { engine ->
+            engine.buildProximity(
+                2u,
+                (0 until 16).map { index ->
+                    ProximityRecord(
+                        "vector-%02d".format(index).bytes(),
+                        listOf(index.toFloat(), 0f),
+                        "value-%02d".format(index).bytes(),
+                    )
+                },
+            ).use { proximity ->
+                val built = proximity.buildHnsw()
+                assertEquals(16uL, built.stats.records)
+                val request = exactProximitySearchRequest(listOf(0f, 0f), 3uL).copy(
+                    policy = SearchPolicyKind.FIXED_BUDGET,
+                    backend = SearchBackendRecord.HNSW,
+                )
+                built.index.use { index ->
+                    assertEquals(true, index.isCanonical)
+                    assertArrayEquals(proximity.descriptor, index.sourceDescriptor)
+                    val result = index.search(proximity, request)
+                    assertEquals(SearchBackendRecord.HNSW, result.backend)
+                    assertArrayEquals("vector-00".bytes(), result.neighbors.first().key)
+                    ProximityCancellationToken().use { cancellation ->
+                        cancellation.cancel()
+                        val cancelled = index.searchCancellable(
+                            proximity, request, cancellation = cancellation,
+                        )
+                        assertEquals(SearchCompletionRecord.CANCELLED, cancelled.completion)
+                        assertEquals(emptyList<Any>(), cancelled.neighbors)
+                    }
+                    val manifest = index.manifest
+                    index.proveSearch(proximity, request).use { proof ->
+                        assertEquals(
+                            SearchBackendRecord.HNSW,
+                            proof.verify(proximity.descriptor).result.backend,
+                        )
+                    }
+                    proximity.loadHnsw(manifest).use { loaded ->
+                        assertArrayEquals(manifest, loaded.manifest)
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun proximityRichSearchRequestIsSharedByMapSessionAndProof() {
+        ProllyNative.useLocalDebugLibrary()
+        Engine.memory().use { engine ->
+            engine.buildProximity(
+                2u,
+                listOf(
+                    ProximityRecord("a".bytes(), listOf(0f, 0f), "alpha".bytes()),
+                    ProximityRecord("ab".bytes(), listOf(1f, 0f), "alphabet".bytes()),
+                    ProximityRecord("b".bytes(), listOf(0.1f, 0f), "beta".bytes()),
+                ),
+            ).use { proximity ->
+                val request = ProximitySearchRequestRecord(
+                    query = listOf(0f, 0f),
+                    k = 3uL,
+                    policy = SearchPolicyKind.FIXED_BUDGET,
+                    adaptiveQuality = null,
+                    budget = SearchBudgetRecord(1_000uL, 1_000_000uL, 1_000uL, 1_000uL),
+                    filter = ProximityFilterRecord(
+                        ProximityFilterKind.PREFIX, null, null, "a".bytes(), emptyList()
+                    ),
+                    kernel = QueryKernelRecord.SCALAR_DETERMINISTIC,
+                    backend = SearchBackendRecord.AUTO,
+                    hnswEfSearch = null,
+                    pqRerankMultiplier = null,
+                )
+
+                val result = proximity.search(request)
+                assertEquals(listOf("a", "ab"), result.neighbors.map { String(it.key) })
+                assertEquals(true, result.stats.distanceEvaluations > 0uL)
+                assertEquals(true, result.planFormatVersion > 0u)
+                val scanned = mutableListOf<String>()
+                assertEquals(2uL, proximity.scanRecords {
+                    scanned += String(it.key)
+                    scanned.size < 2
+                })
+                assertEquals(listOf("a", "ab"), scanned)
+                val rangeViews = mutableListOf<String>()
+                var escapedKey: build.crab.prolly.api.ScopedBytes? = null
+                val outcome = proximity.scanRecordViews("ab".bytes(), "c".bytes()) {
+                    escapedKey = it.key
+                    rangeViews += String(it.key.bytes())
+                    true
+                }
+                assertEquals(2L, outcome.visited)
+                assertEquals(false, outcome.stopped)
+                assertEquals(listOf("ab", "b"), rangeViews)
+                assertThrows<IllegalStateException> { escapedKey!!.bytes() }
+                proximity.read().use { session ->
+                    assertEquals(
+                        listOf("a", "ab"),
+                        session.search(request).neighbors.map { String(it.key) },
+                    )
+                    val retained = mutableListOf<String>()
+                    assertEquals(3uL, session.scanRecords {
+                        retained += String(it.key)
+                        true
+                    })
+                    assertEquals(listOf("a", "ab", "b"), retained)
+                }
+                proximity.proveSearch(request).use { proof ->
+                    assertEquals(
+                        listOf("a", "ab"),
+                        proof.verify(proximity.descriptor).result.neighbors.map { String(it.key) },
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
+    fun versionedBulkPublicationUsesNativePerformancePaths() {
+        ProllyNative.useLocalDebugLibrary()
+        Engine.memory().use { engine ->
+            engine.versionedMap("bulk-publication".bytes()).use { versioned ->
+                val initialized = versioned.initializeSorted(listOf(
+                    EntryRecord("a".bytes(), "one".bytes()),
+                    EntryRecord("b".bytes(), "two".bytes()),
+                ))
+                assertEquals(MapUpdateKind.APPLIED, initialized.kind)
+                versioned.append(listOf(MutationRecord(MutationKind.UPSERT, "c".bytes(), "three".bytes())))
+                val parallel = versioned.parallelApply(
+                    listOf(
+                        MutationRecord(MutationKind.UPSERT, "b".bytes(), "updated".bytes()),
+                        MutationRecord(MutationKind.UPSERT, "d".bytes(), "four".bytes()),
+                    ),
+                    ParallelConfigRecord(1uL, 1uL),
+                )
+                assertEquals(2uL, parallel.stats.inputMutations)
+                val rebuilt = versioned.rebuildSortedIf(parallel.version.id, listOf(
+                    EntryRecord("x".bytes(), "nine".bytes()),
+                    EntryRecord("y".bytes(), "ten".bytes()),
+                ))
+                assertEquals(MapUpdateKind.APPLIED, rebuilt.kind)
+                val iterRebuilt = versioned.rebuildFromEntriesIf(rebuilt.current!!.id, listOf(
+                    EntryRecord("q".bytes(), "queue".bytes()),
+                    EntryRecord("p".bytes(), "priority".bytes()),
+                ))
+                assertEquals(MapUpdateKind.APPLIED, iterRebuilt.kind)
+                assertArrayEquals("priority".bytes(), versioned.get("p".bytes()))
+            }
+        }
+    }
+
     @Test
     fun versionedSnapshotsExposeOrderedNavigationAndBoundedPages() {
         ProllyNative.useLocalDebugLibrary()
@@ -71,6 +460,12 @@ class PortableParityTest {
                 )
                 engine.indexedMap("members".bytes(), registry).use { indexed ->
                     indexed.put("u1".bytes(), "red".bytes())
+                    var escapedValue: build.crab.prolly.api.ScopedBytes? = null
+                    assertEquals(true, indexed.getView("u1".bytes()) {
+                        escapedValue = it
+                        assertArrayEquals("red".bytes(), it.bytes())
+                    })
+                    assertThrows<IllegalStateException> { escapedValue!!.bytes() }
                     indexed.ensureIndex("by_team".bytes())
                     indexed.snapshot().use { snapshot ->
                         snapshot.index("by_team".bytes()).use { index ->
@@ -130,10 +525,68 @@ class PortableParityTest {
         Engine.memory().use { engine ->
             engine.versionedMap("async".bytes()).use { versioned ->
                 versioned.initialize()
+                val subscription = versioned.subscribeAsync()
                 val key = "k".bytes()
-                versioned.putAsync(key, "v".bytes())
+                val updated = versioned.putAsync(key, "v".bytes())
                 key[0] = 'x'.code.toByte()
                 assertArrayEquals("v".bytes(), versioned.get("k".bytes()))
+                assertArrayEquals(updated.id, versioned.headAsync()!!.id)
+                versioned.snapshotAtAsync(updated.id)!!.use { snapshot ->
+                    assertArrayEquals("v".bytes(), snapshot.getAsync("k".bytes()))
+                    val bundle = snapshot.exportAsync()
+                    engine.versionedMap("async-import".bytes()).use { imported ->
+                        val pending = async(start = CoroutineStart.UNDISPATCHED) {
+                            imported.importAsHeadAsync(bundle)
+                        }
+                        bundle.nodes.first().bytes[0] = 0
+                        pending.await()
+                        assertArrayEquals("v".bytes(), imported.get("k".bytes()))
+                    }
+                    snapshot.read().use { session ->
+                        assertArrayEquals("v".bytes(), session.getAsync("k".bytes()))
+                    }
+                }
+                assertEquals(false, subscription.pollAsync() == null)
+                subscription.close()
+            }
+        }
+    }
+
+    @Test
+    fun proximitySuspendSearchUsesNativeCooperativeCancellation() = runBlocking {
+        ProllyNative.useLocalDebugLibrary()
+        Engine.memory().use { engine ->
+            engine.buildProximity(
+                2u,
+                (0 until 256).map { index ->
+                    ProximityRecord(
+                        "vector-%04d".format(index).bytes(),
+                        listOf(index.toFloat(), (index % 7).toFloat()),
+                        index.toString().bytes(),
+                    )
+                },
+            ).use { proximity ->
+                engine.proximitySearchRuntime().use { runtime ->
+                    ProximityCancellationToken().use { cancellation ->
+                        cancellation.cancel()
+                        val result = proximity.searchAsync(
+                            exactProximitySearchRequest(listOf(0f, 0f), 10uL),
+                            runtime,
+                            cancellation,
+                        )
+                        assertEquals(SearchCompletionRecord.CANCELLED, result.completion)
+                        assertEquals(emptyList<Any>(), result.neighbors)
+                        proximity.read().use { session ->
+                            val sessionResult = session.searchAsync(
+                                exactProximitySearchRequest(listOf(0f, 0f), 10uL),
+                                runtime,
+                                cancellation,
+                            )
+                            assertEquals(SearchCompletionRecord.CANCELLED, sessionResult.completion)
+                            assertEquals(emptyList<Any>(), sessionResult.neighbors)
+                        }
+                    }
+                }
             }
         }
     }
@@ -145,14 +598,49 @@ class PortableParityTest {
             engine.versionedMap("proofs".bytes()).use { versioned ->
                 versioned.initialize()
                 versioned.put("k".bytes(), "v".bytes())
+                versioned.put("ka".bytes(), "v2".bytes())
                 versioned.snapshot()!!.use { snapshot ->
                     val verified = verifyKeyProof(snapshot.proveKey("k".bytes()))
                     assertEquals(true, verified.valid)
                     assertArrayEquals("v".bytes(), verified.value)
-                    assertEquals(1uL, snapshot.stats().totalKeyValuePairs)
+                    val multi = verifyMultiKeyProof(snapshot.proveKeys(listOf("k".bytes(), "missing".bytes())))
+                    assertEquals(listOf(true, false), multi.results.map { it.exists })
+                    assertEquals(listOf("k", "ka"), verifyRangeProof(snapshot.proveRange("k".bytes(), "l".bytes())).entries.map { String(it.key) })
+                    assertEquals(listOf("k", "ka"), verifyRangeProof(snapshot.provePrefix("k".bytes())).entries.map { String(it.key) })
+                    val provedPage = snapshot.proveRangePage(end = "l".bytes(), limit = 1uL)
+                    assertEquals(true, verifyRangePageProof(provedPage.proof).valid)
+                    assertEquals(listOf("k"), provedPage.page.entries.map { String(it.key) })
+                    assertEquals(2uL, snapshot.stats().totalKeyValuePairs)
                     assertEquals(true, snapshot.export().nodes.isNotEmpty())
                     snapshot.read().use { session ->
                         assertArrayEquals("v".bytes(), session.get("k".bytes()))
+                        var copiedValue: ByteArray? = null
+                        assertEquals(true, session.getView("k".bytes()) { copiedValue = it.bytes() })
+                        assertArrayEquals("v".bytes(), copiedValue)
+                        var escapedValue: build.crab.prolly.api.ScopedBytes? = null
+                        session.getView("k".bytes()) { escapedValue = it }
+                        assertThrows<IllegalStateException> { escapedValue!!.bytes() }
+                        assertEquals(false, session.getView("missing".bytes()) {})
+                        var inlineRef: ByteArray? = null
+                        assertEquals(true, session.getValueRefView("k".bytes()) { value ->
+                            inlineRef = (value as build.crab.prolly.api.ValueRefView.Inline).value.bytes()
+                        })
+                        assertArrayEquals("v".bytes(), inlineRef)
+                        var escaped: build.crab.prolly.api.ScopedBytes? = null
+                        val seen = mutableListOf<String>()
+                        val outcome = session.scanRangeView("k".bytes(), "l".bytes()) { entry ->
+                            if (escaped == null) escaped = entry.key
+                            seen += "${String(entry.key.bytes())}=${String(entry.value.bytes())}"
+                            true
+                        }
+                        assertEquals(2L, outcome.visited)
+                        assertEquals(false, outcome.stopped)
+                        assertEquals(listOf("k=v", "ka=v2"), seen)
+                        assertThrows<IllegalStateException> { escaped!!.bytes() }
+                        assertEquals(
+                            build.crab.prolly.api.ReadScanOutcome(1L, true),
+                            session.scanRangeView("k".bytes(), "l".bytes()) { false },
+                        )
                     }
                 }
                 assertEquals(true, versioned.verifyCatalog().versionCount >= 2uL)
@@ -171,6 +659,32 @@ class PortableParityTest {
                 engine.indexedMap("indexed-maintenance".bytes(), registry).use { indexed ->
                     val version = indexed.put("k".bytes(), "term".bytes())
                     indexed.ensureIndex("by_value".bytes())
+                    val oldSnapshotId = indexed.snapshot().use { it.id }
+                    assertThrows<ProllyBindingException> {
+                        indexed.replaceIndex(
+                            "by_value".bytes(), 2uL, "value-too-small-v2", IndexProjectionRecord.ALL,
+                            object : SecondaryIndexExtractorCallback {
+                                override fun extract(primaryKey: ByteArray, sourceValue: ByteArray) =
+                                    listOf(IndexEntryRecord(sourceValue.copyOf(), null))
+                            },
+                            defaultSecondaryIndexLimits().copy(maxTermBytes = 3uL),
+                        )
+                    }
+                    assertEquals(1uL, indexed.health().activeIndexes.single().generation)
+                    val replacement = indexed.replaceIndex(
+                        "by_value".bytes(), 2uL, "value-v2", IndexProjectionRecord.ALL,
+                        object : SecondaryIndexExtractorCallback {
+                            override fun extract(primaryKey: ByteArray, sourceValue: ByteArray) =
+                                listOf(IndexEntryRecord(sourceValue.copyOf(), null))
+                        },
+                    )
+                    assertEquals(2uL, replacement.generation)
+                    assertEquals(2uL, indexed.health().activeIndexes.single().generation)
+                    indexed.snapshotById(oldSnapshotId).use { historical ->
+                        historical.index("by_value".bytes()).use { index ->
+                            assertEquals(1, index.exact("term".bytes()).size)
+                        }
+                    }
                     assertEquals(true, indexed.verifyIndex("by_value".bytes(), version.sourceVersion).valid)
                     assertEquals(true, indexed.metrics().buildAttempts >= 1uL)
                     assertEquals(true, indexed.exportCurrent().isNotEmpty())
@@ -219,6 +733,178 @@ class PortableParityTest {
                     assertArrayEquals("p".bytes(), verifiedSearch.result.neighbors.single().key)
                     assertEquals(true, verifiedSearch.replayedEvents > 0uL)
                 }
+            }
+        }
+    }
+
+    @Test
+    fun versionedSnapshotBundlesImportAsHeadWithExplicitTimestamps() {
+        ProllyNative.useLocalDebugLibrary()
+        Engine.memory().use { sourceEngine ->
+            Engine.memory().use { targetEngine ->
+                sourceEngine.versionedMap("versioned-import-source".bytes()).use { source ->
+                    source.initialize()
+                    source.put("k".bytes(), "v".bytes())
+                    val bundle = source.snapshot()!!.use { it.export() }
+                    targetEngine.versionedMap("versioned-import".bytes()).use { target ->
+                        assertEquals(true, target.importAsHead(bundle).isHead)
+                        assertArrayEquals("v".bytes(), target.get("k".bytes()))
+                    }
+                    targetEngine.versionedMap("versioned-import-at".bytes()).use { target ->
+                        val imported = target.importAsHead(bundle, 12_345uL)
+                        assertEquals(12_345uL, imported.createdAtMillis)
+                        assertArrayEquals("v".bytes(), target.get("k".bytes()))
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun versionedComparisonsPinVersionsAndPageDiffs() {
+        ProllyNative.useLocalDebugLibrary()
+        Engine.memory().use { engine ->
+            engine.versionedMap("comparison".bytes()).use { map ->
+                val base = map.initialize()
+                val target = map.put("k".bytes(), "v".bytes())
+                map.compare(base.id, target.id).use { comparison ->
+                    assertArrayEquals(base.id, comparison.base().id)
+                    assertArrayEquals(target.id, comparison.target().id)
+                    assertEquals(listOf("k"), comparison.diff().map { String(it.key) })
+                    assertEquals(listOf("k"), comparison.diffPage(limit = 1uL).diffs.map { String(it.key) })
+                }
+            }
+        }
+    }
+
+    @Test
+    fun versionedHistoryNavigationDiffAndRollbackStayNative() {
+        ProllyNative.useLocalDebugLibrary()
+        Engine.memory().use { engine ->
+            engine.versionedMap("history-navigation".bytes()).use { map ->
+                map.initialize()
+                map.put("a".bytes(), "one".bytes())
+                map.put("ab".bytes(), "two".bytes())
+                val base = map.put("b".bytes(), "three".bytes())
+                val target = map.put("a".bytes(), "updated".bytes())
+
+                assertEquals(listOf("a", "ab", "b"), map.range("a".bytes(), "c".bytes()).map { String(it.key) })
+                assertEquals(listOf("a", "ab"), map.prefix("a".bytes()).map { String(it.key) })
+                assertArrayEquals("one".bytes(), map.rangeAt(base.id, "a".bytes(), "b".bytes()).first().value)
+                assertEquals(listOf("a", "ab"), map.prefixAt(base.id, "a".bytes()).map { String(it.key) })
+                assertEquals(listOf("a", "ab"), map.rangePage(limit = 2uL).entries.map { String(it.key) })
+                assertEquals(listOf("a"), map.prefixPage("a".bytes(), limit = 1uL).entries.map { String(it.key) })
+                val historicalPage = map.prefixPageAt(base.id, "a".bytes(), limit = 1uL)
+                assertEquals(listOf("a"), historicalPage.entries.map { String(it.key) })
+                assertEquals(true, historicalPage.nextCursor != null)
+                assertEquals(listOf("a"), map.diff(base.id, target.id).map { String(it.key) })
+                assertEquals(listOf("a"), map.changesSince(base.id).map { String(it.key) })
+
+                val rolledBack = map.rollbackTo(base.id)
+                assertArrayEquals(rolledBack.id, map.headId())
+                assertArrayEquals("one".bytes(), map.get("a".bytes()))
+                assertEquals(emptyList<String>(), map.changesSince(base.id).map { String(it.key) })
+            }
+        }
+    }
+
+    @Test
+    fun versionedTimestampedWritesExposeCompleteMaintenanceAndRetentionRecords() {
+        ProllyNative.useLocalDebugLibrary()
+        Engine.memory().use { engine ->
+            engine.versionedMap("maintenance-complete".bytes()).use { map ->
+                val first = map.applyAtMillis(listOf(
+                    MutationRecord(MutationKind.UPSERT, "k".bytes(), "one".bytes())
+                ), 1_000uL)
+                val second = map.applyIfAtMillis(first.id, listOf(
+                    MutationRecord(MutationKind.UPSERT, "k".bytes(), "two".bytes())
+                ), 2_000uL).current!!
+                val third = map.applyAtMillis(listOf(
+                    MutationRecord(MutationKind.UPSERT, "k".bytes(), "three".bytes())
+                ), 3_000uL)
+
+                assertEquals(1_000uL, first.createdAtMillis)
+                assertEquals(2_000uL, second.createdAtMillis)
+                assertEquals(NamedRootRetentionKind.PREFIX, map.retentionPolicy().kind)
+                val verification = map.verifyCatalog()
+                assertArrayEquals(third.id, verification.head)
+                assertEquals(3uL, verification.versionCount)
+                val plan = map.planGc()
+                assertEquals(true, plan.reachability.liveNodes > 0uL)
+                assertEquals(true, plan.candidateNodes >= plan.reclaimableNodes)
+
+                val aged = map.keepForAt(3_000uL, 1_500uL)
+                assertEquals(true, aged.retained.any { it.contentEquals(second.id) })
+                assertEquals(true, aged.removed.any { it.contentEquals(first.id) })
+                val explicit = map.keepVersions(listOf(second.id))
+                assertEquals(true, explicit.retained.any { it.contentEquals(third.id) })
+                val pruned = map.pruneVersions(0uL)
+                assertEquals(1, pruned.retained.size)
+                assertArrayEquals(third.id, pruned.retained.single())
+                assertEquals(true, pruned.removed.any { it.contentEquals(second.id) })
+                assertEquals(true, map.keepFor(10_000uL).retained.isNotEmpty())
+                assertEquals(true, map.sweepGc().deletedNodes >= 0uL)
+            }
+        }
+    }
+
+    @Test
+    fun versionedSubscriptionsResumeAndPollOwnedDiffs() {
+        ProllyNative.useLocalDebugLibrary()
+        Engine.memory().use { engine ->
+            engine.versionedMap("subscription".bytes()).use { map ->
+                val initial = map.initialize()
+                map.subscribe().use { subscription ->
+                    assertArrayEquals(initial.id, subscription.lastSeen())
+                    assertEquals(null, subscription.poll())
+                    val current = map.put("k".bytes(), "v".bytes())
+                    val event = subscription.poll()!!
+                    assertArrayEquals(initial.id, event.previous)
+                    assertArrayEquals(current.id, event.current.id)
+                    assertEquals(listOf("k"), event.diffs.map { String(it.key) })
+                    assertArrayEquals(current.id, subscription.lastSeen())
+                }
+            }
+        }
+    }
+
+    @Test
+    fun multiMapTransactionsAreAtomicAndReadStagedValues() {
+        ProllyNative.useLocalDebugLibrary()
+        Engine.memory().use { engine ->
+            engine.beginVersionedTransaction().use { tx ->
+                tx.put("a".bytes(), "k".bytes(), "one".bytes())
+                tx.put("b".bytes(), "k".bytes(), "two".bytes())
+                assertArrayEquals("one".bytes(), tx.get("a".bytes(), "k".bytes()))
+                val committed = tx.commit()
+                assertEquals(true, committed.applied)
+                assertEquals(2, committed.versions.size)
+            }
+            engine.versionedMap("a".bytes()).use { assertArrayEquals("one".bytes(), it.get("k".bytes())) }
+            engine.versionedMap("b".bytes()).use { assertArrayEquals("two".bytes(), it.get("k".bytes())) }
+            engine.beginVersionedTransaction().use { tx ->
+                tx.put("a".bytes(), "discard".bytes(), "x".bytes())
+                tx.rollback()
+            }
+            engine.versionedMap("a".bytes()).use { assertEquals(null, it.get("discard".bytes())) }
+        }
+    }
+
+    @Test
+    fun pinnedMergesPageConflictsAndCasPublish() {
+        ProllyNative.useLocalDebugLibrary()
+        Engine.memory().use { engine ->
+            engine.versionedMap("merge".bytes()).use { map ->
+                val base = map.initialize()
+                val candidate = map.put("k".bytes(), "candidate".bytes())
+                map.put("k".bytes(), "head".bytes())
+                map.prepareMerge(base.id, candidate.id).use { merge ->
+                    assertArrayEquals(base.id, merge.base().id)
+                    assertArrayEquals(candidate.id, merge.candidate().id)
+                    assertEquals(listOf("k"), merge.conflictPage(limit = 1uL).conflicts.map { String(it.key) })
+                    assertArrayEquals(candidate.id, merge.publish("prefer_right").current!!.id)
+                }
+                assertArrayEquals("candidate".bytes(), map.get("k".bytes()))
             }
         }
     }

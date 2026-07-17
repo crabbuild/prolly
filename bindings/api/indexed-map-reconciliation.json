@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "owner": "prolly::IndexedMap",
+  "groups": [
+    {
+      "state": "bound-direct",
+      "rust": [
+        "prolly::IndexedMap::apply",
+        "prolly::IndexedMap::apply_if",
+        "prolly::IndexedMap::deactivate_index",
+        "prolly::IndexedMap::delete",
+        "prolly::IndexedMap::ensure_index",
+        "prolly::IndexedMap::export_current",
+        "prolly::IndexedMap::get",
+        "prolly::IndexedMap::health",
+        "prolly::IndexedMap::id",
+        "prolly::IndexedMap::import_current",
+        "prolly::IndexedMap::keep_last",
+        "prolly::IndexedMap::metrics",
+        "prolly::IndexedMap::put",
+        "prolly::IndexedMap::repair_index",
+        "prolly::IndexedMap::replace_index",
+        "prolly::IndexedMap::snapshot",
+        "prolly::IndexedMap::snapshot_at",
+        "prolly::IndexedMap::snapshot_by_id",
+        "prolly::IndexedMap::verify_all",
+        "prolly::IndexedMap::verify_index"
+      ],
+      "evidence": [
+        "bindings/python/prolly/api.py#IndexedMap",
+        "bindings/go/indexed.go#IndexedMap",
+        "bindings/node/src/indexed.ts#IndexedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#IndexedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/IndexedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#IndexedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#IndexedMap",
+        "bindings/wasm/src/index.ts#WasmIndexedMap"
+      ],
+      "rationale": "The durable indexed-map operations and complete owned result records are exposed by all eight portable wrappers."
+    },
+    {
+      "state": "bound-idiomatic",
+      "rust": [
+        "prolly::IndexedMap::edit",
+        "prolly::IndexedMap::plan_indexed_gc",
+        "prolly::IndexedMap::registry",
+        "prolly::IndexedMap::source"
+      ],
+      "evidence": [
+        "bindings/python/prolly/api.py",
+        "bindings/go/indexed.go",
+        "bindings/node/src/indexed.ts",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi",
+        "bindings/ruby/lib/prolly/api.rb",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
+        "bindings/wasm/src/index.ts"
+      ],
+      "rationale": "Hosts use owned mutation lists instead of the Rust editor callback, planGc for indexed GC, retain the registry passed to Engine.indexedMap, and reopen the raw source as Engine.versionedMap(indexedMap.id)."
+    },
+    {
+      "state": "bound-idiomatic",
+      "rust": [
+        "prolly::IndexedMap::get_with"
+      ],
+      "evidence": [
+        "bindings/uniffi/src/fast_abi.rs#prolly_fast_indexed_get_lease",
+        "bindings/python/prolly/api.py#IndexedMap.get_view",
+        "bindings/go/indexed.go#IndexedMap.GetView",
+        "bindings/node/src/indexed.ts#IndexedMap.withValueView",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#IndexedMap.getView",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/IndexedMap.java#getView",
+        "bindings/ruby/lib/prolly/api.rb#IndexedMap.get_view",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#IndexedMap.withValueView",
+        "bindings/wasm/src/index.ts#WasmIndexedMap.withValueView"
+      ],
+      "rationale": "Every host exposes an idiomatic callback-scoped current-head source-value view. Native hosts retain the immutable source leaf through the shared lease ABI, while WASM borrows the same value from linear memory for the synchronous callback."
+    }
+  ]
+}

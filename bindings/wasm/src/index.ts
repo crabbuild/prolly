@@ -3,6 +3,10 @@ export interface WasmEntryRecord {
   value: Uint8Array;
 }
 
+export type ValueRefView =
+  | { kind: "inline"; value: Uint8Array }
+  | { kind: "blob"; cid: Uint8Array; length: bigint };
+
 export interface WasmScanOutcomeRecord {
   visited: string;
   stopped: boolean;
@@ -78,6 +82,17 @@ export interface WasmSnapshotBundleRecord {
   nodes: WasmSnapshotBundleNodeRecord[];
   nodeCount: number;
   byteCount: number;
+}
+
+/** Opaque, lossless snapshot bundle returned by a pinned versioned-map snapshot. */
+export interface WasmSnapshotBundleHandle {
+  readonly formatVersion: number;
+  readonly tree: unknown;
+  readonly nodes: WasmSnapshotBundleNodeRecord[];
+  readonly nodeCount: number;
+  readonly byteCount: number;
+  toBytes(): Uint8Array;
+  free(): void;
 }
 
 export interface WasmSnapshotBundleSummaryRecord {
@@ -399,6 +414,14 @@ export interface WasmRangeProofVerificationRecord {
   entries: WasmEntryRecord[];
 }
 
+export interface WasmRangePageProofVerificationRecord {
+  valid: boolean;
+  root?: Uint8Array | null;
+  after?: Uint8Array | null;
+  end?: Uint8Array | null;
+  entries: WasmEntryRecord[];
+}
+
 export interface WasmProofBundleSummaryRecord {
   version: string;
   kind: "key" | "multi_key" | "range" | "range_page" | "diff_page";
@@ -667,7 +690,53 @@ export interface PortableIndexRegistration {
   generation: bigint;
   extractorId: string;
   projection: "keys_only" | "include" | "all";
+  limits?: PortableSecondaryIndexLimits;
   extract(primaryKey: Uint8Array, sourceValue: Uint8Array): PortableIndexEntry[];
+}
+
+export interface PortableSecondaryIndexLimits {
+  maxTermBytes: bigint;
+  maxProjectionBytes: bigint;
+  maxAllValueBytes: bigint;
+  maxTermsPerRecord: bigint;
+  maxProjectedBytesPerRecord: bigint;
+  maxDerivedMutationsPerTransaction: bigint;
+  maxProjectedBytesPerTransaction: bigint;
+  maxIndexes: bigint;
+  buildPageSize: bigint;
+  maxTemporarySortBytes: bigint;
+  maxBundleNodes: bigint;
+  maxBundleBytes: bigint;
+  maxVerificationEntries: bigint;
+  maxWriteRetries: bigint;
+  maxBuildRetries: bigint;
+}
+
+export function defaultSecondaryIndexLimits(): PortableSecondaryIndexLimits {
+  return {
+    maxTermBytes: 4n * 1024n,
+    maxProjectionBytes: 64n * 1024n,
+    maxAllValueBytes: 1024n * 1024n,
+    maxTermsPerRecord: 1024n,
+    maxProjectedBytesPerRecord: 1024n * 1024n,
+    maxDerivedMutationsPerTransaction: 100_000n,
+    maxProjectedBytesPerTransaction: 64n * 1024n * 1024n,
+    maxIndexes: 32n,
+    buildPageSize: 4096n,
+    maxTemporarySortBytes: 256n * 1024n * 1024n,
+    maxBundleNodes: 1_000_000n,
+    maxBundleBytes: 1024n * 1024n * 1024n,
+    maxVerificationEntries: 10_000_000n,
+    maxWriteRetries: 8n,
+    maxBuildRetries: 8n,
+  };
+}
+
+function portableSecondaryIndexLimits(value: PortableSecondaryIndexLimits | undefined) {
+  if (value == null) return undefined;
+  return Object.fromEntries(
+    Object.entries(value).map(([name, limit]) => [name, limit.toString()]),
+  );
 }
 
 export interface PortableIndexedVersion {
@@ -778,17 +847,464 @@ export interface PortableProximityRecord {
   value?: Uint8Array;
 }
 
+export class WasmProximityVectorView implements Iterable<number> {
+  readonly dimensions: number;
+  readonly #data: DataView;
+  readonly #scope: { alive: boolean };
+  readonly #memory?: WebAssembly.Memory;
+  readonly #borrowedBuffer: ArrayBufferLike;
+
+  constructor(
+    bytes: Uint8Array,
+    dimensions: number,
+    scope: { alive: boolean },
+    memory?: WebAssembly.Memory,
+  ) {
+    this.dimensions = dimensions;
+    this.#data = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    this.#scope = scope;
+    this.#memory = memory;
+    this.#borrowedBuffer = bytes.buffer;
+  }
+
+  component(index: number): number {
+    if (!this.#scope.alive || (this.#memory != null && this.#memory.buffer !== this.#borrowedBuffer)) {
+      throw new WasmViewExpiredError();
+    }
+    if (!Number.isInteger(index) || index < 0 || index >= this.dimensions) {
+      throw new RangeError("proximity vector index is out of range");
+    }
+    return this.#data.getFloat32(index * 4, true);
+  }
+
+  toFloat32Array(): Float32Array { return Float32Array.from(this); }
+  *[Symbol.iterator](): Iterator<number> {
+    for (let index = 0; index < this.dimensions; index++) yield this.component(index);
+  }
+}
+
+export interface WasmProximityRecordView {
+  vector: WasmProximityVectorView;
+  value: Uint8Array;
+}
+
+export interface WasmProximityScanRecordView extends WasmProximityRecordView {
+  key: Uint8Array;
+}
+
 export interface PortableSearchRequest {
   vector: Float32Array;
   topK: number;
-  policy: "exact";
+  policy: "exact" | "fixed_budget" | "adaptive";
+  adaptiveQuality?: "fast" | "balanced" | "high_recall";
+  budget?: PortableSearchBudget;
+  filter?: PortableSearchFilter;
+  kernel?: "scalar_deterministic" | "simd_deterministic" | "auto_deterministic";
+  backend?: "native" | "product_quantized" | "hnsw" | "composite" | "auto";
+  hnswEfSearch?: number;
+  pqRerankMultiplier?: number;
   signal?: AbortSignal;
 }
 
+export interface PortableSearchBudget {
+  maxNodes?: bigint;
+  maxCommittedBytes?: bigint;
+  maxDistanceEvaluations?: bigint;
+  maxFrontierEntries?: bigint;
+}
+
+export type PortableSearchFilter =
+  | { kind: "all" }
+  | { kind: "key_range"; start?: Uint8Array; rangeEnd?: Uint8Array }
+  | { kind: "prefix"; prefix: Uint8Array }
+  | { kind: "eligible_keys"; eligibleKeys: Uint8Array[] };
+
 export interface PortableSearchResult {
   neighbors: Array<{ key: Uint8Array; value: Uint8Array; distance: number }>;
+  stats: {
+    levelsVisited: bigint;
+    nodesRead: bigint;
+    bytesRead: bigint;
+    physicalBytesRead: bigint;
+    committedBytes: bigint;
+    distanceEvaluations: bigint;
+    quantizedDistanceEvaluations: bigint;
+    rerankedCandidates: bigint;
+    frontierPeak: bigint;
+    candidateHandlesPeak: bigint;
+    candidateRetainedBytesPeak: bigint;
+  };
   completion: string;
   backend: string;
+  planFormatVersion: number;
+}
+
+export interface ProximitySearchRuntimePolicy {
+  maxEntries: bigint;
+  maxBytes: bigint;
+  authoritativeMaxBytes: bigint;
+  hnswMaxBytes: bigint;
+  pqMaxBytes: bigint;
+}
+
+export interface ProximitySearchRuntimeStats {
+  physicalReads: bigint;
+  physicalBytesRead: bigint;
+}
+
+export function defaultProximitySearchRuntimePolicy(): ProximitySearchRuntimePolicy {
+  return {
+    maxEntries: 16_384n,
+    maxBytes: 256n * 1024n * 1024n,
+    authoritativeMaxBytes: 128n * 1024n * 1024n,
+    hnswMaxBytes: 96n * 1024n * 1024n,
+    pqMaxBytes: 32n * 1024n * 1024n,
+  };
+}
+
+export interface PortableNeighborView {
+  key: Uint8Array;
+  value: Uint8Array;
+  distance: number;
+  rank: number;
+}
+
+export interface HnswConfig {
+  maxConnections: number;
+  efConstruction: number;
+  efSearch: number;
+  levelBits: number;
+  overfetchMultiplier: number;
+  seed: bigint;
+  routingVectorEncoding: "full_f32";
+}
+
+export interface HnswBuildLimits {
+  maxRecords?: bigint;
+  maxOwnedBytes?: bigint;
+  maxDistanceEvaluations?: bigint;
+  workerThreads: bigint;
+  maxEncodedGraphBytes?: bigint;
+}
+
+export interface HnswBuildStats {
+  records: bigint;
+  distanceEvaluations: bigint;
+  directedEdges: bigint;
+  maximumLevel: number;
+  ownedBytes: bigint;
+  encodedGraphBytes: bigint;
+}
+
+export interface HnswBuildOptions {
+  config?: HnswConfig;
+  limits?: HnswBuildLimits;
+  signal?: AbortSignal;
+}
+
+export interface HnswBuildResult {
+  index: WasmHnswIndex;
+  stats: HnswBuildStats;
+}
+
+export function defaultHnswConfig(): HnswConfig {
+  return {
+    maxConnections: 16,
+    efConstruction: 128,
+    efSearch: 64,
+    levelBits: 4,
+    overfetchMultiplier: 8,
+    seed: 0n,
+    routingVectorEncoding: "full_f32",
+  };
+}
+
+export function defaultHnswBuildLimits(): HnswBuildLimits {
+  return { workerThreads: 1n };
+}
+
+export interface ProductQuantizationConfig {
+  subquantizers: number;
+  centroidsPerSubquantizer: number;
+  trainingIterations: number;
+  rerankMultiplier: number;
+  seed: bigint;
+  maxTrainingVectors: bigint;
+}
+
+export interface ProductQuantizationBuildLimits {
+  maxTrainingVectors?: bigint;
+  maxTrainingBytes?: bigint;
+  maxTemporaryCodeBytes?: bigint;
+  maxDistanceEvaluations?: bigint;
+  maxEncodedOutputBytes?: bigint;
+  maxWorkerThreads?: bigint;
+}
+
+export interface ProductQuantizationBuildStats {
+  trainingDistanceEvaluations: bigint;
+  encodingDistanceEvaluations: bigint;
+  encodedVectors: bigint;
+  trainingVectors: bigint;
+  trainingBytes: bigint;
+  encodedOutputBytes: bigint;
+}
+
+export interface ProductQuantizationQuality {
+  meanSquaredError: number;
+  maximumSquaredError: number;
+}
+
+export interface ProductQuantizationBuildOptions {
+  config?: ProductQuantizationConfig;
+  workerThreads?: bigint;
+  limits?: ProductQuantizationBuildLimits;
+  signal?: AbortSignal;
+}
+
+export interface ProductQuantizationBuildResult {
+  index: WasmProductQuantizer;
+  stats: ProductQuantizationBuildStats;
+}
+
+export function defaultPqConfig(): ProductQuantizationConfig {
+  return {
+    subquantizers: 8,
+    centroidsPerSubquantizer: 256,
+    trainingIterations: 12,
+    rerankMultiplier: 8,
+    seed: 0n,
+    maxTrainingVectors: 65_536n,
+  };
+}
+
+export function defaultPqBuildLimits(): ProductQuantizationBuildLimits {
+  return {};
+}
+
+export interface CompositeAcceleratorConfig {
+  maxDeltaRecords: bigint;
+  maxShadowRecords: bigint;
+  maxDeltaRatioPpm: number;
+  maxShadowRatioPpm: number;
+  baseOverfetchMultiplier: number;
+}
+export interface CompositeBuildLimits {
+  maxDiffEntries?: bigint; maxOwnedBytes?: bigint;
+  maxEncodedOutputBytes?: bigint; maxDistanceEvaluations?: bigint;
+}
+export interface CompositeBuildStats {
+  diffEntries: bigint; insertedRecords: bigint; vectorUpdatedRecords: bigint;
+  valueOnlyRecords: bigint; deletedRecords: bigint; deltaRecords: bigint;
+  shadowRecords: bigint; ownedBytesPeak: bigint; encodedOutputBytes: bigint;
+  distanceEvaluations: bigint;
+}
+export interface FullRebuildReason {
+  kind: "delta_records" | "shadow_records" | "delta_ratio" | "shadow_ratio";
+  actual: bigint; maximum: bigint;
+}
+export interface CompositeRebuildOptions {
+  hnswLimits?: HnswBuildLimits;
+  pqWorkerThreads?: bigint;
+  pqLimits?: ProductQuantizationBuildLimits;
+}
+export interface CompositeBuildOptions {
+  config?: CompositeAcceleratorConfig; limits?: CompositeBuildLimits; signal?: AbortSignal;
+}
+export interface CompositeBuildOrRebuildOptions extends CompositeBuildOptions { rebuild?: CompositeRebuildOptions; }
+export interface CompositeBuildOutcome {
+  accelerator?: WasmCompositeAccelerator; reasons: FullRebuildReason[]; stats: CompositeBuildStats;
+}
+export interface CompositeBuildOrRebuildOutcome {
+  kind: "composite" | "no_accelerator_required" | "hnsw_rebuilt" | "product_quantized_rebuilt";
+  composite?: WasmCompositeAccelerator; hnsw?: WasmHnswIndex; pq?: WasmProductQuantizer;
+  reasons: FullRebuildReason[]; compositeStats: CompositeBuildStats;
+  hnswStats?: HnswBuildStats; pqStats?: ProductQuantizationBuildStats;
+}
+export interface AcceleratorCatalogEntry {
+  kind: "hnsw" | "product_quantized" | "composite";
+  configurationFingerprint: Uint8Array; manifest: Uint8Array;
+}
+export function defaultCompositeAcceleratorConfig(): CompositeAcceleratorConfig {
+  return { maxDeltaRecords: 4_096n, maxShadowRecords: 8_192n, maxDeltaRatioPpm: 100_000,
+    maxShadowRatioPpm: 200_000, baseOverfetchMultiplier: 2 };
+}
+export function defaultCompositeBuildLimits(): CompositeBuildLimits { return {}; }
+
+function requireUnsignedInteger(value: number, name: string, maximum: number): number {
+  if (!Number.isInteger(value) || value < 0 || value > maximum) {
+    throw new RangeError(`${name} must be an unsigned integer no greater than ${maximum}`);
+  }
+  return value;
+}
+
+function requireUnsignedBigInt(value: bigint, name: string): bigint {
+  if (value < 0n || value > 0xffff_ffff_ffff_ffffn) {
+    throw new RangeError(`${name} must fit an unsigned 64-bit integer`);
+  }
+  return value;
+}
+
+function ownProximitySearchRuntimePolicy(value: ProximitySearchRuntimePolicy): object {
+  return {
+    maxEntries: requireUnsignedBigInt(value.maxEntries, "maxEntries").toString(),
+    maxBytes: requireUnsignedBigInt(value.maxBytes, "maxBytes").toString(),
+    authoritativeMaxBytes: requireUnsignedBigInt(
+      value.authoritativeMaxBytes, "authoritativeMaxBytes",
+    ).toString(),
+    hnswMaxBytes: requireUnsignedBigInt(value.hnswMaxBytes, "hnswMaxBytes").toString(),
+    pqMaxBytes: requireUnsignedBigInt(value.pqMaxBytes, "pqMaxBytes").toString(),
+  };
+}
+
+function ownHnswConfig(value: HnswConfig | undefined): object {
+  const config = value ?? defaultHnswConfig();
+  if (config.routingVectorEncoding !== "full_f32") {
+    throw new TypeError("unsupported HNSW routing-vector encoding");
+  }
+  const seed = requireUnsignedBigInt(config.seed, "seed");
+  if (seed > 0xffff_ffff_ffff_ffffn) throw new RangeError("seed must fit u64");
+  return {
+    maxConnections: requireUnsignedInteger(config.maxConnections, "maxConnections", 0xffff),
+    efConstruction: requireUnsignedInteger(config.efConstruction, "efConstruction", 0xffff_ffff),
+    efSearch: requireUnsignedInteger(config.efSearch, "efSearch", 0xffff_ffff),
+    levelBits: requireUnsignedInteger(config.levelBits, "levelBits", 0xff),
+    overfetchMultiplier: requireUnsignedInteger(
+      config.overfetchMultiplier, "overfetchMultiplier", 0xffff_ffff,
+    ),
+    seed: seed.toString(),
+    routingVectorEncoding: config.routingVectorEncoding,
+  };
+}
+
+function ownHnswBuildLimits(value: HnswBuildLimits | undefined): object {
+  const limits = value ?? defaultHnswBuildLimits();
+  const optional = (candidate: bigint | undefined, name: string) =>
+    candidate == null ? undefined : requireUnsignedBigInt(candidate, name).toString();
+  return {
+    maxRecords: optional(limits.maxRecords, "maxRecords"),
+    maxOwnedBytes: optional(limits.maxOwnedBytes, "maxOwnedBytes"),
+    maxDistanceEvaluations: optional(limits.maxDistanceEvaluations, "maxDistanceEvaluations"),
+    workerThreads: requireUnsignedBigInt(limits.workerThreads, "workerThreads").toString(),
+    maxEncodedGraphBytes: optional(limits.maxEncodedGraphBytes, "maxEncodedGraphBytes"),
+  };
+}
+
+function ownPqConfig(value: ProductQuantizationConfig | undefined): object {
+  const config = value ?? defaultPqConfig();
+  return {
+    subquantizers: requireUnsignedInteger(config.subquantizers, "subquantizers", 0xffff_ffff),
+    centroidsPerSubquantizer: requireUnsignedInteger(
+      config.centroidsPerSubquantizer, "centroidsPerSubquantizer", 0xffff,
+    ),
+    trainingIterations: requireUnsignedInteger(
+      config.trainingIterations, "trainingIterations", 0xffff,
+    ),
+    rerankMultiplier: requireUnsignedInteger(
+      config.rerankMultiplier, "rerankMultiplier", 0xffff_ffff,
+    ),
+    seed: requireUnsignedBigInt(config.seed, "seed").toString(),
+    maxTrainingVectors: requireUnsignedBigInt(
+      config.maxTrainingVectors, "maxTrainingVectors",
+    ).toString(),
+  };
+}
+
+function ownPqBuildLimits(value: ProductQuantizationBuildLimits | undefined): object {
+  const limits = value ?? defaultPqBuildLimits();
+  const optional = (candidate: bigint | undefined, name: string) =>
+    candidate == null ? undefined : requireUnsignedBigInt(candidate, name).toString();
+  return {
+    maxTrainingVectors: optional(limits.maxTrainingVectors, "maxTrainingVectors"),
+    maxTrainingBytes: optional(limits.maxTrainingBytes, "maxTrainingBytes"),
+    maxTemporaryCodeBytes: optional(limits.maxTemporaryCodeBytes, "maxTemporaryCodeBytes"),
+    maxDistanceEvaluations: optional(limits.maxDistanceEvaluations, "maxDistanceEvaluations"),
+    maxEncodedOutputBytes: optional(limits.maxEncodedOutputBytes, "maxEncodedOutputBytes"),
+    maxWorkerThreads: optional(limits.maxWorkerThreads, "maxWorkerThreads"),
+  };
+}
+
+function ownCompositeConfig(value: CompositeAcceleratorConfig | undefined): object {
+  const config = value ?? defaultCompositeAcceleratorConfig();
+  return {
+    maxDeltaRecords: requireUnsignedBigInt(config.maxDeltaRecords, "maxDeltaRecords").toString(),
+    maxShadowRecords: requireUnsignedBigInt(config.maxShadowRecords, "maxShadowRecords").toString(),
+    maxDeltaRatioPpm: requireUnsignedInteger(config.maxDeltaRatioPpm, "maxDeltaRatioPpm", 1_000_000),
+    maxShadowRatioPpm: requireUnsignedInteger(config.maxShadowRatioPpm, "maxShadowRatioPpm", 1_000_000),
+    baseOverfetchMultiplier: requireUnsignedInteger(config.baseOverfetchMultiplier, "baseOverfetchMultiplier", 0xffff_ffff),
+  };
+}
+
+function ownCompositeBuildLimits(value: CompositeBuildLimits | undefined): object {
+  const limits = value ?? defaultCompositeBuildLimits();
+  const optional = (candidate: bigint | undefined, name: string) =>
+    candidate == null ? undefined : requireUnsignedBigInt(candidate, name).toString();
+  return {
+    maxDiffEntries: optional(limits.maxDiffEntries, "maxDiffEntries"),
+    maxOwnedBytes: optional(limits.maxOwnedBytes, "maxOwnedBytes"),
+    maxEncodedOutputBytes: optional(limits.maxEncodedOutputBytes, "maxEncodedOutputBytes"),
+    maxDistanceEvaluations: optional(limits.maxDistanceEvaluations, "maxDistanceEvaluations"),
+  };
+}
+
+function ownCompositeRebuildOptions(value: CompositeRebuildOptions | undefined): object {
+  const options = value ?? {};
+  const workerThreads = requireUnsignedBigInt(options.pqWorkerThreads ?? 1n, "pqWorkerThreads");
+  if (workerThreads !== 1n) {
+    throw new RangeError("browser-safe WASM composite PQ rebuild requires pqWorkerThreads = 1");
+  }
+  return {
+    hnswLimits: ownHnswBuildLimits(options.hnswLimits),
+    pqWorkerThreads: workerThreads.toString(),
+    pqLimits: ownPqBuildLimits(options.pqLimits),
+  };
+}
+
+function ownPortableSearchRequest(request: PortableSearchRequest): object {
+  if (!Number.isSafeInteger(request.topK) || request.topK <= 0) {
+    throw new RangeError("topK must be a positive safe integer");
+  }
+  if (request.policy === "adaptive" && request.adaptiveQuality == null) {
+    throw new TypeError("adaptive search requires adaptiveQuality");
+  }
+  const filter = request.filter ?? { kind: "all" as const };
+  let ownedFilter: object;
+  switch (filter.kind) {
+    case "all":
+      ownedFilter = { kind: "all" };
+      break;
+    case "key_range":
+      ownedFilter = {
+        kind: "key_range",
+        start: filter.start == null ? undefined : ownedPortableBytes(filter.start),
+        rangeEnd: filter.rangeEnd == null ? undefined : ownedPortableBytes(filter.rangeEnd),
+      };
+      break;
+    case "prefix":
+      ownedFilter = { kind: "prefix", prefix: ownedPortableBytes(filter.prefix) };
+      break;
+    case "eligible_keys":
+      ownedFilter = { kind: "eligible_keys", eligibleKeys: filter.eligibleKeys.map(ownedPortableBytes) };
+      break;
+  }
+  const budget = request.budget ?? {};
+  return {
+    query: new Float32Array(request.vector),
+    k: request.topK,
+    policy: request.policy,
+    adaptiveQuality: request.adaptiveQuality,
+    budget: {
+      maxNodes: budget.maxNodes?.toString(),
+      maxCommittedBytes: budget.maxCommittedBytes?.toString(),
+      maxDistanceEvaluations: budget.maxDistanceEvaluations?.toString(),
+      maxFrontierEntries: budget.maxFrontierEntries?.toString(),
+    },
+    filter: ownedFilter,
+    kernel: request.kernel ?? "auto_deterministic",
+    backend: request.backend ?? "native",
+    hnswEfSearch: request.hnswEfSearch,
+    pqRerankMultiplier: request.pqRerankMultiplier,
+  };
 }
 
 export interface PortableProximityConfig {
@@ -830,12 +1346,51 @@ export class WasmViewExpiredError extends Error {
   }
 }
 
-function scopedPortableBytes(value: Uint8Array, scope: { alive: boolean }): Uint8Array {
+function scopedPortableBytes(
+  value: Uint8Array,
+  scope: { alive: boolean },
+  memory?: WebAssembly.Memory,
+): Uint8Array {
+  const borrowedBuffer = value.buffer;
+  const check = () => {
+    if (!scope.alive || (memory != null && memory.buffer !== borrowedBuffer)) {
+      throw new WasmViewExpiredError();
+    }
+  };
+  const mutators = new Set<PropertyKey>(["copyWithin", "fill", "reverse", "set", "sort"]);
+  const iterators = new Set<PropertyKey>([Symbol.iterator, "entries", "keys", "values"]);
   return new Proxy(value, {
     get(target, property) {
-      if (!scope.alive) throw new WasmViewExpiredError();
+      check();
+      if (property === "buffer") {
+        throw new TypeError("the backing WASM memory of a scoped view is not exposed; copy the view instead");
+      }
+      if (mutators.has(property)) {
+        return () => { throw new TypeError("scoped WASM views are read-only"); };
+      }
+      if (property === "subarray") {
+        return (begin?: number, end?: number) => scopedPortableBytes(target.subarray(begin, end), scope, memory);
+      }
+      if (iterators.has(property)) {
+        return () => {
+          const iteratorFactory = Reflect.get(target, property, target) as () => Iterator<unknown>;
+          const iterator = iteratorFactory.call(target);
+          return {
+            next(): IteratorResult<unknown> {
+              check();
+              return iterator.next();
+            },
+            [Symbol.iterator]() { return this; },
+          };
+        };
+      }
       const member = Reflect.get(target, property, target);
-      return typeof member === "function" ? member.bind(target) : member;
+      return typeof member === "function"
+        ? (...args: unknown[]) => {
+          check();
+          return member.apply(target, args);
+        }
+        : member;
     },
     set() { throw new TypeError("scoped WASM views are read-only"); },
   });
@@ -868,7 +1423,13 @@ export class Engine implements Disposable {
   }
 
   versionedMap(id: Uint8Array): WasmVersionedMap {
-    return new WasmVersionedMap(this.#open().versionedMap(ownedPortableBytes(id)));
+    return new WasmVersionedMap(
+      this.#open().versionedMap(ownedPortableBytes(id)), this.#module?.wasmMemory(),
+    );
+  }
+
+  beginVersionedTransaction(): WasmVersionedTransaction {
+    return new WasmVersionedTransaction(this.#open().beginVersionedTransaction());
   }
 
   indexRegistry(): WasmIndexRegistry {
@@ -878,22 +1439,42 @@ export class Engine implements Disposable {
   indexedMap(id: Uint8Array, registry: WasmIndexRegistry): WasmIndexedMap {
     return new WasmIndexedMap(
       this.#open().indexedMap(ownedPortableBytes(id), registry.nativeHandle()),
+      this.#module?.wasmMemory(),
     );
   }
 
   buildProximity(
     dimensions: number,
     records: PortableProximityRecord[],
-    signal?: AbortSignal,
+    options: { threads?: number; signal?: AbortSignal } = {},
   ): Promise<WasmProximityMap> {
     const native = this.#open();
+    const threads = options.threads ?? 1;
+    if (!Number.isSafeInteger(threads) || threads <= 0) {
+      return Promise.reject(new RangeError("proximity build threads must be a positive safe integer"));
+    }
     const owned = records.map((record) => ({
       key: ownedPortableBytes(record.key),
       vector: new Float32Array(record.vector),
       value: ownedPortableBytes(record.value ?? new Uint8Array()),
     }));
+    return portablePromise(options.signal, () =>
+      new WasmProximityMap(native.buildProximity(dimensions, owned, threads), this.#module?.wasmMemory()));
+  }
+
+  loadProximity(descriptor: Uint8Array, signal?: AbortSignal): Promise<WasmProximityMap> {
+    const native = this.#open();
+    const owned = ownedPortableBytes(descriptor);
     return portablePromise(signal, () =>
-      new WasmProximityMap(native.buildProximity(dimensions, owned)));
+      new WasmProximityMap(native.loadProximity(owned), this.#module?.wasmMemory()));
+  }
+
+  proximitySearchRuntime(
+    policy: ProximitySearchRuntimePolicy = defaultProximitySearchRuntimePolicy(),
+  ): WasmProximitySearchRuntime {
+    return new WasmProximitySearchRuntime(
+      this.#open().proximitySearchRuntime(ownProximitySearchRuntimePolicy(policy)),
+    );
   }
 
   close(): void {
@@ -928,6 +1509,115 @@ export interface WasmVersionPrune {
   removed: Uint8Array[];
 }
 
+export interface WasmVersionedParallelConfig { maxThreads: bigint; parallelismThreshold: bigint; }
+export interface WasmVersionedBatchApplyStats {
+  inputMutations: bigint;
+  effectiveMutations: bigint;
+  preprocessInputSorted: boolean;
+  affectedLeaves: bigint;
+  changedLeaves: bigint;
+  sparseLeafApplies: bigint;
+  writtenNodes: bigint;
+  writtenBytes: bigint;
+  usedAppendFastPath: boolean;
+  usedBatchedRoute: boolean;
+  usedCoalescedRebuild: boolean;
+  usedDeferredRebalancing: boolean;
+  usedBottomUpRebuild: boolean;
+  cacheWrittenNodes: boolean;
+}
+export interface WasmVersionedMapBatchResult {
+  version: WasmMapVersion;
+  stats: WasmVersionedBatchApplyStats;
+}
+
+export interface WasmCatalogVerification {
+  head: Uint8Array;
+  versionCount: bigint;
+  reachableNodes: bigint;
+  reachableBytes: bigint;
+}
+
+export interface WasmGcReachability {
+  liveCids: Uint8Array[];
+  liveNodes: bigint;
+  liveBytes: bigint;
+  leafNodes: bigint;
+  internalNodes: bigint;
+}
+
+export interface WasmGcPlan {
+  reachability: WasmGcReachability;
+  candidateNodes: bigint;
+  reclaimableCids: Uint8Array[];
+  reclaimableNodes: bigint;
+  reclaimableBytes: bigint;
+  missingCandidates: bigint;
+}
+
+export interface WasmGcSweep {
+  plan: WasmGcPlan;
+  deletedNodes: bigint;
+  deletedBytes: bigint;
+}
+
+export interface WasmLargeValueConfig { inlineThreshold: bigint; }
+export interface WasmBlobRef { cid: Uint8Array; len: bigint; }
+export interface WasmBlobGcReachability {
+  liveBlobs: WasmBlobRef[];
+  liveBlobCount: bigint;
+  liveBlobBytes: bigint;
+  scannedNodes: bigint;
+  scannedValues: bigint;
+}
+export interface WasmBlobGcPlan {
+  reachability: WasmBlobGcReachability;
+  candidateBlobs: bigint;
+  reclaimableBlobs: WasmBlobRef[];
+  reclaimableBlobCount: bigint;
+  reclaimableBlobBytes: bigint;
+  missingCandidates: bigint;
+}
+export interface WasmBlobGcSweep {
+  plan: WasmBlobGcPlan;
+  deletedBlobs: bigint;
+  deletedBlobBytes: bigint;
+}
+
+export interface WasmNamedRootRetention {
+  kind: "all" | "exact" | "prefix" | "newest_by_name" | "updated_since";
+  names: Uint8Array[];
+  prefix?: Uint8Array;
+  count?: bigint;
+  minUpdatedAtMillis?: bigint;
+}
+
+export interface WasmMapDiff {
+  kind: "added" | "removed" | "changed";
+  key: Uint8Array;
+  value?: Uint8Array;
+  old?: Uint8Array;
+  newValue?: Uint8Array;
+}
+
+export interface WasmDiffPage {
+  diffs: WasmMapDiff[];
+  nextCursor?: WasmRangeCursorRecord | null;
+}
+
+export interface WasmMapChangeEvent {
+  previous?: Uint8Array;
+  current: WasmMapVersion;
+  diffs: WasmMapDiff[];
+}
+
+export interface WasmVersionedTransactionCommit {
+  applied: boolean;
+  versions: WasmMapVersion[];
+  conflictMapId?: Uint8Array;
+  conflictCurrent?: WasmMapVersion;
+}
+
 function wasmMapVersion(value: any): WasmMapVersion {
   return {
     id: value.id,
@@ -944,6 +1634,100 @@ function wasmMapUpdate(value: any): WasmMapUpdate {
   };
 }
 
+function wasmVersionedBatchResult(value: any): WasmVersionedMapBatchResult {
+  return {
+    version: wasmMapVersion(value.version),
+    stats: {
+      inputMutations: BigInt(value.stats.inputMutations),
+      effectiveMutations: BigInt(value.stats.effectiveMutations),
+      preprocessInputSorted: value.stats.preprocessInputSorted,
+      affectedLeaves: BigInt(value.stats.affectedLeaves),
+      changedLeaves: BigInt(value.stats.changedLeaves),
+      sparseLeafApplies: BigInt(value.stats.sparseLeafApplies),
+      writtenNodes: BigInt(value.stats.writtenNodes),
+      writtenBytes: BigInt(value.stats.writtenBytes),
+      usedAppendFastPath: value.stats.usedAppendFastPath,
+      usedBatchedRoute: value.stats.usedBatchedRoute,
+      usedCoalescedRebuild: value.stats.usedCoalescedRebuild,
+      usedDeferredRebalancing: value.stats.usedDeferredRebalancing,
+      usedBottomUpRebuild: value.stats.usedBottomUpRebuild,
+      cacheWrittenNodes: value.stats.cacheWrittenNodes,
+    },
+  };
+}
+
+function wasmCatalogVerification(value: any): WasmCatalogVerification {
+  return {
+    head: value.head,
+    versionCount: BigInt(value.versionCount),
+    reachableNodes: BigInt(value.reachableNodes),
+    reachableBytes: BigInt(value.reachableBytes),
+  };
+}
+
+function wasmGcPlan(value: any): WasmGcPlan {
+  return {
+    reachability: {
+      liveCids: value.reachability.liveCids,
+      liveNodes: BigInt(value.reachability.liveNodes),
+      liveBytes: BigInt(value.reachability.liveBytes),
+      leafNodes: BigInt(value.reachability.leafNodes),
+      internalNodes: BigInt(value.reachability.internalNodes),
+    },
+    candidateNodes: BigInt(value.candidateNodes),
+    reclaimableCids: value.reclaimableCids,
+    reclaimableNodes: BigInt(value.reclaimableNodes),
+    reclaimableBytes: BigInt(value.reclaimableBytes),
+    missingCandidates: BigInt(value.missingCandidates),
+  };
+}
+
+function wasmBlobRef(value: any): WasmBlobRef {
+  return { cid: value.cid, len: BigInt(value.len) };
+}
+
+function wasmBlobGcPlan(value: any): WasmBlobGcPlan {
+  return {
+    reachability: {
+      liveBlobs: value.reachability.liveBlobs.map(wasmBlobRef),
+      liveBlobCount: BigInt(value.reachability.liveBlobCount),
+      liveBlobBytes: BigInt(value.reachability.liveBlobBytes),
+      scannedNodes: BigInt(value.reachability.scannedNodes),
+      scannedValues: BigInt(value.reachability.scannedValues),
+    },
+    candidateBlobs: BigInt(value.candidateBlobs),
+    reclaimableBlobs: value.reclaimableBlobs.map(wasmBlobRef),
+    reclaimableBlobCount: BigInt(value.reclaimableBlobCount),
+    reclaimableBlobBytes: BigInt(value.reclaimableBlobBytes),
+    missingCandidates: BigInt(value.missingCandidates),
+  };
+}
+
+function wasmBlobGcSweep(value: any): WasmBlobGcSweep {
+  return {
+    plan: wasmBlobGcPlan(value.plan),
+    deletedBlobs: BigInt(value.deletedBlobs),
+    deletedBlobBytes: BigInt(value.deletedBlobBytes),
+  };
+}
+
+function checkedWasmU64(value: bigint, name: string): bigint {
+  if (value < 0n || value > 0xffff_ffff_ffff_ffffn) {
+    throw new RangeError(`${name} must be an unsigned 64-bit integer`);
+  }
+  return value;
+}
+
+function wasmNamedRootRetention(value: any): WasmNamedRootRetention {
+  return {
+    kind: value.kind,
+    names: value.names,
+    prefix: value.prefix,
+    count: value.count == null ? undefined : BigInt(value.count),
+    minUpdatedAtMillis: value.minUpdatedAtMillis == null ? undefined : BigInt(value.minUpdatedAtMillis),
+  };
+}
+
 function ownedWasmMutations(mutations: readonly WasmMapMutation[]): WasmMapMutation[] {
   return mutations.map((mutation) => ({
     kind: mutation.kind,
@@ -952,14 +1736,150 @@ function ownedWasmMutations(mutations: readonly WasmMapMutation[]): WasmMapMutat
   }));
 }
 
+function ownedWasmEntries(entries: readonly WasmEntryRecord[]): WasmEntryRecord[] {
+  return entries.map((entry) => ({
+    key: ownedPortableBytes(entry.key),
+    value: ownedPortableBytes(entry.value),
+  }));
+}
+
+export class BlobStore implements Disposable {
+  #native?: any;
+
+  private constructor(native: any) { this.#native = native; }
+
+  static memory(module: PortableNative): BlobStore {
+    return new BlobStore(new module.WasmBlobStore());
+  }
+
+  static file(_module: PortableNative, _path: string): never {
+    throw new Error("filesystem blob stores are unsupported in WASM");
+  }
+
+  cloneNativeHandle(): any {
+    if (this.#native == null) throw new Error("WASM blob store is closed");
+    return this.#native.cloneHandle();
+  }
+
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export interface KeyCodec<K> {
+  encodeKey(key: K): Uint8Array;
+  decodeKey(value: Uint8Array): K;
+}
+
+export interface ValueCodec<V> {
+  encode(value: V): Uint8Array;
+  decode(value: Uint8Array): V;
+}
+
+const typedUtf8Encoder = new TextEncoder();
+const typedUtf8Decoder = new TextDecoder("utf-8", { fatal: true });
+
+export class StringKeyCodec implements KeyCodec<string> {
+  encodeKey(key: string): Uint8Array { return typedUtf8Encoder.encode(key); }
+  decodeKey(value: Uint8Array): string { return typedUtf8Decoder.decode(value); }
+}
+
+export class BytesKeyCodec implements KeyCodec<Uint8Array> {
+  encodeKey(key: Uint8Array): Uint8Array { return ownedPortableBytes(key); }
+  decodeKey(value: Uint8Array): Uint8Array { return ownedPortableBytes(value); }
+}
+
+export class BytesValueCodec implements ValueCodec<Uint8Array> {
+  encode(value: Uint8Array): Uint8Array { return ownedPortableBytes(value); }
+  decode(value: Uint8Array): Uint8Array { return ownedPortableBytes(value); }
+}
+
+export class JsonValueCodec<V> implements ValueCodec<V> {
+  encode(value: V): Uint8Array { return typedUtf8Encoder.encode(JSON.stringify(value)); }
+  decode(value: Uint8Array): V { return JSON.parse(typedUtf8Decoder.decode(value)) as V; }
+}
+
+export interface TypedMigrationResult {
+  update: WasmMapUpdate;
+  scannedValues: number;
+  rewrittenValues: number;
+}
+
+export class TypedVersionedMap<K, V> {
+  readonly raw: WasmVersionedMap;
+  readonly #keyCodec: KeyCodec<K>;
+  readonly #valueCodec: ValueCodec<V>;
+
+  constructor(raw: WasmVersionedMap, keyCodec: KeyCodec<K>, valueCodec: ValueCodec<V>) {
+    this.raw = raw;
+    this.#keyCodec = keyCodec;
+    this.#valueCodec = valueCodec;
+  }
+
+  async get(key: K, signal?: AbortSignal): Promise<V | undefined> {
+    const value = await this.raw.get(this.#keyCodec.encodeKey(key), signal);
+    return value == null ? undefined : this.#valueCodec.decode(value);
+  }
+
+  async getAt(id: Uint8Array, key: K, signal?: AbortSignal): Promise<V | undefined> {
+    const value = await this.raw.getAt(id, this.#keyCodec.encodeKey(key), signal);
+    return value == null ? undefined : this.#valueCodec.decode(value);
+  }
+
+  async entries(signal?: AbortSignal): Promise<Array<readonly [K, V]>> {
+    return (await this.raw.range(new Uint8Array(), undefined, signal)).map((entry) => [
+      this.#keyCodec.decodeKey(entry.key), this.#valueCodec.decode(entry.value),
+    ] as const);
+  }
+
+  put(key: K, value: V, signal?: AbortSignal): Promise<WasmMapVersion> {
+    return this.raw.put(this.#keyCodec.encodeKey(key), this.#valueCodec.encode(value), signal);
+  }
+
+  putIf(expected: Uint8Array | undefined, key: K, value: V, signal?: AbortSignal): Promise<WasmMapUpdate> {
+    return this.raw.putIf(
+      expected, this.#keyCodec.encodeKey(key), this.#valueCodec.encode(value), signal,
+    );
+  }
+
+  delete(key: K, signal?: AbortSignal): Promise<WasmMapVersion> {
+    return this.raw.delete(this.#keyCodec.encodeKey(key), signal);
+  }
+
+  async migrateFrom<Old>(
+    expected: Uint8Array,
+    sourceCodec: ValueCodec<Old>,
+    migrate: (value: Old) => V,
+    signal?: AbortSignal,
+  ): Promise<TypedMigrationResult> {
+    const entries = await this.raw.rangeAt(expected, new Uint8Array(), undefined, signal);
+    const mutations: WasmMapMutation[] = entries.map((entry) => ({
+      kind: "upsert",
+      key: entry.key,
+      value: this.#valueCodec.encode(migrate(sourceCodec.decode(entry.value))),
+    }));
+    const update = await this.raw.applyIf(expected, mutations, signal);
+    return {
+      update,
+      scannedValues: entries.length,
+      rewrittenValues: entries.length,
+    };
+  }
+}
+
 export class WasmVersionedMap implements Disposable {
   #native?: any;
-  constructor(native: any) { this.#native = native; }
+  #memory?: WebAssembly.Memory;
+  constructor(native: any, memory?: WebAssembly.Memory) { this.#native = native; this.#memory = memory; }
   #open(): any {
     if (this.#native == null) throw new Error("WASM versioned map is closed");
     return this.#native;
   }
+  typed<K, V>(keyCodec: KeyCodec<K>, valueCodec: ValueCodec<V>): TypedVersionedMap<K, V> {
+    return new TypedVersionedMap(this, keyCodec, valueCodec);
+  }
   id(): Uint8Array { return this.#open().id(); }
+  headName(): Uint8Array { return this.#open().headName(); }
+  versionsPrefix(): Uint8Array { return this.#open().versionsPrefix(); }
   isInitialized(signal?: AbortSignal): Promise<boolean> {
     const native = this.#open();
     return portablePromise(signal, () => native.isInitialized());
@@ -967,6 +1887,10 @@ export class WasmVersionedMap implements Disposable {
   initialize(signal?: AbortSignal): Promise<WasmMapVersion> {
     const native = this.#open();
     return portablePromise(signal, () => wasmMapVersion(native.initialize()));
+  }
+  initializeSorted(entries: readonly WasmEntryRecord[], signal?: AbortSignal): Promise<WasmMapUpdate> {
+    const native = this.#open(); const owned = ownedWasmEntries(entries);
+    return portablePromise(signal, () => wasmMapUpdate(native.initializeSorted(owned)));
   }
   head(signal?: AbortSignal): Promise<WasmMapVersion | undefined> {
     const native = this.#open();
@@ -994,6 +1918,12 @@ export class WasmVersionedMap implements Disposable {
     const native = this.#open(); key = ownedPortableBytes(key);
     return portablePromise(signal, () => native.get(key) ?? undefined);
   }
+  getLargeValue(blobStore: BlobStore, key: Uint8Array, signal?: AbortSignal): Promise<Uint8Array | undefined> {
+    const native = this.#open(); const nativeBlobStore = blobStore.cloneNativeHandle();
+    key = ownedPortableBytes(key);
+    return portablePromise(signal, () => native.getLargeValue(nativeBlobStore, key) ?? undefined)
+      .finally(() => nativeBlobStore.free());
+  }
   containsKey(key: Uint8Array, signal?: AbortSignal): Promise<boolean> {
     const native = this.#open(); key = ownedPortableBytes(key);
     return portablePromise(signal, () => native.containsKey(key));
@@ -1010,13 +1940,97 @@ export class WasmVersionedMap implements Disposable {
     const native = this.#open(); id = ownedPortableBytes(id); const owned = keys.map(ownedPortableBytes);
     return portablePromise(signal, () => native.getManyAt(id, owned).map((value: Uint8Array | null) => value ?? undefined));
   }
+  range(start: Uint8Array = new Uint8Array(), end?: Uint8Array, signal?: AbortSignal): Promise<WasmEntryRecord[]> {
+    const native = this.#open(); start = ownedPortableBytes(start);
+    const ownedEnd = end == null ? undefined : ownedPortableBytes(end);
+    return portablePromise(signal, () => native.range(start, ownedEnd));
+  }
+  prefix(prefix: Uint8Array, signal?: AbortSignal): Promise<WasmEntryRecord[]> {
+    const native = this.#open(); prefix = ownedPortableBytes(prefix);
+    return portablePromise(signal, () => native.prefix(prefix));
+  }
+  rangeAt(id: Uint8Array, start: Uint8Array = new Uint8Array(), end?: Uint8Array, signal?: AbortSignal): Promise<WasmEntryRecord[]> {
+    const native = this.#open(); id = ownedPortableBytes(id); start = ownedPortableBytes(start);
+    const ownedEnd = end == null ? undefined : ownedPortableBytes(end);
+    return portablePromise(signal, () => native.rangeAt(id, start, ownedEnd));
+  }
+  prefixAt(id: Uint8Array, prefix: Uint8Array, signal?: AbortSignal): Promise<WasmEntryRecord[]> {
+    const native = this.#open(); id = ownedPortableBytes(id); prefix = ownedPortableBytes(prefix);
+    return portablePromise(signal, () => native.prefixAt(id, prefix));
+  }
+  rangePage(cursor?: WasmRangeCursorRecord, end?: Uint8Array, limit = 256, signal?: AbortSignal): Promise<WasmRangePageRecord> {
+    const native = this.#open(); const ownedEnd = end == null ? undefined : ownedPortableBytes(end);
+    return portablePromise(signal, () => native.rangePage(cursor, ownedEnd, limit));
+  }
+  prefixPage(prefix: Uint8Array, cursor?: WasmRangeCursorRecord, limit = 256, signal?: AbortSignal): Promise<WasmRangePageRecord> {
+    const native = this.#open(); prefix = ownedPortableBytes(prefix);
+    return portablePromise(signal, () => native.prefixPage(prefix, cursor, limit));
+  }
+  rangePageAt(id: Uint8Array, cursor?: WasmRangeCursorRecord, end?: Uint8Array, limit = 256, signal?: AbortSignal): Promise<WasmRangePageRecord> {
+    const native = this.#open(); id = ownedPortableBytes(id);
+    const ownedEnd = end == null ? undefined : ownedPortableBytes(end);
+    return portablePromise(signal, () => native.rangePageAt(id, cursor, ownedEnd, limit));
+  }
+  prefixPageAt(id: Uint8Array, prefix: Uint8Array, cursor?: WasmRangeCursorRecord, limit = 256, signal?: AbortSignal): Promise<WasmRangePageRecord> {
+    const native = this.#open(); id = ownedPortableBytes(id); prefix = ownedPortableBytes(prefix);
+    return portablePromise(signal, () => native.prefixPageAt(id, prefix, cursor, limit));
+  }
+  diff(base: Uint8Array, target: Uint8Array, signal?: AbortSignal): Promise<WasmMapDiff[]> {
+    const native = this.#open(); base = ownedPortableBytes(base); target = ownedPortableBytes(target);
+    return portablePromise(signal, () => native.diff(base, target));
+  }
+  changesSince(base: Uint8Array, signal?: AbortSignal): Promise<WasmMapDiff[]> {
+    const native = this.#open(); base = ownedPortableBytes(base);
+    return portablePromise(signal, () => native.changesSince(base));
+  }
+  rollbackTo(id: Uint8Array, signal?: AbortSignal): Promise<WasmMapVersion> {
+    const native = this.#open(); id = ownedPortableBytes(id);
+    return portablePromise(signal, () => wasmMapVersion(native.rollbackTo(id)));
+  }
   put(key: Uint8Array, value: Uint8Array, signal?: AbortSignal): Promise<WasmMapVersion> {
     const native = this.#open(); key = ownedPortableBytes(key); value = ownedPortableBytes(value);
     return portablePromise(signal, () => wasmMapVersion(native.put(key, value)));
   }
+  putLargeValue(blobStore: BlobStore, key: Uint8Array, value: Uint8Array, config: WasmLargeValueConfig, signal?: AbortSignal): Promise<WasmMapVersion> {
+    const native = this.#open();
+    key = ownedPortableBytes(key); value = ownedPortableBytes(value);
+    const threshold = checkedWasmU64(config.inlineThreshold, "inlineThreshold");
+    const nativeBlobStore = blobStore.cloneNativeHandle();
+    return portablePromise(signal, () => wasmMapVersion(native.putLargeValue(nativeBlobStore, key, value, threshold)))
+      .finally(() => nativeBlobStore.free());
+  }
   apply(mutations: readonly WasmMapMutation[], signal?: AbortSignal): Promise<WasmMapVersion> {
     const native = this.#open(); const owned = ownedWasmMutations(mutations);
     return portablePromise(signal, () => wasmMapVersion(native.apply(owned)));
+  }
+  append(mutations: readonly WasmMapMutation[], signal?: AbortSignal): Promise<WasmMapVersion> {
+    const native = this.#open(); const owned = ownedWasmMutations(mutations);
+    return portablePromise(signal, () => wasmMapVersion(native.append(owned)));
+  }
+  parallelApply(mutations: readonly WasmMapMutation[], config: WasmVersionedParallelConfig, signal?: AbortSignal): Promise<WasmVersionedMapBatchResult> {
+    const native = this.#open(); const owned = ownedWasmMutations(mutations);
+    const ownedConfig = {
+      maxThreads: config.maxThreads.toString(),
+      parallelismThreshold: config.parallelismThreshold.toString(),
+    };
+    return portablePromise(signal, () => wasmVersionedBatchResult(native.parallelApply(owned, ownedConfig)));
+  }
+  rebuildSortedIf(expected: Uint8Array | undefined, entries: readonly WasmEntryRecord[], signal?: AbortSignal): Promise<WasmMapUpdate> {
+    const native = this.#open(); const ownedExpected = expected == null ? undefined : ownedPortableBytes(expected);
+    const owned = ownedWasmEntries(entries);
+    return portablePromise(signal, () => wasmMapUpdate(native.rebuildSortedIf(ownedExpected, owned)));
+  }
+  rebuildFromEntriesIf(expected: Uint8Array | undefined, entries: readonly WasmEntryRecord[], signal?: AbortSignal): Promise<WasmMapUpdate> {
+    const native = this.#open(); const ownedExpected = expected == null ? undefined : ownedPortableBytes(expected);
+    const owned = ownedWasmEntries(entries);
+    return portablePromise(signal, () => wasmMapUpdate(native.rebuildFromEntriesIf(ownedExpected, owned)));
+  }
+  rebuildFromIterIf(expected: Uint8Array | undefined, entries: readonly WasmEntryRecord[], signal?: AbortSignal): Promise<WasmMapUpdate> {
+    return this.rebuildFromEntriesIf(expected, entries, signal);
+  }
+  applyAtMillis(mutations: readonly WasmMapMutation[], timestampMillis: bigint, signal?: AbortSignal): Promise<WasmMapVersion> {
+    const native = this.#open(); const owned = ownedWasmMutations(mutations);
+    return portablePromise(signal, () => wasmMapVersion(native.applyAtMillis(owned, timestampMillis)));
   }
   applyIf(expected: Uint8Array | undefined, mutations: readonly WasmMapMutation[], signal?: AbortSignal): Promise<WasmMapUpdate> {
     const native = this.#open();
@@ -1024,11 +2038,26 @@ export class WasmVersionedMap implements Disposable {
     const owned = ownedWasmMutations(mutations);
     return portablePromise(signal, () => wasmMapUpdate(native.applyIf(ownedExpected, owned)));
   }
+  applyIfAtMillis(expected: Uint8Array | undefined, mutations: readonly WasmMapMutation[], timestampMillis: bigint, signal?: AbortSignal): Promise<WasmMapUpdate> {
+    const native = this.#open();
+    const ownedExpected = expected == null ? undefined : ownedPortableBytes(expected);
+    const owned = ownedWasmMutations(mutations);
+    return portablePromise(signal, () => wasmMapUpdate(native.applyIfAtMillis(ownedExpected, owned, timestampMillis)));
+  }
   putIf(expected: Uint8Array | undefined, key: Uint8Array, value: Uint8Array, signal?: AbortSignal): Promise<WasmMapUpdate> {
     const native = this.#open();
     const ownedExpected = expected == null ? undefined : ownedPortableBytes(expected);
     key = ownedPortableBytes(key); value = ownedPortableBytes(value);
     return portablePromise(signal, () => wasmMapUpdate(native.putIf(ownedExpected, key, value)));
+  }
+  putLargeValueIf(blobStore: BlobStore, expected: Uint8Array | undefined, key: Uint8Array, value: Uint8Array, config: WasmLargeValueConfig, signal?: AbortSignal): Promise<WasmMapUpdate> {
+    const native = this.#open();
+    const ownedExpected = expected == null ? undefined : ownedPortableBytes(expected);
+    key = ownedPortableBytes(key); value = ownedPortableBytes(value);
+    const threshold = checkedWasmU64(config.inlineThreshold, "inlineThreshold");
+    const nativeBlobStore = blobStore.cloneNativeHandle();
+    return portablePromise(signal, () => wasmMapUpdate(native.putLargeValueIf(nativeBlobStore, ownedExpected, key, value, threshold)))
+      .finally(() => nativeBlobStore.free());
   }
   deleteIf(expected: Uint8Array | undefined, key: Uint8Array, signal?: AbortSignal): Promise<WasmMapUpdate> {
     const native = this.#open();
@@ -1043,15 +2072,34 @@ export class WasmVersionedMap implements Disposable {
     const native = this.#open();
     return portablePromise(signal, () => {
       const value = native.snapshot();
-      return value == null ? undefined : new WasmMapSnapshot(value);
+      return value == null ? undefined : new WasmMapSnapshot(value, this.#memory);
     });
   }
   snapshotAt(id: Uint8Array, signal?: AbortSignal): Promise<WasmMapSnapshot | undefined> {
     const native = this.#open(); id = ownedPortableBytes(id);
     return portablePromise(signal, () => {
       const value = native.snapshotAt(id);
-      return value == null ? undefined : new WasmMapSnapshot(value);
+      return value == null ? undefined : new WasmMapSnapshot(value, this.#memory);
     });
+  }
+  compare(base: Uint8Array, target: Uint8Array): WasmMapComparison {
+    return new WasmMapComparison(this.#open().compare(
+      ownedPortableBytes(base), ownedPortableBytes(target),
+    ));
+  }
+  compareToHead(base: Uint8Array): WasmMapComparison {
+    return new WasmMapComparison(this.#open().compareToHead(ownedPortableBytes(base)));
+  }
+  subscribe(): WasmMapSubscription { return new WasmMapSubscription(this.#open().subscribe()); }
+  subscribeFrom(lastSeen?: Uint8Array): WasmMapSubscription {
+    return new WasmMapSubscription(this.#open().subscribeFrom(
+      lastSeen == null ? undefined : ownedPortableBytes(lastSeen),
+    ));
+  }
+  prepareMerge(base: Uint8Array, candidate: Uint8Array): WasmMapMerge {
+    return new WasmMapMerge(this.#open().prepareMerge(
+      ownedPortableBytes(base), ownedPortableBytes(candidate),
+    ));
   }
   backup(signal?: AbortSignal): Promise<Uint8Array> {
     const native = this.#open();
@@ -1061,6 +2109,20 @@ export class WasmVersionedMap implements Disposable {
     const native = this.#open(); bytes = ownedPortableBytes(bytes);
     return portablePromise(signal, () => wasmMapVersion(native.restoreBackup(bytes)));
   }
+  importAsHead(bundle: WasmSnapshotBundleHandle, signal?: AbortSignal): Promise<WasmMapVersion> {
+    const native = this.#open(); const owned = ownedPortableBytes(bundle.toBytes());
+    return portablePromise(signal, () => wasmMapVersion(native.importAsHead(owned)));
+  }
+  importAsHeadAtMillis(
+    bundle: WasmSnapshotBundleHandle,
+    timestampMillis: bigint,
+    signal?: AbortSignal,
+  ): Promise<WasmMapVersion> {
+    const native = this.#open(); const owned = ownedPortableBytes(bundle.toBytes());
+    return portablePromise(signal, () => wasmMapVersion(
+      native.importAsHeadAtMillis(owned, timestampMillis),
+    ));
+  }
   keepLast(count: number, signal?: AbortSignal): Promise<WasmVersionPrune> {
     if (!Number.isSafeInteger(count) || count < 0 || count > 0xffff_ffff) {
       return Promise.reject(new RangeError("keepLast count must be a non-negative uint32"));
@@ -1068,13 +2130,145 @@ export class WasmVersionedMap implements Disposable {
     const native = this.#open();
     return portablePromise(signal, () => native.keepLast(count));
   }
-  verifyCatalog(): { itemCount: bigint; byteCount: bigint } {
-    const value = this.#open().verifyCatalog();
-    return { itemCount: BigInt(value.itemCount), byteCount: BigInt(value.byteCount) };
+  pruneVersions(keepLatest: bigint): WasmVersionPrune {
+    return this.#open().pruneVersions(keepLatest);
   }
-  planGc(): { itemCount: bigint; byteCount: bigint } {
-    const value = this.#open().planGc();
-    return { itemCount: BigInt(value.itemCount), byteCount: BigInt(value.byteCount) };
+  keepForAt(nowMillis: bigint, maxAgeMillis: bigint): WasmVersionPrune {
+    return this.#open().keepForAt(nowMillis, maxAgeMillis);
+  }
+  keepFor(maxAgeMillis: bigint): WasmVersionPrune {
+    return this.#open().keepFor(maxAgeMillis);
+  }
+  keepVersions(ids: readonly Uint8Array[]): WasmVersionPrune {
+    return this.#open().keepVersions(ids.map(ownedPortableBytes));
+  }
+  retentionPolicy(): WasmNamedRootRetention {
+    return wasmNamedRootRetention(this.#open().retentionPolicy());
+  }
+  verifyCatalog(): WasmCatalogVerification {
+    return wasmCatalogVerification(this.#open().verifyCatalog());
+  }
+  planGc(): WasmGcPlan {
+    return wasmGcPlan(this.#open().planGc());
+  }
+  sweepGc(): WasmGcSweep {
+    const value = this.#open().sweepGc();
+    return {
+      plan: wasmGcPlan(value.plan),
+      deletedNodes: BigInt(value.deletedNodes),
+      deletedBytes: BigInt(value.deletedBytes),
+    };
+  }
+  planBlobGc(blobStore: BlobStore, signal?: AbortSignal): Promise<WasmBlobGcPlan> {
+    const native = this.#open(); const nativeBlobStore = blobStore.cloneNativeHandle();
+    return portablePromise(signal, () => wasmBlobGcPlan(native.planBlobGc(nativeBlobStore)))
+      .finally(() => nativeBlobStore.free());
+  }
+  sweepBlobGc(blobStore: BlobStore, signal?: AbortSignal): Promise<WasmBlobGcSweep> {
+    const native = this.#open(); const nativeBlobStore = blobStore.cloneNativeHandle();
+    return portablePromise(signal, () => wasmBlobGcSweep(native.sweepBlobGc(nativeBlobStore)))
+      .finally(() => nativeBlobStore.free());
+  }
+  close(): void { this.#native?.free?.(); this.#native = undefined; this.#memory = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class WasmVersionedTransaction implements Disposable {
+  #native?: any;
+  constructor(native: any) { this.#native = native; }
+  #open(): any { if (this.#native == null) throw new Error("WASM versioned transaction is completed"); return this.#native; }
+  head(mapId: Uint8Array, signal?: AbortSignal): Promise<WasmMapVersion | undefined> {
+    const native = this.#open(); mapId = ownedPortableBytes(mapId);
+    return portablePromise(signal, () => { const value = native.head(mapId); return value == null ? undefined : wasmMapVersion(value); });
+  }
+  get(mapId: Uint8Array, key: Uint8Array, signal?: AbortSignal): Promise<Uint8Array | undefined> {
+    const native = this.#open(); mapId = ownedPortableBytes(mapId); key = ownedPortableBytes(key);
+    return portablePromise(signal, () => native.get(mapId, key) ?? undefined);
+  }
+  apply(mapId: Uint8Array, mutations: readonly WasmMapMutation[], signal?: AbortSignal): Promise<WasmMapVersion> {
+    const native = this.#open(); mapId = ownedPortableBytes(mapId); const owned = ownedWasmMutations(mutations);
+    return portablePromise(signal, () => wasmMapVersion(native.apply(mapId, owned)));
+  }
+  applyIf(mapId: Uint8Array, expected: Uint8Array | undefined, mutations: readonly WasmMapMutation[], signal?: AbortSignal): Promise<WasmMapUpdate> {
+    const native = this.#open(); mapId = ownedPortableBytes(mapId);
+    const ownedExpected = expected == null ? undefined : ownedPortableBytes(expected);
+    const owned = ownedWasmMutations(mutations);
+    return portablePromise(signal, () => wasmMapUpdate(native.applyIf(mapId, ownedExpected, owned)));
+  }
+  put(mapId: Uint8Array, key: Uint8Array, value: Uint8Array, signal?: AbortSignal): Promise<WasmMapVersion> {
+    const native = this.#open(); mapId = ownedPortableBytes(mapId); key = ownedPortableBytes(key); value = ownedPortableBytes(value);
+    return portablePromise(signal, () => wasmMapVersion(native.put(mapId, key, value)));
+  }
+  delete(mapId: Uint8Array, key: Uint8Array, signal?: AbortSignal): Promise<WasmMapVersion> {
+    const native = this.#open(); mapId = ownedPortableBytes(mapId); key = ownedPortableBytes(key);
+    return portablePromise(signal, () => wasmMapVersion(native.delete(mapId, key)));
+  }
+  commit(signal?: AbortSignal): Promise<WasmVersionedTransactionCommit> {
+    const native = this.#open(); this.#native = undefined;
+    return portablePromise(signal, () => {
+      const value = native.commit();
+      return {
+        applied: value.applied,
+        versions: value.versions.map(wasmMapVersion),
+        conflictMapId: value.conflictMapId ?? undefined,
+        conflictCurrent: value.conflictCurrent == null ? undefined : wasmMapVersion(value.conflictCurrent),
+      };
+    });
+  }
+  rollback(signal?: AbortSignal): Promise<void> {
+    const native = this.#open(); this.#native = undefined;
+    return portablePromise(signal, () => native.rollback());
+  }
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class WasmMapComparison implements Disposable {
+  #native?: any;
+  constructor(native: any) { this.#native = native; }
+  #open(): any { if (this.#native == null) throw new Error("WASM map comparison is closed"); return this.#native; }
+  base(): WasmMapVersion { return wasmMapVersion(this.#open().base()); }
+  target(): WasmMapVersion { return wasmMapVersion(this.#open().target()); }
+  diff(): WasmMapDiff[] { return this.#open().diff(); }
+  diffPage(cursor?: WasmRangeCursorRecord, end?: Uint8Array, limit = 256): WasmDiffPage {
+    return this.#open().diffPage(
+      cursor, end == null ? undefined : ownedPortableBytes(end), limit,
+    );
+  }
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class WasmMapSubscription implements Disposable {
+  #native?: any;
+  constructor(native: any) { this.#native = native; }
+  #open(): any { if (this.#native == null) throw new Error("WASM map subscription is closed"); return this.#native; }
+  lastSeen(): Uint8Array | undefined { return this.#open().lastSeen() ?? undefined; }
+  poll(): WasmMapChangeEvent | undefined {
+    const event = this.#open().poll();
+    return event == null ? undefined : {
+      previous: event.previous ?? undefined,
+      current: wasmMapVersion(event.current),
+      diffs: event.diffs,
+    };
+  }
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class WasmMapMerge implements Disposable {
+  #native?: any;
+  constructor(native: any) { this.#native = native; }
+  #open(): any { if (this.#native == null) throw new Error("WASM map merge is closed"); return this.#native; }
+  base(): WasmMapVersion { return wasmMapVersion(this.#open().base()); }
+  head(): WasmMapVersion { return wasmMapVersion(this.#open().head()); }
+  candidate(): WasmMapVersion { return wasmMapVersion(this.#open().candidate()); }
+  merge(resolver?: string): any { return this.#open().merge(resolver); }
+  conflictPage(cursor?: WasmRangeCursorRecord, limit = 256): WasmConflictPageRecord {
+    return this.#open().conflictPage(cursor, limit);
+  }
+  publish(resolver?: string): WasmMapUpdate {
+    return wasmMapUpdate(this.#open().publish(resolver));
   }
   close(): void { this.#native?.free?.(); this.#native = undefined; }
   [Symbol.dispose](): void { this.close(); }
@@ -1082,7 +2276,8 @@ export class WasmVersionedMap implements Disposable {
 
 export class WasmMapSnapshot implements Disposable {
   #native?: any;
-  constructor(native: any) { this.#native = native; }
+  #memory?: WebAssembly.Memory;
+  constructor(native: any, memory?: WebAssembly.Memory) { this.#native = native; this.#memory = memory; }
   #open(): any { if (this.#native == null) throw new Error("WASM map snapshot is closed"); return this.#native; }
   id(): Uint8Array { return this.#open().id(); }
   version(): WasmMapVersion { return wasmMapVersion(this.#open().version()); }
@@ -1140,26 +2335,190 @@ export class WasmMapSnapshot implements Disposable {
     return this.#open().prefixReversePage(ownedPortableBytes(prefix), cursor, limit);
   }
   proveKey(key: Uint8Array): WasmKeyProof { return new WasmKeyProof(this.#open().proveKey(ownedPortableBytes(key))); }
+  proveKeys(keys: readonly Uint8Array[]): WasmMultiKeyProof {
+    return new WasmMultiKeyProof(this.#open().proveKeys(keys.map(ownedPortableBytes)));
+  }
+  proveRange(start: Uint8Array = new Uint8Array(), end?: Uint8Array): WasmRangeProof {
+    return new WasmRangeProof(this.#open().proveRange(
+      ownedPortableBytes(start), end == null ? undefined : ownedPortableBytes(end),
+    ));
+  }
+  provePrefix(prefix: Uint8Array): WasmRangeProof {
+    return new WasmRangeProof(this.#open().provePrefix(ownedPortableBytes(prefix)));
+  }
+  proveRangePage(
+    cursor?: WasmRangeCursorRecord,
+    end?: Uint8Array,
+    limit = 256,
+  ): WasmProvedRangePage {
+    return new WasmProvedRangePage(this.#open().proveRangePage(
+      cursor, end == null ? undefined : ownedPortableBytes(end), limit,
+    ));
+  }
   stats(): { itemCount: bigint; byteCount: bigint } {
     const value = this.#open().stats(); return { itemCount: BigInt(value.itemCount), byteCount: BigInt(value.byteCount) };
   }
-  exportSummary(): { itemCount: bigint; byteCount: bigint } {
-    const value = this.#open().export(); return { itemCount: BigInt(value.itemCount), byteCount: BigInt(value.byteCount) };
+  export(signal?: AbortSignal): Promise<WasmSnapshotBundleHandle> {
+    const native = this.#open();
+    return portablePromise(signal, () => native.export());
   }
-  read(): WasmReadSession { return new WasmReadSession(this.#open().read()); }
+  read(): WasmReadSession { return new WasmReadSession(this.#open().read(), this.#memory); }
   close(): void { this.#native?.free?.(); this.#native = undefined; }
   [Symbol.dispose](): void { this.close(); }
 }
 
 export class WasmReadSession implements Disposable {
   #native?: any;
-  constructor(native: any) { this.#native = native; }
+  #memory?: WebAssembly.Memory;
+  #scanActive = false;
+  constructor(native: any, memory?: WebAssembly.Memory) { this.#native = native; this.#memory = memory; }
   get(key: Uint8Array): Uint8Array | undefined {
     if (this.#native == null) throw new Error("WASM read session is closed");
+    if (this.#scanActive) throw new Error("WASM read session cannot be re-entered during a zero-copy scan callback");
     return this.#native.get(ownedPortableBytes(key)) ?? undefined;
+  }
+  getAsync(key: Uint8Array, signal?: AbortSignal): Promise<Uint8Array | undefined> {
+    if (this.#native == null) throw new Error("WASM read session is closed");
+    const native = this.#native; const owned = ownedPortableBytes(key);
+    return portablePromise(signal, () => native.get(owned) ?? undefined);
+  }
+  withValueView(key: Uint8Array, visit: (value: Uint8Array) => void): boolean {
+    if (this.#native == null) throw new Error("WASM read session is closed");
+    if (this.#scanActive) throw new Error("WASM read session cannot be re-entered during a zero-copy callback");
+    if (typeof visit !== "function") throw new TypeError("point-read visitor must be a function");
+    this.#scanActive = true;
+    try {
+      return this.#native.withValueView(ownedPortableBytes(key), (value: Uint8Array) => {
+        const scope = { alive: true };
+        try {
+          visit(scopedPortableBytes(value, scope, this.#memory));
+        } finally {
+          scope.alive = false;
+        }
+      });
+    } finally {
+      this.#scanActive = false;
+    }
+  }
+  withValueRefView(key: Uint8Array, visit: (value: ValueRefView) => void): boolean {
+    return this.withValueView(key, (value) => visit(decodeWasmValueRefView(value)));
+  }
+  scanRangeView(
+    start: Uint8Array,
+    end: Uint8Array | undefined,
+    visit: (entry: WasmEntryRecord) => boolean,
+  ): { visited: bigint; stopped: boolean } {
+    if (this.#native == null) throw new Error("WASM read session is closed");
+    if (this.#scanActive) throw new Error("WASM read session cannot be re-entered during a zero-copy scan callback");
+    if (typeof visit !== "function") throw new TypeError("scan visitor must be a function");
+    this.#scanActive = true;
+    try {
+      const outcome = this.#native.scanRangeView(
+        ownedPortableBytes(start), end == null ? undefined : ownedPortableBytes(end),
+        (entry: WasmEntryRecord) => {
+          const scope = { alive: true };
+          try {
+            return visit({
+              key: scopedPortableBytes(entry.key, scope, this.#memory),
+              value: scopedPortableBytes(entry.value, scope, this.#memory),
+            });
+          } finally {
+            scope.alive = false;
+          }
+        },
+      );
+      return { visited: BigInt(outcome.visited), stopped: outcome.stopped };
+    } finally {
+      this.#scanActive = false;
+    }
   }
   close(): void { this.#native?.free?.(); this.#native = undefined; }
   [Symbol.dispose](): void { this.close(); }
+}
+
+function decodeWasmValueRefView(value: Uint8Array): ValueRefView {
+  if (value.byteLength < 4 || value[0] !== 0x50 || value[1] !== 0x4c || value[2] !== 0x56 || value[3] !== 0x42) {
+    return { kind: "inline", value };
+  }
+  if (value.byteLength < 6 || value[4] !== 1) throw new Error("invalid or unsupported value reference header");
+  if (value[5] === 0) {
+    if (value.byteLength < 14) throw new Error("inline value reference is truncated");
+    const length = readWasmScopedU64(value, 6);
+    if (length > BigInt(Number.MAX_SAFE_INTEGER) || BigInt(value.byteLength) !== 14n + length) {
+      throw new Error("inline value reference length does not match payload");
+    }
+    return { kind: "inline", value: value.subarray(14) };
+  }
+  if (value[5] === 1) {
+    if (value.byteLength !== 46) throw new Error("blob value reference length is invalid");
+    return { kind: "blob", cid: new Uint8Array(value.subarray(6, 38)), length: readWasmScopedU64(value, 38) };
+  }
+  throw new Error(`unknown value reference tag ${value[5]}`);
+}
+
+function readWasmRecordVarint(bytes: Uint8Array, start: number): [number, number] {
+  let value = 0;
+  let shift = 0;
+  for (let offset = start; offset < bytes.byteLength && shift <= 49; offset++, shift += 7) {
+    const byte = bytes[offset]!;
+    value += (byte & 0x7f) * 2 ** shift;
+    if ((byte & 0x80) === 0) return [value, offset + 1];
+  }
+  throw new Error("proximity record contains an invalid varint");
+}
+
+function decodeWasmProximityRecordView(
+  raw: Uint8Array,
+  scope: { alive: boolean },
+  memory?: WebAssembly.Memory,
+): WasmProximityRecordView {
+  if (raw.byteLength < 8 || raw[0] !== 0x50 || raw[1] !== 0x52 || raw[2] !== 0x56 || raw[3] !== 0x52 || raw[4] !== 2 || raw[5] !== 1) {
+    throw new Error("invalid retained proximity record header");
+  }
+  const [dimensions, vectorStart] = readWasmRecordVarint(raw, 6);
+  const vectorEnd = vectorStart + dimensions * 4;
+  if (!Number.isSafeInteger(vectorEnd) || vectorEnd > raw.byteLength) throw new Error("retained proximity vector is truncated");
+  const [valueLength, valueStart] = readWasmRecordVarint(raw, vectorEnd);
+  if (valueStart + valueLength !== raw.byteLength) throw new Error("retained proximity value length is invalid");
+  return {
+    vector: new WasmProximityVectorView(
+      raw.subarray(vectorStart, vectorEnd), dimensions, scope, memory,
+    ),
+    value: scopedPortableBytes(raw.subarray(valueStart), scope, memory),
+  };
+}
+
+function scanWasmProximityRecordViews(
+  native: any,
+  memory: WebAssembly.Memory | undefined,
+  start: Uint8Array,
+  end: Uint8Array | undefined,
+  visitor: (record: WasmProximityScanRecordView) => boolean,
+): { visited: bigint; stopped: boolean } {
+  if (typeof visitor !== "function") throw new TypeError("proximity record visitor must be a function");
+  const outcome = native.scanRecordViews(
+    ownedPortableBytes(start),
+    end == null ? undefined : ownedPortableBytes(end),
+    (row: { key: Uint8Array; vectorBytes: Uint8Array; value: Uint8Array }) => {
+      const scope = { alive: true };
+      try {
+        return visitor({
+          key: scopedPortableBytes(row.key, scope, memory),
+          vector: new WasmProximityVectorView(
+            row.vectorBytes, row.vectorBytes.byteLength / 4, scope, memory,
+          ),
+          value: scopedPortableBytes(row.value, scope, memory),
+        });
+      } finally { scope.alive = false; }
+    },
+  );
+  return { visited: BigInt(outcome.visited), stopped: outcome.stopped };
+}
+
+function readWasmScopedU64(value: Uint8Array, start: number): bigint {
+  let result = 0n;
+  for (let index = 0; index < 8; index += 1) result = (result << 8n) | BigInt(value[start + index]);
+  return result;
 }
 
 export class WasmKeyProof implements Disposable {
@@ -1167,6 +2526,43 @@ export class WasmKeyProof implements Disposable {
   constructor(native: any) { this.#native = native; }
   verify(): { valid: boolean; exists: boolean; value?: Uint8Array } {
     if (this.#native == null) throw new Error("WASM key proof is closed");
+    return this.#native.verify();
+  }
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class WasmMultiKeyProof implements Disposable {
+  #native?: any;
+  constructor(native: any) { this.#native = native; }
+  verify(): WasmMultiKeyProofVerificationRecord {
+    if (this.#native == null) throw new Error("WASM multi-key proof is closed");
+    return this.#native.verify();
+  }
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class WasmRangeProof implements Disposable {
+  #native?: any;
+  constructor(native: any) { this.#native = native; }
+  verify(): WasmRangeProofVerificationRecord {
+    if (this.#native == null) throw new Error("WASM range proof is closed");
+    return this.#native.verify();
+  }
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class WasmProvedRangePage implements Disposable {
+  #native?: any;
+  constructor(native: any) { this.#native = native; }
+  page(): WasmRangePageRecord {
+    if (this.#native == null) throw new Error("WASM proved range page is closed");
+    return this.#native.page();
+  }
+  verify(): WasmRangePageProofVerificationRecord {
+    if (this.#native == null) throw new Error("WASM proved range page is closed");
     return this.#native.verify();
   }
   close(): void { this.#native?.free?.(); this.#native = undefined; }
@@ -1184,6 +2580,7 @@ export class WasmIndexRegistry implements Disposable {
     this.nativeHandle().register(
       ownedPortableBytes(registration.name), registration.generation,
       registration.extractorId, registration.projection,
+      portableSecondaryIndexLimits(registration.limits),
       (key: Uint8Array, value: Uint8Array) => registration.extract(key, value).map((entry) => ({
         term: ownedPortableBytes(entry.term),
         projection: entry.projection == null ? undefined : ownedPortableBytes(entry.projection),
@@ -1229,7 +2626,8 @@ function ownPortableIndexedMutations(mutations: readonly PortableIndexedMutation
 
 export class WasmIndexedMap implements Disposable {
   #native?: any;
-  constructor(native: any) { this.#native = native; }
+  #memory?: WebAssembly.Memory;
+  constructor(native: any, memory?: WebAssembly.Memory) { this.#native = native; this.#memory = memory; }
   #open(): any {
     if (this.#native == null) throw new Error("WASM indexed map is closed");
     return this.#native;
@@ -1238,6 +2636,14 @@ export class WasmIndexedMap implements Disposable {
   get(key: Uint8Array, signal?: AbortSignal): Promise<Uint8Array | undefined> {
     const native = this.#open(); key = ownedPortableBytes(key);
     return portablePromise(signal, () => native.get(key) ?? undefined);
+  }
+  withValueView(key: Uint8Array, visit: (value: Uint8Array) => void): boolean {
+    if (typeof visit !== "function") throw new TypeError("indexed value visitor must be a function");
+    return this.#open().withValueView(ownedPortableBytes(key), (value: Uint8Array) => {
+      const scope = { alive: true };
+      try { visit(scopedPortableBytes(value, scope, this.#memory)); }
+      finally { scope.alive = false; }
+    });
   }
   put(key: Uint8Array, value: Uint8Array, signal?: AbortSignal): Promise<PortableIndexedVersion> {
     const native = this.#open(); key = ownedPortableBytes(key); value = ownedPortableBytes(value);
@@ -1261,6 +2667,28 @@ export class WasmIndexedMap implements Disposable {
     const native = this.#open(); name = ownedPortableBytes(name);
     return portablePromise(signal, () => {
       const value = native.ensureIndex(name);
+      return {
+        sourceVersion: value.sourceVersion, indexVersion: value.indexVersion,
+        catalogVersion: value.catalogVersion, generation: BigInt(value.generation),
+        entries: BigInt(value.entries), attempts: BigInt(value.attempts), activated: value.activated,
+      };
+    });
+  }
+  replaceIndex(registration: PortableIndexRegistration, signal?: AbortSignal): Promise<PortableIndexBuildResult> {
+    const native = this.#open();
+    const name = ownedPortableBytes(registration.name);
+    return portablePromise(signal, () => {
+      const value = native.replaceIndex(
+        name,
+        registration.generation,
+        registration.extractorId,
+        registration.projection,
+        portableSecondaryIndexLimits(registration.limits),
+        (key: Uint8Array, sourceValue: Uint8Array) => registration.extract(key, sourceValue).map((entry) => ({
+          term: ownedPortableBytes(entry.term),
+          projection: entry.projection == null ? undefined : ownedPortableBytes(entry.projection),
+        })),
+      );
       return {
         sourceVersion: value.sourceVersion, indexVersion: value.indexVersion,
         catalogVersion: value.catalogVersion, generation: BigInt(value.generation),
@@ -1328,7 +2756,8 @@ export class WasmIndexedMap implements Disposable {
       removedNamedRoots: value.removedNamedRoots,
     };
   }
-  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  planGc(): WasmGcPlan { return wasmGcPlan(this.#open().planGc()); }
+  close(): void { this.#native?.free?.(); this.#native = undefined; this.#memory = undefined; }
   [Symbol.dispose](): void { this.close(); }
 }
 
@@ -1468,25 +2897,245 @@ export class WasmSecondaryIndex implements Disposable {
   [Symbol.dispose](): void { this.close(); }
 }
 
-export class WasmProximityMap implements Disposable {
+function wasmCompositeRebuildOutcome(result: any): CompositeBuildOrRebuildOutcome {
+  return {
+    kind: result.kind,
+    composite: result.composite == null ? undefined : new WasmCompositeAccelerator(result.composite),
+    hnsw: result.hnsw == null ? undefined : new WasmHnswIndex(result.hnsw),
+    pq: result.pq == null ? undefined : new WasmProductQuantizer(result.pq),
+    reasons: result.reasons,
+    compositeStats: result.compositeStats,
+    hnswStats: result.hnswStats,
+    pqStats: result.pqStats,
+  };
+}
+
+export class WasmProximitySearchRuntime implements Disposable {
   #native?: any;
   constructor(native: any) { this.#native = native; }
+  nativeHandle(): any {
+    if (this.#native == null) throw new Error("WASM proximity search runtime is closed");
+    return this.#native;
+  }
+  policy(): ProximitySearchRuntimePolicy {
+    const value = this.nativeHandle().policy();
+    return {
+      maxEntries: BigInt(value.maxEntries),
+      maxBytes: BigInt(value.maxBytes),
+      authoritativeMaxBytes: BigInt(value.authoritativeMaxBytes),
+      hnswMaxBytes: BigInt(value.hnswMaxBytes),
+      pqMaxBytes: BigInt(value.pqMaxBytes),
+    };
+  }
+  stats(): ProximitySearchRuntimeStats {
+    const value = this.nativeHandle().stats();
+    return {
+      physicalReads: BigInt(value.physicalReads),
+      physicalBytesRead: BigInt(value.physicalBytesRead),
+    };
+  }
+  clear(): void { this.nativeHandle().clear(); }
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class WasmProximityCancellationToken implements Disposable {
+  #native?: any;
+  constructor(native: any) { this.#native = native; }
+  nativeHandle(): any {
+    if (this.#native == null) throw new Error("WASM proximity cancellation token is closed");
+    return this.#native;
+  }
+  cancel(): void { this.nativeHandle().cancel(); }
+  get isCancelled(): boolean { return this.nativeHandle().isCancelled; }
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+async function cooperativeWasmSearch(
+  request: PortableSearchRequest,
+  cancellation: WasmProximityCancellationToken,
+  invoke: (owned: any, token: any) => PortableSearchResult,
+): Promise<PortableSearchResult> {
+  const owned = ownPortableSearchRequest(request);
+  const nativeCancellation = cancellation.nativeHandle();
+  const onAbort = () => cancellation.cancel();
+  request.signal?.addEventListener("abort", onAbort, { once: true });
+  try {
+    return await portablePromise(
+      request.signal, () => invoke(owned, nativeCancellation),
+    );
+  } finally {
+    request.signal?.removeEventListener("abort", onAbort);
+  }
+}
+
+export class WasmProximityMap implements Disposable {
+  #native?: any;
+  #memory?: WebAssembly.Memory;
+  constructor(native: any, memory?: WebAssembly.Memory) {
+    this.#native = native;
+    this.#memory = memory;
+  }
   nativeHandle(): any {
     if (this.#native == null) throw new Error("WASM proximity map is closed");
     return this.#native;
   }
+  clearCache(): void { this.nativeHandle().clearContentCache(); }
   read(): WasmProximityReadSession {
-    return new WasmProximityReadSession(this.nativeHandle().read());
+    return new WasmProximityReadSession(this.nativeHandle().read(), this.#memory);
+  }
+  cancellationToken(): WasmProximityCancellationToken {
+    return new WasmProximityCancellationToken(this.nativeHandle().cancellationToken());
   }
   search(request: PortableSearchRequest): Promise<PortableSearchResult> {
-    return this.read().search(request);
+    const cancellation = this.cancellationToken();
+    return this.searchCancellable(request, cancellation).finally(() => cancellation.close());
+  }
+  searchWithRuntime(
+    request: PortableSearchRequest,
+    runtime: WasmProximitySearchRuntime,
+  ): Promise<PortableSearchResult> {
+    const cancellation = this.cancellationToken();
+    return this.searchCancellable(request, cancellation, runtime).finally(() => cancellation.close());
+  }
+  async searchCancellable(
+    request: PortableSearchRequest,
+    cancellation: WasmProximityCancellationToken,
+    runtime?: WasmProximitySearchRuntime,
+  ): Promise<PortableSearchResult> {
+    const native = this.nativeHandle();
+    const nativeRuntime = runtime?.nativeHandle();
+    return cooperativeWasmSearch(
+      request, cancellation, (owned, token) => (
+        nativeRuntime == null
+          ? native.searchCancellable(owned, token)
+          : native.searchWithRuntimeCancellable(owned, nativeRuntime, token)
+      ),
+    );
   }
   get(key: Uint8Array): { vector: Float32Array; value: Uint8Array } | undefined {
     return this.nativeHandle().get(ownedPortableBytes(key)) ?? undefined;
   }
+  withRecordView(key: Uint8Array, visitor: (record: WasmProximityRecordView) => void): boolean {
+    if (typeof visitor !== "function") throw new TypeError("proximity record visitor must be a function");
+    const scope = { alive: true };
+    try {
+      return this.nativeHandle().withRecordView(ownedPortableBytes(key), (raw: Uint8Array) => {
+        visitor(decodeWasmProximityRecordView(raw, scope, this.#memory));
+      });
+    } finally { scope.alive = false; }
+  }
   contains(key: Uint8Array): boolean { return this.nativeHandle().contains(ownedPortableBytes(key)); }
+  scanRecords(visitor: (record: PortableProximityRecord) => boolean): bigint {
+    return BigInt(this.nativeHandle().scanRecords((record: PortableProximityRecord) => visitor({
+      key: ownedPortableBytes(record.key),
+      vector: new Float32Array(record.vector),
+      value: ownedPortableBytes(record.value ?? new Uint8Array()),
+    })));
+  }
+  scanRecordViews(
+    start: Uint8Array,
+    end: Uint8Array | undefined,
+    visitor: (record: WasmProximityScanRecordView) => boolean,
+  ): { visited: bigint; stopped: boolean } {
+    return scanWasmProximityRecordViews(this.nativeHandle(), this.#memory, start, end, visitor);
+  }
+  withSearchView<R>(
+    query: Float32Array,
+    k: number,
+    visitor: (neighbors: PortableNeighborView[]) => R,
+  ): R {
+    const session = this.read();
+    try { return session.withSearchView(query, k, visitor); }
+    finally { session.close(); }
+  }
   count(): bigint { return BigInt(this.nativeHandle().count()); }
   config(): PortableProximityConfig { return this.nativeHandle().config(); }
+  buildHnsw(options: HnswBuildOptions = {}): Promise<HnswBuildResult> {
+    const native = this.nativeHandle();
+    const config = ownHnswConfig(options.config);
+    const limits = ownHnswBuildLimits(options.limits);
+    return portablePromise(options.signal, () => {
+      const result = native.buildHnsw(config, limits);
+      return {
+        index: new WasmHnswIndex(result.index),
+        stats: {
+          records: BigInt(result.stats.records),
+          distanceEvaluations: BigInt(result.stats.distanceEvaluations),
+          directedEdges: BigInt(result.stats.directedEdges),
+          maximumLevel: result.stats.maximumLevel,
+          ownedBytes: BigInt(result.stats.ownedBytes),
+          encodedGraphBytes: BigInt(result.stats.encodedGraphBytes),
+        },
+      };
+    });
+  }
+  loadHnsw(manifest: Uint8Array): WasmHnswIndex {
+    return new WasmHnswIndex(this.nativeHandle().loadHnsw(ownedPortableBytes(manifest)));
+  }
+  buildPq(options: ProductQuantizationBuildOptions = {}): Promise<ProductQuantizationBuildResult> {
+    const native = this.nativeHandle();
+    const config = ownPqConfig(options.config);
+    const workerThreads = requireUnsignedBigInt(
+      options.workerThreads ?? 1n, "workerThreads",
+    ).toString();
+    const limits = ownPqBuildLimits(options.limits);
+    return portablePromise(options.signal, () => {
+      const result = native.buildPq(config, workerThreads, limits);
+      return {
+        index: new WasmProductQuantizer(result.index),
+        stats: {
+          trainingDistanceEvaluations: BigInt(result.stats.trainingDistanceEvaluations),
+          encodingDistanceEvaluations: BigInt(result.stats.encodingDistanceEvaluations),
+          encodedVectors: BigInt(result.stats.encodedVectors),
+          trainingVectors: BigInt(result.stats.trainingVectors),
+          trainingBytes: BigInt(result.stats.trainingBytes),
+          encodedOutputBytes: BigInt(result.stats.encodedOutputBytes),
+        },
+      };
+    });
+  }
+  loadPq(manifest: Uint8Array): WasmProductQuantizer {
+    return new WasmProductQuantizer(this.nativeHandle().loadPq(ownedPortableBytes(manifest)));
+  }
+  buildCompositeHnsw(baseMap: WasmProximityMap, base: WasmHnswIndex, options: CompositeBuildOptions = {}): Promise<CompositeBuildOutcome> {
+    const native = this.nativeHandle();
+    return portablePromise(options.signal, () => {
+      const result = native.buildCompositeHnsw(baseMap.nativeHandle(), base.nativeHandle(), ownCompositeConfig(options.config), ownCompositeBuildLimits(options.limits));
+      return { accelerator: result.accelerator == null ? undefined : new WasmCompositeAccelerator(result.accelerator), reasons: result.reasons, stats: result.stats };
+    });
+  }
+  buildCompositePq(baseMap: WasmProximityMap, base: WasmProductQuantizer, options: CompositeBuildOptions = {}): Promise<CompositeBuildOutcome> {
+    const native = this.nativeHandle();
+    return portablePromise(options.signal, () => {
+      const result = native.buildCompositePq(baseMap.nativeHandle(), base.nativeHandle(), ownCompositeConfig(options.config), ownCompositeBuildLimits(options.limits));
+      return { accelerator: result.accelerator == null ? undefined : new WasmCompositeAccelerator(result.accelerator), reasons: result.reasons, stats: result.stats };
+    });
+  }
+  buildOrRebuildCompositeHnsw(baseMap: WasmProximityMap, base: WasmHnswIndex, options: CompositeBuildOrRebuildOptions = {}): Promise<CompositeBuildOrRebuildOutcome> {
+    const native = this.nativeHandle();
+    return portablePromise(options.signal, () => wasmCompositeRebuildOutcome(native.buildOrRebuildCompositeHnsw(
+      baseMap.nativeHandle(), base.nativeHandle(), ownCompositeConfig(options.config), ownCompositeBuildLimits(options.limits), ownCompositeRebuildOptions(options.rebuild),
+    )));
+  }
+  buildOrRebuildCompositePq(baseMap: WasmProximityMap, base: WasmProductQuantizer, options: CompositeBuildOrRebuildOptions = {}): Promise<CompositeBuildOrRebuildOutcome> {
+    const native = this.nativeHandle();
+    return portablePromise(options.signal, () => wasmCompositeRebuildOutcome(native.buildOrRebuildCompositePq(
+      baseMap.nativeHandle(), base.nativeHandle(), ownCompositeConfig(options.config), ownCompositeBuildLimits(options.limits), ownCompositeRebuildOptions(options.rebuild),
+    )));
+  }
+  loadComposite(manifest: Uint8Array): WasmCompositeAccelerator {
+    return new WasmCompositeAccelerator(this.nativeHandle().loadComposite(ownedPortableBytes(manifest)));
+  }
+  buildAcceleratorCatalog(options: { hnsw?: WasmHnswIndex; pq?: WasmProductQuantizer; composite?: WasmCompositeAccelerator } = {}): WasmAcceleratorCatalog {
+    return new WasmAcceleratorCatalog(this.nativeHandle().buildAcceleratorCatalog(
+      options.hnsw?.manifest(), options.pq?.manifest(), options.composite?.manifest(),
+    ));
+  }
+  loadAcceleratorCatalog(manifest: Uint8Array): WasmAcceleratorCatalog {
+    return new WasmAcceleratorCatalog(this.nativeHandle().loadAcceleratorCatalog(ownedPortableBytes(manifest)));
+  }
   mutate(mutations: PortableProximityMutation[]): {
     map: WasmProximityMap;
     stats: {
@@ -1503,27 +3152,238 @@ export class WasmProximityMap implements Disposable {
       vector: mutation.vector == null ? undefined : new Float32Array(mutation.vector),
       value: mutation.value == null ? undefined : ownedPortableBytes(mutation.value),
     })));
-    return { map: new WasmProximityMap(result.map), stats: result.stats };
+    return { map: new WasmProximityMap(result.map, this.#memory), stats: result.stats };
   }
   rebuild(mutations: PortableProximityMutation[]): WasmProximityMap {
     return new WasmProximityMap(this.nativeHandle().rebuild(mutations.map((mutation) => ({
       key: ownedPortableBytes(mutation.key),
       vector: mutation.vector == null ? undefined : new Float32Array(mutation.vector),
       value: mutation.value == null ? undefined : ownedPortableBytes(mutation.value),
-    }))));
+    }))), this.#memory);
   }
   descriptor(): Uint8Array { return this.nativeHandle().descriptor(); }
   verify(): PortableProximityVerification { return this.nativeHandle().verify(); }
   proveMembership(key: Uint8Array): WasmProximityProof {
     return new WasmProximityProof(this.nativeHandle().proveMembership(ownedPortableBytes(key)));
   }
-  proveSearch(vector: Float32Array, topK: number): WasmProximitySearchProof {
+  proveSearch(request: PortableSearchRequest): WasmProximitySearchProof {
     return new WasmProximitySearchProof(
-      this.nativeHandle().proveSearch(new Float32Array(vector), topK),
+      this.nativeHandle().proveSearch(ownPortableSearchRequest(request)),
     );
   }
   proveStructure(): WasmProximityStructuralProof {
     return new WasmProximityStructuralProof(this.nativeHandle().proveStructure());
+  }
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class WasmHnswIndex implements Disposable {
+  #native?: any;
+  constructor(native: any) { this.#native = native; }
+  #open(): any {
+    if (this.#native == null) throw new Error("WASM HNSW index is closed");
+    return this.#native;
+  }
+  nativeHandle(): any { return this.#open(); }
+  manifest(): Uint8Array { return ownedPortableBytes(this.#open().manifest()); }
+  sourceDescriptor(): Uint8Array { return ownedPortableBytes(this.#open().sourceDescriptor()); }
+  config(): HnswConfig {
+    const value = this.#open().config();
+    return {
+      maxConnections: value.maxConnections,
+      efConstruction: value.efConstruction,
+      efSearch: value.efSearch,
+      levelBits: value.levelBits,
+      overfetchMultiplier: value.overfetchMultiplier,
+      seed: BigInt(value.seed),
+      routingVectorEncoding: value.routingVectorEncoding,
+    };
+  }
+  isCanonical(): boolean { return this.#open().isCanonical(); }
+  search(map: WasmProximityMap, request: PortableSearchRequest): Promise<PortableSearchResult> {
+    const cancellation = map.cancellationToken();
+    return this.searchCancellable(map, request, cancellation).finally(() => cancellation.close());
+  }
+  searchWithRuntime(
+    map: WasmProximityMap,
+    request: PortableSearchRequest,
+    runtime: WasmProximitySearchRuntime,
+  ): Promise<PortableSearchResult> {
+    const cancellation = map.cancellationToken();
+    return this.searchCancellable(map, request, cancellation, runtime)
+      .finally(() => cancellation.close());
+  }
+  searchCancellable(
+    map: WasmProximityMap, request: PortableSearchRequest,
+    cancellation: WasmProximityCancellationToken, runtime?: WasmProximitySearchRuntime,
+  ): Promise<PortableSearchResult> {
+    const native = this.#open();
+    const nativeMap = map.nativeHandle();
+    const nativeRuntime = runtime?.nativeHandle();
+    return cooperativeWasmSearch(request, cancellation, (owned, token) => (
+      nativeRuntime == null
+        ? native.searchCancellable(nativeMap, owned, token)
+        : native.searchWithRuntimeCancellable(nativeMap, owned, nativeRuntime, token)
+    ));
+  }
+  proveSearch(map: WasmProximityMap, request: PortableSearchRequest): WasmProximitySearchProof {
+    return new WasmProximitySearchProof(
+      this.#open().proveSearch(map.nativeHandle(), ownPortableSearchRequest(request)),
+    );
+  }
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class WasmProductQuantizer implements Disposable {
+  #native?: any;
+  constructor(native: any) { this.#native = native; }
+  #open(): any {
+    if (this.#native == null) throw new Error("WASM product quantizer is closed");
+    return this.#native;
+  }
+  nativeHandle(): any { return this.#open(); }
+  manifest(): Uint8Array { return ownedPortableBytes(this.#open().manifest()); }
+  sourceDescriptor(): Uint8Array { return ownedPortableBytes(this.#open().sourceDescriptor()); }
+  config(): ProductQuantizationConfig {
+    const value = this.#open().config();
+    return {
+      subquantizers: value.subquantizers,
+      centroidsPerSubquantizer: value.centroidsPerSubquantizer,
+      trainingIterations: value.trainingIterations,
+      rerankMultiplier: value.rerankMultiplier,
+      seed: BigInt(value.seed),
+      maxTrainingVectors: BigInt(value.maxTrainingVectors),
+    };
+  }
+  quality(): ProductQuantizationQuality {
+    const value = this.#open().quality();
+    return {
+      meanSquaredError: value.meanSquaredError,
+      maximumSquaredError: value.maximumSquaredError,
+    };
+  }
+  search(map: WasmProximityMap, request: PortableSearchRequest): Promise<PortableSearchResult> {
+    const cancellation = map.cancellationToken();
+    return this.searchCancellable(map, request, cancellation).finally(() => cancellation.close());
+  }
+  searchWithRuntime(
+    map: WasmProximityMap,
+    request: PortableSearchRequest,
+    runtime: WasmProximitySearchRuntime,
+  ): Promise<PortableSearchResult> {
+    const cancellation = map.cancellationToken();
+    return this.searchCancellable(map, request, cancellation, runtime)
+      .finally(() => cancellation.close());
+  }
+  searchCancellable(
+    map: WasmProximityMap, request: PortableSearchRequest,
+    cancellation: WasmProximityCancellationToken, runtime?: WasmProximitySearchRuntime,
+  ): Promise<PortableSearchResult> {
+    const native = this.#open();
+    const nativeMap = map.nativeHandle();
+    const nativeRuntime = runtime?.nativeHandle();
+    return cooperativeWasmSearch(request, cancellation, (owned, token) => (
+      nativeRuntime == null
+        ? native.searchCancellable(nativeMap, owned, token)
+        : native.searchWithRuntimeCancellable(nativeMap, owned, nativeRuntime, token)
+    ));
+  }
+  proveSearch(map: WasmProximityMap, request: PortableSearchRequest): WasmProximitySearchProof {
+    return new WasmProximitySearchProof(
+      this.#open().proveSearch(map.nativeHandle(), ownPortableSearchRequest(request)),
+    );
+  }
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class WasmCompositeAccelerator implements Disposable {
+  #native?: any;
+  constructor(native: any) { this.#native = native; }
+  nativeHandle(): any {
+    if (this.#native == null) throw new Error("WASM composite accelerator is closed");
+    return this.#native;
+  }
+  manifest(): Uint8Array { return ownedPortableBytes(this.nativeHandle().manifest()); }
+  currentSourceDescriptor(): Uint8Array { return ownedPortableBytes(this.nativeHandle().currentSourceDescriptor()); }
+  baseSourceDescriptor(): Uint8Array { return ownedPortableBytes(this.nativeHandle().baseSourceDescriptor()); }
+  baseKind(): "hnsw" | "product_quantized" { return this.nativeHandle().baseKind(); }
+  deltaCount(): bigint { return BigInt(this.nativeHandle().deltaCount()); }
+  shadowCount(): bigint { return BigInt(this.nativeHandle().shadowCount()); }
+  config(): CompositeAcceleratorConfig { return this.nativeHandle().config(); }
+  buildStats(): CompositeBuildStats { return this.nativeHandle().buildStats(); }
+  search(map: WasmProximityMap, request: PortableSearchRequest): Promise<PortableSearchResult> {
+    const cancellation = map.cancellationToken();
+    return this.searchCancellable(map, request, cancellation).finally(() => cancellation.close());
+  }
+  searchWithRuntime(
+    map: WasmProximityMap,
+    request: PortableSearchRequest,
+    runtime: WasmProximitySearchRuntime,
+  ): Promise<PortableSearchResult> {
+    const cancellation = map.cancellationToken();
+    return this.searchCancellable(map, request, cancellation, runtime)
+      .finally(() => cancellation.close());
+  }
+  searchCancellable(
+    map: WasmProximityMap, request: PortableSearchRequest,
+    cancellation: WasmProximityCancellationToken, runtime?: WasmProximitySearchRuntime,
+  ): Promise<PortableSearchResult> {
+    const native = this.nativeHandle();
+    const nativeMap = map.nativeHandle();
+    const nativeRuntime = runtime?.nativeHandle();
+    return cooperativeWasmSearch(request, cancellation, (owned, token) => (
+      nativeRuntime == null
+        ? native.searchCancellable(nativeMap, owned, token)
+        : native.searchWithRuntimeCancellable(nativeMap, owned, nativeRuntime, token)
+    ));
+  }
+  proveSearch(map: WasmProximityMap, request: PortableSearchRequest): WasmProximitySearchProof {
+    return new WasmProximitySearchProof(this.nativeHandle().proveSearch(map.nativeHandle(), ownPortableSearchRequest(request)));
+  }
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class WasmAcceleratorCatalog implements Disposable {
+  #native?: any;
+  constructor(native: any) { this.#native = native; }
+  #open(): any { if (this.#native == null) throw new Error("WASM accelerator catalog is closed"); return this.#native; }
+  manifest(): Uint8Array { return ownedPortableBytes(this.#open().manifest()); }
+  sourceDescriptor(): Uint8Array { return ownedPortableBytes(this.#open().sourceDescriptor()); }
+  entries(): AcceleratorCatalogEntry[] { return this.#open().entries().map((entry: any) => ({
+    kind: entry.kind, configurationFingerprint: ownedPortableBytes(entry.configurationFingerprint), manifest: ownedPortableBytes(entry.manifest),
+  })); }
+  search(map: WasmProximityMap, request: PortableSearchRequest): Promise<PortableSearchResult> {
+    const cancellation = map.cancellationToken();
+    return this.searchCancellable(map, request, cancellation).finally(() => cancellation.close());
+  }
+  searchWithRuntime(
+    map: WasmProximityMap,
+    request: PortableSearchRequest,
+    runtime: WasmProximitySearchRuntime,
+  ): Promise<PortableSearchResult> {
+    const cancellation = map.cancellationToken();
+    return this.searchCancellable(map, request, cancellation, runtime)
+      .finally(() => cancellation.close());
+  }
+  searchCancellable(
+    map: WasmProximityMap, request: PortableSearchRequest,
+    cancellation: WasmProximityCancellationToken, runtime?: WasmProximitySearchRuntime,
+  ): Promise<PortableSearchResult> {
+    const native = this.#open();
+    const nativeMap = map.nativeHandle();
+    const nativeRuntime = runtime?.nativeHandle();
+    return cooperativeWasmSearch(request, cancellation, (owned, token) => (
+      nativeRuntime == null
+        ? native.searchCancellable(nativeMap, owned, token)
+        : native.searchWithRuntimeCancellable(nativeMap, owned, nativeRuntime, token)
+    ));
+  }
+  proveSearch(map: WasmProximityMap, request: PortableSearchRequest): WasmProximitySearchProof {
+    return new WasmProximitySearchProof(this.#open().proveSearch(map.nativeHandle(), ownPortableSearchRequest(request)));
   }
   close(): void { this.#native?.free?.(); this.#native = undefined; }
   [Symbol.dispose](): void { this.close(); }
@@ -1579,21 +3439,105 @@ export class WasmProximitySearchProof implements Disposable {
 
 export class WasmProximityReadSession implements Disposable {
   #native?: any;
-  constructor(native: any) { this.#native = native; }
+  #memory?: WebAssembly.Memory;
+  constructor(native: any, memory?: WebAssembly.Memory) {
+    this.#native = native;
+    this.#memory = memory;
+  }
+  cancellationToken(): WasmProximityCancellationToken {
+    if (this.#native == null) throw new Error("WASM proximity session is closed");
+    return new WasmProximityCancellationToken(this.#native.cancellationToken());
+  }
   get(key: Uint8Array): { vector: Float32Array; value: Uint8Array } | undefined {
     if (this.#native == null) throw new Error("WASM proximity session is closed");
     return this.#native.get(ownedPortableBytes(key)) ?? undefined;
+  }
+  withRecordView(key: Uint8Array, visitor: (record: WasmProximityRecordView) => void): boolean {
+    if (this.#native == null) throw new Error("WASM proximity session is closed");
+    if (typeof visitor !== "function") throw new TypeError("proximity record visitor must be a function");
+    const scope = { alive: true };
+    try {
+      return this.#native.withRecordView(ownedPortableBytes(key), (raw: Uint8Array) => {
+        visitor(decodeWasmProximityRecordView(raw, scope, this.#memory));
+      });
+    } finally { scope.alive = false; }
   }
   contains(key: Uint8Array): boolean {
     if (this.#native == null) throw new Error("WASM proximity session is closed");
     return this.#native.contains(ownedPortableBytes(key));
   }
+  scanRecords(visitor: (record: PortableProximityRecord) => boolean): bigint {
+    if (this.#native == null) throw new Error("WASM proximity session is closed");
+    return BigInt(this.#native.scanRecords((record: PortableProximityRecord) => visitor({
+      key: ownedPortableBytes(record.key),
+      vector: new Float32Array(record.vector),
+      value: ownedPortableBytes(record.value ?? new Uint8Array()),
+    })));
+  }
+  scanRecordViews(
+    start: Uint8Array,
+    end: Uint8Array | undefined,
+    visitor: (record: WasmProximityScanRecordView) => boolean,
+  ): { visited: bigint; stopped: boolean } {
+    if (this.#native == null) throw new Error("WASM proximity session is closed");
+    return scanWasmProximityRecordViews(this.#native, this.#memory, start, end, visitor);
+  }
+  withSearchView<R>(
+    query: Float32Array,
+    k: number,
+    visitor: (neighbors: PortableNeighborView[]) => R,
+  ): R {
+    if (this.#native == null) throw new Error("WASM proximity session is closed");
+    if (!Number.isSafeInteger(k) || k <= 0 || k > 0xffff_ffff) {
+      throw new RangeError("k must be a positive unsigned 32-bit integer");
+    }
+    const scope = { alive: true };
+    try {
+      return this.#native.withSearchView(
+        new Float32Array(query),
+        k,
+        (rows: Array<{ key: Uint8Array; value: Uint8Array; distance: number; rank: number }>) =>
+          visitor(rows.map((row) => ({
+            key: scopedPortableBytes(row.key, scope, this.#memory),
+            value: scopedPortableBytes(row.value, scope, this.#memory),
+            distance: row.distance,
+            rank: row.rank,
+          }))),
+      ) as R;
+    } finally {
+      scope.alive = false;
+    }
+  }
   search(request: PortableSearchRequest): Promise<PortableSearchResult> {
     if (this.#native == null) return Promise.reject(new Error("WASM proximity session is closed"));
-    const native = this.#native;
-    const vector = new Float32Array(request.vector);
-    return portablePromise(request.signal, () => native.search(vector, request.topK));
+    const cancellation = this.cancellationToken();
+    return this.searchCancellable(request, cancellation).finally(() => cancellation.close());
   }
-  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  searchWithRuntime(
+    request: PortableSearchRequest,
+    runtime: WasmProximitySearchRuntime,
+  ): Promise<PortableSearchResult> {
+    if (this.#native == null) {
+      return Promise.reject(new Error("WASM proximity session is closed"));
+    }
+    const cancellation = this.cancellationToken();
+    return this.searchCancellable(request, cancellation, runtime)
+      .finally(() => cancellation.close());
+  }
+  searchCancellable(
+    request: PortableSearchRequest,
+    cancellation: WasmProximityCancellationToken,
+    runtime?: WasmProximitySearchRuntime,
+  ): Promise<PortableSearchResult> {
+    if (this.#native == null) return Promise.reject(new Error("WASM proximity session is closed"));
+    const native = this.#native;
+    const nativeRuntime = runtime?.nativeHandle();
+    return cooperativeWasmSearch(request, cancellation, (owned, token) => (
+      nativeRuntime == null
+        ? native.searchCancellable(owned, token)
+        : native.searchWithRuntimeCancellable(owned, nativeRuntime, token)
+    ));
+  }
+  close(): void { this.#native?.free?.(); this.#native = undefined; this.#memory = undefined; }
   [Symbol.dispose](): void { this.close(); }
 }

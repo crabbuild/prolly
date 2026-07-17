@@ -44,6 +44,30 @@ mod tests {
             .search(ProximitySearchRequestRecord::exact(vec![0.1, 0.1], 1))
             .unwrap();
         assert_eq!(result.neighbors[0].key, b"a");
+        let runtime = engine
+            .proximity_search_runtime(default_proximity_search_runtime_policy())
+            .unwrap();
+        assert_eq!(
+            map.search_with_runtime(
+                ProximitySearchRequestRecord::exact(vec![0.1, 0.1], 1),
+                runtime.clone(),
+            )
+            .unwrap()
+            .neighbors[0]
+                .key,
+            b"a"
+        );
+        assert_eq!(
+            session
+                .search_with_runtime(
+                    ProximitySearchRequestRecord::exact(vec![0.1, 0.1], 1),
+                    runtime,
+                )
+                .unwrap()
+                .neighbors[0]
+                .key,
+            b"a"
+        );
         let updated = map
             .mutate(vec![ProximityMutationRecord {
                 key: b"a".to_vec(),
@@ -99,20 +123,430 @@ mod tests {
         assert_eq!(parsed["packed_page"]["kind"], 7);
         assert_eq!(parsed["packed_page"]["distance"], "f64-le");
     }
+
+    #[test]
+    fn hnsw_accelerator_lifecycle_is_portable_and_source_bound() {
+        let engine = Arc::new(ProllyEngine::memory(default_config()).unwrap());
+        let records = (0..16)
+            .map(|index| ProximityRecordRecord {
+                key: format!("vector-{index:02}").into_bytes(),
+                vector: vec![index as f32, 0.0],
+                value: format!("value-{index:02}").into_bytes(),
+            })
+            .collect();
+        let map = engine
+            .build_proximity_map(ProximityConfigRecord::new(2), records, None)
+            .unwrap();
+        let built = map
+            .build_hnsw(default_hnsw_config(), default_hnsw_build_limits())
+            .unwrap();
+        assert_eq!(built.stats.records, 16);
+        assert!(built.index.is_canonical());
+        assert_eq!(built.index.source_descriptor(), map.descriptor());
+
+        let mut request = ProximitySearchRequestRecord::exact(vec![0.0, 0.0], 3);
+        request.policy = SearchPolicyKind::FixedBudget;
+        request.backend = SearchBackendRecord::Hnsw;
+        let result = built.index.search(map.clone(), request.clone()).unwrap();
+        assert_eq!(result.backend, SearchBackendRecord::Hnsw);
+        assert_eq!(result.neighbors[0].key, b"vector-00");
+        let proof = built
+            .index
+            .prove_search(map.clone(), request, ContentGraphLimitsRecord::defaults())
+            .unwrap();
+        assert_eq!(
+            proof
+                .verify(Some(map.descriptor()), ContentGraphLimitsRecord::defaults())
+                .unwrap()
+                .result
+                .backend,
+            SearchBackendRecord::Hnsw
+        );
+        let loaded = map.load_hnsw(built.index.manifest()).unwrap();
+        assert_eq!(loaded.manifest(), built.index.manifest());
+    }
+
+    #[test]
+    fn pq_accelerator_lifecycle_is_portable_bounded_and_source_bound() {
+        let engine = Arc::new(ProllyEngine::memory(default_config()).unwrap());
+        let records = (0..16)
+            .map(|index| ProximityRecordRecord {
+                key: format!("vector-{index:02}").into_bytes(),
+                vector: vec![index as f32, (index % 3) as f32, 0.0, 1.0],
+                value: format!("value-{index:02}").into_bytes(),
+            })
+            .collect();
+        let map = engine
+            .build_proximity_map(ProximityConfigRecord::new(4), records, None)
+            .unwrap();
+        let config = ProductQuantizationConfigRecord {
+            subquantizers: 2,
+            centroids_per_subquantizer: 4,
+            training_iterations: 2,
+            rerank_multiplier: 4,
+            seed: u64::MAX,
+            max_training_vectors: 16,
+        };
+        let built = map
+            .build_pq(config.clone(), 2, default_pq_build_limits())
+            .unwrap();
+        assert_eq!(built.stats.encoded_vectors, 16);
+        assert_eq!(built.index.config(), config);
+        assert_eq!(built.index.source_descriptor(), map.descriptor());
+        assert!(built.index.quality().mean_squared_error.is_finite());
+
+        let mut request = ProximitySearchRequestRecord::exact(vec![0.0, 0.0, 0.0, 1.0], 3);
+        request.policy = SearchPolicyKind::FixedBudget;
+        request.backend = SearchBackendRecord::ProductQuantized;
+        let result = built.index.search(map.clone(), request.clone()).unwrap();
+        assert_eq!(result.backend, SearchBackendRecord::ProductQuantized);
+        assert_eq!(result.neighbors[0].key, b"vector-00");
+        let runtime = engine
+            .proximity_search_runtime(default_proximity_search_runtime_policy())
+            .unwrap();
+        assert_eq!(
+            built
+                .index
+                .search_with_runtime(map.clone(), request.clone(), runtime.clone())
+                .unwrap()
+                .backend,
+            SearchBackendRecord::ProductQuantized
+        );
+        let cancellation = Arc::new(BindingProximityCancellationToken::new());
+        cancellation.cancel();
+        assert_eq!(
+            built
+                .index
+                .search_cancellable(map.clone(), request.clone(), Some(runtime), cancellation)
+                .unwrap()
+                .completion,
+            SearchCompletionRecord::Cancelled
+        );
+        let proof = built
+            .index
+            .prove_search(map.clone(), request, ContentGraphLimitsRecord::defaults())
+            .unwrap();
+        assert_eq!(
+            proof
+                .verify(Some(map.descriptor()), ContentGraphLimitsRecord::defaults())
+                .unwrap()
+                .result
+                .backend,
+            SearchBackendRecord::ProductQuantized
+        );
+        let loaded = map.load_pq(built.index.manifest()).unwrap();
+        assert_eq!(loaded.manifest(), built.index.manifest());
+    }
+
+    #[test]
+    fn retained_search_runtime_reuses_validated_content_and_is_engine_bound() {
+        let engine = Arc::new(ProllyEngine::memory(default_config()).unwrap());
+        let records = (0..16)
+            .map(|index| ProximityRecordRecord {
+                key: format!("vector-{index:02}").into_bytes(),
+                vector: vec![index as f32, 0.0],
+                value: format!("value-{index:02}").into_bytes(),
+            })
+            .collect();
+        let map = engine
+            .build_proximity_map(ProximityConfigRecord::new(2), records, None)
+            .unwrap();
+        let hnsw = map
+            .build_hnsw(default_hnsw_config(), default_hnsw_build_limits())
+            .unwrap()
+            .index;
+        let policy = default_proximity_search_runtime_policy();
+        let runtime = engine.proximity_search_runtime(policy.clone()).unwrap();
+        assert_eq!(runtime.policy(), policy);
+        assert_eq!(runtime.stats().physical_reads, 0);
+
+        let mut request = ProximitySearchRequestRecord::exact(vec![0.0, 0.0], 3);
+        request.policy = SearchPolicyKind::FixedBudget;
+        request.backend = SearchBackendRecord::Hnsw;
+        let cold = hnsw
+            .search_with_runtime(map.clone(), request.clone(), runtime.clone())
+            .unwrap();
+        assert!(cold.stats.physical_bytes_read > 0);
+        let cold_stats = runtime.stats();
+        assert!(cold_stats.physical_reads > 0);
+        assert!(cold_stats.physical_bytes_read > 0);
+
+        let warm = hnsw
+            .search_with_runtime(map.clone(), request.clone(), runtime.clone())
+            .unwrap();
+        assert_eq!(warm.neighbors, cold.neighbors);
+        assert_eq!(warm.stats.physical_bytes_read, 0);
+        assert_eq!(runtime.stats(), cold_stats);
+
+        runtime.clear();
+        let after_clear = hnsw
+            .search_with_runtime(map.clone(), request.clone(), runtime.clone())
+            .unwrap();
+        assert!(after_clear.stats.physical_bytes_read > 0);
+        assert!(runtime.stats().physical_reads > cold_stats.physical_reads);
+
+        let other_engine = Arc::new(ProllyEngine::memory(default_config()).unwrap());
+        let foreign_runtime = other_engine
+            .proximity_search_runtime(default_proximity_search_runtime_policy())
+            .unwrap();
+        assert!(hnsw
+            .search_with_runtime(map, request, foreign_runtime)
+            .is_err());
+
+        let mut invalid = default_proximity_search_runtime_policy();
+        invalid.max_entries = 0;
+        assert!(engine.proximity_search_runtime(invalid).is_err());
+    }
+
+    #[test]
+    fn portable_proximity_cancellation_reaches_the_native_search_loop() {
+        let engine = Arc::new(ProllyEngine::memory(default_config()).unwrap());
+        let records = (0u64..256)
+            .map(|index| ProximityRecordRecord {
+                key: format!("vector-{index:04}").into_bytes(),
+                vector: vec![index as f32, (index % 7) as f32],
+                value: index.to_le_bytes().to_vec(),
+            })
+            .collect();
+        let map = engine
+            .build_proximity_map(ProximityConfigRecord::new(2), records, None)
+            .unwrap();
+        let runtime = engine
+            .proximity_search_runtime(default_proximity_search_runtime_policy())
+            .unwrap();
+        let cancellation = Arc::new(BindingProximityCancellationToken::new());
+        assert!(!cancellation.is_cancelled());
+        cancellation.cancel();
+        assert!(cancellation.is_cancelled());
+
+        let result = map
+            .search_cancellable(
+                ProximitySearchRequestRecord::exact(vec![0.0, 0.0], 10),
+                Some(runtime.clone()),
+                cancellation.clone(),
+            )
+            .unwrap();
+        assert_eq!(result.completion, SearchCompletionRecord::Cancelled);
+        assert!(result.neighbors.is_empty());
+
+        let session = map.read_session().unwrap();
+        let session_result = session
+            .search_cancellable(
+                ProximitySearchRequestRecord::exact(vec![0.0, 0.0], 10),
+                Some(runtime.clone()),
+                cancellation.clone(),
+            )
+            .unwrap();
+        assert_eq!(session_result.completion, SearchCompletionRecord::Cancelled);
+        assert!(session_result.neighbors.is_empty());
+
+        let hnsw = map
+            .build_hnsw(default_hnsw_config(), default_hnsw_build_limits())
+            .unwrap()
+            .index;
+        let mut hnsw_request = ProximitySearchRequestRecord::exact(vec![0.0, 0.0], 10);
+        hnsw_request.policy = SearchPolicyKind::FixedBudget;
+        hnsw_request.backend = SearchBackendRecord::Hnsw;
+        let hnsw_result = hnsw
+            .search_cancellable(map, hnsw_request, Some(runtime), cancellation)
+            .unwrap();
+        assert_eq!(hnsw_result.completion, SearchCompletionRecord::Cancelled);
+        assert!(hnsw_result.neighbors.is_empty());
+    }
+
+    #[test]
+    fn composite_and_catalog_lifecycle_is_portable_bounded_and_source_bound() {
+        let engine = Arc::new(ProllyEngine::memory(default_config()).unwrap());
+        let records = (0..16)
+            .map(|index| ProximityRecordRecord {
+                key: format!("vector-{index:02}").into_bytes(),
+                vector: vec![index as f32, 0.0],
+                value: format!("value-{index:02}").into_bytes(),
+            })
+            .collect();
+        let base = engine
+            .build_proximity_map(ProximityConfigRecord::new(2), records, None)
+            .unwrap();
+        let hnsw = base
+            .build_hnsw(default_hnsw_config(), default_hnsw_build_limits())
+            .unwrap()
+            .index;
+        let current = base
+            .mutate(vec![ProximityMutationRecord {
+                key: b"vector-00".to_vec(),
+                vector: Some(vec![0.25, 0.0]),
+                value: Some(b"updated".to_vec()),
+            }])
+            .unwrap()
+            .map;
+        let outcome = current
+            .build_composite_hnsw(
+                base.clone(),
+                hnsw.clone(),
+                default_composite_accelerator_config(),
+                default_composite_build_limits(),
+            )
+            .unwrap();
+        assert!(outcome.reasons.is_empty());
+        assert_eq!(outcome.stats.vector_updated_records, 1);
+        let composite = outcome.accelerator.unwrap();
+        assert_eq!(composite.current_source_descriptor(), current.descriptor());
+        assert_eq!(composite.base_source_descriptor(), base.descriptor());
+        assert_eq!(composite.base_kind(), CompositeBaseKindRecord::Hnsw);
+        assert_eq!(composite.delta_count(), 1);
+        assert_eq!(composite.shadow_count(), 1);
+
+        let mut request = ProximitySearchRequestRecord::exact(vec![0.0, 0.0], 3);
+        request.policy = SearchPolicyKind::FixedBudget;
+        request.backend = SearchBackendRecord::Composite;
+        assert_eq!(
+            composite
+                .search(current.clone(), request.clone())
+                .unwrap()
+                .backend,
+            SearchBackendRecord::Composite
+        );
+        let runtime = engine
+            .proximity_search_runtime(default_proximity_search_runtime_policy())
+            .unwrap();
+        assert_eq!(
+            composite
+                .search_with_runtime(current.clone(), request.clone(), runtime.clone())
+                .unwrap()
+                .backend,
+            SearchBackendRecord::Composite
+        );
+        let cancellation = Arc::new(BindingProximityCancellationToken::new());
+        cancellation.cancel();
+        assert_eq!(
+            composite
+                .search_cancellable(
+                    current.clone(),
+                    request.clone(),
+                    Some(runtime.clone()),
+                    cancellation.clone(),
+                )
+                .unwrap()
+                .completion,
+            SearchCompletionRecord::Cancelled
+        );
+        let proof = composite
+            .prove_search(
+                current.clone(),
+                request.clone(),
+                ContentGraphLimitsRecord::defaults(),
+            )
+            .unwrap();
+        assert_eq!(
+            proof
+                .verify(
+                    Some(current.descriptor()),
+                    ContentGraphLimitsRecord::defaults(),
+                )
+                .unwrap()
+                .result
+                .backend,
+            SearchBackendRecord::Composite
+        );
+        let loaded_composite = current.load_composite(composite.manifest()).unwrap();
+        assert_eq!(loaded_composite.manifest(), composite.manifest());
+
+        let catalog = current
+            .build_accelerator_catalog(None, None, Some(composite.clone()))
+            .unwrap();
+        assert_eq!(catalog.source_descriptor(), current.descriptor());
+        assert_eq!(catalog.entries().len(), 1);
+        assert_eq!(
+            catalog.entries()[0].kind,
+            CatalogAcceleratorKindRecord::Composite
+        );
+        assert_eq!(
+            catalog
+                .search(current.clone(), request.clone())
+                .unwrap()
+                .backend,
+            SearchBackendRecord::Composite
+        );
+        assert_eq!(
+            catalog
+                .search_with_runtime(current.clone(), request.clone(), runtime.clone())
+                .unwrap()
+                .backend,
+            SearchBackendRecord::Composite
+        );
+        assert_eq!(
+            catalog
+                .search_cancellable(
+                    current.clone(),
+                    request.clone(),
+                    Some(runtime),
+                    cancellation,
+                )
+                .unwrap()
+                .completion,
+            SearchCompletionRecord::Cancelled
+        );
+        assert_eq!(
+            catalog
+                .prove_search(
+                    current.clone(),
+                    request,
+                    ContentGraphLimitsRecord::defaults(),
+                )
+                .unwrap()
+                .verify(
+                    Some(current.descriptor()),
+                    ContentGraphLimitsRecord::defaults(),
+                )
+                .unwrap()
+                .result
+                .backend,
+            SearchBackendRecord::Composite
+        );
+        let loaded_catalog = current
+            .load_accelerator_catalog(catalog.manifest())
+            .unwrap();
+        assert_eq!(loaded_catalog.manifest(), catalog.manifest());
+
+        let mut forced = default_composite_accelerator_config();
+        forced.max_delta_records = 0;
+        let rebuilt = current
+            .build_or_rebuild_composite_hnsw(
+                base,
+                hnsw,
+                forced,
+                default_composite_build_limits(),
+                default_composite_rebuild_options(),
+            )
+            .unwrap();
+        assert_eq!(rebuilt.kind, CompositeBuildOrRebuildKindRecord::HnswRebuilt);
+        assert!(rebuilt.hnsw.is_some());
+        assert!(!rebuilt.reasons.is_empty());
+    }
 }
+use std::future::Future;
 use std::ops::ControlFlow;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::task::{Context, Poll, Wake, Waker};
 
 use prolly::{
-    AdaptiveQuality, BuildParallelism, ContentGraphLimits, ContentObjectKind, DistanceMetric,
-    HierarchyConfig, HnswSearchOptions, Neighbor, OverflowConfig, PlannerPolicy, PqSearchOptions,
-    ProximityConfig, ProximityFilter, ProximityMap, ProximityMembershipProof, ProximityMutation,
-    ProximityMutationStats, ProximityRecord, ProximitySearchClaim, ProximitySearchProof,
-    ProximitySearchStats, ProximityStructuralProof, ProximityVerification, QueryKernel,
-    ScalarQuantizationConfig, SearchBackend, SearchBudget, SearchCompletion, SearchOptions,
-    SearchPolicy, SearchRequest, SearchResult, TypedContentObject, TypedContentRoot,
-    VectorStorageConfig,
+    AcceleratorCatalog, AcceleratorCatalogEntry, AcceleratorSet, AdaptiveQuality,
+    AsyncAcceleratorCatalog, AsyncAcceleratorSet, AsyncCompositeAccelerator, AsyncHnswIndex,
+    AsyncProductQuantizer, AsyncProximityMap, AsyncSearchControl, BuildParallelism,
+    CancellationToken, CatalogAcceleratorKind, CompositeAccelerator, CompositeAcceleratorConfig,
+    CompositeBase, CompositeBaseKind, CompositeBuildLimits, CompositeBuildOrRebuildOutcome,
+    CompositeBuildOutcome, CompositeBuildStats, CompositeRebuildOptions, ContentGraphLimits,
+    ContentObjectKind, DistanceMetric, FullRebuildReason, HierarchyConfig, HnswBuildLimits,
+    HnswBuildStats, HnswConfig, HnswIndex, HnswRoutingVectorEncoding, HnswSearchOptions, Neighbor,
+    OverflowConfig, PlannerPolicy, PqSearchOptions, ProductQuantizationBuildLimits,
+    ProductQuantizationBuildStats, ProductQuantizationConfig, ProductQuantizationQuality,
+    ProductQuantizer, ProximityConfig, ProximityFilter, ProximityMap, ProximityMembershipProof,
+    ProximityMutation, ProximityMutationStats, ProximityRecord, ProximitySearchClaim,
+    ProximitySearchProof, ProximitySearchStats, ProximityStructuralProof, ProximityVerification,
+    QueryKernel, ScalarQuantizationConfig, SearchBackend, SearchBudget, SearchCompletion, SearchIo,
+    SearchOptions, SearchPolicy, SearchRequest, SearchResult, SearchRuntime, SearchRuntimePolicy,
+    Store, SyncStoreAsAsync, TypedContentObject, TypedContentRoot, VectorStorageConfig,
 };
 
 use crate::{BindingEngine, KeyProofRecord, ProllyBindingError, ProllyEngine};
@@ -679,6 +1113,50 @@ pub struct ProximityNeighborRecord {
     pub distance: f64,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct ProximitySearchRuntimePolicyRecord {
+    pub max_entries: u64,
+    pub max_bytes: u64,
+    pub authoritative_max_bytes: u64,
+    pub hnsw_max_bytes: u64,
+    pub pq_max_bytes: u64,
+}
+
+impl From<SearchRuntimePolicy> for ProximitySearchRuntimePolicyRecord {
+    fn from(value: SearchRuntimePolicy) -> Self {
+        Self {
+            max_entries: value.max_entries as u64,
+            max_bytes: value.max_bytes as u64,
+            authoritative_max_bytes: value.authoritative_max_bytes as u64,
+            hnsw_max_bytes: value.hnsw_max_bytes as u64,
+            pq_max_bytes: value.pq_max_bytes as u64,
+        }
+    }
+}
+
+impl TryFrom<ProximitySearchRuntimePolicyRecord> for SearchRuntimePolicy {
+    type Error = ProllyBindingError;
+
+    fn try_from(value: ProximitySearchRuntimePolicyRecord) -> Result<Self, Self::Error> {
+        Ok(Self {
+            max_entries: to_usize(value.max_entries, "max_entries")?,
+            max_bytes: to_usize(value.max_bytes, "max_bytes")?,
+            authoritative_max_bytes: to_usize(
+                value.authoritative_max_bytes,
+                "authoritative_max_bytes",
+            )?,
+            hnsw_max_bytes: to_usize(value.hnsw_max_bytes, "hnsw_max_bytes")?,
+            pq_max_bytes: to_usize(value.pq_max_bytes, "pq_max_bytes")?,
+        })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct ProximitySearchRuntimeStatsRecord {
+    pub physical_reads: u64,
+    pub physical_bytes_read: u64,
+}
+
 impl From<Neighbor> for ProximityNeighborRecord {
     fn from(value: Neighbor) -> Self {
         Self {
@@ -750,6 +1228,455 @@ pub struct ProximitySearchResultRecord {
     pub completion: SearchCompletionRecord,
     pub backend: SearchBackendRecord,
     pub plan_format_version: u8,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, uniffi::Enum)]
+pub enum HnswRoutingVectorEncodingRecord {
+    FullF32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct HnswConfigRecord {
+    pub max_connections: u16,
+    pub ef_construction: u32,
+    pub ef_search: u32,
+    pub level_bits: u8,
+    pub overfetch_multiplier: u32,
+    pub seed: u64,
+    pub routing_vector_encoding: HnswRoutingVectorEncodingRecord,
+}
+
+impl From<HnswConfig> for HnswConfigRecord {
+    fn from(value: HnswConfig) -> Self {
+        Self {
+            max_connections: value.max_connections,
+            ef_construction: value.ef_construction,
+            ef_search: value.ef_search,
+            level_bits: value.level_bits,
+            overfetch_multiplier: value.overfetch_multiplier,
+            seed: value.seed,
+            routing_vector_encoding: HnswRoutingVectorEncodingRecord::FullF32,
+        }
+    }
+}
+
+impl From<HnswConfigRecord> for HnswConfig {
+    fn from(value: HnswConfigRecord) -> Self {
+        let routing_vector_encoding = match value.routing_vector_encoding {
+            HnswRoutingVectorEncodingRecord::FullF32 => HnswRoutingVectorEncoding::FullF32,
+        };
+        Self {
+            max_connections: value.max_connections,
+            ef_construction: value.ef_construction,
+            ef_search: value.ef_search,
+            level_bits: value.level_bits,
+            overfetch_multiplier: value.overfetch_multiplier,
+            seed: value.seed,
+            routing_vector_encoding,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct HnswBuildLimitsRecord {
+    pub max_records: Option<u64>,
+    pub max_owned_bytes: Option<u64>,
+    pub max_distance_evaluations: Option<u64>,
+    pub worker_threads: u64,
+    pub max_encoded_graph_bytes: Option<u64>,
+}
+
+impl TryFrom<HnswBuildLimitsRecord> for HnswBuildLimits {
+    type Error = ProllyBindingError;
+
+    fn try_from(value: HnswBuildLimitsRecord) -> Result<Self, Self::Error> {
+        Ok(Self {
+            max_records: optional_usize(value.max_records, "max_records")?,
+            max_owned_bytes: optional_usize(value.max_owned_bytes, "max_owned_bytes")?,
+            max_distance_evaluations: optional_usize(
+                value.max_distance_evaluations,
+                "max_distance_evaluations",
+            )?,
+            worker_threads: to_usize(value.worker_threads, "worker_threads")?,
+            max_encoded_graph_bytes: optional_usize(
+                value.max_encoded_graph_bytes,
+                "max_encoded_graph_bytes",
+            )?,
+        })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct HnswBuildStatsRecord {
+    pub records: u64,
+    pub distance_evaluations: u64,
+    pub directed_edges: u64,
+    pub maximum_level: u8,
+    pub owned_bytes: u64,
+    pub encoded_graph_bytes: u64,
+}
+
+impl From<HnswBuildStats> for HnswBuildStatsRecord {
+    fn from(value: HnswBuildStats) -> Self {
+        Self {
+            records: value.records as u64,
+            distance_evaluations: value.distance_evaluations as u64,
+            directed_edges: value.directed_edges as u64,
+            maximum_level: value.maximum_level,
+            owned_bytes: value.owned_bytes as u64,
+            encoded_graph_bytes: value.encoded_graph_bytes as u64,
+        }
+    }
+}
+
+#[uniffi::export]
+pub fn default_hnsw_config() -> HnswConfigRecord {
+    HnswConfig::default().into()
+}
+
+#[uniffi::export]
+pub fn default_hnsw_build_limits() -> HnswBuildLimitsRecord {
+    let value = HnswBuildLimits::default();
+    HnswBuildLimitsRecord {
+        max_records: value.max_records.map(|value| value as u64),
+        max_owned_bytes: value.max_owned_bytes.map(|value| value as u64),
+        max_distance_evaluations: value.max_distance_evaluations.map(|value| value as u64),
+        worker_threads: value.worker_threads as u64,
+        max_encoded_graph_bytes: value.max_encoded_graph_bytes.map(|value| value as u64),
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct ProductQuantizationConfigRecord {
+    pub subquantizers: u32,
+    pub centroids_per_subquantizer: u16,
+    pub training_iterations: u16,
+    pub rerank_multiplier: u32,
+    pub seed: u64,
+    pub max_training_vectors: u64,
+}
+
+impl TryFrom<ProductQuantizationConfigRecord> for ProductQuantizationConfig {
+    type Error = ProllyBindingError;
+
+    fn try_from(value: ProductQuantizationConfigRecord) -> Result<Self, Self::Error> {
+        Ok(Self {
+            subquantizers: value.subquantizers,
+            centroids_per_subquantizer: value.centroids_per_subquantizer,
+            training_iterations: value.training_iterations,
+            rerank_multiplier: value.rerank_multiplier,
+            seed: value.seed,
+            max_training_vectors: to_usize(value.max_training_vectors, "max_training_vectors")?,
+        })
+    }
+}
+
+impl From<ProductQuantizationConfig> for ProductQuantizationConfigRecord {
+    fn from(value: ProductQuantizationConfig) -> Self {
+        Self {
+            subquantizers: value.subquantizers,
+            centroids_per_subquantizer: value.centroids_per_subquantizer,
+            training_iterations: value.training_iterations,
+            rerank_multiplier: value.rerank_multiplier,
+            seed: value.seed,
+            max_training_vectors: value.max_training_vectors as u64,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct ProductQuantizationBuildLimitsRecord {
+    pub max_training_vectors: Option<u64>,
+    pub max_training_bytes: Option<u64>,
+    pub max_temporary_code_bytes: Option<u64>,
+    pub max_distance_evaluations: Option<u64>,
+    pub max_encoded_output_bytes: Option<u64>,
+    pub max_worker_threads: Option<u64>,
+}
+
+impl TryFrom<ProductQuantizationBuildLimitsRecord> for ProductQuantizationBuildLimits {
+    type Error = ProllyBindingError;
+
+    fn try_from(value: ProductQuantizationBuildLimitsRecord) -> Result<Self, Self::Error> {
+        Ok(Self {
+            max_training_vectors: optional_usize(
+                value.max_training_vectors,
+                "max_training_vectors",
+            )?,
+            max_training_bytes: optional_usize(value.max_training_bytes, "max_training_bytes")?,
+            max_temporary_code_bytes: optional_usize(
+                value.max_temporary_code_bytes,
+                "max_temporary_code_bytes",
+            )?,
+            max_distance_evaluations: optional_usize(
+                value.max_distance_evaluations,
+                "max_distance_evaluations",
+            )?,
+            max_encoded_output_bytes: optional_usize(
+                value.max_encoded_output_bytes,
+                "max_encoded_output_bytes",
+            )?,
+            max_worker_threads: optional_usize(value.max_worker_threads, "max_worker_threads")?,
+        })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct ProductQuantizationBuildStatsRecord {
+    pub training_distance_evaluations: u64,
+    pub encoding_distance_evaluations: u64,
+    pub encoded_vectors: u64,
+    pub training_vectors: u64,
+    pub training_bytes: u64,
+    pub encoded_output_bytes: u64,
+}
+
+impl From<ProductQuantizationBuildStats> for ProductQuantizationBuildStatsRecord {
+    fn from(value: ProductQuantizationBuildStats) -> Self {
+        Self {
+            training_distance_evaluations: value.training_distance_evaluations as u64,
+            encoding_distance_evaluations: value.encoding_distance_evaluations as u64,
+            encoded_vectors: value.encoded_vectors as u64,
+            training_vectors: value.training_vectors as u64,
+            training_bytes: value.training_bytes as u64,
+            encoded_output_bytes: value.encoded_output_bytes as u64,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, uniffi::Record)]
+pub struct ProductQuantizationQualityRecord {
+    pub mean_squared_error: f64,
+    pub maximum_squared_error: f64,
+}
+
+impl From<ProductQuantizationQuality> for ProductQuantizationQualityRecord {
+    fn from(value: ProductQuantizationQuality) -> Self {
+        Self {
+            mean_squared_error: value.mean_squared_error,
+            maximum_squared_error: value.maximum_squared_error,
+        }
+    }
+}
+
+#[uniffi::export]
+pub fn default_pq_config() -> ProductQuantizationConfigRecord {
+    ProductQuantizationConfig::default().into()
+}
+
+#[uniffi::export]
+pub fn default_pq_build_limits() -> ProductQuantizationBuildLimitsRecord {
+    let value = ProductQuantizationBuildLimits::default();
+    ProductQuantizationBuildLimitsRecord {
+        max_training_vectors: value.max_training_vectors.map(|value| value as u64),
+        max_training_bytes: value.max_training_bytes.map(|value| value as u64),
+        max_temporary_code_bytes: value.max_temporary_code_bytes.map(|value| value as u64),
+        max_distance_evaluations: value.max_distance_evaluations.map(|value| value as u64),
+        max_encoded_output_bytes: value.max_encoded_output_bytes.map(|value| value as u64),
+        max_worker_threads: value.max_worker_threads.map(|value| value as u64),
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, uniffi::Enum)]
+pub enum CompositeBaseKindRecord {
+    Hnsw,
+    ProductQuantized,
+}
+
+impl From<CompositeBaseKind> for CompositeBaseKindRecord {
+    fn from(value: CompositeBaseKind) -> Self {
+        match value {
+            CompositeBaseKind::Hnsw => Self::Hnsw,
+            CompositeBaseKind::ProductQuantized => Self::ProductQuantized,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct CompositeAcceleratorConfigRecord {
+    pub max_delta_records: u64,
+    pub max_shadow_records: u64,
+    pub max_delta_ratio_ppm: u32,
+    pub max_shadow_ratio_ppm: u32,
+    pub base_overfetch_multiplier: u32,
+}
+
+impl TryFrom<CompositeAcceleratorConfigRecord> for CompositeAcceleratorConfig {
+    type Error = ProllyBindingError;
+
+    fn try_from(value: CompositeAcceleratorConfigRecord) -> Result<Self, Self::Error> {
+        Ok(Self {
+            max_delta_records: to_usize(value.max_delta_records, "max_delta_records")?,
+            max_shadow_records: to_usize(value.max_shadow_records, "max_shadow_records")?,
+            max_delta_ratio_ppm: value.max_delta_ratio_ppm,
+            max_shadow_ratio_ppm: value.max_shadow_ratio_ppm,
+            base_overfetch_multiplier: value.base_overfetch_multiplier,
+        })
+    }
+}
+
+impl From<CompositeAcceleratorConfig> for CompositeAcceleratorConfigRecord {
+    fn from(value: CompositeAcceleratorConfig) -> Self {
+        Self {
+            max_delta_records: value.max_delta_records as u64,
+            max_shadow_records: value.max_shadow_records as u64,
+            max_delta_ratio_ppm: value.max_delta_ratio_ppm,
+            max_shadow_ratio_ppm: value.max_shadow_ratio_ppm,
+            base_overfetch_multiplier: value.base_overfetch_multiplier,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct CompositeBuildLimitsRecord {
+    pub max_diff_entries: Option<u64>,
+    pub max_owned_bytes: Option<u64>,
+    pub max_encoded_output_bytes: Option<u64>,
+    pub max_distance_evaluations: Option<u64>,
+}
+
+impl TryFrom<CompositeBuildLimitsRecord> for CompositeBuildLimits {
+    type Error = ProllyBindingError;
+
+    fn try_from(value: CompositeBuildLimitsRecord) -> Result<Self, Self::Error> {
+        Ok(Self {
+            max_diff_entries: optional_usize(value.max_diff_entries, "max_diff_entries")?,
+            max_owned_bytes: optional_usize(value.max_owned_bytes, "max_owned_bytes")?,
+            max_encoded_output_bytes: optional_usize(
+                value.max_encoded_output_bytes,
+                "max_encoded_output_bytes",
+            )?,
+            max_distance_evaluations: optional_usize(
+                value.max_distance_evaluations,
+                "max_distance_evaluations",
+            )?,
+        })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct CompositeBuildStatsRecord {
+    pub diff_entries: u64,
+    pub inserted_records: u64,
+    pub vector_updated_records: u64,
+    pub value_only_records: u64,
+    pub deleted_records: u64,
+    pub delta_records: u64,
+    pub shadow_records: u64,
+    pub owned_bytes_peak: u64,
+    pub encoded_output_bytes: u64,
+    pub distance_evaluations: u64,
+}
+
+impl From<CompositeBuildStats> for CompositeBuildStatsRecord {
+    fn from(value: CompositeBuildStats) -> Self {
+        Self {
+            diff_entries: value.diff_entries as u64,
+            inserted_records: value.inserted_records as u64,
+            vector_updated_records: value.vector_updated_records as u64,
+            value_only_records: value.value_only_records as u64,
+            deleted_records: value.deleted_records as u64,
+            delta_records: value.delta_records as u64,
+            shadow_records: value.shadow_records as u64,
+            owned_bytes_peak: value.owned_bytes_peak as u64,
+            encoded_output_bytes: value.encoded_output_bytes as u64,
+            distance_evaluations: value.distance_evaluations as u64,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, uniffi::Enum)]
+pub enum FullRebuildReasonKindRecord {
+    DeltaRecords,
+    ShadowRecords,
+    DeltaRatio,
+    ShadowRatio,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct FullRebuildReasonRecord {
+    pub kind: FullRebuildReasonKindRecord,
+    pub actual: u64,
+    pub maximum: u64,
+}
+
+impl From<FullRebuildReason> for FullRebuildReasonRecord {
+    fn from(value: FullRebuildReason) -> Self {
+        match value {
+            FullRebuildReason::DeltaRecords { actual, maximum } => Self {
+                kind: FullRebuildReasonKindRecord::DeltaRecords,
+                actual: actual as u64,
+                maximum: maximum as u64,
+            },
+            FullRebuildReason::ShadowRecords { actual, maximum } => Self {
+                kind: FullRebuildReasonKindRecord::ShadowRecords,
+                actual: actual as u64,
+                maximum: maximum as u64,
+            },
+            FullRebuildReason::DeltaRatio {
+                actual_ppm,
+                maximum_ppm,
+            } => Self {
+                kind: FullRebuildReasonKindRecord::DeltaRatio,
+                actual: u64::from(actual_ppm),
+                maximum: u64::from(maximum_ppm),
+            },
+            FullRebuildReason::ShadowRatio {
+                actual_ppm,
+                maximum_ppm,
+            } => Self {
+                kind: FullRebuildReasonKindRecord::ShadowRatio,
+                actual: u64::from(actual_ppm),
+                maximum: u64::from(maximum_ppm),
+            },
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct CompositeRebuildOptionsRecord {
+    pub hnsw_limits: HnswBuildLimitsRecord,
+    pub pq_worker_threads: u64,
+    pub pq_limits: ProductQuantizationBuildLimitsRecord,
+}
+
+impl TryFrom<CompositeRebuildOptionsRecord> for CompositeRebuildOptions {
+    type Error = ProllyBindingError;
+
+    fn try_from(value: CompositeRebuildOptionsRecord) -> Result<Self, Self::Error> {
+        Ok(Self {
+            hnsw_limits: value.hnsw_limits.try_into()?,
+            pq_parallelism: BuildParallelism::new(to_usize(
+                value.pq_worker_threads,
+                "pq_worker_threads",
+            )?)?,
+            pq_limits: value.pq_limits.try_into()?,
+        })
+    }
+}
+
+#[uniffi::export]
+pub fn default_composite_accelerator_config() -> CompositeAcceleratorConfigRecord {
+    CompositeAcceleratorConfig::default().into()
+}
+
+#[uniffi::export]
+pub fn default_composite_build_limits() -> CompositeBuildLimitsRecord {
+    CompositeBuildLimitsRecord {
+        max_diff_entries: None,
+        max_owned_bytes: None,
+        max_encoded_output_bytes: None,
+        max_distance_evaluations: None,
+    }
+}
+
+#[uniffi::export]
+pub fn default_composite_rebuild_options() -> CompositeRebuildOptionsRecord {
+    CompositeRebuildOptionsRecord {
+        hnsw_limits: default_hnsw_build_limits(),
+        pq_worker_threads: 1,
+        pq_limits: default_pq_build_limits(),
+    }
 }
 
 impl From<SearchResult> for ProximitySearchResultRecord {
@@ -931,6 +1858,35 @@ macro_rules! with_proximity_map {
     }};
 }
 
+macro_rules! with_proximity_store_map {
+    ($self:expr, $store:ident, $map:ident, $body:block) => {{
+        let descriptor = crate::cid_from_vec($self.descriptor.clone())?;
+        match &$self.engine.inner {
+            BindingEngine::Memory(engine) => {
+                let $store = engine.store().clone();
+                let $map = ProximityMap::load($store.clone(), descriptor)?;
+                $body
+            }
+            BindingEngine::File(engine) => {
+                let $store = engine.store().clone();
+                let $map = ProximityMap::load($store.clone(), descriptor)?;
+                $body
+            }
+            #[cfg(feature = "sqlite")]
+            BindingEngine::Sqlite(engine) => {
+                let $store = engine.store().clone();
+                let $map = ProximityMap::load($store.clone(), descriptor)?;
+                $body
+            }
+            BindingEngine::Host(engine) => {
+                let $store = engine.store().clone();
+                let $map = ProximityMap::load($store.clone(), descriptor)?;
+                $body
+            }
+        }
+    }};
+}
+
 enum BindingProximitySessionMap {
     Memory(ProximityMap<Arc<prolly::MemStore>>),
     File(ProximityMap<Arc<prolly::FileNodeStore>>),
@@ -953,8 +1909,32 @@ macro_rules! with_proximity_session {
 
 #[derive(uniffi::Object)]
 pub struct BindingProximityReadSession {
+    engine: Arc<ProllyEngine>,
     inner: BindingProximitySessionMap,
     fast_handle: AtomicU64,
+}
+
+impl BindingProximityReadSession {
+    pub(crate) fn get_lease(
+        &self,
+        key: &[u8],
+    ) -> Result<Option<prolly::OwnedValueLease>, ProllyBindingError> {
+        with_proximity_session!(self, map, {
+            map.read()?.get_lease(key).map_err(Into::into)
+        })
+    }
+
+    pub(crate) fn scan_records_range_until<B>(
+        &self,
+        start: &[u8],
+        end: Option<&[u8]>,
+        visit: impl for<'record> FnMut(&[u8], prolly::ProximityRecordRef<'record>) -> ControlFlow<B>,
+    ) -> Result<prolly::ScanOutcome<B>, ProllyBindingError> {
+        with_proximity_session!(self, map, {
+            map.scan_records_range_until(start, end, visit)
+                .map_err(Into::into)
+        })
+    }
 }
 
 #[uniffi::export]
@@ -986,6 +1966,26 @@ impl BindingProximityReadSession {
         with_proximity_session!(self, map, {
             map.search(request).map(Into::into).map_err(Into::into)
         })
+    }
+
+    pub fn search_with_runtime(
+        &self,
+        request: ProximitySearchRequestRecord,
+        runtime: Arc<BindingProximitySearchRuntime>,
+    ) -> Result<ProximitySearchResultRecord, ProllyBindingError> {
+        let request = proximity_search_request(&request)?;
+        search_session_with_runtime(self, &runtime, request)
+    }
+
+    pub fn search_cancellable(
+        &self,
+        request: ProximitySearchRequestRecord,
+        runtime: Option<Arc<BindingProximitySearchRuntime>>,
+        cancellation: Arc<BindingProximityCancellationToken>,
+    ) -> Result<ProximitySearchResultRecord, ProllyBindingError> {
+        let runtime = binding_search_runtime(&self.engine, runtime)?;
+        let request = proximity_search_request(&request)?;
+        search_session_cancellable(self, &runtime, request, cancellation.inner.clone())
     }
 
     pub fn scan_records(
@@ -1020,6 +2020,1544 @@ pub struct BindingProximityMap {
     engine: Arc<ProllyEngine>,
     descriptor: Vec<u8>,
     fast_handle: AtomicU64,
+}
+
+impl BindingProximityMap {
+    pub(crate) fn get_lease(
+        &self,
+        key: &[u8],
+    ) -> Result<Option<prolly::OwnedValueLease>, ProllyBindingError> {
+        with_proximity_map!(self, map, {
+            map.read()?.get_lease(key).map_err(Into::into)
+        })
+    }
+
+    pub(crate) fn scan_records_range_until<B>(
+        &self,
+        start: &[u8],
+        end: Option<&[u8]>,
+        visit: impl for<'record> FnMut(&[u8], prolly::ProximityRecordRef<'record>) -> ControlFlow<B>,
+    ) -> Result<prolly::ScanOutcome<B>, ProllyBindingError> {
+        with_proximity_map!(self, map, {
+            map.scan_records_range_until(start, end, visit)
+                .map_err(Into::into)
+        })
+    }
+}
+
+enum BindingProximitySearchIo {
+    Memory(SearchIo<Arc<prolly::MemStore>>),
+    File(SearchIo<Arc<prolly::FileNodeStore>>),
+    #[cfg(feature = "sqlite")]
+    Sqlite(SearchIo<Arc<SqliteStore>>),
+    Host(SearchIo<Arc<crate::HostStore>>),
+}
+
+#[derive(uniffi::Object)]
+pub struct BindingProximityCancellationToken {
+    inner: CancellationToken,
+}
+
+#[uniffi::export]
+impl BindingProximityCancellationToken {
+    #[uniffi::constructor]
+    pub fn new() -> Self {
+        Self {
+            inner: CancellationToken::default(),
+        }
+    }
+
+    pub fn cancel(&self) {
+        self.inner.cancel();
+    }
+
+    pub fn is_cancelled(&self) -> bool {
+        self.inner.is_cancelled()
+    }
+}
+
+struct BindingNoopWake;
+
+impl Wake for BindingNoopWake {
+    fn wake(self: Arc<Self>) {}
+}
+
+fn block_on_binding_future<F: Future>(future: F) -> F::Output {
+    let waker = Waker::from(Arc::new(BindingNoopWake));
+    let mut context = Context::from_waker(&waker);
+    let mut future = Box::pin(future);
+    loop {
+        match future.as_mut().poll(&mut context) {
+            Poll::Ready(value) => return value,
+            Poll::Pending => std::thread::yield_now(),
+        }
+    }
+}
+
+#[derive(uniffi::Object)]
+pub struct BindingProximitySearchRuntime {
+    engine: Arc<ProllyEngine>,
+    policy: ProximitySearchRuntimePolicyRecord,
+    inner: BindingProximitySearchIo,
+}
+
+impl BindingProximitySearchRuntime {
+    pub(crate) fn new(
+        engine: Arc<ProllyEngine>,
+        policy: ProximitySearchRuntimePolicyRecord,
+    ) -> Result<Self, ProllyBindingError> {
+        let runtime = Arc::new(SearchRuntime::new(policy.clone().try_into()?)?);
+        let inner = match &engine.inner {
+            BindingEngine::Memory(inner) => {
+                BindingProximitySearchIo::Memory(SearchIo::new(inner.store().clone(), runtime))
+            }
+            BindingEngine::File(inner) => {
+                BindingProximitySearchIo::File(SearchIo::new(inner.store().clone(), runtime))
+            }
+            #[cfg(feature = "sqlite")]
+            BindingEngine::Sqlite(inner) => {
+                BindingProximitySearchIo::Sqlite(SearchIo::new(inner.store().clone(), runtime))
+            }
+            BindingEngine::Host(inner) => {
+                BindingProximitySearchIo::Host(SearchIo::new(inner.store().clone(), runtime))
+            }
+        };
+        Ok(Self {
+            engine,
+            policy,
+            inner,
+        })
+    }
+
+    fn belongs_to(&self, engine: &ProllyEngine) -> bool {
+        same_binding_engine(&self.engine, engine)
+    }
+}
+
+#[uniffi::export]
+impl BindingProximitySearchRuntime {
+    pub fn policy(&self) -> ProximitySearchRuntimePolicyRecord {
+        self.policy.clone()
+    }
+
+    pub fn stats(&self) -> ProximitySearchRuntimeStatsRecord {
+        let (physical_reads, physical_bytes_read) = match &self.inner {
+            BindingProximitySearchIo::Memory(io) => (io.physical_reads(), io.physical_bytes_read()),
+            BindingProximitySearchIo::File(io) => (io.physical_reads(), io.physical_bytes_read()),
+            #[cfg(feature = "sqlite")]
+            BindingProximitySearchIo::Sqlite(io) => (io.physical_reads(), io.physical_bytes_read()),
+            BindingProximitySearchIo::Host(io) => (io.physical_reads(), io.physical_bytes_read()),
+        };
+        ProximitySearchRuntimeStatsRecord {
+            physical_reads: physical_reads as u64,
+            physical_bytes_read: physical_bytes_read as u64,
+        }
+    }
+
+    pub fn clear(&self) {
+        match &self.inner {
+            BindingProximitySearchIo::Memory(io) => io.runtime().clear(),
+            BindingProximitySearchIo::File(io) => io.runtime().clear(),
+            #[cfg(feature = "sqlite")]
+            BindingProximitySearchIo::Sqlite(io) => io.runtime().clear(),
+            BindingProximitySearchIo::Host(io) => io.runtime().clear(),
+        }
+    }
+}
+
+fn same_binding_engine(left: &ProllyEngine, right: &ProllyEngine) -> bool {
+    match (&left.inner, &right.inner) {
+        (BindingEngine::Memory(left), BindingEngine::Memory(right)) => Arc::ptr_eq(left, right),
+        (BindingEngine::File(left), BindingEngine::File(right)) => Arc::ptr_eq(left, right),
+        #[cfg(feature = "sqlite")]
+        (BindingEngine::Sqlite(left), BindingEngine::Sqlite(right)) => Arc::ptr_eq(left, right),
+        (BindingEngine::Host(left), BindingEngine::Host(right)) => Arc::ptr_eq(left, right),
+        _ => false,
+    }
+}
+
+macro_rules! with_proximity_search_io {
+    ($runtime:expr, $io:ident, $body:block) => {{
+        match &$runtime.inner {
+            BindingProximitySearchIo::Memory($io) => $body,
+            BindingProximitySearchIo::File($io) => $body,
+            #[cfg(feature = "sqlite")]
+            BindingProximitySearchIo::Sqlite($io) => $body,
+            BindingProximitySearchIo::Host($io) => $body,
+        }
+    }};
+}
+
+fn search_native_with_runtime<S>(
+    map: &ProximityMap<S>,
+    io: &SearchIo<S>,
+    request: SearchRequest<'_>,
+) -> Result<ProximitySearchResultRecord, ProllyBindingError>
+where
+    S: Store + Clone + Send + Sync,
+    S::Error: Send + Sync,
+{
+    let accelerators = AcceleratorSet::empty();
+    map.search_with(&accelerators, io, request)
+        .map(Into::into)
+        .map_err(Into::into)
+}
+
+fn search_native_cancellable<S>(
+    map: &ProximityMap<S>,
+    io: &SearchIo<S>,
+    request: SearchRequest<'_>,
+    cancellation: CancellationToken,
+) -> Result<ProximitySearchResultRecord, ProllyBindingError>
+where
+    S: Store + Clone + Send + Sync,
+    S::Error: Send + Sync,
+{
+    let before = io.physical_bytes_read();
+    let async_io = io
+        .clone()
+        .with_proximity_dimensions(map.tree().config.dimensions);
+    let async_store = SyncStoreAsAsync::new(async_io);
+    let async_map = block_on_binding_future(AsyncProximityMap::load(
+        async_store,
+        map.tree().descriptor.clone(),
+    ))?;
+    let mut result = block_on_binding_future(async_map.search(
+        request,
+        AsyncSearchControl {
+            cancellation: Some(cancellation),
+            ..AsyncSearchControl::default()
+        },
+    ))?;
+    result.stats.physical_bytes_read = io.physical_bytes_read().saturating_sub(before);
+    Ok(result.into())
+}
+
+#[derive(Clone, Copy)]
+enum BindingAsyncAcceleratorKind {
+    Hnsw,
+    ProductQuantized,
+    Composite,
+    Catalog,
+}
+
+fn search_accelerated_cancellable<S>(
+    map: &ProximityMap<S>,
+    io: &SearchIo<S>,
+    manifest: prolly::Cid,
+    kind: BindingAsyncAcceleratorKind,
+    request: SearchRequest<'_>,
+    cancellation: CancellationToken,
+) -> Result<ProximitySearchResultRecord, ProllyBindingError>
+where
+    S: Store + Clone + Send + Sync,
+    S::Error: Send + Sync,
+{
+    let before = io.physical_bytes_read();
+    let store = io
+        .clone()
+        .with_proximity_dimensions(map.tree().config.dimensions)
+        .sync_store_as_async();
+    let mut result = block_on_binding_future(async {
+        let async_map =
+            AsyncProximityMap::load(store.clone(), map.tree().descriptor.clone()).await?;
+        let accelerators = match kind {
+            BindingAsyncAcceleratorKind::Hnsw => AsyncAcceleratorSet::empty().with_hnsw(
+                async_map.tree(),
+                AsyncHnswIndex::load(&store, manifest).await?,
+            )?,
+            BindingAsyncAcceleratorKind::ProductQuantized => AsyncAcceleratorSet::empty().with_pq(
+                async_map.tree(),
+                AsyncProductQuantizer::load(&store, manifest).await?,
+            )?,
+            BindingAsyncAcceleratorKind::Composite => AsyncAcceleratorSet::empty().with_composite(
+                async_map.tree(),
+                AsyncCompositeAccelerator::load(&store, manifest).await?,
+            )?,
+            BindingAsyncAcceleratorKind::Catalog => {
+                AsyncAcceleratorCatalog::load(&store, manifest, async_map.tree())
+                    .await?
+                    .into_accelerators()
+            }
+        };
+        async_map
+            .search_with_accelerators(
+                &accelerators,
+                request,
+                AsyncSearchControl {
+                    cancellation: Some(cancellation),
+                    ..AsyncSearchControl::default()
+                },
+            )
+            .await
+    })?;
+    result.stats.physical_bytes_read = io.physical_bytes_read().saturating_sub(before);
+    Ok(result.into())
+}
+
+fn binding_search_runtime(
+    engine: &Arc<ProllyEngine>,
+    runtime: Option<Arc<BindingProximitySearchRuntime>>,
+) -> Result<Arc<BindingProximitySearchRuntime>, ProllyBindingError> {
+    match runtime {
+        Some(runtime) => Ok(runtime),
+        None => Ok(Arc::new(BindingProximitySearchRuntime::new(
+            Arc::clone(engine),
+            SearchRuntimePolicy::default().into(),
+        )?)),
+    }
+}
+
+fn search_map_with_runtime(
+    binding: &BindingProximityMap,
+    runtime: &BindingProximitySearchRuntime,
+    request: SearchRequest<'_>,
+) -> Result<ProximitySearchResultRecord, ProllyBindingError> {
+    if !runtime.belongs_to(&binding.engine) {
+        return Err(ProllyBindingError::InvalidArgument {
+            reason: "proximity map and search runtime must belong to the same engine".to_string(),
+        });
+    }
+    let descriptor = crate::cid_from_vec(binding.descriptor.clone())?;
+    match (&binding.engine.inner, &runtime.inner) {
+        (BindingEngine::Memory(engine), BindingProximitySearchIo::Memory(io)) => {
+            let map = ProximityMap::load(engine.store().clone(), descriptor)?;
+            search_native_with_runtime(&map, io, request)
+        }
+        (BindingEngine::File(engine), BindingProximitySearchIo::File(io)) => {
+            let map = ProximityMap::load(engine.store().clone(), descriptor)?;
+            search_native_with_runtime(&map, io, request)
+        }
+        #[cfg(feature = "sqlite")]
+        (BindingEngine::Sqlite(engine), BindingProximitySearchIo::Sqlite(io)) => {
+            let map = ProximityMap::load(engine.store().clone(), descriptor)?;
+            search_native_with_runtime(&map, io, request)
+        }
+        (BindingEngine::Host(engine), BindingProximitySearchIo::Host(io)) => {
+            let map = ProximityMap::load(engine.store().clone(), descriptor)?;
+            search_native_with_runtime(&map, io, request)
+        }
+        _ => Err(ProllyBindingError::InvalidArgument {
+            reason: "proximity map and search runtime store kinds do not match".to_string(),
+        }),
+    }
+}
+
+fn search_map_cancellable(
+    binding: &BindingProximityMap,
+    runtime: &BindingProximitySearchRuntime,
+    request: SearchRequest<'_>,
+    cancellation: CancellationToken,
+) -> Result<ProximitySearchResultRecord, ProllyBindingError> {
+    if !runtime.belongs_to(&binding.engine) {
+        return Err(ProllyBindingError::InvalidArgument {
+            reason: "proximity map and search runtime must belong to the same engine".to_string(),
+        });
+    }
+    let descriptor = crate::cid_from_vec(binding.descriptor.clone())?;
+    match (&binding.engine.inner, &runtime.inner) {
+        (BindingEngine::Memory(engine), BindingProximitySearchIo::Memory(io)) => {
+            let map = ProximityMap::load(engine.store().clone(), descriptor)?;
+            search_native_cancellable(&map, io, request, cancellation)
+        }
+        (BindingEngine::File(engine), BindingProximitySearchIo::File(io)) => {
+            let map = ProximityMap::load(engine.store().clone(), descriptor)?;
+            search_native_cancellable(&map, io, request, cancellation)
+        }
+        #[cfg(feature = "sqlite")]
+        (BindingEngine::Sqlite(engine), BindingProximitySearchIo::Sqlite(io)) => {
+            let map = ProximityMap::load(engine.store().clone(), descriptor)?;
+            search_native_cancellable(&map, io, request, cancellation)
+        }
+        (BindingEngine::Host(engine), BindingProximitySearchIo::Host(io)) => {
+            let map = ProximityMap::load(engine.store().clone(), descriptor)?;
+            search_native_cancellable(&map, io, request, cancellation)
+        }
+        _ => Err(ProllyBindingError::InvalidArgument {
+            reason: "proximity map and search runtime store kinds do not match".to_string(),
+        }),
+    }
+}
+
+fn search_binding_accelerator_cancellable(
+    engine: &Arc<ProllyEngine>,
+    map: &BindingProximityMap,
+    runtime: &BindingProximitySearchRuntime,
+    manifest: prolly::Cid,
+    kind: BindingAsyncAcceleratorKind,
+    request: SearchRequest<'_>,
+    cancellation: CancellationToken,
+) -> Result<ProximitySearchResultRecord, ProllyBindingError> {
+    if !Arc::ptr_eq(engine, &map.engine) || !runtime.belongs_to(engine) {
+        return Err(ProllyBindingError::InvalidArgument {
+            reason: "accelerator, proximity map, and search runtime must belong to the same engine"
+                .to_string(),
+        });
+    }
+    let descriptor = crate::cid_from_vec(map.descriptor.clone())?;
+    match (&engine.inner, &runtime.inner) {
+        (BindingEngine::Memory(engine), BindingProximitySearchIo::Memory(io)) => {
+            let map = ProximityMap::load(engine.store().clone(), descriptor)?;
+            search_accelerated_cancellable(&map, io, manifest, kind, request, cancellation)
+        }
+        (BindingEngine::File(engine), BindingProximitySearchIo::File(io)) => {
+            let map = ProximityMap::load(engine.store().clone(), descriptor)?;
+            search_accelerated_cancellable(&map, io, manifest, kind, request, cancellation)
+        }
+        #[cfg(feature = "sqlite")]
+        (BindingEngine::Sqlite(engine), BindingProximitySearchIo::Sqlite(io)) => {
+            let map = ProximityMap::load(engine.store().clone(), descriptor)?;
+            search_accelerated_cancellable(&map, io, manifest, kind, request, cancellation)
+        }
+        (BindingEngine::Host(engine), BindingProximitySearchIo::Host(io)) => {
+            let map = ProximityMap::load(engine.store().clone(), descriptor)?;
+            search_accelerated_cancellable(&map, io, manifest, kind, request, cancellation)
+        }
+        _ => Err(ProllyBindingError::InvalidArgument {
+            reason: "accelerator and search runtime store kinds do not match".to_string(),
+        }),
+    }
+}
+
+fn search_session_with_runtime(
+    session: &BindingProximityReadSession,
+    runtime: &BindingProximitySearchRuntime,
+    request: SearchRequest<'_>,
+) -> Result<ProximitySearchResultRecord, ProllyBindingError> {
+    if !runtime.belongs_to(&session.engine) {
+        return Err(ProllyBindingError::InvalidArgument {
+            reason: "proximity session and search runtime must belong to the same engine"
+                .to_string(),
+        });
+    }
+    match (&session.inner, &runtime.inner) {
+        (BindingProximitySessionMap::Memory(map), BindingProximitySearchIo::Memory(io)) => {
+            search_native_with_runtime(map, io, request)
+        }
+        (BindingProximitySessionMap::File(map), BindingProximitySearchIo::File(io)) => {
+            search_native_with_runtime(map, io, request)
+        }
+        #[cfg(feature = "sqlite")]
+        (BindingProximitySessionMap::Sqlite(map), BindingProximitySearchIo::Sqlite(io)) => {
+            search_native_with_runtime(map, io, request)
+        }
+        (BindingProximitySessionMap::Host(map), BindingProximitySearchIo::Host(io)) => {
+            search_native_with_runtime(map, io, request)
+        }
+        _ => Err(ProllyBindingError::InvalidArgument {
+            reason: "proximity session and search runtime store kinds do not match".to_string(),
+        }),
+    }
+}
+
+fn search_session_cancellable(
+    session: &BindingProximityReadSession,
+    runtime: &BindingProximitySearchRuntime,
+    request: SearchRequest<'_>,
+    cancellation: CancellationToken,
+) -> Result<ProximitySearchResultRecord, ProllyBindingError> {
+    if !runtime.belongs_to(&session.engine) {
+        return Err(ProllyBindingError::InvalidArgument {
+            reason: "proximity session and search runtime must belong to the same engine"
+                .to_string(),
+        });
+    }
+    match (&session.inner, &runtime.inner) {
+        (BindingProximitySessionMap::Memory(map), BindingProximitySearchIo::Memory(io)) => {
+            search_native_cancellable(map, io, request, cancellation)
+        }
+        (BindingProximitySessionMap::File(map), BindingProximitySearchIo::File(io)) => {
+            search_native_cancellable(map, io, request, cancellation)
+        }
+        #[cfg(feature = "sqlite")]
+        (BindingProximitySessionMap::Sqlite(map), BindingProximitySearchIo::Sqlite(io)) => {
+            search_native_cancellable(map, io, request, cancellation)
+        }
+        (BindingProximitySessionMap::Host(map), BindingProximitySearchIo::Host(io)) => {
+            search_native_cancellable(map, io, request, cancellation)
+        }
+        _ => Err(ProllyBindingError::InvalidArgument {
+            reason: "proximity session and search runtime store kinds do not match".to_string(),
+        }),
+    }
+}
+
+#[derive(uniffi::Object)]
+pub struct BindingHnswIndex {
+    engine: Arc<ProllyEngine>,
+    manifest: Vec<u8>,
+    source_descriptor: Vec<u8>,
+    config: HnswConfigRecord,
+    canonical: bool,
+}
+
+#[derive(uniffi::Object)]
+pub struct BindingProductQuantizer {
+    engine: Arc<ProllyEngine>,
+    manifest: Vec<u8>,
+    source_descriptor: Vec<u8>,
+    config: ProductQuantizationConfigRecord,
+    quality: ProductQuantizationQualityRecord,
+}
+
+#[derive(uniffi::Object)]
+pub struct BindingCompositeAccelerator {
+    engine: Arc<ProllyEngine>,
+    manifest: Vec<u8>,
+    current_source_descriptor: Vec<u8>,
+    base_source_descriptor: Vec<u8>,
+    base_kind: CompositeBaseKindRecord,
+    delta_count: u64,
+    shadow_count: u64,
+    config: CompositeAcceleratorConfigRecord,
+    build_stats: CompositeBuildStatsRecord,
+}
+
+#[derive(Clone, uniffi::Record)]
+pub struct CompositeBuildOutcomeRecord {
+    pub accelerator: Option<Arc<BindingCompositeAccelerator>>,
+    pub reasons: Vec<FullRebuildReasonRecord>,
+    pub stats: CompositeBuildStatsRecord,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, uniffi::Enum)]
+pub enum CompositeBuildOrRebuildKindRecord {
+    Composite,
+    NoAcceleratorRequired,
+    HnswRebuilt,
+    ProductQuantizedRebuilt,
+}
+
+#[derive(Clone, uniffi::Record)]
+pub struct CompositeBuildOrRebuildOutcomeRecord {
+    pub kind: CompositeBuildOrRebuildKindRecord,
+    pub composite: Option<Arc<BindingCompositeAccelerator>>,
+    pub hnsw: Option<Arc<BindingHnswIndex>>,
+    pub pq: Option<Arc<BindingProductQuantizer>>,
+    pub reasons: Vec<FullRebuildReasonRecord>,
+    pub composite_stats: CompositeBuildStatsRecord,
+    pub hnsw_stats: Option<HnswBuildStatsRecord>,
+    pub pq_stats: Option<ProductQuantizationBuildStatsRecord>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, uniffi::Enum)]
+pub enum CatalogAcceleratorKindRecord {
+    Hnsw,
+    ProductQuantized,
+    Composite,
+}
+
+impl From<CatalogAcceleratorKind> for CatalogAcceleratorKindRecord {
+    fn from(value: CatalogAcceleratorKind) -> Self {
+        match value {
+            CatalogAcceleratorKind::Hnsw => Self::Hnsw,
+            CatalogAcceleratorKind::ProductQuantized => Self::ProductQuantized,
+            CatalogAcceleratorKind::Composite => Self::Composite,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct AcceleratorCatalogEntryRecord {
+    pub kind: CatalogAcceleratorKindRecord,
+    pub configuration_fingerprint: Vec<u8>,
+    pub manifest: Vec<u8>,
+}
+
+impl From<AcceleratorCatalogEntry> for AcceleratorCatalogEntryRecord {
+    fn from(value: AcceleratorCatalogEntry) -> Self {
+        Self {
+            kind: value.kind.into(),
+            configuration_fingerprint: value.configuration_fingerprint.0.to_vec(),
+            manifest: value.manifest.0.to_vec(),
+        }
+    }
+}
+
+#[derive(uniffi::Object)]
+pub struct BindingAcceleratorCatalog {
+    engine: Arc<ProllyEngine>,
+    manifest: Vec<u8>,
+    source_descriptor: Vec<u8>,
+    entries: Vec<AcceleratorCatalogEntryRecord>,
+}
+
+fn binding_hnsw_index<S>(engine: Arc<ProllyEngine>, index: &HnswIndex<S>) -> Arc<BindingHnswIndex>
+where
+    S: Store + Clone + Send + Sync,
+    S::Error: Send + Sync,
+{
+    Arc::new(BindingHnswIndex {
+        engine,
+        manifest: index.manifest_cid().0.to_vec(),
+        source_descriptor: index.source_descriptor().0.to_vec(),
+        config: index.config().clone().into(),
+        canonical: index.is_canonical(),
+    })
+}
+
+fn binding_product_quantizer<S>(
+    engine: Arc<ProllyEngine>,
+    index: &ProductQuantizer<S>,
+) -> Arc<BindingProductQuantizer>
+where
+    S: Store + Clone + Send + Sync,
+    S::Error: Send + Sync,
+{
+    Arc::new(BindingProductQuantizer {
+        engine,
+        manifest: index.manifest_cid().0.to_vec(),
+        source_descriptor: index.source_descriptor().0.to_vec(),
+        config: index.config().clone().into(),
+        quality: index.quality().into(),
+    })
+}
+
+fn binding_composite_accelerator<S>(
+    engine: Arc<ProllyEngine>,
+    index: &CompositeAccelerator<S>,
+) -> Arc<BindingCompositeAccelerator>
+where
+    S: Store + Clone + Send + Sync,
+    S::Error: Send + Sync,
+{
+    Arc::new(BindingCompositeAccelerator {
+        engine,
+        manifest: index.manifest_cid().0.to_vec(),
+        current_source_descriptor: index.current_source_descriptor().0.to_vec(),
+        base_source_descriptor: index.base_source_descriptor().0.to_vec(),
+        base_kind: index.base_kind().into(),
+        delta_count: index.delta_count(),
+        shadow_count: index.shadow_count(),
+        config: index.config().clone().into(),
+        build_stats: index.build_stats().clone().into(),
+    })
+}
+
+fn composite_build_outcome<S>(
+    engine: Arc<ProllyEngine>,
+    outcome: CompositeBuildOutcome<S>,
+) -> CompositeBuildOutcomeRecord
+where
+    S: Store + Clone + Send + Sync,
+    S::Error: Send + Sync,
+{
+    match outcome {
+        CompositeBuildOutcome::Composite { accelerator, stats } => CompositeBuildOutcomeRecord {
+            accelerator: Some(binding_composite_accelerator(engine, &accelerator)),
+            reasons: Vec::new(),
+            stats: stats.into(),
+        },
+        CompositeBuildOutcome::FullRebuildRequired { reasons, stats } => {
+            CompositeBuildOutcomeRecord {
+                accelerator: None,
+                reasons: reasons.into_iter().map(Into::into).collect(),
+                stats: stats.into(),
+            }
+        }
+    }
+}
+
+fn composite_rebuild_outcome<S>(
+    engine: Arc<ProllyEngine>,
+    outcome: CompositeBuildOrRebuildOutcome<S>,
+) -> CompositeBuildOrRebuildOutcomeRecord
+where
+    S: Store + Clone + Send + Sync,
+    S::Error: Send + Sync,
+{
+    match outcome {
+        CompositeBuildOrRebuildOutcome::Composite { accelerator, stats } => {
+            CompositeBuildOrRebuildOutcomeRecord {
+                kind: CompositeBuildOrRebuildKindRecord::Composite,
+                composite: Some(binding_composite_accelerator(engine, &accelerator)),
+                hnsw: None,
+                pq: None,
+                reasons: Vec::new(),
+                composite_stats: stats.into(),
+                hnsw_stats: None,
+                pq_stats: None,
+            }
+        }
+        CompositeBuildOrRebuildOutcome::NoAcceleratorRequired {
+            reasons,
+            composite_stats,
+        } => CompositeBuildOrRebuildOutcomeRecord {
+            kind: CompositeBuildOrRebuildKindRecord::NoAcceleratorRequired,
+            composite: None,
+            hnsw: None,
+            pq: None,
+            reasons: reasons.into_iter().map(Into::into).collect(),
+            composite_stats: composite_stats.into(),
+            hnsw_stats: None,
+            pq_stats: None,
+        },
+        CompositeBuildOrRebuildOutcome::HnswRebuilt {
+            accelerator,
+            reasons,
+            composite_stats,
+            rebuild_stats,
+        } => CompositeBuildOrRebuildOutcomeRecord {
+            kind: CompositeBuildOrRebuildKindRecord::HnswRebuilt,
+            composite: None,
+            hnsw: Some(binding_hnsw_index(engine, &accelerator)),
+            pq: None,
+            reasons: reasons.into_iter().map(Into::into).collect(),
+            composite_stats: composite_stats.into(),
+            hnsw_stats: Some(rebuild_stats.into()),
+            pq_stats: None,
+        },
+        CompositeBuildOrRebuildOutcome::ProductQuantizedRebuilt {
+            accelerator,
+            reasons,
+            composite_stats,
+            rebuild_stats,
+        } => CompositeBuildOrRebuildOutcomeRecord {
+            kind: CompositeBuildOrRebuildKindRecord::ProductQuantizedRebuilt,
+            composite: None,
+            hnsw: None,
+            pq: Some(binding_product_quantizer(engine, &accelerator)),
+            reasons: reasons.into_iter().map(Into::into).collect(),
+            composite_stats: composite_stats.into(),
+            hnsw_stats: None,
+            pq_stats: Some(rebuild_stats.into()),
+        },
+    }
+}
+
+fn build_composite_hnsw<S>(
+    engine: Arc<ProllyEngine>,
+    store: S,
+    base_source: prolly::Cid,
+    current_source: prolly::Cid,
+    base_manifest: prolly::Cid,
+    config: CompositeAcceleratorConfig,
+    limits: CompositeBuildLimits,
+) -> Result<CompositeBuildOutcomeRecord, ProllyBindingError>
+where
+    S: Store + Clone + Send + Sync,
+    S::Error: Send + Sync,
+{
+    let base_map = ProximityMap::load(store.clone(), base_source)?;
+    let current_map = ProximityMap::load(store.clone(), current_source)?;
+    let base = CompositeBase::Hnsw(HnswIndex::load(store, base_manifest)?);
+    Ok(composite_build_outcome(
+        engine,
+        CompositeAccelerator::build(&base_map, &current_map, base, config, limits)?,
+    ))
+}
+
+fn build_composite_pq<S>(
+    engine: Arc<ProllyEngine>,
+    store: S,
+    base_source: prolly::Cid,
+    current_source: prolly::Cid,
+    base_manifest: prolly::Cid,
+    config: CompositeAcceleratorConfig,
+    limits: CompositeBuildLimits,
+) -> Result<CompositeBuildOutcomeRecord, ProllyBindingError>
+where
+    S: Store + Clone + Send + Sync,
+    S::Error: Send + Sync,
+{
+    let base_map = ProximityMap::load(store.clone(), base_source)?;
+    let current_map = ProximityMap::load(store.clone(), current_source)?;
+    let base = CompositeBase::ProductQuantized(ProductQuantizer::load(store, base_manifest)?);
+    Ok(composite_build_outcome(
+        engine,
+        CompositeAccelerator::build(&base_map, &current_map, base, config, limits)?,
+    ))
+}
+
+fn rebuild_composite_hnsw<S>(
+    engine: Arc<ProllyEngine>,
+    store: S,
+    base_source: prolly::Cid,
+    current_source: prolly::Cid,
+    base_manifest: prolly::Cid,
+    config: CompositeAcceleratorConfig,
+    limits: CompositeBuildLimits,
+    rebuild: CompositeRebuildOptions,
+) -> Result<CompositeBuildOrRebuildOutcomeRecord, ProllyBindingError>
+where
+    S: Store + Clone + Send + Sync,
+    S::Error: Send + Sync,
+{
+    let base_map = ProximityMap::load(store.clone(), base_source)?;
+    let current_map = ProximityMap::load(store.clone(), current_source)?;
+    let base = CompositeBase::Hnsw(HnswIndex::load(store, base_manifest)?);
+    Ok(composite_rebuild_outcome(
+        engine,
+        CompositeAccelerator::build_or_rebuild(
+            &base_map,
+            &current_map,
+            base,
+            config,
+            limits,
+            rebuild,
+        )?,
+    ))
+}
+
+fn rebuild_composite_pq<S>(
+    engine: Arc<ProllyEngine>,
+    store: S,
+    base_source: prolly::Cid,
+    current_source: prolly::Cid,
+    base_manifest: prolly::Cid,
+    config: CompositeAcceleratorConfig,
+    limits: CompositeBuildLimits,
+    rebuild: CompositeRebuildOptions,
+) -> Result<CompositeBuildOrRebuildOutcomeRecord, ProllyBindingError>
+where
+    S: Store + Clone + Send + Sync,
+    S::Error: Send + Sync,
+{
+    let base_map = ProximityMap::load(store.clone(), base_source)?;
+    let current_map = ProximityMap::load(store.clone(), current_source)?;
+    let base = CompositeBase::ProductQuantized(ProductQuantizer::load(store, base_manifest)?);
+    Ok(composite_rebuild_outcome(
+        engine,
+        CompositeAccelerator::build_or_rebuild(
+            &base_map,
+            &current_map,
+            base,
+            config,
+            limits,
+            rebuild,
+        )?,
+    ))
+}
+
+fn search_hnsw<S>(
+    store: S,
+    manifest: &prolly::Cid,
+    source: &prolly::Cid,
+    request: SearchRequest<'_>,
+) -> Result<ProximitySearchResultRecord, ProllyBindingError>
+where
+    S: Store + Clone + Send + Sync,
+    S::Error: Send + Sync,
+{
+    let index = HnswIndex::load(store.clone(), manifest.clone())?;
+    let map = ProximityMap::load(store, source.clone())?;
+    index
+        .search(&map, request)
+        .map(Into::into)
+        .map_err(Into::into)
+}
+
+fn prove_hnsw_search<S>(
+    store: S,
+    manifest: &prolly::Cid,
+    source: &prolly::Cid,
+    request: SearchRequest<'_>,
+    limits: &ContentGraphLimits,
+) -> Result<ProximitySearchProof, ProllyBindingError>
+where
+    S: Store + Clone + Send + Sync,
+    S::Error: Send + Sync,
+{
+    let index = HnswIndex::load(store.clone(), manifest.clone())?;
+    let map = ProximityMap::load(store, source.clone())?;
+    index
+        .prove_search(&map, request, limits)
+        .map_err(Into::into)
+}
+
+fn search_pq<S>(
+    store: S,
+    manifest: &prolly::Cid,
+    source: &prolly::Cid,
+    request: SearchRequest<'_>,
+) -> Result<ProximitySearchResultRecord, ProllyBindingError>
+where
+    S: Store + Clone + Send + Sync,
+    S::Error: Send + Sync,
+{
+    let index = ProductQuantizer::load(store.clone(), manifest.clone())?;
+    let map = ProximityMap::load(store, source.clone())?;
+    index
+        .search(&map, request)
+        .map(Into::into)
+        .map_err(Into::into)
+}
+
+fn prove_pq_search<S>(
+    store: S,
+    manifest: &prolly::Cid,
+    source: &prolly::Cid,
+    request: SearchRequest<'_>,
+    limits: &ContentGraphLimits,
+) -> Result<ProximitySearchProof, ProllyBindingError>
+where
+    S: Store + Clone + Send + Sync,
+    S::Error: Send + Sync,
+{
+    let index = ProductQuantizer::load(store.clone(), manifest.clone())?;
+    let map = ProximityMap::load(store, source.clone())?;
+    index
+        .prove_search(&map, request, limits)
+        .map_err(Into::into)
+}
+
+fn binding_accelerator_catalog<S>(
+    engine: Arc<ProllyEngine>,
+    catalog: &AcceleratorCatalog<S>,
+) -> Arc<BindingAcceleratorCatalog>
+where
+    S: Store + Clone + Send + Sync,
+    S::Error: Send + Sync,
+{
+    Arc::new(BindingAcceleratorCatalog {
+        engine,
+        manifest: catalog.manifest_cid().0.to_vec(),
+        source_descriptor: catalog.source_descriptor().0.to_vec(),
+        entries: catalog.entries().iter().cloned().map(Into::into).collect(),
+    })
+}
+
+fn search_composite<S>(
+    store: S,
+    manifest: &prolly::Cid,
+    source: &prolly::Cid,
+    request: SearchRequest<'_>,
+) -> Result<ProximitySearchResultRecord, ProllyBindingError>
+where
+    S: Store + Clone + Send + Sync,
+    S::Error: Send + Sync,
+{
+    let map = ProximityMap::load(store.clone(), source.clone())?;
+    let composite = CompositeAccelerator::load(store.clone(), manifest.clone())?;
+    let accelerators = AcceleratorSet::empty().with_composite(map.tree(), composite)?;
+    let search_io = SearchIo::new(store, Arc::new(SearchRuntime::default()));
+    map.search_with(&accelerators, &search_io, request)
+        .map(Into::into)
+        .map_err(Into::into)
+}
+
+fn prove_composite_search<S>(
+    store: S,
+    manifest: &prolly::Cid,
+    source: &prolly::Cid,
+    request: SearchRequest<'_>,
+    limits: &ContentGraphLimits,
+) -> Result<ProximitySearchProof, ProllyBindingError>
+where
+    S: Store + Clone + Send + Sync,
+    S::Error: Send + Sync,
+{
+    let index = CompositeAccelerator::load(store.clone(), manifest.clone())?;
+    let map = ProximityMap::load(store, source.clone())?;
+    index
+        .prove_search(&map, request, limits)
+        .map_err(Into::into)
+}
+
+fn search_catalog<S>(
+    store: S,
+    manifest: &prolly::Cid,
+    source: &prolly::Cid,
+    request: SearchRequest<'_>,
+) -> Result<ProximitySearchResultRecord, ProllyBindingError>
+where
+    S: Store + Clone + Send + Sync,
+    S::Error: Send + Sync,
+{
+    let map = ProximityMap::load(store.clone(), source.clone())?;
+    let catalog = AcceleratorCatalog::load(store.clone(), manifest.clone(), map.tree())?;
+    let search_io = SearchIo::new(store, Arc::new(SearchRuntime::default()));
+    map.search_with(catalog.accelerators(), &search_io, request)
+        .map(Into::into)
+        .map_err(Into::into)
+}
+
+fn prove_catalog_search<S>(
+    store: S,
+    manifest: &prolly::Cid,
+    source: &prolly::Cid,
+    request: SearchRequest<'_>,
+    limits: &ContentGraphLimits,
+) -> Result<ProximitySearchProof, ProllyBindingError>
+where
+    S: Store + Clone + Send + Sync,
+    S::Error: Send + Sync,
+{
+    let map = ProximityMap::load(store.clone(), source.clone())?;
+    let catalog = AcceleratorCatalog::load(store, manifest.clone(), map.tree())?;
+    catalog
+        .prove_search(&map, request, limits)
+        .map_err(Into::into)
+}
+
+fn build_catalog<S>(
+    engine: Arc<ProllyEngine>,
+    store: S,
+    source: prolly::Cid,
+    hnsw: Option<prolly::Cid>,
+    pq: Option<prolly::Cid>,
+    composite: Option<prolly::Cid>,
+) -> Result<Arc<BindingAcceleratorCatalog>, ProllyBindingError>
+where
+    S: Store + Clone + Send + Sync,
+    S::Error: Send + Sync,
+{
+    let map = ProximityMap::load(store.clone(), source)?;
+    let mut accelerators = AcceleratorSet::empty();
+    if let Some(manifest) = hnsw {
+        accelerators =
+            accelerators.with_hnsw(map.tree(), HnswIndex::load(store.clone(), manifest)?)?;
+    }
+    if let Some(manifest) = pq {
+        accelerators =
+            accelerators.with_pq(map.tree(), ProductQuantizer::load(store.clone(), manifest)?)?;
+    }
+    if let Some(manifest) = composite {
+        accelerators = accelerators.with_composite(
+            map.tree(),
+            CompositeAccelerator::load(store.clone(), manifest)?,
+        )?;
+    }
+    let catalog = AcceleratorCatalog::build(store, map.tree(), accelerators)?;
+    Ok(binding_accelerator_catalog(engine, &catalog))
+}
+
+#[uniffi::export]
+impl BindingHnswIndex {
+    pub fn manifest(&self) -> Vec<u8> {
+        self.manifest.clone()
+    }
+
+    pub fn source_descriptor(&self) -> Vec<u8> {
+        self.source_descriptor.clone()
+    }
+
+    pub fn config(&self) -> HnswConfigRecord {
+        self.config.clone()
+    }
+
+    pub fn is_canonical(&self) -> bool {
+        self.canonical
+    }
+
+    pub fn search(
+        &self,
+        map: Arc<BindingProximityMap>,
+        request: ProximitySearchRequestRecord,
+    ) -> Result<ProximitySearchResultRecord, ProllyBindingError> {
+        if !Arc::ptr_eq(&self.engine, &map.engine) {
+            return Err(ProllyBindingError::InvalidArgument {
+                reason: "HNSW index and proximity map belong to different engines".to_string(),
+            });
+        }
+        let manifest = crate::cid_from_vec(self.manifest.clone())?;
+        let source = crate::cid_from_vec(map.descriptor())?;
+        let request = proximity_search_request(&request)?;
+        match &self.engine.inner {
+            BindingEngine::Memory(engine) => {
+                search_hnsw(engine.store().clone(), &manifest, &source, request)
+            }
+            BindingEngine::File(engine) => {
+                search_hnsw(engine.store().clone(), &manifest, &source, request)
+            }
+            #[cfg(feature = "sqlite")]
+            BindingEngine::Sqlite(engine) => {
+                search_hnsw(engine.store().clone(), &manifest, &source, request)
+            }
+            BindingEngine::Host(engine) => {
+                search_hnsw(engine.store().clone(), &manifest, &source, request)
+            }
+        }
+    }
+
+    pub fn search_with_runtime(
+        &self,
+        map: Arc<BindingProximityMap>,
+        request: ProximitySearchRequestRecord,
+        runtime: Arc<BindingProximitySearchRuntime>,
+    ) -> Result<ProximitySearchResultRecord, ProllyBindingError> {
+        if !Arc::ptr_eq(&self.engine, &map.engine) || !runtime.belongs_to(&self.engine) {
+            return Err(ProllyBindingError::InvalidArgument {
+                reason:
+                    "HNSW index, proximity map, and search runtime must belong to the same engine"
+                        .to_string(),
+            });
+        }
+        let manifest = crate::cid_from_vec(self.manifest.clone())?;
+        let source = crate::cid_from_vec(map.descriptor())?;
+        let request = proximity_search_request(&request)?;
+        with_proximity_search_io!(runtime, io, {
+            let store = io.store().clone();
+            let map = ProximityMap::load(store.clone(), source)?;
+            let index = HnswIndex::load(store, manifest)?;
+            let accelerators = AcceleratorSet::empty().with_hnsw(map.tree(), index)?;
+            map.search_with(&accelerators, io, request)
+                .map(Into::into)
+                .map_err(Into::into)
+        })
+    }
+
+    pub fn search_cancellable(
+        &self,
+        map: Arc<BindingProximityMap>,
+        request: ProximitySearchRequestRecord,
+        runtime: Option<Arc<BindingProximitySearchRuntime>>,
+        cancellation: Arc<BindingProximityCancellationToken>,
+    ) -> Result<ProximitySearchResultRecord, ProllyBindingError> {
+        let runtime = binding_search_runtime(&self.engine, runtime)?;
+        search_binding_accelerator_cancellable(
+            &self.engine,
+            &map,
+            &runtime,
+            crate::cid_from_vec(self.manifest.clone())?,
+            BindingAsyncAcceleratorKind::Hnsw,
+            proximity_search_request(&request)?,
+            cancellation.inner.clone(),
+        )
+    }
+
+    pub fn prove_search(
+        &self,
+        map: Arc<BindingProximityMap>,
+        request: ProximitySearchRequestRecord,
+        limits: ContentGraphLimitsRecord,
+    ) -> Result<Arc<BindingProximitySearchProof>, ProllyBindingError> {
+        if !Arc::ptr_eq(&self.engine, &map.engine) {
+            return Err(ProllyBindingError::InvalidArgument {
+                reason: "HNSW index and proximity map belong to different engines".to_string(),
+            });
+        }
+        let manifest = crate::cid_from_vec(self.manifest.clone())?;
+        let source = crate::cid_from_vec(map.descriptor())?;
+        let request = proximity_search_request(&request)?;
+        let limits = ContentGraphLimits::try_from(limits)?;
+        let proof = match &self.engine.inner {
+            BindingEngine::Memory(engine) => {
+                prove_hnsw_search(engine.store().clone(), &manifest, &source, request, &limits)
+            }
+            BindingEngine::File(engine) => {
+                prove_hnsw_search(engine.store().clone(), &manifest, &source, request, &limits)
+            }
+            #[cfg(feature = "sqlite")]
+            BindingEngine::Sqlite(engine) => {
+                prove_hnsw_search(engine.store().clone(), &manifest, &source, request, &limits)
+            }
+            BindingEngine::Host(engine) => {
+                prove_hnsw_search(engine.store().clone(), &manifest, &source, request, &limits)
+            }
+        }?;
+        Ok(Arc::new(BindingProximitySearchProof { inner: proof }))
+    }
+}
+
+#[uniffi::export]
+impl BindingProductQuantizer {
+    pub fn manifest(&self) -> Vec<u8> {
+        self.manifest.clone()
+    }
+
+    pub fn source_descriptor(&self) -> Vec<u8> {
+        self.source_descriptor.clone()
+    }
+
+    pub fn config(&self) -> ProductQuantizationConfigRecord {
+        self.config.clone()
+    }
+
+    pub fn quality(&self) -> ProductQuantizationQualityRecord {
+        self.quality
+    }
+
+    pub fn search(
+        &self,
+        map: Arc<BindingProximityMap>,
+        request: ProximitySearchRequestRecord,
+    ) -> Result<ProximitySearchResultRecord, ProllyBindingError> {
+        if !Arc::ptr_eq(&self.engine, &map.engine) {
+            return Err(ProllyBindingError::InvalidArgument {
+                reason: "product quantizer and proximity map belong to different engines"
+                    .to_string(),
+            });
+        }
+        let manifest = crate::cid_from_vec(self.manifest.clone())?;
+        let source = crate::cid_from_vec(map.descriptor())?;
+        let request = proximity_search_request(&request)?;
+        match &self.engine.inner {
+            BindingEngine::Memory(engine) => {
+                search_pq(engine.store().clone(), &manifest, &source, request)
+            }
+            BindingEngine::File(engine) => {
+                search_pq(engine.store().clone(), &manifest, &source, request)
+            }
+            #[cfg(feature = "sqlite")]
+            BindingEngine::Sqlite(engine) => {
+                search_pq(engine.store().clone(), &manifest, &source, request)
+            }
+            BindingEngine::Host(engine) => {
+                search_pq(engine.store().clone(), &manifest, &source, request)
+            }
+        }
+    }
+
+    pub fn search_with_runtime(
+        &self,
+        map: Arc<BindingProximityMap>,
+        request: ProximitySearchRequestRecord,
+        runtime: Arc<BindingProximitySearchRuntime>,
+    ) -> Result<ProximitySearchResultRecord, ProllyBindingError> {
+        if !Arc::ptr_eq(&self.engine, &map.engine) || !runtime.belongs_to(&self.engine) {
+            return Err(ProllyBindingError::InvalidArgument {
+                reason: "product quantizer, proximity map, and search runtime must belong to the same engine"
+                    .to_string(),
+            });
+        }
+        let manifest = crate::cid_from_vec(self.manifest.clone())?;
+        let source = crate::cid_from_vec(map.descriptor())?;
+        let request = proximity_search_request(&request)?;
+        with_proximity_search_io!(runtime, io, {
+            let store = io.store().clone();
+            let map = ProximityMap::load(store.clone(), source)?;
+            let index = ProductQuantizer::load(store, manifest)?;
+            let accelerators = AcceleratorSet::empty().with_pq(map.tree(), index)?;
+            map.search_with(&accelerators, io, request)
+                .map(Into::into)
+                .map_err(Into::into)
+        })
+    }
+
+    pub fn search_cancellable(
+        &self,
+        map: Arc<BindingProximityMap>,
+        request: ProximitySearchRequestRecord,
+        runtime: Option<Arc<BindingProximitySearchRuntime>>,
+        cancellation: Arc<BindingProximityCancellationToken>,
+    ) -> Result<ProximitySearchResultRecord, ProllyBindingError> {
+        let runtime = binding_search_runtime(&self.engine, runtime)?;
+        search_binding_accelerator_cancellable(
+            &self.engine,
+            &map,
+            &runtime,
+            crate::cid_from_vec(self.manifest.clone())?,
+            BindingAsyncAcceleratorKind::ProductQuantized,
+            proximity_search_request(&request)?,
+            cancellation.inner.clone(),
+        )
+    }
+
+    pub fn prove_search(
+        &self,
+        map: Arc<BindingProximityMap>,
+        request: ProximitySearchRequestRecord,
+        limits: ContentGraphLimitsRecord,
+    ) -> Result<Arc<BindingProximitySearchProof>, ProllyBindingError> {
+        if !Arc::ptr_eq(&self.engine, &map.engine) {
+            return Err(ProllyBindingError::InvalidArgument {
+                reason: "product quantizer and proximity map belong to different engines"
+                    .to_string(),
+            });
+        }
+        let manifest = crate::cid_from_vec(self.manifest.clone())?;
+        let source = crate::cid_from_vec(map.descriptor())?;
+        let request = proximity_search_request(&request)?;
+        let limits = ContentGraphLimits::try_from(limits)?;
+        let proof = match &self.engine.inner {
+            BindingEngine::Memory(engine) => {
+                prove_pq_search(engine.store().clone(), &manifest, &source, request, &limits)
+            }
+            BindingEngine::File(engine) => {
+                prove_pq_search(engine.store().clone(), &manifest, &source, request, &limits)
+            }
+            #[cfg(feature = "sqlite")]
+            BindingEngine::Sqlite(engine) => {
+                prove_pq_search(engine.store().clone(), &manifest, &source, request, &limits)
+            }
+            BindingEngine::Host(engine) => {
+                prove_pq_search(engine.store().clone(), &manifest, &source, request, &limits)
+            }
+        }?;
+        Ok(Arc::new(BindingProximitySearchProof { inner: proof }))
+    }
+}
+
+#[uniffi::export]
+impl BindingCompositeAccelerator {
+    pub fn manifest(&self) -> Vec<u8> {
+        self.manifest.clone()
+    }
+
+    pub fn current_source_descriptor(&self) -> Vec<u8> {
+        self.current_source_descriptor.clone()
+    }
+
+    pub fn base_source_descriptor(&self) -> Vec<u8> {
+        self.base_source_descriptor.clone()
+    }
+
+    pub fn base_kind(&self) -> CompositeBaseKindRecord {
+        self.base_kind
+    }
+
+    pub fn delta_count(&self) -> u64 {
+        self.delta_count
+    }
+
+    pub fn shadow_count(&self) -> u64 {
+        self.shadow_count
+    }
+
+    pub fn config(&self) -> CompositeAcceleratorConfigRecord {
+        self.config.clone()
+    }
+
+    pub fn build_stats(&self) -> CompositeBuildStatsRecord {
+        self.build_stats.clone()
+    }
+
+    pub fn search(
+        &self,
+        map: Arc<BindingProximityMap>,
+        request: ProximitySearchRequestRecord,
+    ) -> Result<ProximitySearchResultRecord, ProllyBindingError> {
+        if !Arc::ptr_eq(&self.engine, &map.engine) {
+            return Err(ProllyBindingError::InvalidArgument {
+                reason: "composite accelerator and proximity map belong to different engines"
+                    .to_string(),
+            });
+        }
+        let manifest = crate::cid_from_vec(self.manifest.clone())?;
+        let source = crate::cid_from_vec(map.descriptor())?;
+        let request = proximity_search_request(&request)?;
+        match &self.engine.inner {
+            BindingEngine::Memory(engine) => {
+                search_composite(engine.store().clone(), &manifest, &source, request)
+            }
+            BindingEngine::File(engine) => {
+                search_composite(engine.store().clone(), &manifest, &source, request)
+            }
+            #[cfg(feature = "sqlite")]
+            BindingEngine::Sqlite(engine) => {
+                search_composite(engine.store().clone(), &manifest, &source, request)
+            }
+            BindingEngine::Host(engine) => {
+                search_composite(engine.store().clone(), &manifest, &source, request)
+            }
+        }
+    }
+
+    pub fn search_with_runtime(
+        &self,
+        map: Arc<BindingProximityMap>,
+        request: ProximitySearchRequestRecord,
+        runtime: Arc<BindingProximitySearchRuntime>,
+    ) -> Result<ProximitySearchResultRecord, ProllyBindingError> {
+        if !Arc::ptr_eq(&self.engine, &map.engine) || !runtime.belongs_to(&self.engine) {
+            return Err(ProllyBindingError::InvalidArgument {
+                reason: "composite accelerator, proximity map, and search runtime must belong to the same engine"
+                    .to_string(),
+            });
+        }
+        let manifest = crate::cid_from_vec(self.manifest.clone())?;
+        let source = crate::cid_from_vec(map.descriptor())?;
+        let request = proximity_search_request(&request)?;
+        with_proximity_search_io!(runtime, io, {
+            let store = io.store().clone();
+            let map = ProximityMap::load(store.clone(), source)?;
+            let composite = CompositeAccelerator::load(store, manifest)?;
+            let accelerators = AcceleratorSet::empty().with_composite(map.tree(), composite)?;
+            map.search_with(&accelerators, io, request)
+                .map(Into::into)
+                .map_err(Into::into)
+        })
+    }
+
+    pub fn search_cancellable(
+        &self,
+        map: Arc<BindingProximityMap>,
+        request: ProximitySearchRequestRecord,
+        runtime: Option<Arc<BindingProximitySearchRuntime>>,
+        cancellation: Arc<BindingProximityCancellationToken>,
+    ) -> Result<ProximitySearchResultRecord, ProllyBindingError> {
+        let runtime = binding_search_runtime(&self.engine, runtime)?;
+        search_binding_accelerator_cancellable(
+            &self.engine,
+            &map,
+            &runtime,
+            crate::cid_from_vec(self.manifest.clone())?,
+            BindingAsyncAcceleratorKind::Composite,
+            proximity_search_request(&request)?,
+            cancellation.inner.clone(),
+        )
+    }
+
+    pub fn prove_search(
+        &self,
+        map: Arc<BindingProximityMap>,
+        request: ProximitySearchRequestRecord,
+        limits: ContentGraphLimitsRecord,
+    ) -> Result<Arc<BindingProximitySearchProof>, ProllyBindingError> {
+        if !Arc::ptr_eq(&self.engine, &map.engine) {
+            return Err(ProllyBindingError::InvalidArgument {
+                reason: "composite accelerator and proximity map belong to different engines"
+                    .to_string(),
+            });
+        }
+        let manifest = crate::cid_from_vec(self.manifest.clone())?;
+        let source = crate::cid_from_vec(map.descriptor())?;
+        let request = proximity_search_request(&request)?;
+        let limits = ContentGraphLimits::try_from(limits)?;
+        let proof = match &self.engine.inner {
+            BindingEngine::Memory(engine) => {
+                prove_composite_search(engine.store().clone(), &manifest, &source, request, &limits)
+            }
+            BindingEngine::File(engine) => {
+                prove_composite_search(engine.store().clone(), &manifest, &source, request, &limits)
+            }
+            #[cfg(feature = "sqlite")]
+            BindingEngine::Sqlite(engine) => {
+                prove_composite_search(engine.store().clone(), &manifest, &source, request, &limits)
+            }
+            BindingEngine::Host(engine) => {
+                prove_composite_search(engine.store().clone(), &manifest, &source, request, &limits)
+            }
+        }?;
+        Ok(Arc::new(BindingProximitySearchProof { inner: proof }))
+    }
+}
+
+#[uniffi::export]
+impl BindingAcceleratorCatalog {
+    pub fn manifest(&self) -> Vec<u8> {
+        self.manifest.clone()
+    }
+
+    pub fn source_descriptor(&self) -> Vec<u8> {
+        self.source_descriptor.clone()
+    }
+
+    pub fn entries(&self) -> Vec<AcceleratorCatalogEntryRecord> {
+        self.entries.clone()
+    }
+
+    pub fn search(
+        &self,
+        map: Arc<BindingProximityMap>,
+        request: ProximitySearchRequestRecord,
+    ) -> Result<ProximitySearchResultRecord, ProllyBindingError> {
+        if !Arc::ptr_eq(&self.engine, &map.engine) {
+            return Err(ProllyBindingError::InvalidArgument {
+                reason: "accelerator catalog and proximity map belong to different engines"
+                    .to_string(),
+            });
+        }
+        let manifest = crate::cid_from_vec(self.manifest.clone())?;
+        let source = crate::cid_from_vec(map.descriptor())?;
+        let request = proximity_search_request(&request)?;
+        match &self.engine.inner {
+            BindingEngine::Memory(engine) => {
+                search_catalog(engine.store().clone(), &manifest, &source, request)
+            }
+            BindingEngine::File(engine) => {
+                search_catalog(engine.store().clone(), &manifest, &source, request)
+            }
+            #[cfg(feature = "sqlite")]
+            BindingEngine::Sqlite(engine) => {
+                search_catalog(engine.store().clone(), &manifest, &source, request)
+            }
+            BindingEngine::Host(engine) => {
+                search_catalog(engine.store().clone(), &manifest, &source, request)
+            }
+        }
+    }
+
+    pub fn search_with_runtime(
+        &self,
+        map: Arc<BindingProximityMap>,
+        request: ProximitySearchRequestRecord,
+        runtime: Arc<BindingProximitySearchRuntime>,
+    ) -> Result<ProximitySearchResultRecord, ProllyBindingError> {
+        if !Arc::ptr_eq(&self.engine, &map.engine) || !runtime.belongs_to(&self.engine) {
+            return Err(ProllyBindingError::InvalidArgument {
+                reason: "accelerator catalog, proximity map, and search runtime must belong to the same engine"
+                    .to_string(),
+            });
+        }
+        let manifest = crate::cid_from_vec(self.manifest.clone())?;
+        let source = crate::cid_from_vec(map.descriptor())?;
+        let request = proximity_search_request(&request)?;
+        with_proximity_search_io!(runtime, io, {
+            let store = io.store().clone();
+            let map = ProximityMap::load(store.clone(), source)?;
+            let catalog = AcceleratorCatalog::load(store, manifest, map.tree())?;
+            map.search_with(catalog.accelerators(), io, request)
+                .map(Into::into)
+                .map_err(Into::into)
+        })
+    }
+
+    pub fn search_cancellable(
+        &self,
+        map: Arc<BindingProximityMap>,
+        request: ProximitySearchRequestRecord,
+        runtime: Option<Arc<BindingProximitySearchRuntime>>,
+        cancellation: Arc<BindingProximityCancellationToken>,
+    ) -> Result<ProximitySearchResultRecord, ProllyBindingError> {
+        let runtime = binding_search_runtime(&self.engine, runtime)?;
+        search_binding_accelerator_cancellable(
+            &self.engine,
+            &map,
+            &runtime,
+            crate::cid_from_vec(self.manifest.clone())?,
+            BindingAsyncAcceleratorKind::Catalog,
+            proximity_search_request(&request)?,
+            cancellation.inner.clone(),
+        )
+    }
+
+    pub fn prove_search(
+        &self,
+        map: Arc<BindingProximityMap>,
+        request: ProximitySearchRequestRecord,
+        limits: ContentGraphLimitsRecord,
+    ) -> Result<Arc<BindingProximitySearchProof>, ProllyBindingError> {
+        if !Arc::ptr_eq(&self.engine, &map.engine) {
+            return Err(ProllyBindingError::InvalidArgument {
+                reason: "accelerator catalog and proximity map belong to different engines"
+                    .to_string(),
+            });
+        }
+        let manifest = crate::cid_from_vec(self.manifest.clone())?;
+        let source = crate::cid_from_vec(map.descriptor())?;
+        let request = proximity_search_request(&request)?;
+        let limits = ContentGraphLimits::try_from(limits)?;
+        let proof = match &self.engine.inner {
+            BindingEngine::Memory(engine) => {
+                prove_catalog_search(engine.store().clone(), &manifest, &source, request, &limits)
+            }
+            BindingEngine::File(engine) => {
+                prove_catalog_search(engine.store().clone(), &manifest, &source, request, &limits)
+            }
+            #[cfg(feature = "sqlite")]
+            BindingEngine::Sqlite(engine) => {
+                prove_catalog_search(engine.store().clone(), &manifest, &source, request, &limits)
+            }
+            BindingEngine::Host(engine) => {
+                prove_catalog_search(engine.store().clone(), &manifest, &source, request, &limits)
+            }
+        }?;
+        Ok(Arc::new(BindingProximitySearchProof { inner: proof }))
+    }
+}
+
+#[derive(Clone, uniffi::Record)]
+pub struct HnswBuildResultRecord {
+    pub index: Arc<BindingHnswIndex>,
+    pub stats: HnswBuildStatsRecord,
+}
+
+#[derive(Clone, uniffi::Record)]
+pub struct ProductQuantizationBuildResultRecord {
+    pub index: Arc<BindingProductQuantizer>,
+    pub stats: ProductQuantizationBuildStatsRecord,
 }
 
 impl BindingProximityMap {
@@ -1070,6 +3608,7 @@ impl BindingProximityMap {
                 ),
             };
         let session = Arc::new(BindingProximityReadSession {
+            engine: self.engine.clone(),
             inner,
             fast_handle: AtomicU64::new(0),
         });
@@ -1125,6 +3664,445 @@ impl BindingProximityMap {
         with_proximity_map!(self, map, { map.clear_content_cache().map_err(Into::into) })
     }
 
+    pub fn build_hnsw(
+        &self,
+        config: HnswConfigRecord,
+        limits: HnswBuildLimitsRecord,
+    ) -> Result<HnswBuildResultRecord, ProllyBindingError> {
+        let config: HnswConfig = config.into();
+        let limits = HnswBuildLimits::try_from(limits)?;
+        with_proximity_map!(self, map, {
+            let (index, stats) = HnswIndex::build_with_limits(&map, config, limits)?;
+            Ok(HnswBuildResultRecord {
+                index: Arc::new(BindingHnswIndex {
+                    engine: self.engine.clone(),
+                    manifest: index.manifest_cid().0.to_vec(),
+                    source_descriptor: index.source_descriptor().0.to_vec(),
+                    config: index.config().clone().into(),
+                    canonical: index.is_canonical(),
+                }),
+                stats: stats.into(),
+            })
+        })
+    }
+
+    pub fn load_hnsw(
+        &self,
+        manifest: Vec<u8>,
+    ) -> Result<Arc<BindingHnswIndex>, ProllyBindingError> {
+        let manifest = crate::cid_from_vec(manifest)?;
+        with_proximity_store_map!(self, store, map, {
+            let index = HnswIndex::load(store, manifest)?;
+            if index.source_descriptor() != &map.tree().descriptor {
+                return Err(ProllyBindingError::InvalidArgument {
+                    reason: "HNSW index is bound to a different source descriptor".to_string(),
+                });
+            }
+            Ok(Arc::new(BindingHnswIndex {
+                engine: self.engine.clone(),
+                manifest: index.manifest_cid().0.to_vec(),
+                source_descriptor: index.source_descriptor().0.to_vec(),
+                config: index.config().clone().into(),
+                canonical: index.is_canonical(),
+            }))
+        })
+    }
+
+    pub fn build_pq(
+        &self,
+        config: ProductQuantizationConfigRecord,
+        worker_threads: u64,
+        limits: ProductQuantizationBuildLimitsRecord,
+    ) -> Result<ProductQuantizationBuildResultRecord, ProllyBindingError> {
+        let config = ProductQuantizationConfig::try_from(config)?;
+        let parallelism = BuildParallelism::new(to_usize(worker_threads, "worker_threads")?)?;
+        let limits = ProductQuantizationBuildLimits::try_from(limits)?;
+        with_proximity_map!(self, map, {
+            let (index, stats) =
+                ProductQuantizer::build_with_limits(&map, config, parallelism, limits)?;
+            Ok(ProductQuantizationBuildResultRecord {
+                index: Arc::new(BindingProductQuantizer {
+                    engine: self.engine.clone(),
+                    manifest: index.manifest_cid().0.to_vec(),
+                    source_descriptor: index.source_descriptor().0.to_vec(),
+                    config: index.config().clone().into(),
+                    quality: index.quality().into(),
+                }),
+                stats: stats.into(),
+            })
+        })
+    }
+
+    pub fn load_pq(
+        &self,
+        manifest: Vec<u8>,
+    ) -> Result<Arc<BindingProductQuantizer>, ProllyBindingError> {
+        let manifest = crate::cid_from_vec(manifest)?;
+        with_proximity_store_map!(self, store, map, {
+            let index = ProductQuantizer::load(store, manifest)?;
+            if index.source_descriptor() != &map.tree().descriptor {
+                return Err(ProllyBindingError::InvalidArgument {
+                    reason: "product quantizer is bound to a different source descriptor"
+                        .to_string(),
+                });
+            }
+            Ok(Arc::new(BindingProductQuantizer {
+                engine: self.engine.clone(),
+                manifest: index.manifest_cid().0.to_vec(),
+                source_descriptor: index.source_descriptor().0.to_vec(),
+                config: index.config().clone().into(),
+                quality: index.quality().into(),
+            }))
+        })
+    }
+
+    pub fn build_composite_hnsw(
+        &self,
+        base_map: Arc<BindingProximityMap>,
+        base: Arc<BindingHnswIndex>,
+        config: CompositeAcceleratorConfigRecord,
+        limits: CompositeBuildLimitsRecord,
+    ) -> Result<CompositeBuildOutcomeRecord, ProllyBindingError> {
+        if !Arc::ptr_eq(&self.engine, &base_map.engine) || !Arc::ptr_eq(&self.engine, &base.engine)
+        {
+            return Err(ProllyBindingError::InvalidArgument {
+                reason: "composite inputs belong to different engines".to_string(),
+            });
+        }
+        let base_source = crate::cid_from_vec(base_map.descriptor())?;
+        let current_source = crate::cid_from_vec(self.descriptor())?;
+        let base_manifest = crate::cid_from_vec(base.manifest())?;
+        let config = config.try_into()?;
+        let limits = limits.try_into()?;
+        match &self.engine.inner {
+            BindingEngine::Memory(engine) => build_composite_hnsw(
+                self.engine.clone(),
+                engine.store().clone(),
+                base_source,
+                current_source,
+                base_manifest,
+                config,
+                limits,
+            ),
+            BindingEngine::File(engine) => build_composite_hnsw(
+                self.engine.clone(),
+                engine.store().clone(),
+                base_source,
+                current_source,
+                base_manifest,
+                config,
+                limits,
+            ),
+            #[cfg(feature = "sqlite")]
+            BindingEngine::Sqlite(engine) => build_composite_hnsw(
+                self.engine.clone(),
+                engine.store().clone(),
+                base_source,
+                current_source,
+                base_manifest,
+                config,
+                limits,
+            ),
+            BindingEngine::Host(engine) => build_composite_hnsw(
+                self.engine.clone(),
+                engine.store().clone(),
+                base_source,
+                current_source,
+                base_manifest,
+                config,
+                limits,
+            ),
+        }
+    }
+
+    pub fn build_composite_pq(
+        &self,
+        base_map: Arc<BindingProximityMap>,
+        base: Arc<BindingProductQuantizer>,
+        config: CompositeAcceleratorConfigRecord,
+        limits: CompositeBuildLimitsRecord,
+    ) -> Result<CompositeBuildOutcomeRecord, ProllyBindingError> {
+        if !Arc::ptr_eq(&self.engine, &base_map.engine) || !Arc::ptr_eq(&self.engine, &base.engine)
+        {
+            return Err(ProllyBindingError::InvalidArgument {
+                reason: "composite inputs belong to different engines".to_string(),
+            });
+        }
+        let base_source = crate::cid_from_vec(base_map.descriptor())?;
+        let current_source = crate::cid_from_vec(self.descriptor())?;
+        let base_manifest = crate::cid_from_vec(base.manifest())?;
+        let config = config.try_into()?;
+        let limits = limits.try_into()?;
+        match &self.engine.inner {
+            BindingEngine::Memory(engine) => build_composite_pq(
+                self.engine.clone(),
+                engine.store().clone(),
+                base_source,
+                current_source,
+                base_manifest,
+                config,
+                limits,
+            ),
+            BindingEngine::File(engine) => build_composite_pq(
+                self.engine.clone(),
+                engine.store().clone(),
+                base_source,
+                current_source,
+                base_manifest,
+                config,
+                limits,
+            ),
+            #[cfg(feature = "sqlite")]
+            BindingEngine::Sqlite(engine) => build_composite_pq(
+                self.engine.clone(),
+                engine.store().clone(),
+                base_source,
+                current_source,
+                base_manifest,
+                config,
+                limits,
+            ),
+            BindingEngine::Host(engine) => build_composite_pq(
+                self.engine.clone(),
+                engine.store().clone(),
+                base_source,
+                current_source,
+                base_manifest,
+                config,
+                limits,
+            ),
+        }
+    }
+
+    pub fn build_or_rebuild_composite_hnsw(
+        &self,
+        base_map: Arc<BindingProximityMap>,
+        base: Arc<BindingHnswIndex>,
+        config: CompositeAcceleratorConfigRecord,
+        limits: CompositeBuildLimitsRecord,
+        rebuild: CompositeRebuildOptionsRecord,
+    ) -> Result<CompositeBuildOrRebuildOutcomeRecord, ProllyBindingError> {
+        if !Arc::ptr_eq(&self.engine, &base_map.engine) || !Arc::ptr_eq(&self.engine, &base.engine)
+        {
+            return Err(ProllyBindingError::InvalidArgument {
+                reason: "composite inputs belong to different engines".to_string(),
+            });
+        }
+        let base_source = crate::cid_from_vec(base_map.descriptor())?;
+        let current_source = crate::cid_from_vec(self.descriptor())?;
+        let base_manifest = crate::cid_from_vec(base.manifest())?;
+        let config = config.try_into()?;
+        let limits = limits.try_into()?;
+        let rebuild = rebuild.try_into()?;
+        match &self.engine.inner {
+            BindingEngine::Memory(engine) => rebuild_composite_hnsw(
+                self.engine.clone(),
+                engine.store().clone(),
+                base_source,
+                current_source,
+                base_manifest,
+                config,
+                limits,
+                rebuild,
+            ),
+            BindingEngine::File(engine) => rebuild_composite_hnsw(
+                self.engine.clone(),
+                engine.store().clone(),
+                base_source,
+                current_source,
+                base_manifest,
+                config,
+                limits,
+                rebuild,
+            ),
+            #[cfg(feature = "sqlite")]
+            BindingEngine::Sqlite(engine) => rebuild_composite_hnsw(
+                self.engine.clone(),
+                engine.store().clone(),
+                base_source,
+                current_source,
+                base_manifest,
+                config,
+                limits,
+                rebuild,
+            ),
+            BindingEngine::Host(engine) => rebuild_composite_hnsw(
+                self.engine.clone(),
+                engine.store().clone(),
+                base_source,
+                current_source,
+                base_manifest,
+                config,
+                limits,
+                rebuild,
+            ),
+        }
+    }
+
+    pub fn build_or_rebuild_composite_pq(
+        &self,
+        base_map: Arc<BindingProximityMap>,
+        base: Arc<BindingProductQuantizer>,
+        config: CompositeAcceleratorConfigRecord,
+        limits: CompositeBuildLimitsRecord,
+        rebuild: CompositeRebuildOptionsRecord,
+    ) -> Result<CompositeBuildOrRebuildOutcomeRecord, ProllyBindingError> {
+        if !Arc::ptr_eq(&self.engine, &base_map.engine) || !Arc::ptr_eq(&self.engine, &base.engine)
+        {
+            return Err(ProllyBindingError::InvalidArgument {
+                reason: "composite inputs belong to different engines".to_string(),
+            });
+        }
+        let base_source = crate::cid_from_vec(base_map.descriptor())?;
+        let current_source = crate::cid_from_vec(self.descriptor())?;
+        let base_manifest = crate::cid_from_vec(base.manifest())?;
+        let config = config.try_into()?;
+        let limits = limits.try_into()?;
+        let rebuild = rebuild.try_into()?;
+        match &self.engine.inner {
+            BindingEngine::Memory(engine) => rebuild_composite_pq(
+                self.engine.clone(),
+                engine.store().clone(),
+                base_source,
+                current_source,
+                base_manifest,
+                config,
+                limits,
+                rebuild,
+            ),
+            BindingEngine::File(engine) => rebuild_composite_pq(
+                self.engine.clone(),
+                engine.store().clone(),
+                base_source,
+                current_source,
+                base_manifest,
+                config,
+                limits,
+                rebuild,
+            ),
+            #[cfg(feature = "sqlite")]
+            BindingEngine::Sqlite(engine) => rebuild_composite_pq(
+                self.engine.clone(),
+                engine.store().clone(),
+                base_source,
+                current_source,
+                base_manifest,
+                config,
+                limits,
+                rebuild,
+            ),
+            BindingEngine::Host(engine) => rebuild_composite_pq(
+                self.engine.clone(),
+                engine.store().clone(),
+                base_source,
+                current_source,
+                base_manifest,
+                config,
+                limits,
+                rebuild,
+            ),
+        }
+    }
+
+    pub fn load_composite(
+        &self,
+        manifest: Vec<u8>,
+    ) -> Result<Arc<BindingCompositeAccelerator>, ProllyBindingError> {
+        let manifest = crate::cid_from_vec(manifest)?;
+        with_proximity_store_map!(self, store, map, {
+            let index = CompositeAccelerator::load(store, manifest)?;
+            if index.current_source_descriptor() != &map.tree().descriptor {
+                return Err(ProllyBindingError::InvalidArgument {
+                    reason: "composite accelerator is bound to a different source descriptor"
+                        .to_string(),
+                });
+            }
+            Ok(binding_composite_accelerator(self.engine.clone(), &index))
+        })
+    }
+
+    pub fn build_accelerator_catalog(
+        &self,
+        hnsw: Option<Arc<BindingHnswIndex>>,
+        pq: Option<Arc<BindingProductQuantizer>>,
+        composite: Option<Arc<BindingCompositeAccelerator>>,
+    ) -> Result<Arc<BindingAcceleratorCatalog>, ProllyBindingError> {
+        for belongs in [
+            hnsw.as_ref()
+                .map(|value| Arc::ptr_eq(&self.engine, &value.engine)),
+            pq.as_ref()
+                .map(|value| Arc::ptr_eq(&self.engine, &value.engine)),
+            composite
+                .as_ref()
+                .map(|value| Arc::ptr_eq(&self.engine, &value.engine)),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            if !belongs {
+                return Err(ProllyBindingError::InvalidArgument {
+                    reason: "catalog inputs belong to different engines".to_string(),
+                });
+            }
+        }
+        let source = crate::cid_from_vec(self.descriptor())?;
+        let hnsw = hnsw
+            .map(|value| crate::cid_from_vec(value.manifest()))
+            .transpose()?;
+        let pq = pq
+            .map(|value| crate::cid_from_vec(value.manifest()))
+            .transpose()?;
+        let composite = composite
+            .map(|value| crate::cid_from_vec(value.manifest()))
+            .transpose()?;
+        match &self.engine.inner {
+            BindingEngine::Memory(engine) => build_catalog(
+                self.engine.clone(),
+                engine.store().clone(),
+                source,
+                hnsw,
+                pq,
+                composite,
+            ),
+            BindingEngine::File(engine) => build_catalog(
+                self.engine.clone(),
+                engine.store().clone(),
+                source,
+                hnsw,
+                pq,
+                composite,
+            ),
+            #[cfg(feature = "sqlite")]
+            BindingEngine::Sqlite(engine) => build_catalog(
+                self.engine.clone(),
+                engine.store().clone(),
+                source,
+                hnsw,
+                pq,
+                composite,
+            ),
+            BindingEngine::Host(engine) => build_catalog(
+                self.engine.clone(),
+                engine.store().clone(),
+                source,
+                hnsw,
+                pq,
+                composite,
+            ),
+        }
+    }
+
+    pub fn load_accelerator_catalog(
+        &self,
+        manifest: Vec<u8>,
+    ) -> Result<Arc<BindingAcceleratorCatalog>, ProllyBindingError> {
+        let manifest = crate::cid_from_vec(manifest)?;
+        with_proximity_store_map!(self, store, map, {
+            let catalog = AcceleratorCatalog::load(store, manifest, map.tree())?;
+            Ok(binding_accelerator_catalog(self.engine.clone(), &catalog))
+        })
+    }
+
     pub fn search(
         &self,
         request: ProximitySearchRequestRecord,
@@ -1133,6 +4111,26 @@ impl BindingProximityMap {
         with_proximity_map!(self, map, {
             map.search(request).map(Into::into).map_err(Into::into)
         })
+    }
+
+    pub fn search_with_runtime(
+        &self,
+        request: ProximitySearchRequestRecord,
+        runtime: Arc<BindingProximitySearchRuntime>,
+    ) -> Result<ProximitySearchResultRecord, ProllyBindingError> {
+        let request = proximity_search_request(&request)?;
+        search_map_with_runtime(self, &runtime, request)
+    }
+
+    pub fn search_cancellable(
+        &self,
+        request: ProximitySearchRequestRecord,
+        runtime: Option<Arc<BindingProximitySearchRuntime>>,
+        cancellation: Arc<BindingProximityCancellationToken>,
+    ) -> Result<ProximitySearchResultRecord, ProllyBindingError> {
+        let runtime = binding_search_runtime(&self.engine, runtime)?;
+        let request = proximity_search_request(&request)?;
+        search_map_cancellable(self, &runtime, request, cancellation.inner.clone())
     }
 
     pub fn prove_search(
@@ -1343,6 +4341,11 @@ pub(crate) fn load_proximity_map(
 #[uniffi::export]
 pub fn default_proximity_config(dimensions: u32) -> ProximityConfigRecord {
     ProximityConfigRecord::new(dimensions)
+}
+
+#[uniffi::export]
+pub fn default_proximity_search_runtime_policy() -> ProximitySearchRuntimePolicyRecord {
+    SearchRuntimePolicy::default().into()
 }
 
 #[uniffi::export]

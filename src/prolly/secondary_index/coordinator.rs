@@ -283,7 +283,7 @@ where
             .cloned();
         for definition in override_definition
             .into_iter()
-            .chain(self.registry.get(&descriptor.name).cloned())
+            .chain(self.registry.definitions_for_name(&descriptor.name))
         {
             let runtime = SecondaryIndexDescriptor::from_runtime(&self.source_map_id, &definition)?;
             if runtime.fingerprint == descriptor.fingerprint {

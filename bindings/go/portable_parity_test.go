@@ -4,8 +4,765 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"runtime"
 	"testing"
 )
+
+func TestTypedVersionedMapIsApplicationFacing(t *testing.T) {
+	config, err := DefaultConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine, err := NewMemoryEngine(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(engine.Close)
+	raw, err := engine.VersionedMap([]byte("typed-users"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(raw.Close)
+	if _, err = raw.Initialize(); err != nil {
+		t.Fatal(err)
+	}
+	typed := NewTypedVersionedMap(raw, StringKeyCodec{}, JSONValueCodec[map[string]int]{})
+	first, err := typed.Put("alice", map[string]int{"score": 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	value, found, err := typed.Get("alice")
+	if err != nil || !found || value["score"] != 1 {
+		t.Fatalf("typed get = %#v, %v, %v", value, found, err)
+	}
+	historical, found, err := typed.GetAt(first.ID, "alice")
+	if err != nil || !found || historical["score"] != 1 {
+		t.Fatalf("typed historical get = %#v, %v, %v", historical, found, err)
+	}
+	entries, err := typed.Entries()
+	if err != nil || len(entries) != 1 || entries[0].Key != "alice" || entries[0].Value["score"] != 1 {
+		t.Fatalf("typed entries = %#v, %v", entries, err)
+	}
+	update, err := typed.PutIf(first.ID, "alice", map[string]int{"score": 2})
+	if err != nil || update.Kind != MapUpdateApplied {
+		t.Fatalf("typed put if = %#v, %v", update, err)
+	}
+	migration, err := MigrateTypedVersionedMap(
+		typed, update.Current.ID, JSONValueCodec[map[string]int]{},
+		func(value map[string]int) (map[string]int, error) {
+			value["score"] += 10
+			return value, nil
+		},
+	)
+	if err != nil || migration.Update.Kind != MapUpdateApplied ||
+		migration.ScannedValues != 1 || migration.RewrittenValues != 1 {
+		t.Fatalf("typed migration = %#v, %v", migration, err)
+	}
+	value, found, err = typed.Get("alice")
+	if err != nil || !found || value["score"] != 12 {
+		t.Fatalf("typed migrated get = %#v, %v, %v", value, found, err)
+	}
+	if typed.Raw() != raw {
+		t.Fatal("typed raw map identity changed")
+	}
+	if _, err = typed.Delete("alice"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestBuildProximityWithParallelism(t *testing.T) {
+	config, err := DefaultConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine, err := NewMemoryEngine(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(engine.Close)
+	records := []ProximityRecord{
+		{Key: []byte("a"), Vector: []float32{0, 1}, Value: []byte("alpha")},
+		{Key: []byte("b"), Vector: []float32{1, 0}, Value: []byte("beta")},
+	}
+	serial, err := engine.BuildProximityWithOptions(2, records, ProximityBuildOptions{Threads: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(serial.Close)
+	parallel, err := engine.BuildProximityWithOptions(2, records, ProximityBuildOptions{Threads: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(parallel.Close)
+	serialDescriptor, err := serial.Descriptor()
+	if err != nil {
+		t.Fatal(err)
+	}
+	parallelDescriptor, err := parallel.Descriptor()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(serialDescriptor, parallelDescriptor) {
+		t.Fatal("parallel proximity build changed the canonical descriptor")
+	}
+}
+
+func TestProximityExactRecordView(t *testing.T) {
+	config, err := DefaultConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine, err := NewMemoryEngine(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(engine.Close)
+	proximity, err := engine.BuildProximity(2, []ProximityRecord{{
+		Key: []byte("a"), Vector: []float32{1.25, 2.5}, Value: []byte("alpha"),
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(proximity.Close)
+	found, err := proximity.GetView([]byte("a"), func(record ProximityRecordView) {
+		if record.Vector.Dimensions() != 2 || record.Vector.Component(1) != 2.5 || string(record.Value) != "alpha" {
+			t.Fatalf("unexpected proximity record view: %#v", record)
+		}
+	})
+	if err != nil || !found {
+		t.Fatalf("GetView found=%v err=%v", found, err)
+	}
+}
+
+func TestRetainedSearchRuntimeReusesValidatedContent(t *testing.T) {
+	config, err := DefaultConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine, err := NewMemoryEngine(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(engine.Close)
+	records := make([]ProximityRecord, 16)
+	for index := range records {
+		records[index] = ProximityRecord{
+			Key: []byte(fmt.Sprintf("vector-%02d", index)), Vector: []float32{float32(index), 0},
+			Value: []byte(fmt.Sprintf("value-%02d", index)),
+		}
+	}
+	proximity, err := engine.BuildProximity(2, records)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(proximity.Close)
+	descriptor, err := proximity.Descriptor()
+	if err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := engine.LoadProximity(descriptor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(loaded.Close)
+	if err := loaded.ClearContentCache(); err != nil {
+		t.Fatal(err)
+	}
+	if record, found, err := loaded.Get([]byte("vector-00")); err != nil || !found || !bytes.Equal(record.Value, []byte("value-00")) {
+		t.Fatalf("loaded proximity record = %#v, %v, %v", record, found, err)
+	}
+	runtime, err := engine.NewProximitySearchRuntime()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(runtime.Close)
+	request := ExactSearch([]float32{0, 0}, 3)
+
+	cold, err := proximity.SearchWithRuntime(context.Background(), request, runtime)
+	if err != nil {
+		t.Fatal(err)
+	}
+	warm, err := proximity.SearchWithRuntime(context.Background(), request, runtime)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cold.Stats.PhysicalBytesRead == 0 || warm.Stats.PhysicalBytesRead != 0 {
+		t.Fatalf("physical bytes cold=%d warm=%d", cold.Stats.PhysicalBytesRead, warm.Stats.PhysicalBytesRead)
+	}
+	stats, err := runtime.Stats()
+	if err != nil || stats.PhysicalReads == 0 {
+		t.Fatalf("runtime stats = %#v, %v", stats, err)
+	}
+	if err := runtime.Clear(); err != nil {
+		t.Fatal(err)
+	}
+	recold, err := proximity.SearchWithRuntime(context.Background(), request, runtime)
+	if err != nil || recold.Stats.PhysicalBytesRead == 0 {
+		t.Fatalf("search after clear = %#v, %v", recold, err)
+	}
+}
+
+func TestProximityFutureUsesNativeCooperativeCancellation(t *testing.T) {
+	config, err := DefaultConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine, err := NewMemoryEngine(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(engine.Close)
+	records := make([]ProximityRecord, 256)
+	for index := range records {
+		records[index] = ProximityRecord{
+			Key:    []byte(fmt.Sprintf("vector-%04d", index)),
+			Vector: []float32{float32(index), float32(index % 7)},
+			Value:  []byte(fmt.Sprint(index)),
+		}
+	}
+	proximity, err := engine.BuildProximity(2, records)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(proximity.Close)
+	runtime, err := engine.NewProximitySearchRuntime()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(runtime.Close)
+	cancellation, err := NewProximityCancellationToken()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(cancellation.Close)
+	if err := cancellation.Cancel(); err != nil {
+		t.Fatal(err)
+	}
+	result, err := proximity.SearchCancellable(
+		context.Background(), ExactSearch([]float32{0, 0}, 10), runtime, cancellation,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Completion != "cancelled" || len(result.Neighbors) != 0 {
+		t.Fatalf("cancelled result = %#v", result)
+	}
+	session, err := proximity.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(session.Close)
+	sessionResult, err := session.SearchCancellable(
+		context.Background(), ExactSearch([]float32{0, 0}, 10), runtime, cancellation,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sessionResult.Completion != "cancelled" || len(sessionResult.Neighbors) != 0 {
+		t.Fatalf("cancelled session result = %#v", sessionResult)
+	}
+}
+
+func TestRichProximitySearchPreservesPolicyFilterStatsSessionAndProof(t *testing.T) {
+	config, err := DefaultConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine, err := NewMemoryEngine(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(engine.Close)
+	proximity, err := engine.BuildProximity(2, []ProximityRecord{
+		{Key: []byte("a"), Vector: []float32{0, 0}, Value: []byte("alpha")},
+		{Key: []byte("ab"), Vector: []float32{1, 0}, Value: []byte("alphabet")},
+		{Key: []byte("b"), Vector: []float32{0.1, 0}, Value: []byte("beta")},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(proximity.Close)
+	maxNodes, maxBytes, maxDistances, maxFrontier := uint64(1_000), uint64(1_000_000), uint64(1_000), uint64(1_000)
+	request := SearchRequest{
+		Query:  []float32{0, 0},
+		K:      3,
+		Policy: SearchPolicyFixedBudget,
+		Budget: SearchBudget{
+			MaxNodes: &maxNodes, MaxCommittedBytes: &maxBytes,
+			MaxDistanceEvaluations: &maxDistances, MaxFrontierEntries: &maxFrontier,
+		},
+		Filter:  PrefixFilter([]byte("a")),
+		Kernel:  QueryKernelScalarDeterministic,
+		Backend: SearchBackendAuto,
+	}
+	mapResult, err := proximity.Search(context.Background(), request)
+	if err != nil || len(mapResult.Neighbors) != 2 {
+		t.Fatalf("map search = %#v, %v", mapResult, err)
+	}
+	session, err := proximity.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(session.Close)
+	result, err := session.Search(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Neighbors) != 2 {
+		t.Fatalf("filtered neighbors = %#v", result.Neighbors)
+	}
+	if got := [][]byte{result.Neighbors[0].Key, result.Neighbors[1].Key}; !bytes.Equal(got[0], []byte("a")) || !bytes.Equal(got[1], []byte("ab")) {
+		t.Fatalf("filtered neighbors = %q", got)
+	}
+	if result.Stats.DistanceEvaluations == 0 || result.PlanFormatVersion == 0 {
+		t.Fatalf("incomplete result metadata = %#v", result)
+	}
+	var scanned []string
+	visited, err := proximity.ScanRecords(func(record ProximityRecord) bool {
+		scanned = append(scanned, string(record.Key))
+		return len(scanned) < 2
+	})
+	if err != nil || visited != 2 || fmt.Sprint(scanned) != "[a ab]" {
+		t.Fatalf("map record scan = %v, %d, %v", scanned, visited, err)
+	}
+	var ranged []string
+	outcome, err := proximity.ScanRecordViews([]byte("ab"), []byte("c"), func(record ProximityScanRecordView) bool {
+		ranged = append(ranged, record.Key.String())
+		return true
+	})
+	if err != nil || outcome != (ScanOutcome{Visited: 2}) || fmt.Sprint(ranged) != "[ab b]" {
+		t.Fatalf("map record view range = %v, %#v, %v", ranged, outcome, err)
+	}
+	var retained []string
+	visited, err = session.ScanRecords(func(record ProximityRecord) bool {
+		retained = append(retained, string(record.Key))
+		return true
+	})
+	if err != nil || visited != 3 || fmt.Sprint(retained) != "[a ab b]" {
+		t.Fatalf("session record scan = %v, %d, %v", retained, visited, err)
+	}
+	previousProcs := runtime.GOMAXPROCS(1)
+	asyncRequest := cloneSearchRequest(request)
+	future := session.SearchAsync(context.Background(), asyncRequest)
+	asyncRequest.Filter.Prefix[0] = 'b'
+	asyncResult, err := future.Await(context.Background())
+	runtime.GOMAXPROCS(previousProcs)
+	if err != nil || len(asyncResult.Neighbors) != 2 || !bytes.Equal(asyncResult.Neighbors[1].Key, []byte("ab")) {
+		t.Fatalf("async search did not own filter inputs = %#v, %v", asyncResult, err)
+	}
+	proof, err := proximity.ProveSearch(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(proof.Close)
+	descriptor, err := proximity.Descriptor()
+	if err != nil {
+		t.Fatal(err)
+	}
+	verified, err := proof.Verify(descriptor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(verified.Result.Neighbors) != 2 || !bytes.Equal(verified.Result.Neighbors[1].Key, []byte("ab")) {
+		t.Fatalf("verified neighbors = %#v", verified.Result.Neighbors)
+	}
+}
+
+func TestHNSWAcceleratorLifecycleIsPortable(t *testing.T) {
+	config, err := DefaultConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine, err := NewMemoryEngine(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(engine.Close)
+	records := make([]ProximityRecord, 16)
+	for index := range records {
+		records[index] = ProximityRecord{
+			Key:    []byte(fmt.Sprintf("vector-%02d", index)),
+			Vector: []float32{float32(index), 0},
+			Value:  []byte(fmt.Sprintf("value-%02d", index)),
+		}
+	}
+	proximity, err := engine.BuildProximity(2, records)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(proximity.Close)
+	hnswConfig, err := DefaultHNSWConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	limits, err := DefaultHNSWBuildLimits()
+	if err != nil {
+		t.Fatal(err)
+	}
+	built, err := proximity.BuildHNSW(hnswConfig, limits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if built.Stats.Records != 16 {
+		t.Fatalf("HNSW records = %d", built.Stats.Records)
+	}
+	index := built.Index
+	manifest, err := index.Manifest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	descriptor, err := proximity.Descriptor()
+	if err != nil {
+		t.Fatal(err)
+	}
+	source, err := index.SourceDescriptor()
+	if err != nil || !bytes.Equal(source, descriptor) {
+		t.Fatalf("HNSW source = %x, %v", source, err)
+	}
+	canonical, err := index.IsCanonical()
+	if err != nil || !canonical {
+		t.Fatalf("HNSW canonical = %v, %v", canonical, err)
+	}
+	request := ExactSearch([]float32{0, 0}, 3)
+	request.Policy = SearchPolicyFixedBudget
+	request.Backend = SearchBackendHNSW
+	result, err := index.Search(context.Background(), proximity, request)
+	if err != nil || result.Backend != "hnsw" || !bytes.Equal(result.Neighbors[0].Key, []byte("vector-00")) {
+		t.Fatalf("HNSW search = %#v, %v", result, err)
+	}
+	cancellation, err := NewProximityCancellationToken()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(cancellation.Close)
+	if err := cancellation.Cancel(); err != nil {
+		t.Fatal(err)
+	}
+	cancelled, err := index.SearchCancellable(
+		context.Background(), proximity, request, nil, cancellation,
+	)
+	if err != nil || cancelled.Completion != "cancelled" || len(cancelled.Neighbors) != 0 {
+		t.Fatalf("cancelled HNSW search = %#v, %v", cancelled, err)
+	}
+	proof, err := index.ProveSearch(proximity, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(proof.Close)
+	verified, err := proof.Verify(descriptor)
+	if err != nil || verified.Result.Backend != "hnsw" {
+		t.Fatalf("HNSW proof = %#v, %v", verified, err)
+	}
+	index.Close()
+	loaded, err := proximity.LoadHNSW(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(loaded.Close)
+	loadedManifest, err := loaded.Manifest()
+	if err != nil || !bytes.Equal(loadedManifest, manifest) {
+		t.Fatalf("loaded HNSW manifest = %x, %v", loadedManifest, err)
+	}
+}
+
+func TestProductQuantizerLifecycleIsPortableAndBounded(t *testing.T) {
+	config, err := DefaultConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine, err := NewMemoryEngine(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(engine.Close)
+	records := make([]ProximityRecord, 16)
+	for index := range records {
+		records[index] = ProximityRecord{
+			Key: []byte(fmt.Sprintf("pq-vector-%02d", index)),
+			Vector: []float32{
+				float32(index), float32(index % 3), float32(index % 5), float32(index % 7),
+			},
+			Value: []byte(fmt.Sprintf("pq-value-%02d", index)),
+		}
+	}
+	proximity, err := engine.BuildProximity(4, records)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(proximity.Close)
+	pqConfig := ProductQuantizationConfig{
+		Subquantizers: 2, CentroidsPerSubquantizer: 4, TrainingIterations: 2,
+		RerankMultiplier: 4, Seed: ^uint64(0), MaxTrainingVectors: 16,
+	}
+	limits, err := DefaultPQBuildLimits()
+	if err != nil {
+		t.Fatal(err)
+	}
+	built, err := proximity.BuildPQ(pqConfig, 2, limits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if built.Stats.EncodedVectors != 16 || built.Stats.TrainingVectors != 16 {
+		t.Fatalf("PQ build stats = %#v", built.Stats)
+	}
+	index := built.Index
+	manifest, err := index.Manifest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	descriptor, err := proximity.Descriptor()
+	if err != nil {
+		t.Fatal(err)
+	}
+	source, err := index.SourceDescriptor()
+	if err != nil || !bytes.Equal(source, descriptor) {
+		t.Fatalf("PQ source = %x, %v", source, err)
+	}
+	actualConfig, err := index.Config()
+	if err != nil || actualConfig != pqConfig {
+		t.Fatalf("PQ config = %#v, %v", actualConfig, err)
+	}
+	quality, err := index.Quality()
+	if err != nil || quality.MeanSquaredError < 0 || quality.MaximumSquaredError < 0 {
+		t.Fatalf("PQ quality = %#v, %v", quality, err)
+	}
+	request := ExactSearch([]float32{0, 0, 0, 0}, 3)
+	request.Policy = SearchPolicyFixedBudget
+	request.Backend = SearchBackendProductQuantized
+	result, err := index.Search(context.Background(), proximity, request)
+	if err != nil || result.Backend != "product-quantized" || !bytes.Equal(result.Neighbors[0].Key, []byte("pq-vector-00")) {
+		t.Fatalf("PQ search = %#v, %v", result, err)
+	}
+	proof, err := index.ProveSearch(proximity, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(proof.Close)
+	verified, err := proof.Verify(descriptor)
+	if err != nil || verified.Result.Backend != "product-quantized" {
+		t.Fatalf("PQ proof = %#v, %v", verified, err)
+	}
+	index.Close()
+	loaded, err := proximity.LoadPQ(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(loaded.Close)
+	loadedManifest, err := loaded.Manifest()
+	if err != nil || !bytes.Equal(loadedManifest, manifest) {
+		t.Fatalf("loaded PQ manifest = %x, %v", loadedManifest, err)
+	}
+}
+
+func TestCompositeAndCatalogLifecycleIsPortableAndBounded(t *testing.T) {
+	config, err := DefaultConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine, err := NewMemoryEngine(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(engine.Close)
+	records := make([]ProximityRecord, 16)
+	for index := range records {
+		records[index] = ProximityRecord{
+			Key:    []byte(fmt.Sprintf("composite-vector-%02d", index)),
+			Vector: []float32{float32(index), 0},
+			Value:  []byte(fmt.Sprintf("composite-value-%02d", index)),
+		}
+	}
+	baseMap, err := engine.BuildProximity(2, records)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(baseMap.Close)
+	hnswConfig, err := DefaultHNSWConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	hnswLimits, err := DefaultHNSWBuildLimits()
+	if err != nil {
+		t.Fatal(err)
+	}
+	baseBuild, err := baseMap.BuildHNSW(hnswConfig, hnswLimits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := baseBuild.Index
+	t.Cleanup(base.Close)
+	current, _, err := baseMap.Mutate([]ProximityMutation{UpsertProximity(
+		[]byte("composite-vector-00"), []float32{0.25, 0}, []byte("updated"),
+	)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(current.Close)
+	compositeConfig, err := DefaultCompositeAcceleratorConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	limits, err := DefaultCompositeBuildLimits()
+	if err != nil {
+		t.Fatal(err)
+	}
+	built, err := current.BuildCompositeHNSW(baseMap, base, compositeConfig, limits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if built.Accelerator == nil || len(built.Reasons) != 0 || built.Stats.VectorUpdatedRecords != 1 {
+		t.Fatalf("composite build = %#v", built)
+	}
+	composite := built.Accelerator
+	currentDescriptor, err := current.Descriptor()
+	if err != nil {
+		t.Fatal(err)
+	}
+	baseDescriptor, err := baseMap.Descriptor()
+	if err != nil {
+		t.Fatal(err)
+	}
+	currentSource, err := composite.CurrentSourceDescriptor()
+	if err != nil || !bytes.Equal(currentSource, currentDescriptor) {
+		t.Fatalf("current source = %x, %v", currentSource, err)
+	}
+	baseSource, err := composite.BaseSourceDescriptor()
+	if err != nil || !bytes.Equal(baseSource, baseDescriptor) {
+		t.Fatalf("base source = %x, %v", baseSource, err)
+	}
+	baseKind, err := composite.BaseKind()
+	if err != nil || baseKind != CompositeBaseHNSW {
+		t.Fatalf("base kind = %v, %v", baseKind, err)
+	}
+	delta, err := composite.DeltaCount()
+	if err != nil || delta != 1 {
+		t.Fatalf("delta = %d, %v", delta, err)
+	}
+	shadow, err := composite.ShadowCount()
+	if err != nil || shadow != 1 {
+		t.Fatalf("shadow = %d, %v", shadow, err)
+	}
+	request := ExactSearch([]float32{0, 0}, 3)
+	request.Policy = SearchPolicyFixedBudget
+	request.Backend = SearchBackendComposite
+	result, err := composite.Search(context.Background(), current, request)
+	if err != nil || result.Backend != "composite" {
+		t.Fatalf("composite search = %#v, %v", result, err)
+	}
+	proof, err := composite.ProveSearch(current, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	verified, err := proof.Verify(currentDescriptor)
+	proof.Close()
+	if err != nil || verified.Result.Backend != "composite" {
+		t.Fatalf("composite proof = %#v, %v", verified, err)
+	}
+	manifest, err := composite.Manifest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	catalog, err := current.BuildAcceleratorCatalog(nil, nil, composite)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries, err := catalog.Entries()
+	if err != nil || len(entries) != 1 || entries[0].Kind != CatalogComposite {
+		t.Fatalf("catalog entries = %#v, %v", entries, err)
+	}
+	catalogResult, err := catalog.Search(context.Background(), current, request)
+	if err != nil || catalogResult.Backend != "composite" {
+		t.Fatalf("catalog search = %#v, %v", catalogResult, err)
+	}
+	catalogManifest, err := catalog.Manifest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	catalog.Close()
+	loadedCatalog, err := current.LoadAcceleratorCatalog(catalogManifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	loadedCatalogManifest, err := loadedCatalog.Manifest()
+	loadedCatalog.Close()
+	if err != nil || !bytes.Equal(loadedCatalogManifest, catalogManifest) {
+		t.Fatalf("loaded catalog = %x, %v", loadedCatalogManifest, err)
+	}
+	composite.Close()
+	loaded, err := current.LoadComposite(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	loadedManifest, err := loaded.Manifest()
+	loaded.Close()
+	if err != nil || !bytes.Equal(loadedManifest, manifest) {
+		t.Fatalf("loaded composite = %x, %v", loadedManifest, err)
+	}
+
+	compositeConfig.MaxDeltaRecords = 0
+	rebuild, err := DefaultCompositeRebuildOptions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rebuilt, err := current.BuildOrRebuildCompositeHNSW(baseMap, base, compositeConfig, limits, rebuild)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rebuilt.Kind != CompositeHNSWRebuilt || rebuilt.HNSW == nil || len(rebuilt.Reasons) == 0 {
+		t.Fatalf("composite rebuild = %#v", rebuilt)
+	}
+	rebuiltSource, err := rebuilt.HNSW.SourceDescriptor()
+	rebuilt.HNSW.Close()
+	if err != nil || !bytes.Equal(rebuiltSource, currentDescriptor) {
+		t.Fatalf("rebuilt source = %x, %v", rebuiltSource, err)
+	}
+}
+
+func TestVersionedBulkPublicationUsesNativePerformancePaths(t *testing.T) {
+	config, err := DefaultConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine, err := NewMemoryEngine(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(engine.Close)
+	versioned, err := engine.VersionedMap([]byte("bulk-publication"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(versioned.Close)
+	initialized, err := versioned.InitializeSorted([]Entry{{Key: []byte("a"), Value: []byte("one")}, {Key: []byte("b"), Value: []byte("two")}})
+	if err != nil || initialized.Current == nil {
+		t.Fatalf("initialize sorted = %#v, %v", initialized, err)
+	}
+	if _, err := versioned.Append([]Mutation{UpsertMutation([]byte("c"), []byte("three"))}); err != nil {
+		t.Fatal(err)
+	}
+	parallel, err := versioned.ParallelApply([]Mutation{
+		UpsertMutation([]byte("b"), []byte("updated")), UpsertMutation([]byte("d"), []byte("four")),
+	}, NewParallelConfig(1, 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parallel.Stats.InputMutations != 2 {
+		t.Fatalf("parallel stats = %#v", parallel.Stats)
+	}
+	rebuilt, err := versioned.RebuildSortedIf(parallel.Version.ID, []Entry{{Key: []byte("x"), Value: []byte("nine")}, {Key: []byte("y"), Value: []byte("ten")}})
+	if err != nil || rebuilt.Kind != MapUpdateApplied || rebuilt.Current == nil {
+		t.Fatalf("sorted rebuild = %#v, %v", rebuilt, err)
+	}
+	iterRebuilt, err := versioned.RebuildFromEntriesIf(rebuilt.Current.ID, []Entry{{Key: []byte("q"), Value: []byte("queue")}, {Key: []byte("p"), Value: []byte("priority")}})
+	if err != nil || iterRebuilt.Current == nil {
+		t.Fatalf("iter rebuild = %#v, %v", iterRebuilt, err)
+	}
+	value, ok, err := versioned.Get([]byte("p"))
+	if err != nil || !ok || !bytes.Equal(value, []byte("priority")) {
+		t.Fatalf("rebuilt value = %q, %v, %v", value, ok, err)
+	}
+}
 
 func TestPortableVersionedIndexedAndProximityMaps(t *testing.T) {
 	config, err := DefaultConfig()
@@ -55,6 +812,14 @@ func TestPortableVersionedIndexedAndProximityMaps(t *testing.T) {
 	t.Cleanup(indexed.Close)
 	if _, err := indexed.Put([]byte("u1"), []byte("red")); err != nil {
 		t.Fatal(err)
+	}
+	found, err := indexed.GetView([]byte("u1"), func(value []byte) {
+		if string(value) != "red" {
+			t.Fatalf("indexed view = %q", value)
+		}
+	})
+	if err != nil || !found {
+		t.Fatalf("indexed GetView found=%v err=%v", found, err)
 	}
 	if _, err := indexed.EnsureIndex([]byte("by_team")); err != nil {
 		t.Fatal(err)
@@ -120,6 +885,376 @@ func TestPortableVersionedIndexedAndProximityMaps(t *testing.T) {
 	}
 }
 
+func TestPortableVersionedComparisonPinsVersionsAndPagesDiffs(t *testing.T) {
+	config, err := DefaultConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine, err := NewMemoryEngine(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer engine.Close()
+	versioned, err := engine.VersionedMap([]byte("comparison"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer versioned.Close()
+	base, err := versioned.Initialize()
+	if err != nil {
+		t.Fatal(err)
+	}
+	target, err := versioned.Put([]byte("k"), []byte("v"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	comparison, err := versioned.Compare(base.ID, target.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer comparison.Close()
+	diffs, err := comparison.Diff()
+	if err != nil || len(diffs) != 1 || !bytes.Equal(diffs[0].Key, []byte("k")) {
+		t.Fatalf("diffs = %+v, %v", diffs, err)
+	}
+	page, err := comparison.DiffPage(nil, nil, 1)
+	if err != nil || len(page.Diffs) != 1 || !bytes.Equal(page.Diffs[0].Key, []byte("k")) {
+		t.Fatalf("page = %+v, %v", page, err)
+	}
+}
+
+func TestPortableVersionedHistoryNavigationDiffAndRollback(t *testing.T) {
+	config, err := DefaultConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine, err := NewMemoryEngine(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer engine.Close()
+	versioned, err := engine.VersionedMap([]byte("history-navigation"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer versioned.Close()
+	if _, err = versioned.Initialize(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = versioned.Put([]byte("a"), []byte("one")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = versioned.Put([]byte("ab"), []byte("two")); err != nil {
+		t.Fatal(err)
+	}
+	base, err := versioned.Put([]byte("b"), []byte("three"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	target, err := versioned.Put([]byte("a"), []byte("updated"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assertEntryKeys := func(label string, rows []Entry, expected ...string) {
+		t.Helper()
+		if len(rows) != len(expected) {
+			t.Fatalf("%s keys = %#v", label, rows)
+		}
+		for i, key := range expected {
+			if !bytes.Equal(rows[i].Key, []byte(key)) {
+				t.Fatalf("%s key[%d] = %q", label, i, rows[i].Key)
+			}
+		}
+	}
+	rows, err := versioned.Range([]byte("a"), []byte("c"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertEntryKeys("range", rows, "a", "ab", "b")
+	rows, err = versioned.Prefix([]byte("a"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertEntryKeys("prefix", rows, "a", "ab")
+	rows, err = versioned.RangeAt(base.ID, []byte("a"), []byte("b"))
+	if err != nil || len(rows) != 2 || !bytes.Equal(rows[0].Value, []byte("one")) {
+		t.Fatalf("historical range = %#v, %v", rows, err)
+	}
+	rows, err = versioned.PrefixAt(base.ID, []byte("a"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertEntryKeys("historical prefix", rows, "a", "ab")
+	page, err := versioned.RangePage(nil, nil, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertEntryKeys("range page", page.Entries, "a", "ab")
+	page, err = versioned.PrefixPage([]byte("a"), nil, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertEntryKeys("prefix page", page.Entries, "a")
+	page, err = versioned.PrefixPageAt(base.ID, []byte("a"), nil, 1)
+	if err != nil || page.NextCursor == nil {
+		t.Fatalf("historical page = %#v, %v", page, err)
+	}
+	assertEntryKeys("historical prefix page", page.Entries, "a")
+	diffs, err := versioned.Diff(base.ID, target.ID)
+	if err != nil || len(diffs) != 1 || !bytes.Equal(diffs[0].Key, []byte("a")) {
+		t.Fatalf("diff = %#v, %v", diffs, err)
+	}
+	diffs, err = versioned.ChangesSince(base.ID)
+	if err != nil || len(diffs) != 1 || !bytes.Equal(diffs[0].Key, []byte("a")) {
+		t.Fatalf("changes = %#v, %v", diffs, err)
+	}
+	rolledBack, err := versioned.RollbackTo(base.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	head, ok, err := versioned.HeadID()
+	if err != nil || !ok || !bytes.Equal(head, rolledBack.ID) {
+		t.Fatalf("rollback head = %x, %v, %v", head, ok, err)
+	}
+	value, ok, err := versioned.Get([]byte("a"))
+	if err != nil || !ok || !bytes.Equal(value, []byte("one")) {
+		t.Fatalf("rollback value = %q, %v, %v", value, ok, err)
+	}
+	diffs, err = versioned.ChangesSince(base.ID)
+	if err != nil || len(diffs) != 0 {
+		t.Fatalf("rollback changes = %#v, %v", diffs, err)
+	}
+}
+
+func TestPortableVersionedTimestampedWritesAndCompleteMaintenance(t *testing.T) {
+	config, err := DefaultConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine, err := NewMemoryEngine(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer engine.Close()
+	versioned, err := engine.VersionedMap([]byte("maintenance-complete"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer versioned.Close()
+	first, err := versioned.ApplyAtMillis([]Mutation{UpsertMutation([]byte("k"), []byte("one"))}, 1_000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondUpdate, err := versioned.ApplyIfAtMillis(first.ID, []Mutation{UpsertMutation([]byte("k"), []byte("two"))}, 2_000)
+	if err != nil || secondUpdate.Current == nil {
+		t.Fatalf("second = %+v, %v", secondUpdate, err)
+	}
+	second := *secondUpdate.Current
+	third, err := versioned.ApplyAtMillis([]Mutation{UpsertMutation([]byte("k"), []byte("three"))}, 3_000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.CreatedAtMillis == nil || *first.CreatedAtMillis != 1_000 {
+		t.Fatalf("first timestamp = %v", first.CreatedAtMillis)
+	}
+	if second.CreatedAtMillis == nil || *second.CreatedAtMillis != 2_000 {
+		t.Fatalf("second timestamp = %v", second.CreatedAtMillis)
+	}
+	policy, err := versioned.RetentionPolicy()
+	if err != nil || policy.Kind != "prefix" {
+		t.Fatalf("policy = %+v, %v", policy, err)
+	}
+	verification, err := versioned.VerifyCatalog()
+	if err != nil || !bytes.Equal(verification.Head, third.ID) || verification.VersionCount != 3 {
+		t.Fatalf("verification = %+v, %v", verification, err)
+	}
+	plan, err := versioned.PlanGC()
+	if err != nil || plan.Reachability.LiveNodes == 0 || plan.CandidateNodes < plan.ReclaimableNodes {
+		t.Fatalf("plan = %+v, %v", plan, err)
+	}
+	aged, err := versioned.KeepForAt(3_000, 1_500)
+	if err != nil || !containsBytes(aged.Retained, second.ID) || !containsBytes(aged.Removed, first.ID) {
+		t.Fatalf("aged = %+v, %v", aged, err)
+	}
+	explicit, err := versioned.KeepVersions([][]byte{second.ID})
+	if err != nil || !containsBytes(explicit.Retained, third.ID) {
+		t.Fatalf("explicit = %+v, %v", explicit, err)
+	}
+	pruned, err := versioned.PruneVersions(0)
+	if err != nil || len(pruned.Retained) != 1 || !bytes.Equal(pruned.Retained[0], third.ID) || !containsBytes(pruned.Removed, second.ID) {
+		t.Fatalf("pruned = %+v, %v", pruned, err)
+	}
+	kept, err := versioned.KeepFor(10_000)
+	if err != nil || len(kept.Retained) == 0 {
+		t.Fatalf("kept = %+v, %v", kept, err)
+	}
+	sweep, err := versioned.SweepGC()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sweep.DeletedNodes > sweep.Plan.CandidateNodes {
+		t.Fatalf("sweep = %+v", sweep)
+	}
+}
+
+func containsBytes(values [][]byte, expected []byte) bool {
+	for _, value := range values {
+		if bytes.Equal(value, expected) {
+			return true
+		}
+	}
+	return false
+}
+
+func TestPortableVersionedSubscriptionResumesAndPollsOwnedDiffs(t *testing.T) {
+	config, err := DefaultConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine, err := NewMemoryEngine(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer engine.Close()
+	versioned, err := engine.VersionedMap([]byte("subscription"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer versioned.Close()
+	initial, err := versioned.Initialize()
+	if err != nil {
+		t.Fatal(err)
+	}
+	subscription, err := versioned.Subscribe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer subscription.Close()
+	lastSeen, ok, err := subscription.LastSeen()
+	if err != nil || !ok || !bytes.Equal(lastSeen, initial.ID) {
+		t.Fatalf("last seen = %x, %v, %v", lastSeen, ok, err)
+	}
+	if event, err := subscription.Poll(); err != nil || event != nil {
+		t.Fatalf("initial poll = %+v, %v", event, err)
+	}
+	current, err := versioned.Put([]byte("k"), []byte("v"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	event, err := subscription.Poll()
+	if err != nil || event == nil {
+		t.Fatalf("poll = %+v, %v", event, err)
+	}
+	if !bytes.Equal(event.Previous, initial.ID) || !bytes.Equal(event.Current.ID, current.ID) || len(event.Diffs) != 1 || !bytes.Equal(event.Diffs[0].Key, []byte("k")) {
+		t.Fatalf("event = %+v", event)
+	}
+}
+
+func TestPortableMultiMapTransactionsAreAtomicAndReadStagedValues(t *testing.T) {
+	config, err := DefaultConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine, err := NewMemoryEngine(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer engine.Close()
+	tx, err := engine.BeginVersionedTransaction()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = tx.Put([]byte("a"), []byte("k"), []byte("one")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = tx.Put([]byte("b"), []byte("k"), []byte("two")); err != nil {
+		t.Fatal(err)
+	}
+	value, ok, err := tx.Get([]byte("a"), []byte("k"))
+	if err != nil || !ok || !bytes.Equal(value, []byte("one")) {
+		t.Fatalf("staged get = %q, %v, %v", value, ok, err)
+	}
+	committed, err := tx.Commit()
+	if err != nil || !committed.Applied || len(committed.Versions) != 2 {
+		t.Fatalf("commit = %+v, %v", committed, err)
+	}
+	for mapID, expected := range map[string]string{"a": "one", "b": "two"} {
+		managed, err := engine.VersionedMap([]byte(mapID))
+		if err != nil {
+			t.Fatal(err)
+		}
+		value, ok, err := managed.Get([]byte("k"))
+		managed.Close()
+		if err != nil || !ok || !bytes.Equal(value, []byte(expected)) {
+			t.Fatalf("%s = %q, %v, %v", mapID, value, ok, err)
+		}
+	}
+	rolledBack, err := engine.BeginVersionedTransaction()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = rolledBack.Put([]byte("a"), []byte("discard"), []byte("x")); err != nil {
+		t.Fatal(err)
+	}
+	if err = rolledBack.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+	a, err := engine.VersionedMap([]byte("a"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+	if _, ok, err = a.Get([]byte("discard")); err != nil || ok {
+		t.Fatalf("rolled-back value exists: %v, %v", ok, err)
+	}
+}
+
+func TestPortablePinnedMergesPageConflictsAndCASPublish(t *testing.T) {
+	config, err := DefaultConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine, err := NewMemoryEngine(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer engine.Close()
+	versioned, err := engine.VersionedMap([]byte("merge"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer versioned.Close()
+	base, err := versioned.Initialize()
+	if err != nil {
+		t.Fatal(err)
+	}
+	candidate, err := versioned.Put([]byte("k"), []byte("candidate"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = versioned.Put([]byte("k"), []byte("head")); err != nil {
+		t.Fatal(err)
+	}
+	merge, err := versioned.PrepareMerge(base.ID, candidate.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer merge.Close()
+	page, err := merge.ConflictPage(nil, 1)
+	if err != nil || len(page.Conflicts) != 1 || !bytes.Equal(page.Conflicts[0].Key, []byte("k")) {
+		t.Fatalf("conflicts = %+v, %v", page, err)
+	}
+	published, err := merge.Publish("prefer_right")
+	if err != nil || published.Current == nil || !bytes.Equal(published.Current.ID, candidate.ID) {
+		t.Fatalf("publish = %+v, %v", published, err)
+	}
+	value, ok, err := versioned.Get([]byte("k"))
+	if err != nil || !ok || !bytes.Equal(value, []byte("candidate")) {
+		t.Fatalf("merged value = %q, %v, %v", value, ok, err)
+	}
+}
+
 func TestPortableContextCancellation(t *testing.T) {
 	engine, err := OpenMemory()
 	if err != nil {
@@ -159,6 +1294,11 @@ func TestPortableAsyncWrappersCopyInputsBeforeHandoff(t *testing.T) {
 	if _, err := versioned.Initialize(); err != nil {
 		t.Fatal(err)
 	}
+	subscription, err := versioned.SubscribeAsync(context.Background()).Await(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer subscription.Close()
 
 	key := []byte("original-key")
 	value := []byte("original-value")
@@ -171,6 +1311,49 @@ func TestPortableAsyncWrappersCopyInputsBeforeHandoff(t *testing.T) {
 	got, ok, err := versioned.Get([]byte("original-key"))
 	if err != nil || !ok || !bytes.Equal(got, []byte("original-value")) {
 		t.Fatalf("async put get = %q, %v, %v", got, ok, err)
+	}
+	head, err := versioned.HeadAsync(context.Background()).Await(context.Background())
+	if err != nil || head == nil {
+		t.Fatalf("async head = %#v, %v", head, err)
+	}
+	snapshot, err := versioned.SnapshotAtAsync(context.Background(), head.ID).Await(context.Background())
+	if err != nil || snapshot == nil {
+		t.Fatalf("async snapshot = %#v, %v", snapshot, err)
+	}
+	defer snapshot.Close()
+	read, err := snapshot.GetAsync(context.Background(), []byte("original-key")).Await(context.Background())
+	if err != nil || !read.Found || !bytes.Equal(read.Value, []byte("original-value")) {
+		t.Fatalf("async snapshot get = %#v, %v", read, err)
+	}
+	bundle, err := snapshot.ExportAsync(context.Background()).Await(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	imported, err := engine.VersionedMap([]byte("async-import"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer imported.Close()
+	pendingImport := imported.ImportAsHeadAsync(context.Background(), bundle)
+	bundle.Nodes[0].Bytes[0] = 0
+	if _, err := pendingImport.Await(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	got, ok, err = imported.Get([]byte("original-key"))
+	if err != nil || !ok || !bytes.Equal(got, []byte("original-value")) {
+		t.Fatalf("async imported get = %q, %v, %v", got, ok, err)
+	}
+	session, err := snapshot.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+	sessionRead, err := session.GetAsync(context.Background(), []byte("original-key")).Await(context.Background())
+	if err != nil || !sessionRead.Found || !bytes.Equal(sessionRead.Value, []byte("original-value")) {
+		t.Fatalf("async session get = %#v, %v", sessionRead, err)
+	}
+	if event, err := subscription.PollAsync(context.Background()).Await(context.Background()); err != nil || event == nil {
+		t.Fatalf("async subscription poll = %#v, %v", event, err)
 	}
 
 	cancelled, cancel := context.WithCancel(context.Background())
@@ -424,9 +1607,112 @@ func TestPortableVersionedBackupRestoreAndRetention(t *testing.T) {
 	if err != nil || !ok || !bytes.Equal(value, []byte("v2")) {
 		t.Fatalf("restored get = %q, %v, %v", value, ok, err)
 	}
+	snapshot, err := source.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	bundle, err := snapshot.Export()
+	snapshot.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	importedMap, err := targetEngine.VersionedMap([]byte("versioned-import"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer importedMap.Close()
+	imported, err := importedMap.ImportAsHead(bundle)
+	if err != nil || !imported.IsHead {
+		t.Fatalf("imported head = %#v, %v", imported, err)
+	}
+	value, ok, err = importedMap.Get([]byte("k"))
+	if err != nil || !ok || !bytes.Equal(value, []byte("v2")) {
+		t.Fatalf("imported get = %q, %v, %v", value, ok, err)
+	}
+	timestampedMap, err := targetEngine.VersionedMap([]byte("versioned-import-at"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer timestampedMap.Close()
+	timestamped, err := timestampedMap.ImportAsHeadAtMillis(bundle, 12_345)
+	if err != nil || timestamped.CreatedAtMillis == nil || *timestamped.CreatedAtMillis != 12_345 {
+		t.Fatalf("timestamped import = %#v, %v", timestamped, err)
+	}
 	pruned, err := source.KeepLast(1)
 	if err != nil || len(pruned.Retained) == 0 || len(pruned.Removed) == 0 {
 		t.Fatalf("pruned = %#v, %v", pruned, err)
+	}
+}
+
+func TestPortableVersionedLargeValuesAndBlobGC(t *testing.T) {
+	engine, err := OpenMemory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer engine.Close()
+	blobs, err := MemoryBlobStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer blobs.Close()
+	versioned, err := engine.VersionedMap([]byte("large-values"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer versioned.Close()
+	if _, err = versioned.Initialize(); err != nil {
+		t.Fatal(err)
+	}
+	headName, err := versioned.HeadName()
+	if err != nil {
+		t.Fatal(err)
+	}
+	versionsPrefix, err := versioned.VersionsPrefix()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(headName) == 0 || len(versionsPrefix) == 0 {
+		t.Fatal("expected catalog namespace accessors")
+	}
+	first, err := versioned.PutLargeValue(blobs, []byte("document"), []byte("large-value"), LargeValueConfig{InlineThreshold: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	value, ok, err := versioned.GetLargeValue(blobs, []byte("document"))
+	if err != nil || !ok || !bytes.Equal(value, []byte("large-value")) {
+		t.Fatalf("large value = %q, %v, %v", value, ok, err)
+	}
+	updated, err := versioned.PutLargeValueIf(blobs, first.ID, []byte("document"), []byte("new-large-value"), LargeValueConfig{InlineThreshold: 1})
+	if err != nil || updated.Kind != MapUpdateApplied {
+		t.Fatalf("large value CAS = %#v, %v", updated, err)
+	}
+	snapshot, err := versioned.Snapshot()
+	if err != nil || snapshot == nil {
+		t.Fatalf("snapshot = %#v, %v", snapshot, err)
+	}
+	defer snapshot.Close()
+	session, err := snapshot.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+	var blob *BlobRef
+	found, err := session.GetValueRefView([]byte("document"), func(value ValueRefView) {
+		if value.Blob != nil {
+			copy := *value.Blob
+			blob = &copy
+		}
+	})
+	if err != nil || !found || blob == nil || len(blob.Cid) != 32 || blob.Len != uint64(len("new-large-value")) {
+		t.Fatalf("blob value reference = %#v, %v, %v", blob, found, err)
+	}
+	plan, err := versioned.PlanBlobGC(blobs)
+	if err != nil || plan.Reachability.LiveBlobCount < 1 {
+		t.Fatalf("blob plan = %#v, %v", plan, err)
+	}
+	sweep, err := versioned.SweepBlobGC(blobs)
+	if err != nil || sweep.Plan.Reachability.LiveBlobCount < 1 {
+		t.Fatalf("blob sweep = %#v, %v", sweep, err)
 	}
 }
 
@@ -447,6 +1733,9 @@ func TestPortableProofSessionAndMaintenance(t *testing.T) {
 	if _, err = versioned.Put([]byte("k"), []byte("v")); err != nil {
 		t.Fatal(err)
 	}
+	if _, err = versioned.Put([]byte("ka"), []byte("v2")); err != nil {
+		t.Fatal(err)
+	}
 	snapshot, err := versioned.Snapshot()
 	if err != nil {
 		t.Fatal(err)
@@ -459,6 +1748,38 @@ func TestPortableProofSessionAndMaintenance(t *testing.T) {
 	verified, err := VerifyKeyProof(proof)
 	if err != nil || !verified.Valid || string(verified.Value) != "v" {
 		t.Fatalf("proof = %+v, %v", verified, err)
+	}
+	multiProof, err := snapshot.ProveKeys([][]byte{[]byte("k"), []byte("missing")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	multi, err := VerifyMultiKeyProof(multiProof)
+	if err != nil || !multi.Valid || len(multi.Results) != 2 || !multi.Results[0].Exists || multi.Results[1].Exists {
+		t.Fatalf("multi proof = %+v, %v", multi, err)
+	}
+	rangeProof, err := snapshot.ProveRange([]byte("k"), []byte("l"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ranged, err := VerifyRangeProof(rangeProof)
+	if err != nil || !ranged.Valid || len(ranged.Entries) != 2 {
+		t.Fatalf("range proof = %+v, %v", ranged, err)
+	}
+	prefixProof, err := snapshot.ProvePrefix([]byte("k"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	prefixed, err := VerifyRangeProof(prefixProof)
+	if err != nil || !prefixed.Valid || len(prefixed.Entries) != 2 {
+		t.Fatalf("prefix proof = %+v, %v", prefixed, err)
+	}
+	provedPage, err := snapshot.ProveRangePage(nil, []byte("l"), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, err := VerifyRangePageProof(provedPage.Proof)
+	if err != nil || !page.Valid || len(provedPage.Page.Entries) != 1 {
+		t.Fatalf("page proof = %+v, %v", page, err)
 	}
 	session, err := snapshot.Read()
 	if err != nil {
@@ -509,6 +1830,56 @@ func TestPortableIndexedProofAndMaintenance(t *testing.T) {
 	}
 	if _, err := indexed.EnsureIndex([]byte("by_team")); err != nil {
 		t.Fatal(err)
+	}
+	oldSnapshot, err := indexed.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldID, err := oldSnapshot.ID()
+	oldSnapshot.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tooSmall := DefaultSecondaryIndexLimits()
+	tooSmall.MaxTermBytes = 2
+	if _, err := indexed.ReplaceIndex(
+		[]byte("by_team"), 2, "team-too-small-v2", IndexProjectionAll, &tooSmall,
+		IndexExtractorFunc(func(_ []byte, source []byte) ([]IndexEntry, error) {
+			return []IndexEntry{{Term: bytes.Clone(source)}}, nil
+		}),
+	); err == nil {
+		t.Fatal("expected replacement to enforce max term bytes")
+	}
+	health, err := indexed.Health()
+	if err != nil || health.ActiveIndexes[0].Generation != 1 {
+		t.Fatalf("failed replacement changed active generation: %+v, %v", health, err)
+	}
+	replacement, err := indexed.ReplaceIndex(
+		[]byte("by_team"), 2, "team-v2", IndexProjectionAll, nil,
+		IndexExtractorFunc(func(_ []byte, source []byte) ([]IndexEntry, error) {
+			return []IndexEntry{{Term: bytes.Clone(source)}}, nil
+		}),
+	)
+	if err != nil || replacement.Generation != 2 {
+		t.Fatalf("replacement = %+v, %v", replacement, err)
+	}
+	health, err = indexed.Health()
+	if err != nil || len(health.ActiveIndexes) != 1 || health.ActiveIndexes[0].Generation != 2 {
+		t.Fatalf("replacement health = %+v, %v", health, err)
+	}
+	reopened, err := indexed.SnapshotByID(oldID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldIndex, err := reopened.Index([]byte("by_team"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	matches, err := oldIndex.Exact([]byte("red"))
+	oldIndex.Close()
+	reopened.Close()
+	if err != nil || len(matches) != 1 {
+		t.Fatalf("historical replacement matches = %+v, %v", matches, err)
 	}
 	verification, err := indexed.VerifyIndex([]byte("by_team"), version.SourceVersion)
 	if err != nil || !verification.Valid || !verification.Canonical {

@@ -21,6 +21,7 @@ pub(crate) enum PackedPageKind {
     IndexMatch = 5,
     JoinedIndexRecord = 6,
     ProximityNeighbor = 7,
+    ProximityRecord = 8,
 }
 
 impl PackedPageKind {
@@ -33,6 +34,7 @@ impl PackedPageKind {
             Self::IndexMatch => 36,
             Self::JoinedIndexRecord => 44,
             Self::ProximityNeighbor => 40,
+            Self::ProximityRecord => 24,
         }
     }
 
@@ -45,6 +47,7 @@ impl PackedPageKind {
             Self::IndexMatch => &[(4, 8), (12, 16), (20, 24), (28, 32)],
             Self::JoinedIndexRecord => &[(4, 8), (12, 16), (20, 24), (28, 32), (36, 40)],
             Self::ProximityNeighbor => &[(4, 8), (24, 28), (32, 36)],
+            Self::ProximityRecord => &[(0, 4), (8, 12), (16, 20)],
         }
     }
 }
@@ -61,6 +64,7 @@ impl TryFrom<u16> for PackedPageKind {
             5 => Ok(Self::IndexMatch),
             6 => Ok(Self::JoinedIndexRecord),
             7 => Ok(Self::ProximityNeighbor),
+            8 => Ok(Self::ProximityRecord),
             _ => Err(BindingError::malformed_transport(format!(
                 "unknown packed page kind {value}"
             ))),
@@ -102,6 +106,14 @@ pub(crate) struct NeighborRecordRef<'a> {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[allow(dead_code)]
+pub(crate) struct ProximityRecordPageRef<'a> {
+    pub(crate) key: &'a [u8],
+    pub(crate) vector_le: &'a [u8],
+    pub(crate) value: &'a [u8],
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) struct IndexMatchRecordRef<'a> {
     pub(crate) term: &'a [u8],
     pub(crate) primary_key: &'a [u8],
@@ -110,7 +122,7 @@ pub(crate) struct IndexMatchRecordRef<'a> {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[allow(dead_code)]
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) struct JoinedIndexRecordRef<'a> {
     pub(crate) term: &'a [u8],
     pub(crate) primary_key: &'a [u8],
@@ -281,6 +293,24 @@ impl<'a> PackedPage<'a> {
     }
 
     #[allow(dead_code)]
+    pub(crate) fn proximity_record(
+        &self,
+        index: u32,
+    ) -> Result<ProximityRecordPageRef<'a>, BindingError> {
+        if self.kind != PackedPageKind::ProximityRecord {
+            return Err(BindingError::malformed_transport(
+                "packed page is not a proximity-record page",
+            ));
+        }
+        let record = self.record(index)?;
+        Ok(ProximityRecordPageRef {
+            key: self.arena_slice(read_u32(record, 0)?, read_u32(record, 4)?)?,
+            vector_le: self.arena_slice(read_u32(record, 8)?, read_u32(record, 12)?)?,
+            value: self.arena_slice(read_u32(record, 16)?, read_u32(record, 20)?)?,
+        })
+    }
+
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn index_match(&self, index: u32) -> Result<IndexMatchRecordRef<'a>, BindingError> {
         if self.kind != PackedPageKind::IndexMatch {
             return Err(BindingError::malformed_transport(
@@ -307,7 +337,7 @@ impl<'a> PackedPage<'a> {
         })
     }
 
-    #[allow(dead_code)]
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn joined_index_record(
         &self,
         index: u32,
@@ -392,6 +422,13 @@ impl<'a> PackedPage<'a> {
                     read_u32(record, 32)?,
                     read_u32(record, 36)?,
                 )?;
+            }
+            if self.kind == PackedPageKind::ProximityRecord
+                && read_u32(record, 12)? % std::mem::size_of::<f32>() as u32 != 0
+            {
+                return Err(BindingError::malformed_transport(
+                    "proximity record vector length is not a multiple of f32",
+                ));
             }
             if matches!(
                 self.kind,
@@ -543,6 +580,40 @@ impl PackedPageBuilder {
         record.extend_from_slice(&value_len.to_le_bytes());
         record.extend_from_slice(&proof_offset.to_le_bytes());
         record.extend_from_slice(&proof_len.to_le_bytes());
+        self.push_record(record)?;
+        Ok(self)
+    }
+
+    pub(crate) fn push_proximity_record(
+        mut self,
+        key: &[u8],
+        vector_le: &[u8],
+        value: &[u8],
+    ) -> Result<Self, BindingError> {
+        if self.kind != PackedPageKind::ProximityRecord {
+            return Err(BindingError::malformed_transport(
+                "proximity records require a proximity-record page",
+            ));
+        }
+        if vector_le.len() % std::mem::size_of::<f32>() != 0 {
+            return Err(BindingError::malformed_transport(
+                "proximity record vector length is not a multiple of f32",
+            ));
+        }
+        let (key_offset, key_len) = self.push_arena(key)?;
+        let (vector_offset, vector_len) = self.push_arena(vector_le)?;
+        let (value_offset, value_len) = self.push_arena(value)?;
+        let mut record = Vec::with_capacity(self.kind.record_width());
+        for value in [
+            key_offset,
+            key_len,
+            vector_offset,
+            vector_len,
+            value_offset,
+            value_len,
+        ] {
+            record.extend_from_slice(&value.to_le_bytes());
+        }
         self.push_record(record)?;
         Ok(self)
     }
@@ -748,6 +819,24 @@ mod tests {
         let record = page.neighbor(0).unwrap();
         assert_eq!(record.distance.to_bits(), distance.to_bits());
         assert_eq!(record.rank, 7);
+    }
+
+    #[test]
+    fn proximity_record_page_round_trips_logical_vector_bytes() {
+        let vector = [0.25_f32, -1.5_f32]
+            .into_iter()
+            .flat_map(f32::to_le_bytes)
+            .collect::<Vec<_>>();
+        let bytes = PackedPageBuilder::new(PackedPageKind::ProximityRecord)
+            .push_proximity_record(b"key", &vector, b"value")
+            .unwrap()
+            .finish(true)
+            .unwrap();
+        let page = PackedPage::parse(&bytes, PageLimits::default()).unwrap();
+        let record = page.proximity_record(0).unwrap();
+        assert_eq!(record.key, b"key");
+        assert_eq!(record.vector_le, vector);
+        assert_eq!(record.value, b"value");
     }
 
     #[test]

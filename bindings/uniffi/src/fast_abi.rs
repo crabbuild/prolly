@@ -13,11 +13,12 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, Weak};
 
 use super::{
-    BindingProximityMap, BindingProximityReadSession, BindingRangeScanSession,
+    BindingIndexedMap, BindingProximityMap, BindingProximityReadSession, BindingRangeScanSession,
     BindingSecondaryIndexSnapshot, ProllyReadSession, ProximitySearchRequestRecord,
     ProximitySearchResultRecord,
 };
 use crate::domain::handle::{HandleKind, HandleRegistry, ResourceHandle};
+use crate::domain::indexed::BindingIndexedFastTarget;
 use crate::domain::page::{PackedPage, PackedPageBuilder, PackedPageKind, PageLimits};
 
 pub const FAST_ABI_VERSION: u32 = 1;
@@ -28,6 +29,8 @@ pub const FAST_CAP_GET_MANY_PAGE: u64 = 1 << 3;
 pub const FAST_CAP_VALUE_LEASE: u64 = 1 << 4;
 pub const FAST_CAP_INDEX_CURSOR: u64 = 1 << 5;
 pub const FAST_CAP_PROXIMITY_SEARCH: u64 = 1 << 6;
+pub const FAST_CAP_PROXIMITY_RECORD_SCAN: u64 = 1 << 7;
+pub const FAST_CAP_PROXIMITY_VALUE_LEASE: u64 = 1 << 8;
 
 pub const FAST_STATUS_OK: i32 = 0;
 pub const FAST_STATUS_BUFFER_TOO_SMALL: i32 = 1;
@@ -110,6 +113,7 @@ static NEXT_SCAN_HANDLE: AtomicU64 = AtomicU64::new(1);
 static NEXT_VALUE_HANDLE: AtomicU64 = AtomicU64::new(1);
 static NEXT_INDEX_SNAPSHOT_HANDLE: AtomicU64 = AtomicU64::new(1);
 static NEXT_INDEX_CURSOR_HANDLE: AtomicU64 = AtomicU64::new(1);
+static NEXT_INDEXED_MAP_HANDLE: AtomicU64 = AtomicU64::new(1);
 static NEXT_PROXIMITY_HANDLE: AtomicU64 = AtomicU64::new(1);
 static SESSION_HANDLES: OnceLock<Mutex<HashMap<u64, Weak<ProllyReadSession>>>> = OnceLock::new();
 static SCAN_HANDLES: OnceLock<Mutex<HashMap<u64, Arc<FastScanHandle>>>> = OnceLock::new();
@@ -117,6 +121,8 @@ static VALUE_HANDLES: OnceLock<Mutex<HashMap<u64, Arc<prolly::OwnedValueLease>>>
 static INDEX_SNAPSHOT_HANDLES: OnceLock<Mutex<HashMap<u64, Weak<BindingSecondaryIndexSnapshot>>>> =
     OnceLock::new();
 static INDEX_CURSOR_HANDLES: OnceLock<Mutex<HashMap<u64, Arc<FastIndexCursorHandle>>>> =
+    OnceLock::new();
+static INDEXED_MAP_HANDLES: OnceLock<Mutex<HashMap<u64, Arc<BindingIndexedFastTarget>>>> =
     OnceLock::new();
 enum FastProximityTarget {
     Map(Weak<BindingProximityMap>),
@@ -129,6 +135,16 @@ enum LiveProximityTarget {
 }
 
 impl LiveProximityTarget {
+    fn get_lease(
+        &self,
+        key: &[u8],
+    ) -> Result<Option<prolly::OwnedValueLease>, crate::ProllyBindingError> {
+        match self {
+            Self::Map(map) => map.get_lease(key),
+            Self::Session(session) => session.get_lease(key),
+        }
+    }
+
     fn search(
         &self,
         request: ProximitySearchRequestRecord,
@@ -136,6 +152,21 @@ impl LiveProximityTarget {
         match self {
             Self::Map(map) => map.search(request),
             Self::Session(session) => session.search(request),
+        }
+    }
+
+    fn scan_records_range_until<B>(
+        &self,
+        start: &[u8],
+        end: Option<&[u8]>,
+        visit: impl for<'record> FnMut(
+            &[u8],
+            prolly::ProximityRecordRef<'record>,
+        ) -> std::ops::ControlFlow<B>,
+    ) -> Result<prolly::ScanOutcome<B>, crate::ProllyBindingError> {
+        match self {
+            Self::Map(map) => map.scan_records_range_until(start, end, visit),
+            Self::Session(session) => session.scan_records_range_until(start, end, visit),
         }
     }
 }
@@ -165,6 +196,40 @@ fn index_snapshot_handles() -> &'static Mutex<HashMap<u64, Weak<BindingSecondary
 
 fn index_cursor_handles() -> &'static Mutex<HashMap<u64, Arc<FastIndexCursorHandle>>> {
     INDEX_CURSOR_HANDLES.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn indexed_map_handles() -> &'static Mutex<HashMap<u64, Arc<BindingIndexedFastTarget>>> {
+    INDEXED_MAP_HANDLES.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+pub(crate) fn register_indexed_map(map: &BindingIndexedMap) -> u64 {
+    let mut handles = indexed_map_handles()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    loop {
+        let handle = next_nonzero_handle(&NEXT_INDEXED_MAP_HANDLE);
+        if let std::collections::hash_map::Entry::Vacant(entry) = handles.entry(handle) {
+            entry.insert(Arc::new(map.fast_target()));
+            return handle;
+        }
+    }
+}
+
+pub(crate) fn unregister_indexed_map(handle: u64) {
+    if handle != 0 {
+        indexed_map_handles()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .remove(&handle);
+    }
+}
+
+fn indexed_map_from_handle(handle: u64) -> Option<Arc<BindingIndexedFastTarget>> {
+    indexed_map_handles()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .get(&handle)
+        .cloned()
 }
 
 pub(crate) fn register_index_snapshot(snapshot: &Arc<BindingSecondaryIndexSnapshot>) -> u64 {
@@ -516,6 +581,8 @@ pub extern "C" fn prolly_fast_abi_capabilities() -> u64 {
         | FAST_CAP_VALUE_LEASE
         | FAST_CAP_INDEX_CURSOR
         | FAST_CAP_PROXIMITY_SEARCH
+        | FAST_CAP_PROXIMITY_RECORD_SCAN
+        | FAST_CAP_PROXIMITY_VALUE_LEASE
 }
 
 unsafe fn input_slice<'a>(ptr: *const u8, len: usize) -> Option<&'a [u8]> {
@@ -673,6 +740,122 @@ pub unsafe extern "C" fn prolly_fast_read_session_get_lease(
                 ..FastValueLeaseResult::default()
             }
         }
+    }
+}
+
+/// Retain the immutable packed leaf containing one encoded PRVR record. The
+/// pointer remains valid until `prolly_fast_value_release` is called.
+#[no_mangle]
+pub unsafe extern "C" fn prolly_fast_proximity_get_lease(
+    map_handle: u64,
+    key_ptr: *const u8,
+    key_len: usize,
+) -> FastValueLeaseResult {
+    let Some(map) = proximity_from_handle(map_handle) else {
+        return FastValueLeaseResult {
+            status: FAST_STATUS_INVALID_ARGUMENT,
+            ..FastValueLeaseResult::default()
+        };
+    };
+    if key_len > MAX_BOUND_BYTES {
+        return FastValueLeaseResult {
+            status: FAST_STATUS_INVALID_ARGUMENT,
+            ..FastValueLeaseResult::default()
+        };
+    }
+    let Some(key) = (unsafe { input_slice(key_ptr, key_len) }) else {
+        return FastValueLeaseResult {
+            status: FAST_STATUS_INVALID_ARGUMENT,
+            ..FastValueLeaseResult::default()
+        };
+    };
+    match catch_unwind(AssertUnwindSafe(|| match map.get_lease(key) {
+        Ok(None) => FastValueLeaseResult {
+            status: FAST_STATUS_OK,
+            ..FastValueLeaseResult::default()
+        },
+        Ok(Some(lease)) => match register_value(lease) {
+            Ok((lease_handle, data_ptr, data_len)) => FastValueLeaseResult {
+                status: FAST_STATUS_OK,
+                found: 1,
+                lease_handle,
+                data_ptr,
+                data_len,
+                ..FastValueLeaseResult::default()
+            },
+            Err(_) => FastValueLeaseResult {
+                status: FAST_STATUS_READ_ERROR,
+                ..FastValueLeaseResult::default()
+            },
+        },
+        Err(_) => FastValueLeaseResult {
+            status: FAST_STATUS_READ_ERROR,
+            ..FastValueLeaseResult::default()
+        },
+    })) {
+        Ok(result) => result,
+        Err(_) => FastValueLeaseResult {
+            status: FAST_STATUS_PANIC,
+            ..FastValueLeaseResult::default()
+        },
+    }
+}
+
+/// Retain the immutable packed leaf containing one indexed-map source value
+/// `prolly_fast_value_release` is called.
+#[no_mangle]
+pub unsafe extern "C" fn prolly_fast_indexed_get_lease(
+    map_handle: u64,
+    key_ptr: *const u8,
+    key_len: usize,
+) -> FastValueLeaseResult {
+    let Some(map) = indexed_map_from_handle(map_handle) else {
+        return FastValueLeaseResult {
+            status: FAST_STATUS_INVALID_ARGUMENT,
+            ..FastValueLeaseResult::default()
+        };
+    };
+    if key_len > MAX_BOUND_BYTES {
+        return FastValueLeaseResult {
+            status: FAST_STATUS_INVALID_ARGUMENT,
+            ..FastValueLeaseResult::default()
+        };
+    }
+    let Some(key) = (unsafe { input_slice(key_ptr, key_len) }) else {
+        return FastValueLeaseResult {
+            status: FAST_STATUS_INVALID_ARGUMENT,
+            ..FastValueLeaseResult::default()
+        };
+    };
+    match catch_unwind(AssertUnwindSafe(|| match map.get_lease(key) {
+        Ok(None) => FastValueLeaseResult {
+            status: FAST_STATUS_OK,
+            ..FastValueLeaseResult::default()
+        },
+        Ok(Some(lease)) => match register_value(lease) {
+            Ok((lease_handle, data_ptr, data_len)) => FastValueLeaseResult {
+                status: FAST_STATUS_OK,
+                found: 1,
+                lease_handle,
+                data_ptr,
+                data_len,
+                ..FastValueLeaseResult::default()
+            },
+            Err(_) => FastValueLeaseResult {
+                status: FAST_STATUS_READ_ERROR,
+                ..FastValueLeaseResult::default()
+            },
+        },
+        Err(_) => FastValueLeaseResult {
+            status: FAST_STATUS_READ_ERROR,
+            ..FastValueLeaseResult::default()
+        },
+    })) {
+        Ok(result) => result,
+        Err(_) => FastValueLeaseResult {
+            status: FAST_STATUS_PANIC,
+            ..FastValueLeaseResult::default()
+        },
     }
 }
 
@@ -1610,6 +1793,199 @@ pub unsafe extern "C" fn prolly_fast_proximity_search(
     }
 }
 
+/// Return one bounded, leased PRPG v2 exact-record page. `after` is an
+/// exclusive bytewise cursor; callers continue with the last delivered key.
+#[no_mangle]
+pub unsafe extern "C" fn prolly_fast_proximity_scan_page(
+    map_handle: u64,
+    after_ptr: *const u8,
+    after_len: usize,
+    has_after: u8,
+    max_records: u32,
+    max_arena_bytes: u64,
+) -> FastPageResult {
+    unsafe {
+        prolly_fast_proximity_scan_range_page(
+            map_handle,
+            ptr::null(),
+            0,
+            ptr::null(),
+            0,
+            0,
+            after_ptr,
+            after_len,
+            has_after,
+            max_records,
+            max_arena_bytes,
+        )
+    }
+}
+
+/// Return one bounded, leased PRPG v2 exact-record page in `[start, end)`.
+/// `after` is an exclusive bytewise cursor; callers continue with the last
+/// delivered key.
+#[no_mangle]
+pub unsafe extern "C" fn prolly_fast_proximity_scan_range_page(
+    map_handle: u64,
+    start_ptr: *const u8,
+    start_len: usize,
+    end_ptr: *const u8,
+    end_len: usize,
+    has_end: u8,
+    after_ptr: *const u8,
+    after_len: usize,
+    has_after: u8,
+    max_records: u32,
+    max_arena_bytes: u64,
+) -> FastPageResult {
+    let Some(map) = proximity_from_handle(map_handle) else {
+        return FastPageResult {
+            status: FAST_STATUS_INVALID_ARGUMENT,
+            ..FastPageResult::default()
+        };
+    };
+    if start_len > MAX_BOUND_BYTES
+        || end_len > MAX_BOUND_BYTES
+        || after_len > MAX_BOUND_BYTES
+        || has_end > 1
+        || has_after > 1
+        || max_records == 0
+        || max_records > MAX_PAGE_RECORDS
+        || max_arena_bytes == 0
+        || max_arena_bytes > MAX_PAGE_ARENA_BYTES
+    {
+        return FastPageResult {
+            status: FAST_STATUS_INVALID_ARGUMENT,
+            ..FastPageResult::default()
+        };
+    }
+    let Some(start) = (unsafe { input_slice(start_ptr, start_len) }) else {
+        return FastPageResult {
+            status: FAST_STATUS_INVALID_ARGUMENT,
+            ..FastPageResult::default()
+        };
+    };
+    let end = if has_end == 0 {
+        None
+    } else {
+        let Some(end) = (unsafe { input_slice(end_ptr, end_len) }) else {
+            return FastPageResult {
+                status: FAST_STATUS_INVALID_ARGUMENT,
+                ..FastPageResult::default()
+            };
+        };
+        Some(end)
+    };
+    let after = if has_after == 0 {
+        None
+    } else {
+        let Some(after) = (unsafe { input_slice(after_ptr, after_len) }) else {
+            return FastPageResult {
+                status: FAST_STATUS_INVALID_ARGUMENT,
+                ..FastPageResult::default()
+            };
+        };
+        Some(after)
+    };
+
+    match catch_unwind(AssertUnwindSafe(|| {
+        let scan_start = after.filter(|after| *after > start).unwrap_or(start);
+        let limits = PageLimits {
+            max_records,
+            max_arena_bytes,
+        };
+        let mut builder = Some(PackedPageBuilder::with_limits(
+            PackedPageKind::ProximityRecord,
+            limits,
+        ));
+        let mut record_count = 0_u32;
+        let mut arena_bytes = 0_usize;
+        let mut build_failed = false;
+        let byte_limit = usize::try_from(max_arena_bytes).unwrap_or(usize::MAX);
+        let outcome = map.scan_records_range_until(scan_start, end, |key, record| {
+            if after.is_some_and(|after| key == after) {
+                return std::ops::ControlFlow::Continue(());
+            }
+            let vector_le = record.vector.as_le_bytes();
+            let Some(next_bytes) = key
+                .len()
+                .checked_add(vector_le.len())
+                .and_then(|value| value.checked_add(record.value.len()))
+            else {
+                build_failed = true;
+                return std::ops::ControlFlow::Break(());
+            };
+            if next_bytes > byte_limit
+                || (record_count > 0 && arena_bytes + next_bytes > byte_limit)
+            {
+                if record_count == 0 {
+                    build_failed = true;
+                }
+                return std::ops::ControlFlow::Break(());
+            }
+            let current = builder.take().expect("packed proximity builder is present");
+            match current.push_proximity_record(key, vector_le, record.value) {
+                Ok(next) => builder = Some(next),
+                Err(_) => {
+                    build_failed = true;
+                    return std::ops::ControlFlow::Break(());
+                }
+            }
+            record_count += 1;
+            arena_bytes += next_bytes;
+            if record_count >= max_records || arena_bytes >= byte_limit {
+                std::ops::ControlFlow::Break(())
+            } else {
+                std::ops::ControlFlow::Continue(())
+            }
+        });
+        let outcome = match outcome {
+            Ok(outcome) => outcome,
+            Err(_) => {
+                return FastPageResult {
+                    status: FAST_STATUS_READ_ERROR,
+                    ..FastPageResult::default()
+                }
+            }
+        };
+        if build_failed {
+            return FastPageResult {
+                status: FAST_STATUS_INVALID_ARGUMENT,
+                ..FastPageResult::default()
+            };
+        }
+        let terminal = outcome.break_value.is_none();
+        let bytes = match builder
+            .expect("packed proximity builder survives successful traversal")
+            .finish(terminal)
+        {
+            Ok(bytes) => bytes,
+            Err(_) => {
+                return FastPageResult {
+                    status: FAST_STATUS_READ_ERROR,
+                    ..FastPageResult::default()
+                }
+            }
+        };
+        let (lease_handle, data_ptr, data_len) = register_page(bytes);
+        FastPageResult {
+            status: FAST_STATUS_OK,
+            terminal: u8::from(terminal),
+            record_count,
+            lease_handle,
+            data_ptr,
+            data_len,
+            ..FastPageResult::default()
+        }
+    })) {
+        Ok(result) => result,
+        Err(_) => FastPageResult {
+            status: FAST_STATUS_PANIC,
+            ..FastPageResult::default()
+        },
+    }
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn prolly_fast_scan_close(scan_handle: u64) {
     if scan_handle == 0 {
@@ -1729,6 +2105,38 @@ mod tests {
     }
 
     #[test]
+    fn indexed_map_get_lease_reads_the_current_source_head() {
+        let engine = Arc::new(ProllyEngine::memory(default_config()).unwrap());
+        let registry = Arc::new(crate::BindingIndexRegistry::new());
+        let map = engine.indexed_map(b"users".to_vec(), registry).unwrap();
+        map.put(b"u1".to_vec(), b"source".to_vec()).unwrap();
+
+        let found = unsafe { prolly_fast_indexed_get_lease(map.fast_handle(), b"u1".as_ptr(), 2) };
+        assert_eq!(found.status, FAST_STATUS_OK);
+        assert_eq!(found.found, 1);
+        assert_eq!(
+            unsafe { slice::from_raw_parts(found.data_ptr, found.data_len as usize) },
+            b"source"
+        );
+        unsafe { prolly_fast_value_release(found.lease_handle) };
+
+        map.put(b"u1".to_vec(), b"updated".to_vec()).unwrap();
+        let updated =
+            unsafe { prolly_fast_indexed_get_lease(map.fast_handle(), b"u1".as_ptr(), 2) };
+        assert_eq!(
+            unsafe { slice::from_raw_parts(updated.data_ptr, updated.data_len as usize) },
+            b"updated"
+        );
+        unsafe { prolly_fast_value_release(updated.lease_handle) };
+
+        let missing =
+            unsafe { prolly_fast_indexed_get_lease(map.fast_handle(), b"u2".as_ptr(), 2) };
+        assert_eq!(missing.status, FAST_STATUS_OK);
+        assert_eq!(missing.found, 0);
+        assert_eq!(missing.lease_handle, 0);
+    }
+
+    #[test]
     fn proximity_search_returns_one_leased_f64_neighbor_page() {
         let engine = Arc::new(ProllyEngine::memory(default_config()).unwrap());
         let map = engine
@@ -1760,6 +2168,169 @@ mod tests {
         assert_eq!(neighbor.value, Some(b"alpha".as_slice()));
         assert_eq!(neighbor.distance, 0.125);
         unsafe { prolly_fast_page_release(page.lease_handle) };
+    }
+
+    #[test]
+    fn proximity_exact_read_returns_the_retained_stored_record() {
+        let engine = Arc::new(ProllyEngine::memory(default_config()).unwrap());
+        let map = engine
+            .build_proximity_map(
+                crate::ProximityConfigRecord::new(2),
+                vec![crate::ProximityRecordRecord {
+                    key: b"a".to_vec(),
+                    vector: vec![1.0, 2.0],
+                    value: b"alpha".to_vec(),
+                }],
+                None,
+            )
+            .unwrap();
+        let result =
+            unsafe { prolly_fast_proximity_get_lease(map.fast_handle(), b"a".as_ptr(), 1) };
+        assert_eq!(result.status, FAST_STATUS_OK);
+        assert_eq!(result.found, 1);
+        let raw = unsafe { slice::from_raw_parts(result.data_ptr, result.data_len as usize) };
+        assert_eq!(&raw[..4], b"PRVR");
+        assert!(raw.ends_with(b"alpha"));
+        unsafe { prolly_fast_value_release(result.lease_handle) };
+    }
+
+    #[test]
+    fn proximity_scan_pages_are_ordered_bounded_and_cursor_resumable() {
+        let engine = Arc::new(ProllyEngine::memory(default_config()).unwrap());
+        let map = engine
+            .build_proximity_map(
+                crate::ProximityConfigRecord::new(2),
+                vec![
+                    crate::ProximityRecordRecord {
+                        key: b"a".to_vec(),
+                        vector: vec![0.0, 1.0],
+                        value: b"alpha".to_vec(),
+                    },
+                    crate::ProximityRecordRecord {
+                        key: b"b".to_vec(),
+                        vector: vec![2.0, 3.0],
+                        value: b"beta".to_vec(),
+                    },
+                ],
+                None,
+            )
+            .unwrap();
+        let handle = map.fast_handle();
+        let first = unsafe { prolly_fast_proximity_scan_page(handle, ptr::null(), 0, 0, 1, 4096) };
+        assert_eq!(first.status, FAST_STATUS_OK);
+        assert_eq!(first.record_count, 1);
+        assert_eq!(first.terminal, 0);
+        let first_page = PackedPage::parse(
+            unsafe { slice::from_raw_parts(first.data_ptr, first.data_len as usize) },
+            PageLimits::default(),
+        )
+        .unwrap();
+        let first_record = first_page.proximity_record(0).unwrap();
+        assert_eq!(first_record.key, b"a");
+        assert_eq!(first_record.value, b"alpha");
+        let cursor = first_record.key.to_vec();
+        let second = unsafe {
+            prolly_fast_proximity_scan_page(handle, cursor.as_ptr(), cursor.len(), 1, 1, 4096)
+        };
+        assert_eq!(second.status, FAST_STATUS_OK);
+        assert_eq!(second.record_count, 1);
+        let second_page = PackedPage::parse(
+            unsafe { slice::from_raw_parts(second.data_ptr, second.data_len as usize) },
+            PageLimits::default(),
+        )
+        .unwrap();
+        let second_record = second_page.proximity_record(0).unwrap();
+        assert_eq!(second_record.key, b"b");
+        assert_eq!(second_record.value, b"beta");
+        unsafe {
+            prolly_fast_page_release(first.lease_handle);
+            prolly_fast_page_release(second.lease_handle);
+        }
+    }
+
+    #[test]
+    fn proximity_scan_range_pages_are_half_open_and_cursor_stable() {
+        let engine = Arc::new(ProllyEngine::memory(default_config()).unwrap());
+        let map = engine
+            .build_proximity_map(
+                crate::ProximityConfigRecord::new(2),
+                vec![
+                    crate::ProximityRecordRecord {
+                        key: b"a".to_vec(),
+                        vector: vec![1.0, 0.0],
+                        value: b"A".to_vec(),
+                    },
+                    crate::ProximityRecordRecord {
+                        key: b"b".to_vec(),
+                        vector: vec![0.0, 1.0],
+                        value: b"B".to_vec(),
+                    },
+                    crate::ProximityRecordRecord {
+                        key: b"c".to_vec(),
+                        vector: vec![1.0, 1.0],
+                        value: b"C".to_vec(),
+                    },
+                    crate::ProximityRecordRecord {
+                        key: b"d".to_vec(),
+                        vector: vec![2.0, 2.0],
+                        value: b"D".to_vec(),
+                    },
+                ],
+                None,
+            )
+            .unwrap();
+        let handle = map.fast_handle();
+        let first = unsafe {
+            prolly_fast_proximity_scan_range_page(
+                handle,
+                b"b".as_ptr(),
+                1,
+                b"d".as_ptr(),
+                1,
+                1,
+                ptr::null(),
+                0,
+                0,
+                1,
+                4096,
+            )
+        };
+        assert_eq!(first.status, FAST_STATUS_OK);
+        assert_eq!(first.record_count, 1);
+        assert_eq!(first.terminal, 0);
+        let packed = PackedPage::parse(
+            unsafe { slice::from_raw_parts(first.data_ptr, first.data_len as usize) },
+            PageLimits::default(),
+        )
+        .unwrap();
+        assert_eq!(packed.proximity_record(0).unwrap().key, b"b");
+        unsafe { prolly_fast_page_release(first.lease_handle) };
+
+        let second = unsafe {
+            prolly_fast_proximity_scan_range_page(
+                handle,
+                b"b".as_ptr(),
+                1,
+                b"d".as_ptr(),
+                1,
+                1,
+                b"b".as_ptr(),
+                1,
+                1,
+                8,
+                4096,
+            )
+        };
+        assert_eq!(second.status, FAST_STATUS_OK);
+        assert_eq!(second.record_count, 1);
+        assert_eq!(second.terminal, 1);
+        let packed = PackedPage::parse(
+            unsafe { slice::from_raw_parts(second.data_ptr, second.data_len as usize) },
+            PageLimits::default(),
+        )
+        .unwrap();
+        assert_eq!(packed.proximity_record(0).unwrap().key, b"c");
+        unsafe { prolly_fast_page_release(second.lease_handle) };
     }
 
     #[test]

@@ -24,6 +24,10 @@ public final class Engine implements AutoCloseable {
         return new VersionedMap(open().versionedMap(id.clone()));
     }
 
+    public VersionedTransaction beginVersionedTransaction() {
+        return new VersionedTransaction(open().beginVersionedTransaction());
+    }
+
     public IndexRegistry indexRegistry() {
         return new IndexRegistry(open().indexRegistry());
     }
@@ -34,9 +38,31 @@ public final class Engine implements AutoCloseable {
     }
 
     public ProximityMap buildProximity(int dimensions, List<ProximityRecord> records) {
+        return buildProximity(dimensions, records, 1);
+    }
+
+    public ProximityMap buildProximity(int dimensions, List<ProximityRecord> records, long threads) {
         if (dimensions <= 0) throw new IllegalArgumentException("dimensions must be positive");
+        if (threads <= 0) throw new IllegalArgumentException("proximity build threads must be positive");
         var nativeRecords = records.stream().map(ProximityRecord::toNative).toList();
-        return new ProximityMap(JavaPortableBridge.buildProximity(open(), dimensions, nativeRecords));
+        return new ProximityMap(JavaPortableBridge.buildProximity(open(), dimensions, nativeRecords, threads));
+    }
+
+    public ProximityMap loadProximity(byte[] descriptor) {
+        if (descriptor.length != 32) {
+            throw new IllegalArgumentException("proximity descriptor must be 32 bytes");
+        }
+        return new ProximityMap(open().loadProximity(descriptor.clone()));
+    }
+
+    public ProximitySearchRuntime proximitySearchRuntime() {
+        return proximitySearchRuntime(ProximitySearchRuntimePolicy.defaults());
+    }
+
+    public ProximitySearchRuntime proximitySearchRuntime(ProximitySearchRuntimePolicy policy) {
+        Objects.requireNonNull(policy, "policy");
+        return new ProximitySearchRuntime(
+                JavaPortableBridge.proximitySearchRuntime(open(), policy.toNative()));
     }
 
     @Override
