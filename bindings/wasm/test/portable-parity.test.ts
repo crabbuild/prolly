@@ -15,6 +15,50 @@ if (generatedPresent) {
 
 const bytes = (value: string): Uint8Array => new TextEncoder().encode(value);
 
+test("WASM rich proximity search preserves policy filter stats session and proof", { skip: !generatedPresent }, async () => {
+  const engine = api.Engine.memory(wasm);
+  try {
+    const proximity = await engine.buildProximity(2, [
+      { key: bytes("a"), vector: new Float32Array([0, 0]), value: bytes("alpha") },
+      { key: bytes("ab"), vector: new Float32Array([1, 0]), value: bytes("alphabet") },
+      { key: bytes("b"), vector: new Float32Array([0.1, 0]), value: bytes("beta") },
+    ]);
+    const request = {
+      vector: new Float32Array([0, 0]),
+      topK: 3,
+      policy: "fixed_budget" as const,
+      budget: {
+        maxNodes: 1_000n,
+        maxCommittedBytes: 1_000_000n,
+        maxDistanceEvaluations: 1_000n,
+        maxFrontierEntries: 1_000n,
+      },
+      filter: { kind: "prefix" as const, prefix: bytes("a") },
+      kernel: "scalar_deterministic" as const,
+      backend: "auto" as const,
+    };
+    const result = await proximity.search(request);
+    assert.deepEqual(result.neighbors.map((neighbor) => Buffer.from(neighbor.key).toString()), ["a", "ab"]);
+    assert.ok(result.stats.distanceEvaluations > 0n);
+    assert.ok(result.planFormatVersion > 0);
+    const session = proximity.read();
+    assert.deepEqual(
+      (await session.search(request)).neighbors.map((neighbor) => Buffer.from(neighbor.key).toString()),
+      ["a", "ab"],
+    );
+    session.close();
+    const proof = proximity.proveSearch(request);
+    assert.deepEqual(
+      proof.verify(proximity.descriptor()).result.neighbors
+        .map((neighbor) => Buffer.from(neighbor.key).toString()),
+      ["a", "ab"],
+    );
+    proof.close();
+  } finally {
+    engine.close();
+  }
+});
+
 test("WASM exposes portable maps and explicit native exclusions", { skip: !generatedPresent }, async () => {
   assert.equal(typeof api.Engine, "function");
   const engine = api.Engine.memory(wasm);
@@ -262,7 +306,9 @@ test("WASM proofs, retained sessions, and maintenance stay in Rust", { skip: !ge
   ]);
   assert.equal(Buffer.from(proximity.proveMembership(bytes("p")).verify(proximity.descriptor()).value ?? []).toString(), "payload");
   assert.equal(proximity.verify().recordCount, 1n);
-  const searchProof = proximity.proveSearch(new Float32Array([0, 0]), 1);
+  const searchProof = proximity.proveSearch({
+    vector: new Float32Array([0, 0]), topK: 1, policy: "exact",
+  });
   const verifiedSearch = searchProof.verify(proximity.descriptor());
   assert.equal(Buffer.from(verifiedSearch.result.neighbors[0].key).toString(), "p");
   assert.ok(verifiedSearch.replayedEvents > 0n);
