@@ -11,7 +11,9 @@
   <modules>
     <module>kotlin</module>
     <module>kotlin/storetest</module>
+    <module>kotlin/stores/sqlite</module>
     <module>java</module>
+    <module>java/stores/sqlite</module>
   </modules>
 
   <properties>

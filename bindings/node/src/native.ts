@@ -975,7 +975,7 @@ export interface NativeProllyEngine {
   ): NativeRangePageRecord;
   reversePage(
     tree: NativeTreeRecord,
-    cursor?: NativeReverseCursorRecord | null,
+    cursor: NativeReverseCursorRecord | null,
     start: Uint8Array,
     limit?: string,
   ): NativeReversePageRecord;
