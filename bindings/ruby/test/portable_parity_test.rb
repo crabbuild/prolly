@@ -82,6 +82,11 @@ class PortableParityTest < Minitest::Test
       )
       assert_equal 'payload'.b, membership.record.value
       assert_equal 1, proximity.verify.record_count
+      proximity.prove_search_exact([0.0, 0.0], 1).use do |proof|
+        verified_search = proof.verify(proximity.descriptor)
+        assert_equal 'p'.b, verified_search.result.neighbors.first.key
+        assert_operator verified_search.replayed_events, :>, 0
+      end
     end
   end
 end

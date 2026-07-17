@@ -10,6 +10,7 @@ import build.crab.prolly.MapCatalogVerificationRecord
 import build.crab.prolly.ProximityVerificationRecord
 import build.crab.prolly.TreeStatsRecord
 import build.crab.prolly.ProximitySearchResultRecord
+import build.crab.prolly.ProximitySearchVerificationRecord
 import build.crab.prolly.SecondaryIndexExtractorCallback
 
 object JavaPortableBridge {
@@ -41,6 +42,19 @@ object JavaPortableBridge {
     ): ProximitySearchResultRecord = map.searchExact(query, k.toULong())
 
     @JvmStatic
+    fun proveSearch(
+        map: ProximityMap,
+        query: List<Float>,
+        k: Long,
+    ): ProximitySearchProof = map.proveSearchExact(query, k.toULong())
+
+    @JvmStatic
+    fun verify(
+        proof: ProximitySearchProof,
+        expectedDescriptor: ByteArray?,
+    ): ProximitySearchVerificationRecord = proof.verify(expectedDescriptor)
+
+    @JvmStatic
     fun openIndexExact(index: SecondaryIndex, term: ByteArray, limit: Int): PackedIndexPage =
         PackedPages.openIndexExact(index.native.fastHandle(), term.copyOf(), limit.toUInt())
 
@@ -67,4 +81,5 @@ object JavaPortableBridge {
     @JvmStatic fun versionCount(verification: MapCatalogVerificationRecord) = verification.versionCount.toLong()
     @JvmStatic fun buildAttempts(metrics: IndexedMapMetricsRecord) = metrics.buildAttempts.toLong()
     @JvmStatic fun recordCount(verification: ProximityVerificationRecord) = verification.recordCount.toLong()
+    @JvmStatic fun replayedEvents(verification: ProximitySearchVerificationRecord) = verification.replayedEvents.toLong()
 }

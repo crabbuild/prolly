@@ -123,8 +123,14 @@ extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximitymap_descripto
 extern uint64_t uniffi_prolly_bindings_fn_method_bindingproximitymap_fast_handle(uint64_t ptr, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximitymap_get(uint64_t ptr, RustBuffer key, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximitymap_prove_membership(uint64_t ptr, RustBuffer key, RustCallStatus *out_err);
+extern uint64_t uniffi_prolly_bindings_fn_method_bindingproximitymap_prove_search(uint64_t ptr, RustBuffer request, RustBuffer limits, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximitymap_verify(uint64_t ptr, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_func_verify_proximity_membership_proof(RustBuffer proof, RustBuffer expected_descriptor, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_func_default_content_graph_limits(RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_func_exact_proximity_search_request(RustBuffer query, uint64_t k, RustCallStatus *out_err);
+extern uint64_t uniffi_prolly_bindings_fn_clone_bindingproximitysearchproof(uint64_t ptr, RustCallStatus *out_err);
+extern void uniffi_prolly_bindings_fn_free_bindingproximitysearchproof(uint64_t ptr, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximitysearchproof_verify(uint64_t ptr, RustBuffer expected_descriptor, RustBuffer limits, RustCallStatus *out_err);
 
 extern ProllyFastScanOpenResult prolly_fast_index_cursor_open(uint64_t snapshot_handle, uint32_t query_kind, const uint8_t *start_ptr, size_t start_len, const uint8_t *end_ptr, size_t end_len, uint8_t has_end, uint8_t reverse);
 extern ProllyFastPageResult prolly_fast_index_cursor_next(uint64_t snapshot_handle, uint64_t cursor_handle, uint32_t max_records, uint64_t max_arena_bytes);
@@ -873,6 +879,78 @@ func ffiProximityProveMembership(handle uint64, key []byte) ([]byte, error) {
 	return ffiProximityBufferCall(handle, key, func(clone C.uint64_t, key C.RustBuffer, status *C.RustCallStatus) C.RustBuffer {
 		return C.uniffi_prolly_bindings_fn_method_bindingproximitymap_prove_membership(clone, key, status)
 	})
+}
+
+func ffiExactProximitySearchRequest(query []float32, k uint64) ([]byte, error) {
+	queryBuf, err := portableInput(encodeFloat32Sequence(query))
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_func_exact_proximity_search_request(queryBuf, C.uint64_t(k), &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiDefaultContentGraphLimits() ([]byte, error) {
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_func_default_content_graph_limits(&status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiProximityProveSearch(handle uint64, request, limits []byte) (uint64, error) {
+	clone, err := ffiCloneProximity(handle)
+	if err != nil {
+		return 0, err
+	}
+	requestBuf, err := portableInput(request)
+	if err != nil {
+		return 0, err
+	}
+	limitsBuf, err := portableInput(limits)
+	if err != nil {
+		return 0, err
+	}
+	var status C.RustCallStatus
+	proof := C.uniffi_prolly_bindings_fn_method_bindingproximitymap_prove_search(C.uint64_t(clone), requestBuf, limitsBuf, &status)
+	return uint64(proof), portableStatusError(&status)
+}
+
+func ffiCloneProximitySearchProof(handle uint64) (uint64, error) {
+	var status C.RustCallStatus
+	clone := C.uniffi_prolly_bindings_fn_clone_bindingproximitysearchproof(C.uint64_t(handle), &status)
+	return uint64(clone), portableStatusError(&status)
+}
+
+func ffiFreeProximitySearchProof(handle uint64) {
+	var status C.RustCallStatus
+	C.uniffi_prolly_bindings_fn_free_bindingproximitysearchproof(C.uint64_t(handle), &status)
+}
+
+func ffiProximitySearchProofVerify(handle uint64, expectedDescriptor, limits []byte) ([]byte, error) {
+	clone, err := ffiCloneProximitySearchProof(handle)
+	if err != nil {
+		return nil, err
+	}
+	expectedBuf, err := portableInput(encodeOptionalByteArray(expectedDescriptor))
+	if err != nil {
+		return nil, err
+	}
+	limitsBuf, err := portableInput(limits)
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingproximitysearchproof_verify(C.uint64_t(clone), expectedBuf, limitsBuf, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
 }
 
 func ffiProximityVerify(handle uint64) ([]byte, error) {

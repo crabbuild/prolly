@@ -111,6 +111,11 @@ test("proofs, retained sessions, and maintenance stay native", async () => {
     const membership = proximity.proveMembership(bytes("p")).verify(proximity.descriptor());
     assert.equal(Buffer.from(membership.value ?? []).toString(), "payload");
     assert.equal(proximity.verify().recordCount, 1n);
+    const searchProof = proximity.proveSearch(exactSearch(new Float32Array([0, 0]), 1));
+    const verifiedSearch = searchProof.verify(proximity.descriptor());
+    assert.equal(Buffer.from(verifiedSearch.result.neighbors[0]!.key).toString(), "p");
+    assert.ok(verifiedSearch.replayedEvents > 0n);
+    searchProof.close();
   } finally {
     engine.close();
   }

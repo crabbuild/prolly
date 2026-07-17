@@ -335,6 +335,12 @@ module Prolly
     def descriptor = open! { @native.descriptor }
     def verify = open! { @native.verify }
     def prove_membership(key) = open! { @native.prove_membership(key.b) }
+    def prove_search(request, limits = Prolly.default_content_graph_limits)
+      open! { ProximitySearchProof.new(@native.prove_search(request, limits)) }
+    end
+    def prove_search_exact(query, k, limits = Prolly.default_content_graph_limits)
+      prove_search(Prolly.exact_proximity_search_request(query, k), limits)
+    end
     def prove_structure(limits = Prolly.default_content_graph_limits) = open! { @native.prove_structure(limits) }
     def clear_cache = open! { @native.clear_content_cache }
     def read = open! { ProximityReadSession.new(@native.read_session) }
@@ -373,6 +379,37 @@ module Prolly
 
     def open!
       raise 'proximity read session is closed' if @closed
+      yield
+    end
+  end
+
+  class ProximitySearchProof
+    def initialize(native)
+      @native = native
+      @closed = false
+    end
+
+    def source_descriptor = open! { @native.source_descriptor }
+    def verify(expected_descriptor = nil, limits = Prolly.default_content_graph_limits)
+      open! { @native.verify(expected_descriptor, limits) }
+    end
+    def close = @closed = true
+
+    def use
+      raise 'proximity search proof is closed' if @closed
+      return self unless block_given?
+
+      begin
+        yield self
+      ensure
+        close
+      end
+    end
+
+    private
+
+    def open!
+      raise 'proximity search proof is closed' if @closed
       yield
     end
   end

@@ -63,6 +63,21 @@ mod tests {
             .record_count,
             2
         );
+        let search_proof = map
+            .prove_search(
+                ProximitySearchRequestRecord::exact(vec![0.1, 0.1], 1),
+                ContentGraphLimitsRecord::defaults(),
+            )
+            .unwrap();
+        let search_verification = search_proof
+            .verify(Some(map.descriptor()), ContentGraphLimitsRecord::defaults())
+            .unwrap();
+        assert_eq!(search_verification.result.neighbors[0].key, b"a");
+        assert_eq!(
+            search_verification.claim.kind,
+            ProximitySearchClaimKindRecord::ExactL2Optimal
+        );
+        assert!(search_verification.replayed_events > 0);
     }
 
     #[test]
@@ -84,10 +99,11 @@ use prolly::{
     AdaptiveQuality, BuildParallelism, ContentGraphLimits, ContentObjectKind, DistanceMetric,
     HierarchyConfig, HnswSearchOptions, Neighbor, OverflowConfig, PlannerPolicy, PqSearchOptions,
     ProximityConfig, ProximityFilter, ProximityMap, ProximityMembershipProof, ProximityMutation,
-    ProximityMutationStats, ProximityRecord, ProximitySearchStats, ProximityStructuralProof,
-    ProximityVerification, QueryKernel, ScalarQuantizationConfig, SearchBackend, SearchBudget,
-    SearchCompletion, SearchOptions, SearchPolicy, SearchRequest, SearchResult, TypedContentObject,
-    TypedContentRoot, VectorStorageConfig,
+    ProximityMutationStats, ProximityRecord, ProximitySearchClaim, ProximitySearchProof,
+    ProximitySearchStats, ProximityStructuralProof, ProximityVerification, QueryKernel,
+    ScalarQuantizationConfig, SearchBackend, SearchBudget, SearchCompletion, SearchOptions,
+    SearchPolicy, SearchRequest, SearchResult, TypedContentObject, TypedContentRoot,
+    VectorStorageConfig,
 };
 
 use crate::{BindingEngine, KeyProofRecord, ProllyBindingError, ProllyEngine};
@@ -582,6 +598,82 @@ fn optional_usize(value: Option<u64>, field: &str) -> Result<Option<usize>, Prol
     value.map(|value| to_usize(value, field)).transpose()
 }
 
+fn proximity_search_request(
+    request: &ProximitySearchRequestRecord,
+) -> Result<SearchRequest<'_>, ProllyBindingError> {
+    let k = to_usize(request.k, "k")?;
+    let policy = match request.policy {
+        SearchPolicyKind::Exact => SearchPolicy::Exact,
+        SearchPolicyKind::FixedBudget => SearchPolicy::FixedBudget,
+        SearchPolicyKind::Adaptive => SearchPolicy::Adaptive(
+            match request
+                .adaptive_quality
+                .ok_or_else(|| ProllyBindingError::InvalidArgument {
+                    reason: "adaptive search requires adaptive_quality".to_string(),
+                })? {
+                AdaptiveQualityRecord::Fast => AdaptiveQuality::Fast,
+                AdaptiveQualityRecord::Balanced => AdaptiveQuality::Balanced,
+                AdaptiveQualityRecord::HighRecall => AdaptiveQuality::HighRecall,
+            },
+        ),
+    };
+    let budget = SearchBudget {
+        max_nodes: optional_usize(request.budget.max_nodes, "max_nodes")?,
+        max_committed_bytes: optional_usize(
+            request.budget.max_committed_bytes,
+            "max_committed_bytes",
+        )?,
+        max_distance_evaluations: optional_usize(
+            request.budget.max_distance_evaluations,
+            "max_distance_evaluations",
+        )?,
+        max_frontier_entries: optional_usize(
+            request.budget.max_frontier_entries,
+            "max_frontier_entries",
+        )?,
+    };
+    let filter = match &request.filter.kind {
+        ProximityFilterKind::All => ProximityFilter::All,
+        ProximityFilterKind::KeyRange => ProximityFilter::KeyRange {
+            start: request.filter.start.as_deref(),
+            end: request.filter.range_end.as_deref(),
+        },
+        ProximityFilterKind::Prefix => {
+            ProximityFilter::Prefix(request.filter.prefix.as_deref().ok_or_else(|| {
+                ProllyBindingError::InvalidArgument {
+                    reason: "prefix filter requires prefix".to_string(),
+                }
+            })?)
+        }
+        ProximityFilterKind::EligibleKeys => {
+            ProximityFilter::EligibleKeys(&request.filter.eligible_keys)
+        }
+    };
+    let kernel = match request.kernel {
+        QueryKernelRecord::ScalarDeterministic => QueryKernel::ScalarDeterministic,
+        QueryKernelRecord::SimdDeterministic => QueryKernel::SimdDeterministic,
+        QueryKernelRecord::AutoDeterministic => QueryKernel::AutoDeterministic,
+    };
+    Ok(SearchRequest {
+        query: &request.query,
+        k,
+        policy,
+        budget,
+        filter,
+        kernel,
+        options: SearchOptions {
+            backend: request.backend.into(),
+            planner: PlannerPolicy::default(),
+            hnsw: HnswSearchOptions {
+                ef_search: request.hnsw_ef_search,
+            },
+            pq: PqSearchOptions {
+                rerank_multiplier: request.pq_rerank_multiplier,
+            },
+        },
+    })
+}
+
 #[derive(Clone, Debug, PartialEq, uniffi::Record)]
 pub struct ProximityNeighborRecord {
     pub key: Vec<u8>,
@@ -671,6 +763,73 @@ impl From<SearchResult> for ProximitySearchResultRecord {
             backend: value.plan.backend.into(),
             plan_format_version: value.plan.format_version,
         }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, uniffi::Enum)]
+pub enum ProximitySearchClaimKindRecord {
+    ExactL2Optimal,
+    HonestExecution,
+}
+
+#[derive(Clone, Debug, PartialEq, uniffi::Record)]
+pub struct ProximitySearchClaimRecord {
+    pub kind: ProximitySearchClaimKindRecord,
+    pub terminal_lower_bound: Option<f64>,
+}
+
+impl From<ProximitySearchClaim> for ProximitySearchClaimRecord {
+    fn from(value: ProximitySearchClaim) -> Self {
+        match value {
+            ProximitySearchClaim::ExactL2Optimal {
+                terminal_lower_bound,
+            } => Self {
+                kind: ProximitySearchClaimKindRecord::ExactL2Optimal,
+                terminal_lower_bound: Some(terminal_lower_bound),
+            },
+            ProximitySearchClaim::HonestExecution => Self {
+                kind: ProximitySearchClaimKindRecord::HonestExecution,
+                terminal_lower_bound: None,
+            },
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, uniffi::Record)]
+pub struct ProximitySearchVerificationRecord {
+    pub result: ProximitySearchResultRecord,
+    pub claim: ProximitySearchClaimRecord,
+    pub replayed_events: u64,
+}
+
+#[derive(uniffi::Object)]
+pub struct BindingProximitySearchProof {
+    inner: ProximitySearchProof,
+}
+
+#[uniffi::export]
+impl BindingProximitySearchProof {
+    pub fn source_descriptor(&self) -> Vec<u8> {
+        self.inner.source.descriptor.0.to_vec()
+    }
+
+    pub fn verify(
+        &self,
+        expected_descriptor: Option<Vec<u8>>,
+        limits: ContentGraphLimitsRecord,
+    ) -> Result<ProximitySearchVerificationRecord, ProllyBindingError> {
+        let limits = ContentGraphLimits::try_from(limits)?;
+        let verified = match expected_descriptor {
+            Some(expected) => self
+                .inner
+                .verify_for_source(&crate::cid_from_vec(expected)?, &limits)?,
+            None => self.inner.verify(&limits)?,
+        };
+        Ok(ProximitySearchVerificationRecord {
+            result: verified.result.into(),
+            claim: verified.claim.into(),
+            replayed_events: verified.replayed_events as u64,
+        })
     }
 }
 
@@ -945,81 +1104,23 @@ impl BindingProximityMap {
         &self,
         request: ProximitySearchRequestRecord,
     ) -> Result<ProximitySearchResultRecord, ProllyBindingError> {
-        let k = to_usize(request.k, "k")?;
-        let policy = match request.policy {
-            SearchPolicyKind::Exact => SearchPolicy::Exact,
-            SearchPolicyKind::FixedBudget => SearchPolicy::FixedBudget,
-            SearchPolicyKind::Adaptive => SearchPolicy::Adaptive(
-                match request.adaptive_quality.ok_or_else(|| {
-                    ProllyBindingError::InvalidArgument {
-                        reason: "adaptive search requires adaptive_quality".to_string(),
-                    }
-                })? {
-                    AdaptiveQualityRecord::Fast => AdaptiveQuality::Fast,
-                    AdaptiveQualityRecord::Balanced => AdaptiveQuality::Balanced,
-                    AdaptiveQualityRecord::HighRecall => AdaptiveQuality::HighRecall,
-                },
-            ),
-        };
-        let budget = SearchBudget {
-            max_nodes: optional_usize(request.budget.max_nodes, "max_nodes")?,
-            max_committed_bytes: optional_usize(
-                request.budget.max_committed_bytes,
-                "max_committed_bytes",
-            )?,
-            max_distance_evaluations: optional_usize(
-                request.budget.max_distance_evaluations,
-                "max_distance_evaluations",
-            )?,
-            max_frontier_entries: optional_usize(
-                request.budget.max_frontier_entries,
-                "max_frontier_entries",
-            )?,
-        };
-        let filter = match &request.filter.kind {
-            ProximityFilterKind::All => ProximityFilter::All,
-            ProximityFilterKind::KeyRange => ProximityFilter::KeyRange {
-                start: request.filter.start.as_deref(),
-                end: request.filter.range_end.as_deref(),
-            },
-            ProximityFilterKind::Prefix => {
-                ProximityFilter::Prefix(request.filter.prefix.as_deref().ok_or_else(|| {
-                    ProllyBindingError::InvalidArgument {
-                        reason: "prefix filter requires prefix".to_string(),
-                    }
-                })?)
-            }
-            ProximityFilterKind::EligibleKeys => {
-                ProximityFilter::EligibleKeys(&request.filter.eligible_keys)
-            }
-        };
-        let kernel = match request.kernel {
-            QueryKernelRecord::ScalarDeterministic => QueryKernel::ScalarDeterministic,
-            QueryKernelRecord::SimdDeterministic => QueryKernel::SimdDeterministic,
-            QueryKernelRecord::AutoDeterministic => QueryKernel::AutoDeterministic,
-        };
-        let options = SearchOptions {
-            backend: request.backend.into(),
-            planner: PlannerPolicy::default(),
-            hnsw: HnswSearchOptions {
-                ef_search: request.hnsw_ef_search,
-            },
-            pq: PqSearchOptions {
-                rerank_multiplier: request.pq_rerank_multiplier,
-            },
-        };
+        let request = proximity_search_request(&request)?;
         with_proximity_map!(self, map, {
-            map.search(SearchRequest {
-                query: &request.query,
-                k,
-                policy,
-                budget,
-                filter,
-                kernel,
-                options,
-            })
-            .map(Into::into)
-            .map_err(Into::into)
+            map.search(request).map(Into::into).map_err(Into::into)
+        })
+    }
+
+    pub fn prove_search(
+        &self,
+        request: ProximitySearchRequestRecord,
+        limits: ContentGraphLimitsRecord,
+    ) -> Result<Arc<BindingProximitySearchProof>, ProllyBindingError> {
+        let limits = ContentGraphLimits::try_from(limits)?;
+        let request = proximity_search_request(&request)?;
+        with_proximity_map!(self, map, {
+            Ok(Arc::new(BindingProximitySearchProof {
+                inner: map.prove_search(request, &limits)?,
+            }))
         })
     }
 

@@ -30,6 +30,12 @@ public final class ProximityMap implements AutoCloseable {
     public build.crab.prolly.ProximityMembershipProofRecord proveMembership(byte[] key) {
         return open().proveMembership(key.clone());
     }
+    public ProximitySearchProof proveSearch(SearchRequest request) {
+        List<Float> query = new ArrayList<>(request.vector().length);
+        for (float value : request.vector()) query.add(value);
+        return new ProximitySearchProof(
+                JavaPortableBridge.proveSearch(open(), query, request.topK()));
+    }
     public build.crab.prolly.ProximityStructuralProofRecord proveStructure() {
         return JavaPortableBridge.proveStructure(open());
     }

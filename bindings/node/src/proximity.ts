@@ -34,8 +34,17 @@ interface NativeProximityMap {
   descriptor(): Uint8Array;
   verify(): string;
   proveMembership(key: Uint8Array): NativeProximityProof;
+  proveSearch(vector: Float32Array, topK: string): NativeProximitySearchProof;
 }
 interface NativeProximityProof { verify(expectedDescriptor?: Uint8Array): Uint8Array | null; }
+interface NativeProximitySearchProof {
+  verify(expectedDescriptor?: Uint8Array): {
+    result: SearchResult;
+    claim: string;
+    terminalLowerBound?: number;
+    replayedEvents: string;
+  };
+}
 
 export class ProximityMap implements Disposable {
   #native?: NativeProximityMap;
@@ -51,6 +60,11 @@ export class ProximityMap implements Disposable {
   proveMembership(key: Uint8Array): ProximityMembershipProof {
     return new ProximityMembershipProof(this.nativeHandle().proveMembership(ownedBytes(key)));
   }
+  proveSearch(request: SearchRequest): ProximitySearchProof {
+    return new ProximitySearchProof(
+      this.nativeHandle().proveSearch(new Float32Array(request.vector), request.topK.toString()),
+    );
+  }
   close(): void { this.#native = undefined; }
   [Symbol.dispose](): void { this.close(); }
 }
@@ -63,6 +77,29 @@ export class ProximityMembershipProof implements Disposable {
     const value = this.#native.verify(
       expectedDescriptor == null ? undefined : ownedBytes(expectedDescriptor));
     return { value: value ?? undefined };
+  }
+  close(): void { this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class ProximitySearchProof implements Disposable {
+  #native?: NativeProximitySearchProof;
+  constructor(native: NativeProximitySearchProof) { this.#native = native; }
+  verify(expectedDescriptor?: Uint8Array): {
+    result: SearchResult;
+    claim: string;
+    terminalLowerBound?: number;
+    replayedEvents: bigint;
+  } {
+    if (this.#native == null) throw new Error("proximity search proof is closed");
+    const value = this.#native.verify(
+      expectedDescriptor == null ? undefined : ownedBytes(expectedDescriptor));
+    return {
+      result: value.result,
+      claim: value.claim,
+      terminalLowerBound: value.terminalLowerBound,
+      replayedEvents: BigInt(value.replayedEvents),
+    };
   }
   close(): void { this.#native = undefined; }
   [Symbol.dispose](): void { this.close(); }

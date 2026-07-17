@@ -2129,6 +2129,26 @@ end
     end
   end
 
+  # The Record type ProximitySearchClaimRecord.
+
+  def self.check_lower_TypeProximitySearchClaimRecord(v)
+    RustBuffer.check_lower_TypeProximitySearchClaimKindRecord(v.kind)
+    RustBuffer.check_lower_Optionalf64(v.terminal_lower_bound)
+  end
+
+  def self.alloc_from_TypeProximitySearchClaimRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeProximitySearchClaimRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeProximitySearchClaimRecord
+    consumeWithStream do |stream|
+      return stream.readTypeProximitySearchClaimRecord
+    end
+  end
+
   # The Record type ProximitySearchRequestRecord.
 
   def self.check_lower_TypeProximitySearchRequestRecord(v)
@@ -2206,6 +2226,27 @@ end
   def consumeIntoTypeProximitySearchStatsRecord
     consumeWithStream do |stream|
       return stream.readTypeProximitySearchStatsRecord
+    end
+  end
+
+  # The Record type ProximitySearchVerificationRecord.
+
+  def self.check_lower_TypeProximitySearchVerificationRecord(v)
+    RustBuffer.check_lower_TypeProximitySearchResultRecord(v.result)
+    RustBuffer.check_lower_TypeProximitySearchClaimRecord(v.claim)
+
+  end
+
+  def self.alloc_from_TypeProximitySearchVerificationRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeProximitySearchVerificationRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeProximitySearchVerificationRecord
+    consumeWithStream do |stream|
+      return stream.readTypeProximitySearchVerificationRecord
     end
   end
 
@@ -3816,6 +3857,25 @@ end
   end
 
 
+  # The Enum type ProximitySearchClaimKindRecord.
+
+  def self.check_lower_TypeProximitySearchClaimKindRecord(v)
+  end
+
+  def self.alloc_from_TypeProximitySearchClaimKindRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeProximitySearchClaimKindRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeProximitySearchClaimKindRecord
+    consumeWithStream do |stream|
+      return stream.readTypeProximitySearchClaimKindRecord
+    end
+  end
+
+
   # The Enum type QueryKernelRecord.
 
   def self.check_lower_TypeQueryKernelRecord(v)
@@ -4047,6 +4107,27 @@ end
   def consumeIntoOptionalu64
     consumeWithStream do |stream|
       return stream.readOptionalu64
+    end
+  end
+
+  # The Optional<T> type for f64.
+
+  def self.check_lower_Optionalf64(v)
+    if not v.nil?
+
+    end
+  end
+
+  def self.alloc_from_Optionalf64(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_Optionalf64(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoOptionalf64
+    consumeWithStream do |stream|
+      return stream.readOptionalf64
     end
   end
 
@@ -5665,6 +5746,13 @@ class RustBufferStream
     return BindingProximityReadSession.uniffi_allocate(handle)
   end
 
+  # The Object type BindingProximitySearchProof.
+
+  def readTypeBindingProximitySearchProof
+    handle = unpack_from 8, 'Q>'
+    return BindingProximitySearchProof.uniffi_allocate(handle)
+  end
+
   # The Object type BindingSecondaryIndexSnapshot.
 
   def readTypeBindingSecondaryIndexSnapshot
@@ -6801,6 +6889,15 @@ class RustBufferStream
     )
   end
 
+  # The Record type ProximitySearchClaimRecord.
+
+  def readTypeProximitySearchClaimRecord
+    ProximitySearchClaimRecord.new(
+      kind: readTypeProximitySearchClaimKindRecord,
+      terminal_lower_bound: readOptionalf64
+    )
+  end
+
   # The Record type ProximitySearchRequestRecord.
 
   def readTypeProximitySearchRequestRecord
@@ -6845,6 +6942,16 @@ class RustBufferStream
       frontier_peak: readU64,
       candidate_handles_peak: readU64,
       candidate_retained_bytes_peak: readU64
+    )
+  end
+
+  # The Record type ProximitySearchVerificationRecord.
+
+  def readTypeProximitySearchVerificationRecord
+    ProximitySearchVerificationRecord.new(
+      result: readTypeProximitySearchResultRecord,
+      claim: readTypeProximitySearchClaimRecord,
+      replayed_events: readU64
     )
   end
 
@@ -8043,6 +8150,25 @@ class RustBufferStream
 
 
 
+  # The Enum type ProximitySearchClaimKindRecord.
+
+  def readTypeProximitySearchClaimKindRecord
+    variant = unpack_from 4, 'l>'
+
+    if variant == 1
+      return ProximitySearchClaimKindRecord::EXACT_L2_OPTIMAL
+    end
+    if variant == 2
+      return ProximitySearchClaimKindRecord::HONEST_EXECUTION
+    end
+
+    raise InternalError, 'Unexpected variant tag for TypeProximitySearchClaimKindRecord'
+  end
+
+
+
+
+
   # The Enum type QueryKernelRecord.
 
   def readTypeQueryKernelRecord
@@ -8290,6 +8416,20 @@ class RustBufferStream
       return readU64
     else
       raise InternalError, 'Unexpected flag byte for Optionalu64'
+    end
+  end
+
+  # The Optional<T> type for f64.
+
+  def readOptionalf64
+    flag = unpack_from 1, 'c'
+
+    if flag == 0
+      return nil
+    elsif flag == 1
+      return readF64
+    else
+      raise InternalError, 'Unexpected flag byte for Optionalf64'
     end
   end
 
@@ -9496,6 +9636,13 @@ class RustBufferBuilder
     pack_into(8, 'Q>', handle)
   end
 
+  # The Object type BindingProximitySearchProof.
+
+  def write_TypeBindingProximitySearchProof(obj)
+    handle = BindingProximitySearchProof.uniffi_lower obj
+    pack_into(8, 'Q>', handle)
+  end
+
   # The Object type BindingSecondaryIndexSnapshot.
 
   def write_TypeBindingSecondaryIndexSnapshot(obj)
@@ -10454,6 +10601,13 @@ class RustBufferBuilder
     self.write_Bytes(v.value)
   end
 
+  # The Record type ProximitySearchClaimRecord.
+
+  def write_TypeProximitySearchClaimRecord(v)
+    self.write_TypeProximitySearchClaimKindRecord(v.kind)
+    self.write_Optionalf64(v.terminal_lower_bound)
+  end
+
   # The Record type ProximitySearchRequestRecord.
 
   def write_TypeProximitySearchRequestRecord(v)
@@ -10493,6 +10647,14 @@ class RustBufferBuilder
     self.write_U64(v.frontier_peak)
     self.write_U64(v.candidate_handles_peak)
     self.write_U64(v.candidate_retained_bytes_peak)
+  end
+
+  # The Record type ProximitySearchVerificationRecord.
+
+  def write_TypeProximitySearchVerificationRecord(v)
+    self.write_TypeProximitySearchResultRecord(v.result)
+    self.write_TypeProximitySearchClaimRecord(v.claim)
+    self.write_U64(v.replayed_events)
   end
 
   # The Record type ProximityStructuralProofRecord.
@@ -11173,6 +11335,13 @@ class RustBufferBuilder
  end
 
 
+  # The Enum type ProximitySearchClaimKindRecord.
+
+  def write_TypeProximitySearchClaimKindRecord(v)
+    pack_into(4, 'l>', v)
+ end
+
+
   # The Enum type QueryKernelRecord.
 
   def write_TypeQueryKernelRecord(v)
@@ -11266,6 +11435,17 @@ class RustBufferBuilder
     else
       pack_into(1, 'c', 1)
       self.write_U64(v)
+    end
+  end
+
+  # The Optional<T> type for f64.
+
+  def write_Optionalf64(v)
+    if v.nil?
+      pack_into(1, 'c', 0)
+    else
+      pack_into(1, 'c', 1)
+      self.write_F64(v)
     end
   end
 
@@ -12176,6 +12356,7 @@ end
 
 
 
+
 # Map error modules to the RustBuffer method name that reads them
 ERROR_MODULE_TO_READER_METHOD = {
 
@@ -12193,6 +12374,7 @@ ERROR_MODULE_TO_READER_METHOD = {
 
 
   ProllyBindingError => :readTypeProllyBindingError,
+
 
 
 
@@ -13104,6 +13286,9 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_fn_method_bindingproximitymap_prove_membership,
     [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingproximitymap_prove_search,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
   attach_function :uniffi_prolly_bindings_fn_method_bindingproximitymap_prove_structure,
     [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
@@ -13137,6 +13322,18 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_fn_method_bindingproximityreadsession_scan_records,
     [:uint64, :uint64, RustCallStatus.by_ref],
     :uint64
+  attach_function :uniffi_prolly_bindings_fn_clone_bindingproximitysearchproof,
+    [:uint64, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_free_bindingproximitysearchproof,
+    [:uint64, RustCallStatus.by_ref],
+    :void
+  attach_function :uniffi_prolly_bindings_fn_method_bindingproximitysearchproof_source_descriptor,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingproximitysearchproof_verify,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_clone_proximityrecordvisitorcallback,
     [:uint64, RustCallStatus.by_ref],
     :uint64
@@ -15066,6 +15263,9 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_checksum_method_bindingproximitymap_prove_membership,
     [RustCallStatus.by_ref],
     :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingproximitymap_prove_search,
+    [RustCallStatus.by_ref],
+    :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_bindingproximitymap_prove_structure,
     [RustCallStatus.by_ref],
     :uint16
@@ -15091,6 +15291,12 @@ module UniFFILib
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_scan_records,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingproximitysearchproof_source_descriptor,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingproximitysearchproof_verify,
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_proximityrecordvisitorcallback_visit,
@@ -15867,6 +16073,17 @@ class ProximityFilterKind
   KEY_RANGE = 2
   PREFIX = 3
   ELIGIBLE_KEYS = 4
+
+end
+
+
+
+
+
+
+class ProximitySearchClaimKindRecord
+  EXACT_L2_OPTIMAL = 1
+  HONEST_EXECUTION = 2
 
 end
 
@@ -20130,6 +20347,27 @@ class ProximityRecordRecord
   end
 end
 
+  # Record type ProximitySearchClaimRecord
+class ProximitySearchClaimRecord
+  attr_reader :kind, :terminal_lower_bound
+
+  def initialize(kind:, terminal_lower_bound:)
+    @kind = kind
+    @terminal_lower_bound = terminal_lower_bound
+  end
+
+  def ==(other)
+    if @kind != other.kind
+      return false
+    end
+    if @terminal_lower_bound != other.terminal_lower_bound
+      return false
+    end
+
+    true
+  end
+end
+
   # Record type ProximitySearchRequestRecord
 class ProximitySearchRequestRecord
   attr_reader :query, :k, :policy, :adaptive_quality, :budget, :filter, :kernel, :backend, :hnsw_ef_search, :pq_rerank_multiplier
@@ -20266,6 +20504,31 @@ class ProximitySearchStatsRecord
       return false
     end
     if @candidate_retained_bytes_peak != other.candidate_retained_bytes_peak
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type ProximitySearchVerificationRecord
+class ProximitySearchVerificationRecord
+  attr_reader :result, :claim, :replayed_events
+
+  def initialize(result:, claim:, replayed_events:)
+    @result = result
+    @claim = claim
+    @replayed_events = replayed_events
+  end
+
+  def ==(other)
+    if @result != other.result
+      return false
+    end
+    if @claim != other.claim
+      return false
+    end
+    if @replayed_events != other.replayed_events
       return false
     end
 
@@ -24925,6 +25188,14 @@ end
     result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingproximitymap_prove_membership,uniffi_clone_handle(),RustBuffer.allocFromBytes(key))
     return result.consumeIntoTypeProximityMembershipProofRecord
   end
+  def prove_search(request, limits)
+        request = request
+        RustBuffer.check_lower_TypeProximitySearchRequestRecord(request)
+        limits = limits
+        RustBuffer.check_lower_TypeContentGraphLimitsRecord(limits)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingproximitymap_prove_search,uniffi_clone_handle(),RustBuffer.alloc_from_TypeProximitySearchRequestRecord(request),RustBuffer.alloc_from_TypeContentGraphLimitsRecord(limits))
+    return BindingProximitySearchProof.uniffi_allocate(result)
+  end
   def prove_structure(limits)
         limits = limits
         RustBuffer.check_lower_TypeContentGraphLimitsRecord(limits)
@@ -25022,6 +25293,66 @@ end
         (ProximityRecordVisitorCallback.uniffi_check_lower visitor)
     result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingproximityreadsession_scan_records,uniffi_clone_handle(),(ProximityRecordVisitorCallback.uniffi_lower visitor))
     return result.to_i
+  end
+
+end
+
+  class BindingProximitySearchProof
+
+  # A private helper for initializing instances of the class from a raw handle,
+  # bypassing any initialization logic and ensuring they are GC'd properly.
+  def self.uniffi_allocate(handle)
+    inst = allocate
+    inst.instance_variable_set :@handle, handle
+    ObjectSpace.define_finalizer(inst, uniffi_define_finalizer_by_handle(handle, inst.object_id))
+    return inst
+  end
+
+  # A private helper for registering an object finalizer.
+  # N.B. it's important that this does not capture a reference
+  # to the actual instance, only its underlying handle.
+  def self.uniffi_define_finalizer_by_handle(handle, object_id)
+    Proc.new do |_id|
+      Prolly.rust_call(
+        :uniffi_prolly_bindings_fn_free_bindingproximitysearchproof,
+        handle
+      )
+    end
+  end
+
+  # A private helper for lowering instances into a raw handle.
+  # This does an explicit typecheck, because accidentally lowering a different type of
+  # object in a place where this type is expected, could lead to memory unsafety.
+  def self.uniffi_check_lower(inst)
+    if not inst.is_a? self
+      raise TypeError.new "Expected a BindingProximitySearchProof instance, got #{inst}"
+    end
+  end
+
+  def uniffi_clone_handle()
+    return Prolly.rust_call(
+      :uniffi_prolly_bindings_fn_clone_bindingproximitysearchproof,
+      @handle
+    )
+  end
+
+  def self.uniffi_lower(inst)
+    return inst.uniffi_clone_handle()
+  end
+
+
+
+  def source_descriptor()
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_bindingproximitysearchproof_source_descriptor,uniffi_clone_handle(),)
+    return result.consumeIntoBytes
+  end
+  def verify(expected_descriptor, limits)
+        expected_descriptor = (expected_descriptor ? Prolly::uniffi_bytes(expected_descriptor) : nil)
+        RustBuffer.check_lower_Optionalbytes(expected_descriptor)
+        limits = limits
+        RustBuffer.check_lower_TypeContentGraphLimitsRecord(limits)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingproximitysearchproof_verify,uniffi_clone_handle(),RustBuffer.alloc_from_Optionalbytes(expected_descriptor),RustBuffer.alloc_from_TypeContentGraphLimitsRecord(limits))
+    return result.consumeIntoTypeProximitySearchVerificationRecord
   end
 
 end

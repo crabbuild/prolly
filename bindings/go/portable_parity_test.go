@@ -311,6 +311,17 @@ func TestPortableProximityProofAndMaintenance(t *testing.T) {
 	if err != nil || !bytes.Equal(verified.Key, []byte("a")) || verified.Record == nil {
 		t.Fatalf("verified = %+v, %v", verified, err)
 	}
+	searchProof, err := proximity.ProveSearch(ExactSearch([]float32{0, 0}, 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer searchProof.Close()
+	verifiedSearch, err := searchProof.Verify(descriptor)
+	if err != nil || len(verifiedSearch.Result.Neighbors) != 1 ||
+		!bytes.Equal(verifiedSearch.Result.Neighbors[0].Key, []byte("a")) ||
+		verifiedSearch.ReplayedEvents == 0 {
+		t.Fatalf("verified search = %+v, %v", verifiedSearch, err)
+	}
 	health, err := proximity.Verify()
 	if err != nil || health.RecordCount != 1 {
 		t.Fatalf("health = %+v, %v", health, err)

@@ -1,9 +1,10 @@
 use super::{js_error, WasmProllyEngine};
 use crate::page::set_bytes;
-use js_sys::{Array, Float32Array, Object, Reflect, Uint8Array};
+use js_sys::{Array, BigInt, Float32Array, Object, Reflect, Uint8Array};
 use prolly::{
-    Cid, ProximityConfig, ProximityMap, ProximityMembershipProof, ProximityRecord, SearchBackend,
-    SearchCompletion, SearchRequest,
+    Cid, ContentGraphLimits, ProximityConfig, ProximityMap, ProximityMembershipProof,
+    ProximityRecord, ProximitySearchClaim, ProximitySearchProof, SearchBackend, SearchCompletion,
+    SearchRequest,
 };
 use std::sync::Arc;
 use wasm_bindgen::prelude::*;
@@ -47,6 +48,21 @@ impl WasmProximityMap {
             .map(|inner| WasmProximityProof { inner })
             .map_err(js_error)
     }
+    #[wasm_bindgen(js_name = proveSearch)]
+    pub fn prove_search(
+        &self,
+        query: Float32Array,
+        k: u32,
+    ) -> Result<WasmProximitySearchProof, JsValue> {
+        let query = query.to_vec();
+        self.load()?
+            .prove_search(
+                SearchRequest::exact(&query, k as usize),
+                &ContentGraphLimits::default(),
+            )
+            .map(|inner| WasmProximitySearchProof { inner })
+            .map_err(js_error)
+    }
 }
 
 #[wasm_bindgen(js_name = WasmProximityProof)]
@@ -72,6 +88,57 @@ impl WasmProximityProof {
             Some(record) => Uint8Array::from(record.1.as_slice()).into(),
             None => JsValue::UNDEFINED,
         })
+    }
+}
+
+#[wasm_bindgen(js_name = WasmProximitySearchProof)]
+pub struct WasmProximitySearchProof {
+    inner: ProximitySearchProof,
+}
+
+#[wasm_bindgen(js_class = WasmProximitySearchProof)]
+impl WasmProximitySearchProof {
+    pub fn verify(&self, expected: Option<Uint8Array>) -> Result<Object, JsValue> {
+        let limits = ContentGraphLimits::default();
+        let value = match expected {
+            Some(expected) => {
+                let bytes = expected.to_vec();
+                let raw: [u8; 32] = bytes
+                    .try_into()
+                    .map_err(|_| JsValue::from_str("descriptor CID must be 32 bytes"))?;
+                self.inner.verify_for_source(&Cid(raw), &limits)
+            }
+            None => self.inner.verify(&limits),
+        }
+        .map_err(js_error)?;
+        let object = Object::new();
+        Reflect::set(
+            &object,
+            &"result".into(),
+            &search_result_object(value.result)?.into(),
+        )?;
+        match value.claim {
+            ProximitySearchClaim::ExactL2Optimal {
+                terminal_lower_bound,
+            } => {
+                Reflect::set(&object, &"claim".into(), &"exact_l2_optimal".into())?;
+                Reflect::set(
+                    &object,
+                    &"terminalLowerBound".into(),
+                    &terminal_lower_bound.into(),
+                )?;
+            }
+            ProximitySearchClaim::HonestExecution => {
+                Reflect::set(&object, &"claim".into(), &"honest_execution".into())?;
+                Reflect::set(&object, &"terminalLowerBound".into(), &JsValue::UNDEFINED)?;
+            }
+        }
+        Reflect::set(
+            &object,
+            &"replayedEvents".into(),
+            &BigInt::from(value.replayed_events as u64).into(),
+        )?;
+        Ok(object)
     }
 }
 
@@ -141,6 +208,10 @@ fn search_map(
     let result = map
         .search(SearchRequest::exact(&query, k as usize))
         .map_err(js_error)?;
+    search_result_object(result)
+}
+
+fn search_result_object(result: prolly::SearchResult) -> Result<Object, JsValue> {
     let neighbors = Array::new();
     for neighbor in result.neighbors {
         let object = Object::new();

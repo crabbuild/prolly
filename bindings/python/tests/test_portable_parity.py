@@ -106,6 +106,10 @@ class PortableParityTests(unittest.TestCase):
             )
             self.assertEqual(verified_membership.record.value, b"payload")
             self.assertEqual(proximity.verify().record_count, 1)
+            with proximity.prove_search_exact([0.0, 0.0], 1) as search_proof:
+                verified_search = search_proof.verify(proximity.descriptor)
+                self.assertEqual(verified_search.result.neighbors[0].key, b"p")
+                self.assertGreater(verified_search.replayed_events, 0)
 
 
 if __name__ == "__main__":

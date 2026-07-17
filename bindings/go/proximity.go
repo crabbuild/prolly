@@ -35,6 +35,17 @@ type ProximityMembershipVerification struct {
 	Record     *ExactProximityRecord
 }
 
+type ProximitySearchClaim struct {
+	Kind               string
+	TerminalLowerBound *float64
+}
+
+type ProximitySearchVerification struct {
+	Result         SearchResult
+	Claim          ProximitySearchClaim
+	ReplayedEvents uint64
+}
+
 type ProximityVerification struct {
 	RecordCount            uint64
 	ProximityNodeCount     uint64
@@ -117,6 +128,15 @@ func encodeProximityRecords(dimensions uint32, records []ProximityRecord) ([]byt
 		encodeByteArrayInto(&out, record.Value)
 	}
 	return out.Bytes(), nil
+}
+
+func encodeFloat32Sequence(values []float32) []byte {
+	var out bytes.Buffer
+	writeI32(&out, int32(len(values)))
+	for _, value := range values {
+		writeU32(&out, math.Float32bits(value))
+	}
+	return out.Bytes()
 }
 
 func (m *ProximityMap) Close() {
@@ -212,6 +232,80 @@ func (m *ProximityMap) ProveMembership(key []byte) (ProximityMembershipProof, er
 		return ProximityMembershipProof{}, err
 	}
 	return ProximityMembershipProof{encoded: raw}, nil
+}
+
+type ProximitySearchProof struct {
+	handle uint64
+	closed atomic.Bool
+	mu     sync.RWMutex
+}
+
+func (m *ProximityMap) ProveSearch(request SearchRequest) (*ProximitySearchProof, error) {
+	if len(request.Query) == 0 || request.K == 0 {
+		return nil, errors.New("proximity query and k must be non-empty")
+	}
+	handle, _, unlock, err := m.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	nativeRequest, err := ffiExactProximitySearchRequest(append([]float32(nil), request.Query...), uint64(request.K))
+	if err != nil {
+		return nil, err
+	}
+	limits, err := ffiDefaultContentGraphLimits()
+	if err != nil {
+		return nil, err
+	}
+	proofHandle, err := ffiProximityProveSearch(handle, nativeRequest, limits)
+	if err != nil {
+		return nil, err
+	}
+	proof := &ProximitySearchProof{handle: proofHandle}
+	runtime.SetFinalizer(proof, (*ProximitySearchProof).Close)
+	return proof, nil
+}
+
+func (p *ProximitySearchProof) Close() {
+	if p == nil || p.closed.Swap(true) {
+		return
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	runtime.SetFinalizer(p, nil)
+	if p.handle != 0 {
+		ffiFreeProximitySearchProof(p.handle)
+		p.handle = 0
+	}
+}
+
+func (p *ProximitySearchProof) withHandle() (uint64, func(), error) {
+	if p == nil || p.closed.Load() {
+		return 0, nil, errors.New("proximity search proof is closed")
+	}
+	p.mu.RLock()
+	if p.closed.Load() || p.handle == 0 {
+		p.mu.RUnlock()
+		return 0, nil, errors.New("proximity search proof is closed")
+	}
+	return p.handle, p.mu.RUnlock, nil
+}
+
+func (p *ProximitySearchProof) Verify(expectedDescriptor []byte) (ProximitySearchVerification, error) {
+	handle, unlock, err := p.withHandle()
+	if err != nil {
+		return ProximitySearchVerification{}, err
+	}
+	defer unlock()
+	limits, err := ffiDefaultContentGraphLimits()
+	if err != nil {
+		return ProximitySearchVerification{}, err
+	}
+	raw, err := ffiProximitySearchProofVerify(handle, append([]byte(nil), expectedDescriptor...), limits)
+	if err != nil {
+		return ProximitySearchVerification{}, err
+	}
+	return decodeProximitySearchVerification(raw)
 }
 
 func VerifyProximityMembershipProof(proof ProximityMembershipProof, expectedDescriptor []byte) (ProximityMembershipVerification, error) {
@@ -379,6 +473,103 @@ func decodeFloat32Sequence(d *byteDecoder) ([]float32, error) {
 		values = append(values, math.Float32frombits(bits))
 	}
 	return values, nil
+}
+
+func decodeProximitySearchResult(d *byteDecoder) (SearchResult, error) {
+	count, err := d.readInt32()
+	if err != nil || count < 0 {
+		if err == nil {
+			err = errors.New("negative proximity neighbor count")
+		}
+		return SearchResult{}, err
+	}
+	result := SearchResult{Neighbors: make([]Neighbor, 0, count)}
+	for index := int32(0); index < count; index++ {
+		key, err := d.readByteArray()
+		if err != nil {
+			return SearchResult{}, err
+		}
+		value, err := d.readByteArray()
+		if err != nil {
+			return SearchResult{}, err
+		}
+		distanceBits, err := d.readUint64()
+		if err != nil {
+			return SearchResult{}, err
+		}
+		result.Neighbors = append(result.Neighbors, Neighbor{
+			Key: key, Value: value, Distance: math.Float64frombits(distanceBits), Rank: uint32(index),
+		})
+	}
+	for range 11 {
+		if _, err := d.readUint64(); err != nil {
+			return SearchResult{}, err
+		}
+	}
+	completion, err := d.readInt32()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	result.Completion = map[int32]string{
+		1: "exact", 2: "approximate-policy-satisfied", 3: "budget-exhausted",
+		4: "cancelled", 5: "deadline-exceeded",
+	}[completion]
+	if result.Completion == "" {
+		return SearchResult{}, errors.New("unknown proximity search completion")
+	}
+	backend, err := d.readInt32()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	result.Backend = map[int32]string{
+		1: "native", 2: "product-quantized", 3: "hnsw", 4: "composite", 5: "auto",
+	}[backend]
+	if result.Backend == "" {
+		return SearchResult{}, errors.New("unknown proximity search backend")
+	}
+	if _, err := d.readByte(); err != nil {
+		return SearchResult{}, err
+	}
+	return result, nil
+}
+
+func decodeProximitySearchVerification(raw []byte) (ProximitySearchVerification, error) {
+	d := byteDecoder{data: raw}
+	result, err := decodeProximitySearchResult(&d)
+	if err != nil {
+		return ProximitySearchVerification{}, err
+	}
+	kind, err := d.readInt32()
+	if err != nil {
+		return ProximitySearchVerification{}, err
+	}
+	claim := ProximitySearchClaim{}
+	switch kind {
+	case 1:
+		claim.Kind = "exact-l2-optimal"
+	case 2:
+		claim.Kind = "honest-execution"
+	default:
+		return ProximitySearchVerification{}, errors.New("unknown proximity search claim")
+	}
+	present, err := d.readByte()
+	if err != nil {
+		return ProximitySearchVerification{}, err
+	}
+	if present != 0 {
+		bits, err := d.readUint64()
+		if err != nil {
+			return ProximitySearchVerification{}, err
+		}
+		value := math.Float64frombits(bits)
+		claim.TerminalLowerBound = &value
+	}
+	replayed, err := d.readUint64()
+	if err != nil {
+		return ProximitySearchVerification{}, err
+	}
+	verification := ProximitySearchVerification{Result: result, Claim: claim, ReplayedEvents: replayed}
+	return verification, d.done()
 }
 
 func decodeOptionalExactProximityRecord(d *byteDecoder) (ExactProximityRecord, bool, error) {

@@ -122,5 +122,9 @@ test("WASM proofs, retained sessions, and maintenance stay in Rust", { skip: !ge
   ]);
   assert.equal(Buffer.from(proximity.proveMembership(bytes("p")).verify(proximity.descriptor()).value ?? []).toString(), "payload");
   assert.equal(proximity.verify().recordCount, 1n);
+  const searchProof = proximity.proveSearch(new Float32Array([0, 0]), 1);
+  const verifiedSearch = searchProof.verify(proximity.descriptor());
+  assert.equal(Buffer.from(verifiedSearch.result.neighbors[0].key).toString(), "p");
+  assert.ok(verifiedSearch.replayedEvents > 0n);
   engine.close();
 });

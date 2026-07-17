@@ -405,6 +405,24 @@ class ProximityMap(_Scoped):
         self._open()
         return self._inner.prove_membership(bytes(key))
 
+    def prove_search(self, request, limits=None) -> "ProximitySearchProof":
+        self._open()
+        return ProximitySearchProof(
+            self._inner.prove_search(
+                request, limits or _native.default_content_graph_limits()
+            )
+        )
+
+    def prove_search_exact(
+        self, query: Sequence[float], k: int, limits=None
+    ) -> "ProximitySearchProof":
+        return self.prove_search(
+            _native.exact_proximity_search_request(
+                [float(value) for value in query], k
+            ),
+            limits,
+        )
+
     def prove_structure(self, limits=None):
         self._open()
         return self._inner.prove_structure(
@@ -428,6 +446,24 @@ class ProximityReadSession(_Scoped):
     def contains(self, key: bytes) -> bool:
         self._open()
         return self._inner.contains_key(bytes(key))
+
+
+class ProximitySearchProof(_Scoped):
+    def __init__(self, inner: _native.BindingProximitySearchProof):
+        super().__init__()
+        self._inner = inner
+
+    @property
+    def source_descriptor(self) -> bytes:
+        self._open()
+        return self._inner.source_descriptor()
+
+    def verify(self, expected_descriptor: bytes | None = None, limits=None):
+        self._open()
+        return self._inner.verify(
+            None if expected_descriptor is None else bytes(expected_descriptor),
+            limits or _native.default_content_graph_limits(),
+        )
 
 
 def verify_key_proof(proof):
@@ -462,6 +498,7 @@ __all__ = [
     "ProximityMap",
     "ProximityReadSession",
     "ProximityRecord",
+    "ProximitySearchProof",
     "SecondaryIndex",
     "ScopedBytes",
     "ReadSession",

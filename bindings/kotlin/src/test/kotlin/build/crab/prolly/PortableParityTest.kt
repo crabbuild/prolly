@@ -130,6 +130,11 @@ class PortableParityTest {
                 )
                 assertArrayEquals("payload".bytes(), verified.record!!.value)
                 assertEquals(1uL, proximity.verify().recordCount)
+                proximity.proveSearchExact(listOf(0.0f, 0.0f), 1uL).use { proof ->
+                    val verifiedSearch = proof.verify(proximity.descriptor)
+                    assertArrayEquals("p".bytes(), verifiedSearch.result.neighbors.single().key)
+                    assertEquals(true, verifiedSearch.replayedEvents > 0uL)
+                }
             }
         }
     }

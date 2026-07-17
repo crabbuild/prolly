@@ -993,6 +993,11 @@ export class WasmProximityMap implements Disposable {
   proveMembership(key: Uint8Array): WasmProximityProof {
     return new WasmProximityProof(this.nativeHandle().proveMembership(ownedPortableBytes(key)));
   }
+  proveSearch(vector: Float32Array, topK: number): WasmProximitySearchProof {
+    return new WasmProximitySearchProof(
+      this.nativeHandle().proveSearch(new Float32Array(vector), topK),
+    );
+  }
   close(): void { this.#native?.free?.(); this.#native = undefined; }
   [Symbol.dispose](): void { this.close(); }
 }
@@ -1003,6 +1008,30 @@ export class WasmProximityProof implements Disposable {
   verify(expected?: Uint8Array): { value?: Uint8Array } {
     if (this.#native == null) throw new Error("WASM proximity proof is closed");
     return { value: this.#native.verify(expected == null ? undefined : ownedPortableBytes(expected)) ?? undefined };
+  }
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class WasmProximitySearchProof implements Disposable {
+  #native?: any;
+  constructor(native: any) { this.#native = native; }
+  verify(expected?: Uint8Array): {
+    result: PortableSearchResult;
+    claim: string;
+    terminalLowerBound?: number;
+    replayedEvents: bigint;
+  } {
+    if (this.#native == null) throw new Error("WASM proximity search proof is closed");
+    const value = this.#native.verify(
+      expected == null ? undefined : ownedPortableBytes(expected),
+    );
+    return {
+      result: value.result,
+      claim: value.claim,
+      terminalLowerBound: value.terminalLowerBound,
+      replayedEvents: BigInt(value.replayedEvents),
+    };
   }
   close(): void { this.#native?.free?.(); this.#native = undefined; }
   [Symbol.dispose](): void { this.close(); }

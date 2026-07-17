@@ -2,15 +2,15 @@ use super::{to_napi_error, NativeProllyEngine, NodeTreeRecord};
 use napi::bindgen_prelude::{Buffer, Env, Error, Float32Array, FunctionRef, Result, Status};
 use napi_derive::napi;
 use prolly_bindings::{
-    default_proximity_config, exact_proximity_search_request, verify_key_proof,
-    verify_proximity_membership_proof, BindingIndexRegistry, BindingIndexedMap,
-    BindingIndexedSnapshot, BindingMapSnapshot, BindingProximityMap, BindingSecondaryIndexSnapshot,
-    BindingVersionedMap, IndexBuildResultRecord, IndexEntryRecord, IndexMatchRecord,
-    IndexPageRecord, IndexProjectionRecord, IndexedSourceRecord, IndexedVersionRecord,
-    KeyProofRecord, MapVersionRecord, ProllyBindingError, ProllyReadSession,
+    default_content_graph_limits, default_proximity_config, exact_proximity_search_request,
+    verify_key_proof, verify_proximity_membership_proof, BindingIndexRegistry, BindingIndexedMap,
+    BindingIndexedSnapshot, BindingMapSnapshot, BindingProximityMap, BindingProximitySearchProof,
+    BindingSecondaryIndexSnapshot, BindingVersionedMap, IndexBuildResultRecord, IndexEntryRecord,
+    IndexMatchRecord, IndexPageRecord, IndexProjectionRecord, IndexedSourceRecord,
+    IndexedVersionRecord, KeyProofRecord, MapVersionRecord, ProllyBindingError, ProllyReadSession,
     ProximityMembershipProofRecord, ProximityNeighborRecord, ProximityRecordRecord,
-    ProximitySearchResultRecord, SearchBackendRecord, SearchCompletionRecord,
-    SecondaryIndexExtractorCallback,
+    ProximitySearchClaimKindRecord, ProximitySearchResultRecord, SearchBackendRecord,
+    SearchCompletionRecord, SecondaryIndexExtractorCallback,
 };
 use std::sync::Arc;
 
@@ -167,6 +167,14 @@ pub struct NodePortableSearchResult {
     pub neighbors: Vec<NodePortableNeighbor>,
     pub completion: String,
     pub backend: String,
+}
+
+#[napi(object)]
+pub struct NodePortableSearchProofVerification {
+    pub result: NodePortableSearchResult,
+    pub claim: String,
+    pub terminal_lower_bound: Option<f64>,
+    pub replayed_events: String,
 }
 
 #[napi(object)]
@@ -676,6 +684,24 @@ impl NativePortableProximityMap {
             .map(|inner| NativePortableProximityProof { inner })
             .map_err(to_napi_error)
     }
+
+    #[napi(js_name = "proveSearch")]
+    pub fn prove_search(
+        &self,
+        query: Float32Array,
+        k: String,
+    ) -> Result<NativePortableProximitySearchProof> {
+        let k = k.parse::<u64>().map_err(|error| {
+            Error::new(Status::InvalidArg, format!("invalid top-k value: {error}"))
+        })?;
+        self.inner
+            .prove_search(
+                exact_proximity_search_request(query.to_vec(), k),
+                default_content_graph_limits(),
+            )
+            .map(|inner| NativePortableProximitySearchProof { inner })
+            .map_err(to_napi_error)
+    }
 }
 
 #[napi]
@@ -693,6 +719,37 @@ impl NativePortableProximityProof {
         )
         .map(|value| value.record.map(|record| Buffer::from(record.value)))
         .map_err(to_napi_error)
+    }
+}
+
+#[napi]
+pub struct NativePortableProximitySearchProof {
+    inner: Arc<BindingProximitySearchProof>,
+}
+
+#[napi]
+impl NativePortableProximitySearchProof {
+    #[napi]
+    pub fn verify(
+        &self,
+        expected_descriptor: Option<Buffer>,
+    ) -> Result<NodePortableSearchProofVerification> {
+        self.inner
+            .verify(
+                expected_descriptor.map(|value| value.to_vec()),
+                default_content_graph_limits(),
+            )
+            .map(|value| NodePortableSearchProofVerification {
+                result: value.result.into(),
+                claim: match value.claim.kind {
+                    ProximitySearchClaimKindRecord::ExactL2Optimal => "exact_l2_optimal",
+                    ProximitySearchClaimKindRecord::HonestExecution => "honest_execution",
+                }
+                .to_string(),
+                terminal_lower_bound: value.claim.terminal_lower_bound,
+                replayed_events: value.replayed_events.to_string(),
+            })
+            .map_err(to_napi_error)
     }
 }
 

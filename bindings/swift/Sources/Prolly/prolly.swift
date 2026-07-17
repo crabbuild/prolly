@@ -2381,6 +2381,8 @@ public protocol BindingProximityMapProtocol: AnyObject, Sendable {
 
     func proveMembership(key: Data) throws  -> ProximityMembershipProofRecord
 
+    func proveSearch(request: ProximitySearchRequestRecord, limits: ContentGraphLimitsRecord) throws  -> BindingProximitySearchProof
+
     func proveStructure(limits: ContentGraphLimitsRecord) throws  -> ProximityStructuralProofRecord
 
     func readSession() throws  -> BindingProximityReadSession
@@ -2518,6 +2520,16 @@ open func proveMembership(key: Data)throws  -> ProximityMembershipProofRecord  {
     uniffi_prolly_bindings_fn_method_bindingproximitymap_prove_membership(
             self.uniffiCloneHandle(),
         FfiConverterData.lower(key),$0
+    )
+})
+}
+
+open func proveSearch(request: ProximitySearchRequestRecord, limits: ContentGraphLimitsRecord)throws  -> BindingProximitySearchProof  {
+    return try  FfiConverterTypeBindingProximitySearchProof_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingproximitymap_prove_search(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeProximitySearchRequestRecord_lower(request),
+        FfiConverterTypeContentGraphLimitsRecord_lower(limits),$0
     )
 })
 }
@@ -2756,6 +2768,134 @@ public func FfiConverterTypeBindingProximityReadSession_lift(_ handle: UInt64) t
 #endif
 public func FfiConverterTypeBindingProximityReadSession_lower(_ value: BindingProximityReadSession) -> UInt64 {
     return FfiConverterTypeBindingProximityReadSession.lower(value)
+}
+
+
+
+
+
+
+public protocol BindingProximitySearchProofProtocol: AnyObject, Sendable {
+
+    func sourceDescriptor()  -> Data
+
+    func verify(expectedDescriptor: Data?, limits: ContentGraphLimitsRecord) throws  -> ProximitySearchVerificationRecord
+
+}
+open class BindingProximitySearchProof: BindingProximitySearchProofProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_prolly_bindings_fn_clone_bindingproximitysearchproof(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_prolly_bindings_fn_free_bindingproximitysearchproof(handle, $0) }
+    }
+
+
+
+
+open func sourceDescriptor() -> Data  {
+    return try!  FfiConverterData.lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_method_bindingproximitysearchproof_source_descriptor(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func verify(expectedDescriptor: Data?, limits: ContentGraphLimitsRecord)throws  -> ProximitySearchVerificationRecord  {
+    return try  FfiConverterTypeProximitySearchVerificationRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingproximitysearchproof_verify(
+            self.uniffiCloneHandle(),
+        FfiConverterOptionData.lower(expectedDescriptor),
+        FfiConverterTypeContentGraphLimitsRecord_lower(limits),$0
+    )
+})
+}
+
+
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBindingProximitySearchProof: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = BindingProximitySearchProof
+
+    public static func lift(_ handle: UInt64) throws -> BindingProximitySearchProof {
+        return BindingProximitySearchProof(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: BindingProximitySearchProof) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BindingProximitySearchProof {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: BindingProximitySearchProof, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBindingProximitySearchProof_lift(_ handle: UInt64) throws -> BindingProximitySearchProof {
+    return try FfiConverterTypeBindingProximitySearchProof.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBindingProximitySearchProof_lower(_ value: BindingProximitySearchProof) -> UInt64 {
+    return FfiConverterTypeBindingProximitySearchProof.lower(value)
 }
 
 
@@ -14591,6 +14731,60 @@ public func FfiConverterTypeProximityRecordRecord_lower(_ value: ProximityRecord
 }
 
 
+public struct ProximitySearchClaimRecord: Equatable, Hashable {
+    public var kind: ProximitySearchClaimKindRecord
+    public var terminalLowerBound: Double?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(kind: ProximitySearchClaimKindRecord, terminalLowerBound: Double?) {
+        self.kind = kind
+        self.terminalLowerBound = terminalLowerBound
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension ProximitySearchClaimRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProximitySearchClaimRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProximitySearchClaimRecord {
+        return
+            try ProximitySearchClaimRecord(
+                kind: FfiConverterTypeProximitySearchClaimKindRecord.read(from: &buf),
+                terminalLowerBound: FfiConverterOptionDouble.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProximitySearchClaimRecord, into buf: inout [UInt8]) {
+        FfiConverterTypeProximitySearchClaimKindRecord.write(value.kind, into: &buf)
+        FfiConverterOptionDouble.write(value.terminalLowerBound, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProximitySearchClaimRecord_lift(_ buf: RustBuffer) throws -> ProximitySearchClaimRecord {
+    return try FfiConverterTypeProximitySearchClaimRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProximitySearchClaimRecord_lower(_ value: ProximitySearchClaimRecord) -> RustBuffer {
+    return FfiConverterTypeProximitySearchClaimRecord.lower(value)
+}
+
+
 public struct ProximitySearchRequestRecord: Equatable, Hashable {
     public var query: [Float]
     public var k: UInt64
@@ -14830,6 +15024,64 @@ public func FfiConverterTypeProximitySearchStatsRecord_lift(_ buf: RustBuffer) t
 #endif
 public func FfiConverterTypeProximitySearchStatsRecord_lower(_ value: ProximitySearchStatsRecord) -> RustBuffer {
     return FfiConverterTypeProximitySearchStatsRecord.lower(value)
+}
+
+
+public struct ProximitySearchVerificationRecord: Equatable, Hashable {
+    public var result: ProximitySearchResultRecord
+    public var claim: ProximitySearchClaimRecord
+    public var replayedEvents: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(result: ProximitySearchResultRecord, claim: ProximitySearchClaimRecord, replayedEvents: UInt64) {
+        self.result = result
+        self.claim = claim
+        self.replayedEvents = replayedEvents
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension ProximitySearchVerificationRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProximitySearchVerificationRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProximitySearchVerificationRecord {
+        return
+            try ProximitySearchVerificationRecord(
+                result: FfiConverterTypeProximitySearchResultRecord.read(from: &buf),
+                claim: FfiConverterTypeProximitySearchClaimRecord.read(from: &buf),
+                replayedEvents: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProximitySearchVerificationRecord, into buf: inout [UInt8]) {
+        FfiConverterTypeProximitySearchResultRecord.write(value.result, into: &buf)
+        FfiConverterTypeProximitySearchClaimRecord.write(value.claim, into: &buf)
+        FfiConverterUInt64.write(value.replayedEvents, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProximitySearchVerificationRecord_lift(_ buf: RustBuffer) throws -> ProximitySearchVerificationRecord {
+    return try FfiConverterTypeProximitySearchVerificationRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProximitySearchVerificationRecord_lower(_ value: ProximitySearchVerificationRecord) -> RustBuffer {
+    return FfiConverterTypeProximitySearchVerificationRecord.lower(value)
 }
 
 
@@ -20121,6 +20373,73 @@ public func FfiConverterTypeProximityFilterKind_lower(_ value: ProximityFilterKi
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
+public enum ProximitySearchClaimKindRecord: Equatable, Hashable {
+
+    case exactL2Optimal
+    case honestExecution
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension ProximitySearchClaimKindRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProximitySearchClaimKindRecord: FfiConverterRustBuffer {
+    typealias SwiftType = ProximitySearchClaimKindRecord
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProximitySearchClaimKindRecord {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .exactL2Optimal
+
+        case 2: return .honestExecution
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ProximitySearchClaimKindRecord, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .exactL2Optimal:
+            writeInt(&buf, Int32(1))
+
+
+        case .honestExecution:
+            writeInt(&buf, Int32(2))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProximitySearchClaimKindRecord_lift(_ buf: RustBuffer) throws -> ProximitySearchClaimKindRecord {
+    return try FfiConverterTypeProximitySearchClaimKindRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProximitySearchClaimKindRecord_lower(_ value: ProximitySearchClaimKindRecord) -> RustBuffer {
+    return FfiConverterTypeProximitySearchClaimKindRecord.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 public enum QueryKernelRecord: Equatable, Hashable {
 
     case scalarDeterministic
@@ -20879,6 +21198,30 @@ fileprivate struct FfiConverterOptionUInt64: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterUInt64.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionDouble: FfiConverterRustBuffer {
+    typealias SwiftType = Double?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterDouble.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterDouble.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -24579,6 +24922,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_prolly_bindings_checksum_method_bindingproximitymap_prove_membership() != 16834) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_prolly_bindings_checksum_method_bindingproximitymap_prove_search() != 30475) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_prolly_bindings_checksum_method_bindingproximitymap_prove_structure() != 54262) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -24604,6 +24950,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_scan_records() != 20861) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingproximitysearchproof_source_descriptor() != 57653) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingproximitysearchproof_verify() != 38054) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_proximityrecordvisitorcallback_visit() != 31782) {

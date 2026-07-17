@@ -111,6 +111,13 @@ class PortableParityTest {
                         proximity.proveMembership(bytes("p")), proximity.descriptor());
                 assertArrayEquals(bytes("payload"), membership.getRecord().getValue());
                 assertEquals(1, proximity.verifiedRecordCount());
+                try (var searchProof = proximity.proveSearch(
+                        SearchRequest.exact(new float[] {0, 0}, 1))) {
+                    var verifiedSearch = searchProof.verify(proximity.descriptor());
+                    assertArrayEquals(bytes("p"),
+                            verifiedSearch.getResult().getNeighbors().get(0).getKey());
+                    assertTrue(searchProof.replayedEvents(verifiedSearch) > 0);
+                }
             }
         }
     }

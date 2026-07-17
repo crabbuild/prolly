@@ -312,6 +312,19 @@ public final class ProximityMap: @unchecked Sendable {
     public func proveMembership(_ key: Data) throws -> ProximityMembershipProofRecord {
         try native.proveMembership(key: Data(key))
     }
+    public func proveSearch(
+        _ request: ProximitySearchRequestRecord,
+        limits: ContentGraphLimitsRecord = defaultContentGraphLimits()
+    ) throws -> ProximitySearchProof {
+        ProximitySearchProof(native: try native.proveSearch(request: request, limits: limits))
+    }
+    public func proveSearchExact(
+        _ query: [Float],
+        k: UInt64,
+        limits: ContentGraphLimitsRecord = defaultContentGraphLimits()
+    ) throws -> ProximitySearchProof {
+        try proveSearch(exactProximitySearchRequest(query: query, k: k), limits: limits)
+    }
     public func proveStructure(
         limits: ContentGraphLimitsRecord = defaultContentGraphLimits()
     ) throws -> ProximityStructuralProofRecord {
@@ -382,6 +395,27 @@ public final class ProximityReadSession: @unchecked Sendable {
     init(native: BindingProximityReadSession) { self.native = native }
     public func get(_ key: Data) throws -> ExactProximityRecordRecord? { try native.get(key: Data(key)) }
     public func contains(_ key: Data) throws -> Bool { try native.containsKey(key: Data(key)) }
+}
+
+public final class ProximitySearchProof: @unchecked Sendable {
+    let native: BindingProximitySearchProof
+    private var closed = false
+    init(native: BindingProximitySearchProof) { self.native = native }
+    public var sourceDescriptor: Data {
+        precondition(!closed, "proximity search proof is closed")
+        return native.sourceDescriptor()
+    }
+    public func verify(
+        expectedDescriptor: Data? = nil,
+        limits: ContentGraphLimitsRecord = defaultContentGraphLimits()
+    ) throws -> ProximitySearchVerificationRecord {
+        guard !closed else { throw PortableAPIError.closed("proximity search proof") }
+        return try native.verify(
+            expectedDescriptor: expectedDescriptor.map { Data($0) },
+            limits: limits
+        )
+    }
+    public func close() { closed = true }
 }
 
 public enum Proofs {

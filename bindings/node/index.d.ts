@@ -61,6 +61,12 @@ export interface NodePortableSearchResult {
   completion: string
   backend: string
 }
+export interface NodePortableSearchProofVerification {
+  result: NodePortableSearchResult
+  claim: string
+  terminalLowerBound?: number
+  replayedEvents: string
+}
 export interface NodePortableProofVerification {
   valid: boolean
   exists: boolean
@@ -815,9 +821,13 @@ export declare class NativePortableProximityMap {
   descriptor(): Buffer
   verify(): string
   proveMembership(key: Buffer): NativePortableProximityProof
+  proveSearch(query: Float32Array, k: string): NativePortableProximitySearchProof
 }
 export declare class NativePortableProximityProof {
   verify(expectedDescriptor?: Buffer | undefined | null): Buffer | null
+}
+export declare class NativePortableProximitySearchProof {
+  verify(expectedDescriptor?: Buffer | undefined | null): NodePortableSearchProofVerification
 }
 export declare class NativeProllyBlobStore {
   static memory(): NativeProllyBlobStore

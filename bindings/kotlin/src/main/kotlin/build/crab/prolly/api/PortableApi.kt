@@ -5,6 +5,7 @@ import build.crab.prolly.BindingIndexedSnapshot
 import build.crab.prolly.BindingIndexRegistry
 import build.crab.prolly.BindingProximityMap
 import build.crab.prolly.BindingProximityReadSession
+import build.crab.prolly.BindingProximitySearchProof
 import build.crab.prolly.BindingSecondaryIndexSnapshot
 import build.crab.prolly.BindingVersionedMap
 import build.crab.prolly.BindingMapSnapshot
@@ -17,6 +18,7 @@ import build.crab.prolly.ProllyReadSession
 import build.crab.prolly.ProximityMembershipProofRecord
 import build.crab.prolly.ProximityRecordRecord
 import build.crab.prolly.ProximitySearchResultRecord
+import build.crab.prolly.ProximitySearchRequestRecord
 import build.crab.prolly.ProximityConfigRecord
 import build.crab.prolly.SecondaryIndexExtractorCallback
 import build.crab.prolly.SnapshotBundleRecord
@@ -172,6 +174,15 @@ class ProximityMap(internal val native: BindingProximityMap) : AutoCloseable {
     ): R = PackedPages.withProximitySearch(native.fastHandle(), query, k, block)
     fun verify() = native.verify()
     fun proveMembership(key: ByteArray) = native.proveMembership(key.copyOf())
+    fun proveSearch(
+        request: ProximitySearchRequestRecord,
+        limits: ContentGraphLimitsRecord = defaultContentGraphLimits(),
+    ) = ProximitySearchProof(native.proveSearch(request, limits))
+    fun proveSearchExact(
+        query: List<Float>,
+        k: ULong,
+        limits: ContentGraphLimitsRecord = defaultContentGraphLimits(),
+    ) = proveSearch(exactProximitySearchRequest(query.toList(), k), limits)
     fun proveStructure(limits: ContentGraphLimitsRecord = defaultContentGraphLimits()) =
         native.proveStructure(limits)
     fun clearCache() = native.clearContentCache()
@@ -181,6 +192,15 @@ class ProximityMap(internal val native: BindingProximityMap) : AutoCloseable {
 class ProximityReadSession(internal val native: BindingProximityReadSession) : AutoCloseable {
     fun get(key: ByteArray) = native.get(key.copyOf())
     fun containsKey(key: ByteArray) = native.containsKey(key.copyOf())
+    override fun close() = native.close()
+}
+
+class ProximitySearchProof(internal val native: BindingProximitySearchProof) : AutoCloseable {
+    val sourceDescriptor: ByteArray get() = native.sourceDescriptor()
+    fun verify(
+        expectedDescriptor: ByteArray? = null,
+        limits: ContentGraphLimitsRecord = defaultContentGraphLimits(),
+    ) = native.verify(expectedDescriptor?.copyOf(), limits)
     override fun close() = native.close()
 }
 
