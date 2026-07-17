@@ -34,6 +34,10 @@ module Prolly
     UniFFILib.attach_function :prolly_fast_proximity_scan_page,
                               [:uint64, :pointer, :size_t, :uint8, :uint32, :uint64],
                               FastPageResult.by_value
+    UniFFILib.attach_function :prolly_fast_proximity_scan_range_page,
+                              [:uint64, :pointer, :size_t, :pointer, :size_t, :uint8,
+                               :pointer, :size_t, :uint8, :uint32, :uint64],
+                              FastPageResult.by_value
     UniFFILib.attach_function :prolly_fast_page_release, [:uint64], :void
     UniFFILib.attach_function :prolly_fast_read_session_scan_open,
                               [:uint64, :pointer, :size_t, :pointer, :size_t, :uint8],
@@ -46,6 +50,9 @@ module Prolly
                               [:uint64, :pointer, :size_t],
                               FastValueLeaseResult.by_value
     UniFFILib.attach_function :prolly_fast_proximity_get_lease,
+                              [:uint64, :pointer, :size_t],
+                              FastValueLeaseResult.by_value
+    UniFFILib.attach_function :prolly_fast_indexed_get_lease,
                               [:uint64, :pointer, :size_t],
                               FastValueLeaseResult.by_value
     UniFFILib.attach_function :prolly_fast_value_release, [:uint64], :void
@@ -201,6 +208,28 @@ module Prolly
       end
     end
 
+    def indexed_point_read_view(map_handle, key)
+      raise ArgumentError, 'indexed point-read visitor block is required' unless block_given?
+
+      key = key.b
+      result = UniFFILib.prolly_fast_indexed_get_lease(map_handle, memory_for(key), key.bytesize)
+      raise "native indexed point read failed with status #{result[:status]}" unless result[:status].zero?
+      if result[:found].zero?
+        raise 'missing indexed point read returned a value lease' unless result[:lease_handle].zero?
+        return [false, nil]
+      end
+      lease = result[:lease_handle]
+      raise 'native indexed point read returned an invalid value lease' if lease.zero? ||
+                                                                  (result[:data_len].positive? && result[:data_ptr].null?)
+      scope = Scope.new
+      begin
+        [true, yield(FieldView.new(result[:data_ptr], 0, result[:data_len], scope))]
+      ensure
+        scope.close
+        UniFFILib.prolly_fast_value_release(lease)
+      end
+    end
+
     def read_varint(pointer, offset, length)
       value = 0
       shift = 0
@@ -284,17 +313,23 @@ module Prolly
     end
 
     def proximity_scan_view(
-      map_handle, max_records: 4096, max_arena_bytes: 4 * 1024 * 1024
+      map_handle, start: ''.b, range_end: nil,
+      max_records: 4096, max_arena_bytes: 4 * 1024 * 1024
     )
       raise ArgumentError, 'proximity scan visitor block is required' unless block_given?
       raise ArgumentError, 'packed scan limits must be positive' unless max_records.positive? && max_arena_bytes.positive?
 
       visited = 0
       after = nil
+      start = start.b
+      range_end = range_end&.b
       loop do
         after_pointer = after.nil? ? nil : memory_for(after)
-        result = UniFFILib.prolly_fast_proximity_scan_page(
-          map_handle, after_pointer, after&.bytesize || 0, after.nil? ? 0 : 1,
+        result = UniFFILib.prolly_fast_proximity_scan_range_page(
+          map_handle,
+          memory_for(start), start.bytesize,
+          range_end.nil? ? nil : memory_for(range_end), range_end&.bytesize || 0, range_end.nil? ? 0 : 1,
+          after_pointer, after&.bytesize || 0, after.nil? ? 0 : 1,
           max_records, max_arena_bytes
         )
         raise "native proximity scan failed with status #{result[:status]}" unless result[:status].zero?

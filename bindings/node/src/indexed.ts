@@ -250,6 +250,7 @@ export class IndexRegistry implements Disposable {
 interface NativeIndexedMap {
   id(): Uint8Array;
   get(key: Uint8Array): Uint8Array | null;
+  withValueView(key: Uint8Array, visitor: (value: Uint8Array) => void): boolean;
   put(key: Uint8Array, value: Uint8Array): NativeIndexedVersion;
   apply(mutations: { kind: string; key: Uint8Array; value?: Uint8Array }[]): NativeIndexedVersion;
   applyIf(expectedSource: Uint8Array | undefined, mutations: { kind: string; key: Uint8Array; value?: Uint8Array }[]): NativeIndexedUpdate;
@@ -361,6 +362,13 @@ export class IndexedMap implements Disposable {
   get(key: Uint8Array, signal?: AbortSignal): Promise<Uint8Array | undefined> {
     const native = this.#open(); key = ownedBytes(key);
     return nativePromise(signal, () => native.get(key) ?? undefined);
+  }
+  withValueView(key: Uint8Array, visitor: (value: Uint8Array) => void): boolean {
+    if (typeof visitor !== "function") throw new TypeError("indexed value visitor must be a function");
+    const scope: ViewScope = { alive: true };
+    try {
+      return this.#open().withValueView(ownedBytes(key), (value) => visitor(scopedBytes(value, scope)));
+    } finally { scope.alive = false; }
   }
   put(key: Uint8Array, value: Uint8Array, signal?: AbortSignal): Promise<IndexedVersion> {
     const native = this.#open(); key = ownedBytes(key); value = ownedBytes(value);

@@ -16048,6 +16048,9 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_fn_method_bindingindexedmap_export_current,
     [:uint64, RustCallStatus.by_ref],
     RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingindexedmap_fast_handle,
+    [:uint64, RustCallStatus.by_ref],
+    :uint64
   attach_function :uniffi_prolly_bindings_fn_method_bindingindexedmap_get,
     [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
@@ -18470,6 +18473,9 @@ module UniFFILib
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_bindingindexedmap_export_current,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingindexedmap_fast_handle,
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_bindingindexedmap_get,
@@ -29990,6 +29996,10 @@ end
   def export_current()
     result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingindexedmap_export_current,uniffi_clone_handle(),)
     return result.consumeIntoBytes
+  end
+  def fast_handle()
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_bindingindexedmap_fast_handle,uniffi_clone_handle(),)
+    return result
   end
   def get(key)
         key = Prolly::uniffi_bytes(key)

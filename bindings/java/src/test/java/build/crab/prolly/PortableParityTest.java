@@ -21,12 +21,14 @@ import build.crab.prolly.javaapi.MapEntry;
 import build.crab.prolly.javaapi.MapUpdateKind;
 import build.crab.prolly.javaapi.ParallelConfig;
 import build.crab.prolly.javaapi.ProximityRecord;
+import build.crab.prolly.javaapi.ProximityScanRecordView;
 import build.crab.prolly.javaapi.ProximityCancellationToken;
 import build.crab.prolly.javaapi.ProximityMutation;
 import build.crab.prolly.javaapi.ProductQuantizationConfig;
 import build.crab.prolly.javaapi.Proofs;
 import build.crab.prolly.javaapi.SearchRequest;
 import build.crab.prolly.javaapi.ScopedBytes;
+import build.crab.prolly.javaapi.ReadScanOutcome;
 import build.crab.prolly.javaapi.SecondaryIndexLimits;
 import build.crab.prolly.javaapi.StringKeyCodec;
 import build.crab.prolly.javaapi.StringValueCodec;
@@ -363,6 +365,16 @@ class PortableParityTest {
                 return scanned.size() < 2;
             }));
             assertEquals(List.of("a", "ab"), scanned);
+            var rangeViews = new ArrayList<String>();
+            ProximityScanRecordView[] escapedRange = new ProximityScanRecordView[1];
+            var rangeOutcome = proximity.scanRecordViews(bytes("ab"), bytes("c"), record -> {
+                escapedRange[0] = record;
+                rangeViews.add(new String(record.key().copy(), StandardCharsets.UTF_8));
+                return true;
+            });
+            assertEquals(new ReadScanOutcome(2, false), rangeOutcome);
+            assertEquals(List.of("ab", "b"), rangeViews);
+            assertThrows(IllegalStateException.class, () -> escapedRange[0].key().copy());
             try (var session = proximity.read()) {
                 assertEquals(List.of("a", "ab"), session.search(request).neighbors().stream()
                         .map(neighbor -> new String(neighbor.key(), StandardCharsets.UTF_8)).toList());
@@ -453,6 +465,12 @@ class PortableParityTest {
                         (key, value) -> List.of(new IndexEntry(value, null)));
                 try (var indexed = engine.indexedMap(bytes("members"), registry)) {
                     indexed.put(bytes("u1"), bytes("red"));
+                    ScopedBytes[] escapedValue = new ScopedBytes[1];
+                    assertTrue(indexed.getView(bytes("u1"), value -> {
+                        escapedValue[0] = value;
+                        assertArrayEquals(bytes("red"), value.copy());
+                    }));
+                    assertThrows(IllegalStateException.class, () -> escapedValue[0].copy());
                     indexed.put(bytes("u2"), bytes("red"));
                     indexed.ensureIndex(bytes("by_team"));
                     try (var snapshot = indexed.snapshot();

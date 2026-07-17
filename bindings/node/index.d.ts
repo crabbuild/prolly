@@ -1311,6 +1311,7 @@ export declare class NativePortableIndexRegistry {
 export declare class NativePortableIndexedMap {
   id(): Buffer
   get(key: Buffer): Buffer | null
+  withValueView(key: Buffer, visit: (arg: object) => void): boolean
   put(key: Buffer, value: Buffer): NodePortableIndexedVersion
   apply(mutations: Array<NodeMutationRecord>): NodePortableIndexedVersion
   applyIf(expectedSource: Buffer | undefined | null, mutations: Array<NodeMutationRecord>): NodePortableIndexedUpdate
@@ -1443,6 +1444,7 @@ export declare class NativePortableProximityMap {
   config(): NodePortableProximityConfig
   get(key: Buffer): NodePortableExactProximityRecord | null
   withRecordView(key: Buffer, visit: (arg: object) => void): boolean
+  withRecordRangePage(start: Buffer, end: Buffer | undefined, after: Buffer | undefined, maxRecords: number, visitor: (page: { bytes: Buffer; recordCount: number; terminal: boolean }) => void): void
   contains(key: Buffer): boolean
   scanRecords(visitor: (record: NodePortableProximityRecord) => boolean): string
   search(request: NodePortableSearchRequest): NodePortableSearchResult
@@ -1467,6 +1469,7 @@ export declare class NativePortableProximityReadSession {
   searchCancellable(request: NodePortableSearchRequest, runtime: NativePortableProximitySearchRuntime | undefined | null, cancellation: NativePortableProximityCancellationToken): Promise<unknown>
   get(key: Buffer): NodePortableExactProximityRecord | null
   withRecordView(key: Buffer, visit: (arg: object) => void): boolean
+  withRecordRangePage(start: Buffer, end: Buffer | undefined, after: Buffer | undefined, maxRecords: number, visitor: (page: { bytes: Buffer; recordCount: number; terminal: boolean }) => void): void
   contains(key: Buffer): boolean
   scanRecords(visitor: (record: NodePortableProximityRecord) => boolean): string
   withSearchPage(query: Float32Array, k: number, visitor: (page: { bytes: Buffer; recordCount: number; terminal: boolean }) => boolean): void

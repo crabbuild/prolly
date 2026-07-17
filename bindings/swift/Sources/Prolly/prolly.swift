@@ -2220,6 +2220,8 @@ public protocol BindingIndexedMapProtocol: AnyObject, Sendable {
     
     func exportCurrent() throws  -> Data
     
+    func fastHandle()  -> UInt64
+    
     func get(key: Data) throws  -> Data?
     
     func health() throws  -> IndexedMapHealthRecord
@@ -2363,6 +2365,14 @@ open func ensureIndex(name: Data)throws  -> IndexBuildResultRecord  {
 open func exportCurrent()throws  -> Data  {
     return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingindexedmap_export_current(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+open func fastHandle() -> UInt64  {
+    return try!  FfiConverterUInt64.lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_method_bindingindexedmap_fast_handle(
             self.uniffiCloneHandle(),$0
     )
 })
@@ -31605,6 +31615,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_bindingindexedmap_export_current() != 22167) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingindexedmap_fast_handle() != 29036) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_bindingindexedmap_get() != 7518) {

@@ -897,6 +897,8 @@ def _uniffi_check_api_checksums(lib):
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_bindingindexedmap_export_current() != 22167:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_bindingindexedmap_fast_handle() != 29036:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_bindingindexedmap_get() != 7518:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_bindingindexedmap_health() != 60950:
@@ -3769,6 +3771,11 @@ _UniffiLib.uniffi_prolly_bindings_fn_method_bindingindexedmap_export_current.arg
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UniffiLib.uniffi_prolly_bindings_fn_method_bindingindexedmap_export_current.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindingindexedmap_fast_handle.argtypes = (
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindingindexedmap_fast_handle.restype = ctypes.c_uint64
 _UniffiLib.uniffi_prolly_bindings_fn_method_bindingindexedmap_get.argtypes = (
     ctypes.c_uint64,
     _UniffiRustBuffer,
@@ -7234,6 +7241,9 @@ _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingindexedmap_ensure_index
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingindexedmap_export_current.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingindexedmap_export_current.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindingindexedmap_fast_handle.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindingindexedmap_fast_handle.restype = ctypes.c_uint16
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingindexedmap_get.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingindexedmap_get.restype = ctypes.c_uint16
@@ -25691,6 +25701,8 @@ class BindingIndexedMapProtocol(typing.Protocol):
         raise NotImplementedError
     def export_current(self, ) -> bytes:
         raise NotImplementedError
+    def fast_handle(self, ) -> int:
+        raise NotImplementedError
     def get(self, key: bytes) -> typing.Optional[bytes]:
         raise NotImplementedError
     def health(self, ) -> IndexedMapHealthRecord:
@@ -25850,6 +25862,18 @@ class BindingIndexedMap(BindingIndexedMapProtocol):
         _uniffi_ffi_result = _uniffi_rust_call_with_error(
             _uniffi_error_converter,
             _UniffiLib.uniffi_prolly_bindings_fn_method_bindingindexedmap_export_current,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def fast_handle(self, ) -> int:
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterUInt64.lift
+        _uniffi_error_converter = None
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingindexedmap_fast_handle,
             *_uniffi_lowered_args,
         )
         return _uniffi_lift_return(_uniffi_ffi_result)

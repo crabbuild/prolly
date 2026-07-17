@@ -207,6 +207,7 @@ extern RustBuffer uniffi_prolly_bindings_fn_method_bindingindexedmap_apply_if(ui
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingindexedmap_put(uint64_t ptr, RustBuffer key, RustBuffer value, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingindexedmap_delete(uint64_t ptr, RustBuffer key, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingindexedmap_get(uint64_t ptr, RustBuffer key, RustCallStatus *out_err);
+extern uint64_t uniffi_prolly_bindings_fn_method_bindingindexedmap_fast_handle(uint64_t ptr, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingindexedmap_ensure_index(uint64_t ptr, RustBuffer name, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingindexedmap_replace_index(uint64_t ptr, RustBuffer name, uint64_t generation, RustBuffer extractor_id, RustBuffer projection, RustBuffer limits, uint64_t extractor, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingindexedmap_health(uint64_t ptr, RustCallStatus *out_err);
@@ -2812,6 +2813,16 @@ func ffiSecondaryIndexFastHandle(handle uint64) (uint64, error) {
 	}
 	var status C.RustCallStatus
 	fast := C.uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_fast_handle(clone, &status)
+	return uint64(fast), portableStatusError(&status)
+}
+
+func ffiIndexedMapFastHandle(handle uint64) (uint64, error) {
+	clone, err := portableCloneIndexedMap(handle)
+	if err != nil {
+		return 0, err
+	}
+	var status C.RustCallStatus
+	fast := C.uniffi_prolly_bindings_fn_method_bindingindexedmap_fast_handle(clone, &status)
 	return uint64(fast), portableStatusError(&status)
 }
 

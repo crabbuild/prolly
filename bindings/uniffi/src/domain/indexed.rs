@@ -589,11 +589,73 @@ macro_rules! with_indexed_map {
 pub struct BindingIndexedMap {
     engine: Arc<ProllyEngine>,
     id: Vec<u8>,
-    registry: Mutex<SecondaryIndexRegistry>,
-    metrics: Mutex<IndexedMapMetricsRecord>,
+    registry: Arc<Mutex<SecondaryIndexRegistry>>,
+    metrics: Arc<Mutex<IndexedMapMetricsRecord>>,
+    fast_handle: AtomicU64,
+}
+
+pub(crate) struct BindingIndexedFastTarget {
+    engine: Arc<ProllyEngine>,
+    id: Vec<u8>,
+    registry: Arc<Mutex<SecondaryIndexRegistry>>,
+    metrics: Arc<Mutex<IndexedMapMetricsRecord>>,
+}
+
+impl BindingIndexedFastTarget {
+    pub(crate) fn get_lease(
+        &self,
+        key: &[u8],
+    ) -> Result<Option<prolly::OwnedValueLease>, ProllyBindingError> {
+        let registry = self
+            .registry
+            .lock()
+            .map_err(|_| ProllyBindingError::Internal {
+                reason: "indexed-map registry is poisoned".to_string(),
+            })?
+            .clone();
+        let (lease, metrics) = match &self.engine.inner {
+            BindingEngine::Memory(engine) => {
+                let map = engine.indexed_map(&self.id, registry)?;
+                let lease = map.source().get_lease(key)?;
+                (lease, map.metrics())
+            }
+            BindingEngine::File(engine) => {
+                let map = engine.indexed_map(&self.id, registry)?;
+                let lease = map.source().get_lease(key)?;
+                (lease, map.metrics())
+            }
+            #[cfg(feature = "sqlite")]
+            BindingEngine::Sqlite(engine) => {
+                let map = engine.indexed_map(&self.id, registry)?;
+                let lease = map.source().get_lease(key)?;
+                (lease, map.metrics())
+            }
+            BindingEngine::Host(_) => {
+                return Err(ProllyBindingError::Internal {
+                    reason: "custom host stores do not expose indexed-map transactions".to_string(),
+                })
+            }
+        };
+        self.metrics
+            .lock()
+            .map_err(|_| ProllyBindingError::Internal {
+                reason: "indexed-map metrics are poisoned".to_string(),
+            })?
+            .add(metrics);
+        Ok(lease)
+    }
 }
 
 impl BindingIndexedMap {
+    pub(crate) fn fast_target(&self) -> BindingIndexedFastTarget {
+        BindingIndexedFastTarget {
+            engine: self.engine.clone(),
+            id: self.id.clone(),
+            registry: self.registry.clone(),
+            metrics: self.metrics.clone(),
+        }
+    }
+
     fn registry_snapshot(&self) -> Result<SecondaryIndexRegistry, ProllyBindingError> {
         self.registry
             .lock()
@@ -648,13 +710,32 @@ impl BindingIndexedMap {
         Ok(Self {
             engine,
             id,
-            registry: Mutex::new(registry.snapshot()?),
-            metrics: Mutex::new(IndexedMapMetricsRecord::default()),
+            registry: Arc::new(Mutex::new(registry.snapshot()?)),
+            metrics: Arc::new(Mutex::new(IndexedMapMetricsRecord::default())),
+            fast_handle: AtomicU64::new(0),
         })
     }
 
     pub fn id(&self) -> Vec<u8> {
         self.id.clone()
+    }
+
+    pub fn fast_handle(&self) -> u64 {
+        let current = self.fast_handle.load(Ordering::Acquire);
+        if current != 0 {
+            return current;
+        }
+        let handle = crate::fast_abi::register_indexed_map(self);
+        match self
+            .fast_handle
+            .compare_exchange(0, handle, Ordering::AcqRel, Ordering::Acquire)
+        {
+            Ok(_) => handle,
+            Err(winner) => {
+                crate::fast_abi::unregister_indexed_map(handle);
+                winner
+            }
+        }
     }
 
     pub fn ensure_index(
@@ -900,6 +981,12 @@ impl BindingIndexedMap {
         with_indexed_map!(self, map, {
             GcPlanRecord::try_from(map.plan_indexed_gc()?)
         })
+    }
+}
+
+impl Drop for BindingIndexedMap {
+    fn drop(&mut self) {
+        crate::fast_abi::unregister_indexed_map(self.fast_handle.load(Ordering::Relaxed));
     }
 }
 

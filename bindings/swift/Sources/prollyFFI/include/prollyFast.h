@@ -69,6 +69,26 @@ ProllyFastValueLeaseResult prolly_fast_proximity_get_lease(
     size_t key_len
 );
 
+ProllyFastValueLeaseResult prolly_fast_indexed_get_lease(
+    uint64_t map_handle,
+    const uint8_t *key_ptr,
+    size_t key_len
+);
+
+ProllyFastPageResult prolly_fast_proximity_scan_range_page(
+    uint64_t map_handle,
+    const uint8_t *start_ptr,
+    size_t start_len,
+    const uint8_t *end_ptr,
+    size_t end_len,
+    uint8_t has_end,
+    const uint8_t *after_ptr,
+    size_t after_len,
+    uint8_t has_after,
+    uint32_t max_records,
+    uint64_t max_arena_bytes
+);
+
 void prolly_fast_value_release(uint64_t lease_handle);
 
 #endif

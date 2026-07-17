@@ -15,6 +15,8 @@ from .packed import (
     ScopedBytes,
     ValueRefView,
     decode_value_ref_view,
+    indexed_point_read_view,
+    proximity_scan_range_view,
     proximity_search_view,
     proximity_point_read_view,
     point_read_view,
@@ -1202,6 +1204,10 @@ class IndexedMap(_Scoped):
         self._open()
         return self._inner.get(bytes(key))
 
+    def get_view(self, key: bytes, visit: Callable[[ScopedBytes], V]) -> tuple[bool, V | None]:
+        self._open()
+        return indexed_point_read_view(self._inner.fast_handle(), key, visit)
+
     def snapshot(self) -> "IndexedSnapshot":
         self._open()
         return IndexedSnapshot(self._inner.snapshot())
@@ -1388,6 +1394,17 @@ class ProximityMap(_Scoped):
     def get_view(self, key: bytes, visit: Callable[[ProximityRecordView], V]) -> tuple[bool, V | None]:
         self._open()
         return proximity_point_read_view(self._inner.fast_handle(), key, visit)
+
+    def scan_record_views(
+        self,
+        start: bytes = b"",
+        end: bytes | None = None,
+        visit: Callable[[ProximityRecordView], bool] | None = None,
+    ) -> ScanOutcome:
+        self._open()
+        if visit is None:
+            raise TypeError("proximity record visitor must be callable")
+        return proximity_scan_range_view(self._inner.fast_handle(), start, end, visit)
 
     def contains(self, key: bytes) -> bool:
         self._open()
@@ -2153,6 +2170,17 @@ class ProximityReadSession(_Scoped):
     def get_view(self, key: bytes, visit: Callable[[ProximityRecordView], V]) -> tuple[bool, V | None]:
         self._open()
         return proximity_point_read_view(self._inner.fast_handle(), key, visit)
+
+    def scan_record_views(
+        self,
+        start: bytes = b"",
+        end: bytes | None = None,
+        visit: Callable[[ProximityRecordView], bool] | None = None,
+    ) -> ScanOutcome:
+        self._open()
+        if visit is None:
+            raise TypeError("proximity record visitor must be callable")
+        return proximity_scan_range_view(self._inner.fast_handle(), start, end, visit)
 
     def contains(self, key: bytes) -> bool:
         self._open()

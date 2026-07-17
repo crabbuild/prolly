@@ -448,6 +448,7 @@ module Prolly
     def id = open! { @native.id }
     def ensure_index(name) = open! { @native.ensure_index(name.b) }
     def get(key) = open! { @native.get(key.b) }
+    def get_view(key, &block) = open! { PackedPage.indexed_point_read_view(@native.fast_handle, key.b, &block) }
     def contains?(key) = open! { @native.contains_key(key.b) }
     def get_many(keys) = open! { @native.get_many(keys.map(&:b)) }
     def get_at(id, key) = open! { @native.get_at(id.b, key.b) }
@@ -1101,9 +1102,9 @@ module Prolly
         ))
       end.visited
     end
-    def scan_record_views(&block)
+    def scan_record_views(start: ''.b, range_end: nil, &block)
       raise ArgumentError, 'scan_record_views requires a block' unless block
-      open! { PackedPage.proximity_scan_view(@native.fast_handle, &block) }
+      open! { PackedPage.proximity_scan_view(@native.fast_handle, start: start, range_end: range_end, &block) }
     end
 
     def search_view(query, k, &block)
@@ -1453,9 +1454,9 @@ module Prolly
         ))
       end.visited
     end
-    def scan_record_views(&block)
+    def scan_record_views(start: ''.b, range_end: nil, &block)
       raise ArgumentError, 'scan_record_views requires a block' unless block
-      open! { PackedPage.proximity_scan_view(@native.fast_handle, &block) }
+      open! { PackedPage.proximity_scan_view(@native.fast_handle, start: start, range_end: range_end, &block) }
     end
     def search_view(query, k, &block)
       open! { PackedPage.proximity_search_view(@native.fast_handle, query, k, &block) }

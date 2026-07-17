@@ -11268,30 +11268,46 @@
     },
     {
       "rust": "prolly::IndexedMap::get_with",
-      "classification": "portable",
-      "status": "planned",
+      "classification": "idiomatic",
+      "status": "implemented",
       "family": "indexed-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "IndexedMap.get_view",
+        "go": "prolly.(*IndexedMap).GetView",
+        "node": "IndexedMap.withValueView",
+        "kotlin": "IndexedMap.getView",
+        "java": "IndexedMap.getView",
+        "ruby": "IndexedMap#get_view",
+        "swift": "IndexedMap.withValueView",
+        "wasm": "WasmIndexedMap.withValueView"
+      },
       "exclusions": {},
-      "tests": [],
-      "docs": [],
+      "tests": [
+        "portable-parity::scoped-view-lifetime",
+        "portable-parity::indexed-current-head-view"
+      ],
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#borrowed-view"
+      ],
       "audience": "application",
       "audience_rationale": "prolly::IndexedMap::get_with has runtime behavior in the requested indexed-map application domain and requires direct or idiomatic host evidence.",
       "reviewed": true,
-      "reconciliation": "confirmed-performance-gap",
+      "reconciliation": "bound-idiomatic",
       "reconciliation_evidence": [
-        "src/prolly/secondary_index/coordinator.rs",
-        "bindings/python/prolly/api.py#IndexedMap",
-        "bindings/go/indexed.go#IndexedMap",
-        "bindings/node/src/indexed.ts#IndexedMap",
-        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#IndexedMap",
-        "bindings/java/src/main/java/build/crab/prolly/javaapi/IndexedMap.java",
-        "bindings/ruby/lib/prolly/api.rb#IndexedMap",
-        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#IndexedMap",
-        "bindings/wasm/src/index.ts#WasmIndexedMap"
+        "bindings/uniffi/src/fast_abi.rs#prolly_fast_indexed_get_lease",
+        "bindings/python/prolly/api.py#IndexedMap.get_view",
+        "bindings/go/indexed.go#IndexedMap.GetView",
+        "bindings/node/src/indexed.ts#IndexedMap.withValueView",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#IndexedMap.getView",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/IndexedMap.java#getView",
+        "bindings/ruby/lib/prolly/api.rb#IndexedMap.get_view",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#IndexedMap.withValueView",
+        "bindings/wasm/src/index.ts#WasmIndexedMap.withValueView"
       ],
-      "reconciliation_rationale": "All wrappers expose owned get, but the callback-scoped source-value lease is not yet reachable from an IndexedMap or IndexedSnapshot in every host."
+      "reconciliation_rationale": "Every host exposes an idiomatic callback-scoped current-head source-value view. Native hosts retain the immutable source leaf through the shared lease ABI, while WASM borrows the same value from linear memory for the synchronous callback.",
+      "equivalence": "borrowed-view",
+      "rationale": "Rust's lifetime-bound indexed value callback is exposed as a synchronous scoped view with explicit post-scope invalidation."
     },
     {
       "rust": "prolly::IndexedMap::health",
@@ -21459,29 +21475,40 @@
     {
       "rust": "prolly::ProximityMap::build_with_parallelism",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "proximity-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "Engine.build_proximity(worker_threads=)",
+        "go": "prolly.(*Engine).BuildProximityWithOptions",
+        "node": "Engine.buildProximity({ threads })",
+        "kotlin": "Engine.buildProximity(threads=)",
+        "java": "Engine.buildProximity(dimensions, records, threads)",
+        "ruby": "Engine#build_proximity(threads:)",
+        "swift": "Engine.buildProximity(threads:)",
+        "wasm": "Engine.buildProximity({ threads })"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::proximity-parallel-build"
+      ],
       "docs": [],
       "audience": "application",
       "audience_rationale": "prolly::ProximityMap::build_with_parallelism has runtime behavior in the requested proximity-map application domain and requires direct or idiomatic host evidence.",
       "reviewed": true,
       "reconciliation": "bound-idiomatic",
       "reconciliation_evidence": [
-        "bindings/uniffi/src/fast_abi.rs#prolly_fast_proximity_get_lease",
-        "bindings/python/prolly/api.py#ProximityMap.get_view",
-        "bindings/go/proximity.go#ProximityMap.GetView",
-        "bindings/node/src/proximity.ts#ProximityMap.withRecordView",
-        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#ProximityMap.getView",
-        "bindings/java/src/main/java/build/crab/prolly/javaapi/ProximityMap.java#getView",
-        "bindings/ruby/lib/prolly/api.rb#ProximityMap.get_view",
-        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#ProximityMap.withRecordView",
-        "bindings/wasm/src/index.ts#WasmProximityMap.withRecordView"
+        "bindings/python/prolly/api.py#Engine.build_proximity",
+        "bindings/go/proximity.go#Engine.BuildProximityWithOptions",
+        "bindings/node/src/index.ts#Engine.buildProximity",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#Engine.buildProximity",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/Engine.java#buildProximity",
+        "bindings/ruby/lib/prolly/api.rb#Engine.build_proximity",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#Engine.buildProximity",
+        "bindings/wasm/src/index.ts#Engine.buildProximity"
       ],
-      "reconciliation_rationale": "Every host exposes explicit build worker selection and a callback-scoped, retained-leaf exact record view. Native hosts use the shared PRVR lease ABI; WASM borrows the same immutable leaf in linear memory and explicitly rejects worker counts above one on its single-thread target."
+      "reconciliation_rationale": "Every host exposes explicit proximity-build worker selection through its Engine factory; WASM accepts the portable single-thread value and rejects unsupported worker counts explicitly.",
+      "rationale": "The Rust parallel build constructor is exposed through each language's Engine factory with an explicit worker-count option."
     },
     {
       "rust": "prolly::ProximityMap::clear_content_cache",
@@ -21599,14 +21626,28 @@
     },
     {
       "rust": "prolly::ProximityMap::get_with",
-      "classification": "portable",
-      "status": "planned",
+      "classification": "idiomatic",
+      "status": "implemented",
       "family": "proximity-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "ProximityMap.get_view",
+        "go": "prolly.(*ProximityMap).GetView",
+        "node": "ProximityMap.withRecordView",
+        "kotlin": "ProximityMap.getView",
+        "java": "ProximityMap.getView",
+        "ruby": "ProximityMap#get_view",
+        "swift": "ProximityMap.withRecordView",
+        "wasm": "WasmProximityMap.withRecordView"
+      },
       "exclusions": {},
-      "tests": [],
-      "docs": [],
+      "tests": [
+        "portable-parity::scoped-view-lifetime",
+        "portable-parity::proximity-scoped-record-view"
+      ],
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#borrowed-view"
+      ],
       "audience": "application",
       "audience_rationale": "prolly::ProximityMap::get_with has runtime behavior in the requested proximity-map application domain and requires direct or idiomatic host evidence.",
       "reviewed": true,
@@ -21622,7 +21663,9 @@
         "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#ProximityMap.withRecordView",
         "bindings/wasm/src/index.ts#WasmProximityMap.withRecordView"
       ],
-      "reconciliation_rationale": "Every host exposes explicit build worker selection and a callback-scoped, retained-leaf exact record view. Native hosts use the shared PRVR lease ABI; WASM borrows the same immutable leaf in linear memory and explicitly rejects worker counts above one on its single-thread target."
+      "reconciliation_rationale": "Every host exposes a callback-scoped, retained-leaf exact record view. Native hosts use the shared PRVR lease ABI, while WASM borrows the same immutable leaf in linear memory.",
+      "equivalence": "borrowed-view",
+      "rationale": "Rust's lifetime-bound proximity record callback is exposed as a synchronous scoped record view with explicit post-scope invalidation."
     },
     {
       "rust": "prolly::ProximityMap::load",
@@ -21931,26 +21974,46 @@
     },
     {
       "rust": "prolly::ProximityMap::scan_records_range_until",
-      "classification": "portable",
-      "status": "planned",
+      "classification": "idiomatic",
+      "status": "implemented",
       "family": "proximity-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "ProximityMap.scan_record_views",
+        "go": "prolly.(*ProximityMap).ScanRecordViews",
+        "node": "ProximityMap.scanRecordViews",
+        "kotlin": "ProximityMap.scanRecordViews",
+        "java": "ProximityMap.scanRecordViews",
+        "ruby": "ProximityMap#scan_record_views",
+        "swift": "ProximityMap.scanRecordViews",
+        "wasm": "WasmProximityMap.scanRecordViews"
+      },
       "exclusions": {},
-      "tests": [],
-      "docs": [],
+      "tests": [
+        "portable-parity::scoped-view-lifetime",
+        "portable-parity::proximity-bounded-record-view"
+      ],
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#borrowed-view"
+      ],
       "audience": "application",
       "audience_rationale": "prolly::ProximityMap::scan_records_range_until has runtime behavior in the requested proximity-map application domain and requires direct or idiomatic host evidence.",
       "reviewed": true,
-      "reconciliation": "confirmed-performance-gap",
+      "reconciliation": "bound-idiomatic",
       "reconciliation_evidence": [
-        "src/prolly/proximity/map.rs",
-        "bindings/go/proximity.go",
-        "bindings/node/src/proximity.ts",
-        "bindings/java/src/main/java/build/crab/prolly/javaapi/ProximityMap.java",
-        "bindings/wasm/src/index.ts"
+        "bindings/uniffi/src/fast_abi.rs#prolly_fast_proximity_scan_range_page",
+        "bindings/python/prolly/api.py#ProximityMap.scan_record_views",
+        "bindings/go/proximity.go#ProximityMap.ScanRecordViews",
+        "bindings/node/src/proximity.ts#ProximityMap.scanRecordViews",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#ProximityMap.scanRecordViews",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/ProximityMap.java#scanRecordViews",
+        "bindings/ruby/lib/prolly/api.rb#ProximityMap.scan_record_views",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#ProximityMap.scanRecordViews",
+        "bindings/wasm/src/index.ts#WasmProximityMap.scanRecordViews"
       ],
-      "reconciliation_rationale": "The seekable half-open zero-copy record scan is not yet exposed consistently; Ruby has an unbounded leased scan view and the shared ABI has cursor pages, but all hosts still need explicit start/end bounds and early-stop parity."
+      "reconciliation_rationale": "Every host exposes inclusive-start/exclusive-end record-view scans with early stop and callback-scoped key/vector/value access. Native hosts page through the shared retained PRPG ABI; WASM borrows validated record slices directly from linear memory.",
+      "equivalence": "borrowed-view",
+      "rationale": "Rust's range callback is exposed as an inclusive-start/exclusive-end scan of scoped record views with identical early-stop behavior."
     },
     {
       "rust": "prolly::ProximityMap::scan_records_until",

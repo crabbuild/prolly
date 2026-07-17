@@ -400,6 +400,9 @@ class PortableParityTest < Minitest::Test
       )
       indexed = engine.indexed_map('members'.b, registry)
       indexed.put('u1'.b, 'red'.b)
+      escaped_indexed = nil
+      assert_equal [true, 'red'.b], indexed.get_view('u1'.b) { |value| escaped_indexed = value; value.bytes }
+      assert_raises(RuntimeError) { escaped_indexed.bytes }
       indexed.ensure_index('by_team'.b)
       rows = indexed.snapshot.index('by_team'.b).records('red'.b)
       assert_equal ['u1'.b], rows.map(&:primary_key)
@@ -418,11 +421,27 @@ class PortableParityTest < Minitest::Test
 
       proximity = engine.build_proximity(
         dimensions: 2,
-        records: [Prolly::ProximityRecord.new(key: 'a'.b, vector: [0.0, 0.0], value: 'alpha'.b)]
+        records: [
+          Prolly::ProximityRecord.new(key: 'a'.b, vector: [0.0, 0.0], value: 'alpha'.b),
+          Prolly::ProximityRecord.new(key: 'b'.b, vector: [0.0, 1.0], value: 'beta'.b),
+          Prolly::ProximityRecord.new(key: 'c'.b, vector: [1.0, 1.0], value: 'charlie'.b),
+          Prolly::ProximityRecord.new(key: 'd'.b, vector: [2.0, 2.0], value: 'delta'.b)
+        ]
       )
       assert_equal 'a'.b, proximity.search_exact([0.1, 0.1], 1).neighbors.first.key
       viewed = proximity.search_view([0.1, 0.1], 1) { |neighbors| neighbors.first.key.bytes }
       assert_equal 'a'.b, viewed
+      keys = []
+      escaped_key = nil
+      outcome = proximity.scan_record_views(start: 'b'.b, range_end: 'd'.b) do |record|
+        escaped_key = record.key
+        keys << record.key.bytes
+        true
+      end
+      assert_equal 2, outcome.visited
+      assert_equal false, outcome.stopped
+      assert_equal ['b'.b, 'c'.b], keys
+      assert_raises(RuntimeError) { escaped_key.bytes }
     end
   end
 

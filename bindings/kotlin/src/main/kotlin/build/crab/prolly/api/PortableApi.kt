@@ -683,6 +683,8 @@ class IndexedMap(internal val native: BindingIndexedMap) : AutoCloseable {
     val id: ByteArray get() = native.id()
     fun ensureIndex(name: ByteArray) = native.ensureIndex(name.copyOf())
     fun get(key: ByteArray) = native.get(key.copyOf())
+    fun getView(key: ByteArray, block: (ScopedBytes) -> Unit) =
+        PackedPages.withIndexedValue(native.fastHandle(), key.copyOf(), block)
     fun put(key: ByteArray, value: ByteArray) = native.put(key.copyOf(), value.copyOf())
     fun apply(mutations: List<MutationRecord>) = native.apply(mutations)
     fun applyIf(expectedSource: ByteArray?, mutations: List<MutationRecord>) =
@@ -866,6 +868,13 @@ class ProximityMap(internal val native: BindingProximityMap) : AutoCloseable {
         native.scanRecords(object : ProximityRecordVisitorCallback {
             override fun visit(record: ProximityRecordRecord) = visitor(record)
         })
+    fun scanRecordViews(
+        start: ByteArray = byteArrayOf(),
+        end: ByteArray? = null,
+        visitor: (ProximityScanRecordView) -> Boolean,
+    ): ReadScanOutcome = PackedPages.scanProximityRecordViews(
+        native.fastHandle(), start.copyOf(), end?.copyOf(), visitor,
+    )
     fun read() = ProximityReadSession(native.readSession())
     fun <R> withSearchView(
         query: List<Float>,
@@ -1109,6 +1118,13 @@ class ProximityReadSession(internal val native: BindingProximityReadSession) : A
         native.scanRecords(object : ProximityRecordVisitorCallback {
             override fun visit(record: ProximityRecordRecord) = visitor(record)
         })
+    fun scanRecordViews(
+        start: ByteArray = byteArrayOf(),
+        end: ByteArray? = null,
+        visitor: (ProximityScanRecordView) -> Boolean,
+    ): ReadScanOutcome = PackedPages.scanProximityRecordViews(
+        native.fastHandle(), start.copyOf(), end?.copyOf(), visitor,
+    )
     fun <R> withSearchView(
         query: List<Float>,
         k: UInt,

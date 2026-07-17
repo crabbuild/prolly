@@ -90,6 +90,24 @@ internal interface FastAbi : Library {
         key: Pointer?,
         keyLen: Long,
     ): ValueLeaseResult
+    fun prolly_fast_indexed_get_lease(
+        mapHandle: Long,
+        key: Pointer?,
+        keyLen: Long,
+    ): ValueLeaseResult
+    fun prolly_fast_proximity_scan_range_page(
+        mapHandle: Long,
+        start: Pointer?,
+        startLen: Long,
+        end: Pointer?,
+        endLen: Long,
+        hasEnd: Byte,
+        after: Pointer?,
+        afterLen: Long,
+        hasAfter: Byte,
+        maxRecords: Int,
+        maxArenaBytes: Long,
+    ): PageResult
     fun prolly_fast_value_release(leaseHandle: Long)
 
     class ScanOpenResult : Structure(), Structure.ByValue {
@@ -181,6 +199,11 @@ class ProximityVectorView internal constructor(
 }
 
 data class ProximityRecordView(val vector: ProximityVectorView, val value: ScopedBytes)
+data class ProximityScanRecordView(
+    val key: ScopedBytes,
+    val vector: ProximityVectorView,
+    val value: ScopedBytes,
+)
 
 data class IndexMatchView(
     val term: ScopedBytes,
@@ -251,6 +274,96 @@ internal object PackedPages {
         } finally {
             scope.close()
             FastAbi.INSTANCE.prolly_fast_value_release(result.leaseHandle)
+        }
+    }
+
+    fun withIndexedValue(
+        mapHandle: ULong,
+        key: ByteArray,
+        block: (ScopedBytes) -> Unit,
+    ): Boolean {
+        val keyMemory = inputMemory(key)
+        val result = FastAbi.INSTANCE.prolly_fast_indexed_get_lease(
+            mapHandle.toLong(), keyMemory, key.size.toLong(),
+        )
+        check(result.status == 0) { "native indexed point read failed with status ${result.status}" }
+        if (result.found.toInt() == 0) {
+            check(result.leaseHandle == 0L) { "missing indexed point read returned a value lease" }
+            return false
+        }
+        check(result.leaseHandle != 0L && (result.dataLen == 0L || result.dataPtr != null)) {
+            "native indexed point read returned an invalid value lease"
+        }
+        val scope = PageScope()
+        try {
+            val buffer = if (result.dataLen == 0L) ByteBuffer.allocate(0)
+                else result.dataPtr!!.getByteBuffer(0, result.dataLen)
+            block(ScopedBytes(buffer, 0, Math.toIntExact(result.dataLen), scope))
+            return true
+        } finally {
+            scope.close()
+            FastAbi.INSTANCE.prolly_fast_value_release(result.leaseHandle)
+        }
+    }
+
+    fun scanProximityRecordViews(
+        mapHandle: ULong,
+        start: ByteArray,
+        end: ByteArray?,
+        visitor: (ProximityScanRecordView) -> Boolean,
+    ): ReadScanOutcome {
+        val startMemory = inputMemory(start)
+        val endMemory = end?.let(::inputMemory)
+        var after: ByteArray? = null
+        var visited = 0L
+        while (true) {
+            val afterMemory = after?.let(::inputMemory)
+            val result = FastAbi.INSTANCE.prolly_fast_proximity_scan_range_page(
+                mapHandle.toLong(), startMemory, start.size.toLong(),
+                endMemory, end?.size?.toLong() ?: 0L, if (end == null) 0 else 1,
+                afterMemory, after?.size?.toLong() ?: 0L, if (after == null) 0 else 1,
+                READ_SCAN_RECORDS, READ_SCAN_ARENA,
+            )
+            check(result.status == 0) { "native proximity range scan failed with status ${result.status}" }
+            var stopped = false
+            var progressed = false
+            withPage(
+                result, expectedKind = 8, recordWidth = 24,
+                expectedTerminal = result.terminal.toInt() != 0,
+            ) { page, arenaStart, count, scope ->
+                repeat(count) { index ->
+                    if (stopped) return@repeat
+                    val base = HEADER_SIZE + index * 24
+                    val keyOffset = page.getInt(base)
+                    val keyLength = page.getInt(base + 4)
+                    val vectorOffset = page.getInt(base + 8)
+                    val vectorLength = page.getInt(base + 12)
+                    val valueOffset = page.getInt(base + 16)
+                    val valueLength = page.getInt(base + 20)
+                    require(vectorLength % 4 == 0) { "proximity vector byte length is invalid" }
+                    val arenaBytes = page.getLong(20).toInt()
+                    requirePackedRange(keyOffset, keyLength, arenaBytes, "proximity key")
+                    requirePackedRange(vectorOffset, vectorLength, arenaBytes, "proximity vector")
+                    requirePackedRange(valueOffset, valueLength, arenaBytes, "proximity value")
+                    val key = ScopedBytes(page, arenaStart + keyOffset, keyLength, scope)
+                    after = key.bytes()
+                    progressed = true
+                    visited++
+                    stopped = !visitor(ProximityScanRecordView(
+                        key,
+                        ProximityVectorView(
+                            result.dataPtr!!,
+                            (arenaStart + vectorOffset).toLong(),
+                            vectorLength / 4,
+                            scope,
+                        ),
+                        ScopedBytes(page, arenaStart + valueOffset, valueLength, scope),
+                    ))
+                }
+            }
+            if (stopped) return ReadScanOutcome(visited, true)
+            if (result.terminal.toInt() != 0) return ReadScanOutcome(visited, false)
+            check(progressed) { "non-terminal proximity scan page made no progress" }
         }
     }
 

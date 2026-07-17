@@ -1761,6 +1761,8 @@ external fun uniffi_prolly_bindings_checksum_method_bindingindexedmap_ensure_ind
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingindexedmap_export_current(
 ): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingindexedmap_fast_handle(
+): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingindexedmap_get(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingindexedmap_health(
@@ -2886,6 +2888,8 @@ external fun uniffi_prolly_bindings_fn_method_bindingindexedmap_ensure_index(`pt
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_bindingindexedmap_export_current(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindingindexedmap_fast_handle(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+): Long
 external fun uniffi_prolly_bindings_fn_method_bindingindexedmap_get(`ptr`: Long,`key`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_bindingindexedmap_health(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -4984,6 +4988,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_method_bindingindexedmap_export_current() != 22167.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingindexedmap_fast_handle() != 29036.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_method_bindingindexedmap_get() != 7518.toShort()) {
@@ -9067,6 +9074,8 @@ public interface BindingIndexedMapInterface {
 
     fun `exportCurrent`(): kotlin.ByteArray
 
+    fun `fastHandle`(): kotlin.ULong
+
     fun `get`(`key`: kotlin.ByteArray): kotlin.ByteArray?
 
     fun `health`(): IndexedMapHealthRecord
@@ -9280,6 +9289,20 @@ open class BindingIndexedMap: Disposable, AutoCloseable, BindingIndexedMapInterf
     callWithHandle {
     uniffiRustCallWithError(ProllyBindingException) { _status ->
     UniffiLib.uniffi_prolly_bindings_fn_method_bindingindexedmap_export_current(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+    override fun `fastHandle`(): kotlin.ULong {
+            return FfiConverterULong.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingindexedmap_fast_handle(
         it,
         _status)
 }
