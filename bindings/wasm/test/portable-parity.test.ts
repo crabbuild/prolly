@@ -510,6 +510,7 @@ test("WASM proofs, retained sessions, and maintenance stay in Rust", { skip: !ge
   assert.equal(snapshot.stats().itemCount, 2n);
   assert.ok(snapshot.exportSummary().itemCount > 0n);
   const session = snapshot.read();
+  assert.equal(Buffer.from(await session.getAsync(bytes("k")) ?? []).toString(), "v");
   assert.equal(Buffer.from(session.get(bytes("k")) ?? []).toString(), "v");
   let escaped: Uint8Array | undefined;
   const seen: string[] = [];

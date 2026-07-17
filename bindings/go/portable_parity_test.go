@@ -1168,6 +1168,15 @@ func TestPortableAsyncWrappersCopyInputsBeforeHandoff(t *testing.T) {
 	if err != nil || !read.Found || !bytes.Equal(read.Value, []byte("original-value")) {
 		t.Fatalf("async snapshot get = %#v, %v", read, err)
 	}
+	session, err := snapshot.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+	sessionRead, err := session.GetAsync(context.Background(), []byte("original-key")).Await(context.Background())
+	if err != nil || !sessionRead.Found || !bytes.Equal(sessionRead.Value, []byte("original-value")) {
+		t.Fatalf("async session get = %#v, %v", sessionRead, err)
+	}
 	if event, err := subscription.PollAsync(context.Background()).Await(context.Background()); err != nil || event == nil {
 		t.Fatalf("async subscription poll = %#v, %v", event, err)
 	}

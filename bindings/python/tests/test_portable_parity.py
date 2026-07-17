@@ -445,6 +445,8 @@ class PortableParityTests(unittest.TestCase):
                 self.assertEqual(await versioned.get_async(b"k"), b"v")
                 snapshot = await versioned.snapshot_at_async(updated.id)
                 self.assertEqual(await snapshot.get_async(b"k"), b"v")
+                with snapshot.read() as session:
+                    self.assertEqual(await session.get_async(b"k"), b"v")
                 self.assertTrue(verify_key_proof(await snapshot.prove_key_async(b"k")).valid)
                 event = await subscription.poll_async()
                 self.assertEqual(event.previous, initial.id)

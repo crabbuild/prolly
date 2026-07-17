@@ -383,6 +383,7 @@ class PortableParityTest < Minitest::Test
       assert_equal updated.id, versioned.head_async.value.id
       snapshot = versioned.snapshot_at_async(updated.id).value
       assert_equal 'v'.b, snapshot.get_async('k'.b).value
+      snapshot.read.use { |session| assert_equal 'v'.b, session.get_async('k'.b).value }
       refute_nil subscription.poll_async.value
       snapshot.close
       subscription.close

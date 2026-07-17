@@ -945,6 +945,11 @@ export class ReadSession implements Disposable {
     if (this.#native == null) throw new Error("read session is closed");
     return this.#native.get(ownedBytes(key)) ?? undefined;
   }
+  getAsync(key: Uint8Array, signal?: AbortSignal): Promise<Uint8Array | undefined> {
+    if (this.#native == null) throw new Error("read session is closed");
+    const native = this.#native; const owned = ownedBytes(key);
+    return nativePromise(signal, () => native.get(owned) ?? undefined);
+  }
   scanRangeView(
     start: Uint8Array,
     end: Uint8Array | undefined,

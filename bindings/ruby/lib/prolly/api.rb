@@ -655,6 +655,11 @@ module Prolly
 
     def get(key) = open! { @native.get(key.b) }
     def get_many(keys) = open! { @native.get_many(keys.map(&:b)) }
+    def get_async(key) = Future.new { get(key.b.dup) }
+    def get_many_async(keys)
+      owned = keys.map { |key| key.b.dup }
+      Future.new { get_many(owned) }
+    end
     def scan_range_view(start = ''.b, range_end = nil, &block)
       open! do
         PackedPage.scan_range_view(

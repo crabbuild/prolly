@@ -491,6 +491,7 @@ test("proofs, retained sessions, and maintenance stay native", async () => {
     assert.ok(snapshot.exportSummary().itemCount > 0n);
     const session = snapshot.read();
     assert.equal(Buffer.from(session.get(bytes("k")) ?? []).toString(), "v");
+    assert.equal(Buffer.from(await session.getAsync(bytes("k")) ?? []).toString(), "v");
     let escaped: Uint8Array | undefined;
     const seen: string[] = [];
     const scan = session.scanRangeView(bytes("k"), bytes("l"), (entry) => {
