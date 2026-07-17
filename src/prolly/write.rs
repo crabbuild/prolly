@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 
 use super::boundary::{entry_count_boundary, BoundaryDetector};
-use super::builder::{entry_encoded_len, node_encoding_overhead, BatchBuilder, NodeSummary};
+use super::builder::{BatchBuilder, EncodedNodeSizer, NodeSummary};
 use super::cid::Cid;
 use super::error::{Error, Mutation};
 use super::format::{BoundaryInput, ChunkMeasure, NodeLayoutSpec};
@@ -47,7 +47,7 @@ pub(crate) struct LeafEmitter<'a> {
     detector: BoundaryDetector,
     current: Node,
     pub(crate) emitted: Vec<EmittedLeaf>,
-    encoded_bytes: u64,
+    sizer: EncodedNodeSizer,
 }
 
 impl<'a> LeafEmitter<'a> {
@@ -61,31 +61,29 @@ impl<'a> LeafEmitter<'a> {
                 .tree_format(config.format.clone())
                 .build(),
             emitted: Vec::new(),
-            encoded_bytes: node_encoding_overhead(config),
+            sizer: EncodedNodeSizer::new(config.format.clone(), true, 0)?,
         })
     }
 
     pub(crate) fn push(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<(), Error> {
         let hard_max = self.config.format.chunking.hard_max_node_bytes;
-        let mut encoded = entry_encoded_len(
-            self.config,
-            self.current.keys.last().map(Vec::as_slice),
-            &key,
-            &value,
-        ) as u64;
-        if !self.current.is_empty() && self.encoded_bytes.saturating_add(encoded) > hard_max {
+        let mut encoded_size = self.sizer.size_after(&key, &value, None)?;
+        if !self.current.is_empty() && encoded_size > hard_max {
             self.flush();
             self.detector.reset();
-            encoded = entry_encoded_len(self.config, None, &key, &value) as u64;
+            encoded_size = self.sizer.size_after(&key, &value, None)?;
         }
-        if self.encoded_bytes.saturating_add(encoded) > hard_max {
+        if encoded_size > hard_max {
             return Err(Error::EntryTooLarge {
-                encoded_bytes: self.encoded_bytes.saturating_add(encoded),
+                encoded_bytes: encoded_size,
                 limit: hard_max,
             });
         }
-        self.encoded_bytes = self.encoded_bytes.saturating_add(encoded);
-        let boundary = self.detector.observe(&key, &value, encoded as usize)?;
+        let encoded_entry_bytes = encoded_size.saturating_sub(self.sizer.size());
+        self.sizer.push_sized(&key, &value, None, encoded_size)?;
+        let boundary = self
+            .detector
+            .observe(&key, &value, encoded_entry_bytes as usize)?;
         self.current.keys.push(key);
         self.current.vals.push(value);
         if boundary {
@@ -117,7 +115,7 @@ impl<'a> LeafEmitter<'a> {
             bytes,
             node,
         });
-        self.encoded_bytes = node_encoding_overhead(self.config);
+        self.sizer.reset();
     }
 
     pub(crate) fn is_aligned_with(&self, old: &NodeSummary) -> bool {

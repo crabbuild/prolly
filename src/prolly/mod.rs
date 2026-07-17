@@ -4869,7 +4869,7 @@ where
         let entries = entries.into_iter().collect::<Vec<_>>();
         let mut collector = AsyncWriteCollector::new_cached();
         let mut summaries = Vec::new();
-        for range in builder::chunk_ranges_for_entries(&self.config, 0, &entries)? {
+        for range in builder::chunk_ranges_for_entries(&self.config, 0, &entries, None)? {
             let start = *range.start();
             let end = *range.end();
             let mut leaf = self.new_leaf_node();
@@ -4951,7 +4951,7 @@ where
         }));
 
         let mut current = Vec::new();
-        for range in builder::chunk_ranges_for_entries(&self.config, 0, &leaf_entries)? {
+        for range in builder::chunk_ranges_for_entries(&self.config, 0, &leaf_entries, None)? {
             let mut leaf = self.new_leaf_node();
             for (key, value) in leaf_entries
                 .iter()
@@ -7440,7 +7440,9 @@ where
             .iter()
             .map(|child| (child.first_key.clone(), child.cid.as_bytes().to_vec()))
             .collect::<Vec<_>>();
-        let chunk_ranges = builder::chunk_ranges_for_entries(&self.config, level, &entries)?;
+        let child_counts = children.iter().map(|child| child.count).collect::<Vec<_>>();
+        let chunk_ranges =
+            builder::chunk_ranges_for_entries(&self.config, level, &entries, Some(&child_counts))?;
         let mut summaries = Vec::with_capacity(chunk_ranges.len());
 
         for range in chunk_ranges {
@@ -7472,7 +7474,9 @@ where
             .iter()
             .map(|child| (child.first_key.clone(), child.cid.as_bytes().to_vec()))
             .collect::<Vec<_>>();
-        let ranges = builder::chunk_ranges_for_entries(&self.config, level, &entries)?;
+        let child_counts = children.iter().map(|child| child.count).collect::<Vec<_>>();
+        let ranges =
+            builder::chunk_ranges_for_entries(&self.config, level, &entries, Some(&child_counts))?;
         let mut summaries = Vec::with_capacity(ranges.len());
 
         for range in ranges {
