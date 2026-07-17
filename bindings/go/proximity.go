@@ -16,6 +16,8 @@ type ProximityRecord struct {
 	Value  []byte
 }
 
+var proximityRecordVisitorVtableOnce sync.Once
+
 type ProximityConfig struct {
 	Dimensions                  uint32
 	Metric                      string
@@ -1300,6 +1302,26 @@ func (m *ProximityMap) Get(key []byte) (ExactProximityRecord, bool, error) {
 	return record, ok, nil
 }
 
+// ScanRecords visits exact records in bytewise key order and stops when the
+// visitor returns false. Records own their Go memory and may be retained.
+func (m *ProximityMap) ScanRecords(visitor func(ProximityRecord) bool) (uint64, error) {
+	if visitor == nil {
+		return 0, errors.New("nil proximity record visitor")
+	}
+	proximityRecordVisitorVtableOnce.Do(ffiRegisterProximityRecordVisitorVtable)
+	handle, _, unlock, err := m.withHandle()
+	if err != nil {
+		return 0, err
+	}
+	defer unlock()
+	callback := registerGoProximityRecordVisitor(visitor)
+	visited, err := ffiProximityScanRecords(handle, callback)
+	if err != nil {
+		removeGoProximityRecordVisitor(callback)
+	}
+	return visited, err
+}
+
 func (m *ProximityMap) ProveMembership(key []byte) (ProximityMembershipProof, error) {
 	handle, _, unlock, err := m.withHandle()
 	if err != nil {
@@ -1617,6 +1639,25 @@ func (s *ProximitySession) Get(key []byte) (ExactProximityRecord, bool, error) {
 	}
 	return record, ok, nil
 }
+
+// ScanRecords reuses the retained session and visits records in key order.
+func (s *ProximitySession) ScanRecords(visitor func(ProximityRecord) bool) (uint64, error) {
+	if visitor == nil {
+		return 0, errors.New("nil proximity record visitor")
+	}
+	proximityRecordVisitorVtableOnce.Do(ffiRegisterProximityRecordVisitorVtable)
+	handle, unlock, err := s.withHandle()
+	if err != nil {
+		return 0, err
+	}
+	defer unlock()
+	callback := registerGoProximityRecordVisitor(visitor)
+	visited, err := ffiProximitySessionScanRecords(handle, callback)
+	if err != nil {
+		removeGoProximityRecordVisitor(callback)
+	}
+	return visited, err
+}
 func (s *ProximitySession) withFast() (uint64, func(), error) {
 	if s == nil || s.closed.Load() {
 		return 0, nil, errors.New("proximity session is closed")
@@ -1716,6 +1757,26 @@ func decodeFloat32Sequence(d *byteDecoder) ([]float32, error) {
 		values = append(values, math.Float32frombits(bits))
 	}
 	return values, nil
+}
+
+func decodeProximityRecordBytes(raw []byte) (ProximityRecord, error) {
+	d := byteDecoder{data: raw}
+	key, err := d.readByteArray()
+	if err != nil {
+		return ProximityRecord{}, err
+	}
+	vector, err := decodeFloat32Sequence(&d)
+	if err != nil {
+		return ProximityRecord{}, err
+	}
+	value, err := d.readByteArray()
+	if err != nil {
+		return ProximityRecord{}, err
+	}
+	if err := d.done(); err != nil {
+		return ProximityRecord{}, err
+	}
+	return ProximityRecord{Key: key, Vector: vector, Value: value}, nil
 }
 
 func decodeProximitySearchResult(d *byteDecoder) (SearchResult, error) {

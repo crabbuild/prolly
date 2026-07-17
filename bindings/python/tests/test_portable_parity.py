@@ -227,11 +227,27 @@ class PortableParityTests(unittest.TestCase):
             self.assertEqual([neighbor.key for neighbor in result.neighbors], [b"a", b"ab"])
             self.assertGreater(result.stats.distance_evaluations, 0)
             self.assertGreater(result.plan_format_version, 0)
+            scanned = []
+            self.assertEqual(
+                proximity.scan_records(
+                    lambda record: scanned.append(record.key) is None and len(scanned) < 2
+                ),
+                2,
+            )
+            self.assertEqual(scanned, [b"a", b"ab"])
             with proximity.read() as session:
                 self.assertEqual(
                     [neighbor.key for neighbor in session.search(request).neighbors],
                     [b"a", b"ab"],
                 )
+                retained = []
+                self.assertEqual(
+                    session.scan_records(
+                        lambda record: retained.append(record.key) is None
+                    ),
+                    3,
+                )
+                self.assertEqual(retained, [b"a", b"ab", b"b"])
             with proximity.prove_search(request) as proof:
                 verified = proof.verify(proximity.descriptor)
                 self.assertEqual(

@@ -1,4 +1,4 @@
-import { nativePromise, ownedBytes } from "./packed.ts";
+import { nativePromise, ownedBytes, scopedBytes, type ViewScope } from "./packed.ts";
 
 export interface ProximityRecord {
   key: Uint8Array;
@@ -41,6 +41,14 @@ export interface Neighbor {
   key: Uint8Array;
   value: Uint8Array;
   distance: number;
+}
+
+export interface NeighborView {
+  key: Uint8Array;
+  distance: number;
+  rank: number;
+  value?: Uint8Array;
+  proof?: Uint8Array;
 }
 
 export interface SearchResult {
@@ -526,6 +534,7 @@ interface NativeProximityMap {
   config(): NativeProximityConfig;
   get(key: Uint8Array): { vector: number[]; value: Uint8Array } | null;
   contains(key: Uint8Array): boolean;
+  scanRecords(visitor: (record: { key: Uint8Array; vector: Float32Array; value: Uint8Array }) => boolean): string;
   mutate(mutations: Array<{ key: Uint8Array; vector?: Float32Array; value?: Uint8Array }>): NativeProximityMutationResult;
   rebuild(mutations: Array<{ key: Uint8Array; vector?: Float32Array; value?: Uint8Array }>): NativeProximityMap;
   descriptor(): Uint8Array;
@@ -538,6 +547,12 @@ interface NativeProximityReadSession {
   search(request: NativeSearchRequest): NativeSearchResult;
   get(key: Uint8Array): { vector: number[]; value: Uint8Array } | null;
   contains(key: Uint8Array): boolean;
+  scanRecords(visitor: (record: { key: Uint8Array; vector: Float32Array; value: Uint8Array }) => boolean): string;
+  withSearchPage(
+    query: Float32Array,
+    k: number,
+    visitor: (page: { bytes: Buffer; recordCount: number; terminal: boolean }) => boolean,
+  ): void;
   fastHandle(): string;
 }
 interface NativeProximityProof { verify(expectedDescriptor?: Uint8Array): Uint8Array | null; }
@@ -865,6 +880,18 @@ export class ProximityMap implements Disposable {
     return record == null ? undefined : { vector: new Float32Array(record.vector), value: record.value };
   }
   contains(key: Uint8Array): boolean { return this.nativeHandle().contains(ownedBytes(key)); }
+  scanRecords(visitor: (record: ProximityRecord) => boolean): bigint {
+    return BigInt(this.nativeHandle().scanRecords((record) => visitor({
+      key: ownedBytes(record.key),
+      vector: new Float32Array(record.vector),
+      value: ownedBytes(record.value),
+    })));
+  }
+  withSearchView<R>(query: Float32Array, k: number, visitor: (neighbors: NeighborView[]) => R): R {
+    const session = this.read();
+    try { return session.withSearchView(query, k, visitor); }
+    finally { session.close(); }
+  }
   buildHnsw(options: HnswBuildOptions = {}): Promise<HnswBuildResult> {
     const native = this.nativeHandle();
     const config = ownHnswConfig(options.config);
@@ -1206,6 +1233,34 @@ export class ProximityReadSession implements Disposable {
     if (this.#native == null) throw new Error("proximity session is closed");
     return this.#native.contains(ownedBytes(key));
   }
+  scanRecords(visitor: (record: ProximityRecord) => boolean): bigint {
+    if (this.#native == null) throw new Error("proximity session is closed");
+    return BigInt(this.#native.scanRecords((record) => visitor({
+      key: ownedBytes(record.key),
+      vector: new Float32Array(record.vector),
+      value: ownedBytes(record.value),
+    })));
+  }
+  withSearchView<R>(query: Float32Array, k: number, visitor: (neighbors: NeighborView[]) => R): R {
+    if (this.#native == null) throw new Error("proximity session is closed");
+    if (!Number.isSafeInteger(k) || k <= 0 || k > 0xffff_ffff) {
+      throw new RangeError("k must be a positive unsigned 32-bit integer");
+    }
+    const scope: ViewScope = { alive: true };
+    let output: R | undefined;
+    let called = false;
+    try {
+      this.#native.withSearchPage(new Float32Array(query), k, (page) => {
+        output = visitor(decodeNeighborViews(page.bytes, page.recordCount, page.terminal, scope));
+        called = true;
+        return true;
+      });
+    } finally {
+      scope.alive = false;
+    }
+    if (!called) throw new Error("native proximity search did not invoke its scoped visitor");
+    return output as R;
+  }
   search(request: SearchRequest): Promise<SearchResult> {
     if (this.#native == null) return Promise.reject(new Error("proximity session is closed"));
     const native = this.#native;
@@ -1218,6 +1273,63 @@ export class ProximityReadSession implements Disposable {
   }
   close(): void { this.#native = undefined; }
   [Symbol.dispose](): void { this.close(); }
+}
+
+function decodeNeighborViews(
+  page: Buffer,
+  recordCount: number,
+  terminal: boolean,
+  scope: ViewScope,
+): NeighborView[] {
+  if (page.length < 28 || page.toString("ascii", 0, 4) !== "PRPG") {
+    throw new Error("invalid proximity packed page header");
+  }
+  if (page.readUInt16LE(4) !== 2 || page.readUInt16LE(6) !== 7) {
+    throw new Error("packed page is not a v2 proximity-neighbor page");
+  }
+  const flags = page.readUInt32LE(8);
+  const count = page.readUInt32LE(12);
+  const tableBytes = page.readUInt32LE(16);
+  const arenaBytes = Number(page.readBigUInt64LE(20));
+  const arenaStart = 28 + tableBytes;
+  if ((flags & ~1) !== 0 || terminal !== ((flags & 1) !== 0)
+    || count !== recordCount || tableBytes !== count * 40
+    || !Number.isSafeInteger(arenaBytes) || arenaStart + arenaBytes !== page.length) {
+    throw new Error("invalid proximity packed page bounds");
+  }
+  const field = (offset: number, length: number): Uint8Array => {
+    if (offset > arenaBytes || length > arenaBytes - offset) {
+      throw new Error("proximity packed field exceeds its arena");
+    }
+    return scopedBytes(page.subarray(arenaStart + offset, arenaStart + offset + length), scope);
+  };
+  const rows: NeighborView[] = [];
+  for (let index = 0; index < count; index += 1) {
+    const base = 28 + index * 40;
+    const recordFlags = page.readUInt32LE(base);
+    if ((recordFlags & ~3) !== 0) throw new Error("invalid proximity neighbor flags");
+    const distance = page.readDoubleLE(base + 12);
+    if (!Number.isFinite(distance)) throw new Error("invalid proximity neighbor distance");
+    const key = field(page.readUInt32LE(base + 4), page.readUInt32LE(base + 8));
+    const valueOffset = page.readUInt32LE(base + 24);
+    const valueLength = page.readUInt32LE(base + 28);
+    const proofOffset = page.readUInt32LE(base + 32);
+    const proofLength = page.readUInt32LE(base + 36);
+    if ((recordFlags & 1) === 0 && (valueOffset !== 0 || valueLength !== 0)) {
+      throw new Error("absent proximity value has a non-empty range");
+    }
+    if ((recordFlags & 2) === 0 && (proofOffset !== 0 || proofLength !== 0)) {
+      throw new Error("absent proximity proof has a non-empty range");
+    }
+    rows.push({
+      key,
+      distance,
+      rank: page.readUInt32LE(base + 20),
+      value: (recordFlags & 1) === 0 ? undefined : field(valueOffset, valueLength),
+      proof: (recordFlags & 2) === 0 ? undefined : field(proofOffset, proofLength),
+    });
+  }
+  return rows;
 }
 
 export function ownProximityRecords(records: ProximityRecord[]): Array<{

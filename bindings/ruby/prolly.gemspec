@@ -12,5 +12,6 @@ Gem::Specification.new do |spec|
   spec.files = Dir['lib/**/*.rb'] + Dir['lib/**/*.md'] + ['README.md']
   spec.require_paths = ['lib']
 
-  spec.add_runtime_dependency 'ffi', '>= 1.15', '< 1.17'
+  spec.add_runtime_dependency 'ffi', '>= 1.15', '< 2'
+  spec.add_development_dependency 'minitest', '>= 5', '< 6'
 end

@@ -207,11 +207,23 @@ class PortableParityTest {
                 assertEquals(listOf("a", "ab"), result.neighbors.map { String(it.key) })
                 assertEquals(true, result.stats.distanceEvaluations > 0uL)
                 assertEquals(true, result.planFormatVersion > 0u)
+                val scanned = mutableListOf<String>()
+                assertEquals(2uL, proximity.scanRecords {
+                    scanned += String(it.key)
+                    scanned.size < 2
+                })
+                assertEquals(listOf("a", "ab"), scanned)
                 proximity.read().use { session ->
                     assertEquals(
                         listOf("a", "ab"),
                         session.search(request).neighbors.map { String(it.key) },
                     )
+                    val retained = mutableListOf<String>()
+                    assertEquals(3uL, session.scanRecords {
+                        retained += String(it.key)
+                        true
+                    })
+                    assertEquals(listOf("a", "ab", "b"), retained)
                 }
                 proximity.proveSearch(request).use { proof ->
                     assertEquals(

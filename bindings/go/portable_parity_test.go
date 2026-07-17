@@ -63,6 +63,22 @@ func TestRichProximitySearchPreservesPolicyFilterStatsSessionAndProof(t *testing
 	if result.Stats.DistanceEvaluations == 0 || result.PlanFormatVersion == 0 {
 		t.Fatalf("incomplete result metadata = %#v", result)
 	}
+	var scanned []string
+	visited, err := proximity.ScanRecords(func(record ProximityRecord) bool {
+		scanned = append(scanned, string(record.Key))
+		return len(scanned) < 2
+	})
+	if err != nil || visited != 2 || fmt.Sprint(scanned) != "[a ab]" {
+		t.Fatalf("map record scan = %v, %d, %v", scanned, visited, err)
+	}
+	var retained []string
+	visited, err = session.ScanRecords(func(record ProximityRecord) bool {
+		retained = append(retained, string(record.Key))
+		return true
+	})
+	if err != nil || visited != 3 || fmt.Sprint(retained) != "[a ab b]" {
+		t.Fatalf("session record scan = %v, %d, %v", retained, visited, err)
+	}
 	previousProcs := runtime.GOMAXPROCS(1)
 	asyncRequest := cloneSearchRequest(request)
 	future := session.SearchAsync(context.Background(), asyncRequest)

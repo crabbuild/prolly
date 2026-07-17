@@ -28,6 +28,7 @@ pub const FAST_CAP_GET_MANY_PAGE: u64 = 1 << 3;
 pub const FAST_CAP_VALUE_LEASE: u64 = 1 << 4;
 pub const FAST_CAP_INDEX_CURSOR: u64 = 1 << 5;
 pub const FAST_CAP_PROXIMITY_SEARCH: u64 = 1 << 6;
+pub const FAST_CAP_PROXIMITY_RECORD_SCAN: u64 = 1 << 7;
 
 pub const FAST_STATUS_OK: i32 = 0;
 pub const FAST_STATUS_BUFFER_TOO_SMALL: i32 = 1;
@@ -136,6 +137,21 @@ impl LiveProximityTarget {
         match self {
             Self::Map(map) => map.search(request),
             Self::Session(session) => session.search(request),
+        }
+    }
+
+    fn scan_records_range_until<B>(
+        &self,
+        start: &[u8],
+        end: Option<&[u8]>,
+        visit: impl for<'record> FnMut(
+            &[u8],
+            prolly::ProximityRecordRef<'record>,
+        ) -> std::ops::ControlFlow<B>,
+    ) -> Result<prolly::ScanOutcome<B>, crate::ProllyBindingError> {
+        match self {
+            Self::Map(map) => map.scan_records_range_until(start, end, visit),
+            Self::Session(session) => session.scan_records_range_until(start, end, visit),
         }
     }
 }
@@ -516,6 +532,7 @@ pub extern "C" fn prolly_fast_abi_capabilities() -> u64 {
         | FAST_CAP_VALUE_LEASE
         | FAST_CAP_INDEX_CURSOR
         | FAST_CAP_PROXIMITY_SEARCH
+        | FAST_CAP_PROXIMITY_RECORD_SCAN
 }
 
 unsafe fn input_slice<'a>(ptr: *const u8, len: usize) -> Option<&'a [u8]> {
@@ -1610,6 +1627,149 @@ pub unsafe extern "C" fn prolly_fast_proximity_search(
     }
 }
 
+/// Return one bounded, leased PRPG v2 exact-record page. `after` is an
+/// exclusive bytewise cursor; callers continue with the last delivered key.
+#[no_mangle]
+pub unsafe extern "C" fn prolly_fast_proximity_scan_page(
+    map_handle: u64,
+    after_ptr: *const u8,
+    after_len: usize,
+    has_after: u8,
+    max_records: u32,
+    max_arena_bytes: u64,
+) -> FastPageResult {
+    let Some(map) = proximity_from_handle(map_handle) else {
+        return FastPageResult {
+            status: FAST_STATUS_INVALID_ARGUMENT,
+            ..FastPageResult::default()
+        };
+    };
+    if after_len > MAX_BOUND_BYTES
+        || has_after > 1
+        || max_records == 0
+        || max_records > MAX_PAGE_RECORDS
+        || max_arena_bytes == 0
+        || max_arena_bytes > MAX_PAGE_ARENA_BYTES
+    {
+        return FastPageResult {
+            status: FAST_STATUS_INVALID_ARGUMENT,
+            ..FastPageResult::default()
+        };
+    }
+    let after = if has_after == 0 {
+        None
+    } else {
+        let Some(after) = (unsafe { input_slice(after_ptr, after_len) }) else {
+            return FastPageResult {
+                status: FAST_STATUS_INVALID_ARGUMENT,
+                ..FastPageResult::default()
+            };
+        };
+        Some(after)
+    };
+
+    match catch_unwind(AssertUnwindSafe(|| {
+        let start = after.unwrap_or_default();
+        let limits = PageLimits {
+            max_records,
+            max_arena_bytes,
+        };
+        let mut builder = Some(PackedPageBuilder::with_limits(
+            PackedPageKind::ProximityRecord,
+            limits,
+        ));
+        let mut record_count = 0_u32;
+        let mut arena_bytes = 0_usize;
+        let mut build_failed = false;
+        let byte_limit = usize::try_from(max_arena_bytes).unwrap_or(usize::MAX);
+        let outcome = map.scan_records_range_until(start, None, |key, record| {
+            if after.is_some_and(|after| key == after) {
+                return std::ops::ControlFlow::Continue(());
+            }
+            let vector = record.vector.to_vec();
+            let mut vector_le = Vec::with_capacity(vector.len() * std::mem::size_of::<f32>());
+            for component in vector {
+                vector_le.extend_from_slice(&component.to_le_bytes());
+            }
+            let Some(next_bytes) = key
+                .len()
+                .checked_add(vector_le.len())
+                .and_then(|value| value.checked_add(record.value.len()))
+            else {
+                build_failed = true;
+                return std::ops::ControlFlow::Break(());
+            };
+            if next_bytes > byte_limit
+                || (record_count > 0 && arena_bytes + next_bytes > byte_limit)
+            {
+                if record_count == 0 {
+                    build_failed = true;
+                }
+                return std::ops::ControlFlow::Break(());
+            }
+            let current = builder.take().expect("packed proximity builder is present");
+            match current.push_proximity_record(key, &vector_le, record.value) {
+                Ok(next) => builder = Some(next),
+                Err(_) => {
+                    build_failed = true;
+                    return std::ops::ControlFlow::Break(());
+                }
+            }
+            record_count += 1;
+            arena_bytes += next_bytes;
+            if record_count >= max_records || arena_bytes >= byte_limit {
+                std::ops::ControlFlow::Break(())
+            } else {
+                std::ops::ControlFlow::Continue(())
+            }
+        });
+        let outcome = match outcome {
+            Ok(outcome) => outcome,
+            Err(_) => {
+                return FastPageResult {
+                    status: FAST_STATUS_READ_ERROR,
+                    ..FastPageResult::default()
+                }
+            }
+        };
+        if build_failed {
+            return FastPageResult {
+                status: FAST_STATUS_INVALID_ARGUMENT,
+                ..FastPageResult::default()
+            };
+        }
+        let terminal = outcome.break_value.is_none();
+        let bytes = match builder
+            .expect("packed proximity builder survives successful traversal")
+            .finish(terminal)
+        {
+            Ok(bytes) => bytes,
+            Err(_) => {
+                return FastPageResult {
+                    status: FAST_STATUS_READ_ERROR,
+                    ..FastPageResult::default()
+                }
+            }
+        };
+        let (lease_handle, data_ptr, data_len) = register_page(bytes);
+        FastPageResult {
+            status: FAST_STATUS_OK,
+            terminal: u8::from(terminal),
+            record_count,
+            lease_handle,
+            data_ptr,
+            data_len,
+            ..FastPageResult::default()
+        }
+    })) {
+        Ok(result) => result,
+        Err(_) => FastPageResult {
+            status: FAST_STATUS_PANIC,
+            ..FastPageResult::default()
+        },
+    }
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn prolly_fast_scan_close(scan_handle: u64) {
     if scan_handle == 0 {
@@ -1760,6 +1920,60 @@ mod tests {
         assert_eq!(neighbor.value, Some(b"alpha".as_slice()));
         assert_eq!(neighbor.distance, 0.125);
         unsafe { prolly_fast_page_release(page.lease_handle) };
+    }
+
+    #[test]
+    fn proximity_scan_pages_are_ordered_bounded_and_cursor_resumable() {
+        let engine = Arc::new(ProllyEngine::memory(default_config()).unwrap());
+        let map = engine
+            .build_proximity_map(
+                crate::ProximityConfigRecord::new(2),
+                vec![
+                    crate::ProximityRecordRecord {
+                        key: b"a".to_vec(),
+                        vector: vec![0.0, 1.0],
+                        value: b"alpha".to_vec(),
+                    },
+                    crate::ProximityRecordRecord {
+                        key: b"b".to_vec(),
+                        vector: vec![2.0, 3.0],
+                        value: b"beta".to_vec(),
+                    },
+                ],
+                None,
+            )
+            .unwrap();
+        let handle = map.fast_handle();
+        let first = unsafe { prolly_fast_proximity_scan_page(handle, ptr::null(), 0, 0, 1, 4096) };
+        assert_eq!(first.status, FAST_STATUS_OK);
+        assert_eq!(first.record_count, 1);
+        assert_eq!(first.terminal, 0);
+        let first_page = PackedPage::parse(
+            unsafe { slice::from_raw_parts(first.data_ptr, first.data_len as usize) },
+            PageLimits::default(),
+        )
+        .unwrap();
+        let first_record = first_page.proximity_record(0).unwrap();
+        assert_eq!(first_record.key, b"a");
+        assert_eq!(first_record.value, b"alpha");
+        let cursor = first_record.key.to_vec();
+        let second = unsafe {
+            prolly_fast_proximity_scan_page(handle, cursor.as_ptr(), cursor.len(), 1, 1, 4096)
+        };
+        assert_eq!(second.status, FAST_STATUS_OK);
+        assert_eq!(second.record_count, 1);
+        let second_page = PackedPage::parse(
+            unsafe { slice::from_raw_parts(second.data_ptr, second.data_len as usize) },
+            PageLimits::default(),
+        )
+        .unwrap();
+        let second_record = second_page.proximity_record(0).unwrap();
+        assert_eq!(second_record.key, b"b");
+        assert_eq!(second_record.value, b"beta");
+        unsafe {
+            prolly_fast_page_release(first.lease_handle);
+            prolly_fast_page_release(second.lease_handle);
+        }
     }
 
     #[test]

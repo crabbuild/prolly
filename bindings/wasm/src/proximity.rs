@@ -1,6 +1,6 @@
 use super::{js_error, WasmProllyEngine};
 use crate::page::set_bytes;
-use js_sys::{Array, BigInt, Float32Array, Object, Reflect, Uint8Array};
+use js_sys::{Array, BigInt, Float32Array, Function, Object, Reflect, Uint8Array};
 use prolly::{
     AcceleratorCatalog, AcceleratorSet, AdaptiveQuality, BuildParallelism, CatalogAcceleratorKind,
     Cid, CompositeAccelerator, CompositeAcceleratorConfig, CompositeBase, CompositeBaseKind,
@@ -791,6 +791,19 @@ impl WasmProximityMap {
     pub fn contains(&self, key: Uint8Array) -> Result<bool, JsValue> {
         self.load()?.contains_key(&key.to_vec()).map_err(js_error)
     }
+    #[wasm_bindgen(js_name = scanRecords)]
+    pub fn scan_records(&self, visitor: &Function) -> Result<String, JsValue> {
+        scan_proximity_records(&self.load()?, visitor)
+    }
+    #[wasm_bindgen(js_name = withSearchView)]
+    pub fn with_search_view(
+        &self,
+        query: Float32Array,
+        k: u32,
+        visitor: &Function,
+    ) -> Result<JsValue, JsValue> {
+        with_proximity_search_view(&self.load()?, query, k, visitor)
+    }
     #[wasm_bindgen(js_name = buildHnsw)]
     pub fn build_hnsw(&self, config: JsValue, limits: JsValue) -> Result<Object, JsValue> {
         let config = hnsw_config_from_js(&config)?;
@@ -1568,10 +1581,105 @@ impl WasmProximityReadSession {
         self.map.contains_key(&key.to_vec()).map_err(js_error)
     }
 
+    #[wasm_bindgen(js_name = scanRecords)]
+    pub fn scan_records(&self, visitor: &Function) -> Result<String, JsValue> {
+        scan_proximity_records(&self.map, visitor)
+    }
+
+    #[wasm_bindgen(js_name = withSearchView)]
+    pub fn with_search_view(
+        &self,
+        query: Float32Array,
+        k: u32,
+        visitor: &Function,
+    ) -> Result<JsValue, JsValue> {
+        with_proximity_search_view(&self.map, query, k, visitor)
+    }
+
     pub fn search(&self, request: JsValue) -> Result<Object, JsValue> {
         let request = owned_search_request(request)?;
         search_map(&self.map, &request)
     }
+}
+
+fn scan_proximity_records(
+    map: &ProximityMap<Arc<prolly::MemStore>>,
+    visitor: &Function,
+) -> Result<String, JsValue> {
+    let mut callback_error = None;
+    let outcome = map
+        .scan_records_until(|key, record| {
+            let object = (|| -> Result<Object, JsValue> {
+                let object = Object::new();
+                set_bytes(&object, "key", key)?;
+                let vector = record.vector.to_vec();
+                Reflect::set(
+                    &object,
+                    &"vector".into(),
+                    &Float32Array::from(vector.as_slice()).into(),
+                )?;
+                set_bytes(&object, "value", record.value)?;
+                Ok(object)
+            })();
+            let should_continue = object.and_then(|object| {
+                visitor
+                    .call1(&JsValue::UNDEFINED, &object.into())
+                    .and_then(|value| {
+                        value.as_bool().ok_or_else(|| {
+                            JsValue::from_str("proximity record visitor must return a boolean")
+                        })
+                    })
+            });
+            match should_continue {
+                Ok(true) => std::ops::ControlFlow::Continue(()),
+                Ok(false) => std::ops::ControlFlow::Break(()),
+                Err(error) => {
+                    callback_error = Some(error);
+                    std::ops::ControlFlow::Break(())
+                }
+            }
+        })
+        .map_err(js_error)?;
+    if let Some(error) = callback_error {
+        return Err(error);
+    }
+    Ok(outcome.visited.to_string())
+}
+
+fn with_proximity_search_view(
+    map: &ProximityMap<Arc<prolly::MemStore>>,
+    query: Float32Array,
+    k: u32,
+    visitor: &Function,
+) -> Result<JsValue, JsValue> {
+    if query.length() == 0 || k == 0 {
+        return Err(JsValue::from_str(
+            "proximity search view requires a non-empty query and positive k",
+        ));
+    }
+    let query = query.to_vec();
+    let result = map
+        .search(SearchRequest::exact(&query, k as usize))
+        .map_err(js_error)?;
+    let rows = Array::new();
+    for (rank, neighbor) in result.neighbors.iter().enumerate() {
+        let object = Object::new();
+        // SAFETY: the search result owns both byte vectors for the complete
+        // synchronous callback. The TypeScript facade poisons every view when
+        // this function returns and also rejects WASM-memory growth.
+        let key = unsafe { Uint8Array::view(neighbor.key.as_slice()) };
+        let value = unsafe { Uint8Array::view(neighbor.value.as_slice()) };
+        Reflect::set(&object, &"key".into(), &key.into())?;
+        Reflect::set(&object, &"value".into(), &value.into())?;
+        Reflect::set(
+            &object,
+            &"distance".into(),
+            &JsValue::from_f64(neighbor.distance),
+        )?;
+        Reflect::set(&object, &"rank".into(), &JsValue::from_f64(rank as f64))?;
+        rows.push(&object.into());
+    }
+    visitor.call1(&JsValue::UNDEFINED, &rows.into())
 }
 
 #[wasm_bindgen(js_class = WasmProllyEngine)]

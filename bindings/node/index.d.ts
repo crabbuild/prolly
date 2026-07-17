@@ -1295,6 +1295,7 @@ export declare class NativePortableProximityMap {
   config(): NodePortableProximityConfig
   get(key: Buffer): NodePortableExactProximityRecord | null
   contains(key: Buffer): boolean
+  scanRecords(visitor: (record: NodePortableProximityRecord) => boolean): string
   search(request: NodePortableSearchRequest): NodePortableSearchResult
   descriptor(): Buffer
   verify(): NodePortableProximityVerification
@@ -1311,6 +1312,8 @@ export declare class NativePortableProximityReadSession {
   search(request: NodePortableSearchRequest): NodePortableSearchResult
   get(key: Buffer): NodePortableExactProximityRecord | null
   contains(key: Buffer): boolean
+  scanRecords(visitor: (record: NodePortableProximityRecord) => boolean): string
+  withSearchPage(query: Float32Array, k: number, visitor: (page: { bytes: Buffer; recordCount: number; terminal: boolean }) => boolean): void
   fastHandle(): string
 }
 export declare class NativePortableProximityProof {

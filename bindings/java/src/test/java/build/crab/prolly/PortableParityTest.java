@@ -218,9 +218,21 @@ class PortableParityTest {
                     .map(neighbor -> new String(neighbor.key(), StandardCharsets.UTF_8)).toList());
             assertTrue(result.stats().distanceEvaluations() > 0);
             assertTrue(result.planFormatVersion() > 0);
+            var scanned = new ArrayList<String>();
+            assertEquals(2, proximity.scanRecords(record -> {
+                scanned.add(new String(record.key(), StandardCharsets.UTF_8));
+                return scanned.size() < 2;
+            }));
+            assertEquals(List.of("a", "ab"), scanned);
             try (var session = proximity.read()) {
                 assertEquals(List.of("a", "ab"), session.search(request).neighbors().stream()
                         .map(neighbor -> new String(neighbor.key(), StandardCharsets.UTF_8)).toList());
+                var retained = new ArrayList<String>();
+                assertEquals(3, session.scanRecords(record -> {
+                    retained.add(new String(record.key(), StandardCharsets.UTF_8));
+                    return true;
+                }));
+                assertEquals(List.of("a", "ab", "b"), retained);
             }
             try (var proof = proximity.proveSearch(request)) {
                 assertEquals(List.of("a", "ab"), proof.verify(proximity.descriptor())
