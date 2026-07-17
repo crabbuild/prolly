@@ -4,7 +4,8 @@ use std::time::{Duration, Instant};
 
 use prolly::{
     append_batch, chunking, BatchBuilder, BatchWriter, BatchWriterConfig, BoundaryRule, Config,
-    MemStore, Mutation, NodeLayoutSpec, ParallelConfig, Prolly, Resolution, Resolver, Store, Tree,
+    MemStore, Mutation, NodeLayoutSpec, ParallelConfig, Prolly, Resolution, Resolver,
+    SortedBatchBuilder, Store, Tree,
 };
 
 const DEFAULT_SCALE: usize = 10_000;
@@ -53,6 +54,10 @@ fn main() {
             bench_range_scan_window(scale);
             return;
         }
+        Ok("chunking-cutover") => {
+            bench_chunking_cutover(scale);
+            return;
+        }
         Ok(_) | Err(_) => {}
     }
 
@@ -82,6 +87,88 @@ fn main() {
     bench_range_diff_window(scale);
     bench_merge_sparse(scale);
     bench_merge_conflict_resolved(scale);
+}
+
+fn bench_chunking_cutover(items: usize) {
+    let data = data_set(items);
+    let config = bench_config();
+
+    measure("cutover_sorted_build", 20, items, || {
+        let store = Arc::new(MemStore::new());
+        let mut builder = SortedBatchBuilder::new(store, config.clone());
+        for (key, value) in &data {
+            builder.add(key.clone(), value.clone()).unwrap();
+        }
+        black_box(builder.build().unwrap().root);
+    });
+
+    measure("cutover_unsorted_build", 20, items, || {
+        let store = Arc::new(MemStore::new());
+        let mut builder = BatchBuilder::new(store, config.clone());
+        for (key, value) in data.iter().rev() {
+            builder.add(key.clone(), value.clone());
+        }
+        black_box(builder.build().unwrap().root);
+    });
+
+    let store = Arc::new(MemStore::new());
+    let base = build_tree_on_store(store.clone(), &config, &data);
+    let manager = Prolly::new(store, config);
+    for append_count in [1, 64, 4_096] {
+        let mutations = append_mutations(items, append_count, "cutover-append");
+        measure(
+            &format!("cutover_append_{append_count}"),
+            20,
+            append_count,
+            || {
+                black_box(
+                    manager
+                        .append_batch(&base, black_box(mutations.clone()))
+                        .unwrap()
+                        .root,
+                );
+            },
+        );
+    }
+
+    let middle = items / 2;
+    let update = vec![Mutation::Upsert {
+        key: key_for_index(middle),
+        val: b"cutover-middle-update".to_vec(),
+    }];
+    measure("cutover_middle_update", 20, 1, || {
+        black_box(
+            manager
+                .batch(&base, black_box(update.clone()))
+                .unwrap()
+                .root,
+        );
+    });
+
+    let insert = vec![Mutation::Upsert {
+        key: format!("key-{middle:08}-insert").into_bytes(),
+        val: b"cutover-middle-insert".to_vec(),
+    }];
+    measure("cutover_middle_insert", 20, 1, || {
+        black_box(
+            manager
+                .batch(&base, black_box(insert.clone()))
+                .unwrap()
+                .root,
+        );
+    });
+
+    let delete = vec![Mutation::Delete {
+        key: key_for_index(middle),
+    }];
+    measure("cutover_middle_delete", 20, 1, || {
+        black_box(
+            manager
+                .batch(&base, black_box(delete.clone()))
+                .unwrap()
+                .root,
+        );
+    });
 }
 
 fn bench_incremental_insert(items: usize) {

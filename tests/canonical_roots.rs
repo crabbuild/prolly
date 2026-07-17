@@ -1,6 +1,6 @@
 use prolly::{
-    chunking, BatchBuilder, Config, Error, MemStore, Mutation, NodeLayoutSpec, ParallelConfig,
-    Prolly,
+    chunking, BatchBuilder, BatchWriter, Config, Error, MemStore, Mutation, NodeLayoutSpec,
+    ParallelConfig, Prolly,
 };
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -14,6 +14,59 @@ fn records() -> Vec<(Vec<u8>, Vec<u8>)> {
             )
         })
         .collect()
+}
+
+fn numbered_records(count: usize) -> Vec<(Vec<u8>, Vec<u8>)> {
+    (0..count)
+        .map(|index| (format!("key-{index:06}").into_bytes(), vec![b'x'; 32]))
+        .collect()
+}
+
+fn build_records(config: Config, records: &[(Vec<u8>, Vec<u8>)]) -> prolly::Tree {
+    let mut builder = BatchBuilder::new(Arc::new(MemStore::new()), config);
+    for (key, value) in records {
+        builder.add(key.clone(), value.clone());
+    }
+    builder.build().unwrap()
+}
+
+#[test]
+fn direct_batch_writer_stats_matches_canonical_root_for_every_policy() {
+    for policy in [
+        chunking::entry_count_key_hash(),
+        chunking::entry_count_key_value_hash(),
+        chunking::logical_bytes_key_weibull(),
+        chunking::logical_bytes_rolling_hash(),
+    ] {
+        let config = Config::builder().chunking(policy).build();
+        let base_records = numbered_records(5_000);
+        let store = Arc::new(MemStore::new());
+        let mut base_builder = BatchBuilder::new(store.clone(), config.clone());
+        for (key, value) in &base_records {
+            base_builder.add(key.clone(), value.clone());
+        }
+        let base = base_builder.build().unwrap();
+        let manager = Prolly::new(store, config.clone());
+        let inserted = (b"key-002500a".to_vec(), vec![b'y'; 32]);
+        let actual = BatchWriter::new()
+            .apply_batch_with_stats(
+                &manager,
+                &base,
+                vec![Mutation::Upsert {
+                    key: inserted.0.clone(),
+                    val: inserted.1.clone(),
+                }],
+            )
+            .unwrap()
+            .tree;
+
+        let mut final_records = base_records;
+        final_records.push(inserted);
+        final_records.sort_unstable_by(|left, right| left.0.cmp(&right.0));
+        let expected = build_records(config, &final_records);
+
+        assert_eq!(actual.root, expected.root, "policy diverged");
+    }
 }
 
 #[test]
