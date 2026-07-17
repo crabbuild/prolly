@@ -93,7 +93,12 @@ impl BoundaryDetector {
                     shape,
                 ),
                 BoundaryRule::RollingBuzHash { .. } => {
-                    self.rolling_hash <= u64::MAX / self.spec.target.max(1)
+                    let eligible_previous = self.previous_measure.max(self.spec.min);
+                    let eligible_current = measure.max(self.spec.min);
+                    let delta = eligible_current.saturating_sub(eligible_previous);
+                    let scale = self.spec.target.saturating_sub(self.spec.min).max(1);
+                    self.rolling_hash
+                        <= deterministic_exponential_threshold(u128::from(delta), u128::from(scale))
                 }
             }
         };
@@ -219,14 +224,87 @@ pub(crate) fn entry_count_boundary(
     Ok((hash_entry(seed, &spec.input, key, &[]) as u32) <= u32::MAX / factor)
 }
 
+const Q62: u128 = 1_u128 << 62;
+
+fn deterministic_exponential_threshold(delta: u128, scale: u128) -> u64 {
+    if delta == 0 {
+        return 0;
+    }
+    if scale == 0 || delta / scale >= 64 {
+        return u64::MAX;
+    }
+
+    let mut exponent = scaled_ratio_q62(delta, scale);
+    let mut squarings = 0;
+    while exponent > Q62 / 16 {
+        exponent = (exponent + 1) / 2;
+        squarings += 1;
+    }
+
+    let mut survival = exp_neg_series_q62(exponent);
+    for _ in 0..squarings {
+        survival = survival.saturating_mul(survival) / Q62;
+    }
+
+    ((Q62.saturating_sub(survival) * u128::from(u64::MAX)) / Q62) as u64
+}
+
+fn scaled_ratio_q62(numerator: u128, denominator: u128) -> u128 {
+    debug_assert!(denominator > 0);
+    let whole = numerator / denominator;
+    let remainder = numerator % denominator;
+    let fraction = if remainder <= u128::MAX / Q62 {
+        (remainder * Q62) / denominator
+    } else {
+        fractional_ratio_q62(remainder, denominator)
+    };
+    whole.saturating_mul(Q62).saturating_add(fraction)
+}
+
+fn fractional_ratio_q62(mut numerator: u128, denominator: u128) -> u128 {
+    debug_assert!(numerator < denominator);
+    let mut quotient = 0_u128;
+    for _ in 0..62 {
+        quotient <<= 1;
+        let complement = denominator - numerator;
+        if numerator >= complement {
+            numerator -= complement;
+            quotient |= 1;
+        } else {
+            numerator <<= 1;
+        }
+    }
+    quotient
+}
+
+fn exp_neg_series_q62(exponent: u128) -> u128 {
+    debug_assert!(exponent <= Q62 / 16);
+    let mut survival = Q62;
+    let mut term = Q62;
+    for divisor in 1_u128..=8 {
+        term = (term * exponent) / Q62 / divisor;
+        if divisor % 2 == 0 {
+            survival = survival.saturating_add(term);
+        } else {
+            survival = survival.saturating_sub(term);
+        }
+    }
+    survival
+}
+
 fn weibull_boundary(hash: u64, previous: u64, current: u64, target: u64, shape: u32) -> bool {
-    let scale = target.max(1) as f64;
-    let shape = shape as f64;
-    let before = (previous as f64 / scale).powf(shape);
-    let after = (current as f64 / scale).powf(shape);
-    let probability = 1.0 - (-(after - before).max(0.0)).exp();
-    let sample = hash as f64 / u64::MAX as f64;
-    sample <= probability
+    let (hazard_delta, hazard_scale) = match shape {
+        1 => (
+            u128::from(current.saturating_sub(previous)),
+            u128::from(target.max(1)),
+        ),
+        2 => (
+            u128::from(current).pow(2) - u128::from(previous).pow(2),
+            u128::from(target.max(1)).pow(2),
+        ),
+        _ => return false,
+    };
+    hash <= deterministic_exponential_threshold(hazard_delta, hazard_scale)
 }
 
 /// Check if entry at index creates a chunk boundary in a node.
@@ -321,6 +399,28 @@ fn is_hash_boundary(hash_seed: u64, chunking_factor: u32, key: &[u8], val: &[u8]
 mod tests {
     use super::super::encoding::Encoding;
     use super::*;
+
+    #[test]
+    fn deterministic_threshold_golden_vectors() {
+        assert_eq!(deterministic_exponential_threshold(0, 12_288), 0);
+        assert_eq!(
+            deterministic_exponential_threshold(44, 12_288),
+            65_934_676_975_190_507
+        );
+        assert_eq!(
+            deterministic_exponential_threshold(4_096, 12_288),
+            5_229_074_366_755_166_475
+        );
+        assert_eq!(
+            deterministic_exponential_threshold(12_288, 12_288),
+            11_660_566_172_440_661_763
+        );
+        assert_eq!(
+            deterministic_exponential_threshold(u128::MAX - 1, u128::MAX),
+            11_660_566_172_440_661_763
+        );
+        assert_eq!(deterministic_exponential_threshold(u128::MAX, 1), u64::MAX);
+    }
 
     #[test]
     fn test_is_boundary_below_min_chunk_size() {

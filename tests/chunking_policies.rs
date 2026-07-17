@@ -158,3 +158,33 @@ fn rolling_logical_bytes_tracks_target_distribution() {
         chunk_sizes.len()
     );
 }
+
+#[test]
+fn weibull_logical_bytes_tracks_target_distribution() {
+    let spec = chunking::logical_bytes_key_weibull();
+    let mut detector = BoundaryDetector::new(spec.clone(), 0).unwrap();
+    let value = [b'v'; 32];
+    let mut current_bytes = 0_u64;
+    let mut chunk_sizes = Vec::new();
+
+    for index in 0..250_000_u64 {
+        let key = format!("{index:012}");
+        let logical_bytes = (key.len() + value.len()) as u64;
+        current_bytes += logical_bytes;
+        if detector
+            .observe(key.as_bytes(), &value, logical_bytes as usize)
+            .unwrap()
+        {
+            chunk_sizes.push(current_bytes);
+            current_bytes = 0;
+        }
+    }
+
+    assert!(!chunk_sizes.is_empty());
+    let mean = chunk_sizes.iter().sum::<u64>() / chunk_sizes.len() as u64;
+    assert!(
+        mean.abs_diff(spec.target) <= spec.target / 10,
+        "mean={mean}, target={}",
+        spec.target
+    );
+}
