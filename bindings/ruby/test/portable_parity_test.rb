@@ -4,6 +4,34 @@ require 'minitest/autorun'
 require 'prolly'
 
 class PortableParityTest < Minitest::Test
+  def test_versioned_bulk_publication_uses_native_performance_paths
+    Prolly::Engine.memory.use do |engine|
+      map = engine.versioned_map('bulk-publication'.b)
+      initialized = map.initialize_sorted([
+        Prolly::EntryRecord.new(key: 'a'.b, value: 'one'.b),
+        Prolly::EntryRecord.new(key: 'b'.b, value: 'two'.b)
+      ])
+      assert_equal Prolly::MapUpdateKind::APPLIED, initialized.kind
+      map.append([Prolly::MutationRecord.new(kind: Prolly::MutationKind::UPSERT, key: 'c'.b, value: 'three'.b)])
+      parallel = map.parallel_apply([
+        Prolly::MutationRecord.new(kind: Prolly::MutationKind::UPSERT, key: 'b'.b, value: 'updated'.b),
+        Prolly::MutationRecord.new(kind: Prolly::MutationKind::UPSERT, key: 'd'.b, value: 'four'.b)
+      ], Prolly::ParallelConfigRecord.new(max_threads: 1, parallelism_threshold: 1))
+      assert_equal 2, parallel.stats.input_mutations
+      rebuilt = map.rebuild_sorted_if(parallel.version.id, [
+        Prolly::EntryRecord.new(key: 'x'.b, value: 'nine'.b),
+        Prolly::EntryRecord.new(key: 'y'.b, value: 'ten'.b)
+      ])
+      assert_equal Prolly::MapUpdateKind::APPLIED, rebuilt.kind
+      iter_rebuilt = map.rebuild_from_entries_if(rebuilt.current.id, [
+        Prolly::EntryRecord.new(key: 'q'.b, value: 'queue'.b),
+        Prolly::EntryRecord.new(key: 'p'.b, value: 'priority'.b)
+      ])
+      assert_equal Prolly::MapUpdateKind::APPLIED, iter_rebuilt.kind
+      assert_equal 'priority'.b, map.get('p'.b)
+    end
+  end
+
   def test_versioned_indexed_and_proximity_maps_use_portable_api
     Prolly::Engine.memory.use do |engine|
       versioned = engine.versioned_map('users'.b)

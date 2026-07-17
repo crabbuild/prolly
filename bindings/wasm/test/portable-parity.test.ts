@@ -409,6 +409,25 @@ test("WASM versioned timestamped writes expose complete maintenance records", { 
   engine.close();
 });
 
+test("WASM versioned bulk publication uses native performance paths", { skip: !generatedPresent }, async () => {
+  const engine = api.Engine.memory(wasm);
+  const map = engine.versionedMap(bytes("bulk-publication"));
+  const initialized = await map.initializeSorted([{ key: bytes("a"), value: bytes("one") }, { key: bytes("b"), value: bytes("two") }]);
+  assert.equal(initialized.kind, "applied");
+  await map.append([{ kind: "upsert", key: bytes("c"), value: bytes("three") }]);
+  const parallel = await map.parallelApply([
+    { kind: "upsert", key: bytes("b"), value: bytes("updated") },
+    { kind: "upsert", key: bytes("d"), value: bytes("four") },
+  ], { maxThreads: 1n, parallelismThreshold: 1n });
+  assert.equal(parallel.stats.inputMutations, 2n);
+  const rebuilt = await map.rebuildSortedIf(parallel.version.id, [{ key: bytes("x"), value: bytes("nine") }, { key: bytes("y"), value: bytes("ten") }]);
+  assert.equal(rebuilt.kind, "applied");
+  const iterRebuilt = await map.rebuildFromEntriesIf(rebuilt.current!.id, [{ key: bytes("q"), value: bytes("queue") }, { key: bytes("p"), value: bytes("priority") }]);
+  assert.equal(iterRebuilt.kind, "applied");
+  assert.equal(Buffer.from(await map.get(bytes("p")) ?? []).toString(), "priority");
+  engine.close();
+});
+
 test("WASM versioned subscriptions resume and poll owned diffs", { skip: !generatedPresent }, async () => {
   const engine = api.Engine.memory(wasm);
   const map = engine.versionedMap(bytes("subscription"));

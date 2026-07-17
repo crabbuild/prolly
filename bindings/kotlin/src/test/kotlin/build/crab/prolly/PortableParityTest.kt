@@ -16,6 +16,40 @@ import org.junit.jupiter.api.assertThrows
 
 class PortableParityTest {
     @Test
+    fun versionedBulkPublicationUsesNativePerformancePaths() {
+        ProllyNative.useLocalDebugLibrary()
+        Engine.memory().use { engine ->
+            engine.versionedMap("bulk-publication".bytes()).use { versioned ->
+                val initialized = versioned.initializeSorted(listOf(
+                    EntryRecord("a".bytes(), "one".bytes()),
+                    EntryRecord("b".bytes(), "two".bytes()),
+                ))
+                assertEquals(MapUpdateKind.APPLIED, initialized.kind)
+                versioned.append(listOf(MutationRecord(MutationKind.UPSERT, "c".bytes(), "three".bytes())))
+                val parallel = versioned.parallelApply(
+                    listOf(
+                        MutationRecord(MutationKind.UPSERT, "b".bytes(), "updated".bytes()),
+                        MutationRecord(MutationKind.UPSERT, "d".bytes(), "four".bytes()),
+                    ),
+                    ParallelConfigRecord(1uL, 1uL),
+                )
+                assertEquals(2uL, parallel.stats.inputMutations)
+                val rebuilt = versioned.rebuildSortedIf(parallel.version.id, listOf(
+                    EntryRecord("x".bytes(), "nine".bytes()),
+                    EntryRecord("y".bytes(), "ten".bytes()),
+                ))
+                assertEquals(MapUpdateKind.APPLIED, rebuilt.kind)
+                val iterRebuilt = versioned.rebuildFromEntriesIf(rebuilt.current!!.id, listOf(
+                    EntryRecord("q".bytes(), "queue".bytes()),
+                    EntryRecord("p".bytes(), "priority".bytes()),
+                ))
+                assertEquals(MapUpdateKind.APPLIED, iterRebuilt.kind)
+                assertArrayEquals("priority".bytes(), versioned.get("p".bytes()))
+            }
+        }
+    }
+
+    @Test
     fun versionedSnapshotsExposeOrderedNavigationAndBoundedPages() {
         ProllyNative.useLocalDebugLibrary()
         Engine.memory().use { engine ->

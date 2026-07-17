@@ -277,6 +277,7 @@ module Prolly
 
     # Ruby makes `initialize` private even when generated as an FFI method.
     def initialize_map = open! { @native.__send__(:initialize) }
+    def initialize_sorted(entries) = open! { @native.initialize_sorted(owned_entries(entries)) }
     def id = open! { @native.id }
     def initialized? = open! { @native.is_initialized }
     def head = open! { @native.head }
@@ -296,6 +297,25 @@ module Prolly
     def changes_since(base) = open! { @native.changes_since(base.b) }
     def rollback_to(id) = open! { @native.rollback_to(id.b) }
     def put(key, value) = open! { @native.put(key.b, value.b) }
+    def apply(mutations) = open! { @native.apply(owned_mutations(mutations)) }
+    def append(mutations) = open! { @native.append(owned_mutations(mutations)) }
+    def parallel_apply(mutations, config)
+      open! do
+        @native.parallel_apply(
+          owned_mutations(mutations),
+          ParallelConfigRecord.new(
+            max_threads: config.max_threads,
+            parallelism_threshold: config.parallelism_threshold
+          )
+        )
+      end
+    end
+    def rebuild_sorted_if(expected, entries) = open! { @native.rebuild_sorted_if(expected&.b, owned_entries(entries)) }
+    def rebuild_from_entries_if(expected, entries) = open! { @native.rebuild_from_entries_if(expected&.b, owned_entries(entries)) }
+    def rebuild_from_iter_if(expected, entries) = rebuild_from_entries_if(expected, entries)
+    def apply_if(expected, mutations) = open! { @native.apply_if(expected&.b, owned_mutations(mutations)) }
+    def put_if(expected, key, value) = open! { @native.put_if(expected&.b, key.b, value.b) }
+    def delete_if(expected, key) = open! { @native.delete_if(expected&.b, key.b) }
     def apply_at_millis(mutations, timestamp_millis) = open! { @native.apply_at_millis(owned_mutations(mutations), timestamp_millis) }
     def apply_if_at_millis(expected, mutations, timestamp_millis) = open! { @native.apply_if_at_millis(expected&.b, owned_mutations(mutations), timestamp_millis) }
     def delete(key) = open! { @native.delete(key.b) }
@@ -334,6 +354,10 @@ module Prolly
           kind: mutation.kind, key: mutation.key.b.dup, value: mutation.value&.b&.dup
         )
       end
+    end
+
+    def owned_entries(entries)
+      entries.map { |entry| EntryRecord.new(key: entry.key.b.dup, value: entry.value.b.dup) }
     end
 
     def open!

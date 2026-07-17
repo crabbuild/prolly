@@ -37,6 +37,11 @@ type VersionPrune struct {
 	Removed  [][]byte
 }
 
+type VersionedMapBatchResult struct {
+	Version MapVersion
+	Stats   BatchApplyStats
+}
+
 type VersionedMap struct {
 	engine *Engine
 	handle uint64
@@ -573,6 +578,19 @@ func (m *VersionedMap) Initialize() (MapVersion, error) {
 	return decodePortableMapVersion(raw)
 }
 
+func (m *VersionedMap) InitializeSorted(entries []Entry) (MapUpdate, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return MapUpdate{}, err
+	}
+	defer unlock()
+	raw, err := ffiVersionedInitializeSorted(handle, encodeEntries(cloneEntries(entries)))
+	if err != nil {
+		return MapUpdate{}, err
+	}
+	return decodePortableMapUpdate(raw)
+}
+
 func (m *VersionedMap) Head() (*MapVersion, error) {
 	handle, unlock, err := m.withHandle()
 	if err != nil {
@@ -886,6 +904,71 @@ func (m *VersionedMap) Apply(mutations []Mutation) (MapVersion, error) {
 		return MapVersion{}, err
 	}
 	return decodePortableMapVersion(raw)
+}
+
+func (m *VersionedMap) Append(mutations []Mutation) (MapVersion, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return MapVersion{}, err
+	}
+	defer unlock()
+	encoded, err := encodeMutations(cloneMutations(mutations))
+	if err != nil {
+		return MapVersion{}, err
+	}
+	raw, err := ffiVersionedAppend(handle, encoded)
+	if err != nil {
+		return MapVersion{}, err
+	}
+	return decodePortableMapVersion(raw)
+}
+
+func (m *VersionedMap) ParallelApply(mutations []Mutation, config ParallelConfig) (VersionedMapBatchResult, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return VersionedMapBatchResult{}, err
+	}
+	defer unlock()
+	encoded, err := encodeMutations(cloneMutations(mutations))
+	if err != nil {
+		return VersionedMapBatchResult{}, err
+	}
+	raw, err := ffiVersionedParallelApply(handle, encoded, encodeParallelConfig(config))
+	if err != nil {
+		return VersionedMapBatchResult{}, err
+	}
+	return decodePortableVersionedMapBatchResult(raw)
+}
+
+func (m *VersionedMap) RebuildSortedIf(expected []byte, entries []Entry) (MapUpdate, error) {
+	return m.rebuildEntriesIf(expected, entries, true)
+}
+
+func (m *VersionedMap) RebuildFromEntriesIf(expected []byte, entries []Entry) (MapUpdate, error) {
+	return m.rebuildEntriesIf(expected, entries, false)
+}
+
+func (m *VersionedMap) RebuildFromIterIf(expected []byte, entries []Entry) (MapUpdate, error) {
+	return m.RebuildFromEntriesIf(expected, entries)
+}
+
+func (m *VersionedMap) rebuildEntriesIf(expected []byte, entries []Entry, sorted bool) (MapUpdate, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return MapUpdate{}, err
+	}
+	defer unlock()
+	owned := encodeEntries(cloneEntries(entries))
+	var raw []byte
+	if sorted {
+		raw, err = ffiVersionedRebuildSortedIf(handle, bytes.Clone(expected), owned)
+	} else {
+		raw, err = ffiVersionedRebuildFromEntriesIf(handle, bytes.Clone(expected), owned)
+	}
+	if err != nil {
+		return MapUpdate{}, err
+	}
+	return decodePortableMapUpdate(raw)
 }
 
 func (m *VersionedMap) ApplyAtMillis(mutations []Mutation, timestampMillis uint64) (MapVersion, error) {
@@ -1531,6 +1614,19 @@ func decodePortableMapVersion(raw []byte) (MapVersion, error) {
 	return value, decoder.done()
 }
 
+func decodePortableVersionedMapBatchResult(raw []byte) (VersionedMapBatchResult, error) {
+	decoder := byteDecoder{data: raw}
+	version, err := readPortableMapVersion(&decoder)
+	if err != nil {
+		return VersionedMapBatchResult{}, err
+	}
+	stats, err := decoder.readBatchApplyStats()
+	if err != nil {
+		return VersionedMapBatchResult{}, err
+	}
+	return VersionedMapBatchResult{Version: version, Stats: stats}, decoder.done()
+}
+
 func readPortableMapVersion(decoder *byteDecoder) (MapVersion, error) {
 	id, err := decoder.readByteArray()
 	if err != nil {
@@ -1687,6 +1783,14 @@ func cloneMutations(values []Mutation) []Mutation {
 			Key:   append([]byte(nil), value.Key...),
 			Value: append([]byte(nil), value.Value...),
 		}
+	}
+	return owned
+}
+
+func cloneEntries(values []Entry) []Entry {
+	owned := make([]Entry, len(values))
+	for index, value := range values {
+		owned[index] = Entry{Key: bytes.Clone(value.Key), Value: bytes.Clone(value.Value)}
 	}
 	return owned
 }

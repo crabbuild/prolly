@@ -24,6 +24,11 @@ public final class VersionedMap implements AutoCloseable {
         return MapVersion.fromNative(open().initialize());
     }
 
+    public MapUpdate initializeSorted(List<MapEntry> entries) {
+        return MapUpdate.fromBridge(build.crab.prolly.api.JavaPortableBridge.initializeVersionedSorted(
+                open(), entries.stream().map(MapEntry::toBridge).toList()));
+    }
+
     public byte[] id() { return open().getId().clone(); }
 
     public boolean isInitialized() { return open().isInitialized(); }
@@ -128,6 +133,35 @@ public final class VersionedMap implements AutoCloseable {
     public MapVersion apply(List<MapMutation> mutations) {
         return MapVersion.fromNative(build.crab.prolly.api.JavaPortableBridge.applyVersioned(
                 open(), mutations.stream().map(MapMutation::toBridge).toList()));
+    }
+
+    public MapVersion append(List<MapMutation> mutations) {
+        return MapVersion.fromNative(build.crab.prolly.api.JavaPortableBridge.appendVersioned(
+                open(), mutations.stream().map(MapMutation::toBridge).toList()));
+    }
+
+    public VersionedMapBatchResult parallelApply(
+            List<MapMutation> mutations, ParallelConfig config) {
+        return VersionedMapBatchResult.fromBridge(
+                build.crab.prolly.api.JavaPortableBridge.parallelApplyVersioned(
+                        open(), mutations.stream().map(MapMutation::toBridge).toList(),
+                        config.maxThreads(), config.parallelismThreshold()));
+    }
+
+    public MapUpdate rebuildSortedIf(byte[] expected, List<MapEntry> entries) {
+        return MapUpdate.fromBridge(build.crab.prolly.api.JavaPortableBridge.rebuildVersionedSortedIf(
+                open(), expected == null ? null : expected.clone(),
+                entries.stream().map(MapEntry::toBridge).toList()));
+    }
+
+    public MapUpdate rebuildFromEntriesIf(byte[] expected, List<MapEntry> entries) {
+        return MapUpdate.fromBridge(build.crab.prolly.api.JavaPortableBridge.rebuildVersionedFromEntriesIf(
+                open(), expected == null ? null : expected.clone(),
+                entries.stream().map(MapEntry::toBridge).toList()));
+    }
+
+    public MapUpdate rebuildFromIterIf(byte[] expected, List<MapEntry> entries) {
+        return rebuildFromEntriesIf(expected, entries);
     }
 
     public MapVersion applyAtMillis(List<MapMutation> mutations, long timestampMillis) {

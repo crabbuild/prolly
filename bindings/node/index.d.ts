@@ -204,6 +204,10 @@ export interface NodePortableCatalogVerification {
   reachableNodes: string
   reachableBytes: string
 }
+export interface NodePortableVersionedMapBatchResult {
+  version: NodePortableMapVersion
+  stats: NodeBatchApplyStatsRecord
+}
 export interface NodePortableReadScanOutcome {
   visited: string
   stopped: boolean
@@ -919,6 +923,7 @@ export declare class NativePortableVersionedMap {
   id(): Buffer
   isInitialized(): boolean
   initialize(): NodePortableMapVersion
+  initializeSorted(entries: Array<NodeEntryRecord>): NodePortableMapUpdate
   head(): NodePortableMapVersion | null
   headId(): Buffer | null
   version(id: Buffer): NodePortableMapVersion | null
@@ -941,6 +946,10 @@ export declare class NativePortableVersionedMap {
   rollbackTo(id: Buffer): NodePortableMapVersion
   put(key: Buffer, value: Buffer): NodePortableMapVersion
   apply(mutations: Array<NodeMutationRecord>): NodePortableMapVersion
+  append(mutations: Array<NodeMutationRecord>): NodePortableMapVersion
+  parallelApply(mutations: Array<NodeMutationRecord>, config: NodeParallelConfigRecord): NodePortableVersionedMapBatchResult
+  rebuildSortedIf(expected: Buffer | undefined | null, entries: Array<NodeEntryRecord>): NodePortableMapUpdate
+  rebuildFromEntriesIf(expected: Buffer | undefined | null, entries: Array<NodeEntryRecord>): NodePortableMapUpdate
   applyAtMillis(mutations: Array<NodeMutationRecord>, timestampMillis: string): NodePortableMapVersion
   applyIf(expected: Buffer | undefined | null, mutations: Array<NodeMutationRecord>): NodePortableMapUpdate
   applyIfAtMillis(expected: Buffer | undefined | null, mutations: Array<NodeMutationRecord>, timestampMillis: string): NodePortableMapUpdate

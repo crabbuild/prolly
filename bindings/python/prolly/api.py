@@ -116,6 +116,13 @@ def _owned_mutations(mutations):
     ]
 
 
+def _owned_entries(entries):
+    return [
+        _native.EntryRecord(key=bytes(entry.key), value=bytes(entry.value))
+        for entry in entries
+    ]
+
+
 class VersionedMap(_Scoped):
     def __init__(self, inner: _native.BindingVersionedMap):
         super().__init__()
@@ -124,6 +131,10 @@ class VersionedMap(_Scoped):
     def initialize(self):
         self._open()
         return self._inner.initialize()
+
+    def initialize_sorted(self, entries):
+        self._open()
+        return self._inner.initialize_sorted(_owned_entries(entries))
 
     @property
     def id(self) -> bytes:
@@ -233,6 +244,33 @@ class VersionedMap(_Scoped):
     def apply(self, mutations):
         self._open()
         return self._inner.apply(_owned_mutations(mutations))
+
+    def append(self, mutations):
+        self._open()
+        return self._inner.append(_owned_mutations(mutations))
+
+    def parallel_apply(self, mutations, config):
+        self._open()
+        owned_config = _native.ParallelConfigRecord(
+            max_threads=config.max_threads,
+            parallelism_threshold=config.parallelism_threshold,
+        )
+        return self._inner.parallel_apply(_owned_mutations(mutations), owned_config)
+
+    def rebuild_sorted_if(self, expected: bytes | None, entries):
+        self._open()
+        return self._inner.rebuild_sorted_if(
+            None if expected is None else bytes(expected), _owned_entries(entries)
+        )
+
+    def rebuild_from_entries_if(self, expected: bytes | None, entries):
+        self._open()
+        return self._inner.rebuild_from_entries_if(
+            None if expected is None else bytes(expected), _owned_entries(entries)
+        )
+
+    def rebuild_from_iter_if(self, expected: bytes | None, entries):
+        return self.rebuild_from_entries_if(expected, entries)
 
     def apply_at_millis(self, mutations, timestamp_millis: int):
         self._open()

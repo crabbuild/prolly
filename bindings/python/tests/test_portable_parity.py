@@ -2,9 +2,11 @@ import unittest
 
 from prolly import (
     Engine,
+    EntryRecord,
     IndexProjection,
     MutationKind,
     MutationRecord,
+    ParallelConfigRecord,
     ProximityRecord,
     ProximityMutationRecord,
     verify_key_proof,
@@ -17,6 +19,37 @@ from prolly import (
 
 
 class PortableParityTests(unittest.TestCase):
+    def test_versioned_bulk_publication_uses_native_performance_paths(self):
+        with Engine.memory() as engine:
+            versioned = engine.versioned_map(b"bulk-publication")
+            initialized = versioned.initialize_sorted([
+                EntryRecord(key=b"a", value=b"one"),
+                EntryRecord(key=b"b", value=b"two"),
+            ])
+            appended = versioned.append([
+                MutationRecord(kind=MutationKind.UPSERT, key=b"c", value=b"three")
+            ])
+            self.assertEqual(versioned.get(b"c"), b"three")
+            parallel = versioned.parallel_apply([
+                MutationRecord(kind=MutationKind.UPSERT, key=b"b", value=b"updated"),
+                MutationRecord(kind=MutationKind.UPSERT, key=b"d", value=b"four"),
+            ], ParallelConfigRecord(max_threads=1, parallelism_threshold=1))
+            self.assertEqual(parallel.stats.input_mutations, 2)
+            rebuilt = versioned.rebuild_sorted_if(parallel.version.id, [
+                EntryRecord(key=b"x", value=b"nine"),
+                EntryRecord(key=b"y", value=b"ten"),
+            ])
+            self.assertEqual(rebuilt.kind.name.lower(), "applied")
+            current = rebuilt.current.id
+            iter_rebuilt = versioned.rebuild_from_entries_if(current, [
+                EntryRecord(key=b"q", value=b"queue"),
+                EntryRecord(key=b"p", value=b"priority"),
+            ])
+            self.assertIsNotNone(iter_rebuilt.current)
+            self.assertEqual(versioned.get(b"p"), b"priority")
+            self.assertIsNotNone(initialized.current)
+            self.assertIsNotNone(appended.id)
+
     def test_versioned_and_proximity_hard_cutover(self):
         with Engine.memory() as engine:
             versioned = engine.versioned_map(b"users")

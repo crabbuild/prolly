@@ -15,10 +15,12 @@ import build.crab.prolly.BindingVersionedTransaction
 import build.crab.prolly.BindingMapSnapshot
 import build.crab.prolly.ConfigRecord
 import build.crab.prolly.ContentGraphLimitsRecord
+import build.crab.prolly.EntryRecord
 import build.crab.prolly.IndexProjectionRecord
 import build.crab.prolly.IndexedSnapshotIdRecord
 import build.crab.prolly.KeyProofRecord
 import build.crab.prolly.MutationRecord
+import build.crab.prolly.ParallelConfigRecord
 import build.crab.prolly.ProllyEngine
 import build.crab.prolly.ProllyReadSession
 import build.crab.prolly.ProximityMembershipProofRecord
@@ -86,6 +88,7 @@ class VersionedMap(internal val native: BindingVersionedMap) : AutoCloseable {
     val id: ByteArray get() = native.id()
     fun isInitialized() = native.isInitialized()
     fun initialize() = native.initialize()
+    fun initializeSorted(entries: List<EntryRecord>) = native.initializeSorted(entries.map(::ownedEntry))
     fun head() = native.head()
     fun headId() = native.headId()
     fun version(id: ByteArray) = native.version(id.copyOf())
@@ -128,6 +131,18 @@ class VersionedMap(internal val native: BindingVersionedMap) : AutoCloseable {
     fun rollbackTo(id: ByteArray) = native.rollbackTo(id.copyOf())
     fun put(key: ByteArray, value: ByteArray) = native.put(key.copyOf(), value.copyOf())
     fun apply(mutations: List<MutationRecord>) = native.apply(mutations.map(::ownedMutation))
+    fun append(mutations: List<MutationRecord>) = native.append(mutations.map(::ownedMutation))
+    fun parallelApply(mutations: List<MutationRecord>, config: ParallelConfigRecord) =
+        native.parallelApply(
+            mutations.map(::ownedMutation),
+            ParallelConfigRecord(config.maxThreads, config.parallelismThreshold),
+        )
+    fun rebuildSortedIf(expected: ByteArray?, entries: List<EntryRecord>) =
+        native.rebuildSortedIf(expected?.copyOf(), entries.map(::ownedEntry))
+    fun rebuildFromEntriesIf(expected: ByteArray?, entries: List<EntryRecord>) =
+        native.rebuildFromEntriesIf(expected?.copyOf(), entries.map(::ownedEntry))
+    fun rebuildFromIterIf(expected: ByteArray?, entries: List<EntryRecord>) =
+        rebuildFromEntriesIf(expected, entries)
     fun applyAtMillis(mutations: List<MutationRecord>, timestampMillis: ULong) =
         native.applyAtMillis(mutations.map(::ownedMutation), timestampMillis)
     fun applyIf(expected: ByteArray?, mutations: List<MutationRecord>) =
@@ -216,6 +231,8 @@ class MapMerge(internal val native: BindingMapMerge) : AutoCloseable {
 private fun ownedMutation(mutation: MutationRecord) = MutationRecord(
     mutation.kind, mutation.key.copyOf(), mutation.value?.copyOf(),
 )
+
+private fun ownedEntry(entry: EntryRecord) = EntryRecord(entry.key.copyOf(), entry.value.copyOf())
 
 private fun ownedRangeCursor(cursor: RangeCursorRecord?) =
     cursor?.let { RangeCursorRecord(it.afterKey?.copyOf()) }

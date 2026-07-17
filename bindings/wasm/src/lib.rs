@@ -2888,7 +2888,7 @@ fn bytes_array(values: Array) -> Result<Vec<Vec<u8>>, JsValue> {
         .collect()
 }
 
-fn entries_array(values: Array) -> Result<Vec<(Vec<u8>, Vec<u8>)>, JsValue> {
+pub(crate) fn entries_array(values: Array) -> Result<Vec<(Vec<u8>, Vec<u8>)>, JsValue> {
     values
         .iter()
         .map(|value| Ok((object_bytes(&value, "key")?, object_bytes(&value, "value")?)))
@@ -2899,7 +2899,7 @@ fn mutations_array(values: Array) -> Result<Vec<Mutation>, JsValue> {
     values.iter().map(mutation_from_js).collect()
 }
 
-fn parallel_config_from_js(value: &JsValue) -> Result<ParallelConfig, JsValue> {
+pub(crate) fn parallel_config_from_js(value: &JsValue) -> Result<ParallelConfig, JsValue> {
     Ok(ParallelConfig::new(
         object_usize(value, "maxThreads", "max_threads")?,
         object_usize(value, "parallelismThreshold", "parallelism_threshold")?,

@@ -1,10 +1,11 @@
 use super::{
     borrowed_entry_view_object, call_scan_visitor, conflict_to_object, diffs_to_array,
     entries_to_array, entry_object, js_error, multi_key_proof_verification_to_object,
-    optional_bytes, range_cursor_value, range_page_proof_verification_to_object,
-    range_page_to_object, range_proof_verification_to_object, resolver_from_name,
-    reverse_page_to_object, scan_callback_flow, scan_outcome_to_object, WasmProllyEngine,
-    WasmRangeCursor, WasmReverseCursor,
+    optional_bytes, parallel_config_from_js, range_cursor_value,
+    range_page_proof_verification_to_object, range_page_to_object,
+    range_proof_verification_to_object, resolver_from_name, reverse_page_to_object,
+    scan_callback_flow, scan_outcome_to_object, WasmProllyEngine, WasmRangeCursor,
+    WasmReverseCursor,
 };
 use crate::page::set_bytes;
 use js_sys::{Array, Function, Object, Reflect, Uint8Array};
@@ -43,6 +44,15 @@ impl WasmVersionedMap {
             .initialize()
             .map_err(js_error)
             .and_then(map_version_object)
+    }
+
+    #[wasm_bindgen(js_name = initializeSorted)]
+    pub fn initialize_sorted(&self, entries: Array) -> Result<Object, JsValue> {
+        self.engine
+            .versioned_map(&self.id)
+            .initialize_sorted(super::entries_array(entries)?)
+            .map_err(js_error)
+            .and_then(map_update_object)
     }
 
     pub fn head(&self) -> Result<Option<Object>, JsValue> {
@@ -337,6 +347,72 @@ impl WasmVersionedMap {
             .apply(crate::indexed::mutations_from_array(&mutations)?)
             .map_err(js_error)
             .and_then(map_version_object)
+    }
+
+    pub fn append(&self, mutations: Array) -> Result<Object, JsValue> {
+        self.engine
+            .versioned_map(&self.id)
+            .append(crate::indexed::mutations_from_array(&mutations)?)
+            .map_err(js_error)
+            .and_then(map_version_object)
+    }
+
+    #[wasm_bindgen(js_name = parallelApply)]
+    pub fn parallel_apply(&self, mutations: Array, config: JsValue) -> Result<Object, JsValue> {
+        let result = self
+            .engine
+            .versioned_map(&self.id)
+            .parallel_apply(
+                crate::indexed::mutations_from_array(&mutations)?,
+                &parallel_config_from_js(&config)?,
+            )
+            .map_err(js_error)?;
+        let object = Object::new();
+        Reflect::set(
+            &object,
+            &"version".into(),
+            &map_version_object(result.version)?.into(),
+        )?;
+        Reflect::set(
+            &object,
+            &"stats".into(),
+            &versioned_batch_stats_object(result.stats)?.into(),
+        )?;
+        Ok(object)
+    }
+
+    #[wasm_bindgen(js_name = rebuildSortedIf)]
+    pub fn rebuild_sorted_if(
+        &self,
+        expected: Option<Uint8Array>,
+        entries: Array,
+    ) -> Result<Object, JsValue> {
+        let expected = expected
+            .map(|value| MapVersionId::from_bytes(&value.to_vec()))
+            .transpose()
+            .map_err(js_error)?;
+        self.engine
+            .versioned_map(&self.id)
+            .rebuild_sorted_if(expected.as_ref(), super::entries_array(entries)?)
+            .map_err(js_error)
+            .and_then(map_update_object)
+    }
+
+    #[wasm_bindgen(js_name = rebuildFromEntriesIf)]
+    pub fn rebuild_from_entries_if(
+        &self,
+        expected: Option<Uint8Array>,
+        entries: Array,
+    ) -> Result<Object, JsValue> {
+        let expected = expected
+            .map(|value| MapVersionId::from_bytes(&value.to_vec()))
+            .transpose()
+            .map_err(js_error)?;
+        self.engine
+            .versioned_map(&self.id)
+            .rebuild_from_iter_if(expected.as_ref(), super::entries_array(entries)?)
+            .map_err(js_error)
+            .and_then(map_update_object)
     }
 
     #[wasm_bindgen(js_name = applyAtMillis)]
@@ -1575,6 +1651,53 @@ fn gc_sweep_object(value: prolly::GcSweep) -> Result<Object, JsValue> {
     Reflect::set(&object, &"plan".into(), &gc_plan_object(value.plan)?.into())?;
     set_count(&object, "deletedNodes", value.deleted_nodes)?;
     set_count(&object, "deletedBytes", value.deleted_bytes)?;
+    Ok(object)
+}
+
+fn versioned_batch_stats_object(stats: prolly::BatchApplyStats) -> Result<Object, JsValue> {
+    let object = Object::new();
+    set_count(&object, "inputMutations", stats.input_mutations)?;
+    set_count(&object, "effectiveMutations", stats.effective_mutations)?;
+    Reflect::set(
+        &object,
+        &"preprocessInputSorted".into(),
+        &stats.preprocess_input_sorted.into(),
+    )?;
+    set_count(&object, "affectedLeaves", stats.affected_leaves)?;
+    set_count(&object, "changedLeaves", stats.changed_leaves)?;
+    set_count(&object, "sparseLeafApplies", stats.sparse_leaf_applies)?;
+    set_count(&object, "writtenNodes", stats.written_nodes)?;
+    set_count(&object, "writtenBytes", stats.written_bytes)?;
+    Reflect::set(
+        &object,
+        &"usedAppendFastPath".into(),
+        &stats.used_append_fast_path.into(),
+    )?;
+    Reflect::set(
+        &object,
+        &"usedBatchedRoute".into(),
+        &stats.used_batched_route.into(),
+    )?;
+    Reflect::set(
+        &object,
+        &"usedCoalescedRebuild".into(),
+        &stats.used_coalesced_rebuild.into(),
+    )?;
+    Reflect::set(
+        &object,
+        &"usedDeferredRebalancing".into(),
+        &stats.used_deferred_rebalancing.into(),
+    )?;
+    Reflect::set(
+        &object,
+        &"usedBottomUpRebuild".into(),
+        &stats.used_bottom_up_rebuild.into(),
+    )?;
+    Reflect::set(
+        &object,
+        &"cacheWrittenNodes".into(),
+        &stats.cache_written_nodes.into(),
+    )?;
     Ok(object)
 }
 

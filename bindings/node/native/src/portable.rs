@@ -1,9 +1,10 @@
 use super::{
-    to_napi_error, NativeProllyEngine, NodeConflictPageRecord, NodeDiffPageRecord, NodeDiffRecord,
-    NodeEntryRecord, NodeGcPlanRecord, NodeGcSweepRecord, NodeMultiKeyProofVerificationRecord,
-    NodeMutationRecord, NodeNamedRootRetentionRecord, NodeRangeCursorRecord,
-    NodeRangePageProofVerificationRecord, NodeRangePageRecord, NodeRangeProofVerificationRecord,
-    NodeReverseCursorRecord, NodeReversePageRecord, NodeTreeRecord,
+    to_napi_error, NativeProllyEngine, NodeBatchApplyStatsRecord, NodeConflictPageRecord,
+    NodeDiffPageRecord, NodeDiffRecord, NodeEntryRecord, NodeGcPlanRecord, NodeGcSweepRecord,
+    NodeMultiKeyProofVerificationRecord, NodeMutationRecord, NodeNamedRootRetentionRecord,
+    NodeParallelConfigRecord, NodeRangeCursorRecord, NodeRangePageProofVerificationRecord,
+    NodeRangePageRecord, NodeRangeProofVerificationRecord, NodeReverseCursorRecord,
+    NodeReversePageRecord, NodeTreeRecord,
 };
 use napi::bindgen_prelude::{Buffer, Env, Error, Float32Array, FunctionRef, Result, Status};
 use napi::JsObject;
@@ -654,6 +655,12 @@ pub struct NodePortableCatalogVerification {
 }
 
 #[napi(object)]
+pub struct NodePortableVersionedMapBatchResult {
+    pub version: NodePortableMapVersion,
+    pub stats: NodeBatchApplyStatsRecord,
+}
+
+#[napi(object)]
 pub struct NodePortableReadScanOutcome {
     pub visited: String,
     pub stopped: bool,
@@ -766,6 +773,17 @@ impl NativePortableVersionedMap {
     pub fn initialize(&self) -> Result<NodePortableMapVersion> {
         self.inner
             .initialize()
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "initializeSorted")]
+    pub fn initialize_sorted(
+        &self,
+        entries: Vec<NodeEntryRecord>,
+    ) -> Result<NodePortableMapUpdate> {
+        self.inner
+            .initialize_sorted(entries.into_iter().map(Into::into).collect())
             .map(Into::into)
             .map_err(to_napi_error)
     }
@@ -1001,6 +1019,68 @@ impl NativePortableVersionedMap {
             .collect::<Result<Vec<_>>>()?;
         self.inner
             .apply(mutations)
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi]
+    pub fn append(&self, mutations: Vec<NodeMutationRecord>) -> Result<NodePortableMapVersion> {
+        let mutations = mutations
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect::<Result<Vec<_>>>()?;
+        self.inner
+            .append(mutations)
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "parallelApply")]
+    pub fn parallel_apply(
+        &self,
+        mutations: Vec<NodeMutationRecord>,
+        config: NodeParallelConfigRecord,
+    ) -> Result<NodePortableVersionedMapBatchResult> {
+        let mutations = mutations
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect::<Result<Vec<_>>>()?;
+        let result = self
+            .inner
+            .parallel_apply(mutations, config.try_into()?)
+            .map_err(to_napi_error)?;
+        Ok(NodePortableVersionedMapBatchResult {
+            version: result.version.into(),
+            stats: result.stats.into(),
+        })
+    }
+
+    #[napi(js_name = "rebuildSortedIf")]
+    pub fn rebuild_sorted_if(
+        &self,
+        expected: Option<Buffer>,
+        entries: Vec<NodeEntryRecord>,
+    ) -> Result<NodePortableMapUpdate> {
+        self.inner
+            .rebuild_sorted_if(
+                expected.map(|value| value.to_vec()),
+                entries.into_iter().map(Into::into).collect(),
+            )
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "rebuildFromEntriesIf")]
+    pub fn rebuild_from_entries_if(
+        &self,
+        expected: Option<Buffer>,
+        entries: Vec<NodeEntryRecord>,
+    ) -> Result<NodePortableMapUpdate> {
+        self.inner
+            .rebuild_from_entries_if(
+                expected.map(|value| value.to_vec()),
+                entries.into_iter().map(Into::into).collect(),
+            )
             .map(Into::into)
             .map_err(to_napi_error)
     }

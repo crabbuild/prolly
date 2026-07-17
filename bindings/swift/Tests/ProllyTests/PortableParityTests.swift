@@ -4,6 +4,37 @@ import ProllyAPI
 import XCTest
 
 final class PortableParityTests: XCTestCase {
+    func testVersionedBulkPublicationUsesNativePerformancePaths() throws {
+        try Engine.withMemory { engine in
+            let map = try engine.versionedMap(Data("bulk-publication".utf8))
+            let initialized = try map.initializeSorted([
+                EntryRecord(key: Data("a".utf8), value: Data("one".utf8)),
+                EntryRecord(key: Data("b".utf8), value: Data("two".utf8)),
+            ])
+            XCTAssertEqual(initialized.kind, .applied)
+            _ = try map.append([MutationRecord(kind: .upsert, key: Data("c".utf8), value: Data("three".utf8))])
+            let parallel = try map.parallelApply(
+                [
+                    MutationRecord(kind: .upsert, key: Data("b".utf8), value: Data("updated".utf8)),
+                    MutationRecord(kind: .upsert, key: Data("d".utf8), value: Data("four".utf8)),
+                ],
+                config: ParallelConfigRecord(maxThreads: 1, parallelismThreshold: 1)
+            )
+            XCTAssertEqual(parallel.stats.inputMutations, 2)
+            let rebuilt = try map.rebuildSortedIf(parallel.version.id, entries: [
+                EntryRecord(key: Data("x".utf8), value: Data("nine".utf8)),
+                EntryRecord(key: Data("y".utf8), value: Data("ten".utf8)),
+            ])
+            XCTAssertEqual(rebuilt.kind, .applied)
+            let iterRebuilt = try map.rebuildFromEntriesIf(rebuilt.current!.id, entries: [
+                EntryRecord(key: Data("q".utf8), value: Data("queue".utf8)),
+                EntryRecord(key: Data("p".utf8), value: Data("priority".utf8)),
+            ])
+            XCTAssertEqual(iterRebuilt.kind, .applied)
+            XCTAssertEqual(try map.get(Data("p".utf8)), Data("priority".utf8))
+        }
+    }
+
     func testVersionedAndProximityMapsUsePortableAPI() throws {
         try Engine.withMemory { engine in
             let versioned = try engine.versionedMap(Data("users".utf8))

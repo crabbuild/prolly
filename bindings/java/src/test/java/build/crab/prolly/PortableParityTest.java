@@ -13,7 +13,9 @@ import build.crab.prolly.javaapi.IndexProjection;
 import build.crab.prolly.javaapi.IndexedMutation;
 import build.crab.prolly.javaapi.IndexedUpdateKind;
 import build.crab.prolly.javaapi.MapMutation;
+import build.crab.prolly.javaapi.MapEntry;
 import build.crab.prolly.javaapi.MapUpdateKind;
+import build.crab.prolly.javaapi.ParallelConfig;
 import build.crab.prolly.javaapi.ProximityRecord;
 import build.crab.prolly.javaapi.ProximityMutation;
 import build.crab.prolly.javaapi.Proofs;
@@ -26,6 +28,31 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
 class PortableParityTest {
+    @Test
+    void versionedBulkPublicationUsesNativePerformancePaths() {
+        Prolly.useLocalDebugLibrary();
+        try (Engine engine = Engine.memory(); var map = engine.versionedMap(bytes("bulk-publication"))) {
+            var initialized = map.initializeSorted(List.of(
+                    new MapEntry(bytes("a"), bytes("one")),
+                    new MapEntry(bytes("b"), bytes("two"))));
+            assertEquals(MapUpdateKind.APPLIED, initialized.kind());
+            map.append(List.of(MapMutation.upsert(bytes("c"), bytes("three"))));
+            var parallel = map.parallelApply(List.of(
+                    MapMutation.upsert(bytes("b"), bytes("updated")),
+                    MapMutation.upsert(bytes("d"), bytes("four"))), new ParallelConfig(1, 1));
+            assertEquals(2L, parallel.stats().inputMutations());
+            var rebuilt = map.rebuildSortedIf(parallel.version().id(), List.of(
+                    new MapEntry(bytes("x"), bytes("nine")),
+                    new MapEntry(bytes("y"), bytes("ten"))));
+            assertEquals(MapUpdateKind.APPLIED, rebuilt.kind());
+            var iterRebuilt = map.rebuildFromEntriesIf(rebuilt.current().id(), List.of(
+                    new MapEntry(bytes("q"), bytes("queue")),
+                    new MapEntry(bytes("p"), bytes("priority"))));
+            assertEquals(MapUpdateKind.APPLIED, iterRebuilt.kind());
+            assertArrayEquals(bytes("priority"), map.get(bytes("p")).orElseThrow());
+        }
+    }
+
     @Test
     void versionedSnapshotsExposeOrderedNavigationAndBoundedPages() {
         Prolly.useLocalDebugLibrary();
