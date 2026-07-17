@@ -13,9 +13,11 @@
     <module>kotlin/storetest</module>
     <module>kotlin/stores/sqlite</module>
     <module>kotlin/stores/postgres</module>
+    <module>kotlin/stores/mysql</module>
     <module>java</module>
     <module>java/stores/sqlite</module>
     <module>java/stores/postgres</module>
+    <module>java/stores/mysql</module>
   </modules>
 
   <properties>
