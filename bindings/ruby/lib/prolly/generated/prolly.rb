@@ -17299,6 +17299,9 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_fn_func_open_remote_prolly_engine,
     [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
     :uint64
+  attach_function :uniffi_prolly_bindings_fn_func_default_secondary_index_limits,
+    [RustCallStatus.by_ref],
+    RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_func_default_composite_accelerator_config,
     [RustCallStatus.by_ref],
     RustBuffer.by_value
@@ -17720,6 +17723,9 @@ module UniFFILib
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_func_open_remote_prolly_engine,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_func_default_secondary_index_limits,
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_func_default_composite_accelerator_config,
@@ -27092,6 +27098,15 @@ end
   
   
 
+def self.default_secondary_index_limits()
+  result = Prolly.rust_call(:uniffi_prolly_bindings_fn_func_default_secondary_index_limits,)
+  return result.consumeIntoTypeSecondaryIndexLimitsRecord
+end
+
+
+  
+  
+
 def self.default_composite_accelerator_config()
   result = Prolly.rust_call(:uniffi_prolly_bindings_fn_func_default_composite_accelerator_config,)
   return result.consumeIntoTypeCompositeAcceleratorConfigRecord
@@ -30030,11 +30045,11 @@ end
   end
   def replace_index(name, generation, extractor_id, projection, limits, extractor)
         name = Prolly::uniffi_bytes(name)
-
+        
         generation = Prolly::uniffi_in_range(generation, "u64", 0, 2**64)
-
+        
         extractor_id = Prolly::uniffi_utf8(extractor_id)
-
+        
         projection = projection
         RustBuffer.check_lower_TypeIndexProjectionRecord(projection)
         limits = (limits ? limits : nil)

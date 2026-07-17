@@ -367,6 +367,23 @@ export interface NodePortableVersionedTransactionCommit {
   conflictMapId?: Buffer
   conflictCurrent?: NodePortableMapVersion
 }
+export interface NodePortableSecondaryIndexLimits {
+  maxTermBytes: string
+  maxProjectionBytes: string
+  maxAllValueBytes: string
+  maxTermsPerRecord: string
+  maxProjectedBytesPerRecord: string
+  maxDerivedMutationsPerTransaction: string
+  maxProjectedBytesPerTransaction: string
+  maxIndexes: string
+  buildPageSize: string
+  maxTemporarySortBytes: string
+  maxBundleNodes: string
+  maxBundleBytes: string
+  maxVerificationEntries: string
+  maxWriteRetries: string
+  maxBuildRetries: string
+}
 export interface NodeRemoteStoreCapabilitiesRecord {
   nativeBatchReads: boolean
   atomicBatchWrites: boolean
@@ -1279,7 +1296,7 @@ export declare class NativePortableProvedRangePage {
 }
 export declare class NativePortableIndexRegistry {
   constructor()
-  register(name: Buffer, generation: string, extractorId: string, projection: string, extractor: NodePortableIndexExtractor): void
+  register(name: Buffer, generation: string, extractorId: string, projection: string, limits: NodePortableSecondaryIndexLimits | undefined | null, extractor: NodePortableIndexExtractor): void
 }
 export declare class NativePortableIndexedMap {
   id(): Buffer
@@ -1302,7 +1319,7 @@ export declare class NativePortableIndexedMap {
   importCurrent(bundle: Buffer, expectedSource?: Buffer | undefined | null): NodePortableIndexedVersion
   keepLast(count: string): NodePortableIndexedRetention
   planGc(): NodeGcPlanRecord
-  replaceIndex(name: Buffer, generation: string, extractorId: string, projection: string, extractor: NodePortableIndexExtractor): NodePortableIndexBuildResult
+  replaceIndex(name: Buffer, generation: string, extractorId: string, projection: string, limits: NodePortableSecondaryIndexLimits | undefined | null, extractor: NodePortableIndexExtractor): NodePortableIndexBuildResult
 }
 export declare class NativePortableIndexedSnapshot {
   id(): NodePortableIndexedSnapshotId

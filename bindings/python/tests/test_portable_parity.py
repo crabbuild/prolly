@@ -30,6 +30,7 @@ from prolly import (
     verify_proximity_membership_proof,
     verify_proximity_structure_proof,
     default_composite_accelerator_config,
+    default_secondary_index_limits,
 )
 
 
@@ -639,6 +640,14 @@ class PortableParityTests(unittest.TestCase):
             version = indexed.put(b"k", b"term")
             indexed.ensure_index(b"by_value")
             old_snapshot_id = indexed.snapshot().id
+            too_small = default_secondary_index_limits()
+            too_small.max_term_bytes = 3
+            with self.assertRaises(Exception):
+                indexed.replace_index(
+                    b"by_value", 2, "value-too-small-v2", IndexProjection.ALL,
+                    lambda _key, value: [(value, None)], too_small,
+                )
+            self.assertEqual(indexed.health().active_indexes[0].generation, 1)
             replacement = indexed.replace_index(
                 b"by_value", 2, "value-v2", IndexProjection.ALL,
                 lambda _key, value: [(value, None)],

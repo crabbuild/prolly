@@ -86,6 +86,11 @@ impl From<SecondaryIndexLimits> for SecondaryIndexLimitsRecord {
     }
 }
 
+#[uniffi::export]
+pub fn default_secondary_index_limits() -> SecondaryIndexLimitsRecord {
+    SecondaryIndexLimits::default().into()
+}
+
 fn limits_from_record(
     value: SecondaryIndexLimitsRecord,
 ) -> Result<SecondaryIndexLimits, ProllyBindingError> {

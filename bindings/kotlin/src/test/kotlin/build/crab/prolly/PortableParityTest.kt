@@ -557,6 +557,17 @@ class PortableParityTest {
                     val version = indexed.put("k".bytes(), "term".bytes())
                     indexed.ensureIndex("by_value".bytes())
                     val oldSnapshotId = indexed.snapshot().use { it.id }
+                    assertThrows<ProllyBindingException> {
+                        indexed.replaceIndex(
+                            "by_value".bytes(), 2uL, "value-too-small-v2", IndexProjectionRecord.ALL,
+                            object : SecondaryIndexExtractorCallback {
+                                override fun extract(primaryKey: ByteArray, sourceValue: ByteArray) =
+                                    listOf(IndexEntryRecord(sourceValue.copyOf(), null))
+                            },
+                            defaultSecondaryIndexLimits().copy(maxTermBytes = 3uL),
+                        )
+                    }
+                    assertEquals(1uL, indexed.health().activeIndexes.single().generation)
                     val replacement = indexed.replaceIndex(
                         "by_value".bytes(), 2uL, "value-v2", IndexProjectionRecord.ALL,
                         object : SecondaryIndexExtractorCallback {

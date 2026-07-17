@@ -27,6 +27,7 @@ import build.crab.prolly.javaapi.ProductQuantizationConfig;
 import build.crab.prolly.javaapi.Proofs;
 import build.crab.prolly.javaapi.SearchRequest;
 import build.crab.prolly.javaapi.ScopedBytes;
+import build.crab.prolly.javaapi.SecondaryIndexLimits;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -490,6 +491,11 @@ class PortableParityTest {
                     try (var oldSnapshot = indexed.snapshot()) {
                         oldSnapshotId = oldSnapshot.id();
                     }
+                    assertThrows(ProllyBindingException.Internal.class, () -> indexed.replaceIndex(
+                            bytes("by_value"), 2, "value-too-small-v2", IndexProjection.ALL,
+                            SecondaryIndexLimits.defaults().withMaxTermBytes(3),
+                            (key, value) -> List.of(new IndexEntry(value, null))));
+                    assertEquals(1, indexed.health().activeIndexes().get(0).generation());
                     var replacement = indexed.replaceIndex(
                             bytes("by_value"), 2, "value-v2", IndexProjection.ALL,
                             (key, value) -> List.of(new IndexEntry(value, null)));

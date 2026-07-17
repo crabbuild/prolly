@@ -23,6 +23,16 @@ public final class IndexRegistry implements AutoCloseable {
             String extractorId,
             IndexProjection projection,
             IndexExtractor extractor) {
+        register(name, generation, extractorId, projection, null, extractor);
+    }
+
+    public void register(
+            byte[] name,
+            long generation,
+            String extractorId,
+            IndexProjection projection,
+            SecondaryIndexLimits limits,
+            IndexExtractor extractor) {
         Objects.requireNonNull(extractor, "extractor");
         SecondaryIndexExtractorCallback callback = (primaryKey, sourceValue) ->
                 extractor.extract(primaryKey.clone(), sourceValue.clone()).stream()
@@ -30,7 +40,8 @@ public final class IndexRegistry implements AutoCloseable {
                         .toList();
         JavaPortableBridge.register(
                 nativeRegistry(), name.clone(), generation, extractorId,
-                Objects.requireNonNull(projection).nativeValue, callback);
+                Objects.requireNonNull(projection).nativeValue,
+                limits == null ? null : limits.toNative(), callback);
     }
 
     @Override

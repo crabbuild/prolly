@@ -1,7 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { Engine, defaultCompositeAcceleratorConfig, exactSearch } from "../src/index.ts";
+import {
+  Engine, defaultCompositeAcceleratorConfig, defaultSecondaryIndexLimits, exactSearch,
+} from "../src/index.ts";
 
 const bytes = (value: string): Buffer => Buffer.from(value);
 
@@ -519,6 +521,12 @@ test("proofs, retained sessions, and maintenance stay native", async () => {
     const version = await indexed.put(bytes("k"), bytes("term"));
     await indexed.ensureIndex(bytes("by_value"));
     const oldSnapshotId = (await indexed.snapshot()).id();
+    await assert.rejects(indexed.replaceIndex({
+      name: bytes("by_value"), generation: 2n, extractorId: "value-too-small-v2", projection: "all",
+      limits: { ...defaultSecondaryIndexLimits(), maxTermBytes: 3n },
+      extract: (_key, value) => [{ term: Buffer.from(value) }],
+    }));
+    assert.equal(indexed.health().activeIndexes[0]?.generation, 1n);
     const replacement = await indexed.replaceIndex({
       name: bytes("by_value"), generation: 2n, extractorId: "value-v2", projection: "all",
       extract: (_key, value) => [{ term: Buffer.from(value) }],

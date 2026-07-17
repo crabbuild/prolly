@@ -675,7 +675,53 @@ export interface PortableIndexRegistration {
   generation: bigint;
   extractorId: string;
   projection: "keys_only" | "include" | "all";
+  limits?: PortableSecondaryIndexLimits;
   extract(primaryKey: Uint8Array, sourceValue: Uint8Array): PortableIndexEntry[];
+}
+
+export interface PortableSecondaryIndexLimits {
+  maxTermBytes: bigint;
+  maxProjectionBytes: bigint;
+  maxAllValueBytes: bigint;
+  maxTermsPerRecord: bigint;
+  maxProjectedBytesPerRecord: bigint;
+  maxDerivedMutationsPerTransaction: bigint;
+  maxProjectedBytesPerTransaction: bigint;
+  maxIndexes: bigint;
+  buildPageSize: bigint;
+  maxTemporarySortBytes: bigint;
+  maxBundleNodes: bigint;
+  maxBundleBytes: bigint;
+  maxVerificationEntries: bigint;
+  maxWriteRetries: bigint;
+  maxBuildRetries: bigint;
+}
+
+export function defaultSecondaryIndexLimits(): PortableSecondaryIndexLimits {
+  return {
+    maxTermBytes: 4n * 1024n,
+    maxProjectionBytes: 64n * 1024n,
+    maxAllValueBytes: 1024n * 1024n,
+    maxTermsPerRecord: 1024n,
+    maxProjectedBytesPerRecord: 1024n * 1024n,
+    maxDerivedMutationsPerTransaction: 100_000n,
+    maxProjectedBytesPerTransaction: 64n * 1024n * 1024n,
+    maxIndexes: 32n,
+    buildPageSize: 4096n,
+    maxTemporarySortBytes: 256n * 1024n * 1024n,
+    maxBundleNodes: 1_000_000n,
+    maxBundleBytes: 1024n * 1024n * 1024n,
+    maxVerificationEntries: 10_000_000n,
+    maxWriteRetries: 8n,
+    maxBuildRetries: 8n,
+  };
+}
+
+function portableSecondaryIndexLimits(value: PortableSecondaryIndexLimits | undefined) {
+  if (value == null) return undefined;
+  return Object.fromEntries(
+    Object.entries(value).map(([name, limit]) => [name, limit.toString()]),
+  );
 }
 
 export interface PortableIndexedVersion {
@@ -2121,6 +2167,7 @@ export class WasmIndexRegistry implements Disposable {
     this.nativeHandle().register(
       ownedPortableBytes(registration.name), registration.generation,
       registration.extractorId, registration.projection,
+      portableSecondaryIndexLimits(registration.limits),
       (key: Uint8Array, value: Uint8Array) => registration.extract(key, value).map((entry) => ({
         term: ownedPortableBytes(entry.term),
         projection: entry.projection == null ? undefined : ownedPortableBytes(entry.projection),
@@ -2214,6 +2261,7 @@ export class WasmIndexedMap implements Disposable {
         registration.generation,
         registration.extractorId,
         registration.projection,
+        portableSecondaryIndexLimits(registration.limits),
         (key: Uint8Array, sourceValue: Uint8Array) => registration.extract(key, sourceValue).map((entry) => ({
           term: ownedPortableBytes(entry.term),
           projection: entry.projection == null ? undefined : ownedPortableBytes(entry.projection),

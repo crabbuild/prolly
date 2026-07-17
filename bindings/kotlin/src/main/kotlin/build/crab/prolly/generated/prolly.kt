@@ -1263,6 +1263,8 @@ external fun uniffi_prolly_bindings_checksum_func_versioned_value_to_bytes(
 ): Short
 external fun uniffi_prolly_bindings_checksum_func_open_remote_prolly_engine(
 ): Short
+external fun uniffi_prolly_bindings_checksum_func_default_secondary_index_limits(
+): Short
 external fun uniffi_prolly_bindings_checksum_func_default_composite_accelerator_config(
 ): Short
 external fun uniffi_prolly_bindings_checksum_func_default_composite_build_limits(
@@ -3718,6 +3720,8 @@ external fun uniffi_prolly_bindings_fn_func_versioned_value_to_bytes(`record`: R
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_open_remote_prolly_engine(`store`: Long,`config`: RustBuffer.ByValue,
 ): Long
+external fun uniffi_prolly_bindings_fn_func_default_secondary_index_limits(uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_default_composite_accelerator_config(uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_default_composite_build_limits(uniffi_out_err: UniffiRustCallStatus,
@@ -4233,6 +4237,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_func_open_remote_prolly_engine() != 31371.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_func_default_secondary_index_limits() != 62049.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_func_default_composite_accelerator_config() != 39819.toShort()) {
@@ -39130,6 +39137,16 @@ public object FfiConverterSequenceOptionalByteArray: FfiConverterRustBuffer<List
         ProllyBindingException.ErrorHandler,
     )
     }
+ fun `defaultSecondaryIndexLimits`(): SecondaryIndexLimitsRecord {
+            return FfiConverterTypeSecondaryIndexLimitsRecord.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_func_default_secondary_index_limits(
+
+        _status)
+}
+    )
+    }
+
  fun `defaultCompositeAcceleratorConfig`(): CompositeAcceleratorConfigRecord {
             return FfiConverterTypeCompositeAcceleratorConfigRecord.lift(
     uniffiRustCall() { _status ->

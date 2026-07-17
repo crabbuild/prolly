@@ -12,7 +12,7 @@ import {
 } from "./proximity.ts";
 import { VersionedMap, VersionedTransaction } from "./versioned.ts";
 
-export { IndexRegistry, IndexedMap } from "./indexed.ts";
+export { defaultSecondaryIndexLimits, IndexRegistry, IndexedMap } from "./indexed.ts";
 export { ViewExpiredError } from "./packed.ts";
 export {
   defaultHnswBuildLimits,

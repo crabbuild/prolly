@@ -97,6 +97,16 @@ public final class IndexedMap implements AutoCloseable {
             String extractorId,
             IndexProjection projection,
             IndexExtractor extractor) {
+        return replaceIndex(name, generation, extractorId, projection, null, extractor);
+    }
+
+    public IndexBuildResult replaceIndex(
+            byte[] name,
+            long generation,
+            String extractorId,
+            IndexProjection projection,
+            SecondaryIndexLimits limits,
+            IndexExtractor extractor) {
         Objects.requireNonNull(extractor, "extractor");
         SecondaryIndexExtractorCallback callback = (primaryKey, sourceValue) ->
                 extractor.extract(primaryKey.clone(), sourceValue.clone()).stream()
@@ -105,7 +115,8 @@ public final class IndexedMap implements AutoCloseable {
         extractors.add(callback);
         return IndexBuildResult.fromNative(JavaPortableBridge.replaceIndex(
                 open(), name.clone(), generation, extractorId,
-                Objects.requireNonNull(projection).nativeValue, callback));
+                Objects.requireNonNull(projection).nativeValue,
+                limits == null ? null : limits.toNative(), callback));
     }
 
     public IndexedVersion deactivateIndex(byte[] name) {
