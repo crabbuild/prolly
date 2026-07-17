@@ -354,6 +354,13 @@ module Prolly
 
     def get(key) = open! { @native.get(key.b) }
     def get_many(keys) = open! { @native.get_many(keys.map(&:b)) }
+    def scan_range_view(start = ''.b, range_end = nil, &block)
+      open! do
+        PackedPage.scan_range_view(
+          @native.fast_handle, start.b, range_end&.b, &block
+        )
+      end
+    end
     def close = @closed = true
 
     def use

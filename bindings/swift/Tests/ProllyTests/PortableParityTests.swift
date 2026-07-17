@@ -160,6 +160,20 @@ final class PortableParityTests: XCTestCase {
             XCTAssertFalse(try snapshot.export().nodes.isEmpty)
             let session = try snapshot.read()
             XCTAssertEqual(try session.get(Data("k".utf8)), Data("v".utf8))
+            var seen: [String] = []
+            let scan = try session.scanRangeView(
+                from: Data("k".utf8), to: Data("l".utf8)
+            ) { entry in
+                seen.append("\(String(decoding: entry.key, as: UTF8.self))=\(String(decoding: entry.value, as: UTF8.self))")
+                return true
+            }
+            XCTAssertEqual(scan.visited, 2)
+            XCTAssertFalse(scan.stopped)
+            XCTAssertEqual(seen, ["k=v", "ka=v2"])
+            let stopped = try session.scanRangeView(
+                from: Data("k".utf8), to: Data("l".utf8)
+            ) { _ in false }
+            XCTAssertEqual(stopped, ReadScanOutcome(visited: 1, stopped: true))
             session.close()
             XCTAssertGreaterThanOrEqual(try versioned.verifyCatalog().versionCount, 2)
             XCTAssertFalse(try versioned.backup().isEmpty)

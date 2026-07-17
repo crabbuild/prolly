@@ -14,6 +14,12 @@ typedef struct ProllyFastPageResult {
     uint64_t data_len;
 } ProllyFastPageResult;
 
+typedef struct ProllyFastScanOpenResult {
+    int32_t status;
+    uint32_t reserved;
+    uint64_t scan_handle;
+} ProllyFastScanOpenResult;
+
 ProllyFastPageResult prolly_fast_proximity_search(
     uint64_t map_handle,
     const float *query_ptr,
@@ -21,6 +27,24 @@ ProllyFastPageResult prolly_fast_proximity_search(
     uint32_t k,
     uint64_t max_arena_bytes
 );
+
+ProllyFastScanOpenResult prolly_fast_read_session_scan_open(
+    uint64_t session_handle,
+    const uint8_t *start_ptr,
+    size_t start_len,
+    const uint8_t *end_ptr,
+    size_t end_len,
+    uint8_t has_end
+);
+
+ProllyFastPageResult prolly_fast_read_session_scan_next(
+    uint64_t session_handle,
+    uint64_t scan_handle,
+    uint32_t max_records,
+    uint64_t max_arena_bytes
+);
+
+void prolly_fast_scan_close(uint64_t scan_handle);
 
 void prolly_fast_page_release(uint64_t lease_handle);
 

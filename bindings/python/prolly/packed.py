@@ -63,6 +63,26 @@ class NeighborView:
     proof: ScopedBytes | None
 
 
+@dataclass(frozen=True)
+class EntryView:
+    key: ScopedBytes
+    value: ScopedBytes
+
+
+@dataclass(frozen=True)
+class ScanOutcome:
+    visited: int
+    stopped: bool
+
+
+class _FastScanOpenResult(ctypes.Structure):
+    _fields_ = [
+        ("status", ctypes.c_int32),
+        ("reserved", ctypes.c_uint32),
+        ("scan_handle", ctypes.c_uint64),
+    ]
+
+
 def _slice(arena: memoryview, offset: int, length: int) -> memoryview:
     end = offset + length
     if offset < 0 or end > len(arena):
@@ -97,6 +117,52 @@ def _decode_neighbors(page: memoryview, scope: _Scope) -> tuple[NeighborView, ..
                 rank=rank,
                 value=ScopedBytes(_slice(arena, value_offset, value_len), scope) if flags & 1 else None,
                 proof=ScopedBytes(_slice(arena, proof_offset, proof_len), scope) if flags & 2 else None,
+            )
+        )
+    return tuple(rows)
+
+
+def _decode_entries(
+    page: memoryview,
+    scope: _Scope,
+    record_count: int,
+    terminal: bool,
+    previous_key: bytes | None,
+) -> tuple[EntryView, ...]:
+    if len(page) < 28 or bytes(page[:4]) != b"PRPG":
+        raise ValueError("invalid packed scan page header")
+    version, kind, flags, count, table_bytes, arena_bytes = struct.unpack_from(
+        "<HHIIIQ", page, 4
+    )
+    if (
+        version != 1
+        or kind != 1
+        or count != record_count
+        or table_bytes < count * 16
+        or table_bytes % 16 != 0
+        or bool(flags & 1) != terminal
+    ):
+        raise ValueError("inconsistent packed scan page metadata")
+    arena_start = 28 + table_bytes
+    if arena_start + arena_bytes != len(page):
+        raise ValueError("packed scan page length mismatch")
+    arena = page[arena_start:]
+    rows: list[EntryView] = []
+    prior = previous_key
+    for index in range(count):
+        key_offset, key_len, value_offset, value_len = struct.unpack_from(
+            "<IIII", page, 28 + index * 16
+        )
+        key_view = _slice(arena, key_offset, key_len)
+        value_view = _slice(arena, value_offset, value_len)
+        key = key_view.tobytes()
+        if prior is not None and prior >= key:
+            raise ValueError("packed scan page keys are not strictly ordered")
+        prior = key
+        rows.append(
+            EntryView(
+                key=ScopedBytes(key_view, scope),
+                value=ScopedBytes(value_view, scope),
             )
         )
     return tuple(rows)
@@ -142,3 +208,100 @@ def proximity_search_view(
     finally:
         scope.close()
         release(result.lease_handle)
+
+
+def scan_range_view(
+    session_handle: int,
+    start: bytes,
+    end: bytes | None,
+    visit: Callable[[EntryView], bool],
+    *,
+    max_records: int = 4096,
+    max_arena_bytes: int = 4 * 1024 * 1024,
+) -> ScanOutcome:
+    """Visit a retained scan through callback-scoped views into native pages."""
+
+    if not callable(visit):
+        raise TypeError("visit must be callable")
+    if max_records <= 0 or max_arena_bytes <= 0:
+        raise ValueError("packed scan limits must be positive")
+    library = _native._UniffiLib
+    open_scan = library.prolly_fast_read_session_scan_open
+    open_scan.argtypes = [
+        ctypes.c_uint64,
+        ctypes.POINTER(ctypes.c_uint8),
+        ctypes.c_size_t,
+        ctypes.POINTER(ctypes.c_uint8),
+        ctypes.c_size_t,
+        ctypes.c_uint8,
+    ]
+    open_scan.restype = _FastScanOpenResult
+    next_page = library.prolly_fast_read_session_scan_next
+    next_page.argtypes = [ctypes.c_uint64, ctypes.c_uint64, ctypes.c_uint32, ctypes.c_uint64]
+    next_page.restype = _FastPageResult
+    close_scan = library.prolly_fast_scan_close
+    close_scan.argtypes = [ctypes.c_uint64]
+    close_scan.restype = None
+    release = library.prolly_fast_page_release
+    release.argtypes = [ctypes.c_uint64]
+    release.restype = None
+
+    start_bytes = bytes(start)
+    end_bytes = None if end is None else bytes(end)
+    start_buffer = (ctypes.c_uint8 * len(start_bytes)).from_buffer_copy(start_bytes)
+    end_buffer = (
+        None
+        if end_bytes is None
+        else (ctypes.c_uint8 * len(end_bytes)).from_buffer_copy(end_bytes)
+    )
+    opened = open_scan(
+        session_handle,
+        start_buffer if start_bytes else None,
+        len(start_bytes),
+        end_buffer if end_bytes else None,
+        0 if end_bytes is None else len(end_bytes),
+        0 if end_bytes is None else 1,
+    )
+    if opened.status != 0:
+        raise RuntimeError(f"native retained scan open failed with status {opened.status}")
+
+    visited = 0
+    previous_key: bytes | None = None
+    try:
+        while True:
+            result = next_page(
+                session_handle, opened.scan_handle, max_records, max_arena_bytes
+            )
+            if result.status != 0:
+                raise RuntimeError(
+                    f"native retained scan read failed with status {result.status}"
+                )
+            scope = _Scope()
+            try:
+                if not result.data_ptr:
+                    raise ValueError("native packed scan page pointer was null")
+                raw = (ctypes.c_uint8 * result.data_len).from_address(
+                    ctypes.addressof(result.data_ptr.contents)
+                )
+                rows = _decode_entries(
+                    memoryview(raw).cast("B"),
+                    scope,
+                    result.record_count,
+                    bool(result.terminal),
+                    previous_key,
+                )
+                for row in rows:
+                    visited += 1
+                    if not visit(row):
+                        return ScanOutcome(visited=visited, stopped=True)
+                if rows:
+                    previous_key = bytes(rows[-1].key)
+                elif not result.terminal:
+                    raise RuntimeError("non-terminal packed scan page made no progress")
+            finally:
+                scope.close()
+                release(result.lease_handle)
+            if result.terminal:
+                return ScanOutcome(visited=visited, stopped=False)
+    finally:
+        close_scan(opened.scan_handle)

@@ -198,6 +198,10 @@ export interface NodePortableMaintenanceSummary {
   itemCount: string
   byteCount: string
 }
+export interface NodePortableReadScanOutcome {
+  visited: string
+  stopped: boolean
+}
 export interface NodeTreeRecord {
   root?: Buffer
   config?: NodeConfigRecord
@@ -948,6 +952,7 @@ export declare class NativePortableMapSnapshot {
 }
 export declare class NativePortableReadSession {
   get(key: Buffer): Buffer | null
+  scanRangePages(start: Buffer, end: Buffer | undefined | null, visit: (arg: object) => number): NodePortableReadScanOutcome
 }
 export declare class NativePortableKeyProof {
   verify(): NodePortableProofVerification

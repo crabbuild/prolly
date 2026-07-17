@@ -223,6 +223,26 @@ test("WASM proofs, retained sessions, and maintenance stay in Rust", { skip: !ge
   assert.ok(snapshot.exportSummary().itemCount > 0n);
   const session = snapshot.read();
   assert.equal(Buffer.from(session.get(bytes("k")) ?? []).toString(), "v");
+  let escaped: Uint8Array | undefined;
+  const seen: string[] = [];
+  const scan = session.scanRangeView(bytes("k"), bytes("l"), (entry: any) => {
+    escaped ??= entry.key;
+    seen.push(`${Buffer.from(entry.key)}=${Buffer.from(entry.value)}`);
+    return true;
+  });
+  assert.deepEqual(scan, { visited: 2n, stopped: false });
+  assert.deepEqual(seen, ["k=v", "ka=v2"]);
+  assert.throws(() => Buffer.from(escaped!));
+  assert.deepEqual(
+    session.scanRangeView(bytes("k"), bytes("l"), () => false),
+    { visited: 1n, stopped: true },
+  );
+  const memoryGuarded = session.scanRangeView(bytes("k"), bytes("l"), (entry: any) => {
+    wasm.wasmMemory().grow(1);
+    assert.throws(() => entry.key[0]);
+    return false;
+  });
+  assert.deepEqual(memoryGuarded, { visited: 1n, stopped: true });
   assert.ok(versioned.verifyCatalog().itemCount >= 2n);
   assert.ok((await versioned.backup()).byteLength > 0);
   assert.ok(versioned.planGc().itemCount > 0n);

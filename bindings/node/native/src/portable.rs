@@ -5,6 +5,7 @@ use super::{
     NodeReversePageRecord, NodeTreeRecord,
 };
 use napi::bindgen_prelude::{Buffer, Env, Error, Float32Array, FunctionRef, Result, Status};
+use napi::JsObject;
 use napi_derive::napi;
 use prolly_bindings::{
     default_content_graph_limits, default_proximity_config, exact_proximity_search_request,
@@ -26,6 +27,61 @@ use prolly_bindings::{
     SecondaryIndexExtractorCallback, VersionPruneRecord,
 };
 use std::sync::Arc;
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct NodeFastPageResult {
+    status: i32,
+    terminal: u8,
+    reserved: [u8; 3],
+    record_count: u32,
+    lease_handle: u64,
+    data_ptr: *const u8,
+    data_len: u64,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct NodeFastScanOpenResult {
+    status: i32,
+    reserved: u32,
+    scan_handle: u64,
+}
+
+extern "C" {
+    fn prolly_fast_read_session_scan_open(
+        session_handle: u64,
+        start_ptr: *const u8,
+        start_len: usize,
+        end_ptr: *const u8,
+        end_len: usize,
+        has_end: u8,
+    ) -> NodeFastScanOpenResult;
+    fn prolly_fast_read_session_scan_next(
+        session_handle: u64,
+        scan_handle: u64,
+        max_records: u32,
+        max_arena_bytes: u64,
+    ) -> NodeFastPageResult;
+    fn prolly_fast_scan_close(scan_handle: u64);
+    fn prolly_fast_page_release(lease_handle: u64);
+}
+
+struct NodeFastScanGuard(u64);
+
+impl Drop for NodeFastScanGuard {
+    fn drop(&mut self) {
+        unsafe { prolly_fast_scan_close(self.0) };
+    }
+}
+
+struct NodeFastPageGuard(u64);
+
+impl Drop for NodeFastPageGuard {
+    fn drop(&mut self) {
+        unsafe { prolly_fast_page_release(self.0) };
+    }
+}
 
 #[napi(object)]
 pub struct NodePortableMapVersion {
@@ -585,6 +641,12 @@ pub struct NodePortableProofVerification {
 pub struct NodePortableMaintenanceSummary {
     pub item_count: String,
     pub byte_count: String,
+}
+
+#[napi(object)]
+pub struct NodePortableReadScanOutcome {
+    pub visited: String,
+    pub stopped: bool,
 }
 
 impl From<ProximitySearchResultRecord> for NodePortableSearchResult {
@@ -1159,6 +1221,124 @@ impl NativePortableReadSession {
             .get(key.to_vec())
             .map(|value| value.map(Buffer::from))
             .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "scanRangePages")]
+    pub fn scan_range_pages(
+        &self,
+        env: Env,
+        start: Buffer,
+        end: Option<Buffer>,
+        visit: FunctionRef<JsObject, u32>,
+    ) -> Result<NodePortableReadScanOutcome> {
+        let session_handle = self.inner.fast_handle();
+        if session_handle == 0 {
+            return Err(Error::new(
+                Status::GenericFailure,
+                "native retained read session is closed".to_string(),
+            ));
+        }
+        let (end_ptr, end_len, has_end) = match end.as_ref() {
+            Some(end) => (end.as_ptr(), end.len(), 1),
+            None => (std::ptr::null(), 0, 0),
+        };
+        let opened = unsafe {
+            prolly_fast_read_session_scan_open(
+                session_handle,
+                start.as_ptr(),
+                start.len(),
+                end_ptr,
+                end_len,
+                has_end,
+            )
+        };
+        if opened.status != 0 || opened.scan_handle == 0 {
+            return Err(Error::new(
+                Status::GenericFailure,
+                format!(
+                    "native retained scan open failed with status {}",
+                    opened.status
+                ),
+            ));
+        }
+        let _scan = NodeFastScanGuard(opened.scan_handle);
+        let function = visit.borrow_back(&env)?;
+        let mut visited = 0_u64;
+        loop {
+            let page = unsafe {
+                prolly_fast_read_session_scan_next(
+                    session_handle,
+                    opened.scan_handle,
+                    4096,
+                    4 * 1024 * 1024,
+                )
+            };
+            if page.status != 0 {
+                return Err(Error::new(
+                    Status::GenericFailure,
+                    format!(
+                        "native retained scan read failed with status {}",
+                        page.status
+                    ),
+                ));
+            }
+            let _page = NodeFastPageGuard(page.lease_handle);
+            if page.data_ptr.is_null() {
+                return Err(Error::new(
+                    Status::GenericFailure,
+                    "native retained scan returned a null page".to_string(),
+                ));
+            }
+            let length = usize::try_from(page.data_len).map_err(|_| {
+                Error::new(
+                    Status::GenericFailure,
+                    "native retained scan page exceeds the host address space".to_string(),
+                )
+            })?;
+            let borrowed = unsafe {
+                env.create_buffer_with_borrowed_data(
+                    page.data_ptr.cast_mut(),
+                    length,
+                    (),
+                    |(), _env| {},
+                )?
+            };
+            let mut argument = env.create_object()?;
+            argument.set_named_property("bytes", borrowed.into_unknown())?;
+            argument.set_named_property("recordCount", page.record_count)?;
+            argument.set_named_property("terminal", page.terminal != 0)?;
+            let consumed = function.call(argument)?;
+            if consumed > page.record_count {
+                return Err(Error::new(
+                    Status::InvalidArg,
+                    "packed scan visitor consumed more records than the page contains".to_string(),
+                ));
+            }
+            visited = visited.checked_add(u64::from(consumed)).ok_or_else(|| {
+                Error::new(
+                    Status::GenericFailure,
+                    "packed scan visit count overflow".to_string(),
+                )
+            })?;
+            if consumed < page.record_count {
+                return Ok(NodePortableReadScanOutcome {
+                    visited: visited.to_string(),
+                    stopped: true,
+                });
+            }
+            if page.terminal != 0 {
+                return Ok(NodePortableReadScanOutcome {
+                    visited: visited.to_string(),
+                    stopped: false,
+                });
+            }
+            if page.record_count == 0 {
+                return Err(Error::new(
+                    Status::GenericFailure,
+                    "non-terminal packed scan page made no progress".to_string(),
+                ));
+            }
+        }
     }
 }
 

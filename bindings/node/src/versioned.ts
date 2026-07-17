@@ -1,4 +1,4 @@
-import { nativePromise, ownedBytes } from "./packed.ts";
+import { nativePromise, ownedBytes, scopedBytes, type ViewScope } from "./packed.ts";
 
 export interface MapVersion {
   id: Uint8Array;
@@ -29,6 +29,9 @@ export interface RangeCursor { afterKey?: Uint8Array; }
 export interface ReverseCursor { beforeKey?: Uint8Array; }
 export interface RangePage { entries: MapEntry[]; nextCursor?: RangeCursor; }
 export interface ReversePage { entries: MapEntry[]; nextCursor?: ReverseCursor; }
+/** Read-only page views that expire when the scan callback returns. */
+export interface MapEntryView { key: Uint8Array; value: Uint8Array; }
+export interface ReadScanOutcome { visited: bigint; stopped: boolean; }
 export interface KeyProofVerification {
   valid: boolean;
   exists: boolean;
@@ -124,7 +127,15 @@ interface NativeMapSnapshot {
   export(): NativeMaintenanceSummary;
   read(): NativeReadSession;
 }
-interface NativeReadSession { get(key: Uint8Array): Uint8Array | null; }
+interface NativeReadSession {
+  get(key: Uint8Array): Uint8Array | null;
+  scanRangePages(
+    start: Uint8Array,
+    end: Uint8Array | null,
+    visit: (page: NativePackedReadPage) => number,
+  ): { visited: string; stopped: boolean };
+}
+interface NativePackedReadPage { bytes: Uint8Array; recordCount: number; terminal: boolean; }
 interface NativeKeyProof {
   verify(): KeyProofVerification;
 }
@@ -445,8 +456,95 @@ export class ReadSession implements Disposable {
     if (this.#native == null) throw new Error("read session is closed");
     return this.#native.get(ownedBytes(key)) ?? undefined;
   }
+  scanRangeView(
+    start: Uint8Array,
+    end: Uint8Array | undefined,
+    visit: (entry: MapEntryView) => boolean,
+  ): ReadScanOutcome {
+    if (this.#native == null) throw new Error("read session is closed");
+    if (typeof visit !== "function") throw new TypeError("scan visitor must be a function");
+    let previousPageKey: Uint8Array | undefined;
+    const outcome = this.#native.scanRangePages(
+      ownedBytes(start), end == null ? null : ownedBytes(end), (nativePage) => {
+        const page = decodePackedReadPage(nativePage);
+        const scope: ViewScope = { alive: true };
+        let consumed = 0;
+        let previousView: Uint8Array | undefined;
+        try {
+          for (const rawEntry of page.entries) {
+            if (previousView != null && compareBytes(previousView, rawEntry.key) >= 0) {
+              throw new Error("packed scan page keys are not strictly ordered");
+            }
+            if (previousView == null && previousPageKey != null && compareBytes(previousPageKey, rawEntry.key) >= 0) {
+              throw new Error("packed scan page keys are not strictly ordered");
+            }
+            const key = scopedBytes(rawEntry.key, scope);
+            const value = scopedBytes(rawEntry.value, scope);
+            previousView = rawEntry.key;
+            consumed += 1;
+            if (!visit({ key, value })) return consumed;
+          }
+          if (!nativePage.terminal && previousView == null) {
+            throw new Error("non-terminal packed scan page made no progress");
+          }
+          previousPageKey = previousView == null ? previousPageKey : ownedBytes(previousView);
+          return consumed;
+        } finally {
+          scope.alive = false;
+        }
+      },
+    );
+    return { visited: BigInt(outcome.visited), stopped: outcome.stopped };
+  }
   close(): void { this.#native = undefined; }
   [Symbol.dispose](): void { this.close(); }
+}
+
+function decodePackedReadPage(page: NativePackedReadPage): {
+  entries: Array<{ key: Uint8Array; value: Uint8Array }>;
+} {
+  const bytes = page.bytes;
+  if (bytes.byteLength < 28) throw new Error("packed scan page header is truncated");
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  if (view.getUint32(0, false) !== 0x50525047 || view.getUint16(4, true) !== 1 || view.getUint16(6, true) !== 1) {
+    throw new Error("invalid packed scan page header");
+  }
+  const flags = view.getUint32(8, true);
+  const count = view.getUint32(12, true);
+  const tableBytes = view.getUint32(16, true);
+  const arenaBytes = view.getBigUint64(20, true);
+  if (count !== page.recordCount || tableBytes < count * 16 || tableBytes % 16 !== 0 || Boolean(flags & 1) !== page.terminal) {
+    throw new Error("inconsistent packed scan page metadata");
+  }
+  const arenaStart = 28 + tableBytes;
+  if (arenaBytes > BigInt(Number.MAX_SAFE_INTEGER) || BigInt(arenaStart) + arenaBytes !== BigInt(bytes.byteLength)) {
+    throw new Error("invalid packed scan page bounds");
+  }
+  const arenaLength = Number(arenaBytes);
+  const entries: Array<{ key: Uint8Array; value: Uint8Array }> = [];
+  for (let index = 0; index < count; index += 1) {
+    const base = 28 + index * 16;
+    const keyOffset = view.getUint32(base, true);
+    const keyLength = view.getUint32(base + 4, true);
+    const valueOffset = view.getUint32(base + 8, true);
+    const valueLength = view.getUint32(base + 12, true);
+    if (keyOffset > arenaLength || keyLength > arenaLength - keyOffset || valueOffset > arenaLength || valueLength > arenaLength - valueOffset) {
+      throw new Error("packed scan field exceeds arena");
+    }
+    entries.push({
+      key: new Uint8Array(bytes.buffer, bytes.byteOffset + arenaStart + keyOffset, keyLength),
+      value: new Uint8Array(bytes.buffer, bytes.byteOffset + arenaStart + valueOffset, valueLength),
+    });
+  }
+  return { entries };
+}
+
+function compareBytes(left: Uint8Array, right: Uint8Array): number {
+  const shared = Math.min(left.byteLength, right.byteLength);
+  for (let index = 0; index < shared; index += 1) {
+    if (left[index] !== right[index]) return left[index]! - right[index]!;
+  }
+  return left.byteLength - right.byteLength;
 }
 
 export class KeyProof implements Disposable {

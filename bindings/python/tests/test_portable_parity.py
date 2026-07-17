@@ -200,6 +200,23 @@ class PortableParityTests(unittest.TestCase):
                 self.assertGreater(len(snapshot.export().nodes), 0)
                 with snapshot.read() as session:
                     self.assertEqual(session.get(b"k"), b"v")
+                    escaped = []
+                    seen = []
+
+                    def visit_entry(view):
+                        escaped.append(view.key)
+                        seen.append((bytes(view.key), bytes(view.value)))
+                        return True
+
+                    outcome = session.scan_range_view(b"k", b"l", visit_entry)
+                    self.assertEqual(outcome.visited, 2)
+                    self.assertFalse(outcome.stopped)
+                    self.assertEqual(seen, [(b"k", b"v"), (b"ka", b"v2")])
+                    with self.assertRaises(RuntimeError):
+                        bytes(escaped[0])
+                    stopped = session.scan_range_view(b"k", b"l", lambda _entry: False)
+                    self.assertEqual(stopped.visited, 1)
+                    self.assertTrue(stopped.stopped)
             self.assertGreaterEqual(versioned.verify_catalog().version_count, 2)
             self.assertGreater(len(versioned.backup()), 0)
             self.assertGreaterEqual(len(versioned.plan_gc().reachability.live_cids), 1)
