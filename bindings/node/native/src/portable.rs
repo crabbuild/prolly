@@ -2,11 +2,13 @@ use super::{to_napi_error, NativeProllyEngine, NodeTreeRecord};
 use napi::bindgen_prelude::{Buffer, Env, Error, Float32Array, FunctionRef, Result, Status};
 use napi_derive::napi;
 use prolly_bindings::{
-    default_proximity_config, exact_proximity_search_request, BindingIndexRegistry,
-    BindingIndexedMap, BindingIndexedSnapshot, BindingProximityMap, BindingSecondaryIndexSnapshot,
+    default_proximity_config, exact_proximity_search_request, verify_key_proof,
+    verify_proximity_membership_proof, BindingIndexRegistry, BindingIndexedMap,
+    BindingIndexedSnapshot, BindingMapSnapshot, BindingProximityMap, BindingSecondaryIndexSnapshot,
     BindingVersionedMap, IndexBuildResultRecord, IndexEntryRecord, IndexMatchRecord,
     IndexPageRecord, IndexProjectionRecord, IndexedSourceRecord, IndexedVersionRecord,
-    MapVersionRecord, ProllyBindingError, ProximityNeighborRecord, ProximityRecordRecord,
+    KeyProofRecord, MapVersionRecord, ProllyBindingError, ProllyReadSession,
+    ProximityMembershipProofRecord, ProximityNeighborRecord, ProximityRecordRecord,
     ProximitySearchResultRecord, SearchBackendRecord, SearchCompletionRecord,
     SecondaryIndexExtractorCallback,
 };
@@ -167,6 +169,19 @@ pub struct NodePortableSearchResult {
     pub backend: String,
 }
 
+#[napi(object)]
+pub struct NodePortableProofVerification {
+    pub valid: bool,
+    pub exists: bool,
+    pub value: Option<Buffer>,
+}
+
+#[napi(object)]
+pub struct NodePortableMaintenanceSummary {
+    pub item_count: String,
+    pub byte_count: String,
+}
+
 impl From<ProximitySearchResultRecord> for NodePortableSearchResult {
     fn from(value: ProximitySearchResultRecord) -> Self {
         let completion = match value.completion {
@@ -276,6 +291,135 @@ impl NativePortableVersionedMap {
             .map(Into::into)
             .map_err(to_napi_error)
     }
+
+    #[napi]
+    pub fn snapshot(&self) -> Result<Option<NativePortableMapSnapshot>> {
+        self.inner
+            .snapshot()
+            .map(|value| value.map(|inner| NativePortableMapSnapshot { inner }))
+            .map_err(to_napi_error)
+    }
+
+    #[napi]
+    pub fn backup(&self) -> Result<Buffer> {
+        self.inner.backup().map(Buffer::from).map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "verifyCatalog")]
+    pub fn verify_catalog(&self) -> Result<NodePortableMaintenanceSummary> {
+        self.inner
+            .verify_catalog()
+            .map(|value| NodePortableMaintenanceSummary {
+                item_count: value.version_count.to_string(),
+                byte_count: value.reachable_bytes.to_string(),
+            })
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "planGc")]
+    pub fn plan_gc(&self) -> Result<NodePortableMaintenanceSummary> {
+        self.inner
+            .plan_gc()
+            .map(|value| NodePortableMaintenanceSummary {
+                item_count: value.reachability.live_nodes.to_string(),
+                byte_count: value.reclaimable_bytes.to_string(),
+            })
+            .map_err(to_napi_error)
+    }
+}
+
+#[napi]
+pub struct NativePortableMapSnapshot {
+    inner: Arc<BindingMapSnapshot>,
+}
+
+#[napi]
+impl NativePortableMapSnapshot {
+    #[napi]
+    pub fn get(&self, key: Buffer) -> Result<Option<Buffer>> {
+        self.inner
+            .get(key.to_vec())
+            .map(|value| value.map(Buffer::from))
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "proveKey")]
+    pub fn prove_key(&self, key: Buffer) -> Result<NativePortableKeyProof> {
+        self.inner
+            .prove_key(key.to_vec())
+            .map(|inner| NativePortableKeyProof { inner })
+            .map_err(to_napi_error)
+    }
+
+    #[napi]
+    pub fn stats(&self) -> Result<NodePortableMaintenanceSummary> {
+        self.inner
+            .stats()
+            .map(|value| NodePortableMaintenanceSummary {
+                item_count: value.total_key_value_pairs.to_string(),
+                byte_count: value.total_tree_size_bytes.to_string(),
+            })
+            .map_err(to_napi_error)
+    }
+
+    #[napi]
+    pub fn export(&self) -> Result<NodePortableMaintenanceSummary> {
+        self.inner
+            .export()
+            .map(|value| NodePortableMaintenanceSummary {
+                item_count: value.nodes.len().to_string(),
+                byte_count: value
+                    .nodes
+                    .iter()
+                    .map(|node| node.bytes.len() as u64)
+                    .sum::<u64>()
+                    .to_string(),
+            })
+            .map_err(to_napi_error)
+    }
+
+    #[napi]
+    pub fn read(&self) -> Result<NativePortableReadSession> {
+        self.inner
+            .read_session()
+            .map(|inner| NativePortableReadSession { inner })
+            .map_err(to_napi_error)
+    }
+}
+
+#[napi]
+pub struct NativePortableReadSession {
+    inner: Arc<ProllyReadSession>,
+}
+
+#[napi]
+impl NativePortableReadSession {
+    #[napi]
+    pub fn get(&self, key: Buffer) -> Result<Option<Buffer>> {
+        self.inner
+            .get(key.to_vec())
+            .map(|value| value.map(Buffer::from))
+            .map_err(to_napi_error)
+    }
+}
+
+#[napi]
+pub struct NativePortableKeyProof {
+    inner: KeyProofRecord,
+}
+
+#[napi]
+impl NativePortableKeyProof {
+    #[napi]
+    pub fn verify(&self) -> Result<NodePortableProofVerification> {
+        verify_key_proof(self.inner.clone())
+            .map(|value| NodePortableProofVerification {
+                valid: value.valid,
+                exists: value.exists,
+                value: value.value.map(Buffer::from),
+            })
+            .map_err(to_napi_error)
+    }
 }
 
 #[napi]
@@ -382,6 +526,44 @@ impl NativePortableIndexedMap {
             .map(|inner| NativePortableIndexedSnapshot { inner })
             .map_err(to_napi_error)
     }
+
+    #[napi]
+    pub fn metrics(&self) -> Result<NodePortableMaintenanceSummary> {
+        self.inner
+            .metrics()
+            .map(|value| NodePortableMaintenanceSummary {
+                item_count: value.build_attempts.to_string(),
+                byte_count: value.projected_bytes.to_string(),
+            })
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "verifyIndex")]
+    pub fn verify_index(&self, name: Buffer, source_version: Buffer) -> Result<bool> {
+        self.inner
+            .verify_index(name.to_vec(), source_version.to_vec())
+            .map(|value| value.valid)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "exportCurrent")]
+    pub fn export_current(&self) -> Result<Buffer> {
+        self.inner
+            .export_current()
+            .map(Buffer::from)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "keepLast")]
+    pub fn keep_last(&self, count: String) -> Result<String> {
+        let count = count
+            .parse::<u64>()
+            .map_err(|error| Error::new(Status::InvalidArg, error.to_string()))?;
+        self.inner
+            .keep_last(count)
+            .map(|value| value.retained_source_versions.len().to_string())
+            .map_err(to_napi_error)
+    }
 }
 
 #[napi]
@@ -472,6 +654,45 @@ impl NativePortableProximityMap {
             .search(exact_proximity_search_request(query.to_vec(), k))
             .map(Into::into)
             .map_err(to_napi_error)
+    }
+
+    #[napi]
+    pub fn descriptor(&self) -> Buffer {
+        Buffer::from(self.inner.descriptor())
+    }
+
+    #[napi]
+    pub fn verify(&self) -> Result<String> {
+        self.inner
+            .verify()
+            .map(|value| value.record_count.to_string())
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "proveMembership")]
+    pub fn prove_membership(&self, key: Buffer) -> Result<NativePortableProximityProof> {
+        self.inner
+            .prove_membership(key.to_vec())
+            .map(|inner| NativePortableProximityProof { inner })
+            .map_err(to_napi_error)
+    }
+}
+
+#[napi]
+pub struct NativePortableProximityProof {
+    inner: ProximityMembershipProofRecord,
+}
+
+#[napi]
+impl NativePortableProximityProof {
+    #[napi]
+    pub fn verify(&self, expected_descriptor: Option<Buffer>) -> Result<Option<Buffer>> {
+        verify_proximity_membership_proof(
+            self.inner.clone(),
+            expected_descriptor.map(|value| value.to_vec()),
+        )
+        .map(|value| value.record.map(|record| Buffer::from(record.value)))
+        .map_err(to_napi_error)
     }
 }
 

@@ -73,3 +73,45 @@ test("portable promises honor AbortSignal and own inputs", async () => {
     engine.close();
   }
 });
+
+test("proofs, retained sessions, and maintenance stay native", async () => {
+  const engine = await Engine.memory();
+  try {
+    const versioned = engine.versionedMap(bytes("proofs"));
+    await versioned.initialize();
+    await versioned.put(bytes("k"), bytes("v"));
+    const snapshot = await versioned.snapshot();
+    assert.ok(snapshot);
+    const proof = snapshot.proveKey(bytes("k"));
+    assert.equal(Buffer.from(proof.verify().value ?? []).toString(), "v");
+    assert.equal(snapshot.stats().itemCount, 1n);
+    assert.ok(snapshot.exportSummary().itemCount > 0n);
+    const session = snapshot.read();
+    assert.equal(Buffer.from(session.get(bytes("k")) ?? []).toString(), "v");
+    assert.ok((await versioned.verifyCatalog()).itemCount >= 2n);
+    assert.ok((await versioned.backup()).byteLength > 0);
+    assert.ok((await versioned.planGc()).itemCount > 0n);
+
+    const registry = engine.indexRegistry();
+    registry.register({
+      name: bytes("by_value"), generation: 1n, extractorId: "value-v1", projection: "all",
+      extract: (_key, value) => [{ term: Buffer.from(value) }],
+    });
+    const indexed = engine.indexedMap(bytes("indexed-maintenance"), registry);
+    const version = await indexed.put(bytes("k"), bytes("term"));
+    await indexed.ensureIndex(bytes("by_value"));
+    assert.equal(indexed.verifyIndex(bytes("by_value"), version.sourceVersion), true);
+    assert.ok(indexed.metrics().buildAttempts >= 1n);
+    assert.ok(indexed.exportCurrent().byteLength > 0);
+    assert.ok(indexed.keepLast(1n) >= 1n);
+
+    const proximity = await engine.buildProximity(2, [
+      { key: bytes("p"), vector: new Float32Array([0, 0]), value: bytes("payload") },
+    ]);
+    const membership = proximity.proveMembership(bytes("p")).verify(proximity.descriptor());
+    assert.equal(Buffer.from(membership.value ?? []).toString(), "payload");
+    assert.equal(proximity.verify().recordCount, 1n);
+  } finally {
+    engine.close();
+  }
+});

@@ -31,7 +31,11 @@ export interface SearchResult {
 
 interface NativeProximityMap {
   search(vector: Float32Array, topK: string): SearchResult;
+  descriptor(): Uint8Array;
+  verify(): string;
+  proveMembership(key: Uint8Array): NativeProximityProof;
 }
+interface NativeProximityProof { verify(expectedDescriptor?: Uint8Array): Uint8Array | null; }
 
 export class ProximityMap implements Disposable {
   #native?: NativeProximityMap;
@@ -42,6 +46,24 @@ export class ProximityMap implements Disposable {
   }
   read(): ProximityReadSession { return new ProximityReadSession(this.nativeHandle()); }
   search(request: SearchRequest): Promise<SearchResult> { return this.read().search(request); }
+  descriptor(): Uint8Array { return this.nativeHandle().descriptor(); }
+  verify(): { recordCount: bigint } { return { recordCount: BigInt(this.nativeHandle().verify()) }; }
+  proveMembership(key: Uint8Array): ProximityMembershipProof {
+    return new ProximityMembershipProof(this.nativeHandle().proveMembership(ownedBytes(key)));
+  }
+  close(): void { this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class ProximityMembershipProof implements Disposable {
+  #native?: NativeProximityProof;
+  constructor(native: NativeProximityProof) { this.#native = native; }
+  verify(expectedDescriptor?: Uint8Array): { value?: Uint8Array } {
+    if (this.#native == null) throw new Error("proximity proof is closed");
+    const value = this.#native.verify(
+      expectedDescriptor == null ? undefined : ownedBytes(expectedDescriptor));
+    return { value: value ?? undefined };
+  }
   close(): void { this.#native = undefined; }
   [Symbol.dispose](): void { this.close(); }
 }

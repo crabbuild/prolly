@@ -120,6 +120,10 @@ interface NativeIndexedMap {
   delete(key: Uint8Array): NativeIndexedVersion;
   ensureIndex(name: Uint8Array): NativeIndexBuildResult;
   snapshot(): NativeIndexedSnapshot;
+  metrics(): { itemCount: string; byteCount: string };
+  verifyIndex(name: Uint8Array, sourceVersion: Uint8Array): boolean;
+  exportCurrent(): Uint8Array;
+  keepLast(count: string): string;
 }
 
 interface NativeIndexedSnapshot { index(name: Uint8Array): NativeSecondaryIndex; }
@@ -176,6 +180,15 @@ export class IndexedMap implements Disposable {
     const native = this.#open();
     return nativePromise(signal, () => new IndexedSnapshot(native.snapshot()));
   }
+  metrics(): { buildAttempts: bigint; projectedBytes: bigint } {
+    const value = this.#open().metrics();
+    return { buildAttempts: BigInt(value.itemCount), projectedBytes: BigInt(value.byteCount) };
+  }
+  verifyIndex(name: Uint8Array, sourceVersion: Uint8Array): boolean {
+    return this.#open().verifyIndex(ownedBytes(name), ownedBytes(sourceVersion));
+  }
+  exportCurrent(): Uint8Array { return this.#open().exportCurrent(); }
+  keepLast(count: bigint): bigint { return BigInt(this.#open().keepLast(count.toString())); }
   close(): void { this.#native = undefined; }
   [Symbol.dispose](): void { this.close(); }
 }

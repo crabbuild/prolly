@@ -61,6 +61,15 @@ export interface NodePortableSearchResult {
   completion: string
   backend: string
 }
+export interface NodePortableProofVerification {
+  valid: boolean
+  exists: boolean
+  value?: Buffer
+}
+export interface NodePortableMaintenanceSummary {
+  itemCount: string
+  byteCount: string
+}
 export interface NodeTreeRecord {
   root?: Buffer
   config?: NodeConfigRecord
@@ -758,6 +767,23 @@ export declare class NativePortableVersionedMap {
   get(key: Buffer): Buffer | null
   put(key: Buffer, value: Buffer): NodePortableMapVersion
   delete(key: Buffer): NodePortableMapVersion
+  snapshot(): NativePortableMapSnapshot | null
+  backup(): Buffer
+  verifyCatalog(): NodePortableMaintenanceSummary
+  planGc(): NodePortableMaintenanceSummary
+}
+export declare class NativePortableMapSnapshot {
+  get(key: Buffer): Buffer | null
+  proveKey(key: Buffer): NativePortableKeyProof
+  stats(): NodePortableMaintenanceSummary
+  export(): NodePortableMaintenanceSummary
+  read(): NativePortableReadSession
+}
+export declare class NativePortableReadSession {
+  get(key: Buffer): Buffer | null
+}
+export declare class NativePortableKeyProof {
+  verify(): NodePortableProofVerification
 }
 export declare class NativePortableIndexRegistry {
   constructor()
@@ -769,6 +795,10 @@ export declare class NativePortableIndexedMap {
   delete(key: Buffer): NodePortableIndexedVersion
   ensureIndex(name: Buffer): NodePortableIndexBuildResult
   snapshot(): NativePortableIndexedSnapshot
+  metrics(): NodePortableMaintenanceSummary
+  verifyIndex(name: Buffer, sourceVersion: Buffer): boolean
+  exportCurrent(): Buffer
+  keepLast(count: string): string
 }
 export declare class NativePortableIndexedSnapshot {
   index(name: Buffer): NativePortableSecondaryIndex
@@ -782,6 +812,12 @@ export declare class NativePortableSecondaryIndex {
 }
 export declare class NativePortableProximityMap {
   search(query: Float32Array, k: string): NodePortableSearchResult
+  descriptor(): Buffer
+  verify(): string
+  proveMembership(key: Buffer): NativePortableProximityProof
+}
+export declare class NativePortableProximityProof {
+  verify(expectedDescriptor?: Buffer | undefined | null): Buffer | null
 }
 export declare class NativeProllyBlobStore {
   static memory(): NativeProllyBlobStore
