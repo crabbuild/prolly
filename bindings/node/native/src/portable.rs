@@ -622,10 +622,52 @@ pub struct NativePortableVersionedMap {
 #[napi]
 impl NativePortableVersionedMap {
     #[napi]
+    pub fn id(&self) -> Buffer {
+        Buffer::from(self.inner.id())
+    }
+
+    #[napi(js_name = "isInitialized")]
+    pub fn is_initialized(&self) -> Result<bool> {
+        self.inner.is_initialized().map_err(to_napi_error)
+    }
+
+    #[napi]
     pub fn initialize(&self) -> Result<NodePortableMapVersion> {
         self.inner
             .initialize()
             .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi]
+    pub fn head(&self) -> Result<Option<NodePortableMapVersion>> {
+        self.inner
+            .head()
+            .map(|value| value.map(Into::into))
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "headId")]
+    pub fn head_id(&self) -> Result<Option<Buffer>> {
+        self.inner
+            .head_id()
+            .map(|value| value.map(Buffer::from))
+            .map_err(to_napi_error)
+    }
+
+    #[napi]
+    pub fn version(&self, id: Buffer) -> Result<Option<NodePortableMapVersion>> {
+        self.inner
+            .version(id.to_vec())
+            .map(|value| value.map(Into::into))
+            .map_err(to_napi_error)
+    }
+
+    #[napi]
+    pub fn versions(&self) -> Result<Vec<NodePortableMapVersion>> {
+        self.inner
+            .versions()
+            .map(|values| values.into_iter().map(Into::into).collect())
             .map_err(to_napi_error)
     }
 
@@ -657,6 +699,14 @@ impl NativePortableVersionedMap {
     pub fn snapshot(&self) -> Result<Option<NativePortableMapSnapshot>> {
         self.inner
             .snapshot()
+            .map(|value| value.map(|inner| NativePortableMapSnapshot { inner }))
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "snapshotAt")]
+    pub fn snapshot_at(&self, id: Buffer) -> Result<Option<NativePortableMapSnapshot>> {
+        self.inner
+            .snapshot_at(id.to_vec())
             .map(|value| value.map(|inner| NativePortableMapSnapshot { inner }))
             .map_err(to_napi_error)
     }
@@ -696,6 +746,16 @@ pub struct NativePortableMapSnapshot {
 
 #[napi]
 impl NativePortableMapSnapshot {
+    #[napi]
+    pub fn id(&self) -> Buffer {
+        Buffer::from(self.inner.id())
+    }
+
+    #[napi]
+    pub fn version(&self) -> NodePortableMapVersion {
+        self.inner.version().into()
+    }
+
     #[napi]
     pub fn get(&self, key: Buffer) -> Result<Option<Buffer>> {
         self.inner

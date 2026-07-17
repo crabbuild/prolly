@@ -102,6 +102,27 @@ test("WASM promise wrappers own inputs and honor AbortSignal", { skip: !generate
   engine.close();
 });
 
+test("WASM versioned maps expose identity and historical snapshot lifecycle", { skip: !generatedPresent }, async () => {
+  const engine = api.Engine.memory(wasm);
+  const map = engine.versionedMap(bytes("versioned-lifecycle"));
+  assert.equal(Buffer.from(map.id()).toString(), "versioned-lifecycle");
+  assert.equal(await map.isInitialized(), false);
+  const initial = await map.initialize();
+  assert.equal(await map.isInitialized(), true);
+  assert.deepEqual(await map.headId(), initial.id);
+  const first = await map.put(bytes("k"), bytes("v1"));
+  await map.put(bytes("k"), bytes("v2"));
+  assert.deepEqual((await map.head())?.id, await map.headId());
+  assert.deepEqual((await map.version(first.id))?.id, first.id);
+  assert.ok((await map.versions()).length >= 3);
+  const historical = await map.snapshotAt(first.id);
+  assert.ok(historical);
+  assert.deepEqual(historical.id(), first.id);
+  assert.deepEqual(historical.version().id, first.id);
+  assert.equal(Buffer.from(historical.get(bytes("k")) ?? []).toString(), "v1");
+  engine.close();
+});
+
 test("WASM proofs, retained sessions, and maintenance stay in Rust", { skip: !generatedPresent }, async () => {
   const engine = api.Engine.memory(wasm);
   const versioned = engine.versionedMap(bytes("proofs"));

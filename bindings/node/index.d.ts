@@ -886,16 +886,25 @@ export declare class NodePortableProximityMutationResult {
   stats(): NodePortableProximityMutationStats
 }
 export declare class NativePortableVersionedMap {
+  id(): Buffer
+  isInitialized(): boolean
   initialize(): NodePortableMapVersion
+  head(): NodePortableMapVersion | null
+  headId(): Buffer | null
+  version(id: Buffer): NodePortableMapVersion | null
+  versions(): Array<NodePortableMapVersion>
   get(key: Buffer): Buffer | null
   put(key: Buffer, value: Buffer): NodePortableMapVersion
   delete(key: Buffer): NodePortableMapVersion
   snapshot(): NativePortableMapSnapshot | null
+  snapshotAt(id: Buffer): NativePortableMapSnapshot | null
   backup(): Buffer
   verifyCatalog(): NodePortableMaintenanceSummary
   planGc(): NodePortableMaintenanceSummary
 }
 export declare class NativePortableMapSnapshot {
+  id(): Buffer
+  version(): NodePortableMapVersion
   get(key: Buffer): Buffer | null
   proveKey(key: Buffer): NativePortableKeyProof
   stats(): NodePortableMaintenanceSummary

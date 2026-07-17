@@ -35,6 +35,26 @@ final class PortableParityTests: XCTestCase {
         }
     }
 
+    func testVersionedSnapshotLifecycle() throws {
+        try Engine.withMemory { engine in
+            let versioned = try engine.versionedMap(Data("versioned-lifecycle".utf8))
+            XCTAssertEqual(versioned.id, Data("versioned-lifecycle".utf8))
+            XCTAssertFalse(try versioned.isInitialized())
+            let initial = try versioned.initialize()
+            XCTAssertTrue(try versioned.isInitialized())
+            XCTAssertEqual(try versioned.headID(), initial.id)
+            let first = try versioned.put(Data("k".utf8), value: Data("v1".utf8))
+            _ = try versioned.put(Data("k".utf8), value: Data("v2".utf8))
+            XCTAssertEqual(try versioned.head()?.id, try versioned.headID())
+            XCTAssertEqual(try versioned.version(first.id)?.id, first.id)
+            XCTAssertGreaterThanOrEqual(try versioned.versions().count, 3)
+            let historical = try XCTUnwrap(versioned.snapshot(at: first.id))
+            XCTAssertEqual(historical.id, first.id)
+            XCTAssertEqual(historical.version.id, first.id)
+            XCTAssertEqual(try historical.get(Data("k".utf8)), Data("v1".utf8))
+        }
+    }
+
     func testProofsSessionsAndMaintenanceAreApplicationFacing() throws {
         try Engine.withMemory { engine in
             let versioned = try engine.versionedMap(Data("proofs".utf8))

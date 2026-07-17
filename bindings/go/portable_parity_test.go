@@ -180,6 +180,74 @@ func TestPortableAsyncWrappersCopyInputsBeforeHandoff(t *testing.T) {
 	}
 }
 
+func TestPortableVersionedSnapshotLifecycle(t *testing.T) {
+	engine, err := OpenMemory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer engine.Close()
+	versioned, err := engine.VersionedMap([]byte("versioned-lifecycle"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer versioned.Close()
+	id, err := versioned.ID()
+	if err != nil || !bytes.Equal(id, []byte("versioned-lifecycle")) {
+		t.Fatalf("id = %q, %v", id, err)
+	}
+	if initialized, err := versioned.IsInitialized(); err != nil || initialized {
+		t.Fatalf("initial state = %v, %v", initialized, err)
+	}
+	initial, err := versioned.Initialize()
+	if err != nil {
+		t.Fatal(err)
+	}
+	headID, ok, err := versioned.HeadID()
+	if err != nil || !ok || !bytes.Equal(headID, initial.ID) {
+		t.Fatalf("initial head = %x, %v, %v", headID, ok, err)
+	}
+	first, err := versioned.Put([]byte("k"), []byte("v1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := versioned.Put([]byte("k"), []byte("v2")); err != nil {
+		t.Fatal(err)
+	}
+	head, err := versioned.Head()
+	if err != nil || head == nil {
+		t.Fatalf("head = %#v, %v", head, err)
+	}
+	headID, ok, err = versioned.HeadID()
+	if err != nil || !ok || !bytes.Equal(head.ID, headID) {
+		t.Fatalf("head id = %x, %v, %v", headID, ok, err)
+	}
+	loaded, err := versioned.Version(first.ID)
+	if err != nil || loaded == nil || !bytes.Equal(loaded.ID, first.ID) {
+		t.Fatalf("version = %#v, %v", loaded, err)
+	}
+	versions, err := versioned.Versions()
+	if err != nil || len(versions) < 3 {
+		t.Fatalf("versions = %d, %v", len(versions), err)
+	}
+	historical, err := versioned.SnapshotAt(first.ID)
+	if err != nil || historical == nil {
+		t.Fatalf("snapshot at = %#v, %v", historical, err)
+	}
+	defer historical.Close()
+	snapshotID, err := historical.ID()
+	if err != nil || !bytes.Equal(snapshotID, first.ID) {
+		t.Fatalf("snapshot id = %x, %v", snapshotID, err)
+	}
+	snapshotVersion, err := historical.Version()
+	if err != nil || !bytes.Equal(snapshotVersion.ID, first.ID) {
+		t.Fatalf("snapshot version = %#v, %v", snapshotVersion, err)
+	}
+	value, ok, err := historical.Get([]byte("k"))
+	if err != nil || !ok || !bytes.Equal(value, []byte("v1")) {
+		t.Fatalf("historical get = %q, %v, %v", value, ok, err)
+	}
+}
+
 func TestPortableProofSessionAndMaintenance(t *testing.T) {
 	engine, err := OpenMemory()
 	if err != nil {

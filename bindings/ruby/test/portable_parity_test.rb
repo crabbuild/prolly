@@ -56,6 +56,26 @@ class PortableParityTest < Minitest::Test
     end
   end
 
+  def test_versioned_snapshot_lifecycle
+    Prolly::Engine.memory.use do |engine|
+      versioned = engine.versioned_map('versioned-lifecycle'.b)
+      assert_equal 'versioned-lifecycle'.b, versioned.id
+      refute versioned.initialized?
+      initial = versioned.initialize_map
+      assert versioned.initialized?
+      assert_equal initial.id, versioned.head_id
+      first = versioned.put('k'.b, 'v1'.b)
+      versioned.put('k'.b, 'v2'.b)
+      assert_equal versioned.head.id, versioned.head_id
+      assert_equal first.id, versioned.version(first.id).id
+      assert_operator versioned.versions.size, :>=, 3
+      historical = versioned.snapshot_at(first.id)
+      assert_equal first.id, historical.id
+      assert_equal first.id, historical.version.id
+      assert_equal 'v1'.b, historical.get('k'.b)
+    end
+  end
+
   def test_proofs_sessions_and_maintenance_are_application_facing
     Prolly::Engine.memory.use do |engine|
       versioned = engine.versioned_map('proofs'.b)

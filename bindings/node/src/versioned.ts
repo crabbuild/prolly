@@ -15,11 +15,18 @@ interface NativeMapVersion {
 }
 
 interface NativeVersionedMap {
+  id(): Uint8Array;
+  isInitialized(): boolean;
   initialize(): NativeMapVersion;
+  head(): NativeMapVersion | null;
+  headId(): Uint8Array | null;
+  version(id: Uint8Array): NativeMapVersion | null;
+  versions(): NativeMapVersion[];
   get(key: Uint8Array): Uint8Array | null;
   put(key: Uint8Array, value: Uint8Array): NativeMapVersion;
   delete(key: Uint8Array): NativeMapVersion;
   snapshot(): NativeMapSnapshot | null;
+  snapshotAt(id: Uint8Array): NativeMapSnapshot | null;
   backup(): Uint8Array;
   verifyCatalog(): NativeMaintenanceSummary;
   planGc(): NativeMaintenanceSummary;
@@ -27,6 +34,8 @@ interface NativeVersionedMap {
 
 interface NativeMaintenanceSummary { itemCount: string; byteCount: string; }
 interface NativeMapSnapshot {
+  id(): Uint8Array;
+  version(): NativeMapVersion;
   get(key: Uint8Array): Uint8Array | null;
   proveKey(key: Uint8Array): NativeKeyProof;
   stats(): NativeMaintenanceSummary;
@@ -65,9 +74,42 @@ export class VersionedMap implements Disposable {
     return this.#native;
   }
 
+  id(): Uint8Array { return this.#open().id(); }
+
+  isInitialized(signal?: AbortSignal): Promise<boolean> {
+    const native = this.#open();
+    return nativePromise(signal, () => native.isInitialized());
+  }
+
   initialize(signal?: AbortSignal): Promise<MapVersion> {
     const native = this.#open();
     return nativePromise(signal, () => mapVersion(native.initialize()));
+  }
+
+  head(signal?: AbortSignal): Promise<MapVersion | undefined> {
+    const native = this.#open();
+    return nativePromise(signal, () => {
+      const value = native.head();
+      return value == null ? undefined : mapVersion(value);
+    });
+  }
+
+  headId(signal?: AbortSignal): Promise<Uint8Array | undefined> {
+    const native = this.#open();
+    return nativePromise(signal, () => native.headId() ?? undefined);
+  }
+
+  version(id: Uint8Array, signal?: AbortSignal): Promise<MapVersion | undefined> {
+    const native = this.#open(); id = ownedBytes(id);
+    return nativePromise(signal, () => {
+      const value = native.version(id);
+      return value == null ? undefined : mapVersion(value);
+    });
+  }
+
+  versions(signal?: AbortSignal): Promise<MapVersion[]> {
+    const native = this.#open();
+    return nativePromise(signal, () => native.versions().map(mapVersion));
   }
 
   get(key: Uint8Array, signal?: AbortSignal): Promise<Uint8Array | undefined> {
@@ -93,6 +135,14 @@ export class VersionedMap implements Disposable {
     const native = this.#open();
     return nativePromise(signal, () => {
       const value = native.snapshot();
+      return value == null ? undefined : new MapSnapshot(value);
+    });
+  }
+
+  snapshotAt(id: Uint8Array, signal?: AbortSignal): Promise<MapSnapshot | undefined> {
+    const native = this.#open(); id = ownedBytes(id);
+    return nativePromise(signal, () => {
+      const value = native.snapshotAt(id);
       return value == null ? undefined : new MapSnapshot(value);
     });
   }
@@ -128,6 +178,8 @@ export class MapSnapshot implements Disposable {
     if (this.#native == null) throw new Error("map snapshot is closed");
     return this.#native;
   }
+  id(): Uint8Array { return this.#open().id(); }
+  version(): MapVersion { return mapVersion(this.#open().version()); }
   get(key: Uint8Array, signal?: AbortSignal): Promise<Uint8Array | undefined> {
     const native = this.#open(); key = ownedBytes(key);
     return nativePromise(signal, () => native.get(key) ?? undefined);

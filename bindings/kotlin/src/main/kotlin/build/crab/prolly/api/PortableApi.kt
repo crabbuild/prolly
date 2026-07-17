@@ -73,11 +73,17 @@ class Engine private constructor(internal val native: ProllyEngine) : AutoClosea
 }
 
 class VersionedMap(internal val native: BindingVersionedMap) : AutoCloseable {
+    val id: ByteArray get() = native.id()
+    fun isInitialized() = native.isInitialized()
     fun initialize() = native.initialize()
+    fun head() = native.head()
+    fun headId() = native.headId()
+    fun version(id: ByteArray) = native.version(id.copyOf())
     fun get(key: ByteArray) = native.get(key.copyOf())
     fun put(key: ByteArray, value: ByteArray) = native.put(key.copyOf(), value.copyOf())
     fun delete(key: ByteArray) = native.delete(key.copyOf())
     fun snapshot() = native.snapshot()?.let(::MapSnapshot)
+    fun snapshotAt(id: ByteArray) = native.snapshotAt(id.copyOf())?.let(::MapSnapshot)
     fun versions() = native.versions()
     fun backup() = native.backup()
     fun restoreBackup(bundle: ByteArray) = native.restoreBackup(bundle.copyOf())
@@ -97,6 +103,7 @@ class VersionedMap(internal val native: BindingVersionedMap) : AutoCloseable {
 
 class MapSnapshot(internal val native: BindingMapSnapshot) : AutoCloseable {
     val id: ByteArray get() = native.id()
+    val version get() = native.version()
     fun get(key: ByteArray) = native.get(key.copyOf())
     fun range(start: ByteArray = ByteArray(0), end: ByteArray? = null) =
         native.range(start.copyOf(), end?.copyOf())

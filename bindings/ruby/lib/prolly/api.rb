@@ -257,10 +257,17 @@ module Prolly
 
     # Ruby makes `initialize` private even when generated as an FFI method.
     def initialize_map = open! { @native.__send__(:initialize) }
+    def id = open! { @native.id }
+    def initialized? = open! { @native.is_initialized }
+    def head = open! { @native.head }
+    def head_id = open! { @native.head_id }
+    def version(id) = open! { @native.version(id.b) }
+    def versions = open! { @native.versions }
     def get(key) = open! { @native.get(key.b) }
     def put(key, value) = open! { @native.put(key.b, value.b) }
     def delete(key) = open! { @native.delete(key.b) }
     def snapshot = open! { @native.snapshot&.then { |value| MapSnapshot.new(value) } }
+    def snapshot_at(id) = open! { @native.snapshot_at(id.b)&.then { |value| MapSnapshot.new(value) } }
     def backup = open! { @native.backup }
     def restore_backup(bundle) = open! { @native.restore_backup(bundle.b) }
     def keep_last(count) = open! { @native.keep_last(count) }
@@ -291,6 +298,7 @@ module Prolly
     end
 
     def id = open! { @native.id }
+    def version = open! { @native.version }
     def get(key) = open! { @native.get(key.b) }
     def range(start = ''.b, range_end = nil) = open! { @native.range(start.b, range_end&.b) }
     def prove_key(key) = open! { @native.prove_key(key.b) }

@@ -226,6 +226,28 @@ class PortableParityTest {
         }
     }
 
+    @Test
+    void versionedMapExposesIdentityAndHistoricalSnapshotLifecycle() {
+        Prolly.useLocalDebugLibrary();
+        try (Engine engine = Engine.memory(); var map = engine.versionedMap(bytes("versioned-lifecycle"))) {
+            assertArrayEquals(bytes("versioned-lifecycle"), map.id());
+            assertFalse(map.isInitialized());
+            var initial = map.initialize();
+            assertTrue(map.isInitialized());
+            assertArrayEquals(initial.id(), map.headId().orElseThrow());
+            var first = map.put(bytes("k"), bytes("v1"));
+            map.put(bytes("k"), bytes("v2"));
+            assertArrayEquals(map.head().orElseThrow().id(), map.headId().orElseThrow());
+            assertArrayEquals(first.id(), map.version(first.id()).orElseThrow().id());
+            assertTrue(map.versions().size() >= 3);
+            try (var historical = map.snapshotAt(first.id())) {
+                assertArrayEquals(first.id(), historical.id());
+                assertArrayEquals(first.id(), historical.version().id());
+                assertArrayEquals(bytes("v1"), historical.get(bytes("k")).orElseThrow());
+            }
+        }
+    }
+
     private static byte[] bytes(String value) {
         return value.getBytes(StandardCharsets.UTF_8);
     }

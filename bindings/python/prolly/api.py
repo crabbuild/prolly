@@ -103,9 +103,26 @@ class VersionedMap(_Scoped):
         self._open()
         return self._inner.initialize()
 
+    @property
+    def id(self) -> bytes:
+        self._open()
+        return self._inner.id()
+
+    def is_initialized(self) -> bool:
+        self._open()
+        return self._inner.is_initialized()
+
     def head(self):
         self._open()
         return self._inner.head()
+
+    def head_id(self):
+        self._open()
+        return self._inner.head_id()
+
+    def version(self, version_id: bytes):
+        self._open()
+        return self._inner.version(bytes(version_id))
 
     def versions(self):
         self._open()
@@ -192,6 +209,11 @@ class MapSnapshot(_Scoped):
     def id(self) -> bytes:
         self._open()
         return self._inner.id()
+
+    @property
+    def version(self):
+        self._open()
+        return self._inner.version()
 
     def get(self, key: bytes):
         self._open()

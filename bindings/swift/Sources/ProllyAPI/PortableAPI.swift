@@ -102,7 +102,15 @@ public final class VersionedMap: @unchecked Sendable {
     init(native: BindingVersionedMap) { self.native = native }
 
     public func close() { closed = true }
+    public var id: Data { native.id() }
+    public func isInitialized() throws -> Bool { try open { try native.isInitialized() } }
     public func initialize() throws -> MapVersionRecord { try open { try native.initialize() } }
+    public func head() throws -> MapVersionRecord? { try open { try native.head() } }
+    public func headID() throws -> Data? { try open { try native.headId() } }
+    public func version(_ id: Data) throws -> MapVersionRecord? {
+        try open { try native.version(id: Data(id)) }
+    }
+    public func versions() throws -> [MapVersionRecord] { try open { try native.versions() } }
     public func get(_ key: Data) throws -> Data? { try open { try native.get(key: Data(key)) } }
     public func put(_ key: Data, value: Data) throws -> MapVersionRecord {
         try open { try native.put(key: Data(key), value: Data(value)) }
@@ -112,6 +120,9 @@ public final class VersionedMap: @unchecked Sendable {
     }
     public func snapshot() throws -> MapSnapshot? {
         try open { try native.snapshot().map(MapSnapshot.init(native:)) }
+    }
+    public func snapshot(at id: Data) throws -> MapSnapshot? {
+        try open { try native.snapshotAt(id: Data(id)).map(MapSnapshot.init(native:)) }
     }
     public func backup() throws -> Data { try open { try native.backup() } }
     public func restoreBackup(_ bundle: Data) throws -> MapVersionRecord {
@@ -147,6 +158,7 @@ public final class MapSnapshot: @unchecked Sendable {
     init(native: BindingMapSnapshot) { self.native = native }
     public func close() { closed = true }
     public var id: Data { native.id() }
+    public var version: MapVersionRecord { native.version() }
     public func get(_ key: Data) throws -> Data? { try open { try native.get(key: Data(key)) } }
     public func range(from start: Data = Data(), to end: Data? = nil) throws -> [EntryRecord] {
         try open { try native.range(start: Data(start), rangeEnd: end.map { Data($0) }) }

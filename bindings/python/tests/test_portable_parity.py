@@ -85,6 +85,24 @@ class PortableParityTests(unittest.TestCase):
 
         asyncio.run(run())
 
+    def test_versioned_snapshot_lifecycle(self):
+        with Engine.memory() as engine:
+            versioned = engine.versioned_map(b"versioned-lifecycle")
+            self.assertEqual(versioned.id, b"versioned-lifecycle")
+            self.assertFalse(versioned.is_initialized())
+            initial = versioned.initialize()
+            self.assertTrue(versioned.is_initialized())
+            self.assertEqual(versioned.head_id(), initial.id)
+            first = versioned.put(b"k", b"v1")
+            versioned.put(b"k", b"v2")
+            self.assertEqual(versioned.head().id, versioned.head_id())
+            self.assertEqual(versioned.version(first.id).id, first.id)
+            self.assertGreaterEqual(len(versioned.versions()), 3)
+            with versioned.snapshot_at(first.id) as historical:
+                self.assertEqual(historical.id, first.id)
+                self.assertEqual(historical.version.id, first.id)
+                self.assertEqual(historical.get(b"k"), b"v1")
+
     def test_proofs_sessions_and_maintenance_are_application_facing(self):
         with Engine.memory() as engine:
             versioned = engine.versioned_map(b"proofs")

@@ -16,6 +16,7 @@ public final class MapSnapshot implements AutoCloseable {
     }
 
     public byte[] id() { return open().getId().clone(); }
+    public MapVersion version() { return MapVersion.fromNative(open().getVersion()); }
     public Optional<byte[]> get(byte[] key) {
         byte[] value = open().get(key.clone());
         return Optional.ofNullable(value == null ? null : value.clone());

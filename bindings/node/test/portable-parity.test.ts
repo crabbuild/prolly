@@ -79,6 +79,30 @@ test("portable promises honor AbortSignal and own inputs", async () => {
   }
 });
 
+test("versioned maps expose identity and historical snapshot lifecycle", async () => {
+  const engine = await Engine.memory();
+  try {
+    const map = engine.versionedMap(bytes("versioned-lifecycle"));
+    assert.equal(Buffer.from(map.id()).toString(), "versioned-lifecycle");
+    assert.equal(await map.isInitialized(), false);
+    const initial = await map.initialize();
+    assert.equal(await map.isInitialized(), true);
+    assert.deepEqual(await map.headId(), initial.id);
+    const first = await map.put(bytes("k"), bytes("v1"));
+    await map.put(bytes("k"), bytes("v2"));
+    assert.deepEqual((await map.head())?.id, (await map.headId()));
+    assert.deepEqual((await map.version(first.id))?.id, first.id);
+    assert.ok((await map.versions()).length >= 3);
+    const historical = await map.snapshotAt(first.id);
+    assert.ok(historical);
+    assert.deepEqual(historical.id(), first.id);
+    assert.deepEqual(historical.version().id, first.id);
+    assert.equal(Buffer.from(await historical.get(bytes("k")) ?? []).toString(), "v1");
+  } finally {
+    engine.close();
+  }
+});
+
 test("proofs, retained sessions, and maintenance stay native", async () => {
   const engine = await Engine.memory();
   try {

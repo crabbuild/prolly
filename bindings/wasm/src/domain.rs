@@ -13,12 +13,62 @@ pub struct WasmVersionedMap {
 
 #[wasm_bindgen(js_class = WasmVersionedMap)]
 impl WasmVersionedMap {
+    pub fn id(&self) -> Vec<u8> {
+        self.id.clone()
+    }
+
+    #[wasm_bindgen(js_name = isInitialized)]
+    pub fn is_initialized(&self) -> Result<bool, JsValue> {
+        self.engine
+            .versioned_map(&self.id)
+            .is_initialized()
+            .map_err(js_error)
+    }
+
     pub fn initialize(&self) -> Result<Object, JsValue> {
         self.engine
             .versioned_map(&self.id)
             .initialize()
             .map_err(js_error)
             .and_then(map_version_object)
+    }
+
+    pub fn head(&self) -> Result<Option<Object>, JsValue> {
+        self.engine
+            .versioned_map(&self.id)
+            .head()
+            .map_err(js_error)?
+            .map(map_version_object)
+            .transpose()
+    }
+
+    #[wasm_bindgen(js_name = headId)]
+    pub fn head_id(&self) -> Result<JsValue, JsValue> {
+        self.engine
+            .versioned_map(&self.id)
+            .head_id()
+            .map(|value| optional_bytes(value.map(|id| id.into_cid().0.to_vec())))
+            .map_err(js_error)
+    }
+
+    pub fn version(&self, id: Uint8Array) -> Result<Option<Object>, JsValue> {
+        let id = MapVersionId::from_bytes(&id.to_vec()).map_err(js_error)?;
+        self.engine
+            .versioned_map(&self.id)
+            .version(&id)
+            .map_err(js_error)?
+            .map(map_version_object)
+            .transpose()
+    }
+
+    pub fn versions(&self) -> Result<Vec<Object>, JsValue> {
+        self.engine
+            .versioned_map(&self.id)
+            .versions()
+            .map_err(js_error)?
+            .into_iter()
+            .map(map_version_object)
+            .collect()
     }
 
     pub fn get(&self, key: Uint8Array) -> Result<JsValue, JsValue> {
@@ -54,6 +104,21 @@ impl WasmVersionedMap {
                 engine: Arc::clone(&self.engine),
                 id: self.id.clone(),
                 version: snapshot.id().clone(),
+            }))
+    }
+
+    #[wasm_bindgen(js_name = snapshotAt)]
+    pub fn snapshot_at(&self, id: Uint8Array) -> Result<Option<WasmMapSnapshot>, JsValue> {
+        let version = MapVersionId::from_bytes(&id.to_vec()).map_err(js_error)?;
+        Ok(self
+            .engine
+            .versioned_map(&self.id)
+            .snapshot_at(&version)
+            .map_err(js_error)?
+            .map(|_| WasmMapSnapshot {
+                engine: Arc::clone(&self.engine),
+                id: self.id.clone(),
+                version,
             }))
     }
 
@@ -108,6 +173,14 @@ impl WasmMapSnapshot {
 
 #[wasm_bindgen(js_class = WasmMapSnapshot)]
 impl WasmMapSnapshot {
+    pub fn id(&self) -> Vec<u8> {
+        self.version.clone().into_cid().0.to_vec()
+    }
+
+    pub fn version(&self) -> Result<Object, JsValue> {
+        map_version_object(self.load()?.version().clone())
+    }
+
     pub fn get(&self, key: Uint8Array) -> Result<JsValue, JsValue> {
         self.load()?
             .get(&key.to_vec())

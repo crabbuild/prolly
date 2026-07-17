@@ -905,6 +905,20 @@ export class Engine implements Disposable {
   [Symbol.dispose](): void { this.close(); }
 }
 
+export interface WasmMapVersion {
+  id: Uint8Array;
+  createdAtMillis?: bigint;
+  isHead: boolean;
+}
+
+function wasmMapVersion(value: any): WasmMapVersion {
+  return {
+    id: value.id,
+    createdAtMillis: value.createdAtMillis == null ? undefined : BigInt(value.createdAtMillis),
+    isHead: value.isHead,
+  };
+}
+
 export class WasmVersionedMap implements Disposable {
   #native?: any;
   constructor(native: any) { this.#native = native; }
@@ -912,26 +926,60 @@ export class WasmVersionedMap implements Disposable {
     if (this.#native == null) throw new Error("WASM versioned map is closed");
     return this.#native;
   }
-  initialize(signal?: AbortSignal): Promise<unknown> {
+  id(): Uint8Array { return this.#open().id(); }
+  isInitialized(signal?: AbortSignal): Promise<boolean> {
     const native = this.#open();
-    return portablePromise(signal, () => native.initialize());
+    return portablePromise(signal, () => native.isInitialized());
+  }
+  initialize(signal?: AbortSignal): Promise<WasmMapVersion> {
+    const native = this.#open();
+    return portablePromise(signal, () => wasmMapVersion(native.initialize()));
+  }
+  head(signal?: AbortSignal): Promise<WasmMapVersion | undefined> {
+    const native = this.#open();
+    return portablePromise(signal, () => {
+      const value = native.head();
+      return value == null ? undefined : wasmMapVersion(value);
+    });
+  }
+  headId(signal?: AbortSignal): Promise<Uint8Array | undefined> {
+    const native = this.#open();
+    return portablePromise(signal, () => native.headId() ?? undefined);
+  }
+  version(id: Uint8Array, signal?: AbortSignal): Promise<WasmMapVersion | undefined> {
+    const native = this.#open(); id = ownedPortableBytes(id);
+    return portablePromise(signal, () => {
+      const value = native.version(id);
+      return value == null ? undefined : wasmMapVersion(value);
+    });
+  }
+  versions(signal?: AbortSignal): Promise<WasmMapVersion[]> {
+    const native = this.#open();
+    return portablePromise(signal, () => native.versions().map(wasmMapVersion));
   }
   get(key: Uint8Array, signal?: AbortSignal): Promise<Uint8Array | undefined> {
     const native = this.#open(); key = ownedPortableBytes(key);
     return portablePromise(signal, () => native.get(key) ?? undefined);
   }
-  put(key: Uint8Array, value: Uint8Array, signal?: AbortSignal): Promise<unknown> {
+  put(key: Uint8Array, value: Uint8Array, signal?: AbortSignal): Promise<WasmMapVersion> {
     const native = this.#open(); key = ownedPortableBytes(key); value = ownedPortableBytes(value);
-    return portablePromise(signal, () => native.put(key, value));
+    return portablePromise(signal, () => wasmMapVersion(native.put(key, value)));
   }
-  delete(key: Uint8Array, signal?: AbortSignal): Promise<unknown> {
+  delete(key: Uint8Array, signal?: AbortSignal): Promise<WasmMapVersion> {
     const native = this.#open(); key = ownedPortableBytes(key);
-    return portablePromise(signal, () => native.delete(key));
+    return portablePromise(signal, () => wasmMapVersion(native.delete(key)));
   }
   snapshot(signal?: AbortSignal): Promise<WasmMapSnapshot | undefined> {
     const native = this.#open();
     return portablePromise(signal, () => {
       const value = native.snapshot();
+      return value == null ? undefined : new WasmMapSnapshot(value);
+    });
+  }
+  snapshotAt(id: Uint8Array, signal?: AbortSignal): Promise<WasmMapSnapshot | undefined> {
+    const native = this.#open(); id = ownedPortableBytes(id);
+    return portablePromise(signal, () => {
+      const value = native.snapshotAt(id);
       return value == null ? undefined : new WasmMapSnapshot(value);
     });
   }
@@ -955,6 +1003,8 @@ export class WasmMapSnapshot implements Disposable {
   #native?: any;
   constructor(native: any) { this.#native = native; }
   #open(): any { if (this.#native == null) throw new Error("WASM map snapshot is closed"); return this.#native; }
+  id(): Uint8Array { return this.#open().id(); }
+  version(): WasmMapVersion { return wasmMapVersion(this.#open().version()); }
   get(key: Uint8Array): Uint8Array | undefined { return this.#open().get(ownedPortableBytes(key)) ?? undefined; }
   proveKey(key: Uint8Array): WasmKeyProof { return new WasmKeyProof(this.#open().proveKey(ownedPortableBytes(key))); }
   stats(): { itemCount: bigint; byteCount: bigint } {
