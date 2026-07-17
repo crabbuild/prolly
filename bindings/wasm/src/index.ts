@@ -1147,6 +1147,11 @@ export class WasmVersionedMap implements Disposable {
       lastSeen == null ? undefined : ownedPortableBytes(lastSeen),
     ));
   }
+  prepareMerge(base: Uint8Array, candidate: Uint8Array): WasmMapMerge {
+    return new WasmMapMerge(this.#open().prepareMerge(
+      ownedPortableBytes(base), ownedPortableBytes(candidate),
+    ));
+  }
   backup(signal?: AbortSignal): Promise<Uint8Array> {
     const native = this.#open();
     return portablePromise(signal, () => native.backup());
@@ -1252,6 +1257,24 @@ export class WasmMapSubscription implements Disposable {
       current: wasmMapVersion(event.current),
       diffs: event.diffs,
     };
+  }
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class WasmMapMerge implements Disposable {
+  #native?: any;
+  constructor(native: any) { this.#native = native; }
+  #open(): any { if (this.#native == null) throw new Error("WASM map merge is closed"); return this.#native; }
+  base(): WasmMapVersion { return wasmMapVersion(this.#open().base()); }
+  head(): WasmMapVersion { return wasmMapVersion(this.#open().head()); }
+  candidate(): WasmMapVersion { return wasmMapVersion(this.#open().candidate()); }
+  merge(resolver?: string): any { return this.#open().merge(resolver); }
+  conflictPage(cursor?: WasmRangeCursorRecord, limit = 256): WasmConflictPageRecord {
+    return this.#open().conflictPage(cursor, limit);
+  }
+  publish(resolver?: string): WasmMapUpdate {
+    return wasmMapUpdate(this.#open().publish(resolver));
   }
   close(): void { this.#native?.free?.(); this.#native = undefined; }
   [Symbol.dispose](): void { this.close(); }

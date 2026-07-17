@@ -402,6 +402,23 @@ class PortableParityTest {
         }
     }
 
+    @Test
+    void pinnedMergesPageConflictsAndCasPublish() {
+        Prolly.useLocalDebugLibrary();
+        try (Engine engine = Engine.memory(); var map = engine.versionedMap(bytes("merge"))) {
+            var base = map.initialize();
+            var candidate = map.put(bytes("k"), bytes("candidate"));
+            map.put(bytes("k"), bytes("head"));
+            try (var merge = map.prepareMerge(base.id(), candidate.id())) {
+                assertArrayEquals(base.id(), merge.base().id());
+                assertArrayEquals(candidate.id(), merge.candidate().id());
+                assertEquals(List.of("k"), merge.conflictPage(null, 1).getConflicts().stream().map(row -> new String(row.getKey())).toList());
+                assertArrayEquals(candidate.id(), merge.publish("prefer_right").current().id());
+            }
+            assertArrayEquals(bytes("candidate"), map.get(bytes("k")).orElseThrow());
+        }
+    }
+
     private static byte[] bytes(String value) {
         return value.getBytes(StandardCharsets.UTF_8);
     }

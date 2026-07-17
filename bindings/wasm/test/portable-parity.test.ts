@@ -385,3 +385,18 @@ test("WASM multi-map transactions are atomic and read staged values", { skip: !g
   assert.equal(await engine.versionedMap(bytes("a")).get(bytes("discard")), undefined);
   engine.close();
 });
+
+test("WASM pinned merges page conflicts and CAS publish", { skip: !generatedPresent }, async () => {
+  const engine = api.Engine.memory(wasm);
+  const map = engine.versionedMap(bytes("merge"));
+  const base = await map.initialize();
+  const candidate = await map.put(bytes("k"), bytes("candidate"));
+  await map.put(bytes("k"), bytes("head"));
+  const merge = map.prepareMerge(base.id, candidate.id);
+  assert.deepEqual(merge.base().id, base.id);
+  assert.deepEqual(merge.candidate().id, candidate.id);
+  assert.deepEqual(merge.conflictPage(undefined, 1).conflicts.map((row) => Buffer.from(row.key).toString()), ["k"]);
+  assert.deepEqual(merge.publish("prefer_right").current?.id, candidate.id);
+  assert.equal(Buffer.from((await map.get(bytes("k")))!).toString(), "candidate");
+  merge.close(); engine.close();
+});

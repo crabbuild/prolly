@@ -120,6 +120,10 @@ public final class VersionedMap implements AutoCloseable {
         return new MapSubscription(open().subscribeFrom(lastSeen == null ? null : lastSeen.clone()));
     }
 
+    public MapMerge prepareMerge(byte[] base, byte[] candidate) {
+        return new MapMerge(open().prepareMerge(base.clone(), candidate.clone()));
+    }
+
     public byte[] backup() { return open().backup().clone(); }
     public MapVersion restoreBackup(byte[] bytes) {
         return MapVersion.fromNative(open().restoreBackup(bytes.clone()));

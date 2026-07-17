@@ -308,5 +308,24 @@ class PortableParityTest {
         }
     }
 
+    @Test
+    fun pinnedMergesPageConflictsAndCasPublish() {
+        ProllyNative.useLocalDebugLibrary()
+        Engine.memory().use { engine ->
+            engine.versionedMap("merge".bytes()).use { map ->
+                val base = map.initialize()
+                val candidate = map.put("k".bytes(), "candidate".bytes())
+                map.put("k".bytes(), "head".bytes())
+                map.prepareMerge(base.id, candidate.id).use { merge ->
+                    assertArrayEquals(base.id, merge.base().id)
+                    assertArrayEquals(candidate.id, merge.candidate().id)
+                    assertEquals(listOf("k"), merge.conflictPage(limit = 1uL).conflicts.map { String(it.key) })
+                    assertArrayEquals(candidate.id, merge.publish("prefer_right").current!!.id)
+                }
+                assertArrayEquals("candidate".bytes(), map.get("k".bytes()))
+            }
+        }
+    }
+
     private fun String.bytes() = encodeToByteArray()
 }

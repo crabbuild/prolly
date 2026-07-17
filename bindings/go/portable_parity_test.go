@@ -261,6 +261,51 @@ func TestPortableMultiMapTransactionsAreAtomicAndReadStagedValues(t *testing.T) 
 	}
 }
 
+func TestPortablePinnedMergesPageConflictsAndCASPublish(t *testing.T) {
+	config, err := DefaultConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine, err := NewMemoryEngine(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer engine.Close()
+	versioned, err := engine.VersionedMap([]byte("merge"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer versioned.Close()
+	base, err := versioned.Initialize()
+	if err != nil {
+		t.Fatal(err)
+	}
+	candidate, err := versioned.Put([]byte("k"), []byte("candidate"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = versioned.Put([]byte("k"), []byte("head")); err != nil {
+		t.Fatal(err)
+	}
+	merge, err := versioned.PrepareMerge(base.ID, candidate.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer merge.Close()
+	page, err := merge.ConflictPage(nil, 1)
+	if err != nil || len(page.Conflicts) != 1 || !bytes.Equal(page.Conflicts[0].Key, []byte("k")) {
+		t.Fatalf("conflicts = %+v, %v", page, err)
+	}
+	published, err := merge.Publish("prefer_right")
+	if err != nil || published.Current == nil || !bytes.Equal(published.Current.ID, candidate.ID) {
+		t.Fatalf("publish = %+v, %v", published, err)
+	}
+	value, ok, err := versioned.Get([]byte("k"))
+	if err != nil || !ok || !bytes.Equal(value, []byte("candidate")) {
+		t.Fatalf("merged value = %q, %v, %v", value, ok, err)
+	}
+}
+
 func TestPortableContextCancellation(t *testing.T) {
 	engine, err := OpenMemory()
 	if err != nil {
