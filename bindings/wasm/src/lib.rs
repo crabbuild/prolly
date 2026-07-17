@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use js_sys::{Array, Function, Object, Reflect, Uint8Array};
 use prolly::{
-    is_boundary_config as core_is_boundary_config, AuthenticatedProofEnvelope, BatchApplyResult,
+    AuthenticatedProofEnvelope, BatchApplyResult,
     BatchApplyStats, Cid, Config, Conflict, Diff, DiffPageProof, Encoding, Error, KeyProof,
     MemStore, MultiKeyProof, Mutation, Node, OwnedProllyTransaction, ParallelConfig, Prolly,
     RangeCursor, RangePageProof, RangeProof, Resolver, ReverseCursor, SnapshotBundle,
@@ -1746,22 +1746,6 @@ pub fn authenticated_proof_envelope_from_bytes_wasm(bytes: Uint8Array) -> Result
     AuthenticatedProofEnvelope::from_bytes(&bytes.to_vec())
         .map_err(js_error)
         .and_then(authenticated_proof_envelope_to_object)
-}
-
-#[wasm_bindgen(js_name = isBoundaryConfigJson)]
-pub fn is_boundary_config_json(
-    config_json: &str,
-    count: u32,
-    key: Uint8Array,
-    value: Uint8Array,
-) -> Result<bool, JsValue> {
-    let config = config_from_json(config_json)?;
-    Ok(core_is_boundary_config(
-        &config,
-        count as usize,
-        &key.to_vec(),
-        &value.to_vec(),
-    ))
 }
 
 #[wasm_bindgen(js_name = defaultParallelConfig)]

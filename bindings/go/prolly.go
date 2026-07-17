@@ -251,7 +251,6 @@ extern RustBuffer uniffi_prolly_bindings_fn_func_default_large_value_config(Rust
 extern RustBuffer uniffi_prolly_bindings_fn_func_default_parallel_config(RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_func_encode_segment(RustBuffer segment, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_func_i64_key(int64_t value, RustCallStatus *out_err);
-extern uint8_t uniffi_prolly_bindings_fn_func_is_boundary_config(RustBuffer config, uint64_t count, RustBuffer key, RustBuffer value, RustCallStatus *out_err);
 extern uint8_t uniffi_prolly_bindings_fn_func_is_tombstone_value(RustBuffer bytes, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_func_key_from_prefixed_segments(RustBuffer prefix, RustBuffer segments, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_func_key_from_segments(RustBuffer segments, RustCallStatus *out_err);
@@ -6171,27 +6170,6 @@ func MultiKeyProofFromNodeBytes(root []byte, hasRoot bool, keys [][]byte, pathNo
 	}
 	defer freeRustBuffer(out)
 	return decodeMultiKeyProof(copyRustBuffer(out))
-}
-
-func IsBoundary(config Config, count uint64, key []byte, value []byte) (bool, error) {
-	configBuf, err := rustBufferFromBytes(config.raw)
-	if err != nil {
-		return false, err
-	}
-	keyBuf, err := rustBufferFromBytes(encodeByteArray(key))
-	if err != nil {
-		return false, err
-	}
-	valueBuf, err := rustBufferFromBytes(encodeByteArray(value))
-	if err != nil {
-		return false, err
-	}
-	var status C.RustCallStatus
-	out := C.uniffi_prolly_bindings_fn_func_is_boundary_config(configBuf, C.uint64_t(count), keyBuf, valueBuf, &status)
-	if err := statusError(&status); err != nil {
-		return false, err
-	}
-	return out != 0, nil
 }
 
 func PrefixEnd(prefix []byte) ([]byte, bool, error) {

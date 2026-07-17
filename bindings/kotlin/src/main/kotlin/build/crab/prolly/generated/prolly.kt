@@ -950,8 +950,6 @@ external fun uniffi_prolly_bindings_checksum_func_i64_key(
 ): Short
 external fun uniffi_prolly_bindings_checksum_func_inspect_proof_bundle(
 ): Short
-external fun uniffi_prolly_bindings_checksum_func_is_boundary_config(
-): Short
 external fun uniffi_prolly_bindings_checksum_func_is_tombstone_value(
 ): Short
 external fun uniffi_prolly_bindings_checksum_func_key_from_prefixed_segments(
@@ -3198,8 +3196,6 @@ external fun uniffi_prolly_bindings_fn_func_i64_key(`value`: Long,uniffi_out_err
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_inspect_proof_bundle(`bytes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
-external fun uniffi_prolly_bindings_fn_func_is_boundary_config(`config`: RustBuffer.ByValue,`count`: Long,`key`: RustBuffer.ByValue,`value`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
-): Byte
 external fun uniffi_prolly_bindings_fn_func_is_tombstone_value(`bytes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): Byte
 external fun uniffi_prolly_bindings_fn_func_key_from_prefixed_segments(`prefix`: RustBuffer.ByValue,`segments`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -3616,9 +3612,6 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_func_inspect_proof_bundle() != 56731.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_prolly_bindings_checksum_func_is_boundary_config() != 24556.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_func_is_tombstone_value() != 33316.toShort()) {
@@ -34052,16 +34045,6 @@ public object FfiConverterSequenceOptionalByteArray: FfiConverterRustBuffer<List
     )
     }
 
-
-    @Throws(ProllyBindingException::class) fun `isBoundaryConfig`(`config`: ConfigRecord, `count`: kotlin.ULong, `key`: kotlin.ByteArray, `value`: kotlin.ByteArray): kotlin.Boolean {
-            return FfiConverterBoolean.lift(
-    uniffiRustCallWithError(ProllyBindingException) { _status ->
-    UniffiLib.uniffi_prolly_bindings_fn_func_is_boundary_config(
-
-        FfiConverterTypeConfigRecord.lower(`config`),FfiConverterULong.lower(`count`),FfiConverterByteArray.lower(`key`),FfiConverterByteArray.lower(`value`),_status)
-}
-    )
-    }
 
  fun `isTombstoneValue`(`bytes`: kotlin.ByteArray): kotlin.Boolean {
             return FfiConverterBoolean.lift(

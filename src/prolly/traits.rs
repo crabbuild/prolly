@@ -45,7 +45,7 @@
 //! future to allow users to provide custom implementations. For example:
 //!
 //! - A `StreamingDiffer` that yields differences lazily
-//! - A `ParallelRebalancer` that uses multiple threads
+//! - A scheduler that tunes parallel reads without changing canonical roots
 //! - A `ConflictFreeMerger` for CRDT-style merging
 
 // Allow dead_code since these traits are defined for future extensibility

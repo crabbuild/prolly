@@ -26232,16 +26232,6 @@ public func inspectProofBundle(bytes: Data)throws  -> ProofBundleSummaryRecord  
     )
 })
 }
-public func isBoundaryConfig(config: ConfigRecord, count: UInt64, key: Data, value: Data)throws  -> Bool  {
-    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
-    uniffi_prolly_bindings_fn_func_is_boundary_config(
-        FfiConverterTypeConfigRecord_lower(config),
-        FfiConverterUInt64.lower(count),
-        FfiConverterData.lower(key),
-        FfiConverterData.lower(value),$0
-    )
-})
-}
 public func isTombstoneValue(bytes: Data) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
     uniffi_prolly_bindings_fn_func_is_tombstone_value(
@@ -27129,9 +27119,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_func_inspect_proof_bundle() != 56731) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_prolly_bindings_checksum_func_is_boundary_config() != 24556) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_func_is_tombstone_value() != 33316) {

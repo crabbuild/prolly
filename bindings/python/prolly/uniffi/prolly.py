@@ -559,8 +559,6 @@ def _uniffi_check_api_checksums(lib):
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_func_inspect_proof_bundle() != 56731:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    if lib.uniffi_prolly_bindings_checksum_func_is_boundary_config() != 24556:
-        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_func_is_tombstone_value() != 33316:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_func_key_from_prefixed_segments() != 62628:
@@ -2613,14 +2611,6 @@ _UniffiLib.uniffi_prolly_bindings_fn_func_inspect_proof_bundle.argtypes = (
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UniffiLib.uniffi_prolly_bindings_fn_func_inspect_proof_bundle.restype = _UniffiRustBuffer
-_UniffiLib.uniffi_prolly_bindings_fn_func_is_boundary_config.argtypes = (
-    _UniffiRustBuffer,
-    ctypes.c_uint64,
-    _UniffiRustBuffer,
-    _UniffiRustBuffer,
-    ctypes.POINTER(_UniffiRustCallStatus),
-)
-_UniffiLib.uniffi_prolly_bindings_fn_func_is_boundary_config.restype = ctypes.c_int8
 _UniffiLib.uniffi_prolly_bindings_fn_func_is_tombstone_value.argtypes = (
     _UniffiRustBuffer,
     ctypes.POINTER(_UniffiRustCallStatus),
@@ -6252,9 +6242,6 @@ _UniffiLib.uniffi_prolly_bindings_checksum_func_i64_key.restype = ctypes.c_uint1
 _UniffiLib.uniffi_prolly_bindings_checksum_func_inspect_proof_bundle.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_func_inspect_proof_bundle.restype = ctypes.c_uint16
-_UniffiLib.uniffi_prolly_bindings_checksum_func_is_boundary_config.argtypes = (
-)
-_UniffiLib.uniffi_prolly_bindings_checksum_func_is_boundary_config.restype = ctypes.c_uint16
 _UniffiLib.uniffi_prolly_bindings_checksum_func_is_tombstone_value.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_func_is_tombstone_value.restype = ctypes.c_uint16
@@ -32630,29 +32617,6 @@ def inspect_proof_bundle(bytes: bytes) -> ProofBundleSummaryRecord:
         *_uniffi_lowered_args,
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
-def is_boundary_config(config: ConfigRecord,count: int,key: bytes,value: bytes) -> bool:
-
-    _UniffiFfiConverterTypeConfigRecord.check_lower(config)
-
-    _UniffiFfiConverterUInt64.check_lower(count)
-
-    _UniffiFfiConverterBytes.check_lower(key)
-
-    _UniffiFfiConverterBytes.check_lower(value)
-    _uniffi_lowered_args = (
-        _UniffiFfiConverterTypeConfigRecord.lower(config),
-        _UniffiFfiConverterUInt64.lower(count),
-        _UniffiFfiConverterBytes.lower(key),
-        _UniffiFfiConverterBytes.lower(value),
-    )
-    _uniffi_lift_return = _UniffiFfiConverterBoolean.lift
-    _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
-    _uniffi_ffi_result = _uniffi_rust_call_with_error(
-        _uniffi_error_converter,
-        _UniffiLib.uniffi_prolly_bindings_fn_func_is_boundary_config,
-        *_uniffi_lowered_args,
-    )
-    return _uniffi_lift_return(_uniffi_ffi_result)
 def is_tombstone_value(bytes: bytes) -> bool:
 
     _UniffiFfiConverterBytes.check_lower(bytes)
@@ -34375,7 +34339,6 @@ __all__ = [
     "i128_key",
     "i64_key",
     "inspect_proof_bundle",
-    "is_boundary_config",
     "is_tombstone_value",
     "key_from_prefixed_segments",
     "key_from_segments",

@@ -61,10 +61,11 @@ impl LeafEmitter {
         Ok(())
     }
 
-    pub(crate) fn flush(&mut self) {
-        if let Some(emitted) = self.emitter.finish() {
+    pub(crate) fn flush(&mut self) -> Result<(), Error> {
+        if let Some(emitted) = self.emitter.finish()? {
             self.collect(vec![emitted]);
         }
+        Ok(())
     }
 
     fn collect(&mut self, emitted: Vec<EmittedNode>) {
@@ -245,7 +246,7 @@ fn apply_impl<S: Store>(
             }
             mutation_index += 1;
         }
-        emitter.flush();
+        emitter.flush()?;
         summaries.extend(emitter.emitted.iter().map(|leaf| leaf.summary.clone()));
         emitted.extend(emitter.emitted);
         old_cursor = resynced_at.map_or(old_leaves.len(), |index| index + 1);
@@ -510,7 +511,7 @@ fn try_localized_height_two_deletes<S: Store>(
     if resynced_at.is_none() && window_end < root.len() {
         return Ok(None);
     }
-    emitter.flush();
+    emitter.flush()?;
 
     let old_cursor = resynced_at.map_or(old_leaves.len(), |index| index + 1);
     let mut leaf_summaries = Vec::with_capacity(old_leaves.len());
@@ -691,7 +692,7 @@ fn try_append<S: Store>(
         )?;
         stats.entries_streamed += 1;
     }
-    emitter.flush();
+    emitter.flush()?;
 
     let builder = BatchBuilder::new(manager.store(), tree.config.clone());
     let mut current = emitter

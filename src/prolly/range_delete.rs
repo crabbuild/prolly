@@ -302,7 +302,7 @@ pub(crate) fn try_localized_height_two<S: Store>(
     if resynced_at.is_none() && window_end < root.len() {
         return Ok(None);
     }
-    emitter.flush();
+    emitter.flush()?;
 
     let old_cursor = resynced_at.map_or(old_leaves.len(), |index| index + 1);
     let mut replacement_leaves = Vec::with_capacity(old_leaves.len());

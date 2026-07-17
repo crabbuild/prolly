@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "generated_at": "2026-07-17T17:13:31+00:00",
+  "generated_at": "2026-07-17T23:21:23+00:00",
   "rustdoc_format_version": 57,
   "rust_features": [
     "async-store"
@@ -7924,28 +7924,6 @@
     },
     {
       "rust": "prolly::DefaultConflictFreeMerger::new",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::DefaultParallelRebalancer",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::DefaultParallelRebalancer::new",
       "classification": "portable",
       "status": "planned",
       "family": "core",
@@ -18096,60 +18074,6 @@
       "docs": []
     },
     {
-      "rust": "prolly::ParallelRebalancer",
-      "classification": "idiomatic",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": [
-        "bindings/api/idiomatic-equivalents.json#builder-typestate"
-      ],
-      "equivalence": "builder-typestate",
-      "rationale": "prolly::ParallelRebalancer is represented by the reviewed builder-typestate host-language contract instead of a literal Rust declaration.",
-      "reviewed": true,
-      "audience": "rust-extension",
-      "audience_rationale": "prolly::ParallelRebalancer supports the portable application API through the builder-typestate contract and is not a separately invoked application operation."
-    },
-    {
-      "rust": "prolly::ParallelRebalancer::parallel_batch",
-      "classification": "idiomatic",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": [
-        "bindings/api/idiomatic-equivalents.json#builder-typestate"
-      ],
-      "equivalence": "builder-typestate",
-      "rationale": "prolly::ParallelRebalancer::parallel_batch is represented by the reviewed builder-typestate host-language contract instead of a literal Rust declaration.",
-      "reviewed": true,
-      "audience": "rust-extension",
-      "audience_rationale": "prolly::ParallelRebalancer::parallel_batch supports the portable application API through the builder-typestate contract and is not a separately invoked application operation."
-    },
-    {
-      "rust": "prolly::ParallelRebalancer::parallel_rebalance",
-      "classification": "idiomatic",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": [
-        "bindings/api/idiomatic-equivalents.json#builder-typestate"
-      ],
-      "equivalence": "builder-typestate",
-      "rationale": "prolly::ParallelRebalancer::parallel_rebalance is represented by the reviewed builder-typestate host-language contract instead of a literal Rust declaration.",
-      "reviewed": true,
-      "audience": "rust-extension",
-      "audience_rationale": "prolly::ParallelRebalancer::parallel_rebalance supports the portable application API through the builder-typestate contract and is not a separately invoked application operation."
-    },
-    {
       "rust": "prolly::PendingValue",
       "classification": "portable",
       "status": "planned",
@@ -22550,6 +22474,17 @@
       "reviewed": true
     },
     {
+      "rust": "prolly::ProximityReadSession::get_lease",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::ProximityReadSession::get_with",
       "classification": "portable",
       "status": "planned",
@@ -24231,6 +24166,17 @@
       "audience": "application",
       "audience_rationale": "prolly::ReadSession::first_entry_with has runtime behavior in the requested session application domain and requires direct or idiomatic host evidence.",
       "reviewed": true
+    },
+    {
+      "rust": "prolly::ReadSession::get_lease",
+      "classification": "portable",
+      "status": "planned",
+      "family": "session",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
     },
     {
       "rust": "prolly::ReadSession::get_many_with",
@@ -27836,6 +27782,17 @@
       "audience": "application",
       "audience_rationale": "prolly::SecondaryIndexRegistry::register has runtime behavior in the requested indexed-map application domain and requires direct or idiomatic host evidence.",
       "reviewed": true
+    },
+    {
+      "rust": "prolly::SecondaryIndexRegistry::replace",
+      "classification": "portable",
+      "status": "planned",
+      "family": "indexed-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
     },
     {
       "rust": "prolly::SecondaryIndexSnapshot",
@@ -37293,28 +37250,6 @@
       "audience": "application",
       "audience_rationale": "prolly::inspect_proof_bundle has runtime behavior in the requested proof application domain and requires direct or idiomatic host evidence.",
       "reviewed": true
-    },
-    {
-      "rust": "prolly::is_boundary",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::is_boundary_config",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
     },
     {
       "rust": "prolly::is_tombstone_value",

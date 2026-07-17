@@ -48,10 +48,6 @@ object ProllyJavaAdapters {
         record.nodeCacheMaxNodes?.toLong()
 
     @JvmStatic
-    fun isBoundaryConfig(config: ConfigRecord, count: Long, key: ByteArray, value: ByteArray): Boolean =
-        build.crab.prolly.isBoundaryConfig(config, count.toULong(), key, value)
-
-    @JvmStatic
     fun u64Key(value: String): ByteArray =
         build.crab.prolly.u64Key(value.toULong())
 

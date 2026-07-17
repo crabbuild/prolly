@@ -4,11 +4,10 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use prolly::{
-    debug_key, decode_segments, encode_segment, i128_key, i64_key, is_boundary_config,
-    physical_index_key, prefix_end, timestamp_millis_key, u128_key, u64_key, ActiveIndexControl,
-    BlobRef, Cid, Config, Diff, Encoding, IndexControl, IndexProjection, MemStore, Node,
-    NodeStoreScan, Prolly, RootManifest, SecondaryIndex, SecondaryIndexEntry,
-    SecondaryIndexRegistry, Store, ValueRef, VersionedValue,
+    debug_key, decode_segments, encode_segment, i128_key, i64_key, physical_index_key, prefix_end,
+    timestamp_millis_key, u128_key, u64_key, ActiveIndexControl, BlobRef, Cid, Config, Diff,
+    Encoding, IndexControl, IndexProjection, MemStore, Node, NodeStoreScan, Prolly, RootManifest,
+    SecondaryIndex, SecondaryIndexEntry, SecondaryIndexRegistry, Store, ValueRef, VersionedValue,
 };
 use serde::Serialize;
 
@@ -19,7 +18,6 @@ struct FixtureDocument {
     rust_package: &'static str,
     defaults: ConfigFixture,
     node_fixtures: Vec<NodeFixture>,
-    boundary_fixtures: Vec<BoundaryFixture>,
     key_fixtures: KeyFixtures,
     tree_fixtures: Vec<TreeFixture>,
     diff_fixtures: Vec<DiffFixture>,
@@ -66,16 +64,6 @@ struct NodeFixture {
     node: NodeShape,
     bytes: String,
     cid: String,
-}
-
-#[derive(Serialize)]
-struct BoundaryFixture {
-    name: &'static str,
-    config: ConfigFixture,
-    count: usize,
-    key: String,
-    value: String,
-    is_boundary: bool,
 }
 
 #[derive(Serialize)]
@@ -249,7 +237,6 @@ fn fixture_document() -> Result<FixtureDocument, Box<dyn std::error::Error>> {
         rust_package: "prolly-map",
         defaults: config_fixture(&Config::default()),
         node_fixtures: node_fixtures(),
-        boundary_fixtures: boundary_fixtures(),
         key_fixtures: key_fixtures(),
         tree_fixtures: vec![tree_fixture()?],
         diff_fixtures: vec![diff_fixture()?],
@@ -440,74 +427,6 @@ fn node_fixture(name: &'static str, node: Node) -> NodeFixture {
         node: node_shape(&node),
         cid: hex(node.cid().as_bytes()),
         bytes: hex(&bytes),
-    }
-}
-
-fn boundary_fixtures() -> Vec<BoundaryFixture> {
-    let below_min = Config::builder()
-        .min_chunk_size(4)
-        .max_chunk_size(10)
-        .chunking_factor(128)
-        .build();
-    let at_max = Config::builder()
-        .min_chunk_size(2)
-        .max_chunk_size(4)
-        .chunking_factor(128)
-        .build();
-    let hash_config = Config::builder()
-        .min_chunk_size(1)
-        .max_chunk_size(1_000)
-        .chunking_factor(8)
-        .hash_seed(42)
-        .build();
-    let (boundary_key, boundary_value) = find_boundary_case(&hash_config, true);
-    let (non_boundary_key, non_boundary_value) = find_boundary_case(&hash_config, false);
-
-    vec![
-        boundary_fixture("below_min", &below_min, 2, b"key", b"value"),
-        boundary_fixture("at_max", &at_max, 4, b"key", b"value"),
-        boundary_fixture(
-            "hash_boundary",
-            &hash_config,
-            1,
-            &boundary_key,
-            &boundary_value,
-        ),
-        boundary_fixture(
-            "hash_non_boundary",
-            &hash_config,
-            1,
-            &non_boundary_key,
-            &non_boundary_value,
-        ),
-    ]
-}
-
-fn find_boundary_case(config: &Config, expected: bool) -> (Vec<u8>, Vec<u8>) {
-    for idx in 0..100_000u32 {
-        let key = format!("k{idx:05}").into_bytes();
-        let value = format!("v{idx:05}").into_bytes();
-        if is_boundary_config(config, config.min_chunk_size(), &key, &value) == expected {
-            return (key, value);
-        }
-    }
-    panic!("failed to find boundary fixture case");
-}
-
-fn boundary_fixture(
-    name: &'static str,
-    config: &Config,
-    count: usize,
-    key: &[u8],
-    value: &[u8],
-) -> BoundaryFixture {
-    BoundaryFixture {
-        name,
-        config: config_fixture(config),
-        count,
-        key: hex(key),
-        value: hex(value),
-        is_boundary: is_boundary_config(config, count, key, value),
     }
 }
 

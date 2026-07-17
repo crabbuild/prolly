@@ -1328,7 +1328,6 @@ export interface NativeModule {
     end: Uint8Array | null | undefined,
     pathNodeBytes: Uint8Array[],
   ): NativeRangePageProofRecord;
-  isBoundaryConfigJson(configJson: string, count: string, key: Uint8Array, value: Uint8Array): boolean;
   prefixEnd(prefix: Uint8Array): Uint8Array | null;
   prefixRange(prefix: Uint8Array): NativeRangeBoundsRecord;
   u64Key(value: string): Uint8Array;

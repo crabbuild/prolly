@@ -163,7 +163,6 @@ pub mod crdt;
 pub mod diff;
 pub mod parallel;
 pub mod range;
-pub mod rebalance;
 #[cfg(feature = "async-store")]
 pub mod remote;
 pub mod secondary_index;
@@ -176,7 +175,9 @@ mod traits;
 use self::sync::{MissingNodeCopy, MissingNodePlan, SnapshotBundle, SnapshotBundleNode};
 use blob::{BlobStore, BlobStoreScan, LargeValueConfig};
 use cid::Cid;
-use config::{Config, RuntimeConfig};
+use config::Config;
+#[cfg(feature = "async-store")]
+use config::RuntimeConfig;
 use encoding::INIT_LEVEL;
 use error::Conflict;
 use error::Diff;
@@ -800,6 +801,7 @@ impl ProllyMetrics {
         add_metric(&self.bytes_read, loaded_bytes);
     }
 
+    #[cfg(test)]
     fn record_point_write(&self, bytes: usize) {
         add_metric(&self.store_put_calls, 1);
         add_metric(&self.nodes_written, 1);
@@ -892,7 +894,6 @@ pub struct Prolly<S: Store> {
     node_cache: RwLock<NodeCache>,
     recent_leaf: RwLock<Option<RecentLeafRead>>,
     recent_leaf_misses: AtomicUsize,
-    rightmost_path_cache: RwLock<Option<(Cid, Vec<CachedRightmostPathEntry>)>>,
     metrics: ProllyMetrics,
 }
 
@@ -1123,6 +1124,7 @@ impl AsyncWriteCollector {
 }
 
 #[derive(Clone)]
+#[cfg(feature = "async-store")]
 pub(crate) struct CachedRightmostPathEntry {
     pub cid: Cid,
     pub node: Node,
@@ -1243,7 +1245,6 @@ impl<S: Store> Prolly<S> {
             node_cache: RwLock::new(NodeCache::new(node_cache_max_nodes, node_cache_max_bytes)),
             recent_leaf: RwLock::new(None),
             recent_leaf_misses: AtomicUsize::new(0),
-            rightmost_path_cache: RwLock::new(None),
             metrics: ProllyMetrics::default(),
         }
     }
@@ -3656,6 +3657,7 @@ impl<S: Store> Prolly<S> {
     }
 
     /// Save a node to the store and return its CID.
+    #[cfg(test)]
     pub(crate) fn save(&self, node: &Node) -> Result<Cid, Error> {
         let bytes = node.to_bytes();
         let cid = Cid::from_bytes(&bytes);
@@ -3678,25 +3680,6 @@ impl<S: Store> Prolly<S> {
         }
     }
 
-    pub(crate) fn cached_rightmost_path(
-        &self,
-        root: &Cid,
-    ) -> Option<Vec<CachedRightmostPathEntry>> {
-        self.rightmost_path_cache
-            .read()
-            .ok()
-            .and_then(|cached| match cached.as_ref() {
-                Some((cached_root, path)) if cached_root == root => Some(path.clone()),
-                _ => None,
-            })
-    }
-
-    pub(crate) fn cache_rightmost_path(&self, root: Cid, path: Vec<CachedRightmostPathEntry>) {
-        if let Ok(mut cache) = self.rightmost_path_cache.write() {
-            *cache = Some((root, path));
-        }
-    }
-
     /// Clear the in-process immutable node cache.
     ///
     /// This is mostly useful after external store maintenance or tests that
@@ -3710,9 +3693,6 @@ impl<S: Store> Prolly<S> {
             *recent = None;
         }
         self.recent_leaf_misses.store(0, Ordering::Relaxed);
-        if let Ok(mut cache) = self.rightmost_path_cache.write() {
-            *cache = None;
-        }
     }
 
     /// Return the number of cached nodes in this Prolly manager.
@@ -4319,6 +4299,7 @@ impl<S: Store> Prolly<S> {
     }
 
     /// Create a new internal node with config settings.
+    #[cfg(test)]
     pub(crate) fn new_internal_node(&self, level: u8) -> Node {
         Node::builder()
             .leaf(false)
@@ -5220,7 +5201,7 @@ where
                     .map(|emitted| emitted.node),
             );
         }
-        if let Some(emitted) = emitter.finish() {
+        if let Some(emitted) = emitter.finish()? {
             leaves.push(emitted.node);
         }
         Ok(leaves)
@@ -5408,7 +5389,7 @@ where
                 count: stored_logical_count(child),
             })?);
         }
-        if let Some(parent) = emitter.finish() {
+        if let Some(parent) = emitter.finish()? {
             parents.push(parent);
         }
         Ok(parents
@@ -7699,7 +7680,7 @@ where
             };
             chunks.extend(emitted.into_iter().map(|emitted| emitted.node));
         }
-        if let Some(emitted) = emitter.finish() {
+        if let Some(emitted) = emitter.finish()? {
             chunks.push(emitted.node);
         }
         Ok(chunks)
@@ -8985,7 +8966,7 @@ mod tests {
     }
 
     #[test]
-    fn parallel_batch_with_stats_uses_bounded_batched_route() {
+    fn parallel_batch_with_stats_delegates_to_canonical_writer() {
         let store = Arc::new(CountingStore {
             prefer_batch_reads: true,
             ..CountingStore::default()
@@ -9019,6 +9000,7 @@ mod tests {
             })
             .collect();
 
+        let expected = prolly.batch(&tree, update_mutations.clone()).unwrap();
         let result = prolly
             .parallel_batch_with_stats(
                 &tree,
@@ -9029,19 +9011,11 @@ mod tests {
 
         assert_eq!(result.stats.input_mutations, 8);
         assert_eq!(result.stats.effective_mutations, 8);
-        assert!(result.stats.used_batched_route);
         assert!(result.stats.used_coalesced_rebuild);
         assert!(result.stats.affected_leaves > 1);
         assert!(result.stats.changed_leaves > 1);
         assert!(result.stats.written_nodes > 0);
-        assert!(
-            store.batch_get_ordered_calls.load(Ordering::Relaxed) > 0,
-            "batched-read stores should hydrate parallel batch routes through ordered reads"
-        );
-        assert!(
-            store.max_batch_get_ordered_len.load(Ordering::Relaxed) <= 3,
-            "ParallelConfig::max_threads should bound route-hydration batch width"
-        );
+        assert_eq!(result.tree.root, expected.root);
         assert_eq!(
             prolly.get(&result.tree, b"k005").unwrap(),
             Some(b"updated-005".to_vec())

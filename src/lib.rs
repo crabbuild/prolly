@@ -248,21 +248,6 @@
 //! });
 //! ```
 //!
-//! ### Parallel Processing
-//!
-//! Use [`ParallelRebalancer`] for multi-threaded batch operations:
-//!
-//! ```rust
-//! use prolly::{ParallelConfig, DefaultParallelRebalancer};
-//!
-//! // Configure parallel processing
-//! let config = ParallelConfig {
-//!     max_threads: 4,           // Use 4 threads (0 = auto)
-//!     parallelism_threshold: 50, // Parallelize when > 50 items
-//! };
-//!
-//! let rebalancer = DefaultParallelRebalancer::new();
-//! ```
 
 mod prolly;
 
@@ -278,7 +263,7 @@ pub use prolly::blob::{
 };
 #[cfg(feature = "tokio")]
 pub use prolly::blob::{TokioBlockingBlobStore, TokioBlockingBlobStoreError};
-pub use prolly::boundary::{is_boundary, is_boundary_config, BoundaryDetector};
+pub use prolly::boundary::BoundaryDetector;
 pub use prolly::builder::{BatchBuilder, SortedBatchBuilder};
 pub use prolly::chunking;
 pub use prolly::cid::Cid;
@@ -329,7 +314,7 @@ pub use prolly::manifest::{
     NamedRootRetention, NamedRootSelection, NamedRootUpdate, RootManifest,
 };
 pub use prolly::node::{Node, NodeBuilder};
-pub use prolly::parallel::{DefaultParallelRebalancer, ParallelConfig, ParallelRebalancer};
+pub use prolly::parallel::ParallelConfig;
 pub use prolly::patch::{LogicalPatch, StructuralEdit, StructuralPatch};
 pub use prolly::policy::{
     MergePolicyFn, MergePolicyRegistry, MergePolicyRule, MergePolicyRuleLabel,

@@ -68,7 +68,7 @@ impl LevelEmitter {
         let mut emitted = Vec::new();
         let mut encoded_size = self.sizer.size_after(&key, &value, child_count)?;
         if !self.current.is_empty() && encoded_size > hard_max {
-            emitted.push(self.flush_current().expect("nonempty node flushes"));
+            emitted.push(self.flush_current()?.expect("nonempty node flushes"));
             self.detector.reset();
             encoded_size = self.sizer.size_after(&key, &value, child_count)?;
         }
@@ -92,14 +92,14 @@ impl LevelEmitter {
         }
         if boundary {
             emitted.push(
-                self.flush_current()
+                self.flush_current()?
                     .expect("observed entry makes node nonempty"),
             );
         }
         Ok(emitted)
     }
 
-    pub(crate) fn finish(&mut self) -> Option<EmittedNode> {
+    pub(crate) fn finish(&mut self) -> Result<Option<EmittedNode>, Error> {
         self.flush_current()
     }
 
@@ -107,16 +107,22 @@ impl LevelEmitter {
         self.current.is_empty()
     }
 
-    fn flush_current(&mut self) -> Option<EmittedNode> {
+    fn flush_current(&mut self) -> Result<Option<EmittedNode>, Error> {
         if self.current.is_empty() {
-            return None;
+            return Ok(None);
         }
         let node = std::mem::replace(
             &mut self.current,
             new_builder_node(&self.config, self.leaf, self.level),
         );
         let bytes = node.to_bytes();
-        debug_assert!(bytes.len() as u64 <= self.config.format.chunking.hard_max_node_bytes);
+        let hard_max = self.config.format.chunking.hard_max_node_bytes;
+        if bytes.len() as u64 > hard_max {
+            return Err(Error::EntryTooLarge {
+                encoded_bytes: bytes.len() as u64,
+                limit: hard_max,
+            });
+        }
         let summary = NodeSummary {
             cid: Cid::from_bytes(&bytes),
             first_key: node.keys[0].clone(),
@@ -127,11 +133,11 @@ impl LevelEmitter {
             },
         };
         self.sizer.reset();
-        Some(EmittedNode {
+        Ok(Some(EmittedNode {
             summary,
             node,
             bytes,
-        })
+        }))
     }
 
     #[cfg(test)]
@@ -186,7 +192,7 @@ impl HierarchicalEmitter {
 
     pub(crate) fn finish(&mut self) -> Result<(Option<NodeSummary>, Vec<EmittedNode>), Error> {
         let mut emitted = Vec::new();
-        if let Some(node) = self.leaf.finish() {
+        if let Some(node) = self.leaf.finish()? {
             let summary = node.summary.clone();
             emitted.push(node);
             self.cascade(0, summary, &mut emitted)?;
@@ -201,7 +207,7 @@ impl HierarchicalEmitter {
                 return Err(Error::InvalidNode);
             }
             if let Some(mut emitter) = self.parents[index].emitter.take() {
-                if let Some(node) = emitter.finish() {
+                if let Some(node) = emitter.finish()? {
                     let summary = node.summary.clone();
                     emitted.push(node);
                     self.cascade((index + 1) as u8, summary, &mut emitted)?;

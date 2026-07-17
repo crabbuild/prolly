@@ -10,7 +10,7 @@ use prolly_bindings::{
     crdt_resolution_value, debug_key, decode_segments, default_config, default_large_value_config,
     default_parallel_config, delete_mutation, diff_page_proof_from_bytes, diff_page_proof_to_bytes,
     encode_segment, encoding_cbor, encoding_custom, encoding_json, encoding_raw, i128_key, i64_key,
-    inspect_proof_bundle, is_boundary_config, is_tombstone_value, key_from_prefixed_segments,
+    inspect_proof_bundle, is_tombstone_value, key_from_prefixed_segments,
     key_from_segments, key_proof_from_bytes, key_proof_from_node_bytes, key_proof_path_node_bytes,
     key_proof_to_bytes, large_value_config, multi_key_proof_from_bytes,
     multi_key_proof_from_node_bytes, multi_key_proof_path_node_bytes, multi_key_proof_to_bytes,
@@ -5486,20 +5486,6 @@ pub fn range_page_proof_from_node_bytes_native(
     )
     .map_err(to_napi_error)?;
     NodeRangePageProofRecord::try_from_binding(proof)
-}
-
-#[napi(js_name = "isBoundaryConfigJson")]
-pub fn is_boundary_config_json(
-    config_json: String,
-    count: String,
-    key: Buffer,
-    value: Buffer,
-) -> Result<bool> {
-    let config = config_from_json(&config_json)?;
-    let count = count
-        .parse::<u64>()
-        .map_err(|error| Error::new(Status::InvalidArg, error.to_string()))?;
-    is_boundary_config(config, count, key.to_vec(), value.to_vec()).map_err(to_napi_error)
 }
 
 #[napi(js_name = "prefixEnd")]
