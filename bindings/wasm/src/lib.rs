@@ -2392,7 +2392,7 @@ fn diff_page_proof_to_object(proof: DiffPageProof) -> Result<Object, JsValue> {
     Ok(object)
 }
 
-fn range_page_to_object(page: prolly::RangePage) -> Result<Object, JsValue> {
+pub(crate) fn range_page_to_object(page: prolly::RangePage) -> Result<Object, JsValue> {
     let object = Object::new();
     Reflect::set(
         &object,
@@ -2407,7 +2407,7 @@ fn range_page_to_object(page: prolly::RangePage) -> Result<Object, JsValue> {
     Ok(object)
 }
 
-fn reverse_page_to_object(page: prolly::ReversePage) -> Result<Object, JsValue> {
+pub(crate) fn reverse_page_to_object(page: prolly::ReversePage) -> Result<Object, JsValue> {
     let object = Object::new();
     Reflect::set(
         &object,
@@ -2946,7 +2946,7 @@ where
     Ok(out)
 }
 
-fn entries_to_array(entries: Vec<(Vec<u8>, Vec<u8>)>) -> Result<Array, JsValue> {
+pub(crate) fn entries_to_array(entries: Vec<(Vec<u8>, Vec<u8>)>) -> Result<Array, JsValue> {
     let out = Array::new();
     for (key, value) in entries {
         let object: JsValue = entry_object(key, value)?.into();
@@ -3115,7 +3115,7 @@ fn range_bounds_to_object(start: Vec<u8>, end: Option<Vec<u8>>) -> Result<Object
     Ok(object)
 }
 
-fn entry_object(key: Vec<u8>, value: Vec<u8>) -> Result<Object, JsValue> {
+pub(crate) fn entry_object(key: Vec<u8>, value: Vec<u8>) -> Result<Object, JsValue> {
     borrowed_entry_object(&key, &value)
 }
 

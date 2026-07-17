@@ -1,4 +1,7 @@
-use super::{to_napi_error, NativeProllyEngine, NodeMutationRecord, NodeTreeRecord};
+use super::{
+    to_napi_error, NativeProllyEngine, NodeEntryRecord, NodeMutationRecord, NodeRangeCursorRecord,
+    NodeRangePageRecord, NodeReverseCursorRecord, NodeReversePageRecord, NodeTreeRecord,
+};
 use napi::bindgen_prelude::{Buffer, Env, Error, Float32Array, FunctionRef, Result, Status};
 use napi_derive::napi;
 use prolly_bindings::{
@@ -913,6 +916,140 @@ impl NativePortableMapSnapshot {
         self.inner
             .get(key.to_vec())
             .map(|value| value.map(Buffer::from))
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "getMany")]
+    pub fn get_many(&self, keys: Vec<Buffer>) -> Result<Vec<Option<Buffer>>> {
+        self.inner
+            .get_many(keys.into_iter().map(|key| key.to_vec()).collect())
+            .map(|values| {
+                values
+                    .into_iter()
+                    .map(|value| value.map(Buffer::from))
+                    .collect()
+            })
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "containsKey")]
+    pub fn contains_key(&self, key: Buffer) -> Result<bool> {
+        self.inner.contains_key(key.to_vec()).map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "firstEntry")]
+    pub fn first_entry(&self) -> Result<Option<NodeEntryRecord>> {
+        self.inner
+            .first_entry()
+            .map(|entry| entry.map(Into::into))
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "lastEntry")]
+    pub fn last_entry(&self) -> Result<Option<NodeEntryRecord>> {
+        self.inner
+            .last_entry()
+            .map(|entry| entry.map(Into::into))
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "lowerBound")]
+    pub fn lower_bound(&self, key: Buffer) -> Result<Option<NodeEntryRecord>> {
+        self.inner
+            .lower_bound(key.to_vec())
+            .map(|entry| entry.map(Into::into))
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "upperBound")]
+    pub fn upper_bound(&self, key: Buffer) -> Result<Option<NodeEntryRecord>> {
+        self.inner
+            .upper_bound(key.to_vec())
+            .map(|entry| entry.map(Into::into))
+            .map_err(to_napi_error)
+    }
+
+    #[napi]
+    pub fn range(&self, start: Buffer, end: Option<Buffer>) -> Result<Vec<NodeEntryRecord>> {
+        self.inner
+            .range(start.to_vec(), end.map(|value| value.to_vec()))
+            .map(|entries| entries.into_iter().map(Into::into).collect())
+            .map_err(to_napi_error)
+    }
+
+    #[napi]
+    pub fn prefix(&self, prefix: Buffer) -> Result<Vec<NodeEntryRecord>> {
+        self.inner
+            .prefix(prefix.to_vec())
+            .map(|entries| entries.into_iter().map(Into::into).collect())
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "rangePage")]
+    pub fn range_page(
+        &self,
+        cursor: Option<NodeRangeCursorRecord>,
+        end: Option<Buffer>,
+        limit: String,
+    ) -> Result<NodeRangePageRecord> {
+        self.inner
+            .range_page(
+                cursor.map(Into::into),
+                end.map(|value| value.to_vec()),
+                parse_index_page_limit(&limit)?,
+            )
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "prefixPage")]
+    pub fn prefix_page(
+        &self,
+        prefix: Buffer,
+        cursor: Option<NodeRangeCursorRecord>,
+        limit: String,
+    ) -> Result<NodeRangePageRecord> {
+        self.inner
+            .prefix_page(
+                prefix.to_vec(),
+                cursor.map(Into::into),
+                parse_index_page_limit(&limit)?,
+            )
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "reversePage")]
+    pub fn reverse_page(
+        &self,
+        cursor: Option<NodeReverseCursorRecord>,
+        start: Buffer,
+        limit: String,
+    ) -> Result<NodeReversePageRecord> {
+        self.inner
+            .reverse_page(
+                cursor.map(Into::into),
+                start.to_vec(),
+                parse_index_page_limit(&limit)?,
+            )
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "prefixReversePage")]
+    pub fn prefix_reverse_page(
+        &self,
+        prefix: Buffer,
+        cursor: Option<NodeReverseCursorRecord>,
+        limit: String,
+    ) -> Result<NodeReversePageRecord> {
+        self.inner
+            .prefix_reverse_page(
+                prefix.to_vec(),
+                cursor.map(Into::into),
+                parse_index_page_limit(&limit)?,
+            )
+            .map(Into::into)
             .map_err(to_napi_error)
     }
 

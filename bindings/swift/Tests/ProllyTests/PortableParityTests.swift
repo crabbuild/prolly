@@ -55,6 +55,37 @@ final class PortableParityTests: XCTestCase {
         }
     }
 
+    func testVersionedSnapshotsExposeOrderedNavigationAndBoundedPages() throws {
+        try Engine.withMemory { engine in
+            let versioned = try engine.versionedMap(Data("versioned-ordered".utf8))
+            _ = try versioned.initialize()
+            _ = try versioned.apply([
+                MutationRecord(kind: .upsert, key: Data("a".utf8), value: Data("one".utf8)),
+                MutationRecord(kind: .upsert, key: Data("ab".utf8), value: Data("two".utf8)),
+                MutationRecord(kind: .upsert, key: Data("b".utf8), value: Data("three".utf8)),
+                MutationRecord(kind: .upsert, key: Data("c".utf8), value: Data("four".utf8)),
+            ])
+            let snapshot = try XCTUnwrap(versioned.snapshot())
+            XCTAssertTrue(try snapshot.contains(Data("ab".utf8)))
+            XCTAssertEqual(try snapshot.getMany([Data("a".utf8), Data("missing".utf8)])[0], Data("one".utf8))
+            XCTAssertEqual(try snapshot.firstEntry()?.key, Data("a".utf8))
+            XCTAssertEqual(try snapshot.lastEntry()?.key, Data("c".utf8))
+            XCTAssertEqual(try snapshot.lowerBound(Data("aa".utf8))?.key, Data("ab".utf8))
+            XCTAssertEqual(try snapshot.upperBound(Data("ab".utf8))?.key, Data("b".utf8))
+            XCTAssertEqual(try snapshot.prefix(Data("a".utf8)).map(\.key), [Data("a".utf8), Data("ab".utf8)])
+            XCTAssertEqual(try snapshot.range(from: Data("ab".utf8), to: Data("c".utf8)).map(\.key), [Data("ab".utf8), Data("b".utf8)])
+            let prefixPage = try snapshot.prefixPage(Data("a".utf8), limit: 1)
+            XCTAssertEqual(prefixPage.entries.map(\.key), [Data("a".utf8)])
+            XCTAssertNotNil(prefixPage.nextCursor)
+            let first = try snapshot.rangePage(to: Data("c".utf8), limit: 2)
+            XCTAssertEqual(first.entries.map(\.key), [Data("a".utf8), Data("ab".utf8)])
+            let second = try snapshot.rangePage(cursor: first.nextCursor, to: Data("c".utf8), limit: 2)
+            XCTAssertEqual(second.entries.map(\.key), [Data("b".utf8)])
+            XCTAssertEqual(try snapshot.reversePage(from: Data("a".utf8), limit: 2).entries.map(\.key), [Data("c".utf8), Data("b".utf8)])
+            XCTAssertEqual(try snapshot.prefixReversePage(Data("a".utf8), limit: 2).entries.map(\.key), [Data("ab".utf8), Data("a".utf8)])
+        }
+    }
+
     func testVersionedBatchCASAndPinnedPointReads() throws {
         try Engine.withMemory { engine in
             let versioned = try engine.versionedMap(Data("versioned-cas".utf8))

@@ -24,6 +24,12 @@ export interface VersionPrune {
   removed: Uint8Array[];
 }
 
+export interface MapEntry { key: Uint8Array; value: Uint8Array; }
+export interface RangeCursor { afterKey?: Uint8Array; }
+export interface ReverseCursor { beforeKey?: Uint8Array; }
+export interface RangePage { entries: MapEntry[]; nextCursor?: RangeCursor; }
+export interface ReversePage { entries: MapEntry[]; nextCursor?: ReverseCursor; }
+
 interface NativeMapVersion {
   id: Uint8Array;
   tree: unknown;
@@ -70,6 +76,18 @@ interface NativeMapSnapshot {
   id(): Uint8Array;
   version(): NativeMapVersion;
   get(key: Uint8Array): Uint8Array | null;
+  getMany(keys: Uint8Array[]): Array<Uint8Array | null>;
+  containsKey(key: Uint8Array): boolean;
+  firstEntry(): MapEntry | null;
+  lastEntry(): MapEntry | null;
+  lowerBound(key: Uint8Array): MapEntry | null;
+  upperBound(key: Uint8Array): MapEntry | null;
+  range(start: Uint8Array, end: Uint8Array | null): MapEntry[];
+  prefix(prefix: Uint8Array): MapEntry[];
+  rangePage(cursor: RangeCursor | null, end: Uint8Array | null, limit: string): RangePage;
+  prefixPage(prefix: Uint8Array, cursor: RangeCursor | null, limit: string): RangePage;
+  reversePage(cursor: ReverseCursor | null, start: Uint8Array, limit: string): ReversePage;
+  prefixReversePage(prefix: Uint8Array, cursor: ReverseCursor | null, limit: string): ReversePage;
   proveKey(key: Uint8Array): NativeKeyProof;
   stats(): NativeMaintenanceSummary;
   export(): NativeMaintenanceSummary;
@@ -109,6 +127,25 @@ function ownedMutations(mutations: readonly MapMutation[]): MapMutation[] {
     key: ownedBytes(mutation.key),
     value: mutation.value == null ? undefined : ownedBytes(mutation.value),
   }));
+}
+
+function checkedPageLimit(limit: bigint): string {
+  if (limit < 0n || limit > 0xffff_ffff_ffff_ffffn) {
+    throw new RangeError("page limit must be an unsigned 64-bit integer");
+  }
+  return limit.toString();
+}
+
+function ownedRangeCursor(cursor: RangeCursor | undefined): RangeCursor | null {
+  return cursor == null ? null : {
+    afterKey: cursor.afterKey == null ? undefined : ownedBytes(cursor.afterKey),
+  };
+}
+
+function ownedReverseCursor(cursor: ReverseCursor | undefined): ReverseCursor | null {
+  return cursor == null ? null : {
+    beforeKey: cursor.beforeKey == null ? undefined : ownedBytes(cursor.beforeKey),
+  };
 }
 
 export class VersionedMap implements Disposable {
@@ -290,6 +327,52 @@ export class MapSnapshot implements Disposable {
   get(key: Uint8Array, signal?: AbortSignal): Promise<Uint8Array | undefined> {
     const native = this.#open(); key = ownedBytes(key);
     return nativePromise(signal, () => native.get(key) ?? undefined);
+  }
+  getMany(keys: readonly Uint8Array[], signal?: AbortSignal): Promise<Array<Uint8Array | undefined>> {
+    const native = this.#open(); const owned = keys.map(ownedBytes);
+    return nativePromise(signal, () => native.getMany(owned).map((value) => value ?? undefined));
+  }
+  containsKey(key: Uint8Array, signal?: AbortSignal): Promise<boolean> {
+    const native = this.#open(); key = ownedBytes(key);
+    return nativePromise(signal, () => native.containsKey(key));
+  }
+  firstEntry(signal?: AbortSignal): Promise<MapEntry | undefined> {
+    const native = this.#open(); return nativePromise(signal, () => native.firstEntry() ?? undefined);
+  }
+  lastEntry(signal?: AbortSignal): Promise<MapEntry | undefined> {
+    const native = this.#open(); return nativePromise(signal, () => native.lastEntry() ?? undefined);
+  }
+  lowerBound(key: Uint8Array, signal?: AbortSignal): Promise<MapEntry | undefined> {
+    const native = this.#open(); key = ownedBytes(key);
+    return nativePromise(signal, () => native.lowerBound(key) ?? undefined);
+  }
+  upperBound(key: Uint8Array, signal?: AbortSignal): Promise<MapEntry | undefined> {
+    const native = this.#open(); key = ownedBytes(key);
+    return nativePromise(signal, () => native.upperBound(key) ?? undefined);
+  }
+  range(start: Uint8Array = new Uint8Array(), end?: Uint8Array, signal?: AbortSignal): Promise<MapEntry[]> {
+    const native = this.#open(); start = ownedBytes(start); const ownedEnd = end == null ? null : ownedBytes(end);
+    return nativePromise(signal, () => native.range(start, ownedEnd));
+  }
+  prefix(prefix: Uint8Array, signal?: AbortSignal): Promise<MapEntry[]> {
+    const native = this.#open(); prefix = ownedBytes(prefix);
+    return nativePromise(signal, () => native.prefix(prefix));
+  }
+  rangePage(cursor?: RangeCursor, end?: Uint8Array, limit: bigint = 256n, signal?: AbortSignal): Promise<RangePage> {
+    const native = this.#open(); const ownedCursor = ownedRangeCursor(cursor); const ownedEnd = end == null ? null : ownedBytes(end);
+    return nativePromise(signal, () => native.rangePage(ownedCursor, ownedEnd, checkedPageLimit(limit)));
+  }
+  prefixPage(prefix: Uint8Array, cursor?: RangeCursor, limit: bigint = 256n, signal?: AbortSignal): Promise<RangePage> {
+    const native = this.#open(); prefix = ownedBytes(prefix); const ownedCursor = ownedRangeCursor(cursor);
+    return nativePromise(signal, () => native.prefixPage(prefix, ownedCursor, checkedPageLimit(limit)));
+  }
+  reversePage(cursor?: ReverseCursor, start: Uint8Array = new Uint8Array(), limit: bigint = 256n, signal?: AbortSignal): Promise<ReversePage> {
+    const native = this.#open(); const ownedCursor = ownedReverseCursor(cursor); start = ownedBytes(start);
+    return nativePromise(signal, () => native.reversePage(ownedCursor, start, checkedPageLimit(limit)));
+  }
+  prefixReversePage(prefix: Uint8Array, cursor?: ReverseCursor, limit: bigint = 256n, signal?: AbortSignal): Promise<ReversePage> {
+    const native = this.#open(); prefix = ownedBytes(prefix); const ownedCursor = ownedReverseCursor(cursor);
+    return nativePromise(signal, () => native.prefixReversePage(prefix, ownedCursor, checkedPageLimit(limit)));
   }
   proveKey(key: Uint8Array): KeyProof {
     const native = this.#open();

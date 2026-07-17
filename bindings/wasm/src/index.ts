@@ -1087,6 +1087,58 @@ export class WasmMapSnapshot implements Disposable {
   id(): Uint8Array { return this.#open().id(); }
   version(): WasmMapVersion { return wasmMapVersion(this.#open().version()); }
   get(key: Uint8Array): Uint8Array | undefined { return this.#open().get(ownedPortableBytes(key)) ?? undefined; }
+  getMany(keys: readonly Uint8Array[]): Array<Uint8Array | undefined> {
+    return this.#open().getMany(keys.map(ownedPortableBytes)).map(
+      (value: Uint8Array | null) => value ?? undefined,
+    );
+  }
+  containsKey(key: Uint8Array): boolean { return this.#open().containsKey(ownedPortableBytes(key)); }
+  firstEntry(): WasmEntryRecord | undefined { return this.#open().firstEntry() ?? undefined; }
+  lastEntry(): WasmEntryRecord | undefined { return this.#open().lastEntry() ?? undefined; }
+  lowerBound(key: Uint8Array): WasmEntryRecord | undefined {
+    return this.#open().lowerBound(ownedPortableBytes(key)) ?? undefined;
+  }
+  upperBound(key: Uint8Array): WasmEntryRecord | undefined {
+    return this.#open().upperBound(ownedPortableBytes(key)) ?? undefined;
+  }
+  range(start: Uint8Array = new Uint8Array(), end?: Uint8Array): WasmEntryRecord[] {
+    return this.#open().range(
+      ownedPortableBytes(start), end == null ? undefined : ownedPortableBytes(end),
+    );
+  }
+  prefix(prefix: Uint8Array): WasmEntryRecord[] {
+    return this.#open().prefix(ownedPortableBytes(prefix));
+  }
+  rangePage(
+    cursor?: WasmRangeCursorRecord,
+    end?: Uint8Array,
+    limit = 256,
+  ): WasmRangePageRecord {
+    return this.#open().rangePage(
+      cursor, end == null ? undefined : ownedPortableBytes(end), limit,
+    );
+  }
+  prefixPage(
+    prefix: Uint8Array,
+    cursor?: WasmRangeCursorRecord,
+    limit = 256,
+  ): WasmRangePageRecord {
+    return this.#open().prefixPage(ownedPortableBytes(prefix), cursor, limit);
+  }
+  reversePage(
+    cursor?: WasmReverseCursorRecord,
+    start: Uint8Array = new Uint8Array(),
+    limit = 256,
+  ): WasmReversePageRecord {
+    return this.#open().reversePage(cursor, ownedPortableBytes(start), limit);
+  }
+  prefixReversePage(
+    prefix: Uint8Array,
+    cursor?: WasmReverseCursorRecord,
+    limit = 256,
+  ): WasmReversePageRecord {
+    return this.#open().prefixReversePage(ownedPortableBytes(prefix), cursor, limit);
+  }
   proveKey(key: Uint8Array): WasmKeyProof { return new WasmKeyProof(this.#open().proveKey(ownedPortableBytes(key))); }
   stats(): { itemCount: bigint; byteCount: bigint } {
     const value = this.#open().stats(); return { itemCount: BigInt(value.itemCount), byteCount: BigInt(value.byteCount) };

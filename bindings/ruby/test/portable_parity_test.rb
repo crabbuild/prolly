@@ -76,6 +76,37 @@ class PortableParityTest < Minitest::Test
     end
   end
 
+  def test_versioned_snapshots_expose_ordered_navigation_and_bounded_pages
+    Prolly::Engine.memory.use do |engine|
+      versioned = engine.versioned_map('versioned-ordered'.b)
+      versioned.initialize_map
+      versioned.apply([
+        Prolly::MutationRecord.new(kind: Prolly::MutationKind::UPSERT, key: 'a'.b, value: 'one'.b),
+        Prolly::MutationRecord.new(kind: Prolly::MutationKind::UPSERT, key: 'ab'.b, value: 'two'.b),
+        Prolly::MutationRecord.new(kind: Prolly::MutationKind::UPSERT, key: 'b'.b, value: 'three'.b),
+        Prolly::MutationRecord.new(kind: Prolly::MutationKind::UPSERT, key: 'c'.b, value: 'four'.b)
+      ])
+      snapshot = versioned.snapshot
+      assert snapshot.contains?('ab'.b)
+      assert_equal ['one'.b, nil], snapshot.get_many(['a'.b, 'missing'.b])
+      assert_equal 'a'.b, snapshot.first_entry.key
+      assert_equal 'c'.b, snapshot.last_entry.key
+      assert_equal 'ab'.b, snapshot.lower_bound('aa'.b).key
+      assert_equal 'b'.b, snapshot.upper_bound('ab'.b).key
+      assert_equal ['a'.b, 'ab'.b], snapshot.prefix('a'.b).map(&:key)
+      assert_equal ['ab'.b, 'b'.b], snapshot.range('ab'.b, 'c'.b).map(&:key)
+      prefix_page = snapshot.prefix_page('a'.b, nil, 1)
+      assert_equal ['a'.b], prefix_page.entries.map(&:key)
+      refute_nil prefix_page.next_cursor
+      first = snapshot.range_page(nil, 'c'.b, 2)
+      assert_equal ['a'.b, 'ab'.b], first.entries.map(&:key)
+      second = snapshot.range_page(first.next_cursor, 'c'.b, 2)
+      assert_equal ['b'.b], second.entries.map(&:key)
+      assert_equal ['c'.b, 'b'.b], snapshot.reverse_page(nil, 'a'.b, 2).entries.map(&:key)
+      assert_equal ['ab'.b, 'a'.b], snapshot.prefix_reverse_page('a'.b, nil, 2).entries.map(&:key)
+    end
+  end
+
   def test_versioned_batch_cas_and_pinned_point_reads
     Prolly::Engine.memory.use do |engine|
       versioned = engine.versioned_map('versioned-cas'.b)

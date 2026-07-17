@@ -23,6 +23,8 @@ import build.crab.prolly.ProximityMutationStatsRecord
 import build.crab.prolly.ProximityRecordRecord
 import build.crab.prolly.ProximitySearchResultRecord
 import build.crab.prolly.ProximitySearchRequestRecord
+import build.crab.prolly.RangeCursorRecord
+import build.crab.prolly.ReverseCursorRecord
 import build.crab.prolly.ProximityConfigRecord
 import build.crab.prolly.ProximityStructuralProofRecord
 import build.crab.prolly.SecondaryIndexExtractorCallback
@@ -117,12 +119,45 @@ private fun ownedMutation(mutation: MutationRecord) = MutationRecord(
     mutation.kind, mutation.key.copyOf(), mutation.value?.copyOf(),
 )
 
+private fun ownedRangeCursor(cursor: RangeCursorRecord?) =
+    cursor?.let { RangeCursorRecord(it.afterKey?.copyOf()) }
+
+private fun ownedReverseCursor(cursor: ReverseCursorRecord?) =
+    cursor?.let { ReverseCursorRecord(it.beforeKey?.copyOf()) }
+
 class MapSnapshot(internal val native: BindingMapSnapshot) : AutoCloseable {
     val id: ByteArray get() = native.id()
     val version get() = native.version()
     fun get(key: ByteArray) = native.get(key.copyOf())
+    fun getMany(keys: List<ByteArray>) = native.getMany(keys.map(ByteArray::copyOf))
+    fun containsKey(key: ByteArray) = native.containsKey(key.copyOf())
+    fun firstEntry() = native.firstEntry()
+    fun lastEntry() = native.lastEntry()
+    fun lowerBound(key: ByteArray) = native.lowerBound(key.copyOf())
+    fun upperBound(key: ByteArray) = native.upperBound(key.copyOf())
     fun range(start: ByteArray = ByteArray(0), end: ByteArray? = null) =
         native.range(start.copyOf(), end?.copyOf())
+    fun prefix(prefix: ByteArray) = native.prefix(prefix.copyOf())
+    fun rangePage(
+        cursor: RangeCursorRecord? = null,
+        end: ByteArray? = null,
+        limit: ULong = 256uL,
+    ) = native.rangePage(ownedRangeCursor(cursor), end?.copyOf(), limit)
+    fun prefixPage(
+        prefix: ByteArray,
+        cursor: RangeCursorRecord? = null,
+        limit: ULong = 256uL,
+    ) = native.prefixPage(prefix.copyOf(), ownedRangeCursor(cursor), limit)
+    fun reversePage(
+        cursor: ReverseCursorRecord? = null,
+        start: ByteArray = ByteArray(0),
+        limit: ULong = 256uL,
+    ) = native.reversePage(ownedReverseCursor(cursor), start.copyOf(), limit)
+    fun prefixReversePage(
+        prefix: ByteArray,
+        cursor: ReverseCursorRecord? = null,
+        limit: ULong = 256uL,
+    ) = native.prefixReversePage(prefix.copyOf(), ownedReverseCursor(cursor), limit)
     fun proveKey(key: ByteArray) = native.proveKey(key.copyOf())
     fun proveKeys(keys: List<ByteArray>) = native.proveKeys(keys.map(ByteArray::copyOf))
     fun proveRange(start: ByteArray = ByteArray(0), end: ByteArray? = null) =

@@ -29,6 +29,10 @@ import build.crab.prolly.ProximityVerificationRecord
 import build.crab.prolly.TreeStatsRecord
 import build.crab.prolly.ProximitySearchResultRecord
 import build.crab.prolly.ProximitySearchVerificationRecord
+import build.crab.prolly.RangeCursorRecord
+import build.crab.prolly.RangePageRecord
+import build.crab.prolly.ReverseCursorRecord
+import build.crab.prolly.ReversePageRecord
 import build.crab.prolly.SecondaryIndexExtractorCallback
 
 data class JavaIndexedMutation(
@@ -280,6 +284,50 @@ private fun ProximityVerificationRecord.toJava() = JavaProximityVerification(
 )
 
 object JavaPortableBridge {
+    @JvmStatic
+    fun mapSnapshotRangePage(
+        snapshot: MapSnapshot,
+        cursor: RangeCursorRecord?,
+        end: ByteArray?,
+        limit: Long,
+    ): RangePageRecord {
+        require(limit >= 0) { "page limit must be non-negative" }
+        return snapshot.rangePage(cursor, end, limit.toULong())
+    }
+
+    @JvmStatic
+    fun mapSnapshotPrefixPage(
+        snapshot: MapSnapshot,
+        prefix: ByteArray,
+        cursor: RangeCursorRecord?,
+        limit: Long,
+    ): RangePageRecord {
+        require(limit >= 0) { "page limit must be non-negative" }
+        return snapshot.prefixPage(prefix, cursor, limit.toULong())
+    }
+
+    @JvmStatic
+    fun mapSnapshotReversePage(
+        snapshot: MapSnapshot,
+        cursor: ReverseCursorRecord?,
+        start: ByteArray,
+        limit: Long,
+    ): ReversePageRecord {
+        require(limit >= 0) { "page limit must be non-negative" }
+        return snapshot.reversePage(cursor, start, limit.toULong())
+    }
+
+    @JvmStatic
+    fun mapSnapshotPrefixReversePage(
+        snapshot: MapSnapshot,
+        prefix: ByteArray,
+        cursor: ReverseCursorRecord?,
+        limit: Long,
+    ): ReversePageRecord {
+        require(limit >= 0) { "page limit must be non-negative" }
+        return snapshot.prefixReversePage(prefix, cursor, limit.toULong())
+    }
+
     @JvmStatic
     fun memory(): Engine = Engine.memory()
 

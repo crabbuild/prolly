@@ -925,6 +925,18 @@ export declare class NativePortableMapSnapshot {
   id(): Buffer
   version(): NodePortableMapVersion
   get(key: Buffer): Buffer | null
+  getMany(keys: Array<Buffer>): Array<Buffer | undefined | null>
+  containsKey(key: Buffer): boolean
+  firstEntry(): NodeEntryRecord | null
+  lastEntry(): NodeEntryRecord | null
+  lowerBound(key: Buffer): NodeEntryRecord | null
+  upperBound(key: Buffer): NodeEntryRecord | null
+  range(start: Buffer, end?: Buffer | undefined | null): Array<NodeEntryRecord>
+  prefix(prefix: Buffer): Array<NodeEntryRecord>
+  rangePage(cursor: NodeRangeCursorRecord | undefined | null, end: Buffer | undefined | null, limit: string): NodeRangePageRecord
+  prefixPage(prefix: Buffer, cursor: NodeRangeCursorRecord | undefined | null, limit: string): NodeRangePageRecord
+  reversePage(cursor: NodeReverseCursorRecord | undefined | null, start: Buffer, limit: string): NodeReversePageRecord
+  prefixReversePage(prefix: Buffer, cursor: NodeReverseCursorRecord | undefined | null, limit: string): NodeReversePageRecord
   proveKey(key: Buffer): NativePortableKeyProof
   stats(): NodePortableMaintenanceSummary
   export(): NodePortableMaintenanceSummary

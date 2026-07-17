@@ -1,4 +1,7 @@
-use super::{js_error, optional_bytes, WasmProllyEngine};
+use super::{
+    entries_to_array, entry_object, js_error, optional_bytes, range_page_to_object,
+    reverse_page_to_object, WasmProllyEngine, WasmRangeCursor, WasmReverseCursor,
+};
 use crate::page::set_bytes;
 use js_sys::{Array, Object, Reflect, Uint8Array};
 use prolly::{KeyProof, MapVersionId, OwnedReadSession, VersionedMapBackup, VersionedMapUpdate};
@@ -329,6 +332,143 @@ impl WasmMapSnapshot {
             .map(optional_bytes)
             .map_err(js_error)
     }
+
+    #[wasm_bindgen(js_name = getMany)]
+    pub fn get_many(&self, keys: Array) -> Result<Array, JsValue> {
+        let keys = keys
+            .iter()
+            .map(|value| Uint8Array::new(&value).to_vec())
+            .collect::<Vec<_>>();
+        let result = Array::new();
+        for value in self.load()?.get_many(&keys).map_err(js_error)? {
+            result.push(&optional_bytes(value));
+        }
+        Ok(result)
+    }
+
+    #[wasm_bindgen(js_name = containsKey)]
+    pub fn contains_key(&self, key: Uint8Array) -> Result<bool, JsValue> {
+        self.load()?.contains_key(&key.to_vec()).map_err(js_error)
+    }
+
+    #[wasm_bindgen(js_name = firstEntry)]
+    pub fn first_entry(&self) -> Result<JsValue, JsValue> {
+        optional_entry(self.load()?.first_entry().map_err(js_error)?)
+    }
+
+    #[wasm_bindgen(js_name = lastEntry)]
+    pub fn last_entry(&self) -> Result<JsValue, JsValue> {
+        optional_entry(self.load()?.last_entry().map_err(js_error)?)
+    }
+
+    #[wasm_bindgen(js_name = lowerBound)]
+    pub fn lower_bound(&self, key: Uint8Array) -> Result<JsValue, JsValue> {
+        optional_entry(self.load()?.lower_bound(&key.to_vec()).map_err(js_error)?)
+    }
+
+    #[wasm_bindgen(js_name = upperBound)]
+    pub fn upper_bound(&self, key: Uint8Array) -> Result<JsValue, JsValue> {
+        optional_entry(self.load()?.upper_bound(&key.to_vec()).map_err(js_error)?)
+    }
+
+    pub fn range(&self, start: Uint8Array, end: Option<Uint8Array>) -> Result<Array, JsValue> {
+        let entries = self
+            .load()?
+            .range(
+                &start.to_vec(),
+                end.as_ref().map(Uint8Array::to_vec).as_deref(),
+            )
+            .map_err(js_error)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(js_error)?;
+        entries_to_array(entries)
+    }
+
+    pub fn prefix(&self, prefix: Uint8Array) -> Result<Array, JsValue> {
+        let entries = self
+            .load()?
+            .prefix(&prefix.to_vec())
+            .map_err(js_error)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(js_error)?;
+        entries_to_array(entries)
+    }
+
+    #[wasm_bindgen(js_name = rangePage)]
+    pub fn range_page(
+        &self,
+        cursor: Option<WasmRangeCursor>,
+        end: Option<Uint8Array>,
+        limit: u32,
+    ) -> Result<Object, JsValue> {
+        self.load()?
+            .range_page(
+                &cursor
+                    .map(|value| value.inner)
+                    .unwrap_or_else(prolly::RangeCursor::start),
+                end.as_ref().map(Uint8Array::to_vec).as_deref(),
+                limit as usize,
+            )
+            .map_err(js_error)
+            .and_then(range_page_to_object)
+    }
+
+    #[wasm_bindgen(js_name = prefixPage)]
+    pub fn prefix_page(
+        &self,
+        prefix: Uint8Array,
+        cursor: Option<WasmRangeCursor>,
+        limit: u32,
+    ) -> Result<Object, JsValue> {
+        self.load()?
+            .prefix_page(
+                &prefix.to_vec(),
+                &cursor
+                    .map(|value| value.inner)
+                    .unwrap_or_else(prolly::RangeCursor::start),
+                limit as usize,
+            )
+            .map_err(js_error)
+            .and_then(range_page_to_object)
+    }
+
+    #[wasm_bindgen(js_name = reversePage)]
+    pub fn reverse_page(
+        &self,
+        cursor: Option<WasmReverseCursor>,
+        start: Uint8Array,
+        limit: u32,
+    ) -> Result<Object, JsValue> {
+        self.load()?
+            .reverse_page(
+                &cursor
+                    .map(|value| value.inner)
+                    .unwrap_or_else(prolly::ReverseCursor::end),
+                &start.to_vec(),
+                limit as usize,
+            )
+            .map_err(js_error)
+            .and_then(reverse_page_to_object)
+    }
+
+    #[wasm_bindgen(js_name = prefixReversePage)]
+    pub fn prefix_reverse_page(
+        &self,
+        prefix: Uint8Array,
+        cursor: Option<WasmReverseCursor>,
+        limit: u32,
+    ) -> Result<Object, JsValue> {
+        self.load()?
+            .prefix_reverse_page(
+                &prefix.to_vec(),
+                &cursor
+                    .map(|value| value.inner)
+                    .unwrap_or_else(prolly::ReverseCursor::end),
+                limit as usize,
+            )
+            .map_err(js_error)
+            .and_then(reverse_page_to_object)
+    }
     #[wasm_bindgen(js_name = proveKey)]
     pub fn prove_key(&self, key: Uint8Array) -> Result<WasmKeyProof, JsValue> {
         self.load()?
@@ -357,6 +497,13 @@ impl WasmMapSnapshot {
             .map(|inner| WasmReadSession { inner })
             .map_err(js_error)
     }
+}
+
+fn optional_entry(value: Option<(Vec<u8>, Vec<u8>)>) -> Result<JsValue, JsValue> {
+    value
+        .map(|(key, value)| entry_object(key, value).map(JsValue::from))
+        .transpose()
+        .map(|value| value.unwrap_or(JsValue::NULL))
 }
 
 #[wasm_bindgen(js_name = WasmReadSession)]

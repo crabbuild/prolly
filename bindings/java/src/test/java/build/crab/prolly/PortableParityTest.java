@@ -3,6 +3,7 @@ package build.crab.prolly;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import build.crab.prolly.javaapi.Engine;
@@ -22,6 +23,38 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class PortableParityTest {
+    @Test
+    void versionedSnapshotsExposeOrderedNavigationAndBoundedPages() {
+        Prolly.useLocalDebugLibrary();
+        try (Engine engine = Engine.memory(); var map = engine.versionedMap(bytes("versioned-ordered"))) {
+            map.initialize();
+            map.apply(List.of(
+                    MapMutation.upsert(bytes("a"), bytes("one")),
+                    MapMutation.upsert(bytes("ab"), bytes("two")),
+                    MapMutation.upsert(bytes("b"), bytes("three")),
+                    MapMutation.upsert(bytes("c"), bytes("four"))));
+            try (var snapshot = map.snapshot()) {
+                assertTrue(snapshot.containsKey(bytes("ab")));
+                assertArrayEquals(bytes("one"), snapshot.getMany(List.of(bytes("a"), bytes("missing"))).get(0).orElseThrow());
+                assertArrayEquals(bytes("a"), snapshot.firstEntry().orElseThrow().getKey());
+                assertArrayEquals(bytes("c"), snapshot.lastEntry().orElseThrow().getKey());
+                assertArrayEquals(bytes("ab"), snapshot.lowerBound(bytes("aa")).orElseThrow().getKey());
+                assertArrayEquals(bytes("b"), snapshot.upperBound(bytes("ab")).orElseThrow().getKey());
+                assertEquals(List.of("a", "ab"), snapshot.prefix(bytes("a")).stream().map(entry -> new String(entry.getKey())).toList());
+                assertEquals(List.of("ab", "b"), snapshot.range(bytes("ab"), bytes("c")).stream().map(entry -> new String(entry.getKey())).toList());
+                var prefixPage = snapshot.prefixPage(bytes("a"), null, 1);
+                assertEquals(List.of("a"), prefixPage.getEntries().stream().map(entry -> new String(entry.getKey())).toList());
+                assertNotNull(prefixPage.getNextCursor());
+                var first = snapshot.rangePage(null, bytes("c"), 2);
+                assertEquals(List.of("a", "ab"), first.getEntries().stream().map(entry -> new String(entry.getKey())).toList());
+                var second = snapshot.rangePage(first.getNextCursor(), bytes("c"), 2);
+                assertEquals(List.of("b"), second.getEntries().stream().map(entry -> new String(entry.getKey())).toList());
+                assertEquals(List.of("c", "b"), snapshot.reversePage(null, bytes("a"), 2).getEntries().stream().map(entry -> new String(entry.getKey())).toList());
+                assertEquals(List.of("ab", "a"), snapshot.prefixReversePage(bytes("a"), null, 2).getEntries().stream().map(entry -> new String(entry.getKey())).toList());
+            }
+        }
+    }
+
     @Test
     void versionedIndexedAndProximityParity() throws Exception {
         Prolly.useLocalDebugLibrary();

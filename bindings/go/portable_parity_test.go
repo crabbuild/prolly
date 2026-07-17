@@ -248,6 +248,86 @@ func TestPortableVersionedSnapshotLifecycle(t *testing.T) {
 	}
 }
 
+func TestPortableVersionedSnapshotOrderedNavigationAndBoundedPages(t *testing.T) {
+	engine, err := OpenMemory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer engine.Close()
+	versioned, err := engine.VersionedMap([]byte("versioned-ordered"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer versioned.Close()
+	if _, err := versioned.Initialize(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := versioned.Apply([]Mutation{
+		UpsertMutation([]byte("a"), []byte("one")),
+		UpsertMutation([]byte("ab"), []byte("two")),
+		UpsertMutation([]byte("b"), []byte("three")),
+		UpsertMutation([]byte("c"), []byte("four")),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := versioned.Snapshot()
+	if err != nil || snapshot == nil {
+		t.Fatalf("snapshot = %#v, %v", snapshot, err)
+	}
+	defer snapshot.Close()
+	if contains, err := snapshot.ContainsKey([]byte("ab")); err != nil || !contains {
+		t.Fatalf("contains = %v, %v", contains, err)
+	}
+	values, err := snapshot.GetMany([][]byte{[]byte("a"), []byte("missing")})
+	if err != nil || !bytes.Equal(values[0], []byte("one")) || values[1] != nil {
+		t.Fatalf("get many = %#v, %v", values, err)
+	}
+	first, err := snapshot.FirstEntry()
+	if err != nil || first == nil || !bytes.Equal(first.Key, []byte("a")) {
+		t.Fatalf("first = %#v, %v", first, err)
+	}
+	last, err := snapshot.LastEntry()
+	if err != nil || last == nil || !bytes.Equal(last.Key, []byte("c")) {
+		t.Fatalf("last = %#v, %v", last, err)
+	}
+	lower, err := snapshot.LowerBound([]byte("aa"))
+	if err != nil || lower == nil || !bytes.Equal(lower.Key, []byte("ab")) {
+		t.Fatalf("lower = %#v, %v", lower, err)
+	}
+	upper, err := snapshot.UpperBound([]byte("ab"))
+	if err != nil || upper == nil || !bytes.Equal(upper.Key, []byte("b")) {
+		t.Fatalf("upper = %#v, %v", upper, err)
+	}
+	prefix, err := snapshot.Prefix([]byte("a"))
+	if err != nil || len(prefix) != 2 || !bytes.Equal(prefix[1].Key, []byte("ab")) {
+		t.Fatalf("prefix = %#v, %v", prefix, err)
+	}
+	ranged, err := snapshot.Range([]byte("ab"), []byte("c"))
+	if err != nil || len(ranged) != 2 || !bytes.Equal(ranged[1].Key, []byte("b")) {
+		t.Fatalf("range = %#v, %v", ranged, err)
+	}
+	prefixPage, err := snapshot.PrefixPage([]byte("a"), nil, 1)
+	if err != nil || len(prefixPage.Entries) != 1 || prefixPage.NextCursor == nil || !bytes.Equal(prefixPage.Entries[0].Key, []byte("a")) {
+		t.Fatalf("prefix page = %#v, %v", prefixPage, err)
+	}
+	page, err := snapshot.RangePage(nil, []byte("c"), 2)
+	if err != nil || len(page.Entries) != 2 || page.NextCursor == nil {
+		t.Fatalf("first page = %#v, %v", page, err)
+	}
+	page, err = snapshot.RangePage(page.NextCursor, []byte("c"), 2)
+	if err != nil || len(page.Entries) != 1 || !bytes.Equal(page.Entries[0].Key, []byte("b")) {
+		t.Fatalf("second page = %#v, %v", page, err)
+	}
+	reverse, err := snapshot.ReversePage(nil, []byte("a"), 2)
+	if err != nil || len(reverse.Entries) != 2 || !bytes.Equal(reverse.Entries[0].Key, []byte("c")) {
+		t.Fatalf("reverse = %#v, %v", reverse, err)
+	}
+	prefixed, err := snapshot.PrefixReversePage([]byte("a"), nil, 2)
+	if err != nil || len(prefixed.Entries) != 2 || !bytes.Equal(prefixed.Entries[0].Key, []byte("ab")) {
+		t.Fatalf("prefix reverse = %#v, %v", prefixed, err)
+	}
+}
+
 func TestPortableVersionedBatchCASAndPinnedPointReads(t *testing.T) {
 	engine, err := OpenMemory()
 	if err != nil {

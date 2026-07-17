@@ -536,6 +536,172 @@ func (s *MapSnapshot) Get(key []byte) ([]byte, bool, error) {
 	}
 	return value, ok, d.done()
 }
+func (s *MapSnapshot) GetMany(keys [][]byte) ([][]byte, error) {
+	handle, unlock, err := s.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	owned := make([][]byte, len(keys))
+	for index, key := range keys {
+		owned[index] = append([]byte{}, key...)
+	}
+	raw, err := ffiMapSnapshotGetMany(handle, owned)
+	if err != nil {
+		return nil, err
+	}
+	values, _, err := decodeOptionalByteArraySequence(raw)
+	return values, err
+}
+func (s *MapSnapshot) ContainsKey(key []byte) (bool, error) {
+	handle, unlock, err := s.withHandle()
+	if err != nil {
+		return false, err
+	}
+	defer unlock()
+	return ffiMapSnapshotContainsKey(handle, append([]byte{}, key...))
+}
+func (s *MapSnapshot) FirstEntry() (*Entry, error) {
+	handle, unlock, err := s.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	raw, err := ffiMapSnapshotFirstEntry(handle)
+	if err != nil {
+		return nil, err
+	}
+	return decodeOptionalEntry(raw)
+}
+func (s *MapSnapshot) LastEntry() (*Entry, error) {
+	handle, unlock, err := s.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	raw, err := ffiMapSnapshotLastEntry(handle)
+	if err != nil {
+		return nil, err
+	}
+	return decodeOptionalEntry(raw)
+}
+func (s *MapSnapshot) LowerBound(key []byte) (*Entry, error) {
+	handle, unlock, err := s.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	raw, err := ffiMapSnapshotLowerBound(handle, append([]byte{}, key...))
+	if err != nil {
+		return nil, err
+	}
+	return decodeOptionalEntry(raw)
+}
+func (s *MapSnapshot) UpperBound(key []byte) (*Entry, error) {
+	handle, unlock, err := s.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	raw, err := ffiMapSnapshotUpperBound(handle, append([]byte{}, key...))
+	if err != nil {
+		return nil, err
+	}
+	return decodeOptionalEntry(raw)
+}
+func (s *MapSnapshot) Range(start, end []byte) ([]Entry, error) {
+	handle, unlock, err := s.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	raw, err := ffiMapSnapshotRange(handle, append([]byte{}, start...), cloneOptionalBytes(end))
+	if err != nil {
+		return nil, err
+	}
+	return decodeEntries(raw)
+}
+func (s *MapSnapshot) Prefix(prefix []byte) ([]Entry, error) {
+	handle, unlock, err := s.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	raw, err := ffiMapSnapshotPrefix(handle, append([]byte{}, prefix...))
+	if err != nil {
+		return nil, err
+	}
+	return decodeEntries(raw)
+}
+func (s *MapSnapshot) RangePage(cursor *RangeCursor, end []byte, limit uint64) (RangePage, error) {
+	handle, unlock, err := s.withHandle()
+	if err != nil {
+		return RangePage{}, err
+	}
+	defer unlock()
+	raw, err := ffiMapSnapshotRangePage(handle, cloneRangeCursor(cursor), cloneOptionalBytes(end), limit)
+	if err != nil {
+		return RangePage{}, err
+	}
+	return decodeRangePage(raw)
+}
+func (s *MapSnapshot) PrefixPage(prefix []byte, cursor *RangeCursor, limit uint64) (RangePage, error) {
+	handle, unlock, err := s.withHandle()
+	if err != nil {
+		return RangePage{}, err
+	}
+	defer unlock()
+	raw, err := ffiMapSnapshotPrefixPage(handle, append([]byte{}, prefix...), cloneRangeCursor(cursor), limit)
+	if err != nil {
+		return RangePage{}, err
+	}
+	return decodeRangePage(raw)
+}
+func (s *MapSnapshot) ReversePage(cursor *ReverseCursor, start []byte, limit uint64) (ReversePage, error) {
+	handle, unlock, err := s.withHandle()
+	if err != nil {
+		return ReversePage{}, err
+	}
+	defer unlock()
+	raw, err := ffiMapSnapshotReversePage(handle, cloneReverseCursor(cursor), append([]byte{}, start...), limit)
+	if err != nil {
+		return ReversePage{}, err
+	}
+	return decodeReversePage(raw)
+}
+func (s *MapSnapshot) PrefixReversePage(prefix []byte, cursor *ReverseCursor, limit uint64) (ReversePage, error) {
+	handle, unlock, err := s.withHandle()
+	if err != nil {
+		return ReversePage{}, err
+	}
+	defer unlock()
+	raw, err := ffiMapSnapshotPrefixReversePage(handle, append([]byte{}, prefix...), cloneReverseCursor(cursor), limit)
+	if err != nil {
+		return ReversePage{}, err
+	}
+	return decodeReversePage(raw)
+}
+
+func cloneOptionalBytes(value []byte) []byte {
+	if value == nil {
+		return nil
+	}
+	return append([]byte{}, value...)
+}
+
+func cloneRangeCursor(cursor *RangeCursor) *RangeCursor {
+	if cursor == nil {
+		return nil
+	}
+	return &RangeCursor{AfterKey: cloneOptionalBytes(cursor.AfterKey)}
+}
+
+func cloneReverseCursor(cursor *ReverseCursor) *ReverseCursor {
+	if cursor == nil {
+		return nil
+	}
+	return &ReverseCursor{BeforeKey: cloneOptionalBytes(cursor.BeforeKey)}
+}
 func (s *MapSnapshot) ProveKey(key []byte) (KeyProof, error) {
 	handle, unlock, err := s.withHandle()
 	if err != nil {

@@ -316,7 +316,18 @@ module Prolly
     def id = open! { @native.id }
     def version = open! { @native.version }
     def get(key) = open! { @native.get(key.b) }
+    def get_many(keys) = open! { @native.get_many(keys.map(&:b)) }
+    def contains?(key) = open! { @native.contains_key(key.b) }
+    def first_entry = open! { @native.first_entry }
+    def last_entry = open! { @native.last_entry }
+    def lower_bound(key) = open! { @native.lower_bound(key.b) }
+    def upper_bound(key) = open! { @native.upper_bound(key.b) }
     def range(start = ''.b, range_end = nil) = open! { @native.range(start.b, range_end&.b) }
+    def prefix(prefix) = open! { @native.prefix(prefix.b) }
+    def range_page(cursor = nil, range_end = nil, limit = 256) = open! { @native.range_page(cursor, range_end&.b, limit) }
+    def prefix_page(prefix, cursor = nil, limit = 256) = open! { @native.prefix_page(prefix.b, cursor, limit) }
+    def reverse_page(cursor = nil, start = ''.b, limit = 256) = open! { @native.reverse_page(cursor, start.b, limit) }
+    def prefix_reverse_page(prefix, cursor = nil, limit = 256) = open! { @native.prefix_reverse_page(prefix.b, cursor, limit) }
     def prove_key(key) = open! { @native.prove_key(key.b) }
     def prove_keys(keys) = open! { @native.prove_keys(keys.map(&:b)) }
     def prove_range(start = ''.b, range_end = nil) = open! { @native.prove_range(start.b, range_end&.b) }

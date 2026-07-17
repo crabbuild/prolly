@@ -13,6 +13,41 @@ import org.junit.jupiter.api.assertThrows
 
 class PortableParityTest {
     @Test
+    fun versionedSnapshotsExposeOrderedNavigationAndBoundedPages() {
+        ProllyNative.useLocalDebugLibrary()
+        Engine.memory().use { engine ->
+            engine.versionedMap("versioned-ordered".bytes()).use { versioned ->
+                versioned.initialize()
+                versioned.apply(listOf(
+                    MutationRecord(MutationKind.UPSERT, "a".bytes(), "one".bytes()),
+                    MutationRecord(MutationKind.UPSERT, "ab".bytes(), "two".bytes()),
+                    MutationRecord(MutationKind.UPSERT, "b".bytes(), "three".bytes()),
+                    MutationRecord(MutationKind.UPSERT, "c".bytes(), "four".bytes()),
+                ))
+                versioned.snapshot()!!.use { snapshot ->
+                    assertEquals(true, snapshot.containsKey("ab".bytes()))
+                    assertArrayEquals("one".bytes(), snapshot.getMany(listOf("a".bytes(), "missing".bytes()))[0])
+                    assertArrayEquals("a".bytes(), snapshot.firstEntry()!!.key)
+                    assertArrayEquals("c".bytes(), snapshot.lastEntry()!!.key)
+                    assertArrayEquals("ab".bytes(), snapshot.lowerBound("aa".bytes())!!.key)
+                    assertArrayEquals("b".bytes(), snapshot.upperBound("ab".bytes())!!.key)
+                    assertEquals(listOf("a", "ab"), snapshot.prefix("a".bytes()).map { String(it.key) })
+                    assertEquals(listOf("ab", "b"), snapshot.range("ab".bytes(), "c".bytes()).map { String(it.key) })
+                    val prefixPage = snapshot.prefixPage("a".bytes(), limit = 1uL)
+                    assertEquals(listOf("a"), prefixPage.entries.map { String(it.key) })
+                    assertEquals(true, prefixPage.nextCursor != null)
+                    val first = snapshot.rangePage(end = "c".bytes(), limit = 2uL)
+                    assertEquals(listOf("a", "ab"), first.entries.map { String(it.key) })
+                    val second = snapshot.rangePage(first.nextCursor, "c".bytes(), 2uL)
+                    assertEquals(listOf("b"), second.entries.map { String(it.key) })
+                    assertEquals(listOf("c", "b"), snapshot.reversePage(start = "a".bytes(), limit = 2uL).entries.map { String(it.key) })
+                    assertEquals(listOf("ab", "a"), snapshot.prefixReversePage("a".bytes(), limit = 2uL).entries.map { String(it.key) })
+                }
+            }
+        }
+    }
+
+    @Test
     fun versionedIndexedAndProximityMapsUseThePortableApi() {
         ProllyNative.useLocalDebugLibrary()
 

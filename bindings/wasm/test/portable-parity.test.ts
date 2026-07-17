@@ -123,6 +123,44 @@ test("WASM versioned maps expose identity and historical snapshot lifecycle", { 
   engine.close();
 });
 
+test("WASM versioned snapshots expose ordered navigation and bounded pages", { skip: !generatedPresent }, async () => {
+  const engine = api.Engine.memory(wasm);
+  const map = engine.versionedMap(bytes("versioned-ordered"));
+  await map.initialize();
+  await map.apply([
+    { kind: "upsert", key: bytes("a"), value: bytes("one") },
+    { kind: "upsert", key: bytes("ab"), value: bytes("two") },
+    { kind: "upsert", key: bytes("b"), value: bytes("three") },
+    { kind: "upsert", key: bytes("c"), value: bytes("four") },
+  ]);
+  const snapshot = await map.snapshot();
+  assert.ok(snapshot);
+  assert.equal(snapshot.containsKey(bytes("ab")), true);
+  assert.deepEqual(snapshot.getMany([bytes("a"), bytes("missing")]).map((value: Uint8Array | undefined) => value == null ? undefined : Buffer.from(value).toString()), ["one", undefined]);
+  assert.equal(Buffer.from(snapshot.firstEntry()!.key).toString(), "a");
+  assert.equal(Buffer.from(snapshot.lastEntry()!.key).toString(), "c");
+  assert.equal(Buffer.from(snapshot.lowerBound(bytes("aa"))!.key).toString(), "ab");
+  assert.equal(Buffer.from(snapshot.upperBound(bytes("ab"))!.key).toString(), "b");
+  assert.deepEqual(snapshot.prefix(bytes("a")).map((entry: any) => Buffer.from(entry.key).toString()), ["a", "ab"]);
+  assert.deepEqual(snapshot.range(bytes("ab"), bytes("c")).map((entry: any) => Buffer.from(entry.key).toString()), ["ab", "b"]);
+
+  const prefixPage = snapshot.prefixPage(bytes("a"), undefined, 1);
+  assert.deepEqual(prefixPage.entries.map((entry: any) => Buffer.from(entry.key).toString()), ["a"]);
+  assert.ok(prefixPage.nextCursor);
+
+  const first = snapshot.rangePage(undefined, bytes("c"), 2);
+  assert.deepEqual(first.entries.map((entry: any) => Buffer.from(entry.key).toString()), ["a", "ab"]);
+  assert.ok(first.nextCursor);
+  const second = snapshot.rangePage(first.nextCursor, bytes("c"), 2);
+  assert.deepEqual(second.entries.map((entry: any) => Buffer.from(entry.key).toString()), ["b"]);
+  const reverse = snapshot.reversePage(undefined, bytes("a"), 2);
+  assert.deepEqual(reverse.entries.map((entry: any) => Buffer.from(entry.key).toString()), ["c", "b"]);
+  const prefixed = snapshot.prefixReversePage(bytes("a"), undefined, 2);
+  assert.deepEqual(prefixed.entries.map((entry: any) => Buffer.from(entry.key).toString()), ["ab", "a"]);
+  map.close();
+  engine.close();
+});
+
 test("WASM versioned maps expose owned batch CAS and version-pinned point reads", { skip: !generatedPresent }, async () => {
   const engine = api.Engine.memory(wasm);
   const map = engine.versionedMap(bytes("versioned-cas"));

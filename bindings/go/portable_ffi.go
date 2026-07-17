@@ -98,6 +98,18 @@ extern void uniffi_prolly_bindings_fn_free_bindingmapsnapshot(uint64_t ptr, Rust
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingmapsnapshot_id(uint64_t ptr, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingmapsnapshot_version(uint64_t ptr, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingmapsnapshot_get(uint64_t ptr, RustBuffer key, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingmapsnapshot_get_many(uint64_t ptr, RustBuffer keys, RustCallStatus *out_err);
+extern int8_t uniffi_prolly_bindings_fn_method_bindingmapsnapshot_contains_key(uint64_t ptr, RustBuffer key, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingmapsnapshot_first_entry(uint64_t ptr, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingmapsnapshot_last_entry(uint64_t ptr, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingmapsnapshot_lower_bound(uint64_t ptr, RustBuffer key, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingmapsnapshot_upper_bound(uint64_t ptr, RustBuffer key, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingmapsnapshot_range(uint64_t ptr, RustBuffer start, RustBuffer range_end, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prefix(uint64_t ptr, RustBuffer prefix, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingmapsnapshot_range_page(uint64_t ptr, RustBuffer cursor, RustBuffer range_end, uint64_t limit, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prefix_page(uint64_t ptr, RustBuffer prefix, RustBuffer cursor, uint64_t limit, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingmapsnapshot_reverse_page(uint64_t ptr, RustBuffer cursor, RustBuffer start, uint64_t limit, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prefix_reverse_page(uint64_t ptr, RustBuffer prefix, RustBuffer cursor, uint64_t limit, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prove_key(uint64_t ptr, RustBuffer key, RustCallStatus *out_err);
 extern uint64_t uniffi_prolly_bindings_fn_method_bindingmapsnapshot_read_session(uint64_t ptr, RustCallStatus *out_err);
 extern uint64_t uniffi_prolly_bindings_fn_clone_prollyreadsession(uint64_t ptr, RustCallStatus *out_err);
@@ -773,6 +785,219 @@ func ffiMapSnapshotGet(handle uint64, key []byte) ([]byte, error) {
 	}
 	var status C.RustCallStatus
 	buf := C.uniffi_prolly_bindings_fn_method_bindingmapsnapshot_get(clone, keyBuf, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiMapSnapshotGetMany(handle uint64, keys [][]byte) ([]byte, error) {
+	clone, err := portableCloneMapSnapshot(handle)
+	if err != nil {
+		return nil, err
+	}
+	keysBuf, err := portableInput(encodeByteArraySequence(keys))
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingmapsnapshot_get_many(clone, keysBuf, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiMapSnapshotContainsKey(handle uint64, key []byte) (bool, error) {
+	clone, err := portableCloneMapSnapshot(handle)
+	if err != nil {
+		return false, err
+	}
+	keyBuf, err := portableInput(encodeByteArray(key))
+	if err != nil {
+		return false, err
+	}
+	var status C.RustCallStatus
+	value := C.uniffi_prolly_bindings_fn_method_bindingmapsnapshot_contains_key(clone, keyBuf, &status)
+	return value != 0, portableStatusError(&status)
+}
+
+func ffiMapSnapshotFirstEntry(handle uint64) ([]byte, error) {
+	clone, err := portableCloneMapSnapshot(handle)
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingmapsnapshot_first_entry(clone, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiMapSnapshotLastEntry(handle uint64) ([]byte, error) {
+	clone, err := portableCloneMapSnapshot(handle)
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingmapsnapshot_last_entry(clone, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiMapSnapshotLowerBound(handle uint64, key []byte) ([]byte, error) {
+	clone, err := portableCloneMapSnapshot(handle)
+	if err != nil {
+		return nil, err
+	}
+	keyBuf, err := portableInput(encodeByteArray(key))
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingmapsnapshot_lower_bound(clone, keyBuf, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiMapSnapshotUpperBound(handle uint64, key []byte) ([]byte, error) {
+	clone, err := portableCloneMapSnapshot(handle)
+	if err != nil {
+		return nil, err
+	}
+	keyBuf, err := portableInput(encodeByteArray(key))
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingmapsnapshot_upper_bound(clone, keyBuf, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiMapSnapshotRange(handle uint64, start, end []byte) ([]byte, error) {
+	clone, err := portableCloneMapSnapshot(handle)
+	if err != nil {
+		return nil, err
+	}
+	startBuf, err := portableInput(encodeByteArray(start))
+	if err != nil {
+		return nil, err
+	}
+	endBuf, err := portableInput(encodeOptionalByteArray(end))
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingmapsnapshot_range(clone, startBuf, endBuf, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiMapSnapshotPrefix(handle uint64, prefix []byte) ([]byte, error) {
+	clone, err := portableCloneMapSnapshot(handle)
+	if err != nil {
+		return nil, err
+	}
+	prefixBuf, err := portableInput(encodeByteArray(prefix))
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prefix(clone, prefixBuf, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiMapSnapshotRangePage(handle uint64, cursor *RangeCursor, end []byte, limit uint64) ([]byte, error) {
+	clone, err := portableCloneMapSnapshot(handle)
+	if err != nil {
+		return nil, err
+	}
+	cursorBuf, err := portableInput(encodeOptionalRangeCursor(cursor))
+	if err != nil {
+		return nil, err
+	}
+	endBuf, err := portableInput(encodeOptionalByteArray(end))
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingmapsnapshot_range_page(clone, cursorBuf, endBuf, C.uint64_t(limit), &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiMapSnapshotPrefixPage(handle uint64, prefix []byte, cursor *RangeCursor, limit uint64) ([]byte, error) {
+	clone, err := portableCloneMapSnapshot(handle)
+	if err != nil {
+		return nil, err
+	}
+	prefixBuf, err := portableInput(encodeByteArray(prefix))
+	if err != nil {
+		return nil, err
+	}
+	cursorBuf, err := portableInput(encodeOptionalRangeCursor(cursor))
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prefix_page(clone, prefixBuf, cursorBuf, C.uint64_t(limit), &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiMapSnapshotReversePage(handle uint64, cursor *ReverseCursor, start []byte, limit uint64) ([]byte, error) {
+	clone, err := portableCloneMapSnapshot(handle)
+	if err != nil {
+		return nil, err
+	}
+	cursorBuf, err := portableInput(encodeOptionalReverseCursor(cursor))
+	if err != nil {
+		return nil, err
+	}
+	startBuf, err := portableInput(encodeByteArray(start))
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingmapsnapshot_reverse_page(clone, cursorBuf, startBuf, C.uint64_t(limit), &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiMapSnapshotPrefixReversePage(handle uint64, prefix []byte, cursor *ReverseCursor, limit uint64) ([]byte, error) {
+	clone, err := portableCloneMapSnapshot(handle)
+	if err != nil {
+		return nil, err
+	}
+	prefixBuf, err := portableInput(encodeByteArray(prefix))
+	if err != nil {
+		return nil, err
+	}
+	cursorBuf, err := portableInput(encodeOptionalReverseCursor(cursor))
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prefix_reverse_page(clone, prefixBuf, cursorBuf, C.uint64_t(limit), &status)
 	if err := portableStatusError(&status); err != nil {
 		return nil, err
 	}

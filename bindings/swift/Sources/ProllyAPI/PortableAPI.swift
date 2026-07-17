@@ -196,8 +196,57 @@ public final class MapSnapshot: @unchecked Sendable {
     public var id: Data { native.id() }
     public var version: MapVersionRecord { native.version() }
     public func get(_ key: Data) throws -> Data? { try open { try native.get(key: Data(key)) } }
+    public func getMany(_ keys: [Data]) throws -> [Data?] {
+        try open { try native.getMany(keys: keys.map { Data($0) }) }
+    }
+    public func contains(_ key: Data) throws -> Bool {
+        try open { try native.containsKey(key: Data(key)) }
+    }
+    public func firstEntry() throws -> EntryRecord? { try open { try native.firstEntry() } }
+    public func lastEntry() throws -> EntryRecord? { try open { try native.lastEntry() } }
+    public func lowerBound(_ key: Data) throws -> EntryRecord? {
+        try open { try native.lowerBound(key: Data(key)) }
+    }
+    public func upperBound(_ key: Data) throws -> EntryRecord? {
+        try open { try native.upperBound(key: Data(key)) }
+    }
     public func range(from start: Data = Data(), to end: Data? = nil) throws -> [EntryRecord] {
         try open { try native.range(start: Data(start), rangeEnd: end.map { Data($0) }) }
+    }
+    public func prefix(_ prefix: Data) throws -> [EntryRecord] {
+        try open { try native.prefix(prefix: Data(prefix)) }
+    }
+    public func rangePage(
+        cursor: RangeCursorRecord? = nil,
+        to end: Data? = nil,
+        limit: UInt64 = 256
+    ) throws -> RangePageRecord {
+        try open {
+            try native.rangePage(cursor: cursor, rangeEnd: end.map { Data($0) }, limit: limit)
+        }
+    }
+    public func prefixPage(
+        _ prefix: Data,
+        cursor: RangeCursorRecord? = nil,
+        limit: UInt64 = 256
+    ) throws -> RangePageRecord {
+        try open { try native.prefixPage(prefix: Data(prefix), cursor: cursor, limit: limit) }
+    }
+    public func reversePage(
+        cursor: ReverseCursorRecord? = nil,
+        from start: Data = Data(),
+        limit: UInt64 = 256
+    ) throws -> ReversePageRecord {
+        try open { try native.reversePage(cursor: cursor, start: Data(start), limit: limit) }
+    }
+    public func prefixReversePage(
+        _ prefix: Data,
+        cursor: ReverseCursorRecord? = nil,
+        limit: UInt64 = 256
+    ) throws -> ReversePageRecord {
+        try open {
+            try native.prefixReversePage(prefix: Data(prefix), cursor: cursor, limit: limit)
+        }
     }
     public func proveKey(_ key: Data) throws -> KeyProofRecord {
         try open { try native.proveKey(key: Data(key)) }

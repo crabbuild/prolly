@@ -103,6 +103,41 @@ class PortableParityTests(unittest.TestCase):
                 self.assertEqual(historical.version.id, first.id)
                 self.assertEqual(historical.get(b"k"), b"v1")
 
+    def test_versioned_snapshot_exposes_ordered_navigation_and_bounded_pages(self):
+        with Engine.memory() as engine:
+            versioned = engine.versioned_map(b"versioned-ordered")
+            versioned.initialize()
+            versioned.apply([
+                MutationRecord(kind=MutationKind.UPSERT, key=b"a", value=b"one"),
+                MutationRecord(kind=MutationKind.UPSERT, key=b"ab", value=b"two"),
+                MutationRecord(kind=MutationKind.UPSERT, key=b"b", value=b"three"),
+                MutationRecord(kind=MutationKind.UPSERT, key=b"c", value=b"four"),
+            ])
+            with versioned.snapshot() as snapshot:
+                self.assertTrue(snapshot.contains(b"ab"))
+                self.assertEqual(snapshot.get_many([b"a", b"missing"]), [b"one", None])
+                self.assertEqual(snapshot.first_entry().key, b"a")
+                self.assertEqual(snapshot.last_entry().key, b"c")
+                self.assertEqual(snapshot.lower_bound(b"aa").key, b"ab")
+                self.assertEqual(snapshot.upper_bound(b"ab").key, b"b")
+                self.assertEqual([entry.key for entry in snapshot.prefix(b"a")], [b"a", b"ab"])
+                self.assertEqual([entry.key for entry in snapshot.range(b"ab", b"c")], [b"ab", b"b"])
+
+                prefix_page = snapshot.prefix_page(b"a", None, 1)
+                self.assertEqual([entry.key for entry in prefix_page.entries], [b"a"])
+                self.assertIsNotNone(prefix_page.next_cursor)
+
+                first = snapshot.range_page(None, b"c", 2)
+                self.assertEqual([entry.key for entry in first.entries], [b"a", b"ab"])
+                self.assertIsNotNone(first.next_cursor)
+                second = snapshot.range_page(first.next_cursor, b"c", 2)
+                self.assertEqual([entry.key for entry in second.entries], [b"b"])
+
+                reverse = snapshot.reverse_page(None, b"a", 2)
+                self.assertEqual([entry.key for entry in reverse.entries], [b"c", b"b"])
+                prefixed = snapshot.prefix_reverse_page(b"a", None, 2)
+                self.assertEqual([entry.key for entry in prefixed.entries], [b"ab", b"a"])
+
     def test_versioned_batch_cas_and_pinned_point_reads(self):
         with Engine.memory() as engine:
             versioned = engine.versioned_map(b"versioned-cas")

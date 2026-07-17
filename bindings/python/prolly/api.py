@@ -256,9 +256,53 @@ class MapSnapshot(_Scoped):
         self._open()
         return self._inner.get(bytes(key))
 
+    def get_many(self, keys: Iterable[bytes]):
+        self._open()
+        return self._inner.get_many([bytes(key) for key in keys])
+
+    def contains(self, key: bytes) -> bool:
+        self._open()
+        return self._inner.contains_key(bytes(key))
+
+    def first_entry(self):
+        self._open()
+        return self._inner.first_entry()
+
+    def last_entry(self):
+        self._open()
+        return self._inner.last_entry()
+
+    def lower_bound(self, key: bytes):
+        self._open()
+        return self._inner.lower_bound(bytes(key))
+
+    def upper_bound(self, key: bytes):
+        self._open()
+        return self._inner.upper_bound(bytes(key))
+
     def range(self, start: bytes = b"", end: bytes | None = None):
         self._open()
         return self._inner.range(bytes(start), None if end is None else bytes(end))
+
+    def prefix(self, prefix: bytes):
+        self._open()
+        return self._inner.prefix(bytes(prefix))
+
+    def range_page(self, cursor=None, end: bytes | None = None, limit: int = 256):
+        self._open()
+        return self._inner.range_page(cursor, None if end is None else bytes(end), limit)
+
+    def prefix_page(self, prefix: bytes, cursor=None, limit: int = 256):
+        self._open()
+        return self._inner.prefix_page(bytes(prefix), cursor, limit)
+
+    def reverse_page(self, cursor=None, start: bytes = b"", limit: int = 256):
+        self._open()
+        return self._inner.reverse_page(cursor, bytes(start), limit)
+
+    def prefix_reverse_page(self, prefix: bytes, cursor=None, limit: int = 256):
+        self._open()
+        return self._inner.prefix_reverse_page(bytes(prefix), cursor, limit)
 
     def prove_key(self, key: bytes):
         self._open()
