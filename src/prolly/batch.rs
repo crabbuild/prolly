@@ -5111,6 +5111,16 @@ impl BatchWriter {
         tree: &Tree,
         mutations: Vec<Mutation>,
     ) -> Result<BatchApplyResult, Error> {
+        apply_with_stats(prolly, tree, mutations)
+    }
+
+    #[allow(dead_code)]
+    fn apply_batch_with_legacy_stats<S: Store>(
+        &self,
+        prolly: &Prolly<S>,
+        tree: &Tree,
+        mutations: Vec<Mutation>,
+    ) -> Result<BatchApplyResult, Error> {
         let mut stats = BatchApplyStats::new(mutations.len(), self.config.cache_written_nodes);
 
         // Handle empty mutations
@@ -7591,7 +7601,7 @@ mod tests {
         let ordered_gets_before = store.batch_get_ordered_calls.load(Ordering::Relaxed);
 
         let updated = writer
-            .apply_batch_with_stats(
+            .apply_batch_with_legacy_stats(
                 &prolly,
                 &base,
                 vec![
@@ -7665,7 +7675,7 @@ mod tests {
         let ordered_gets_before = store.batch_get_ordered_calls.load(Ordering::Relaxed);
 
         let result = writer
-            .apply_batch_with_stats(
+            .apply_batch_with_legacy_stats(
                 &prolly,
                 &base,
                 vec![
@@ -7737,7 +7747,7 @@ mod tests {
         let batch_gets_before = store.batch_get_calls.load(Ordering::Relaxed);
 
         let result = writer
-            .apply_batch_with_stats(
+            .apply_batch_with_legacy_stats(
                 &prolly,
                 &base,
                 vec![Mutation::Upsert {
@@ -7786,7 +7796,7 @@ mod tests {
         prolly.clear_cache();
 
         let result = writer
-            .apply_batch_with_stats(
+            .apply_batch_with_legacy_stats(
                 &prolly,
                 &base,
                 vec![
@@ -7850,7 +7860,7 @@ mod tests {
         let writes_before = store.batch_put_entries.load(Ordering::Relaxed);
 
         let result = writer
-            .apply_batch_with_stats(
+            .apply_batch_with_legacy_stats(
                 &prolly,
                 &base,
                 vec![Mutation::Upsert {
@@ -7892,7 +7902,7 @@ mod tests {
         let writes_before = store.batch_put_entries.load(Ordering::Relaxed);
 
         let result = writer
-            .apply_batch_with_stats(
+            .apply_batch_with_legacy_stats(
                 &prolly,
                 &base,
                 vec![Mutation::Upsert {
@@ -7939,7 +7949,7 @@ mod tests {
         let writes_before = store.batch_put_entries.load(Ordering::Relaxed);
 
         let result = writer
-            .apply_batch_with_stats(
+            .apply_batch_with_legacy_stats(
                 &prolly,
                 &base,
                 vec![
@@ -7984,7 +7994,7 @@ mod tests {
         let tree = prolly.create();
 
         let result = writer
-            .apply_batch_with_stats(
+            .apply_batch_with_legacy_stats(
                 &prolly,
                 &tree,
                 vec![
@@ -8041,7 +8051,7 @@ mod tests {
         prolly.clear_cache();
 
         let updated = writer
-            .apply_batch_with_stats(
+            .apply_batch_with_legacy_stats(
                 &prolly,
                 &base,
                 vec![
@@ -8563,7 +8573,7 @@ mod tests {
         let writer = BatchWriter::new();
 
         let result = writer
-            .apply_batch_with_stats(
+            .apply_batch_with_legacy_stats(
                 &prolly,
                 &tree,
                 vec![Mutation::Upsert {
@@ -8604,7 +8614,7 @@ mod tests {
         let writer = BatchWriter::with_config(BatchWriterConfig::new().with_optimized_merge(false));
 
         let result = writer
-            .apply_batch_with_stats(
+            .apply_batch_with_legacy_stats(
                 &prolly,
                 &tree,
                 vec![Mutation::Upsert {

@@ -70,6 +70,69 @@ fn direct_batch_writer_stats_matches_canonical_root_for_every_policy() {
 }
 
 #[test]
+fn every_stats_and_parallel_writer_returns_the_canonical_root() {
+    for policy in [
+        chunking::entry_count_key_hash(),
+        chunking::entry_count_key_value_hash(),
+        chunking::logical_bytes_key_weibull(),
+        chunking::logical_bytes_rolling_hash(),
+    ] {
+        let config = Config::builder().chunking(policy).build();
+        let base_records = numbered_records(5_000);
+        let store = Arc::new(MemStore::new());
+        let mut base_builder = BatchBuilder::new(store.clone(), config.clone());
+        for (key, value) in &base_records {
+            base_builder.add(key.clone(), value.clone());
+        }
+        let base = base_builder.build().unwrap();
+        let manager = Prolly::new(store, config.clone());
+        let mutations = vec![Mutation::Upsert {
+            key: b"key-002500a".to_vec(),
+            val: vec![b'y'; 32],
+        }];
+
+        let mut final_records = base_records;
+        final_records.push((b"key-002500a".to_vec(), vec![b'y'; 32]));
+        final_records.sort_unstable_by(|left, right| left.0.cmp(&right.0));
+        let expected = build_records(config, &final_records).root;
+
+        let roots = [
+            BatchWriter::new()
+                .apply_batch(&manager, &base, mutations.clone())
+                .unwrap()
+                .root,
+            BatchWriter::new()
+                .apply_batch_with_stats(&manager, &base, mutations.clone())
+                .unwrap()
+                .tree
+                .root,
+            manager.batch(&base, mutations.clone()).unwrap().root,
+            manager
+                .batch_with_stats(&base, mutations.clone())
+                .unwrap()
+                .tree
+                .root,
+            manager
+                .batch_with_write_stats(&base, mutations.clone())
+                .unwrap()
+                .0
+                .root,
+            manager
+                .parallel_batch(&base, mutations.clone(), &ParallelConfig::new(4, 1))
+                .unwrap()
+                .root,
+            manager
+                .parallel_batch_with_stats(&base, mutations.clone(), &ParallelConfig::new(4, 1))
+                .unwrap()
+                .tree
+                .root,
+        ];
+
+        assert!(roots.iter().all(|root| root == &expected));
+    }
+}
+
+#[test]
 fn mutation_rejects_a_tree_whose_declared_format_differs_from_its_root() {
     let store = Arc::new(MemStore::new());
     let manager = Prolly::new(store, Config::default());
