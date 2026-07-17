@@ -27,6 +27,24 @@ public final class IndexedMap implements AutoCloseable {
         return IndexBuildResult.fromNative(open().ensureIndex(name.clone()));
     }
     public IndexedSnapshot snapshot() { return new IndexedSnapshot(open().snapshot()); }
+    public build.crab.prolly.IndexedMapHealthRecord health() { return open().health(); }
+    public build.crab.prolly.IndexedMapMetricsRecord metrics() { return open().metrics(); }
+    public long buildAttempts() {
+        return build.crab.prolly.api.JavaPortableBridge.buildAttempts(metrics());
+    }
+    public build.crab.prolly.IndexVerificationRecord verifyIndex(byte[] name, byte[] sourceVersion) {
+        return open().verifyIndex(name.clone(), sourceVersion.clone());
+    }
+    public java.util.List<build.crab.prolly.IndexVerificationRecord> verifyAll(byte[] sourceVersion) {
+        return open().verifyAll(sourceVersion.clone());
+    }
+    public build.crab.prolly.IndexVerificationRecord repairIndex(byte[] name, byte[] sourceVersion) {
+        return open().repairIndex(name.clone(), sourceVersion.clone());
+    }
+    public byte[] exportCurrent() { return open().exportCurrent().clone(); }
+    public build.crab.prolly.IndexedRetentionRecord keepLast(long count) {
+        return build.crab.prolly.api.JavaPortableBridge.keepLast(open(), count);
+    }
 
     public CompletableFuture<IndexedVersion> putAsync(byte[] key, byte[] value) {
         var nativeHandle = open(); byte[] ownedKey = key.clone(); byte[] ownedValue = value.clone();

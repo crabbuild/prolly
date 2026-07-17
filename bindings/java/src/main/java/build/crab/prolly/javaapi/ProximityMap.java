@@ -12,6 +12,7 @@ public final class ProximityMap implements AutoCloseable {
         if (nativeMap == null) throw new IllegalStateException("proximity map is closed");
         return nativeMap;
     }
+    public byte[] descriptor() { return open().getDescriptor().clone(); }
     public ProximityReadSession read() { return new ProximityReadSession(this, open().read()); }
     public SearchResult search(SearchRequest request) {
         List<Float> query = new ArrayList<>(request.vector().length);
@@ -26,6 +27,17 @@ public final class ProximityMap implements AutoCloseable {
         var owned = SearchRequest.exact(request.vector(), request.topK());
         return CompletableFuture.supplyAsync(() -> search(owned));
     }
+    public build.crab.prolly.ProximityMembershipProofRecord proveMembership(byte[] key) {
+        return open().proveMembership(key.clone());
+    }
+    public build.crab.prolly.ProximityStructuralProofRecord proveStructure() {
+        return JavaPortableBridge.proveStructure(open());
+    }
+    public build.crab.prolly.ProximityVerificationRecord verify() { return open().verify(); }
+    public long verifiedRecordCount() {
+        return JavaPortableBridge.recordCount(verify());
+    }
+    public void clearCache() { open().clearCache(); }
     @Override public void close() {
         if (nativeMap != null) { nativeMap.close(); nativeMap = null; }
     }

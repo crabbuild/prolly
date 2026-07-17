@@ -32,6 +32,24 @@ public final class VersionedMap implements AutoCloseable {
         return MapVersion.fromNative(open().delete(key.clone()));
     }
 
+    public MapSnapshot snapshot() {
+        var snapshot = open().snapshot();
+        return snapshot == null ? null : new MapSnapshot(snapshot);
+    }
+
+    public byte[] backup() { return open().backup().clone(); }
+    public build.crab.prolly.MapCatalogVerificationRecord verifyCatalog() {
+        return open().verifyCatalog();
+    }
+    public long catalogVersionCount() {
+        return build.crab.prolly.api.JavaPortableBridge.versionCount(verifyCatalog());
+    }
+    public build.crab.prolly.GcPlanRecord planGc() { return open().planGc(); }
+    public build.crab.prolly.GcSweepRecord sweepGc() { return open().sweepGc(); }
+    public build.crab.prolly.VersionPruneRecord keepLast(long count) {
+        return build.crab.prolly.api.JavaPortableBridge.keepLast(open(), count);
+    }
+
     public CompletableFuture<MapVersion> initializeAsync() {
         var nativeHandle = open();
         return CompletableFuture.supplyAsync(() -> MapVersion.fromNative(nativeHandle.initialize()));
