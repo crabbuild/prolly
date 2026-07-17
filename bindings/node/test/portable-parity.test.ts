@@ -169,11 +169,30 @@ test("rich proximity search preserves policy filter stats session and proof", as
     assert.deepEqual(result.neighbors.map((neighbor) => Buffer.from(neighbor.key).toString()), ["a", "ab"]);
     assert.ok(result.stats.distanceEvaluations > 0n);
     assert.ok(result.planFormatVersion > 0);
+    const scanned: string[] = [];
+    assert.equal(proximity.scanRecords((record) => {
+      scanned.push(Buffer.from(record.key).toString());
+      return scanned.length < 2;
+    }), 2n);
+    assert.deepEqual(scanned, ["a", "ab"]);
+    let expiredKey: Uint8Array | undefined;
+    const viewed = proximity.withSearchView(new Float32Array([0, 0]), 2, (neighbors) => {
+      expiredKey = neighbors[0]!.key;
+      return neighbors.map((neighbor) => Buffer.from(neighbor.key).toString());
+    });
+    assert.deepEqual(viewed, ["a", "b"]);
+    assert.throws(() => expiredKey![0], /expired/i);
     const session = proximity.read();
     assert.deepEqual(
       (await session.search(request)).neighbors.map((neighbor) => Buffer.from(neighbor.key).toString()),
       ["a", "ab"],
     );
+    const retained: string[] = [];
+    assert.equal(session.scanRecords((record) => {
+      retained.push(Buffer.from(record.key).toString());
+      return true;
+    }), 3n);
+    assert.deepEqual(retained, ["a", "ab", "b"]);
     session.close();
     const proof = proximity.proveSearch(request);
     assert.deepEqual(

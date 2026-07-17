@@ -35,7 +35,43 @@ var (
 	goIndexExtractorNext atomic.Uint64
 	goIndexExtractorMu   sync.Mutex
 	goIndexExtractors    = map[uint64]IndexExtractor{}
+
+	goProximityVisitorNext atomic.Uint64
+	goProximityVisitorMu   sync.Mutex
+	goProximityVisitors    = map[uint64]func(ProximityRecord) bool{}
 )
+
+func registerGoProximityRecordVisitor(visitor func(ProximityRecord) bool) uint64 {
+	handle := goProximityVisitorNext.Add(2) - 1
+	goProximityVisitorMu.Lock()
+	goProximityVisitors[handle] = visitor
+	goProximityVisitorMu.Unlock()
+	return handle
+}
+
+func cloneGoProximityRecordVisitor(handle uint64) uint64 {
+	goProximityVisitorMu.Lock()
+	defer goProximityVisitorMu.Unlock()
+	visitor := goProximityVisitors[handle]
+	if visitor == nil {
+		return 0
+	}
+	clone := goProximityVisitorNext.Add(2) - 1
+	goProximityVisitors[clone] = visitor
+	return clone
+}
+
+func removeGoProximityRecordVisitor(handle uint64) {
+	goProximityVisitorMu.Lock()
+	delete(goProximityVisitors, handle)
+	goProximityVisitorMu.Unlock()
+}
+
+func getGoProximityRecordVisitor(handle uint64) func(ProximityRecord) bool {
+	goProximityVisitorMu.Lock()
+	defer goProximityVisitorMu.Unlock()
+	return goProximityVisitors[handle]
+}
 
 func registerGoIndexExtractor(extractor IndexExtractor) uint64 {
 	handle := goIndexExtractorNext.Add(2) - 1
@@ -109,6 +145,53 @@ func prolly_go_index_extractor_extract(handle C.uint64_t, key C.RustBuffer, valu
 	if outReturn != nil {
 		*outReturn = portableCallbackBuffer(encoded.Bytes())
 	}
+}
+
+//export prolly_go_proximity_record_visitor_free
+func prolly_go_proximity_record_visitor_free(handle C.uint64_t) {
+	removeGoProximityRecordVisitor(uint64(handle))
+}
+
+//export prolly_go_proximity_record_visitor_clone
+func prolly_go_proximity_record_visitor_clone(handle C.uint64_t) C.uint64_t {
+	return C.uint64_t(cloneGoProximityRecordVisitor(uint64(handle)))
+}
+
+//export prolly_go_proximity_record_visitor_visit
+func prolly_go_proximity_record_visitor_visit(handle C.uint64_t, record C.RustBuffer, outReturn *C.int8_t, outStatus *C.RustCallStatus) {
+	resetPortableCallbackStatus(outStatus)
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			writePortableCallbackPanic(outStatus, "panic in proximity record visitor")
+			if outReturn != nil {
+				*outReturn = 0
+			}
+		}
+	}()
+	raw := portableCallbackRawBuffer(record)
+	decoded, err := decodeProximityRecordBytes(raw)
+	if err != nil {
+		writePortableCallbackPanic(outStatus, err.Error())
+		return
+	}
+	visitor := getGoProximityRecordVisitor(uint64(handle))
+	if visitor == nil {
+		writePortableCallbackPanic(outStatus, "proximity record visitor was released")
+		return
+	}
+	if outReturn != nil && visitor(decoded) {
+		*outReturn = 1
+	}
+}
+
+func portableCallbackRawBuffer(buf C.RustBuffer) []byte {
+	var raw []byte
+	if buf.data != nil && buf.len != 0 {
+		raw = C.GoBytes(unsafe.Pointer(buf.data), C.int(buf.len))
+	}
+	var status C.RustCallStatus
+	C.ffi_prolly_bindings_rustbuffer_free(buf, &status)
+	return raw
 }
 
 func resetPortableCallbackStatus(status *C.RustCallStatus) {

@@ -13,4 +13,5 @@ Gem::Specification.new do |spec|
   spec.require_paths = ['lib']
 
   spec.add_runtime_dependency 'ffi', '>= 1.17.4', '< 2.0'
+  spec.add_development_dependency 'minitest', '>= 5', '< 6'
 end

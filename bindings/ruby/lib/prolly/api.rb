@@ -695,6 +695,19 @@ module Prolly
       read.use { |session| session.search_exact(query, k) }
     end
 
+    def scan_records(&block)
+      raise ArgumentError, 'scan_records requires a block' unless block
+      scan_record_views do |record|
+        block.call(ProximityRecordRecord.new(
+          key: record.key.bytes, vector: record.vector.to_a, value: record.value.bytes
+        ))
+      end.visited
+    end
+    def scan_record_views(&block)
+      raise ArgumentError, 'scan_record_views requires a block' unless block
+      open! { PackedPage.proximity_scan_view(@native.fast_handle, &block) }
+    end
+
     def search_view(query, k, &block)
       read.use { |session| session.search_view(query, k, &block) }
     end
@@ -916,6 +929,18 @@ module Prolly
     def contains?(key) = open! { @native.contains_key(key.b) }
     def search(request) = open! { @native.search(Prolly.owned_proximity_search_request(request)) }
     def search_exact(query, k) = search(Prolly.exact_proximity_search_request(query, k))
+    def scan_records(&block)
+      raise ArgumentError, 'scan_records requires a block' unless block
+      scan_record_views do |record|
+        block.call(ProximityRecordRecord.new(
+          key: record.key.bytes, vector: record.vector.to_a, value: record.value.bytes
+        ))
+      end.visited
+    end
+    def scan_record_views(&block)
+      raise ArgumentError, 'scan_record_views requires a block' unless block
+      open! { PackedPage.proximity_scan_view(@native.fast_handle, &block) }
+    end
     def search_view(query, k, &block)
       open! { PackedPage.proximity_search_view(@native.fast_handle, query, k, &block) }
     end

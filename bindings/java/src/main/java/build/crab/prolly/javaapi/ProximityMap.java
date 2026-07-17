@@ -4,6 +4,7 @@ import build.crab.prolly.api.JavaPortableBridge;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Predicate;
 
 public final class ProximityMap implements AutoCloseable {
     private build.crab.prolly.api.ProximityMap nativeMap;
@@ -24,6 +25,15 @@ public final class ProximityMap implements AutoCloseable {
     }
     public build.crab.prolly.ExactProximityRecordRecord get(byte[] key) { return open().get(key.clone()); }
     public boolean contains(byte[] key) { return open().containsKey(key.clone()); }
+    public long scanRecords(Predicate<ProximityRecord> visitor) {
+        return JavaPortableBridge.scanRecords(open(), record -> visitor.test(new ProximityRecord(
+                record.getKey().clone(), toFloatArray(record.getVector()), record.getValue().clone())));
+    }
+    private static float[] toFloatArray(List<Float> values) {
+        var result = new float[values.size()];
+        for (int index = 0; index < values.size(); index++) result[index] = values.get(index);
+        return result;
+    }
     public HnswBuildResult buildHnsw() {
         return buildHnsw(HnswConfig.defaults(), HnswBuildLimits.defaults());
     }

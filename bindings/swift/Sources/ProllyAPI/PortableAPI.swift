@@ -1024,6 +1024,12 @@ public final class ProximityMap: @unchecked Sendable {
         defer { session.close() }
         return try session.searchExact(query, k: k)
     }
+
+    public func scanRecords(
+        _ visitor: @escaping (ProximityRecord) -> Bool
+    ) throws -> UInt64 {
+        try native.scanRecords(visitor: ClosureProximityRecordVisitor(visitor))
+    }
     public func read() throws -> ProximityReadSession { ProximityReadSession(native: try native.readSession()) }
     public func verify() throws -> ProximityVerificationRecord { try native.verify() }
     public func mutate(
@@ -1294,6 +1300,13 @@ public final class ProximityReadSession: @unchecked Sendable {
         guard !closed else { throw PortableAPIError.closed("proximity read session") }
         return try native.search(request: ownedSearchRequest(request))
     }
+
+    public func scanRecords(
+        _ visitor: @escaping (ProximityRecord) -> Bool
+    ) throws -> UInt64 {
+        guard !closed else { throw PortableAPIError.closed("proximity read session") }
+        return try native.scanRecords(visitor: ClosureProximityRecordVisitor(visitor))
+    }
     public func searchExact(_ query: [Float], k: UInt64) throws -> ProximitySearchResultRecord {
         try search(exactProximitySearchRequest(query: query, k: k))
     }
@@ -1306,6 +1319,18 @@ public final class ProximityReadSession: @unchecked Sendable {
         return try withProximitySearchView(handle: native.fastHandle(), query: query, k: k, body)
     }
     public func close() { closed = true }
+}
+
+private final class ClosureProximityRecordVisitor: ProximityRecordVisitorCallback, @unchecked Sendable {
+    private let visitor: (ProximityRecord) -> Bool
+
+    init(_ visitor: @escaping (ProximityRecord) -> Bool) {
+        self.visitor = visitor
+    }
+
+    func visit(record: ProximityRecordRecord) -> Bool {
+        visitor(ProximityRecord(key: record.key, vector: record.vector, value: record.value))
+    }
 }
 
 public final class ProximitySearchProof: @unchecked Sendable {

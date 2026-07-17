@@ -1081,6 +1081,12 @@ class ProximityMap(_Scoped):
         with self.read() as session:
             return session.search_exact(query, k)
 
+    def scan_records(
+        self, visitor: Callable[[_native.ProximityRecordRecord], bool]
+    ) -> int:
+        self._open()
+        return self._inner.scan_records(_ProximityRecordVisitor(visitor))
+
     def read(self) -> "ProximityReadSession":
         self._open()
         return ProximityReadSession(self._inner.read_session())
@@ -1372,6 +1378,12 @@ class ProximityReadSession(_Scoped):
             )
         )
 
+    def scan_records(
+        self, visitor: Callable[[_native.ProximityRecordRecord], bool]
+    ) -> int:
+        self._open()
+        return self._inner.scan_records(_ProximityRecordVisitor(visitor))
+
     def search_view(
         self,
         query: Sequence[float],
@@ -1380,6 +1392,16 @@ class ProximityReadSession(_Scoped):
     ):
         self._open()
         return proximity_search_view(self._inner.fast_handle(), query, k, visit)
+
+
+class _ProximityRecordVisitor(_native.ProximityRecordVisitorCallback):
+    def __init__(
+        self, visitor: Callable[[_native.ProximityRecordRecord], bool]
+    ) -> None:
+        self._visitor = visitor
+
+    def visit(self, record: _native.ProximityRecordRecord) -> bool:
+        return bool(self._visitor(record))
 
 
 class ProximitySearchProof(_Scoped):

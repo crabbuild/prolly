@@ -42,11 +42,25 @@ typedef struct UniFfiTraitVtableSecondaryIndexExtractorCallback {
 	IndexExtractorExtractCallback extract;
 } UniFfiTraitVtableSecondaryIndexExtractorCallback;
 
+typedef void (*ProximityRecordVisitorFreeCallback)(uint64_t handle);
+typedef uint64_t (*ProximityRecordVisitorCloneCallback)(uint64_t handle);
+typedef void (*ProximityRecordVisitorVisitCallback)(uint64_t handle, RustBuffer record, int8_t *out_return, RustCallStatus *out_status);
+
+typedef struct UniFfiTraitVtableProximityRecordVisitorCallback {
+	ProximityRecordVisitorFreeCallback uniffi_free;
+	ProximityRecordVisitorCloneCallback uniffi_clone;
+	ProximityRecordVisitorVisitCallback visit;
+} UniFfiTraitVtableProximityRecordVisitorCallback;
+
 extern void prolly_go_index_extractor_free(uint64_t handle);
 extern uint64_t prolly_go_index_extractor_clone(uint64_t handle);
 extern void prolly_go_index_extractor_extract(uint64_t handle, RustBuffer key, RustBuffer value, RustBuffer *out_return, RustCallStatus *out_status);
+extern void prolly_go_proximity_record_visitor_free(uint64_t handle);
+extern uint64_t prolly_go_proximity_record_visitor_clone(uint64_t handle);
+extern void prolly_go_proximity_record_visitor_visit(uint64_t handle, RustBuffer record, int8_t *out_return, RustCallStatus *out_status);
 
 extern void uniffi_prolly_bindings_fn_init_callback_vtable_secondaryindexextractorcallback(UniFfiTraitVtableSecondaryIndexExtractorCallback *vtable);
+extern void uniffi_prolly_bindings_fn_init_callback_vtable_proximityrecordvisitorcallback(UniFfiTraitVtableProximityRecordVisitorCallback *vtable);
 
 static UniFfiTraitVtableSecondaryIndexExtractorCallback prolly_go_index_extractor_vtable = {
 	prolly_go_index_extractor_free,
@@ -56,6 +70,16 @@ static UniFfiTraitVtableSecondaryIndexExtractorCallback prolly_go_index_extracto
 
 static void prolly_register_go_index_extractor_vtable(void) {
 	uniffi_prolly_bindings_fn_init_callback_vtable_secondaryindexextractorcallback(&prolly_go_index_extractor_vtable);
+}
+
+static UniFfiTraitVtableProximityRecordVisitorCallback prolly_go_proximity_record_visitor_vtable = {
+	prolly_go_proximity_record_visitor_free,
+	prolly_go_proximity_record_visitor_clone,
+	prolly_go_proximity_record_visitor_visit,
+};
+
+static void prolly_register_go_proximity_record_visitor_vtable(void) {
+	uniffi_prolly_bindings_fn_init_callback_vtable_proximityrecordvisitorcallback(&prolly_go_proximity_record_visitor_vtable);
 }
 
 extern RustBuffer ffi_prolly_bindings_rustbuffer_alloc(uint64_t size, RustCallStatus *out_err);
@@ -227,6 +251,7 @@ extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximitymap_prove_mem
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximitymap_prove_structure(uint64_t ptr, RustBuffer limits, RustCallStatus *out_err);
 extern uint64_t uniffi_prolly_bindings_fn_method_bindingproximitymap_prove_search(uint64_t ptr, RustBuffer request, RustBuffer limits, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximitymap_search(uint64_t ptr, RustBuffer request, RustCallStatus *out_err);
+extern uint64_t uniffi_prolly_bindings_fn_method_bindingproximitymap_scan_records(uint64_t ptr, uint64_t visitor, RustCallStatus *out_err);
 extern uint64_t uniffi_prolly_bindings_fn_method_bindingproximitymap_read_session(uint64_t ptr, RustCallStatus *out_err);
 extern uint64_t uniffi_prolly_bindings_fn_method_bindingproximitymap_rebuild(uint64_t ptr, RustBuffer mutations, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximitymap_verify(uint64_t ptr, RustCallStatus *out_err);
@@ -236,6 +261,7 @@ extern int8_t uniffi_prolly_bindings_fn_method_bindingproximityreadsession_conta
 extern uint64_t uniffi_prolly_bindings_fn_method_bindingproximityreadsession_fast_handle(uint64_t ptr, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximityreadsession_get(uint64_t ptr, RustBuffer key, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximityreadsession_search(uint64_t ptr, RustBuffer request, RustCallStatus *out_err);
+extern uint64_t uniffi_prolly_bindings_fn_method_bindingproximityreadsession_scan_records(uint64_t ptr, uint64_t visitor, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_func_verify_proximity_membership_proof(RustBuffer proof, RustBuffer expected_descriptor, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_func_verify_proximity_structure_proof(RustBuffer proof, RustBuffer expected_descriptor, RustBuffer limits, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_func_default_content_graph_limits(RustCallStatus *out_err);
@@ -1815,6 +1841,9 @@ func ffiNewIndexRegistry() (uint64, error) {
 }
 
 func ffiRegisterIndexExtractorVtable() { C.prolly_register_go_index_extractor_vtable() }
+func ffiRegisterProximityRecordVisitorVtable() {
+	C.prolly_register_go_proximity_record_visitor_vtable()
+}
 
 func ffiIndexRegistryRegister(handle uint64, name []byte, generation uint64, extractorID string, projection int32, limits []byte, extractor uint64) error {
 	clone, err := portableCloneRegistry(handle)
@@ -3377,6 +3406,30 @@ func ffiProximitySearchRecord(handle uint64, request []byte) ([]byte, error) {
 		return nil, err
 	}
 	return portableTakeBuffer(buf), nil
+}
+
+func ffiProximityScanRecords(handle, visitor uint64) (uint64, error) {
+	clone, err := ffiCloneProximity(handle)
+	if err != nil {
+		return 0, err
+	}
+	var status C.RustCallStatus
+	visited := C.uniffi_prolly_bindings_fn_method_bindingproximitymap_scan_records(
+		C.uint64_t(clone), C.uint64_t(visitor), &status,
+	)
+	return uint64(visited), portableStatusError(&status)
+}
+
+func ffiProximitySessionScanRecords(handle, visitor uint64) (uint64, error) {
+	clone, err := ffiCloneProximityReadSession(handle)
+	if err != nil {
+		return 0, err
+	}
+	var status C.RustCallStatus
+	visited := C.uniffi_prolly_bindings_fn_method_bindingproximityreadsession_scan_records(
+		C.uint64_t(clone), C.uint64_t(visitor), &status,
+	)
+	return uint64(visited), portableStatusError(&status)
 }
 
 func ffiExactProximitySearchRequest(query []float32, k uint64) ([]byte, error) {

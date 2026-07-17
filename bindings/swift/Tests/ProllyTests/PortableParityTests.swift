@@ -183,11 +183,23 @@ final class PortableParityTests: XCTestCase {
             XCTAssertEqual(result.neighbors.map(\.key), [Data("a".utf8), Data("ab".utf8)])
             XCTAssertGreaterThan(result.stats.distanceEvaluations, 0)
             XCTAssertGreaterThan(result.planFormatVersion, 0)
+            var scanned: [Data] = []
+            XCTAssertEqual(try proximity.scanRecords { record in
+                scanned.append(record.key)
+                return scanned.count < 2
+            }, 2)
+            XCTAssertEqual(scanned, [Data("a".utf8), Data("ab".utf8)])
             let session = try proximity.read()
             XCTAssertEqual(
                 try session.search(request).neighbors.map(\.key),
                 [Data("a".utf8), Data("ab".utf8)]
             )
+            var retained: [Data] = []
+            XCTAssertEqual(try session.scanRecords { record in
+                retained.append(record.key)
+                return true
+            }, 3)
+            XCTAssertEqual(retained, [Data("a".utf8), Data("ab".utf8), Data("b".utf8)])
             session.close()
             let proof = try proximity.proveSearch(request)
             XCTAssertEqual(

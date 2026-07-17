@@ -34,6 +34,7 @@ import build.crab.prolly.ProximityFilterKind
 import build.crab.prolly.ProximityFilterRecord
 import build.crab.prolly.ProximityMutationRecord
 import build.crab.prolly.ProximityMutationStatsRecord
+import build.crab.prolly.ProximityRecordRecord
 import build.crab.prolly.ProximityStructuralProofRecord
 import build.crab.prolly.ProximityStructuralVerificationRecord
 import build.crab.prolly.IndexedMapMetricsRecord
@@ -46,6 +47,7 @@ import build.crab.prolly.ParallelConfigRecord
 import build.crab.prolly.MultiKeyProofRecord
 import build.crab.prolly.MultiKeyProofVerificationRecord
 import build.crab.prolly.ProximityVerificationRecord
+import java.util.function.Predicate
 import build.crab.prolly.TreeStatsRecord
 import build.crab.prolly.ProximitySearchResultRecord
 import build.crab.prolly.ProximitySearchRequestRecord
@@ -1150,6 +1152,18 @@ object JavaPortableBridge {
         session: ProximityReadSession,
         request: JavaProximitySearchRequest,
     ): ProximitySearchResultRecord = session.search(request.toNative())
+
+    @JvmStatic
+    fun scanRecords(
+        map: ProximityMap,
+        visitor: Predicate<ProximityRecordRecord>,
+    ): Long = map.scanRecords { visitor.test(it) }.toLong()
+
+    @JvmStatic
+    fun scanRecords(
+        session: ProximityReadSession,
+        visitor: Predicate<ProximityRecordRecord>,
+    ): Long = session.scanRecords { visitor.test(it) }.toLong()
 
     @JvmStatic
     fun searchStats(result: ProximitySearchResultRecord) = JavaProximitySearchStats(

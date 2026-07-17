@@ -216,8 +216,14 @@ class PortableParityTest < Minitest::Test
       assert_equal ['a'.b, 'ab'.b], result.neighbors.map(&:key)
       assert_operator result.stats.distance_evaluations, :>, 0
       assert_operator result.plan_format_version, :>, 0
+      scanned = []
+      assert_equal 2, proximity.scan_records { |record| scanned << record.key; scanned.length < 2 }
+      assert_equal ['a'.b, 'ab'.b], scanned
       proximity.read.use do |session|
         assert_equal ['a'.b, 'ab'.b], session.search(request).neighbors.map(&:key)
+        retained = []
+        assert_equal 3, session.scan_records { |record| retained << record.key; true }
+        assert_equal ['a'.b, 'ab'.b, 'b'.b], retained
       end
       proximity.prove_search(request).use do |proof|
         assert_equal ['a'.b, 'ab'.b], proof.verify(proximity.descriptor).result.neighbors.map(&:key)

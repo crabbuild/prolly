@@ -35,11 +35,11 @@ use prolly_bindings::{
     ProductQuantizationQualityRecord, ProllyBindingError, ProllyReadSession, ProvedRangePageRecord,
     ProximityConfigRecord, ProximityFilterKind, ProximityFilterRecord,
     ProximityMembershipProofRecord, ProximityMutationRecord, ProximityMutationStatsRecord,
-    ProximityNeighborRecord, ProximityRecordRecord, ProximitySearchClaimKindRecord,
-    ProximitySearchRequestRecord, ProximitySearchResultRecord, ProximityStructuralProofRecord,
-    ProximityVerificationRecord, QueryKernelRecord, RangeProofRecord, SearchBackendRecord,
-    SearchBudgetRecord, SearchCompletionRecord, SearchPolicyKind, SecondaryIndexExtractorCallback,
-    VersionPruneRecord,
+    ProximityNeighborRecord, ProximityRecordRecord, ProximityRecordVisitorCallback,
+    ProximitySearchClaimKindRecord, ProximitySearchRequestRecord, ProximitySearchResultRecord,
+    ProximityStructuralProofRecord, ProximityVerificationRecord, QueryKernelRecord,
+    RangeProofRecord, SearchBackendRecord, SearchBudgetRecord, SearchCompletionRecord,
+    SearchPolicyKind, SecondaryIndexExtractorCallback, VersionPruneRecord,
 };
 use std::sync::Arc;
 
@@ -76,6 +76,13 @@ extern "C" {
         session_handle: u64,
         scan_handle: u64,
         max_records: u32,
+        max_arena_bytes: u64,
+    ) -> NodeFastPageResult;
+    fn prolly_fast_proximity_search(
+        map_handle: u64,
+        query_ptr: *const f32,
+        dimensions: usize,
+        k: u32,
         max_arena_bytes: u64,
     ) -> NodeFastPageResult;
     fn prolly_fast_scan_close(scan_handle: u64);
@@ -457,6 +464,58 @@ pub struct NodePortableProximityRecord {
     pub key: Buffer,
     pub vector: Float32Array,
     pub value: Buffer,
+}
+
+impl From<ProximityRecordRecord> for NodePortableProximityRecord {
+    fn from(value: ProximityRecordRecord) -> Self {
+        Self {
+            key: Buffer::from(value.key),
+            vector: Float32Array::from(value.vector),
+            value: Buffer::from(value.value),
+        }
+    }
+}
+
+type NodePortableProximityRecordVisitor = FunctionRef<NodePortableProximityRecord, bool>;
+
+struct NodeProximityRecordVisitor {
+    env: Env,
+    callback: NodePortableProximityRecordVisitor,
+    callback_error: Arc<std::sync::Mutex<Option<String>>>,
+}
+
+unsafe impl Send for NodeProximityRecordVisitor {}
+unsafe impl Sync for NodeProximityRecordVisitor {}
+
+impl ProximityRecordVisitorCallback for NodeProximityRecordVisitor {
+    fn visit(&self, record: ProximityRecordRecord) -> bool {
+        if self
+            .callback_error
+            .lock()
+            .map(|guard| guard.is_some())
+            .unwrap_or(true)
+        {
+            return false;
+        }
+        let result = self
+            .callback
+            .borrow_back(&self.env)
+            .map_err(|error| error.to_string())
+            .and_then(|function| {
+                function
+                    .call(record.into())
+                    .map_err(|error| error.to_string())
+            });
+        match result {
+            Ok(should_continue) => should_continue,
+            Err(error) => {
+                if let Ok(mut guard) = self.callback_error.lock() {
+                    *guard = Some(error);
+                }
+                false
+            }
+        }
+    }
 }
 
 #[napi(object)]
@@ -3704,6 +3763,33 @@ impl NativePortableProximityMap {
         self.inner.contains_key(key.to_vec()).map_err(to_napi_error)
     }
 
+    #[napi(
+        js_name = "scanRecords",
+        ts_args_type = "visitor: (record: NodePortableProximityRecord) => boolean"
+    )]
+    pub fn scan_records(
+        &self,
+        env: Env,
+        visitor: NodePortableProximityRecordVisitor,
+    ) -> Result<String> {
+        let callback_error = Arc::new(std::sync::Mutex::new(None));
+        let visited = self
+            .inner
+            .scan_records(Arc::new(NodeProximityRecordVisitor {
+                env,
+                callback: visitor,
+                callback_error: Arc::clone(&callback_error),
+            }));
+        if let Ok(mut error) = callback_error.lock() {
+            if let Some(error) = error.take() {
+                return Err(Error::new(Status::GenericFailure, error));
+            }
+        }
+        visited
+            .map(|value| value.to_string())
+            .map_err(to_napi_error)
+    }
+
     #[napi]
     pub fn search(&self, request: NodePortableSearchRequest) -> Result<NodePortableSearchResult> {
         self.inner
@@ -3845,6 +3931,93 @@ impl NativePortableProximityReadSession {
     #[napi]
     pub fn contains(&self, key: Buffer) -> Result<bool> {
         self.inner.contains_key(key.to_vec()).map_err(to_napi_error)
+    }
+
+    #[napi(
+        js_name = "scanRecords",
+        ts_args_type = "visitor: (record: NodePortableProximityRecord) => boolean"
+    )]
+    pub fn scan_records(
+        &self,
+        env: Env,
+        visitor: NodePortableProximityRecordVisitor,
+    ) -> Result<String> {
+        let callback_error = Arc::new(std::sync::Mutex::new(None));
+        let visited = self
+            .inner
+            .scan_records(Arc::new(NodeProximityRecordVisitor {
+                env,
+                callback: visitor,
+                callback_error: Arc::clone(&callback_error),
+            }));
+        if let Ok(mut error) = callback_error.lock() {
+            if let Some(error) = error.take() {
+                return Err(Error::new(Status::GenericFailure, error));
+            }
+        }
+        visited
+            .map(|value| value.to_string())
+            .map_err(to_napi_error)
+    }
+
+    #[napi(
+        js_name = "withSearchPage",
+        ts_args_type = "query: Float32Array, k: number, visitor: (page: { bytes: Buffer; recordCount: number; terminal: boolean }) => boolean"
+    )]
+    pub fn with_search_page(
+        &self,
+        env: Env,
+        query: Float32Array,
+        k: u32,
+        visitor: FunctionRef<JsObject, bool>,
+    ) -> Result<()> {
+        if query.is_empty() || k == 0 {
+            return Err(Error::new(
+                Status::InvalidArg,
+                "proximity search view requires a non-empty query and positive k".to_string(),
+            ));
+        }
+        let handle = self.inner.fast_handle();
+        if handle == 0 {
+            return Err(Error::new(
+                Status::GenericFailure,
+                "native proximity read session is closed".to_string(),
+            ));
+        }
+        let page = unsafe {
+            prolly_fast_proximity_search(handle, query.as_ptr(), query.len(), k, 64 * 1024 * 1024)
+        };
+        if page.status != 0 || page.lease_handle == 0 || page.data_ptr.is_null() {
+            return Err(Error::new(
+                Status::GenericFailure,
+                format!(
+                    "native proximity search page failed with status {}",
+                    page.status
+                ),
+            ));
+        }
+        let _page = NodeFastPageGuard(page.lease_handle);
+        let length = usize::try_from(page.data_len).map_err(|_| {
+            Error::new(
+                Status::GenericFailure,
+                "native proximity page exceeds the host address space".to_string(),
+            )
+        })?;
+        let borrowed = unsafe {
+            env.create_buffer_with_borrowed_data(
+                page.data_ptr.cast_mut(),
+                length,
+                (),
+                |(), _env| {},
+            )?
+        };
+        let mut argument = env.create_object()?;
+        argument.set_named_property("bytes", borrowed.into_unknown())?;
+        argument.set_named_property("recordCount", page.record_count)?;
+        argument.set_named_property("terminal", page.terminal != 0)?;
+        let function = visitor.borrow_back(&env)?;
+        function.call(argument)?;
+        Ok(())
     }
 
     #[napi(js_name = "fastHandle")]

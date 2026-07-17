@@ -21,6 +21,9 @@ module Prolly
     UniFFILib.attach_function :prolly_fast_proximity_search,
                               [:uint64, :pointer, :size_t, :uint32, :uint64],
                               FastPageResult.by_value
+    UniFFILib.attach_function :prolly_fast_proximity_scan_page,
+                              [:uint64, :pointer, :size_t, :uint8, :uint32, :uint64],
+                              FastPageResult.by_value
     UniFFILib.attach_function :prolly_fast_page_release, [:uint64], :void
     UniFFILib.attach_function :prolly_fast_read_session_scan_open,
                               [:uint64, :pointer, :size_t, :pointer, :size_t, :uint8],
@@ -82,8 +85,34 @@ module Prolly
     end
 
     NeighborView = Struct.new(:key, :distance, :rank, :value, :proof, keyword_init: true)
+    ProximityRecordView = Struct.new(:key, :vector, :value, keyword_init: true)
     EntryView = Struct.new(:key, :value, keyword_init: true)
     ScanOutcome = Struct.new(:visited, :stopped, keyword_init: true)
+
+    class VectorView
+      attr_reader :length
+
+      def initialize(pointer, offset, byte_length, scope)
+        raise 'packed proximity vector length is invalid' unless (byte_length % 4).zero?
+        @pointer = pointer
+        @offset = offset
+        @length = byte_length / 4
+        @scope = scope
+      end
+
+      def component(index)
+        @scope.check!
+        raise IndexError, 'proximity vector index is out of range' unless index.between?(0, @length - 1)
+        @pointer.get_bytes(@offset + index * 4, 4).unpack1('e')
+      end
+
+      alias [] component
+
+      def to_a
+        @scope.check!
+        @pointer.get_bytes(@offset, @length * 4).unpack('e*')
+      end
+    end
 
     module_function
 
@@ -124,6 +153,75 @@ module Prolly
       ensure
         scope&.close
         UniFFILib.prolly_fast_page_release(result[:lease_handle])
+      end
+    end
+
+    def proximity_scan_view(
+      map_handle, max_records: 4096, max_arena_bytes: 4 * 1024 * 1024
+    )
+      raise ArgumentError, 'proximity scan visitor block is required' unless block_given?
+      raise ArgumentError, 'packed scan limits must be positive' unless max_records.positive? && max_arena_bytes.positive?
+
+      visited = 0
+      after = nil
+      loop do
+        after_pointer = after.nil? ? nil : memory_for(after)
+        result = UniFFILib.prolly_fast_proximity_scan_page(
+          map_handle, after_pointer, after&.bytesize || 0, after.nil? ? 0 : 1,
+          max_records, max_arena_bytes
+        )
+        raise "native proximity scan failed with status #{result[:status]}" unless result[:status].zero?
+
+        scope = Scope.new
+        begin
+          pointer = result[:data_ptr]
+          raise 'native proximity scan page pointer was null' if pointer.null?
+          magic, version, kind, flags, count, table_bytes, arena_bytes =
+            pointer.get_bytes(0, 28).unpack('a4vvVVVQ<')
+          valid = magic == 'PRPG' && version == 2 && kind == 8 &&
+                  count == result[:record_count] && table_bytes == count * 24 &&
+                  flags.anybits?(1) == !result[:terminal].zero? &&
+                  28 + table_bytes + arena_bytes == result[:data_len]
+          raise 'invalid packed proximity-record page' unless valid
+
+          arena_start = 28 + table_bytes
+          previous = nil
+          stopped = false
+          count.times do |index|
+            key_offset, key_length, vector_offset, vector_length, value_offset, value_length =
+              pointer.get_bytes(28 + index * 24, 24).unpack('V6')
+            require_range!(key_offset, key_length, arena_bytes, 'proximity key')
+            require_range!(vector_offset, vector_length, arena_bytes, 'proximity vector')
+            require_range!(value_offset, value_length, arena_bytes, 'proximity value')
+            key = FieldView.new(pointer, arena_start + key_offset, key_length, scope)
+            ordered = if previous
+                        previous.compare(key).negative?
+                      elsif after
+                        key.compare_bytes_left(after).negative?
+                      else
+                        true
+                      end
+            raise 'packed proximity keys are not strictly ordered' unless ordered
+            previous = key
+            visited += 1
+            row = ProximityRecordView.new(
+              key: key,
+              vector: VectorView.new(pointer, arena_start + vector_offset, vector_length, scope),
+              value: FieldView.new(pointer, arena_start + value_offset, value_length, scope)
+            )
+            unless yield row
+              stopped = true
+              break
+            end
+          end
+          return ScanOutcome.new(visited: visited, stopped: true) if stopped
+          after = previous&.bytes
+        ensure
+          scope.close
+          UniFFILib.prolly_fast_page_release(result[:lease_handle])
+        end
+        return ScanOutcome.new(visited: visited, stopped: false) unless result[:terminal].zero?
+        raise 'non-terminal proximity scan page made no progress' unless after
       end
     end
 

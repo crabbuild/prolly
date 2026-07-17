@@ -833,6 +833,13 @@ export interface PortableSearchResult {
   planFormatVersion: number;
 }
 
+export interface PortableNeighborView {
+  key: Uint8Array;
+  value: Uint8Array;
+  distance: number;
+  rank: number;
+}
+
 export interface HnswConfig {
   maxConnections: number;
   efConstruction: number;
@@ -1306,7 +1313,7 @@ export class Engine implements Disposable {
       value: ownedPortableBytes(record.value ?? new Uint8Array()),
     }));
     return portablePromise(signal, () =>
-      new WasmProximityMap(native.buildProximity(dimensions, owned)));
+      new WasmProximityMap(native.buildProximity(dimensions, owned), this.#module?.wasmMemory()));
   }
 
   close(): void {
@@ -1767,7 +1774,7 @@ export class WasmVersionedMap implements Disposable {
       deletedBytes: BigInt(value.deletedBytes),
     };
   }
-  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  close(): void { this.#native?.free?.(); this.#native = undefined; this.#memory = undefined; }
   [Symbol.dispose](): void { this.close(); }
 }
 
@@ -2365,13 +2372,17 @@ function wasmCompositeRebuildOutcome(result: any): CompositeBuildOrRebuildOutcom
 
 export class WasmProximityMap implements Disposable {
   #native?: any;
-  constructor(native: any) { this.#native = native; }
+  #memory?: WebAssembly.Memory;
+  constructor(native: any, memory?: WebAssembly.Memory) {
+    this.#native = native;
+    this.#memory = memory;
+  }
   nativeHandle(): any {
     if (this.#native == null) throw new Error("WASM proximity map is closed");
     return this.#native;
   }
   read(): WasmProximityReadSession {
-    return new WasmProximityReadSession(this.nativeHandle().read());
+    return new WasmProximityReadSession(this.nativeHandle().read(), this.#memory);
   }
   search(request: PortableSearchRequest): Promise<PortableSearchResult> {
     return this.read().search(request);
@@ -2380,6 +2391,22 @@ export class WasmProximityMap implements Disposable {
     return this.nativeHandle().get(ownedPortableBytes(key)) ?? undefined;
   }
   contains(key: Uint8Array): boolean { return this.nativeHandle().contains(ownedPortableBytes(key)); }
+  scanRecords(visitor: (record: PortableProximityRecord) => boolean): bigint {
+    return BigInt(this.nativeHandle().scanRecords((record: PortableProximityRecord) => visitor({
+      key: ownedPortableBytes(record.key),
+      vector: new Float32Array(record.vector),
+      value: ownedPortableBytes(record.value ?? new Uint8Array()),
+    })));
+  }
+  withSearchView<R>(
+    query: Float32Array,
+    k: number,
+    visitor: (neighbors: PortableNeighborView[]) => R,
+  ): R {
+    const session = this.read();
+    try { return session.withSearchView(query, k, visitor); }
+    finally { session.close(); }
+  }
   count(): bigint { return BigInt(this.nativeHandle().count()); }
   config(): PortableProximityConfig { return this.nativeHandle().config(); }
   buildHnsw(options: HnswBuildOptions = {}): Promise<HnswBuildResult> {
@@ -2482,14 +2509,14 @@ export class WasmProximityMap implements Disposable {
       vector: mutation.vector == null ? undefined : new Float32Array(mutation.vector),
       value: mutation.value == null ? undefined : ownedPortableBytes(mutation.value),
     })));
-    return { map: new WasmProximityMap(result.map), stats: result.stats };
+    return { map: new WasmProximityMap(result.map, this.#memory), stats: result.stats };
   }
   rebuild(mutations: PortableProximityMutation[]): WasmProximityMap {
     return new WasmProximityMap(this.nativeHandle().rebuild(mutations.map((mutation) => ({
       key: ownedPortableBytes(mutation.key),
       vector: mutation.vector == null ? undefined : new Float32Array(mutation.vector),
       value: mutation.value == null ? undefined : ownedPortableBytes(mutation.value),
-    }))));
+    }))), this.#memory);
   }
   descriptor(): Uint8Array { return this.nativeHandle().descriptor(); }
   verify(): PortableProximityVerification { return this.nativeHandle().verify(); }
@@ -2685,7 +2712,11 @@ export class WasmProximitySearchProof implements Disposable {
 
 export class WasmProximityReadSession implements Disposable {
   #native?: any;
-  constructor(native: any) { this.#native = native; }
+  #memory?: WebAssembly.Memory;
+  constructor(native: any, memory?: WebAssembly.Memory) {
+    this.#native = native;
+    this.#memory = memory;
+  }
   get(key: Uint8Array): { vector: Float32Array; value: Uint8Array } | undefined {
     if (this.#native == null) throw new Error("WASM proximity session is closed");
     return this.#native.get(ownedPortableBytes(key)) ?? undefined;
@@ -2694,12 +2725,46 @@ export class WasmProximityReadSession implements Disposable {
     if (this.#native == null) throw new Error("WASM proximity session is closed");
     return this.#native.contains(ownedPortableBytes(key));
   }
+  scanRecords(visitor: (record: PortableProximityRecord) => boolean): bigint {
+    if (this.#native == null) throw new Error("WASM proximity session is closed");
+    return BigInt(this.#native.scanRecords((record: PortableProximityRecord) => visitor({
+      key: ownedPortableBytes(record.key),
+      vector: new Float32Array(record.vector),
+      value: ownedPortableBytes(record.value ?? new Uint8Array()),
+    })));
+  }
+  withSearchView<R>(
+    query: Float32Array,
+    k: number,
+    visitor: (neighbors: PortableNeighborView[]) => R,
+  ): R {
+    if (this.#native == null) throw new Error("WASM proximity session is closed");
+    if (!Number.isSafeInteger(k) || k <= 0 || k > 0xffff_ffff) {
+      throw new RangeError("k must be a positive unsigned 32-bit integer");
+    }
+    const scope = { alive: true };
+    try {
+      return this.#native.withSearchView(
+        new Float32Array(query),
+        k,
+        (rows: Array<{ key: Uint8Array; value: Uint8Array; distance: number; rank: number }>) =>
+          visitor(rows.map((row) => ({
+            key: scopedPortableBytes(row.key, scope, this.#memory),
+            value: scopedPortableBytes(row.value, scope, this.#memory),
+            distance: row.distance,
+            rank: row.rank,
+          }))),
+      ) as R;
+    } finally {
+      scope.alive = false;
+    }
+  }
   search(request: PortableSearchRequest): Promise<PortableSearchResult> {
     if (this.#native == null) return Promise.reject(new Error("WASM proximity session is closed"));
     const native = this.#native;
     const owned = ownPortableSearchRequest(request);
     return portablePromise(request.signal, () => native.search(owned));
   }
-  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  close(): void { this.#native?.free?.(); this.#native = undefined; this.#memory = undefined; }
   [Symbol.dispose](): void { this.close(); }
 }

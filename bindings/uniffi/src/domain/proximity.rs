@@ -1661,6 +1661,20 @@ pub struct BindingProximityReadSession {
     fast_handle: AtomicU64,
 }
 
+impl BindingProximityReadSession {
+    pub(crate) fn scan_records_range_until<B>(
+        &self,
+        start: &[u8],
+        end: Option<&[u8]>,
+        visit: impl for<'record> FnMut(&[u8], prolly::ProximityRecordRef<'record>) -> ControlFlow<B>,
+    ) -> Result<prolly::ScanOutcome<B>, ProllyBindingError> {
+        with_proximity_session!(self, map, {
+            map.scan_records_range_until(start, end, visit)
+                .map_err(Into::into)
+        })
+    }
+}
+
 #[uniffi::export]
 impl BindingProximityReadSession {
     pub fn fast_handle(&self) -> u64 {
@@ -1724,6 +1738,20 @@ pub struct BindingProximityMap {
     engine: Arc<ProllyEngine>,
     descriptor: Vec<u8>,
     fast_handle: AtomicU64,
+}
+
+impl BindingProximityMap {
+    pub(crate) fn scan_records_range_until<B>(
+        &self,
+        start: &[u8],
+        end: Option<&[u8]>,
+        visit: impl for<'record> FnMut(&[u8], prolly::ProximityRecordRef<'record>) -> ControlFlow<B>,
+    ) -> Result<prolly::ScanOutcome<B>, ProllyBindingError> {
+        with_proximity_map!(self, map, {
+            map.scan_records_range_until(start, end, visit)
+                .map_err(Into::into)
+        })
+    }
 }
 
 #[derive(uniffi::Object)]

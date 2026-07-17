@@ -42,6 +42,7 @@ import build.crab.prolly.ProximityMembershipProofRecord
 import build.crab.prolly.ProximityMutationRecord
 import build.crab.prolly.ProximityMutationStatsRecord
 import build.crab.prolly.ProximityRecordRecord
+import build.crab.prolly.ProximityRecordVisitorCallback
 import build.crab.prolly.ProximitySearchResultRecord
 import build.crab.prolly.ProximitySearchRequestRecord
 import build.crab.prolly.ProductQuantizationBuildLimitsRecord
@@ -511,6 +512,10 @@ class ProximityMap(internal val native: BindingProximityMap) : AutoCloseable {
         read().use { it.search(request) }
     fun searchExact(query: List<Float>, k: ULong): ProximitySearchResultRecord =
         read().use { it.searchExact(query, k) }
+    fun scanRecords(visitor: (ProximityRecordRecord) -> Boolean): ULong =
+        native.scanRecords(object : ProximityRecordVisitorCallback {
+            override fun visit(record: ProximityRecordRecord) = visitor(record)
+        })
     fun read() = ProximityReadSession(native.readSession())
     fun <R> withSearchView(
         query: List<Float>,
@@ -609,6 +614,10 @@ class ProximityReadSession(internal val native: BindingProximityReadSession) : A
         native.search(ownedSearchRequest(request))
     fun searchExact(query: List<Float>, k: ULong): ProximitySearchResultRecord =
         search(exactProximitySearchRequest(query.toList(), k))
+    fun scanRecords(visitor: (ProximityRecordRecord) -> Boolean): ULong =
+        native.scanRecords(object : ProximityRecordVisitorCallback {
+            override fun visit(record: ProximityRecordRecord) = visitor(record)
+        })
     fun <R> withSearchView(
         query: List<Float>,
         k: UInt,

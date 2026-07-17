@@ -81,10 +81,22 @@ impl<S: Store> ProximityReadSession<'_, S> {
 
     pub fn scan_records_until<B>(
         &mut self,
+        visit: impl for<'record> FnMut(&[u8], ProximityRecordRef<'record>) -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error> {
+        self.scan_records_range_until(&[], None, visit)
+    }
+
+    /// Visit a half-open exact-record range with callback-directed early
+    /// termination. This is the seekable primitive used by bounded binding
+    /// pages; `start` is inclusive and `end` is exclusive.
+    pub fn scan_records_range_until<B>(
+        &mut self,
+        start: &[u8],
+        end: Option<&[u8]>,
         mut visit: impl for<'record> FnMut(&[u8], ProximityRecordRef<'record>) -> ControlFlow<B>,
     ) -> Result<ScanOutcome<B>, Error> {
         let dimensions = self.dimensions;
-        let outcome = self.directory.scan_range_until(&[], None, |entry| {
+        let outcome = self.directory.scan_range_until(start, end, |entry| {
             let stored = match StoredRecordRef::decode(entry.value(), dimensions) {
                 Ok(stored) => stored,
                 Err(error) => return ControlFlow::Break(Err(error)),
@@ -280,6 +292,17 @@ where
         visit: impl for<'record> FnMut(&[u8], ProximityRecordRef<'record>) -> ControlFlow<B>,
     ) -> Result<ScanOutcome<B>, Error> {
         self.read()?.scan_records_until(visit)
+    }
+
+    /// Visit a half-open exact-record range without allocating logical
+    /// records. Binding adapters use this seekable form for bounded pages.
+    pub fn scan_records_range_until<B>(
+        &self,
+        start: &[u8],
+        end: Option<&[u8]>,
+        visit: impl for<'record> FnMut(&[u8], ProximityRecordRef<'record>) -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error> {
+        self.read()?.scan_records_range_until(start, end, visit)
     }
 
     /// Exact key membership through the authoritative ordered directory.
