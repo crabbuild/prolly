@@ -2024,6 +2024,11 @@ export class WasmReadSession implements Disposable {
     if (this.#scanActive) throw new Error("WASM read session cannot be re-entered during a zero-copy scan callback");
     return this.#native.get(ownedPortableBytes(key)) ?? undefined;
   }
+  getAsync(key: Uint8Array, signal?: AbortSignal): Promise<Uint8Array | undefined> {
+    if (this.#native == null) throw new Error("WASM read session is closed");
+    const native = this.#native; const owned = ownedPortableBytes(key);
+    return portablePromise(signal, () => native.get(owned) ?? undefined);
+  }
   scanRangeView(
     start: Uint8Array,
     end: Uint8Array | undefined,

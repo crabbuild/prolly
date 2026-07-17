@@ -167,6 +167,27 @@ func (s *MapSnapshot) ProvePrefixAsync(ctx context.Context, prefix []byte) *Futu
 	return startFuture(ctx, func() (RangeProof, error) { return s.ProvePrefix(prefix) })
 }
 
+func (s *ReadSession) GetAsync(ctx context.Context, key []byte) *Future[VersionedGetResult] {
+	key = append([]byte(nil), key...)
+	return startFuture(ctx, func() (VersionedGetResult, error) {
+		value, found, err := s.Get(key)
+		return VersionedGetResult{Value: value, Found: found}, err
+	})
+}
+
+type ReadSessionGetManyResult struct {
+	Values  [][]byte
+	Present []bool
+}
+
+func (s *ReadSession) GetManyAsync(ctx context.Context, keys [][]byte) *Future[ReadSessionGetManyResult] {
+	keys = cloneByteSlices(keys)
+	return startFuture(ctx, func() (ReadSessionGetManyResult, error) {
+		values, present, err := s.GetMany(keys)
+		return ReadSessionGetManyResult{Values: values, Present: present}, err
+	})
+}
+
 type IndexedGetResult struct {
 	Value []byte
 	Found bool

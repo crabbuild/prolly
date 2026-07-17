@@ -723,6 +723,14 @@ public final class ReadSession: @unchecked Sendable {
     public func getMany(_ keys: [Data]) throws -> [Data?] {
         try open { try native.getMany(keys: keys.map { Data($0) }) }
     }
+    public func getAsync(_ key: Data) -> Task<Data?, Error> {
+        let owned = Data(key)
+        return Task { try Task.checkCancellation(); return try self.get(owned) }
+    }
+    public func getManyAsync(_ keys: [Data]) -> Task<[Data?], Error> {
+        let owned = keys.map { Data($0) }
+        return Task { try Task.checkCancellation(); return try self.getMany(owned) }
+    }
     public func scanRangeView(
         from start: Data = Data(),
         to end: Data? = nil,

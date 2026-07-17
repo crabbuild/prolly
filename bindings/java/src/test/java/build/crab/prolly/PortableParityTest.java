@@ -430,6 +430,9 @@ class PortableParityTest {
             var head = map.headAsync().get().orElseThrow();
             try (var snapshot = map.snapshotAtAsync(head.id()).get()) {
                 assertArrayEquals(bytes("original-value"), snapshot.getAsync(bytes("original-key")).get().orElseThrow());
+                try (var session = snapshot.read()) {
+                    assertArrayEquals(bytes("original-value"), session.getAsync(bytes("original-key")).get().orElseThrow());
+                }
             }
             assertTrue(subscription.pollAsync().get().isPresent());
             subscription.close();

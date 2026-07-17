@@ -451,6 +451,9 @@ class PortableParityTest {
                 assertArrayEquals(updated.id, versioned.headAsync()!!.id)
                 versioned.snapshotAtAsync(updated.id)!!.use { snapshot ->
                     assertArrayEquals("v".bytes(), snapshot.getAsync("k".bytes()))
+                    snapshot.read().use { session ->
+                        assertArrayEquals("v".bytes(), session.getAsync("k".bytes()))
+                    }
                 }
                 assertEquals(false, subscription.pollAsync() == null)
                 subscription.close()

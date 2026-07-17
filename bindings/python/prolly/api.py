@@ -804,6 +804,14 @@ class ReadSession(_Scoped):
         self._open()
         return self._inner.get_many([bytes(key) for key in keys])
 
+    def get_async(self, key: bytes):
+        owned = bytes(key)
+        return _background(lambda: self.get(owned))
+
+    def get_many_async(self, keys: Iterable[bytes]):
+        owned = tuple(bytes(key) for key in keys)
+        return _background(lambda: self.get_many(owned))
+
     def scan_range_view(
         self,
         start: bytes = b"",

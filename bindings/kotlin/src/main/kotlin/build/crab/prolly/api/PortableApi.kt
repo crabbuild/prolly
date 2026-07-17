@@ -455,6 +455,12 @@ class MapSnapshot(internal val native: BindingMapSnapshot) : AutoCloseable {
 class ReadSession(internal val native: ProllyReadSession) : AutoCloseable {
     fun get(key: ByteArray) = native.get(key.copyOf())
     fun getMany(keys: List<ByteArray>) = native.getMany(keys.map(ByteArray::copyOf))
+    suspend fun getAsync(key: ByteArray) = key.copyOf().let { owned ->
+        withContext(Dispatchers.IO) { get(owned) }
+    }
+    suspend fun getManyAsync(keys: List<ByteArray>) = keys.map(ByteArray::copyOf).let { owned ->
+        withContext(Dispatchers.IO) { getMany(owned) }
+    }
     fun scanRangeView(
         start: ByteArray = ByteArray(0),
         end: ByteArray? = null,

@@ -2,6 +2,7 @@ package build.crab.prolly.javaapi;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Predicate;
 
 public final class ReadSession implements AutoCloseable {
@@ -18,6 +19,14 @@ public final class ReadSession implements AutoCloseable {
     public List<byte[]> getMany(List<byte[]> keys) {
         return open().getMany(keys.stream().map(byte[]::clone).toList()).stream()
                 .map(value -> value == null ? null : value.clone()).toList();
+    }
+    public CompletableFuture<Optional<byte[]>> getAsync(byte[] key) {
+        byte[] owned = key.clone();
+        return CompletableFuture.supplyAsync(() -> get(owned));
+    }
+    public CompletableFuture<List<byte[]>> getManyAsync(List<byte[]> keys) {
+        var owned = keys.stream().map(byte[]::clone).toList();
+        return CompletableFuture.supplyAsync(() -> getMany(owned));
     }
     public ReadScanOutcome scanRangeView(
             byte[] start, byte[] end, Predicate<EntryView> visitor) {
