@@ -8315,9 +8315,11 @@ mod tests {
         assert_eq!(config.node_cache_max_nodes, Some(16));
         assert_eq!(config.node_cache_max_bytes, Some(4096));
 
-        let mut format = prolly::TreeFormat::default();
-        format.chunking = prolly::chunking::logical_bytes_key_weibull();
-        format.node_layout = prolly::NodeLayoutSpec::Plain;
+        let format = prolly::TreeFormat {
+            chunking: prolly::chunking::logical_bytes_key_weibull(),
+            node_layout: prolly::NodeLayoutSpec::Plain,
+            ..Default::default()
+        };
         let format_bytes = format.canonical_bytes().unwrap();
         let configured = tree_config_from_format_bytes(format_bytes, None, None).unwrap();
         assert_eq!(Config::try_from(configured).unwrap().format, format);

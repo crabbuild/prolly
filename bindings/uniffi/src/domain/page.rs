@@ -101,6 +101,7 @@ pub(crate) struct NeighborRecordRef<'a> {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[allow(dead_code)]
 pub(crate) struct IndexMatchRecordRef<'a> {
     pub(crate) term: &'a [u8],
     pub(crate) primary_key: &'a [u8],
@@ -109,6 +110,7 @@ pub(crate) struct IndexMatchRecordRef<'a> {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[allow(dead_code)]
 pub(crate) struct JoinedIndexRecordRef<'a> {
     pub(crate) term: &'a [u8],
     pub(crate) primary_key: &'a [u8],
@@ -278,6 +280,7 @@ impl<'a> PackedPage<'a> {
         })
     }
 
+    #[allow(dead_code)]
     pub(crate) fn index_match(&self, index: u32) -> Result<IndexMatchRecordRef<'a>, BindingError> {
         if self.kind != PackedPageKind::IndexMatch {
             return Err(BindingError::malformed_transport(
@@ -304,6 +307,7 @@ impl<'a> PackedPage<'a> {
         })
     }
 
+    #[allow(dead_code)]
     pub(crate) fn joined_index_record(
         &self,
         index: u32,

@@ -547,23 +547,12 @@ impl Default for ProximityFilterRecord {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, uniffi::Record)]
 pub struct SearchBudgetRecord {
     pub max_nodes: Option<u64>,
     pub max_committed_bytes: Option<u64>,
     pub max_distance_evaluations: Option<u64>,
     pub max_frontier_entries: Option<u64>,
-}
-
-impl Default for SearchBudgetRecord {
-    fn default() -> Self {
-        Self {
-            max_nodes: None,
-            max_committed_bytes: None,
-            max_distance_evaluations: None,
-            max_frontier_entries: None,
-        }
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, uniffi::Record)]
