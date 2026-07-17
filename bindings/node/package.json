@@ -34,6 +34,7 @@
     ".": "./src/index.ts",
     "./async": "./src/async.ts",
     "./native": "./src/native.ts",
+    "./remote-store": "./src/remote-store.ts",
     "./wasm": "../wasm/src/index.ts"
   }
 }

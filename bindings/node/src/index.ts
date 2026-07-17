@@ -9,6 +9,7 @@ export { IndexRegistry, IndexedMap } from "./indexed.ts";
 export { ViewExpiredError } from "./packed.ts";
 export { exactSearch, ProximityMap, ProximityReadSession } from "./proximity.ts";
 export { VersionedMap } from "./versioned.ts";
+export * from "./remote-store.ts";
 export type * from "./indexed.ts";
 export type * from "./proximity.ts";
 export type * from "./versioned.ts";
