@@ -308,6 +308,42 @@ class PortableParityTests(unittest.TestCase):
             self.assertEqual(versioned.get(b"a"), b"one")
             self.assertEqual(versioned.changes_since(base.id), [])
 
+    def test_versioned_timestamped_writes_and_complete_maintenance_records(self):
+        with Engine.memory() as engine:
+            versioned = engine.versioned_map(b"maintenance-complete")
+            first = versioned.apply_at_millis([
+                MutationRecord(kind=MutationKind.UPSERT, key=b"k", value=b"one")
+            ], 1_000)
+            second_update = versioned.apply_if_at_millis(first.id, [
+                MutationRecord(kind=MutationKind.UPSERT, key=b"k", value=b"two")
+            ], 2_000)
+            second = second_update.current
+            third = versioned.apply_at_millis([
+                MutationRecord(kind=MutationKind.UPSERT, key=b"k", value=b"three")
+            ], 3_000)
+
+            self.assertEqual(first.created_at_millis, 1_000)
+            self.assertEqual(second.created_at_millis, 2_000)
+            self.assertEqual(versioned.retention_policy().kind.name, "PREFIX")
+            verification = versioned.verify_catalog()
+            self.assertEqual(verification.head, third.id)
+            self.assertEqual(verification.version_count, 3)
+            plan = versioned.plan_gc()
+            self.assertGreater(plan.reachability.live_nodes, 0)
+            self.assertGreaterEqual(plan.candidate_nodes, plan.reclaimable_nodes)
+
+            aged = versioned.keep_for_at(3_000, 1_500)
+            self.assertIn(second.id, aged.retained)
+            self.assertIn(first.id, aged.removed)
+            explicit = versioned.keep_versions([second.id])
+            self.assertIn(third.id, explicit.retained)
+            pruned = versioned.prune_versions(0)
+            self.assertEqual(pruned.retained, [third.id])
+            self.assertIn(second.id, pruned.removed)
+            self.assertIn(third.id, versioned.keep_for(10_000).retained)
+            sweep = versioned.sweep_gc()
+            self.assertGreaterEqual(sweep.deleted_nodes, 0)
+
     def test_versioned_subscription_resumes_and_polls_owned_diffs(self):
         with Engine.memory() as engine:
             versioned = engine.versioned_map(b"subscription")

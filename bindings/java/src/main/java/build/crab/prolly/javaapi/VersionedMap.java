@@ -130,10 +130,22 @@ public final class VersionedMap implements AutoCloseable {
                 open(), mutations.stream().map(MapMutation::toBridge).toList()));
     }
 
+    public MapVersion applyAtMillis(List<MapMutation> mutations, long timestampMillis) {
+        return MapVersion.fromNative(build.crab.prolly.api.JavaPortableBridge.applyVersionedAtMillis(
+                open(), mutations.stream().map(MapMutation::toBridge).toList(), timestampMillis));
+    }
+
     public MapUpdate applyIf(byte[] expected, List<MapMutation> mutations) {
         return MapUpdate.fromBridge(build.crab.prolly.api.JavaPortableBridge.applyVersionedIf(
                 open(), expected == null ? null : expected.clone(),
                 mutations.stream().map(MapMutation::toBridge).toList()));
+    }
+
+    public MapUpdate applyIfAtMillis(
+            byte[] expected, List<MapMutation> mutations, long timestampMillis) {
+        return MapUpdate.fromBridge(build.crab.prolly.api.JavaPortableBridge.applyVersionedIfAtMillis(
+                open(), expected == null ? null : expected.clone(),
+                mutations.stream().map(MapMutation::toBridge).toList(), timestampMillis));
     }
 
     public MapUpdate putIf(byte[] expected, byte[] key, byte[] value) {
@@ -188,10 +200,31 @@ public final class VersionedMap implements AutoCloseable {
     public long catalogVersionCount() {
         return build.crab.prolly.api.JavaPortableBridge.versionCount(verifyCatalog());
     }
-    public build.crab.prolly.GcPlanRecord planGc() { return open().planGc(); }
-    public build.crab.prolly.GcSweepRecord sweepGc() { return open().sweepGc(); }
+    public GcPlan planGc() {
+        return GcPlan.fromBridge(build.crab.prolly.api.JavaPortableBridge.versionedPlanGc(open()));
+    }
+    public GcSweep sweepGc() {
+        return GcSweep.fromBridge(build.crab.prolly.api.JavaPortableBridge.versionedSweepGc(open()));
+    }
     public VersionPrune keepLast(long count) {
         return VersionPrune.fromBridge(build.crab.prolly.api.JavaPortableBridge.keepLast(open(), count));
+    }
+    public VersionPrune pruneVersions(long keepLatest) {
+        return VersionPrune.fromBridge(build.crab.prolly.api.JavaPortableBridge.pruneVersions(open(), keepLatest));
+    }
+    public VersionPrune keepForAt(long nowMillis, long maxAgeMillis) {
+        return VersionPrune.fromBridge(build.crab.prolly.api.JavaPortableBridge.keepForAt(
+                open(), nowMillis, maxAgeMillis));
+    }
+    public VersionPrune keepFor(long maxAgeMillis) {
+        return VersionPrune.fromBridge(build.crab.prolly.api.JavaPortableBridge.keepFor(open(), maxAgeMillis));
+    }
+    public VersionPrune keepVersions(List<byte[]> ids) {
+        return VersionPrune.fromBridge(build.crab.prolly.api.JavaPortableBridge.keepVersions(
+                open(), ids.stream().map(byte[]::clone).toList()));
+    }
+    public build.crab.prolly.NamedRootRetentionRecord retentionPolicy() {
+        return open().retentionPolicy();
     }
 
     public CompletableFuture<MapVersion> initializeAsync() {

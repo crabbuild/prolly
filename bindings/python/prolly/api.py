@@ -234,10 +234,26 @@ class VersionedMap(_Scoped):
         self._open()
         return self._inner.apply(_owned_mutations(mutations))
 
+    def apply_at_millis(self, mutations, timestamp_millis: int):
+        self._open()
+        return self._inner.apply_at_millis(
+            _owned_mutations(mutations), timestamp_millis
+        )
+
     def apply_if(self, expected: bytes | None, mutations):
         self._open()
         return self._inner.apply_if(
             None if expected is None else bytes(expected), _owned_mutations(mutations)
+        )
+
+    def apply_if_at_millis(
+        self, expected: bytes | None, mutations, timestamp_millis: int
+    ):
+        self._open()
+        return self._inner.apply_if_at_millis(
+            None if expected is None else bytes(expected),
+            _owned_mutations(mutations),
+            timestamp_millis,
         )
 
     def put_if(self, expected: bytes | None, key: bytes, value: bytes):
@@ -287,6 +303,26 @@ class VersionedMap(_Scoped):
     def keep_last(self, count: int):
         self._open()
         return self._inner.keep_last(count)
+
+    def prune_versions(self, keep_latest: int):
+        self._open()
+        return self._inner.prune_versions(keep_latest)
+
+    def keep_for_at(self, now_millis: int, max_age_millis: int):
+        self._open()
+        return self._inner.keep_for_at(now_millis, max_age_millis)
+
+    def keep_for(self, max_age_millis: int):
+        self._open()
+        return self._inner.keep_for(max_age_millis)
+
+    def keep_versions(self, version_ids: Iterable[bytes]):
+        self._open()
+        return self._inner.keep_versions([bytes(version_id) for version_id in version_ids])
+
+    def retention_policy(self):
+        self._open()
+        return self._inner.retention_policy()
 
     def verify_catalog(self):
         self._open()

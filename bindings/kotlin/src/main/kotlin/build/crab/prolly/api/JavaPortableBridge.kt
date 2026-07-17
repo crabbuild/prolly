@@ -68,6 +68,29 @@ data class JavaVersionPrune(
     val removed: List<ByteArray>,
 )
 
+data class JavaGcReachability(
+    val liveCids: List<ByteArray>,
+    val liveNodes: Long,
+    val liveBytes: Long,
+    val leafNodes: Long,
+    val internalNodes: Long,
+)
+
+data class JavaGcPlan(
+    val reachability: JavaGcReachability,
+    val candidateNodes: Long,
+    val reclaimableCids: List<ByteArray>,
+    val reclaimableNodes: Long,
+    val reclaimableBytes: Long,
+    val missingCandidates: Long,
+)
+
+data class JavaGcSweep(
+    val plan: JavaGcPlan,
+    val deletedNodes: Long,
+    val deletedBytes: Long,
+)
+
 data class JavaIndexedVersion(
     val sourceVersion: ByteArray,
     val catalogVersion: ByteArray?,
@@ -175,6 +198,19 @@ private fun IndexedVersionRecord.toJava() = JavaIndexedVersion(
 
 private fun MapUpdateRecord.toJava() = JavaMapUpdate(
     kind.name.lowercase(), previous, current,
+)
+
+private fun build.crab.prolly.GcReachabilityRecord.toJava() = JavaGcReachability(
+    liveCids, liveNodes.toLong(), liveBytes.toLong(), leafNodes.toLong(), internalNodes.toLong(),
+)
+
+private fun build.crab.prolly.GcPlanRecord.toJava() = JavaGcPlan(
+    reachability.toJava(), candidateNodes.toLong(), reclaimableCids, reclaimableNodes.toLong(),
+    reclaimableBytes.toLong(), missingCandidates.toLong(),
+)
+
+private fun build.crab.prolly.GcSweepRecord.toJava() = JavaGcSweep(
+    plan.toJava(), deletedNodes.toLong(), deletedBytes.toLong(),
 )
 
 private fun IndexBuildResultRecord.toJava() = JavaIndexBuildResult(
@@ -294,6 +330,51 @@ private fun ProximityVerificationRecord.toJava() = JavaProximityVerification(
 )
 
 object JavaPortableBridge {
+    @JvmStatic
+    fun mapVersionCreatedAtMillis(version: MapVersionRecord): Long? =
+        version.createdAtMillis?.toLong()
+
+    @JvmStatic
+    fun applyVersionedAtMillis(
+        map: VersionedMap,
+        mutations: List<JavaMapMutation>,
+        timestampMillis: Long,
+    ): MapVersionRecord = map.applyAtMillis(mutations.map { it.toNative() }, timestampMillis.toULong())
+
+    @JvmStatic
+    fun applyVersionedIfAtMillis(
+        map: VersionedMap,
+        expected: ByteArray?,
+        mutations: List<JavaMapMutation>,
+        timestampMillis: Long,
+    ): JavaMapUpdate = map.applyIfAtMillis(
+        expected, mutations.map { it.toNative() }, timestampMillis.toULong(),
+    ).toJava()
+
+    @JvmStatic
+    fun pruneVersions(map: VersionedMap, keepLatest: Long): JavaVersionPrune =
+        map.pruneVersions(keepLatest.toULong()).let { JavaVersionPrune(it.retained, it.removed) }
+
+    @JvmStatic
+    fun keepForAt(map: VersionedMap, nowMillis: Long, maxAgeMillis: Long): JavaVersionPrune =
+        map.keepForAt(nowMillis.toULong(), maxAgeMillis.toULong()).let {
+            JavaVersionPrune(it.retained, it.removed)
+        }
+
+    @JvmStatic
+    fun keepFor(map: VersionedMap, maxAgeMillis: Long): JavaVersionPrune =
+        map.keepFor(maxAgeMillis.toULong()).let { JavaVersionPrune(it.retained, it.removed) }
+
+    @JvmStatic
+    fun keepVersions(map: VersionedMap, ids: List<ByteArray>): JavaVersionPrune =
+        map.keepVersions(ids).let { JavaVersionPrune(it.retained, it.removed) }
+
+    @JvmStatic
+    fun versionedPlanGc(map: VersionedMap): JavaGcPlan = map.planGc().toJava()
+
+    @JvmStatic
+    fun versionedSweepGc(map: VersionedMap): JavaGcSweep = map.sweepGc().toJava()
+
     @JvmStatic
     fun versionedRangePage(
         map: VersionedMap,

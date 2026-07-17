@@ -981,6 +981,44 @@ export interface WasmVersionPrune {
   removed: Uint8Array[];
 }
 
+export interface WasmCatalogVerification {
+  head: Uint8Array;
+  versionCount: bigint;
+  reachableNodes: bigint;
+  reachableBytes: bigint;
+}
+
+export interface WasmGcReachability {
+  liveCids: Uint8Array[];
+  liveNodes: bigint;
+  liveBytes: bigint;
+  leafNodes: bigint;
+  internalNodes: bigint;
+}
+
+export interface WasmGcPlan {
+  reachability: WasmGcReachability;
+  candidateNodes: bigint;
+  reclaimableCids: Uint8Array[];
+  reclaimableNodes: bigint;
+  reclaimableBytes: bigint;
+  missingCandidates: bigint;
+}
+
+export interface WasmGcSweep {
+  plan: WasmGcPlan;
+  deletedNodes: bigint;
+  deletedBytes: bigint;
+}
+
+export interface WasmNamedRootRetention {
+  kind: "all" | "exact" | "prefix" | "newest_by_name" | "updated_since";
+  names: Uint8Array[];
+  prefix?: Uint8Array;
+  count?: bigint;
+  minUpdatedAtMillis?: bigint;
+}
+
 export interface WasmMapDiff {
   kind: "added" | "removed" | "changed";
   key: Uint8Array;
@@ -1020,6 +1058,42 @@ function wasmMapUpdate(value: any): WasmMapUpdate {
     kind: value.kind,
     previous: value.previous ?? undefined,
     current: value.current == null ? undefined : wasmMapVersion(value.current),
+  };
+}
+
+function wasmCatalogVerification(value: any): WasmCatalogVerification {
+  return {
+    head: value.head,
+    versionCount: BigInt(value.versionCount),
+    reachableNodes: BigInt(value.reachableNodes),
+    reachableBytes: BigInt(value.reachableBytes),
+  };
+}
+
+function wasmGcPlan(value: any): WasmGcPlan {
+  return {
+    reachability: {
+      liveCids: value.reachability.liveCids,
+      liveNodes: BigInt(value.reachability.liveNodes),
+      liveBytes: BigInt(value.reachability.liveBytes),
+      leafNodes: BigInt(value.reachability.leafNodes),
+      internalNodes: BigInt(value.reachability.internalNodes),
+    },
+    candidateNodes: BigInt(value.candidateNodes),
+    reclaimableCids: value.reclaimableCids,
+    reclaimableNodes: BigInt(value.reclaimableNodes),
+    reclaimableBytes: BigInt(value.reclaimableBytes),
+    missingCandidates: BigInt(value.missingCandidates),
+  };
+}
+
+function wasmNamedRootRetention(value: any): WasmNamedRootRetention {
+  return {
+    kind: value.kind,
+    names: value.names,
+    prefix: value.prefix,
+    count: value.count == null ? undefined : BigInt(value.count),
+    minUpdatedAtMillis: value.minUpdatedAtMillis == null ? undefined : BigInt(value.minUpdatedAtMillis),
   };
 }
 
@@ -1145,11 +1219,21 @@ export class WasmVersionedMap implements Disposable {
     const native = this.#open(); const owned = ownedWasmMutations(mutations);
     return portablePromise(signal, () => wasmMapVersion(native.apply(owned)));
   }
+  applyAtMillis(mutations: readonly WasmMapMutation[], timestampMillis: bigint, signal?: AbortSignal): Promise<WasmMapVersion> {
+    const native = this.#open(); const owned = ownedWasmMutations(mutations);
+    return portablePromise(signal, () => wasmMapVersion(native.applyAtMillis(owned, timestampMillis)));
+  }
   applyIf(expected: Uint8Array | undefined, mutations: readonly WasmMapMutation[], signal?: AbortSignal): Promise<WasmMapUpdate> {
     const native = this.#open();
     const ownedExpected = expected == null ? undefined : ownedPortableBytes(expected);
     const owned = ownedWasmMutations(mutations);
     return portablePromise(signal, () => wasmMapUpdate(native.applyIf(ownedExpected, owned)));
+  }
+  applyIfAtMillis(expected: Uint8Array | undefined, mutations: readonly WasmMapMutation[], timestampMillis: bigint, signal?: AbortSignal): Promise<WasmMapUpdate> {
+    const native = this.#open();
+    const ownedExpected = expected == null ? undefined : ownedPortableBytes(expected);
+    const owned = ownedWasmMutations(mutations);
+    return portablePromise(signal, () => wasmMapUpdate(native.applyIfAtMillis(ownedExpected, owned, timestampMillis)));
   }
   putIf(expected: Uint8Array | undefined, key: Uint8Array, value: Uint8Array, signal?: AbortSignal): Promise<WasmMapUpdate> {
     const native = this.#open();
@@ -1214,13 +1298,34 @@ export class WasmVersionedMap implements Disposable {
     const native = this.#open();
     return portablePromise(signal, () => native.keepLast(count));
   }
-  verifyCatalog(): { itemCount: bigint; byteCount: bigint } {
-    const value = this.#open().verifyCatalog();
-    return { itemCount: BigInt(value.itemCount), byteCount: BigInt(value.byteCount) };
+  pruneVersions(keepLatest: bigint): WasmVersionPrune {
+    return this.#open().pruneVersions(keepLatest);
   }
-  planGc(): { itemCount: bigint; byteCount: bigint } {
-    const value = this.#open().planGc();
-    return { itemCount: BigInt(value.itemCount), byteCount: BigInt(value.byteCount) };
+  keepForAt(nowMillis: bigint, maxAgeMillis: bigint): WasmVersionPrune {
+    return this.#open().keepForAt(nowMillis, maxAgeMillis);
+  }
+  keepFor(maxAgeMillis: bigint): WasmVersionPrune {
+    return this.#open().keepFor(maxAgeMillis);
+  }
+  keepVersions(ids: readonly Uint8Array[]): WasmVersionPrune {
+    return this.#open().keepVersions(ids.map(ownedPortableBytes));
+  }
+  retentionPolicy(): WasmNamedRootRetention {
+    return wasmNamedRootRetention(this.#open().retentionPolicy());
+  }
+  verifyCatalog(): WasmCatalogVerification {
+    return wasmCatalogVerification(this.#open().verifyCatalog());
+  }
+  planGc(): WasmGcPlan {
+    return wasmGcPlan(this.#open().planGc());
+  }
+  sweepGc(): WasmGcSweep {
+    const value = this.#open().sweepGc();
+    return {
+      plan: wasmGcPlan(value.plan),
+      deletedNodes: BigInt(value.deletedNodes),
+      deletedBytes: BigInt(value.deletedBytes),
+    };
   }
   close(): void { this.#native?.free?.(); this.#native = undefined; }
   [Symbol.dispose](): void { this.close(); }

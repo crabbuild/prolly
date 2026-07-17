@@ -262,6 +262,86 @@ func TestPortableVersionedHistoryNavigationDiffAndRollback(t *testing.T) {
 	}
 }
 
+func TestPortableVersionedTimestampedWritesAndCompleteMaintenance(t *testing.T) {
+	config, err := DefaultConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine, err := NewMemoryEngine(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer engine.Close()
+	versioned, err := engine.VersionedMap([]byte("maintenance-complete"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer versioned.Close()
+	first, err := versioned.ApplyAtMillis([]Mutation{UpsertMutation([]byte("k"), []byte("one"))}, 1_000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondUpdate, err := versioned.ApplyIfAtMillis(first.ID, []Mutation{UpsertMutation([]byte("k"), []byte("two"))}, 2_000)
+	if err != nil || secondUpdate.Current == nil {
+		t.Fatalf("second = %+v, %v", secondUpdate, err)
+	}
+	second := *secondUpdate.Current
+	third, err := versioned.ApplyAtMillis([]Mutation{UpsertMutation([]byte("k"), []byte("three"))}, 3_000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.CreatedAtMillis == nil || *first.CreatedAtMillis != 1_000 {
+		t.Fatalf("first timestamp = %v", first.CreatedAtMillis)
+	}
+	if second.CreatedAtMillis == nil || *second.CreatedAtMillis != 2_000 {
+		t.Fatalf("second timestamp = %v", second.CreatedAtMillis)
+	}
+	policy, err := versioned.RetentionPolicy()
+	if err != nil || policy.Kind != "prefix" {
+		t.Fatalf("policy = %+v, %v", policy, err)
+	}
+	verification, err := versioned.VerifyCatalog()
+	if err != nil || !bytes.Equal(verification.Head, third.ID) || verification.VersionCount != 3 {
+		t.Fatalf("verification = %+v, %v", verification, err)
+	}
+	plan, err := versioned.PlanGC()
+	if err != nil || plan.Reachability.LiveNodes == 0 || plan.CandidateNodes < plan.ReclaimableNodes {
+		t.Fatalf("plan = %+v, %v", plan, err)
+	}
+	aged, err := versioned.KeepForAt(3_000, 1_500)
+	if err != nil || !containsBytes(aged.Retained, second.ID) || !containsBytes(aged.Removed, first.ID) {
+		t.Fatalf("aged = %+v, %v", aged, err)
+	}
+	explicit, err := versioned.KeepVersions([][]byte{second.ID})
+	if err != nil || !containsBytes(explicit.Retained, third.ID) {
+		t.Fatalf("explicit = %+v, %v", explicit, err)
+	}
+	pruned, err := versioned.PruneVersions(0)
+	if err != nil || len(pruned.Retained) != 1 || !bytes.Equal(pruned.Retained[0], third.ID) || !containsBytes(pruned.Removed, second.ID) {
+		t.Fatalf("pruned = %+v, %v", pruned, err)
+	}
+	kept, err := versioned.KeepFor(10_000)
+	if err != nil || len(kept.Retained) == 0 {
+		t.Fatalf("kept = %+v, %v", kept, err)
+	}
+	sweep, err := versioned.SweepGC()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sweep.DeletedNodes > sweep.Plan.CandidateNodes {
+		t.Fatalf("sweep = %+v", sweep)
+	}
+}
+
+func containsBytes(values [][]byte, expected []byte) bool {
+	for _, value := range values {
+		if bytes.Equal(value, expected) {
+			return true
+		}
+	}
+	return false
+}
+
 func TestPortableVersionedSubscriptionResumesAndPollsOwnedDiffs(t *testing.T) {
 	config, err := DefaultConfig()
 	if err != nil {

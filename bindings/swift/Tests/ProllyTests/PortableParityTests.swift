@@ -285,6 +285,42 @@ final class PortableParityTests: XCTestCase {
             XCTAssertTrue(try map.changes(since: base.id).isEmpty)
         }
     }
+    func testVersionedTimestampedWritesExposeCompleteMaintenanceAndRetentionRecords() throws {
+        try Engine.withMemory { engine in
+            let map = try engine.versionedMap(Data("maintenance-complete".utf8))
+            let first = try map.applyAtMillis([
+                MutationRecord(kind: .upsert, key: Data("k".utf8), value: Data("one".utf8))
+            ], timestampMillis: 1_000)
+            let second = try XCTUnwrap(map.applyIfAtMillis(
+                expected: first.id,
+                mutations: [MutationRecord(kind: .upsert, key: Data("k".utf8), value: Data("two".utf8))],
+                timestampMillis: 2_000
+            ).current)
+            let third = try map.applyAtMillis([
+                MutationRecord(kind: .upsert, key: Data("k".utf8), value: Data("three".utf8))
+            ], timestampMillis: 3_000)
+
+            XCTAssertEqual(first.createdAtMillis, 1_000)
+            XCTAssertEqual(second.createdAtMillis, 2_000)
+            XCTAssertEqual(map.retentionPolicy().kind, .prefix)
+            let verification = try map.verifyCatalog()
+            XCTAssertEqual(verification.head, third.id)
+            XCTAssertEqual(verification.versionCount, 3)
+            let plan = try map.planGC()
+            XCTAssertGreaterThan(plan.reachability.liveNodes, 0)
+            XCTAssertGreaterThanOrEqual(plan.candidateNodes, plan.reclaimableNodes)
+
+            let aged = try map.keepForAt(nowMillis: 3_000, maxAgeMillis: 1_500)
+            XCTAssertTrue(aged.retained.contains(second.id))
+            XCTAssertTrue(aged.removed.contains(first.id))
+            XCTAssertTrue(try map.keepVersions([second.id]).retained.contains(third.id))
+            let pruned = try map.pruneVersions(0)
+            XCTAssertEqual(pruned.retained, [third.id])
+            XCTAssertTrue(pruned.removed.contains(second.id))
+            XCTAssertFalse(try map.keepFor(maxAgeMillis: 10_000).retained.isEmpty)
+            XCTAssertGreaterThanOrEqual(try map.sweepGC().deletedNodes, 0)
+        }
+    }
     func testVersionedSubscriptionResumesAndPollsOwnedDiffs() throws {
         try Engine.withMemory { engine in
             let map = try engine.versionedMap(Data("subscription".utf8))

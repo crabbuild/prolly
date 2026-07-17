@@ -227,9 +227,9 @@ test("proofs, retained sessions, and maintenance stay native", async () => {
       session.scanRangeView(bytes("k"), bytes("l"), () => false),
       { visited: 1n, stopped: true },
     );
-    assert.ok((await versioned.verifyCatalog()).itemCount >= 2n);
+    assert.ok((await versioned.verifyCatalog()).versionCount >= 2n);
     assert.ok((await versioned.backup()).byteLength > 0);
-    assert.ok((await versioned.planGc()).itemCount > 0n);
+    assert.ok((await versioned.planGc()).reachability.liveNodes > 0n);
 
     const registry = engine.indexRegistry();
     registry.register({
@@ -430,6 +430,38 @@ test("versioned history navigation, diffs, and rollback stay native", async () =
     assert.deepEqual(await map.headId(), rolledBack.id);
     assert.equal(Buffer.from((await map.get(bytes("a")))!).toString(), "one");
     assert.deepEqual(await map.changesSince(base.id), []);
+  } finally { engine.close(); }
+});
+
+test("versioned timestamped writes expose complete maintenance and retention records", async () => {
+  const engine = await Engine.memory();
+  try {
+    const map = engine.versionedMap(bytes("maintenance-complete"));
+    const first = await map.applyAtMillis([{ kind: "upsert", key: bytes("k"), value: bytes("one") }], 1_000n);
+    const second = (await map.applyIfAtMillis(first.id, [{ kind: "upsert", key: bytes("k"), value: bytes("two") }], 2_000n)).current!;
+    const third = await map.applyAtMillis([{ kind: "upsert", key: bytes("k"), value: bytes("three") }], 3_000n);
+
+    assert.equal(first.createdAtMillis, 1_000n);
+    assert.equal(second.createdAtMillis, 2_000n);
+    assert.equal(map.retentionPolicy().kind, "prefix");
+    const verification = await map.verifyCatalog();
+    assert.deepEqual(verification.head, third.id);
+    assert.equal(verification.versionCount, 3n);
+    const plan = await map.planGc();
+    assert.ok(plan.reachability.liveNodes > 0n);
+    assert.ok(plan.candidateNodes >= plan.reclaimableNodes);
+
+    const aged = await map.keepForAt(3_000n, 1_500n);
+    assert.ok(aged.retained.some((id) => Buffer.from(id).equals(Buffer.from(second.id))));
+    assert.ok(aged.removed.some((id) => Buffer.from(id).equals(Buffer.from(first.id))));
+    const explicit = await map.keepVersions([second.id]);
+    assert.ok(explicit.retained.some((id) => Buffer.from(id).equals(Buffer.from(third.id))));
+    const pruned = await map.pruneVersions(0n);
+    assert.deepEqual(pruned.retained, [third.id]);
+    assert.ok(pruned.removed.some((id) => Buffer.from(id).equals(Buffer.from(second.id))));
+    assert.ok((await map.keepFor(10_000n)).retained.length >= 1);
+    const sweep = await map.sweepGc();
+    assert.ok(sweep.deletedNodes >= 0n);
   } finally { engine.close(); }
 });
 

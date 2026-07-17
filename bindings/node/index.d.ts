@@ -198,6 +198,12 @@ export interface NodePortableMaintenanceSummary {
   itemCount: string
   byteCount: string
 }
+export interface NodePortableCatalogVerification {
+  head: Buffer
+  versionCount: string
+  reachableNodes: string
+  reachableBytes: string
+}
 export interface NodePortableReadScanOutcome {
   visited: string
   stopped: boolean
@@ -935,7 +941,9 @@ export declare class NativePortableVersionedMap {
   rollbackTo(id: Buffer): NodePortableMapVersion
   put(key: Buffer, value: Buffer): NodePortableMapVersion
   apply(mutations: Array<NodeMutationRecord>): NodePortableMapVersion
+  applyAtMillis(mutations: Array<NodeMutationRecord>, timestampMillis: string): NodePortableMapVersion
   applyIf(expected: Buffer | undefined | null, mutations: Array<NodeMutationRecord>): NodePortableMapUpdate
+  applyIfAtMillis(expected: Buffer | undefined | null, mutations: Array<NodeMutationRecord>, timestampMillis: string): NodePortableMapUpdate
   putIf(expected: Buffer | undefined | null, key: Buffer, value: Buffer): NodePortableMapUpdate
   deleteIf(expected: Buffer | undefined | null, key: Buffer): NodePortableMapUpdate
   delete(key: Buffer): NodePortableMapVersion
@@ -949,8 +957,14 @@ export declare class NativePortableVersionedMap {
   backup(): Buffer
   restoreBackup(bytes: Buffer): NodePortableMapVersion
   keepLast(count: number): NodePortableVersionPrune
-  verifyCatalog(): NodePortableMaintenanceSummary
-  planGc(): NodePortableMaintenanceSummary
+  pruneVersions(keepLatest: string): NodePortableVersionPrune
+  keepForAt(nowMillis: string, maxAgeMillis: string): NodePortableVersionPrune
+  keepFor(maxAgeMillis: string): NodePortableVersionPrune
+  keepVersions(ids: Array<Buffer>): NodePortableVersionPrune
+  retentionPolicy(): NodeNamedRootRetentionRecord
+  verifyCatalog(): NodePortableCatalogVerification
+  planGc(): NodeGcPlanRecord
+  sweepGc(): NodeGcSweepRecord
 }
 export declare class NativePortableMapComparison {
   base(): NodePortableMapVersion
