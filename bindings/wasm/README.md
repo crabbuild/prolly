@@ -32,8 +32,9 @@ Current surface:
   key helpers, and boundary checks from Rust.
 
 Filesystem, SQLite, native store constructors, and host callback stores are
-intentionally absent in browser builds. IndexedDB/OPFS stores belong in a later
-host-integration pass.
+intentionally absent in browser builds. Version-1 async store adapters for
+IndexedDB, OPFS, and browser PGlite live under `stores/`; they preserve binary
+keys, atomic transactions, cancellation, and caller-owned handle lifecycles.
 
 Local checks:
 
@@ -96,18 +97,19 @@ WASM keys and values are `Uint8Array`. Keep encoding explicit and deterministic.
 Browser applications should keep key layouts prefix-friendly so UI pagination,
 sync windows, and worker jobs can operate on bounded key ranges.
 
-The WASM engine is memory-only. Persistent browser storage should be layered
-outside this crate through IndexedDB, OPFS, Cache Storage, or application-owned
-sync protocols. The browser storage scenario demonstrates root handoff with a
-small in-memory map, not a production storage adapter.
+The WASM engine is memory-only. Use `stores/indexeddb` for native database
+transactions, `stores/opfs` for an atomically replaced origin-private file, or
+`stores/pglite` with an `idb://` data directory. Applications still choose when
+to publish a named root and how to synchronize browser state remotely.
 
 ## Browser Boundaries
 
 WASM cannot expose every native feature safely. File stores, SQLite stores,
 native host stores, and direct OS handles are intentionally absent. Browser
 applications should decide how roots and node bytes move to durable browser
-storage, and that integration should be explicit about quotas, transactions,
-worker ownership, and recovery after tab termination.
+storage. IndexedDB and PGlite provide native transaction isolation; OPFS uses a
+serialized commit file and the Web Locks API when available. Quotas, worker
+ownership, and recovery after tab termination remain application concerns.
 
 For UI applications, keep large merges and proof generation in a worker when
 possible. Avoid blocking the main thread with large range scans or snapshot

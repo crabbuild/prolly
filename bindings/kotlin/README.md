@@ -102,6 +102,35 @@ and retries remain understandable.
 Use structured concurrency around long workflows. Avoid launching detached
 coroutines that mutate roots after the caller has lost interest in the result.
 
+## Async Store Providers
+
+Every provider is a separate Maven artifact; `build.crab:prolly-kotlin` has no
+database SDK dependency. Adapters borrow their inputs and never close the
+application's data source, client, connection, dispatcher, or executor.
+
+| Artifact | Minimal Kotlin construction | Preparation |
+| --- | --- | --- |
+| `prolly-kotlin-store-sqlite` | `SqliteStore(dataSource, dispatcher)` | `store.initializeSchema()` |
+| `prolly-kotlin-store-postgres` | `PostgresStore(dataSource, dispatcher)` | `store.initializeSchema()` |
+| `prolly-kotlin-store-mysql` | `MysqlStore(dataSource, dispatcher)` | `store.initializeSchema()` |
+| `prolly-kotlin-store-redis` | `RedisStore(connection.async())` | use Lettuce `ByteArrayCodec` |
+| `prolly-kotlin-store-dynamodb` | `DynamoDbStore(client, DynamoDbStoreOptions("prolly"))` | `store.initializeTable()` |
+| `prolly-kotlin-store-cosmosdb` | `CosmosDbStore(container)` | create with `/kind`, then `store.validateContainer()` |
+| `prolly-kotlin-store-spanner` | `SpannerStore(database, dispatcher)` | apply `SPANNER_DDL` |
+
+JDBC calls run on the injected bounded dispatcher with interruptible coroutine
+bridging. AWS, Azure, Lettuce, and Google clients use their official SDK
+futures; cancellation propagates where those SDKs permit it. Credentials,
+connection pools, TLS, retries, dispatchers, and shutdown remain owned by the
+caller.
+
+DynamoDB enforces its 100-read, 25-write, and 100-operation transaction limits.
+Cosmos DB strict operations share one logical partition and have a 100-operation
+limit. Redis used as primary storage needs AOF, an explicit `appendfsync`
+policy, monitored persistence health, recovery drills, and backups. Run every
+Kotlin and Java provider against local services with
+`./scripts/test-node-jvm-stores.sh` from the repository root.
+
 ## Merge And Domain Rules
 
 Built-in merge resolvers are useful for simple state classes. Domain values with

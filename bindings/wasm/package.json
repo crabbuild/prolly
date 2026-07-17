@@ -5,7 +5,8 @@
   "private": true,
   "description": "Browser WASM binding for prolly-map",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./remote-store": "./src/remote-store.ts"
   },
   "scripts": {
     "example:agent-event-log": "node examples/agent-event-log.ts",

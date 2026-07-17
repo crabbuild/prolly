@@ -68,6 +68,37 @@ tree behavior.
 | Ruby | `bindings/ruby/test/prolly_smoke_test.rb` | `PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" BUNDLE_GEMFILE=bindings/ruby/Gemfile BUNDLE_PATH=/tmp/prolly-ruby-bundle bundle exec ruby -Ibindings/ruby/lib bindings/ruby/test/prolly_smoke_test.rb` |
 | Swift | `bindings/swift/Examples/FixtureCheck`, cookbook executable targets | `DYLD_LIBRARY_PATH="$PWD/target/debug" swift run --package-path bindings/swift prolly-fixture-check` |
 
+## Async Store Provider Gate
+
+The shared protocol has isolated provider modules for Go, Node/TypeScript,
+Kotlin, and Java. Node supports SQLite, PostgreSQL, MySQL, Redis, DynamoDB,
+Cosmos DB, Cloud Spanner, and PGlite. Go, Kotlin, and Java support the same
+seven providers except PGlite, which is a JavaScript/WebAssembly database.
+
+Run the manifest and dependency-boundary gate without services:
+
+```sh
+node scripts/verify-store-compatibility.mjs
+```
+
+Run all Node and JVM provider suites with managed local services:
+
+```sh
+./scripts/test-node-jvm-stores.sh
+```
+
+Pass `--services-running` to reuse PostgreSQL, MySQL, Redis, DynamoDB Local,
+and the Spanner emulator already listening on the configured
+`PROLLY_STORE_*_PORT` values. The runner tears down only Compose services that
+it started. Cosmos DB's SDK-contract suite always runs; set
+`RUN_PROLLY_COSMOS_LIVE=1` and provide `PROLLY_COSMOS_ENDPOINT`,
+`PROLLY_COSMOS_KEY`, and `PROLLY_COSMOS_DATABASE` for the managed-cloud gate.
+
+The compatibility verifier rejects missing matrix cells, protocol/schema
+drift, SDK-coordinate drift, incomplete capability or limit declarations,
+placeholder unsupported reasons, mismatched package metadata, and provider SDKs
+leaking into the Node, Kotlin, or Java core artifacts.
+
 ## Generated Binding Regeneration
 
 When the UniFFI facade changes, build it once, then regenerate the checked-in
@@ -137,6 +168,111 @@ DYLD_LIBRARY_PATH="$PWD/target/debug" \
 ```
 
 ## Release Gate
+
+Provider-first SQLite checks for the remaining native languages:
+
+```sh
+PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" \
+  PYTHONPATH=bindings/python:bindings/python/stores/sqlite \
+  python3 -m unittest discover -s bindings/python/stores/sqlite/tests -v
+PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" \
+  BUNDLE_GEMFILE=bindings/ruby/stores/sqlite/Gemfile \
+  BUNDLE_PATH=/tmp/prolly-ruby-sqlite-bundle \
+  bundle exec ruby -Ibindings/ruby/stores/sqlite/lib \
+  bindings/ruby/stores/sqlite/test/sqlite_store_test.rb
+PROLLY_BINDINGS_LIBRARY_DIR="$PWD/target/debug" \
+  DYLD_LIBRARY_PATH="$PWD/target/debug" \
+  swift run --package-path bindings/swift prolly-store-sqlite-check
+```
+
+Provider-first PostgreSQL checks:
+
+```sh
+PROLLY_POSTGRES_URL=postgresql://prolly:prolly@127.0.0.1:55432/prolly?sslmode=disable \
+  PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" \
+  PYTHONPATH=bindings/python:bindings/python/stores/postgres \
+  python3 -m unittest discover -s bindings/python/stores/postgres/tests -v
+PROLLY_POSTGRES_URL=postgresql://prolly:prolly@127.0.0.1:55432/prolly?sslmode=disable \
+  PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" \
+  BUNDLE_GEMFILE=bindings/ruby/stores/postgres/Gemfile \
+  BUNDLE_PATH=/tmp/prolly-ruby-postgres-bundle \
+  bundle exec ruby -Ibindings/ruby/stores/postgres/lib \
+  bindings/ruby/stores/postgres/test/postgres_store_test.rb
+PROLLY_POSTGRES_URL=postgresql://prolly:prolly@127.0.0.1:55432/prolly?sslmode=disable \
+  PROLLY_BINDINGS_LIBRARY_DIR="$PWD/target/debug" \
+  DYLD_LIBRARY_PATH="$PWD/target/debug" \
+  swift run --package-path bindings/swift prolly-store-postgres-check
+```
+
+Provider-first MySQL checks:
+
+```sh
+PROLLY_MYSQL_URL=mysql://prolly:prolly@127.0.0.1:53306/prolly \
+  PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" \
+  PYTHONPATH=bindings/python:bindings/python/stores/mysql \
+  python3 -m unittest discover -s bindings/python/stores/mysql/tests -v
+PROLLY_MYSQL_URL=mysql://prolly:prolly@127.0.0.1:53306/prolly \
+  PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" \
+  BUNDLE_GEMFILE=bindings/ruby/stores/mysql/Gemfile \
+  BUNDLE_PATH=/tmp/prolly-ruby-mysql-bundle \
+  bundle exec ruby -Ibindings/ruby/stores/mysql/lib \
+  bindings/ruby/stores/mysql/test/mysql_store_test.rb
+PROLLY_MYSQL_URL=mysql://prolly:prolly@127.0.0.1:53306/prolly \
+  PROLLY_BINDINGS_LIBRARY_DIR="$PWD/target/debug" \
+  DYLD_LIBRARY_PATH="$PWD/target/debug" \
+  swift run --package-path bindings/swift prolly-store-mysql-check
+```
+
+Provider-first Redis checks:
+
+```sh
+PROLLY_REDIS_URL=redis://127.0.0.1:56379 \
+  PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" \
+  PYTHONPATH=bindings/python:bindings/python/stores/redis \
+  python3 -m unittest discover -s bindings/python/stores/redis/tests -v
+PROLLY_REDIS_URL=redis://127.0.0.1:56379 \
+  PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" \
+  BUNDLE_GEMFILE=bindings/ruby/stores/redis/Gemfile \
+  BUNDLE_PATH=/tmp/prolly-ruby-redis-bundle \
+  bundle exec ruby -Ibindings/ruby/stores/redis/lib \
+  bindings/ruby/stores/redis/test/redis_store_test.rb
+PROLLY_REDIS_URL=redis://127.0.0.1:56379 \
+  PROLLY_BINDINGS_LIBRARY_DIR="$PWD/target/debug" \
+  DYLD_LIBRARY_PATH="$PWD/target/debug" \
+  swift run --package-path bindings/swift prolly-store-redis-check
+```
+
+Provider-first DynamoDB checks:
+
+```sh
+PROLLY_DYNAMODB_ENDPOINT=http://127.0.0.1:8000 \
+  PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" \
+  PYTHONPATH=bindings/python:bindings/python/stores/dynamodb \
+  python3 -m unittest discover -s bindings/python/stores/dynamodb/tests -v
+PROLLY_DYNAMODB_ENDPOINT=http://127.0.0.1:8000 \
+  PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" \
+  BUNDLE_GEMFILE=bindings/ruby/stores/dynamodb/Gemfile \
+  BUNDLE_PATH=/tmp/prolly-ruby-dynamodb-bundle \
+  bundle exec ruby -Ibindings/ruby/stores/dynamodb/lib \
+  bindings/ruby/stores/dynamodb/test/dynamodb_store_test.rb
+PROLLY_DYNAMODB_ENDPOINT=http://127.0.0.1:8000 \
+  PROLLY_BINDINGS_LIBRARY_DIR="$PWD/target/debug" \
+  DYLD_LIBRARY_PATH="$PWD/target/debug" \
+  swift run --package-path bindings/swift prolly-store-dynamodb-check
+```
+
+Provider-first Python Cosmos DB SDK-contract check:
+
+```sh
+PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" \
+  PYTHONPATH=bindings/python:bindings/python/stores/cosmosdb \
+  python3 -m unittest discover -s bindings/python/stores/cosmosdb/tests -v
+```
+
+Set `PROLLY_COSMOS_ENDPOINT`, `PROLLY_COSMOS_KEY`, and
+`PROLLY_COSMOS_DATABASE` to include the managed-cloud round trip. Ruby and
+Swift remain explicitly unsupported because Microsoft does not publish
+supported Cosmos DB SDKs for those languages.
 
 Before publishing a binding release:
 

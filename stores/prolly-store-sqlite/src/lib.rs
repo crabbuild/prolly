@@ -356,7 +356,7 @@ pub fn sqlite_main_file_identity(
     let rc = unsafe {
         rusqlite::ffi::sqlite3_file_control(
             conn.handle(),
-            b"main\0".as_ptr().cast(),
+            c"main".as_ptr(),
             rusqlite::ffi::SQLITE_FCNTL_FILE_POINTER,
             (&mut sqlite_file as *mut *mut rusqlite::ffi::sqlite3_file).cast(),
         )

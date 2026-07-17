@@ -65,13 +65,7 @@ async fn run() -> Result<(), Box<dyn Error>> {
     let resolver: Resolver = Box::new(|conflict| {
         let mut value = conflict.left.clone().unwrap_or_default();
         value.extend_from_slice(b"+");
-        value.extend_from_slice(
-            conflict
-                .right
-                .as_ref()
-                .map(Vec::as_slice)
-                .unwrap_or_default(),
-        );
+        value.extend_from_slice(conflict.right.as_deref().unwrap_or_default());
         Resolution::value(value)
     });
     let resolved = prolly

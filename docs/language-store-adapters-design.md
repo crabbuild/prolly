@@ -905,6 +905,23 @@ core dependency graph contains no provider SDK. Ruby/Cosmos DB and
 Swift/Cosmos DB or Spanner remain explicitly unsupported because the providers
 do not publish supported client SDKs for those language combinations.
 
+### Current Node and JVM implementation
+
+Node/TypeScript, Kotlin, and Java now implement isolated SQLite, PostgreSQL,
+MySQL, Redis, DynamoDB, Cosmos DB, and Cloud Spanner modules. Node also provides
+PGlite using its JavaScript/WebAssembly SDK; it is not a JVM or Go target. The
+Java artifacts are `CompletableFuture` facades over the same Kotlin provider
+implementations, so Java and Kotlin share physical layout and transaction code.
+
+All adapters implement protocol major 1, borrow caller-owned SDK clients or
+connection resources, keep schema setup explicit, and use the exact Rust
+provider layout. The core npm and Maven artifacts contain no provider SDKs.
+`scripts/verify-store-compatibility.mjs` enforces the supported matrix, SDK
+versions, capability/limit declarations, package coordinates, unsupported
+reasons, and dependency isolation. `scripts/test-node-jvm-stores.sh` runs all
+provider suites against local services while keeping Cosmos DB live execution
+as an explicit credentialed gate.
+
 ### Phase 0: Protocol and documentation
 
 - Add protocol records and capability definitions.
