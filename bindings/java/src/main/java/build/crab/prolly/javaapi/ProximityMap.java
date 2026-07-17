@@ -24,6 +24,18 @@ public final class ProximityMap implements AutoCloseable {
     }
     public build.crab.prolly.ExactProximityRecordRecord get(byte[] key) { return open().get(key.clone()); }
     public boolean contains(byte[] key) { return open().containsKey(key.clone()); }
+    public HnswBuildResult buildHnsw() {
+        return buildHnsw(HnswConfig.defaults(), HnswBuildLimits.defaults());
+    }
+    public HnswBuildResult buildHnsw(HnswConfig config, HnswBuildLimits limits) {
+        var result = JavaPortableBridge.buildHnsw(open(), config.toNative(), limits.toNative());
+        return new HnswBuildResult(
+                new HnswIndex(result.getIndex()),
+                HnswBuildStats.fromNative(result.getStats()));
+    }
+    public HnswIndex loadHnsw(byte[] manifest) {
+        return new HnswIndex(JavaPortableBridge.loadHnsw(open(), manifest.clone()));
+    }
     public ProximityReadSession read() { return new ProximityReadSession(this, open().read()); }
     public SearchResult search(SearchRequest request) {
         return fromNative(JavaPortableBridge.search(open(), request.toNative()));

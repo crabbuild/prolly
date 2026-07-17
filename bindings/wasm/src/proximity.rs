@@ -2,7 +2,8 @@ use super::{js_error, WasmProllyEngine};
 use crate::page::set_bytes;
 use js_sys::{Array, BigInt, Float32Array, Object, Reflect, Uint8Array};
 use prolly::{
-    AdaptiveQuality, Cid, ContentGraphLimits, DistanceMetric, HnswSearchOptions, PlannerPolicy,
+    AdaptiveQuality, Cid, ContentGraphLimits, DistanceMetric, HnswBuildLimits, HnswBuildStats,
+    HnswConfig, HnswIndex, HnswRoutingVectorEncoding, HnswSearchOptions, PlannerPolicy,
     PqSearchOptions, ProximityConfig, ProximityFilter, ProximityMap, ProximityMembershipProof,
     ProximityMutation, ProximityRecord, ProximitySearchClaim, ProximitySearchProof,
     ProximityStructuralProof, ProximityVerification, QueryKernel, SearchBackend, SearchBudget,
@@ -94,6 +95,133 @@ fn optional_string_usize(value: &JsValue, name: &str) -> Result<Option<usize>, J
                 .map_err(|error| JsValue::from_str(&format!("invalid {name}: {error}")))
         })
         .transpose()
+}
+
+fn required_string_usize(value: &JsValue, name: &str) -> Result<usize, JsValue> {
+    optional_string_usize(value, name)?
+        .ok_or_else(|| JsValue::from_str(&format!("{name} is required")))
+}
+
+fn required_string_u64(value: &JsValue, name: &str) -> Result<u64, JsValue> {
+    js_field(value, name)?
+        .as_string()
+        .ok_or_else(|| JsValue::from_str(&format!("{name} must be an unsigned integer string")))?
+        .parse::<u64>()
+        .map_err(|error| JsValue::from_str(&format!("invalid {name}: {error}")))
+}
+
+fn required_u32(value: &JsValue, name: &str) -> Result<u32, JsValue> {
+    optional_u32(value, name)?.ok_or_else(|| JsValue::from_str(&format!("{name} is required")))
+}
+
+fn hnsw_config_from_js(value: &JsValue) -> Result<HnswConfig, JsValue> {
+    if value.is_null() || value.is_undefined() {
+        return Ok(HnswConfig::default());
+    }
+    let max_connections = u16::try_from(required_u32(value, "maxConnections")?)
+        .map_err(|_| JsValue::from_str("maxConnections must fit u16"))?;
+    let level_bits = u8::try_from(required_u32(value, "levelBits")?)
+        .map_err(|_| JsValue::from_str("levelBits must fit u8"))?;
+    let routing_vector_encoding = match required_string(value, "routingVectorEncoding")?.as_str() {
+        "full_f32" => HnswRoutingVectorEncoding::FullF32,
+        other => {
+            return Err(JsValue::from_str(&format!(
+                "unknown HNSW routing-vector encoding: {other}"
+            )))
+        }
+    };
+    Ok(HnswConfig {
+        max_connections,
+        ef_construction: required_u32(value, "efConstruction")?,
+        ef_search: required_u32(value, "efSearch")?,
+        level_bits,
+        overfetch_multiplier: required_u32(value, "overfetchMultiplier")?,
+        seed: required_string_u64(value, "seed")?,
+        routing_vector_encoding,
+    })
+}
+
+fn hnsw_build_limits_from_js(value: &JsValue) -> Result<HnswBuildLimits, JsValue> {
+    if value.is_null() || value.is_undefined() {
+        return Ok(HnswBuildLimits::default());
+    }
+    Ok(HnswBuildLimits {
+        max_records: optional_string_usize(value, "maxRecords")?,
+        max_owned_bytes: optional_string_usize(value, "maxOwnedBytes")?,
+        max_distance_evaluations: optional_string_usize(value, "maxDistanceEvaluations")?,
+        worker_threads: required_string_usize(value, "workerThreads")?,
+        max_encoded_graph_bytes: optional_string_usize(value, "maxEncodedGraphBytes")?,
+    })
+}
+
+fn hnsw_config_object(config: &HnswConfig) -> Result<Object, JsValue> {
+    let object = Object::new();
+    Reflect::set(
+        &object,
+        &"maxConnections".into(),
+        &JsValue::from_f64(config.max_connections as f64),
+    )?;
+    Reflect::set(
+        &object,
+        &"efConstruction".into(),
+        &JsValue::from_f64(config.ef_construction as f64),
+    )?;
+    Reflect::set(
+        &object,
+        &"efSearch".into(),
+        &JsValue::from_f64(config.ef_search as f64),
+    )?;
+    Reflect::set(
+        &object,
+        &"levelBits".into(),
+        &JsValue::from_f64(config.level_bits as f64),
+    )?;
+    Reflect::set(
+        &object,
+        &"overfetchMultiplier".into(),
+        &JsValue::from_f64(config.overfetch_multiplier as f64),
+    )?;
+    Reflect::set(&object, &"seed".into(), &BigInt::from(config.seed))?;
+    let encoding = match config.routing_vector_encoding {
+        HnswRoutingVectorEncoding::FullF32 => "full_f32",
+    };
+    Reflect::set(&object, &"routingVectorEncoding".into(), &encoding.into())?;
+    Ok(object)
+}
+
+fn hnsw_build_stats_object(stats: HnswBuildStats) -> Result<Object, JsValue> {
+    let object = Object::new();
+    Reflect::set(
+        &object,
+        &"records".into(),
+        &BigInt::from(stats.records as u64),
+    )?;
+    Reflect::set(
+        &object,
+        &"distanceEvaluations".into(),
+        &BigInt::from(stats.distance_evaluations as u64),
+    )?;
+    Reflect::set(
+        &object,
+        &"directedEdges".into(),
+        &BigInt::from(stats.directed_edges as u64),
+    )?;
+    Reflect::set(
+        &object,
+        &"maximumLevel".into(),
+        &JsValue::from_f64(stats.maximum_level as f64),
+    )?;
+    Reflect::set(
+        &object,
+        &"ownedBytes".into(),
+        &BigInt::from(stats.owned_bytes as u64),
+    )?;
+    Reflect::set(
+        &object,
+        &"encodedGraphBytes".into(),
+        &BigInt::from(stats.encoded_graph_bytes as u64),
+    )?;
+    Ok(object)
 }
 
 fn optional_u32(value: &JsValue, name: &str) -> Result<Option<u32>, JsValue> {
@@ -275,6 +403,40 @@ impl WasmProximityMap {
     pub fn contains(&self, key: Uint8Array) -> Result<bool, JsValue> {
         self.load()?.contains_key(&key.to_vec()).map_err(js_error)
     }
+    #[wasm_bindgen(js_name = buildHnsw)]
+    pub fn build_hnsw(&self, config: JsValue, limits: JsValue) -> Result<Object, JsValue> {
+        let config = hnsw_config_from_js(&config)?;
+        let limits = hnsw_build_limits_from_js(&limits)?;
+        let map = self.load()?;
+        let (index, stats) =
+            HnswIndex::build_with_limits(&map, config, limits).map_err(js_error)?;
+        let result = Object::new();
+        Reflect::set(
+            &result,
+            &"index".into(),
+            &JsValue::from(WasmHnswIndex { inner: index }),
+        )?;
+        Reflect::set(
+            &result,
+            &"stats".into(),
+            &hnsw_build_stats_object(stats)?.into(),
+        )?;
+        Ok(result)
+    }
+    #[wasm_bindgen(js_name = loadHnsw)]
+    pub fn load_hnsw(&self, manifest: Uint8Array) -> Result<WasmHnswIndex, JsValue> {
+        let raw: [u8; 32] = manifest
+            .to_vec()
+            .try_into()
+            .map_err(|_| JsValue::from_str("HNSW manifest CID must be 32 bytes"))?;
+        let index = HnswIndex::load(self.engine.store().clone(), Cid(raw)).map_err(js_error)?;
+        if index.source_descriptor() != &self.descriptor {
+            return Err(JsValue::from_str(
+                "HNSW index is bound to a different source descriptor",
+            ));
+        }
+        Ok(WasmHnswIndex { inner: index })
+    }
     pub fn verify(&self) -> Result<Object, JsValue> {
         proximity_verification_object(self.load()?.verify().map_err(js_error)?)
     }
@@ -390,6 +552,55 @@ impl WasmProximityMap {
         self.load()?
             .prove_structure(&ContentGraphLimits::default())
             .map(|inner| WasmProximityStructuralProof { inner })
+            .map_err(js_error)
+    }
+}
+
+#[wasm_bindgen(js_name = WasmHnswIndex)]
+pub struct WasmHnswIndex {
+    inner: HnswIndex<Arc<prolly::MemStore>>,
+}
+
+#[wasm_bindgen(js_class = WasmHnswIndex)]
+impl WasmHnswIndex {
+    pub fn manifest(&self) -> Vec<u8> {
+        self.inner.manifest_cid().as_bytes().to_vec()
+    }
+
+    #[wasm_bindgen(js_name = sourceDescriptor)]
+    pub fn source_descriptor(&self) -> Vec<u8> {
+        self.inner.source_descriptor().as_bytes().to_vec()
+    }
+
+    pub fn config(&self) -> Result<Object, JsValue> {
+        hnsw_config_object(self.inner.config())
+    }
+
+    #[wasm_bindgen(js_name = isCanonical)]
+    pub fn is_canonical(&self) -> bool {
+        self.inner.is_canonical()
+    }
+
+    pub fn search(&self, map: &WasmProximityMap, request: JsValue) -> Result<Object, JsValue> {
+        let request = owned_search_request(request)?;
+        let map = map.load()?;
+        self.inner
+            .search(&map, request.as_request())
+            .map_err(js_error)
+            .and_then(search_result_object)
+    }
+
+    #[wasm_bindgen(js_name = proveSearch)]
+    pub fn prove_search(
+        &self,
+        map: &WasmProximityMap,
+        request: JsValue,
+    ) -> Result<WasmProximitySearchProof, JsValue> {
+        let request = owned_search_request(request)?;
+        let map = map.load()?;
+        self.inner
+            .prove_search(&map, request.as_request(), &ContentGraphLimits::default())
+            .map(|inner| WasmProximitySearchProof { inner })
             .map_err(js_error)
     }
 }

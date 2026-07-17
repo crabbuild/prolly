@@ -833,6 +833,105 @@ export interface PortableSearchResult {
   planFormatVersion: number;
 }
 
+export interface HnswConfig {
+  maxConnections: number;
+  efConstruction: number;
+  efSearch: number;
+  levelBits: number;
+  overfetchMultiplier: number;
+  seed: bigint;
+  routingVectorEncoding: "full_f32";
+}
+
+export interface HnswBuildLimits {
+  maxRecords?: bigint;
+  maxOwnedBytes?: bigint;
+  maxDistanceEvaluations?: bigint;
+  workerThreads: bigint;
+  maxEncodedGraphBytes?: bigint;
+}
+
+export interface HnswBuildStats {
+  records: bigint;
+  distanceEvaluations: bigint;
+  directedEdges: bigint;
+  maximumLevel: number;
+  ownedBytes: bigint;
+  encodedGraphBytes: bigint;
+}
+
+export interface HnswBuildOptions {
+  config?: HnswConfig;
+  limits?: HnswBuildLimits;
+  signal?: AbortSignal;
+}
+
+export interface HnswBuildResult {
+  index: WasmHnswIndex;
+  stats: HnswBuildStats;
+}
+
+export function defaultHnswConfig(): HnswConfig {
+  return {
+    maxConnections: 16,
+    efConstruction: 128,
+    efSearch: 64,
+    levelBits: 4,
+    overfetchMultiplier: 8,
+    seed: 0n,
+    routingVectorEncoding: "full_f32",
+  };
+}
+
+export function defaultHnswBuildLimits(): HnswBuildLimits {
+  return { workerThreads: 1n };
+}
+
+function requireUnsignedInteger(value: number, name: string, maximum: number): number {
+  if (!Number.isInteger(value) || value < 0 || value > maximum) {
+    throw new RangeError(`${name} must be an unsigned integer no greater than ${maximum}`);
+  }
+  return value;
+}
+
+function requireUnsignedBigInt(value: bigint, name: string): bigint {
+  if (value < 0n) throw new RangeError(`${name} must be non-negative`);
+  return value;
+}
+
+function ownHnswConfig(value: HnswConfig | undefined): object {
+  const config = value ?? defaultHnswConfig();
+  if (config.routingVectorEncoding !== "full_f32") {
+    throw new TypeError("unsupported HNSW routing-vector encoding");
+  }
+  const seed = requireUnsignedBigInt(config.seed, "seed");
+  if (seed > 0xffff_ffff_ffff_ffffn) throw new RangeError("seed must fit u64");
+  return {
+    maxConnections: requireUnsignedInteger(config.maxConnections, "maxConnections", 0xffff),
+    efConstruction: requireUnsignedInteger(config.efConstruction, "efConstruction", 0xffff_ffff),
+    efSearch: requireUnsignedInteger(config.efSearch, "efSearch", 0xffff_ffff),
+    levelBits: requireUnsignedInteger(config.levelBits, "levelBits", 0xff),
+    overfetchMultiplier: requireUnsignedInteger(
+      config.overfetchMultiplier, "overfetchMultiplier", 0xffff_ffff,
+    ),
+    seed: seed.toString(),
+    routingVectorEncoding: config.routingVectorEncoding,
+  };
+}
+
+function ownHnswBuildLimits(value: HnswBuildLimits | undefined): object {
+  const limits = value ?? defaultHnswBuildLimits();
+  const optional = (candidate: bigint | undefined, name: string) =>
+    candidate == null ? undefined : requireUnsignedBigInt(candidate, name).toString();
+  return {
+    maxRecords: optional(limits.maxRecords, "maxRecords"),
+    maxOwnedBytes: optional(limits.maxOwnedBytes, "maxOwnedBytes"),
+    maxDistanceEvaluations: optional(limits.maxDistanceEvaluations, "maxDistanceEvaluations"),
+    workerThreads: requireUnsignedBigInt(limits.workerThreads, "workerThreads").toString(),
+    maxEncodedGraphBytes: optional(limits.maxEncodedGraphBytes, "maxEncodedGraphBytes"),
+  };
+}
+
 function ownPortableSearchRequest(request: PortableSearchRequest): object {
   if (!Number.isSafeInteger(request.topK) || request.topK <= 0) {
     throw new RangeError("topK must be a positive safe integer");
@@ -2090,6 +2189,28 @@ export class WasmProximityMap implements Disposable {
   contains(key: Uint8Array): boolean { return this.nativeHandle().contains(ownedPortableBytes(key)); }
   count(): bigint { return BigInt(this.nativeHandle().count()); }
   config(): PortableProximityConfig { return this.nativeHandle().config(); }
+  buildHnsw(options: HnswBuildOptions = {}): Promise<HnswBuildResult> {
+    const native = this.nativeHandle();
+    const config = ownHnswConfig(options.config);
+    const limits = ownHnswBuildLimits(options.limits);
+    return portablePromise(options.signal, () => {
+      const result = native.buildHnsw(config, limits);
+      return {
+        index: new WasmHnswIndex(result.index),
+        stats: {
+          records: BigInt(result.stats.records),
+          distanceEvaluations: BigInt(result.stats.distanceEvaluations),
+          directedEdges: BigInt(result.stats.directedEdges),
+          maximumLevel: result.stats.maximumLevel,
+          ownedBytes: BigInt(result.stats.ownedBytes),
+          encodedGraphBytes: BigInt(result.stats.encodedGraphBytes),
+        },
+      };
+    });
+  }
+  loadHnsw(manifest: Uint8Array): WasmHnswIndex {
+    return new WasmHnswIndex(this.nativeHandle().loadHnsw(ownedPortableBytes(manifest)));
+  }
   mutate(mutations: PortableProximityMutation[]): {
     map: WasmProximityMap;
     stats: {
@@ -2127,6 +2248,43 @@ export class WasmProximityMap implements Disposable {
   }
   proveStructure(): WasmProximityStructuralProof {
     return new WasmProximityStructuralProof(this.nativeHandle().proveStructure());
+  }
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class WasmHnswIndex implements Disposable {
+  #native?: any;
+  constructor(native: any) { this.#native = native; }
+  #open(): any {
+    if (this.#native == null) throw new Error("WASM HNSW index is closed");
+    return this.#native;
+  }
+  manifest(): Uint8Array { return ownedPortableBytes(this.#open().manifest()); }
+  sourceDescriptor(): Uint8Array { return ownedPortableBytes(this.#open().sourceDescriptor()); }
+  config(): HnswConfig {
+    const value = this.#open().config();
+    return {
+      maxConnections: value.maxConnections,
+      efConstruction: value.efConstruction,
+      efSearch: value.efSearch,
+      levelBits: value.levelBits,
+      overfetchMultiplier: value.overfetchMultiplier,
+      seed: BigInt(value.seed),
+      routingVectorEncoding: value.routingVectorEncoding,
+    };
+  }
+  isCanonical(): boolean { return this.#open().isCanonical(); }
+  search(map: WasmProximityMap, request: PortableSearchRequest): Promise<PortableSearchResult> {
+    const native = this.#open();
+    const nativeMap = map.nativeHandle();
+    const owned = ownPortableSearchRequest(request);
+    return portablePromise(request.signal, () => native.search(nativeMap, owned));
+  }
+  proveSearch(map: WasmProximityMap, request: PortableSearchRequest): WasmProximitySearchProof {
+    return new WasmProximitySearchProof(
+      this.#open().proveSearch(map.nativeHandle(), ownPortableSearchRequest(request)),
+    );
   }
   close(): void { this.#native?.free?.(); this.#native = undefined; }
   [Symbol.dispose](): void { this.close(); }

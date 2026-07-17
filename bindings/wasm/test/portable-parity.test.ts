@@ -15,6 +15,47 @@ if (generatedPresent) {
 
 const bytes = (value: string): Uint8Array => new TextEncoder().encode(value);
 
+test("WASM HNSW accelerator lifecycle is portable", { skip: !generatedPresent }, async () => {
+  const engine = api.Engine.memory(wasm);
+  try {
+    const proximity = await engine.buildProximity(2, Array.from({ length: 16 }, (_, index) => ({
+      key: bytes(`vector-${index.toString().padStart(2, "0")}`),
+      vector: new Float32Array([index, 0]),
+      value: bytes(`value-${index.toString().padStart(2, "0")}`),
+    })));
+    const defaults = api.defaultHnswConfig();
+    const built = await proximity.buildHnsw({
+      config: defaults,
+      limits: api.defaultHnswBuildLimits(),
+    });
+    assert.equal(built.stats.records, 16n);
+    const request = {
+      vector: new Float32Array([0, 0]),
+      topK: 3,
+      policy: "fixed_budget" as const,
+      backend: "hnsw" as const,
+    };
+    const index = built.index;
+    assert.equal(index.isCanonical(), true);
+    assert.deepEqual(index.sourceDescriptor(), proximity.descriptor());
+    assert.deepEqual(index.config(), defaults);
+    const result = await index.search(proximity, request);
+    assert.equal(result.backend, "hnsw");
+    assert.equal(Buffer.from(result.neighbors[0].key).toString(), "vector-00");
+    const manifest = index.manifest();
+    const proof = index.proveSearch(proximity, request);
+    assert.equal(proof.verify(proximity.descriptor()).result.backend, "hnsw");
+    proof.close();
+    index.close();
+    const loaded = proximity.loadHnsw(manifest);
+    assert.deepEqual(loaded.manifest(), manifest);
+    loaded.close();
+    proximity.close();
+  } finally {
+    engine.close();
+  }
+});
+
 test("WASM rich proximity search preserves policy filter stats session and proof", { skip: !generatedPresent }, async () => {
   const engine = api.Engine.memory(wasm);
   try {

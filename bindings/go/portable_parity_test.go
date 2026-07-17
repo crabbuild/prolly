@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"runtime"
 	"testing"
 )
@@ -86,6 +87,89 @@ func TestRichProximitySearchPreservesPolicyFilterStatsSessionAndProof(t *testing
 	}
 	if len(verified.Result.Neighbors) != 2 || !bytes.Equal(verified.Result.Neighbors[1].Key, []byte("ab")) {
 		t.Fatalf("verified neighbors = %#v", verified.Result.Neighbors)
+	}
+}
+
+func TestHNSWAcceleratorLifecycleIsPortable(t *testing.T) {
+	config, err := DefaultConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine, err := NewMemoryEngine(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(engine.Close)
+	records := make([]ProximityRecord, 16)
+	for index := range records {
+		records[index] = ProximityRecord{
+			Key:    []byte(fmt.Sprintf("vector-%02d", index)),
+			Vector: []float32{float32(index), 0},
+			Value:  []byte(fmt.Sprintf("value-%02d", index)),
+		}
+	}
+	proximity, err := engine.BuildProximity(2, records)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(proximity.Close)
+	hnswConfig, err := DefaultHNSWConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	limits, err := DefaultHNSWBuildLimits()
+	if err != nil {
+		t.Fatal(err)
+	}
+	built, err := proximity.BuildHNSW(hnswConfig, limits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if built.Stats.Records != 16 {
+		t.Fatalf("HNSW records = %d", built.Stats.Records)
+	}
+	index := built.Index
+	manifest, err := index.Manifest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	descriptor, err := proximity.Descriptor()
+	if err != nil {
+		t.Fatal(err)
+	}
+	source, err := index.SourceDescriptor()
+	if err != nil || !bytes.Equal(source, descriptor) {
+		t.Fatalf("HNSW source = %x, %v", source, err)
+	}
+	canonical, err := index.IsCanonical()
+	if err != nil || !canonical {
+		t.Fatalf("HNSW canonical = %v, %v", canonical, err)
+	}
+	request := ExactSearch([]float32{0, 0}, 3)
+	request.Policy = SearchPolicyFixedBudget
+	request.Backend = SearchBackendHNSW
+	result, err := index.Search(context.Background(), proximity, request)
+	if err != nil || result.Backend != "hnsw" || !bytes.Equal(result.Neighbors[0].Key, []byte("vector-00")) {
+		t.Fatalf("HNSW search = %#v, %v", result, err)
+	}
+	proof, err := index.ProveSearch(proximity, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(proof.Close)
+	verified, err := proof.Verify(descriptor)
+	if err != nil || verified.Result.Backend != "hnsw" {
+		t.Fatalf("HNSW proof = %#v, %v", verified, err)
+	}
+	index.Close()
+	loaded, err := proximity.LoadHNSW(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(loaded.Close)
+	loadedManifest, err := loaded.Manifest()
+	if err != nil || !bytes.Equal(loadedManifest, manifest) {
+		t.Fatalf("loaded HNSW manifest = %x, %v", loadedManifest, err)
 	}
 }
 

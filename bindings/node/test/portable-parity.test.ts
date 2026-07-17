@@ -5,6 +5,40 @@ import { Engine, exactSearch } from "../src/index.ts";
 
 const bytes = (value: string): Buffer => Buffer.from(value);
 
+test("HNSW accelerator lifecycle is portable", async () => {
+  const engine = await Engine.memory();
+  try {
+    const proximity = await engine.buildProximity(2, Array.from({ length: 16 }, (_, index) => ({
+      key: bytes(`vector-${index.toString().padStart(2, "0")}`),
+      vector: new Float32Array([index, 0]),
+      value: bytes(`value-${index.toString().padStart(2, "0")}`),
+    })));
+    const built = await proximity.buildHnsw();
+    assert.equal(built.stats.records, 16n);
+    const request = {
+      ...exactSearch(new Float32Array([0, 0]), 3),
+      policy: "fixed_budget" as const,
+      backend: "hnsw" as const,
+    };
+    const index = built.index;
+    assert.equal(index.isCanonical(), true);
+    assert.deepEqual(index.sourceDescriptor(), proximity.descriptor());
+    const result = await index.search(proximity, request);
+    assert.equal(result.backend, "hnsw");
+    assert.equal(Buffer.from(result.neighbors[0].key).toString(), "vector-00");
+    const manifest = index.manifest();
+    const proof = index.proveSearch(proximity, request);
+    assert.equal(proof.verify(proximity.descriptor()).result.backend, "hnsw");
+    proof.close();
+    index.close();
+    const loaded = proximity.loadHnsw(manifest);
+    assert.deepEqual(loaded.manifest(), manifest);
+    loaded.close();
+  } finally {
+    engine.close();
+  }
+});
+
 test("rich proximity search preserves policy filter stats session and proof", async () => {
   const engine = await Engine.memory();
   try {

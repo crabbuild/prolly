@@ -203,6 +203,30 @@ export interface NodePortableSearchRequest {
   hnswEfSearch?: number
   pqRerankMultiplier?: number
 }
+export interface NodePortableHnswConfig {
+  maxConnections: number
+  efConstruction: number
+  efSearch: number
+  levelBits: number
+  overfetchMultiplier: number
+  seed: string
+  routingVectorEncoding: string
+}
+export interface NodePortableHnswBuildLimits {
+  maxRecords?: string
+  maxOwnedBytes?: string
+  maxDistanceEvaluations?: string
+  workerThreads: string
+  maxEncodedGraphBytes?: string
+}
+export interface NodePortableHnswBuildStats {
+  records: string
+  distanceEvaluations: string
+  directedEdges: string
+  maximumLevel: number
+  ownedBytes: string
+  encodedGraphBytes: string
+}
 export interface NodePortableSearchStats {
   levelsVisited: string
   nodesRead: string
@@ -1216,7 +1240,21 @@ export declare class NativePortableSecondaryIndex {
   rangePage(start: Buffer, end: Buffer | undefined | null, cursor: Buffer | undefined | null, limit: string): NodePortableIndexPage
   rangeReversePage(start: Buffer, end: Buffer | undefined | null, cursor: Buffer | undefined | null, limit: string): NodePortableIndexPage
 }
+export declare class NativePortableHnswBuildResult {
+  index(): NativePortableHnswIndex
+  stats(): NodePortableHnswBuildStats
+}
+export declare class NativePortableHnswIndex {
+  manifest(): Buffer
+  sourceDescriptor(): Buffer
+  config(): NodePortableHnswConfig
+  isCanonical(): boolean
+  search(map: NativePortableProximityMap, request: NodePortableSearchRequest): NodePortableSearchResult
+  proveSearch(map: NativePortableProximityMap, request: NodePortableSearchRequest): NativePortableProximitySearchProof
+}
 export declare class NativePortableProximityMap {
+  buildHnsw(config?: NodePortableHnswConfig | undefined | null, limits?: NodePortableHnswBuildLimits | undefined | null): NativePortableHnswBuildResult
+  loadHnsw(manifest: Buffer): NativePortableHnswIndex
   read(): NativePortableProximityReadSession
   count(): string
   config(): NodePortableProximityConfig

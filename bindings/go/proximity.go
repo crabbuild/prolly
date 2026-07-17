@@ -29,6 +29,169 @@ type ProximityConfig struct {
 	ScalarQuantizationGroupSize *uint32
 }
 
+type HNSWRoutingVectorEncoding int32
+
+const (
+	HNSWRoutingVectorFullF32 HNSWRoutingVectorEncoding = 1
+)
+
+type HNSWConfig struct {
+	MaxConnections        uint16
+	EFConstruction        uint32
+	EFSearch              uint32
+	LevelBits             uint8
+	OverfetchMultiplier   uint32
+	Seed                  uint64
+	RoutingVectorEncoding HNSWRoutingVectorEncoding
+}
+
+type HNSWBuildLimits struct {
+	MaxRecords             *uint64
+	MaxOwnedBytes          *uint64
+	MaxDistanceEvaluations *uint64
+	WorkerThreads          uint64
+	MaxEncodedGraphBytes   *uint64
+}
+
+type HNSWBuildStats struct {
+	Records             uint64
+	DistanceEvaluations uint64
+	DirectedEdges       uint64
+	MaximumLevel        uint8
+	OwnedBytes          uint64
+	EncodedGraphBytes   uint64
+}
+
+type HNSWBuildResult struct {
+	Index *HNSWIndex
+	Stats HNSWBuildStats
+}
+
+func decodeHNSWConfig(raw []byte) (HNSWConfig, error) {
+	d := byteDecoder{data: raw}
+	high, err := d.readByte()
+	if err != nil {
+		return HNSWConfig{}, err
+	}
+	low, err := d.readByte()
+	if err != nil {
+		return HNSWConfig{}, err
+	}
+	config := HNSWConfig{MaxConnections: uint16(high)<<8 | uint16(low)}
+	if config.EFConstruction, err = d.readUint32(); err != nil {
+		return HNSWConfig{}, err
+	}
+	if config.EFSearch, err = d.readUint32(); err != nil {
+		return HNSWConfig{}, err
+	}
+	if config.LevelBits, err = d.readByte(); err != nil {
+		return HNSWConfig{}, err
+	}
+	if config.OverfetchMultiplier, err = d.readUint32(); err != nil {
+		return HNSWConfig{}, err
+	}
+	if config.Seed, err = d.readUint64(); err != nil {
+		return HNSWConfig{}, err
+	}
+	encoding, err := d.readInt32()
+	if err != nil {
+		return HNSWConfig{}, err
+	}
+	config.RoutingVectorEncoding = HNSWRoutingVectorEncoding(encoding)
+	if config.RoutingVectorEncoding != HNSWRoutingVectorFullF32 {
+		return HNSWConfig{}, errors.New("unknown HNSW routing-vector encoding")
+	}
+	return config, d.done()
+}
+
+func encodeHNSWConfig(config HNSWConfig) ([]byte, error) {
+	if config.RoutingVectorEncoding != HNSWRoutingVectorFullF32 {
+		return nil, errors.New("unknown HNSW routing-vector encoding")
+	}
+	var out bytes.Buffer
+	out.WriteByte(byte(config.MaxConnections >> 8))
+	out.WriteByte(byte(config.MaxConnections))
+	writeU32(&out, config.EFConstruction)
+	writeU32(&out, config.EFSearch)
+	out.WriteByte(config.LevelBits)
+	writeU32(&out, config.OverfetchMultiplier)
+	writeU64(&out, config.Seed)
+	writeI32(&out, int32(config.RoutingVectorEncoding))
+	return out.Bytes(), nil
+}
+
+func decodeHNSWBuildLimits(raw []byte) (HNSWBuildLimits, error) {
+	d := byteDecoder{data: raw}
+	var result HNSWBuildLimits
+	var err error
+	if result.MaxRecords, err = d.readOptionalUint64(); err != nil {
+		return HNSWBuildLimits{}, err
+	}
+	if result.MaxOwnedBytes, err = d.readOptionalUint64(); err != nil {
+		return HNSWBuildLimits{}, err
+	}
+	if result.MaxDistanceEvaluations, err = d.readOptionalUint64(); err != nil {
+		return HNSWBuildLimits{}, err
+	}
+	if result.WorkerThreads, err = d.readUint64(); err != nil {
+		return HNSWBuildLimits{}, err
+	}
+	if result.MaxEncodedGraphBytes, err = d.readOptionalUint64(); err != nil {
+		return HNSWBuildLimits{}, err
+	}
+	return result, d.done()
+}
+
+func encodeHNSWBuildLimits(limits HNSWBuildLimits) []byte {
+	var out bytes.Buffer
+	encodeOptionalU64(&out, limits.MaxRecords)
+	encodeOptionalU64(&out, limits.MaxOwnedBytes)
+	encodeOptionalU64(&out, limits.MaxDistanceEvaluations)
+	writeU64(&out, limits.WorkerThreads)
+	encodeOptionalU64(&out, limits.MaxEncodedGraphBytes)
+	return out.Bytes()
+}
+
+func decodeHNSWBuildStats(d *byteDecoder) (HNSWBuildStats, error) {
+	var result HNSWBuildStats
+	var err error
+	if result.Records, err = d.readUint64(); err != nil {
+		return HNSWBuildStats{}, err
+	}
+	if result.DistanceEvaluations, err = d.readUint64(); err != nil {
+		return HNSWBuildStats{}, err
+	}
+	if result.DirectedEdges, err = d.readUint64(); err != nil {
+		return HNSWBuildStats{}, err
+	}
+	if result.MaximumLevel, err = d.readByte(); err != nil {
+		return HNSWBuildStats{}, err
+	}
+	if result.OwnedBytes, err = d.readUint64(); err != nil {
+		return HNSWBuildStats{}, err
+	}
+	if result.EncodedGraphBytes, err = d.readUint64(); err != nil {
+		return HNSWBuildStats{}, err
+	}
+	return result, nil
+}
+
+func DefaultHNSWConfig() (HNSWConfig, error) {
+	raw, err := ffiDefaultHNSWConfig()
+	if err != nil {
+		return HNSWConfig{}, err
+	}
+	return decodeHNSWConfig(raw)
+}
+
+func DefaultHNSWBuildLimits() (HNSWBuildLimits, error) {
+	raw, err := ffiDefaultHNSWBuildLimits()
+	if err != nil {
+		return HNSWBuildLimits{}, err
+	}
+	return decodeHNSWBuildLimits(raw)
+}
+
 type ProximityMutation struct {
 	Key    []byte
 	Vector []float32
@@ -333,6 +496,206 @@ func newProximityMap(handle uint64) (*ProximityMap, error) {
 	result := &ProximityMap{handle: handle, fast: fast}
 	runtime.SetFinalizer(result, (*ProximityMap).Close)
 	return result, nil
+}
+
+type HNSWIndex struct {
+	handle uint64
+	closed atomic.Bool
+	mu     sync.RWMutex
+}
+
+func newHNSWIndex(handle uint64) *HNSWIndex {
+	index := &HNSWIndex{handle: handle}
+	runtime.SetFinalizer(index, (*HNSWIndex).Close)
+	return index
+}
+
+func (i *HNSWIndex) Close() {
+	if i == nil || i.closed.Swap(true) {
+		return
+	}
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	runtime.SetFinalizer(i, nil)
+	if i.handle != 0 {
+		ffiFreeHNSWIndex(i.handle)
+		i.handle = 0
+	}
+}
+
+func (i *HNSWIndex) withHandle() (uint64, func(), error) {
+	if i == nil || i.closed.Load() {
+		return 0, nil, errors.New("HNSW index is closed")
+	}
+	i.mu.RLock()
+	if i.closed.Load() || i.handle == 0 {
+		i.mu.RUnlock()
+		return 0, nil, errors.New("HNSW index is closed")
+	}
+	return i.handle, i.mu.RUnlock, nil
+}
+
+func (m *ProximityMap) BuildHNSW(config HNSWConfig, limits HNSWBuildLimits) (HNSWBuildResult, error) {
+	encodedConfig, err := encodeHNSWConfig(config)
+	if err != nil {
+		return HNSWBuildResult{}, err
+	}
+	encodedLimits := encodeHNSWBuildLimits(limits)
+	handle, _, unlock, err := m.withHandle()
+	if err != nil {
+		return HNSWBuildResult{}, err
+	}
+	defer unlock()
+	raw, err := ffiProximityBuildHNSW(handle, encodedConfig, encodedLimits)
+	if err != nil {
+		return HNSWBuildResult{}, err
+	}
+	d := byteDecoder{data: raw}
+	indexHandle, err := d.readUint64()
+	if err != nil {
+		return HNSWBuildResult{}, err
+	}
+	stats, err := decodeHNSWBuildStats(&d)
+	if err != nil {
+		ffiFreeHNSWIndex(indexHandle)
+		return HNSWBuildResult{}, err
+	}
+	if err := d.done(); err != nil {
+		ffiFreeHNSWIndex(indexHandle)
+		return HNSWBuildResult{}, err
+	}
+	return HNSWBuildResult{Index: newHNSWIndex(indexHandle), Stats: stats}, nil
+}
+
+func (m *ProximityMap) LoadHNSW(manifest []byte) (*HNSWIndex, error) {
+	handle, _, unlock, err := m.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	indexHandle, err := ffiProximityLoadHNSW(handle, append([]byte(nil), manifest...))
+	if err != nil {
+		return nil, err
+	}
+	return newHNSWIndex(indexHandle), nil
+}
+
+func decodeHNSWByteArray(raw []byte) ([]byte, error) {
+	d := byteDecoder{data: raw}
+	value, err := d.readByteArray()
+	if err != nil {
+		return nil, err
+	}
+	return value, d.done()
+}
+
+func (i *HNSWIndex) Manifest() ([]byte, error) {
+	handle, unlock, err := i.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	raw, err := ffiHNSWIndexManifest(handle)
+	if err != nil {
+		return nil, err
+	}
+	return decodeHNSWByteArray(raw)
+}
+
+func (i *HNSWIndex) SourceDescriptor() ([]byte, error) {
+	handle, unlock, err := i.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	raw, err := ffiHNSWIndexSourceDescriptor(handle)
+	if err != nil {
+		return nil, err
+	}
+	return decodeHNSWByteArray(raw)
+}
+
+func (i *HNSWIndex) Config() (HNSWConfig, error) {
+	handle, unlock, err := i.withHandle()
+	if err != nil {
+		return HNSWConfig{}, err
+	}
+	defer unlock()
+	raw, err := ffiHNSWIndexConfig(handle)
+	if err != nil {
+		return HNSWConfig{}, err
+	}
+	return decodeHNSWConfig(raw)
+}
+
+func (i *HNSWIndex) IsCanonical() (bool, error) {
+	handle, unlock, err := i.withHandle()
+	if err != nil {
+		return false, err
+	}
+	defer unlock()
+	return ffiHNSWIndexIsCanonical(handle)
+}
+
+func (i *HNSWIndex) Search(ctx context.Context, proximity *ProximityMap, request SearchRequest) (SearchResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return SearchResult{}, err
+	}
+	request = cloneSearchRequest(request)
+	encodedRequest, err := encodeProximitySearchRequest(request)
+	if err != nil {
+		return SearchResult{}, err
+	}
+	indexHandle, indexUnlock, err := i.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer indexUnlock()
+	mapHandle, _, mapUnlock, err := proximity.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer mapUnlock()
+	raw, err := ffiHNSWIndexSearch(indexHandle, mapHandle, encodedRequest)
+	if err != nil {
+		return SearchResult{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return SearchResult{}, err
+	}
+	return decodeProximitySearchResultBytes(raw)
+}
+
+func (i *HNSWIndex) ProveSearch(proximity *ProximityMap, request SearchRequest) (*ProximitySearchProof, error) {
+	request = cloneSearchRequest(request)
+	encodedRequest, err := encodeProximitySearchRequest(request)
+	if err != nil {
+		return nil, err
+	}
+	limits, err := ffiDefaultContentGraphLimits()
+	if err != nil {
+		return nil, err
+	}
+	indexHandle, indexUnlock, err := i.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer indexUnlock()
+	mapHandle, _, mapUnlock, err := proximity.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer mapUnlock()
+	proofHandle, err := ffiHNSWIndexProveSearch(indexHandle, mapHandle, encodedRequest, limits)
+	if err != nil {
+		return nil, err
+	}
+	proof := &ProximitySearchProof{handle: proofHandle}
+	runtime.SetFinalizer(proof, (*ProximitySearchProof).Close)
+	return proof, nil
 }
 
 func encodeProximityRecords(dimensions uint32, records []ProximityRecord) ([]byte, error) {
