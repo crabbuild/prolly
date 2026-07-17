@@ -286,6 +286,8 @@ module Prolly
     def snapshot_at(id) = open! { @native.snapshot_at(id.b)&.then { |value| MapSnapshot.new(value) } }
     def compare(base, target) = open! { MapComparison.new(@native.compare(base.b, target.b)) }
     def compare_to_head(base) = open! { MapComparison.new(@native.compare_to_head(base.b)) }
+    def subscribe = open! { MapSubscription.new(@native.subscribe) }
+    def subscribe_from(last_seen = nil) = open! { MapSubscription.new(@native.subscribe_from(last_seen&.b)) }
     def backup = open! { @native.backup }
     def restore_backup(bundle) = open! { @native.restore_backup(bundle.b) }
     def keep_last(count) = open! { @native.keep_last(count) }
@@ -325,6 +327,24 @@ module Prolly
 
     def open!
       raise IOError, 'map comparison is closed' if @closed
+      yield
+    end
+  end
+
+  class MapSubscription
+    def initialize(native)
+      @native = native
+      @closed = false
+    end
+
+    def last_seen = open! { @native.last_seen }
+    def poll = open! { @native.poll }
+    def close = @closed = true
+
+    private
+
+    def open!
+      raise IOError, 'map subscription is closed' if @closed
       yield
     end
   end

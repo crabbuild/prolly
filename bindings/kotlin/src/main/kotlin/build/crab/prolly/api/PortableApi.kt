@@ -4,6 +4,7 @@ import build.crab.prolly.BindingIndexedMap
 import build.crab.prolly.BindingIndexedSnapshot
 import build.crab.prolly.BindingIndexRegistry
 import build.crab.prolly.BindingMapComparison
+import build.crab.prolly.BindingMapSubscription
 import build.crab.prolly.BindingProximityMap
 import build.crab.prolly.BindingProximityReadSession
 import build.crab.prolly.BindingProximitySearchProof
@@ -105,6 +106,9 @@ class VersionedMap(internal val native: BindingVersionedMap) : AutoCloseable {
     fun compare(base: ByteArray, target: ByteArray) =
         MapComparison(native.compare(base.copyOf(), target.copyOf()))
     fun compareToHead(base: ByteArray) = MapComparison(native.compareToHead(base.copyOf()))
+    fun subscribe() = MapSubscription(native.subscribe())
+    fun subscribeFrom(lastSeen: ByteArray? = null) =
+        MapSubscription(native.subscribeFrom(lastSeen?.copyOf()))
     fun versions() = native.versions()
     fun backup() = native.backup()
     fun restoreBackup(bundle: ByteArray) = native.restoreBackup(bundle.copyOf())
@@ -128,6 +132,12 @@ class MapComparison(internal val native: BindingMapComparison) : AutoCloseable {
     fun diff() = native.diff()
     fun diffPage(cursor: RangeCursorRecord? = null, end: ByteArray? = null, limit: ULong = 256uL) =
         native.diffPage(cursor, end?.copyOf(), limit)
+    override fun close() = native.close()
+}
+
+class MapSubscription(internal val native: BindingMapSubscription) : AutoCloseable {
+    fun lastSeen() = native.lastSeen()?.copyOf()
+    fun poll() = native.poll()
     override fun close() = native.close()
 }
 

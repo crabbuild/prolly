@@ -990,6 +990,12 @@ export interface WasmDiffPage {
   nextCursor?: WasmRangeCursorRecord | null;
 }
 
+export interface WasmMapChangeEvent {
+  previous?: Uint8Array;
+  current: WasmMapVersion;
+  diffs: WasmMapDiff[];
+}
+
 function wasmMapVersion(value: any): WasmMapVersion {
   return {
     id: value.id,
@@ -1124,6 +1130,12 @@ export class WasmVersionedMap implements Disposable {
   compareToHead(base: Uint8Array): WasmMapComparison {
     return new WasmMapComparison(this.#open().compareToHead(ownedPortableBytes(base)));
   }
+  subscribe(): WasmMapSubscription { return new WasmMapSubscription(this.#open().subscribe()); }
+  subscribeFrom(lastSeen?: Uint8Array): WasmMapSubscription {
+    return new WasmMapSubscription(this.#open().subscribeFrom(
+      lastSeen == null ? undefined : ownedPortableBytes(lastSeen),
+    ));
+  }
   backup(signal?: AbortSignal): Promise<Uint8Array> {
     const native = this.#open();
     return portablePromise(signal, () => native.backup());
@@ -1162,6 +1174,23 @@ export class WasmMapComparison implements Disposable {
     return this.#open().diffPage(
       cursor, end == null ? undefined : ownedPortableBytes(end), limit,
     );
+  }
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class WasmMapSubscription implements Disposable {
+  #native?: any;
+  constructor(native: any) { this.#native = native; }
+  #open(): any { if (this.#native == null) throw new Error("WASM map subscription is closed"); return this.#native; }
+  lastSeen(): Uint8Array | undefined { return this.#open().lastSeen() ?? undefined; }
+  poll(): WasmMapChangeEvent | undefined {
+    const event = this.#open().poll();
+    return event == null ? undefined : {
+      previous: event.previous ?? undefined,
+      current: wasmMapVersion(event.current),
+      diffs: event.diffs,
+    };
   }
   close(): void { this.#native?.free?.(); this.#native = undefined; }
   [Symbol.dispose](): void { this.close(); }

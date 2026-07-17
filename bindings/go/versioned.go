@@ -1,6 +1,7 @@
 package prolly
 
 import (
+	"bytes"
 	"errors"
 	"runtime"
 	"sync"
@@ -65,6 +66,108 @@ type MapComparison struct {
 	base   MapVersion
 	target MapVersion
 	closed atomic.Bool
+}
+
+type MapChangeEvent struct {
+	Previous []byte
+	Current  MapVersion
+	Diffs    []Diff
+}
+
+// MapSubscription is a resumable explicitly-polled change stream.
+type MapSubscription struct {
+	engine   *Engine
+	mapID    []byte
+	lastSeen []byte
+	closed   atomic.Bool
+	mu       sync.Mutex
+}
+
+func (m *VersionedMap) Subscribe() (*MapSubscription, error) {
+	id, err := m.ID()
+	if err != nil {
+		return nil, err
+	}
+	lastSeen, ok, err := m.HeadID()
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		lastSeen = nil
+	}
+	return &MapSubscription{engine: m.engine, mapID: id, lastSeen: bytes.Clone(lastSeen)}, nil
+}
+
+func (m *VersionedMap) SubscribeFrom(lastSeen []byte) (*MapSubscription, error) {
+	id, err := m.ID()
+	if err != nil {
+		return nil, err
+	}
+	return &MapSubscription{engine: m.engine, mapID: id, lastSeen: bytes.Clone(lastSeen)}, nil
+}
+
+func (s *MapSubscription) Close() {
+	if s != nil {
+		s.closed.Store(true)
+	}
+}
+
+func (s *MapSubscription) LastSeen() ([]byte, bool, error) {
+	if s == nil || s.closed.Load() {
+		return nil, false, errors.New("map subscription is closed")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.lastSeen == nil {
+		return nil, false, nil
+	}
+	return bytes.Clone(s.lastSeen), true, nil
+}
+
+func (s *MapSubscription) Poll() (*MapChangeEvent, error) {
+	if s == nil || s.closed.Load() {
+		return nil, errors.New("map subscription is closed")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed.Load() {
+		return nil, errors.New("map subscription is closed")
+	}
+	mapHandle, err := s.engine.VersionedMap(s.mapID)
+	if err != nil {
+		return nil, err
+	}
+	defer mapHandle.Close()
+	current, err := mapHandle.Head()
+	if err != nil || current == nil {
+		return nil, err
+	}
+	if bytes.Equal(s.lastSeen, current.ID) {
+		return nil, nil
+	}
+	var previousTree Tree
+	if s.lastSeen == nil {
+		previousTree, err = s.engine.Create()
+	} else {
+		previous, loadErr := mapHandle.Version(s.lastSeen)
+		if loadErr != nil {
+			return nil, loadErr
+		}
+		if previous == nil {
+			return nil, errors.New("subscription resume version was pruned")
+		}
+		previousTree = previous.Tree
+	}
+	if err != nil {
+		return nil, err
+	}
+	diffs, err := s.engine.Diff(previousTree, current.Tree)
+	if err != nil {
+		return nil, err
+	}
+	previous := bytes.Clone(s.lastSeen)
+	s.lastSeen = bytes.Clone(current.ID)
+	return &MapChangeEvent{Previous: previous, Current: *current, Diffs: diffs}, nil
 }
 
 func (m *VersionedMap) Compare(baseID, targetID []byte) (*MapComparison, error) {

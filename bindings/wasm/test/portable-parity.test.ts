@@ -350,3 +350,20 @@ test("WASM versioned comparisons pin versions and page diffs", { skip: !generate
   comparison.close();
   engine.close();
 });
+
+test("WASM versioned subscriptions resume and poll owned diffs", { skip: !generatedPresent }, async () => {
+  const engine = api.Engine.memory(wasm);
+  const map = engine.versionedMap(bytes("subscription"));
+  const initial = await map.initialize();
+  const subscription = map.subscribe();
+  assert.deepEqual(subscription.lastSeen(), initial.id);
+  assert.equal(subscription.poll(), undefined);
+  const current = await map.put(bytes("k"), bytes("v"));
+  const event = subscription.poll();
+  assert.deepEqual(event?.previous, initial.id);
+  assert.deepEqual(event?.current.id, current.id);
+  assert.deepEqual(event?.diffs.map((diff: any) => Buffer.from(diff.key).toString()), ["k"]);
+  assert.deepEqual(subscription.lastSeen(), current.id);
+  subscription.close();
+  engine.close();
+});

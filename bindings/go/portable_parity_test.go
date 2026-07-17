@@ -158,6 +158,50 @@ func TestPortableVersionedComparisonPinsVersionsAndPagesDiffs(t *testing.T) {
 	}
 }
 
+func TestPortableVersionedSubscriptionResumesAndPollsOwnedDiffs(t *testing.T) {
+	config, err := DefaultConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine, err := NewMemoryEngine(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer engine.Close()
+	versioned, err := engine.VersionedMap([]byte("subscription"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer versioned.Close()
+	initial, err := versioned.Initialize()
+	if err != nil {
+		t.Fatal(err)
+	}
+	subscription, err := versioned.Subscribe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer subscription.Close()
+	lastSeen, ok, err := subscription.LastSeen()
+	if err != nil || !ok || !bytes.Equal(lastSeen, initial.ID) {
+		t.Fatalf("last seen = %x, %v, %v", lastSeen, ok, err)
+	}
+	if event, err := subscription.Poll(); err != nil || event != nil {
+		t.Fatalf("initial poll = %+v, %v", event, err)
+	}
+	current, err := versioned.Put([]byte("k"), []byte("v"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	event, err := subscription.Poll()
+	if err != nil || event == nil {
+		t.Fatalf("poll = %+v, %v", event, err)
+	}
+	if !bytes.Equal(event.Previous, initial.ID) || !bytes.Equal(event.Current.ID, current.ID) || len(event.Diffs) != 1 || !bytes.Equal(event.Diffs[0].Key, []byte("k")) {
+		t.Fatalf("event = %+v", event)
+	}
+}
+
 func TestPortableContextCancellation(t *testing.T) {
 	engine, err := OpenMemory()
 	if err != nil {

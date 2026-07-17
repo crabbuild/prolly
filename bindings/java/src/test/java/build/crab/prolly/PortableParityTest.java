@@ -360,6 +360,24 @@ class PortableParityTest {
         }
     }
 
+    @Test
+    void versionedSubscriptionsResumeAndPollOwnedDiffs() {
+        Prolly.useLocalDebugLibrary();
+        try (Engine engine = Engine.memory(); var map = engine.versionedMap(bytes("subscription"))) {
+            var initial = map.initialize();
+            try (var subscription = map.subscribe()) {
+                assertArrayEquals(initial.id(), subscription.lastSeen().orElseThrow());
+                assertTrue(subscription.poll().isEmpty());
+                var current = map.put(bytes("k"), bytes("v"));
+                var event = subscription.poll().orElseThrow();
+                assertArrayEquals(initial.id(), event.getPrevious());
+                assertArrayEquals(current.id(), event.getCurrent().getId());
+                assertEquals(List.of("k"), event.getDiffs().stream().map(diff -> new String(diff.getKey())).toList());
+                assertArrayEquals(current.id(), subscription.lastSeen().orElseThrow());
+            }
+        }
+    }
+
     private static byte[] bytes(String value) {
         return value.getBytes(StandardCharsets.UTF_8);
     }

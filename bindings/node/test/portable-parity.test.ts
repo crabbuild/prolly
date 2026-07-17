@@ -402,3 +402,22 @@ test("versioned comparisons pin versions and page diffs", async () => {
     engine.close();
   }
 });
+
+test("versioned subscriptions resume and poll owned diffs", async () => {
+  const engine = await Engine.memory();
+  try {
+    const map = engine.versionedMap(bytes("subscription"));
+    const initial = await map.initialize();
+    using subscription = map.subscribe();
+    assert.deepEqual(subscription.lastSeen(), initial.id);
+    assert.equal(await subscription.poll(), undefined);
+    const current = await map.put(bytes("k"), bytes("v"));
+    const event = await subscription.poll();
+    assert.deepEqual(event?.previous, initial.id);
+    assert.deepEqual(event?.current.id, current.id);
+    assert.deepEqual(event?.diffs.map((diff) => Buffer.from(diff.key).toString()), ["k"]);
+    assert.deepEqual(subscription.lastSeen(), current.id);
+  } finally {
+    engine.close();
+  }
+});
