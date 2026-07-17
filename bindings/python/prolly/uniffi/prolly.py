@@ -907,6 +907,8 @@ def _uniffi_check_api_checksums(lib):
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_bindingindexedmap_metrics() != 61793:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_bindingindexedmap_plan_gc() != 48857:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_bindingindexedmap_put() != 8190:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_bindingindexedmap_repair_index() != 41978:
@@ -3793,6 +3795,11 @@ _UniffiLib.uniffi_prolly_bindings_fn_method_bindingindexedmap_metrics.argtypes =
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UniffiLib.uniffi_prolly_bindings_fn_method_bindingindexedmap_metrics.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindingindexedmap_plan_gc.argtypes = (
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindingindexedmap_plan_gc.restype = _UniffiRustBuffer
 _UniffiLib.uniffi_prolly_bindings_fn_method_bindingindexedmap_put.argtypes = (
     ctypes.c_uint64,
     _UniffiRustBuffer,
@@ -7223,6 +7230,9 @@ _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingindexedmap_keep_last.re
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingindexedmap_metrics.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingindexedmap_metrics.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindingindexedmap_plan_gc.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindingindexedmap_plan_gc.restype = ctypes.c_uint16
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingindexedmap_put.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingindexedmap_put.restype = ctypes.c_uint16
@@ -25668,6 +25678,8 @@ class BindingIndexedMapProtocol(typing.Protocol):
         raise NotImplementedError
     def metrics(self, ) -> IndexedMapMetricsRecord:
         raise NotImplementedError
+    def plan_gc(self, ) -> GcPlanRecord:
+        raise NotImplementedError
     def put(self, key: bytes,value: bytes) -> IndexedVersionRecord:
         raise NotImplementedError
     def repair_index(self, name: bytes,source_version: bytes) -> IndexVerificationRecord:
@@ -25895,6 +25907,18 @@ class BindingIndexedMap(BindingIndexedMapProtocol):
         _uniffi_ffi_result = _uniffi_rust_call_with_error(
             _uniffi_error_converter,
             _UniffiLib.uniffi_prolly_bindings_fn_method_bindingindexedmap_metrics,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def plan_gc(self, ) -> GcPlanRecord:
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeGcPlanRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingindexedmap_plan_gc,
             *_uniffi_lowered_args,
         )
         return _uniffi_lift_return(_uniffi_ffi_result)

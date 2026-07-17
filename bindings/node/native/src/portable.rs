@@ -2989,6 +2989,11 @@ impl NativePortableIndexedMap {
             .map(Into::into)
             .map_err(to_napi_error)
     }
+
+    #[napi(js_name = "planGc")]
+    pub fn plan_gc(&self) -> Result<NodeGcPlanRecord> {
+        self.inner.plan_gc().map(Into::into).map_err(to_napi_error)
+    }
 }
 
 #[napi]

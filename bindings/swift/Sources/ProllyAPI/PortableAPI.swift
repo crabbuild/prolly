@@ -822,6 +822,7 @@ public final class IndexedMap: @unchecked Sendable {
     public func keepLast(_ count: UInt64) throws -> IndexedRetentionRecord {
         try native.keepLast(count: count)
     }
+    public func planGC() throws -> GcPlanRecord { try native.planGc() }
     public func getAsync(_ key: Data) -> Task<Data?, Error> {
         let owned = Data(key)
         return Task { try Task.checkCancellation(); return try self.get(owned) }

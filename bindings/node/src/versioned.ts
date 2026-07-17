@@ -305,7 +305,7 @@ function catalogVerification(value: NativeCatalogVerification): CatalogVerificat
   };
 }
 
-function gcPlan(value: NativeGcPlan): GcPlan {
+export function gcPlan(value: NativeGcPlan): GcPlan {
   return {
     reachability: {
       liveCids: value.reachability.liveCids,

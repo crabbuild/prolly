@@ -2265,6 +2265,7 @@ export class WasmIndexedMap implements Disposable {
       removedNamedRoots: value.removedNamedRoots,
     };
   }
+  planGc(): WasmGcPlan { return wasmGcPlan(this.#open().planGc()); }
   close(): void { this.#native?.free?.(); this.#native = undefined; }
   [Symbol.dispose](): void { this.close(); }
 }

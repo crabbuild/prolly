@@ -512,6 +512,20 @@ impl WasmIndexedMap {
         self.capture_metrics(map.metrics());
         result
     }
+
+    #[wasm_bindgen(js_name = planGc)]
+    pub fn plan_gc(&self) -> Result<Object, JsValue> {
+        let map = self
+            .engine
+            .indexed_map(&self.id, self.registry.clone())
+            .map_err(js_error)?;
+        let result = map
+            .plan_indexed_gc()
+            .map_err(js_error)
+            .and_then(super::domain::gc_plan_object);
+        self.capture_metrics(map.metrics());
+        result
+    }
 }
 
 #[wasm_bindgen(js_name = WasmIndexedSnapshot)]

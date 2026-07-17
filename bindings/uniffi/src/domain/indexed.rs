@@ -9,7 +9,7 @@ use prolly::{
     SecondaryIndexRegistry,
 };
 
-use crate::{BindingEngine, MutationRecord, ProllyBindingError, ProllyEngine};
+use crate::{BindingEngine, GcPlanRecord, MutationRecord, ProllyBindingError, ProllyEngine};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, uniffi::Enum)]
 pub enum IndexProjectionRecord {
@@ -814,6 +814,10 @@ impl BindingIndexedMap {
             map.keep_last(count).map(Into::into).map_err(Into::into)
         })
     }
+
+    pub fn plan_gc(&self) -> Result<GcPlanRecord, ProllyBindingError> {
+        with_indexed_map!(self, map, { GcPlanRecord::try_from(map.plan_indexed_gc()?) })
+    }
 }
 
 #[derive(uniffi::Object)]
@@ -1139,6 +1143,7 @@ mod tests {
             .unwrap()
             .retained_source_versions
             .is_empty());
+        assert!(map.plan_gc().unwrap().reachability.live_nodes > 0);
 
         let stale = map.health().unwrap().source_version.unwrap();
         map.put(b"u2".to_vec(), b"next".to_vec()).unwrap();

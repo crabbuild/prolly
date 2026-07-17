@@ -823,6 +823,8 @@ object JavaPortableBridge {
 
     @JvmStatic
     fun versionedPlanGc(map: VersionedMap): JavaGcPlan = map.planGc().toJava()
+    @JvmStatic
+    fun indexedPlanGc(map: IndexedMap): JavaGcPlan = map.planGc().toJava()
 
     @JvmStatic
     fun versionedSweepGc(map: VersionedMap): JavaGcSweep = map.sweepGc().toJava()

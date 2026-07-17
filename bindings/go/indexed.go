@@ -496,6 +496,19 @@ func (m *IndexedMap) KeepLast(count uint64) (IndexedRetention, error) {
 	}
 	return decodeIndexedRetention(raw)
 }
+
+func (m *IndexedMap) PlanGC() (GcPlan, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return GcPlan{}, err
+	}
+	defer unlock()
+	raw, err := ffiIndexedMapPlanGC(handle)
+	if err != nil {
+		return GcPlan{}, err
+	}
+	return decodeGcPlan(raw)
+}
 func (m *IndexedMap) Snapshot() (*IndexedSnapshot, error) {
 	handle, unlock, err := m.withHandle()
 	if err != nil {

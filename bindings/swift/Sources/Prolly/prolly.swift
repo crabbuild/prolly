@@ -2232,6 +2232,8 @@ public protocol BindingIndexedMapProtocol: AnyObject, Sendable {
     
     func metrics() throws  -> IndexedMapMetricsRecord
     
+    func planGc() throws  -> GcPlanRecord
+    
     func put(key: Data, value: Data) throws  -> IndexedVersionRecord
     
     func repairIndex(name: Data, sourceVersion: Data) throws  -> IndexVerificationRecord
@@ -2411,6 +2413,14 @@ open func keepLast(count: UInt64)throws  -> IndexedRetentionRecord  {
 open func metrics()throws  -> IndexedMapMetricsRecord  {
     return try  FfiConverterTypeIndexedMapMetricsRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingindexedmap_metrics(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+open func planGc()throws  -> GcPlanRecord  {
+    return try  FfiConverterTypeGcPlanRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingindexedmap_plan_gc(
             self.uniffiCloneHandle(),$0
     )
 })
@@ -31588,6 +31598,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_bindingindexedmap_metrics() != 61793) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingindexedmap_plan_gc() != 48857) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_bindingindexedmap_put() != 8190) {

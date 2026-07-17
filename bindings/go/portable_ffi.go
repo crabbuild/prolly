@@ -203,6 +203,7 @@ extern RustBuffer uniffi_prolly_bindings_fn_method_bindingindexedmap_deactivate_
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingindexedmap_export_current(uint64_t ptr, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingindexedmap_import_current(uint64_t ptr, RustBuffer bundle, RustBuffer expected_source, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingindexedmap_keep_last(uint64_t ptr, uint64_t count, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingindexedmap_plan_gc(uint64_t ptr, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingindexedmap_metrics(uint64_t ptr, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingindexedmap_verify_all(uint64_t ptr, RustBuffer source_version, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingindexedmap_verify_index(uint64_t ptr, RustBuffer name, RustBuffer source_version, RustCallStatus *out_err);
@@ -2271,6 +2272,19 @@ func ffiIndexedMapKeepLast(handle, count uint64) ([]byte, error) {
 	}
 	var status C.RustCallStatus
 	buf := C.uniffi_prolly_bindings_fn_method_bindingindexedmap_keep_last(clone, C.uint64_t(count), &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiIndexedMapPlanGC(handle uint64) ([]byte, error) {
+	clone, err := portableCloneIndexedMap(handle)
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingindexedmap_plan_gc(clone, &status)
 	if err := portableStatusError(&status); err != nil {
 		return nil, err
 	}

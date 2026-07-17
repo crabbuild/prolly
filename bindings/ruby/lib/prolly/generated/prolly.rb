@@ -16066,6 +16066,9 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_fn_method_bindingindexedmap_metrics,
     [:uint64, RustCallStatus.by_ref],
     RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingindexedmap_plan_gc,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_method_bindingindexedmap_put,
     [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
@@ -18476,6 +18479,9 @@ module UniFFILib
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_bindingindexedmap_metrics,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingindexedmap_plan_gc,
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_bindingindexedmap_put,
@@ -29995,6 +30001,10 @@ end
   def metrics()
     result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingindexedmap_metrics,uniffi_clone_handle(),)
     return result.consumeIntoTypeIndexedMapMetricsRecord
+  end
+  def plan_gc()
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingindexedmap_plan_gc,uniffi_clone_handle(),)
+    return result.consumeIntoTypeGcPlanRecord
   end
   def put(key, value)
         key = Prolly::uniffi_bytes(key)

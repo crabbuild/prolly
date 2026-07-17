@@ -329,6 +329,7 @@ module Prolly
     def export_current = open! { @native.export_current }
     def import_current(bundle, expected_source = nil) = open! { @native.import_current(bundle.b, expected_source&.b) }
     def keep_last(count) = open! { @native.keep_last(count) }
+    def plan_gc = open! { @native.plan_gc }
     def snapshot = open! { IndexedSnapshot.new(@native.snapshot) }
     def snapshot_at(source_version) = open! { IndexedSnapshot.new(@native.snapshot_at(source_version.b)) }
     def snapshot_by_id(id) = open! { IndexedSnapshot.new(@native.snapshot_by_id(id)) }

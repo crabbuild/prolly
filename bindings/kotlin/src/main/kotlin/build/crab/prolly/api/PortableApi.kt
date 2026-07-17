@@ -504,6 +504,7 @@ class IndexedMap(internal val native: BindingIndexedMap) : AutoCloseable {
     fun importCurrent(bundle: ByteArray, expectedSource: ByteArray? = null) =
         native.importCurrent(bundle.copyOf(), expectedSource?.copyOf())
     fun keepLast(count: ULong) = native.keepLast(count)
+    fun planGc() = native.planGc()
     suspend fun getAsync(key: ByteArray) = key.copyOf().let { owned ->
         withContext(Dispatchers.IO) { get(owned) }
     }

@@ -1,4 +1,5 @@
 import { nativePromise, ownedBytes, scopedBytes, type ViewScope } from "./packed.ts";
+import { gcPlan, type GcPlan } from "./versioned.ts";
 
 export type IndexProjection = "keys_only" | "include" | "all";
 
@@ -225,6 +226,7 @@ interface NativeIndexedMap {
     removedCatalogVersions: Uint8Array[]; removedCheckpointRecords: string;
     removedNamedRoots: Uint8Array[];
   };
+  planGc(): any;
 }
 
 interface NativeIndexVerification {
@@ -391,6 +393,7 @@ export class IndexedMap implements Disposable {
       removedNamedRoots: value.removedNamedRoots,
     };
   }
+  planGc(): GcPlan { return gcPlan(this.#open().planGc()); }
   close(): void { this.#native = undefined; }
   [Symbol.dispose](): void { this.close(); }
 }
