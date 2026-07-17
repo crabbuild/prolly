@@ -12,9 +12,9 @@ use std::slice;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, Weak};
 
-use super::{BindingRangeScanSession, ProllyReadSession};
+use super::{BindingRangeScanSession, BindingSecondaryIndexSnapshot, ProllyReadSession};
 use crate::domain::handle::{HandleKind, HandleRegistry, ResourceHandle};
-use crate::domain::page::{PackedPage, PageLimits};
+use crate::domain::page::{PackedPage, PackedPageBuilder, PackedPageKind, PageLimits};
 
 pub const FAST_ABI_VERSION: u32 = 1;
 pub const FAST_CAP_GET_INTO: u64 = 1 << 0;
@@ -22,6 +22,7 @@ pub const FAST_CAP_SCAN_PAGE: u64 = 1 << 1;
 pub const FAST_CAP_RETAINED_SCAN: u64 = 1 << 2;
 pub const FAST_CAP_GET_MANY_PAGE: u64 = 1 << 3;
 pub const FAST_CAP_VALUE_LEASE: u64 = 1 << 4;
+pub const FAST_CAP_INDEX_CURSOR: u64 = 1 << 5;
 
 pub const FAST_STATUS_OK: i32 = 0;
 pub const FAST_STATUS_BUFFER_TOO_SMALL: i32 = 1;
@@ -81,12 +82,36 @@ struct FastPageLease {
     bytes: Box<[u8]>,
 }
 
+enum FastIndexQuery {
+    Exact(Vec<u8>),
+    Prefix(Vec<u8>),
+    Range(Vec<u8>, Option<Vec<u8>>),
+}
+
+struct FastIndexCursorState {
+    cursor: Option<Vec<u8>>,
+    terminal: bool,
+}
+
+struct FastIndexCursorHandle {
+    owner_snapshot: u64,
+    query: FastIndexQuery,
+    reverse: bool,
+    state: Mutex<FastIndexCursorState>,
+}
+
 static NEXT_SESSION_HANDLE: AtomicU64 = AtomicU64::new(1);
 static NEXT_SCAN_HANDLE: AtomicU64 = AtomicU64::new(1);
 static NEXT_VALUE_HANDLE: AtomicU64 = AtomicU64::new(1);
+static NEXT_INDEX_SNAPSHOT_HANDLE: AtomicU64 = AtomicU64::new(1);
+static NEXT_INDEX_CURSOR_HANDLE: AtomicU64 = AtomicU64::new(1);
 static SESSION_HANDLES: OnceLock<Mutex<HashMap<u64, Weak<ProllyReadSession>>>> = OnceLock::new();
 static SCAN_HANDLES: OnceLock<Mutex<HashMap<u64, Arc<FastScanHandle>>>> = OnceLock::new();
 static VALUE_HANDLES: OnceLock<Mutex<HashMap<u64, Arc<prolly::OwnedValueLease>>>> = OnceLock::new();
+static INDEX_SNAPSHOT_HANDLES: OnceLock<Mutex<HashMap<u64, Weak<BindingSecondaryIndexSnapshot>>>> =
+    OnceLock::new();
+static INDEX_CURSOR_HANDLES: OnceLock<Mutex<HashMap<u64, Arc<FastIndexCursorHandle>>>> =
+    OnceLock::new();
 static RESOURCE_HANDLES: OnceLock<HandleRegistry> = OnceLock::new();
 
 fn session_handles() -> &'static Mutex<HashMap<u64, Weak<ProllyReadSession>>> {
@@ -103,6 +128,73 @@ fn resource_handles() -> &'static HandleRegistry {
 
 fn value_handles() -> &'static Mutex<HashMap<u64, Arc<prolly::OwnedValueLease>>> {
     VALUE_HANDLES.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn index_snapshot_handles() -> &'static Mutex<HashMap<u64, Weak<BindingSecondaryIndexSnapshot>>> {
+    INDEX_SNAPSHOT_HANDLES.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn index_cursor_handles() -> &'static Mutex<HashMap<u64, Arc<FastIndexCursorHandle>>> {
+    INDEX_CURSOR_HANDLES.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+pub(crate) fn register_index_snapshot(snapshot: &Arc<BindingSecondaryIndexSnapshot>) -> u64 {
+    let mut handles = index_snapshot_handles()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    loop {
+        let handle = next_nonzero_handle(&NEXT_INDEX_SNAPSHOT_HANDLE);
+        if let std::collections::hash_map::Entry::Vacant(entry) = handles.entry(handle) {
+            entry.insert(Arc::downgrade(snapshot));
+            return handle;
+        }
+    }
+}
+
+pub(crate) fn unregister_index_snapshot(handle: u64) {
+    if handle == 0 {
+        return;
+    }
+    index_snapshot_handles()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .remove(&handle);
+    index_cursor_handles()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .retain(|_, cursor| cursor.owner_snapshot != handle);
+}
+
+fn index_snapshot_from_handle(handle: u64) -> Option<Arc<BindingSecondaryIndexSnapshot>> {
+    let mut handles = index_snapshot_handles()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let snapshot = handles.get(&handle).and_then(Weak::upgrade);
+    if snapshot.is_none() {
+        handles.remove(&handle);
+    }
+    snapshot
+}
+
+fn register_index_cursor(cursor: FastIndexCursorHandle) -> u64 {
+    let mut handles = index_cursor_handles()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    loop {
+        let handle = next_nonzero_handle(&NEXT_INDEX_CURSOR_HANDLE);
+        if let std::collections::hash_map::Entry::Vacant(entry) = handles.entry(handle) {
+            entry.insert(Arc::new(cursor));
+            return handle;
+        }
+    }
+}
+
+fn index_cursor_from_handle(handle: u64) -> Option<Arc<FastIndexCursorHandle>> {
+    index_cursor_handles()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .get(&handle)
+        .cloned()
 }
 
 fn next_nonzero_handle(counter: &AtomicU64) -> u64 {
@@ -338,6 +430,7 @@ pub extern "C" fn prolly_fast_abi_capabilities() -> u64 {
         | FAST_CAP_RETAINED_SCAN
         | FAST_CAP_GET_MANY_PAGE
         | FAST_CAP_VALUE_LEASE
+        | FAST_CAP_INDEX_CURSOR
 }
 
 unsafe fn input_slice<'a>(ptr: *const u8, len: usize) -> Option<&'a [u8]> {
@@ -1107,6 +1200,236 @@ pub unsafe extern "C" fn prolly_fast_read_session_scan_next(
     }
 }
 
+/// Open a retained, snapshot-bound secondary-index cursor. Query kinds are
+/// `1=exact`, `2=prefix`, and `3=range`; `reverse` selects descending order.
+#[no_mangle]
+pub unsafe extern "C" fn prolly_fast_index_cursor_open(
+    snapshot_handle: u64,
+    query_kind: u32,
+    start_ptr: *const u8,
+    start_len: usize,
+    end_ptr: *const u8,
+    end_len: usize,
+    has_end: u8,
+    reverse: u8,
+) -> FastScanOpenResult {
+    if index_snapshot_from_handle(snapshot_handle).is_none()
+        || start_len > MAX_BOUND_BYTES
+        || end_len > MAX_BOUND_BYTES
+        || has_end > 1
+        || reverse > 1
+        || !(1..=3).contains(&query_kind)
+        || (query_kind != 3 && has_end != 0)
+    {
+        return FastScanOpenResult {
+            status: FAST_STATUS_INVALID_ARGUMENT,
+            ..FastScanOpenResult::default()
+        };
+    }
+    let Some(start) = (unsafe { input_slice(start_ptr, start_len) }) else {
+        return FastScanOpenResult {
+            status: FAST_STATUS_INVALID_ARGUMENT,
+            ..FastScanOpenResult::default()
+        };
+    };
+    let end = if has_end == 0 {
+        None
+    } else {
+        let Some(end) = (unsafe { input_slice(end_ptr, end_len) }) else {
+            return FastScanOpenResult {
+                status: FAST_STATUS_INVALID_ARGUMENT,
+                ..FastScanOpenResult::default()
+            };
+        };
+        Some(end.to_vec())
+    };
+    let query = match query_kind {
+        1 => FastIndexQuery::Exact(start.to_vec()),
+        2 => FastIndexQuery::Prefix(start.to_vec()),
+        3 => FastIndexQuery::Range(start.to_vec(), end),
+        _ => unreachable!("query kind validated above"),
+    };
+    let handle = register_index_cursor(FastIndexCursorHandle {
+        owner_snapshot: snapshot_handle,
+        query,
+        reverse: reverse != 0,
+        state: Mutex::new(FastIndexCursorState {
+            cursor: None,
+            terminal: false,
+        }),
+    });
+    FastScanOpenResult {
+        status: FAST_STATUS_OK,
+        scan_handle: handle,
+        ..FastScanOpenResult::default()
+    }
+}
+
+/// Continue a retained secondary-index cursor and return one leased PRPG v2
+/// index-match page. The last record carries the stable continuation cursor.
+#[no_mangle]
+pub unsafe extern "C" fn prolly_fast_index_cursor_next(
+    snapshot_handle: u64,
+    cursor_handle: u64,
+    max_records: u32,
+    max_arena_bytes: u64,
+) -> FastPageResult {
+    let Some(snapshot) = index_snapshot_from_handle(snapshot_handle) else {
+        return FastPageResult {
+            status: FAST_STATUS_INVALID_ARGUMENT,
+            ..FastPageResult::default()
+        };
+    };
+    let Some(cursor) = index_cursor_from_handle(cursor_handle) else {
+        return FastPageResult {
+            status: FAST_STATUS_INVALID_ARGUMENT,
+            ..FastPageResult::default()
+        };
+    };
+    if cursor.owner_snapshot != snapshot_handle
+        || max_records == 0
+        || max_records > MAX_PAGE_RECORDS
+        || max_arena_bytes == 0
+        || max_arena_bytes > MAX_PAGE_ARENA_BYTES
+    {
+        return FastPageResult {
+            status: FAST_STATUS_INVALID_ARGUMENT,
+            ..FastPageResult::default()
+        };
+    }
+
+    match catch_unwind(AssertUnwindSafe(|| {
+        let Ok(mut state) = cursor.state.lock() else {
+            return FastPageResult {
+                status: FAST_STATUS_READ_ERROR,
+                ..FastPageResult::default()
+            };
+        };
+        if state.terminal {
+            let bytes = match PackedPageBuilder::with_limits(
+                PackedPageKind::IndexMatch,
+                PageLimits {
+                    max_records,
+                    max_arena_bytes,
+                },
+            )
+            .finish(true)
+            {
+                Ok(bytes) => bytes,
+                Err(_) => {
+                    return FastPageResult {
+                        status: FAST_STATUS_READ_ERROR,
+                        ..FastPageResult::default()
+                    };
+                }
+            };
+            let (lease_handle, data_ptr, data_len) = register_page(bytes);
+            return FastPageResult {
+                status: FAST_STATUS_OK,
+                terminal: 1,
+                lease_handle,
+                data_ptr,
+                data_len,
+                ..FastPageResult::default()
+            };
+        }
+
+        let current = state.cursor.clone();
+        let page = match (&cursor.query, cursor.reverse) {
+            (FastIndexQuery::Exact(term), false) => {
+                snapshot.exact_page(term.clone(), current, max_records as u64)
+            }
+            (FastIndexQuery::Exact(term), true) => {
+                snapshot.exact_reverse_page(term.clone(), current, max_records as u64)
+            }
+            (FastIndexQuery::Prefix(prefix), false) => {
+                snapshot.prefix_page(prefix.clone(), current, max_records as u64)
+            }
+            (FastIndexQuery::Prefix(prefix), true) => {
+                snapshot.prefix_reverse_page(prefix.clone(), current, max_records as u64)
+            }
+            (FastIndexQuery::Range(start, end), false) => {
+                snapshot.range_page(start.clone(), end.clone(), current, max_records as u64)
+            }
+            (FastIndexQuery::Range(start, end), true) => {
+                snapshot.range_reverse_page(start.clone(), end.clone(), current, max_records as u64)
+            }
+        };
+        let Ok(page) = page else {
+            return FastPageResult {
+                status: FAST_STATUS_READ_ERROR,
+                ..FastPageResult::default()
+            };
+        };
+        let terminal = page.next_cursor.is_none();
+        let record_count = page.matches.len() as u32;
+        let mut builder = PackedPageBuilder::with_limits(
+            PackedPageKind::IndexMatch,
+            PageLimits {
+                max_records,
+                max_arena_bytes,
+            },
+        );
+        for (position, matched) in page.matches.iter().enumerate() {
+            let continuation = (position + 1 == page.matches.len())
+                .then_some(page.next_cursor.as_deref())
+                .flatten();
+            builder = match builder.push_index_match(
+                &matched.term,
+                &matched.primary_key,
+                matched.projection.as_deref(),
+                continuation,
+            ) {
+                Ok(builder) => builder,
+                Err(_) => {
+                    return FastPageResult {
+                        status: FAST_STATUS_INVALID_ARGUMENT,
+                        ..FastPageResult::default()
+                    };
+                }
+            };
+        }
+        let bytes = match builder.finish(terminal) {
+            Ok(bytes) => bytes,
+            Err(_) => {
+                return FastPageResult {
+                    status: FAST_STATUS_READ_ERROR,
+                    ..FastPageResult::default()
+                };
+            }
+        };
+        state.cursor = page.next_cursor;
+        state.terminal = terminal;
+        let (lease_handle, data_ptr, data_len) = register_page(bytes);
+        FastPageResult {
+            status: FAST_STATUS_OK,
+            terminal: u8::from(terminal),
+            record_count,
+            lease_handle,
+            data_ptr,
+            data_len,
+            ..FastPageResult::default()
+        }
+    })) {
+        Ok(result) => result,
+        Err(_) => FastPageResult {
+            status: FAST_STATUS_PANIC,
+            ..FastPageResult::default()
+        },
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn prolly_fast_index_cursor_close(cursor_handle: u64) {
+    if cursor_handle == 0 {
+        return;
+    }
+    index_cursor_handles()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .remove(&cursor_handle);
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn prolly_fast_scan_close(scan_handle: u64) {
     if scan_handle == 0 {
@@ -1147,6 +1470,83 @@ pub unsafe extern "C" fn prolly_fast_value_release(lease_handle: u64) {
 mod tests {
     use super::super::{default_config, ProllyEngine};
     use super::*;
+
+    struct FastIndexExtractor;
+
+    impl crate::SecondaryIndexExtractorCallback for FastIndexExtractor {
+        fn extract(
+            &self,
+            _primary_key: Vec<u8>,
+            _source_value: Vec<u8>,
+        ) -> Result<Vec<crate::IndexEntryRecord>, crate::ProllyBindingError> {
+            Ok(vec![crate::IndexEntryRecord {
+                term: b"red".to_vec(),
+                projection: Some(b"Ada".to_vec()),
+            }])
+        }
+    }
+
+    #[test]
+    fn indexed_cursor_returns_generation_checked_packed_pages() {
+        let engine = Arc::new(ProllyEngine::memory(default_config()).unwrap());
+        let registry = Arc::new(crate::BindingIndexRegistry::new());
+        registry
+            .register(
+                b"by_team".to_vec(),
+                1,
+                "tests.fast-index/v1".to_string(),
+                crate::IndexProjectionRecord::Include,
+                None,
+                Arc::new(FastIndexExtractor),
+            )
+            .unwrap();
+        let map = engine.indexed_map(b"users".to_vec(), registry).unwrap();
+        map.ensure_index(b"by_team".to_vec()).unwrap();
+        map.put(b"u1".to_vec(), b"source".to_vec()).unwrap();
+        map.put(b"u2".to_vec(), b"source-2".to_vec()).unwrap();
+        let index = map.snapshot().unwrap().index(b"by_team".to_vec()).unwrap();
+        let snapshot_handle = index.fast_handle();
+        let opened = unsafe {
+            prolly_fast_index_cursor_open(
+                snapshot_handle,
+                1,
+                b"red".as_ptr(),
+                3,
+                ptr::null(),
+                0,
+                0,
+                0,
+            )
+        };
+        assert_eq!(opened.status, FAST_STATUS_OK);
+        let page =
+            unsafe { prolly_fast_index_cursor_next(snapshot_handle, opened.scan_handle, 1, 4096) };
+        assert_eq!(page.status, FAST_STATUS_OK);
+        assert_eq!(page.record_count, 1);
+        let packed = PackedPage::parse(
+            unsafe { slice::from_raw_parts(page.data_ptr, page.data_len as usize) },
+            PageLimits::default(),
+        )
+        .unwrap();
+        let matched = packed.index_match(0).unwrap();
+        assert_eq!(matched.term, b"red");
+        assert_eq!(matched.primary_key, b"u1");
+        assert!(matched.cursor.is_some());
+        assert_eq!(page.terminal, 0);
+        let second =
+            unsafe { prolly_fast_index_cursor_next(snapshot_handle, opened.scan_handle, 1, 4096) };
+        assert_eq!(second.status, FAST_STATUS_OK);
+        assert_eq!(second.record_count, 1);
+        assert_eq!(second.terminal, 1);
+        unsafe {
+            prolly_fast_page_release(page.lease_handle);
+            prolly_fast_page_release(second.lease_handle);
+            prolly_fast_index_cursor_close(opened.scan_handle);
+        }
+        let stale =
+            unsafe { prolly_fast_index_cursor_next(snapshot_handle, opened.scan_handle, 16, 4096) };
+        assert_eq!(stale.status, FAST_STATUS_INVALID_ARGUMENT);
+    }
 
     #[test]
     fn opaque_handles_reject_stale_values_and_release_idempotently() {

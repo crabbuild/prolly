@@ -8,6 +8,8 @@ pub(crate) const PAGE_FLAG_TERMINAL: u32 = 1;
 
 const RECORD_FLAG_VALUE: u32 = 1;
 const RECORD_FLAG_PROOF: u32 = 2;
+const RECORD_FLAG_PROJECTION: u32 = 1;
+const RECORD_FLAG_CURSOR: u32 = 2;
 
 #[repr(u16)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -96,6 +98,23 @@ pub(crate) struct NeighborRecordRef<'a> {
     pub(crate) rank: u32,
     pub(crate) value: Option<&'a [u8]>,
     pub(crate) proof: Option<&'a [u8]>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct IndexMatchRecordRef<'a> {
+    pub(crate) term: &'a [u8],
+    pub(crate) primary_key: &'a [u8],
+    pub(crate) projection: Option<&'a [u8]>,
+    pub(crate) cursor: Option<&'a [u8]>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct JoinedIndexRecordRef<'a> {
+    pub(crate) term: &'a [u8],
+    pub(crate) primary_key: &'a [u8],
+    pub(crate) projection: Option<&'a [u8]>,
+    pub(crate) source_value: &'a [u8],
+    pub(crate) cursor: Option<&'a [u8]>,
 }
 
 #[derive(Debug)]
@@ -259,6 +278,62 @@ impl<'a> PackedPage<'a> {
         })
     }
 
+    pub(crate) fn index_match(&self, index: u32) -> Result<IndexMatchRecordRef<'a>, BindingError> {
+        if self.kind != PackedPageKind::IndexMatch {
+            return Err(BindingError::malformed_transport(
+                "packed page is not an index-match page",
+            ));
+        }
+        let record = self.record(index)?;
+        let flags = read_u32(record, 0)?;
+        Ok(IndexMatchRecordRef {
+            term: self.arena_slice(read_u32(record, 4)?, read_u32(record, 8)?)?,
+            primary_key: self.arena_slice(read_u32(record, 12)?, read_u32(record, 16)?)?,
+            projection: optional_slice(
+                self,
+                flags & RECORD_FLAG_PROJECTION != 0,
+                read_u32(record, 20)?,
+                read_u32(record, 24)?,
+            )?,
+            cursor: optional_slice(
+                self,
+                flags & RECORD_FLAG_CURSOR != 0,
+                read_u32(record, 28)?,
+                read_u32(record, 32)?,
+            )?,
+        })
+    }
+
+    pub(crate) fn joined_index_record(
+        &self,
+        index: u32,
+    ) -> Result<JoinedIndexRecordRef<'a>, BindingError> {
+        if self.kind != PackedPageKind::JoinedIndexRecord {
+            return Err(BindingError::malformed_transport(
+                "packed page is not a joined-index-record page",
+            ));
+        }
+        let record = self.record(index)?;
+        let flags = read_u32(record, 0)?;
+        Ok(JoinedIndexRecordRef {
+            term: self.arena_slice(read_u32(record, 4)?, read_u32(record, 8)?)?,
+            primary_key: self.arena_slice(read_u32(record, 12)?, read_u32(record, 16)?)?,
+            projection: optional_slice(
+                self,
+                flags & RECORD_FLAG_PROJECTION != 0,
+                read_u32(record, 20)?,
+                read_u32(record, 24)?,
+            )?,
+            source_value: self.arena_slice(read_u32(record, 28)?, read_u32(record, 32)?)?,
+            cursor: optional_slice(
+                self,
+                flags & RECORD_FLAG_CURSOR != 0,
+                read_u32(record, 36)?,
+                read_u32(record, 40)?,
+            )?,
+        })
+    }
+
     fn record(&self, index: u32) -> Result<&'a [u8], BindingError> {
         if index >= self.record_count {
             return Err(BindingError::malformed_transport(
@@ -312,6 +387,34 @@ impl<'a> PackedPage<'a> {
                     flags & RECORD_FLAG_PROOF != 0,
                     read_u32(record, 28)?,
                     read_u32(record, 32)?,
+                )?;
+            }
+            if matches!(
+                self.kind,
+                PackedPageKind::IndexMatch | PackedPageKind::JoinedIndexRecord
+            ) {
+                let flags = read_u32(record, 0)?;
+                if flags & !(RECORD_FLAG_PROJECTION | RECORD_FLAG_CURSOR) != 0 {
+                    return Err(BindingError::malformed_transport(
+                        "index record has unknown flags",
+                    ));
+                }
+                optional_slice(
+                    self,
+                    flags & RECORD_FLAG_PROJECTION != 0,
+                    read_u32(record, 20)?,
+                    read_u32(record, 24)?,
+                )?;
+                let (cursor_offset, cursor_length) = match self.kind {
+                    PackedPageKind::IndexMatch => (28, 32),
+                    PackedPageKind::JoinedIndexRecord => (36, 40),
+                    _ => unreachable!(),
+                };
+                optional_slice(
+                    self,
+                    flags & RECORD_FLAG_CURSOR != 0,
+                    read_u32(record, cursor_offset)?,
+                    read_u32(record, cursor_length)?,
                 )?;
             }
             for &(offset_at, length_at) in self.kind.offset_pairs() {
@@ -440,6 +543,92 @@ impl PackedPageBuilder {
         Ok(self)
     }
 
+    pub(crate) fn push_index_match(
+        mut self,
+        term: &[u8],
+        primary_key: &[u8],
+        projection: Option<&[u8]>,
+        cursor: Option<&[u8]>,
+    ) -> Result<Self, BindingError> {
+        if self.kind != PackedPageKind::IndexMatch {
+            return Err(BindingError::malformed_transport(
+                "index-match records require an index-match page",
+            ));
+        }
+        let (term_offset, term_len) = self.push_arena(term)?;
+        let (key_offset, key_len) = self.push_arena(primary_key)?;
+        let (projection_offset, projection_len) = match projection {
+            Some(value) => self.push_arena(value)?,
+            None => (0, 0),
+        };
+        let (cursor_offset, cursor_len) = match cursor {
+            Some(value) => self.push_arena(value)?,
+            None => (0, 0),
+        };
+        let flags = optional_flags(projection, cursor);
+        let mut record = Vec::with_capacity(self.kind.record_width());
+        for value in [
+            flags,
+            term_offset,
+            term_len,
+            key_offset,
+            key_len,
+            projection_offset,
+            projection_len,
+            cursor_offset,
+            cursor_len,
+        ] {
+            record.extend_from_slice(&value.to_le_bytes());
+        }
+        self.push_record(record)?;
+        Ok(self)
+    }
+
+    pub(crate) fn push_joined_index_record(
+        mut self,
+        term: &[u8],
+        primary_key: &[u8],
+        projection: Option<&[u8]>,
+        source_value: &[u8],
+        cursor: Option<&[u8]>,
+    ) -> Result<Self, BindingError> {
+        if self.kind != PackedPageKind::JoinedIndexRecord {
+            return Err(BindingError::malformed_transport(
+                "joined records require a joined-index-record page",
+            ));
+        }
+        let (term_offset, term_len) = self.push_arena(term)?;
+        let (key_offset, key_len) = self.push_arena(primary_key)?;
+        let (projection_offset, projection_len) = match projection {
+            Some(value) => self.push_arena(value)?,
+            None => (0, 0),
+        };
+        let (source_offset, source_len) = self.push_arena(source_value)?;
+        let (cursor_offset, cursor_len) = match cursor {
+            Some(value) => self.push_arena(value)?,
+            None => (0, 0),
+        };
+        let flags = optional_flags(projection, cursor);
+        let mut record = Vec::with_capacity(self.kind.record_width());
+        for value in [
+            flags,
+            term_offset,
+            term_len,
+            key_offset,
+            key_len,
+            projection_offset,
+            projection_len,
+            source_offset,
+            source_len,
+            cursor_offset,
+            cursor_len,
+        ] {
+            record.extend_from_slice(&value.to_le_bytes());
+        }
+        self.push_record(record)?;
+        Ok(self)
+    }
+
     pub(crate) fn finish(self, terminal: bool) -> Result<Box<[u8]>, BindingError> {
         let table_bytes = self
             .records
@@ -504,6 +693,18 @@ impl PackedPageBuilder {
     }
 }
 
+fn optional_flags(projection: Option<&[u8]>, cursor: Option<&[u8]>) -> u32 {
+    (if projection.is_some() {
+        RECORD_FLAG_PROJECTION
+    } else {
+        0
+    }) | (if cursor.is_some() {
+        RECORD_FLAG_CURSOR
+    } else {
+        0
+    })
+}
+
 fn read_u16(bytes: &[u8], offset: usize) -> Result<u16, BindingError> {
     let value = bytes
         .get(offset..offset + 2)
@@ -530,6 +731,46 @@ fn read_u64(bytes: &[u8], offset: usize) -> Result<u64, BindingError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn joined_index_page_round_trips_binary_fields() {
+        let bytes = PackedPageBuilder::new(PackedPageKind::JoinedIndexRecord)
+            .push_joined_index_record(
+                b"red",
+                b"u1",
+                Some(b"Ada"),
+                br#"{"team":"red"}"#,
+                Some(b"cursor"),
+            )
+            .unwrap()
+            .finish(true)
+            .unwrap();
+        let page = PackedPage::parse(&bytes, PageLimits::default()).unwrap();
+        let record = page.joined_index_record(0).unwrap();
+
+        assert_eq!(record.term, b"red");
+        assert_eq!(record.primary_key, b"u1");
+        assert_eq!(record.projection, Some(b"Ada".as_slice()));
+        assert_eq!(record.source_value, br#"{"team":"red"}"#);
+        assert_eq!(record.cursor, Some(b"cursor".as_slice()));
+    }
+
+    #[test]
+    fn index_match_page_round_trips_optional_fields() {
+        let bytes = PackedPageBuilder::new(PackedPageKind::IndexMatch)
+            .push_index_match(b"red", b"u1", None, Some(b"cursor"))
+            .unwrap()
+            .finish(false)
+            .unwrap();
+        let page = PackedPage::parse(&bytes, PageLimits::default()).unwrap();
+        let record = page.index_match(0).unwrap();
+
+        assert_eq!(record.term, b"red");
+        assert_eq!(record.primary_key, b"u1");
+        assert_eq!(record.projection, None);
+        assert_eq!(record.cursor, Some(b"cursor".as_slice()));
+        assert!(!page.terminal());
+    }
 
     #[test]
     fn entry_page_round_trips_binary_fields() {

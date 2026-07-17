@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "description": "Portable hard-cutover indexed-map conformance cases",
+  "registry": {
+    "name_hex": "62795f7465616d",
+    "generation": 1,
+    "extractor_id": "conformance.users.by-team/v1",
+    "projection": "include"
+  },
+  "workflow": [
+    "ensure_index",
+    "apply",
+    "snapshot",
+    "exact",
+    "prefix",
+    "range",
+    "join_source",
+    "verify_index",
+    "export_current",
+    "keep_last"
+  ],
+  "binary_record": {
+    "term_hex": "72656400ff",
+    "primary_key_hex": "753100",
+    "projection_hex": "41646100ff"
+  },
+  "packed_page": {
+    "magic": "PRPG",
+    "version": 2,
+    "kind": 5,
+    "cursor_on_last_record": true,
+    "lease_required": true
+  },
+  "error_cases": [
+    "empty_map_id",
+    "missing_runtime_definition",
+    "stale_source_version",
+    "cursor_snapshot_mismatch",
+    "cursor_generation_mismatch",
+    "closed_cursor_handle"
+  ]
+}

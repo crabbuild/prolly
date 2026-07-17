@@ -36,6 +36,14 @@ use thiserror::Error;
 mod domain;
 mod fast_abi;
 
+pub use domain::indexed::{
+    ActiveIndexHealthRecord, BindingIndexRegistry, BindingIndexedMap, BindingIndexedSnapshot,
+    BindingSecondaryIndexSnapshot, IndexBuildResultRecord, IndexEntryRecord, IndexMatchRecord,
+    IndexPageRecord, IndexProjectionRecord, IndexVerificationRecord, IndexedMapHealthRecord,
+    IndexedMapMetricsRecord, IndexedRetentionRecord, IndexedSnapshotIdRecord, IndexedSourceRecord,
+    IndexedUpdateKind, IndexedUpdateRecord, IndexedVersionRecord, SecondaryIndexExtractorCallback,
+    SecondaryIndexLimitsRecord,
+};
 pub use domain::versioned::{
     BindingMapComparison, BindingMapMerge, BindingMapSnapshot, BindingMapSubscription,
     BindingVersionedMap, BindingVersionedTransaction, MapCatalogVerificationRecord,
@@ -2345,6 +2353,23 @@ impl ProllyEngine {
                 inner: self.inner.clone(),
             }),
             id,
+        )
+        .map(Arc::new)
+    }
+
+    /// Open an application-facing indexed map using a frozen snapshot of the
+    /// supplied extractor registry.
+    pub fn indexed_map(
+        &self,
+        id: Vec<u8>,
+        registry: Arc<BindingIndexRegistry>,
+    ) -> Result<Arc<BindingIndexedMap>, ProllyBindingError> {
+        BindingIndexedMap::new(
+            Arc::new(Self {
+                inner: self.inner.clone(),
+            }),
+            id,
+            registry,
         )
         .map(Arc::new)
     }
