@@ -1,5 +1,29 @@
 # Prolly Binding Verification Matrix
 
+## Public API Inventory Gate
+
+The checked-in [API parity contract](api/parity.json) is generated from
+rustdoc JSON and includes every public Rust root export and reachable public
+associated item.
+
+~~~sh
+cargo +nightly rustdoc --lib -- -Z unstable-options --output-format json
+python3 scripts/binding_api_inventory.py generate
+python3 scripts/binding_api_inventory.py check
+~~~
+
+The inventory check rejects missing, stale, malformed, and duplicate contract
+entries. Before a binding release, run the stricter gate:
+
+~~~sh
+python3 scripts/binding_api_inventory.py check --release
+~~~
+
+The release gate also requires implemented symbols for all eight languages,
+conformance test IDs, and tested reasons for platform exclusions. A passing
+inventory-only check does not establish feature parity while entries remain
+planned.
+
 This matrix maps major Rust `prolly-map` API groups to the language binding
 tests that exercise them. The goal is to keep every binding on the same
 behavioral contract while letting each language expose idiomatic names and
