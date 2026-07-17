@@ -1412,6 +1412,13 @@ export class Engine implements Disposable {
       new WasmProximityMap(native.buildProximity(dimensions, owned), this.#module?.wasmMemory()));
   }
 
+  loadProximity(descriptor: Uint8Array, signal?: AbortSignal): Promise<WasmProximityMap> {
+    const native = this.#open();
+    const owned = ownedPortableBytes(descriptor);
+    return portablePromise(signal, () =>
+      new WasmProximityMap(native.loadProximity(owned), this.#module?.wasmMemory()));
+  }
+
   proximitySearchRuntime(
     policy: ProximitySearchRuntimePolicy = defaultProximitySearchRuntimePolicy(),
   ): WasmProximitySearchRuntime {
@@ -2856,6 +2863,7 @@ export class WasmProximityMap implements Disposable {
     if (this.#native == null) throw new Error("WASM proximity map is closed");
     return this.#native;
   }
+  clearCache(): void { this.nativeHandle().clearContentCache(); }
   read(): WasmProximityReadSession {
     return new WasmProximityReadSession(this.nativeHandle().read(), this.#memory);
   }

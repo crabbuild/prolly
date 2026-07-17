@@ -567,6 +567,7 @@ export interface NativeProximityCancellationToken {
 }
 
 interface NativeProximityMap {
+  clearContentCache(): void;
   buildHnsw(config?: NativeHnswConfig, limits?: NativeHnswBuildLimits): NativeHnswBuildResult;
   loadHnsw(manifest: Uint8Array): NativeHnswIndex;
   buildPq(config: NativePqConfig | undefined, workerThreads: string, limits?: NativePqBuildLimits): NativePqBuildResult;
@@ -1016,6 +1017,7 @@ export class ProximityMap implements Disposable {
     if (this.#native == null) throw new Error("proximity map is closed");
     return this.#native;
   }
+  clearCache(): void { this.nativeHandle().clearContentCache(); }
   cancellationToken(): ProximityCancellationToken {
     return new ProximityCancellationToken(this.nativeHandle().cancellationToken());
   }

@@ -375,6 +375,10 @@ test("WASM exposes portable maps and explicit native exclusions", { skip: !gener
   const proximity = await engine.buildProximity(2, [
     { key: bytes("a"), vector: new Float32Array([0, 0]), value: bytes("alpha") },
   ]);
+  proximity.clearCache();
+  const loadedProximity = await engine.loadProximity(proximity.descriptor());
+  assert.equal(Buffer.from(loadedProximity.get(bytes("a"))?.value ?? []).toString(), "alpha");
+  loadedProximity.close();
   const session = proximity.read();
   assert.equal(session.contains(bytes("a")), true);
   assert.equal(Buffer.from(session.get(bytes("a"))?.value ?? []).toString(), "alpha");

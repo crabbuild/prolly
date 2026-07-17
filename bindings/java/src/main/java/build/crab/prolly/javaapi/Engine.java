@@ -43,6 +43,13 @@ public final class Engine implements AutoCloseable {
         return new ProximityMap(JavaPortableBridge.buildProximity(open(), dimensions, nativeRecords));
     }
 
+    public ProximityMap loadProximity(byte[] descriptor) {
+        if (descriptor.length != 32) {
+            throw new IllegalArgumentException("proximity descriptor must be 32 bytes");
+        }
+        return new ProximityMap(open().loadProximity(descriptor.clone()));
+    }
+
     public ProximitySearchRuntime proximitySearchRuntime() {
         return proximitySearchRuntime(ProximitySearchRuntimePolicy.defaults());
     }

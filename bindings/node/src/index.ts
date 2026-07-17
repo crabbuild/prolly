@@ -104,6 +104,12 @@ export class Engine implements Disposable {
     return nativePromise(signal, () => new ProximityMap(native.buildProximity(dimensions, owned)));
   }
 
+  loadProximity(descriptor: Uint8Array, signal?: AbortSignal): Promise<ProximityMap> {
+    const native = this.#open();
+    const owned = ownedBytes(descriptor);
+    return nativePromise(signal, () => new ProximityMap(native.loadProximity(owned)));
+  }
+
   proximitySearchRuntime(
     policy?: ProximitySearchRuntimePolicy,
   ): ProximitySearchRuntime {

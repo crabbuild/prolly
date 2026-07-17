@@ -1426,6 +1426,7 @@ export declare class NativePortableAcceleratorCatalog {
   proveSearch(map: NativePortableProximityMap, request: NodePortableSearchRequest): NativePortableProximitySearchProof
 }
 export declare class NativePortableProximityMap {
+  clearContentCache(): void
   buildHnsw(config?: NodePortableHnswConfig | undefined | null, limits?: NodePortableHnswBuildLimits | undefined | null): NativePortableHnswBuildResult
   loadHnsw(manifest: Buffer): NativePortableHnswIndex
   buildPq(config: NodePortablePqConfig | undefined | null, workerThreads: string, limits?: NodePortablePqBuildLimits | undefined | null): NativePortablePqBuildResult
@@ -1542,6 +1543,7 @@ export declare class NativeProllyEngine {
   versionedMap(id: Buffer): NativePortableVersionedMap
   indexedMap(id: Buffer, registry: NativePortableIndexRegistry): NativePortableIndexedMap
   buildProximity(dimensions: number, records: Array<NodePortableProximityRecord>): NativePortableProximityMap
+  loadProximity(descriptor: Buffer): NativePortableProximityMap
   static memory(): NativeProllyEngine
   static memoryWithConfigJson(configJson: string): NativeProllyEngine
   static customStore(store: NativeHostStore): NativeProllyEngine

@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "owner": "prolly::ProximityMap",
+  "groups": [
+    {
+      "state": "bound-direct",
+      "rust": [
+        "prolly::ProximityMap::clear_content_cache",
+        "prolly::ProximityMap::contains_key",
+        "prolly::ProximityMap::get",
+        "prolly::ProximityMap::mutate_batch",
+        "prolly::ProximityMap::prove_membership",
+        "prolly::ProximityMap::prove_search",
+        "prolly::ProximityMap::prove_structure",
+        "prolly::ProximityMap::read",
+        "prolly::ProximityMap::rebuild_batch",
+        "prolly::ProximityMap::scan_records",
+        "prolly::ProximityMap::scan_records_until",
+        "prolly::ProximityMap::search",
+        "prolly::ProximityMap::verify"
+      ],
+      "evidence": [
+        "bindings/python/prolly/api.py#ProximityMap",
+        "bindings/go/proximity.go#ProximityMap",
+        "bindings/node/src/proximity.ts#ProximityMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#ProximityMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/ProximityMap.java",
+        "bindings/ruby/lib/prolly/api.rb#ProximityMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#ProximityMap",
+        "bindings/wasm/src/index.ts#WasmProximityMap"
+      ],
+      "rationale": "Exact reads, owned mutation/rebuild results, proofs, retained sessions, ordered early-stop scans, searches, and verification are exposed by all eight wrappers."
+    },
+    {
+      "state": "bound-idiomatic",
+      "rust": [
+        "prolly::ProximityMap::build",
+        "prolly::ProximityMap::load",
+        "prolly::ProximityMap::search_with",
+        "prolly::ProximityMap::tree"
+      ],
+      "evidence": [
+        "bindings/python/prolly/api.py",
+        "bindings/go/proximity.go",
+        "bindings/node/src/proximity.ts",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi",
+        "bindings/ruby/lib/prolly/api.rb",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
+        "bindings/wasm/src/index.ts"
+      ],
+      "rationale": "Hosts build through Engine factories, dispatch accelerated searches through typed accelerator/catalog handles, and represent the Rust tree as an opaque ProximityMap with descriptor/config/count accessors."
+    },
+    {
+      "state": "confirmed-performance-gap",
+      "rust": [
+        "prolly::ProximityMap::build_with_parallelism",
+        "prolly::ProximityMap::get_with",
+        "prolly::ProximityMap::scan_records_range_until"
+      ],
+      "evidence": [
+        "src/prolly/proximity/map.rs",
+        "bindings/go/proximity.go",
+        "bindings/node/src/proximity.ts",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/ProximityMap.java",
+        "bindings/wasm/src/index.ts"
+      ],
+      "rationale": "Explicit build parallelism is not portable to four hosts, exact get lacks a callback-scoped vector/value lease, and the seekable half-open zero-copy record scan is not exposed consistently."
+    }
+  ]
+}

@@ -93,6 +93,21 @@ func TestRetainedSearchRuntimeReusesValidatedContent(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(proximity.Close)
+	descriptor, err := proximity.Descriptor()
+	if err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := engine.LoadProximity(descriptor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(loaded.Close)
+	if err := loaded.ClearContentCache(); err != nil {
+		t.Fatal(err)
+	}
+	if record, found, err := loaded.Get([]byte("vector-00")); err != nil || !found || !bytes.Equal(record.Value, []byte("value-00")) {
+		t.Fatalf("loaded proximity record = %#v, %v, %v", record, found, err)
+	}
 	runtime, err := engine.NewProximitySearchRuntime()
 	if err != nil {
 		t.Fatal(err)

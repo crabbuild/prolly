@@ -90,6 +90,7 @@ extern uint64_t uniffi_prolly_bindings_fn_method_prollyengine_versioned_map(uint
 extern uint64_t uniffi_prolly_bindings_fn_method_prollyengine_begin_versioned_transaction(uint64_t ptr, RustCallStatus *out_err);
 extern uint64_t uniffi_prolly_bindings_fn_method_prollyengine_indexed_map(uint64_t ptr, RustBuffer id, uint64_t registry, RustCallStatus *out_err);
 extern uint64_t uniffi_prolly_bindings_fn_method_prollyengine_build_proximity_map(uint64_t ptr, RustBuffer config, RustBuffer records, RustBuffer threads, RustCallStatus *out_err);
+extern uint64_t uniffi_prolly_bindings_fn_method_prollyengine_load_proximity_map(uint64_t ptr, RustBuffer descriptor, RustCallStatus *out_err);
 extern uint64_t uniffi_prolly_bindings_fn_method_prollyengine_proximity_search_runtime(uint64_t ptr, RustBuffer policy, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_func_default_proximity_config(uint32_t dimensions, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_func_default_proximity_search_runtime_policy(RustCallStatus *out_err);
@@ -591,6 +592,25 @@ func ffiEngineBuildProximity(engine *Engine, config, records []byte) (uint64, er
 	}
 	var status C.RustCallStatus
 	result := C.uniffi_prolly_bindings_fn_method_prollyengine_build_proximity_map(handle, configBuf, recordsBuf, threadsBuf, &status)
+	return uint64(result), portableStatusError(&status)
+}
+
+func ffiEngineLoadProximity(engine *Engine, descriptor []byte) (uint64, error) {
+	handle, unlock, err := portableEngineHandle(engine)
+	if err != nil {
+		return 0, err
+	}
+	defer unlock()
+	handle, err = portableCloneEngine(handle)
+	if err != nil {
+		return 0, err
+	}
+	descriptorBuf, err := portableInput(encodeByteArray(descriptor))
+	if err != nil {
+		return 0, err
+	}
+	var status C.RustCallStatus
+	result := C.uniffi_prolly_bindings_fn_method_prollyengine_load_proximity_map(handle, descriptorBuf, &status)
 	return uint64(result), portableStatusError(&status)
 }
 
