@@ -99,13 +99,19 @@ measurements include cgo and adapter work and use product-default encodings.
 | --- | ---: | --- | --- | --- |
 | 10K + 50K | 3 per scenario | Rust won 12/12; 1.17–1.53x faster | Rust lost 12/12; 1.41–2.24x slower | highest median 0.10 vs 0.07 GiB |
 | 1M | 1 per scenario | Rust won 6/6; 1.55–1.87x faster | Rust lost 6/6; 1.21–1.49x slower | highest observed 1.42 vs 0.60 GiB |
+| 5M | 3 per scenario | Rust won 6/6; 1.55–2.03x faster | Rust won 5/6; 1.15x faster to 1.004x slower | highest median 5.71 vs 3.54 GiB |
+| 10M | 3 per scenario | Rust won 6/6; 1.36–2.14x faster | Rust won 6/6; 1.03–1.16x faster | highest median 8.66 vs 6.98 GiB |
 
-The 1M run is a smoke result, not a stable median. No 5M/10M claim is made by
-this implementation pass. Point reads now meet the desired 1.5x signal at 1M
-in that single run, but the evidence is not sufficient for a release claim.
-Full scans remain behind native Go even where the ratio is within the 1.5x
-target, and binding RSS remains materially higher at 1M. Both are active
-optimization areas. Reproduce with `PROLLY_COMPARE_POINT_API=view`,
+The 1M run remains a smoke result, but 5M and 10M now have three-run medians.
+At 10M, only four of six point-read cells meet or exceed the desired 1.5x
+advantage, so the universal 1.5–2x goal is not yet met. Full scans reach parity
+or a modest advantage at large scale, but remain well below a 1.5x advantage.
+Binding peak RSS is higher in every large-tier scenario, most visibly for
+random mutation. Machine-wide swap rose from 5.64 GiB before the large run to
+7.26 GiB after it, so the exact 10M medians should be repeated on an idle
+dedicated host before publication. The detailed validated evidence is in
+[`../performance-results/go-binding-vs-native-go-large-optimized-2026-07-16/report.md`](../performance-results/go-binding-vs-native-go-large-optimized-2026-07-16/report.md).
+Reproduce with `PROLLY_COMPARE_POINT_API=view`,
 `PROLLY_COMPARE_SCAN_API=view`, and `scripts/run_go_binding_comparison.sh`.
 
 ## Relationship to Existing Designs

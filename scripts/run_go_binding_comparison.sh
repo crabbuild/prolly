@@ -39,7 +39,7 @@ if [ "$RESUME" = 1 ] && [ -f "$OUT/machine.txt" ]; then
     GO_REV=$(sed -n 's/^native_go_revision=//p' "$OUT/machine.txt")
 fi
 
-cargo build --manifest-path "$ROOT/Cargo.toml" --release -p prolly-bindings --target-dir "$ROOT/target"
+cargo build --manifest-path "$ROOT/bindings/uniffi/Cargo.toml" --release --target-dir "$ROOT/target"
 (cd "$ROOT/bindings/go" && go build -tags prolly_release -trimpath \
     -o "$OUT/bin/rust-go-binding-prolly-compare" ./cmd/prolly-compare)
 (cd "$ROOT/dolt/go" && go build -trimpath -o "$OUT/bin/native-go-prolly-compare" ./cmd/prolly-compare)
@@ -69,6 +69,11 @@ if [ "$RESUME" != 1 ] || [ ! -f "$OUT/machine.txt" ]; then
     printf 'generated_utc=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     printf 'host=%s\n' "$(hostname)"
     printf 'os=%s\n' "$(uname -a)"
+    if command -v sysctl >/dev/null 2>&1; then
+        printf 'host_memory_bytes=%s\n' "$(sysctl -n hw.memsize 2>/dev/null || printf unknown)"
+        printf 'host_cpu=%s\n' "$(sysctl -n machdep.cpu.brand_string 2>/dev/null || printf unknown)"
+        printf 'host_swap_before=%s\n' "$(sysctl vm.swapusage 2>/dev/null || printf unknown)"
+    fi
     printf 'binding_revision=%s\n' "$BINDING_REV"
     printf 'native_go_revision=%s\n' "$GO_REV"
     printf 'binding_binary_sha256=%s\n' "$(shasum -a 256 "$OUT/bin/rust-go-binding-prolly-compare" | awk '{ print $1 }')"
@@ -182,5 +187,8 @@ for records in $SIZES; do
     done
 done
 
+if command -v sysctl >/dev/null 2>&1; then
+    printf 'host_swap_after=%s\n' "$(sysctl vm.swapusage 2>/dev/null || printf unknown)" >>"$OUT/machine.txt"
+fi
 python3 "$ROOT/scripts/summarize_go_binding_comparison.py" "$OUT/results.csv" "$OUT"
 printf 'comparison complete: %s/report.md\n' "$OUT"
