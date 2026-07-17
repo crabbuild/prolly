@@ -457,6 +457,22 @@ fileprivate struct FfiConverterInt8: FfiConverterPrimitive {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterUInt16: FfiConverterPrimitive {
+    typealias FfiType = UInt16
+    typealias SwiftType = UInt16
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UInt16 {
+        return try lift(readInt(&buf))
+    }
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterUInt32: FfiConverterPrimitive {
     typealias FfiType = UInt32
     typealias SwiftType = UInt32
@@ -499,6 +515,22 @@ fileprivate struct FfiConverterInt64: FfiConverterPrimitive {
 
     public static func write(_ value: Int64, into buf: inout [UInt8]) {
         writeInt(&buf, lower(value))
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterFloat: FfiConverterPrimitive {
+    typealias FfiType = Float
+    typealias SwiftType = Float
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Float {
+        return try lift(readFloat(&buf))
+    }
+
+    public static func write(_ value: Float, into buf: inout [UInt8]) {
+        writeFloat(&buf, lower(value))
     }
 }
 
@@ -600,6 +632,3551 @@ fileprivate struct FfiConverterData: FfiConverterRustBuffer {
         writeBytes(&buf, value)
     }
 }
+
+
+
+
+public protocol BindingIndexRegistryProtocol: AnyObject, Sendable {
+
+    func len() throws  -> UInt64
+
+    func register(name: Data, generation: UInt64, extractorId: String, projection: IndexProjectionRecord, limits: SecondaryIndexLimitsRecord?, extractor: SecondaryIndexExtractorCallback) throws
+
+}
+open class BindingIndexRegistry: BindingIndexRegistryProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_prolly_bindings_fn_clone_bindingindexregistry(self.handle, $0) }
+    }
+public convenience init() {
+    let handle =
+        try! rustCall() {
+    uniffi_prolly_bindings_fn_constructor_bindingindexregistry_new($0
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_prolly_bindings_fn_free_bindingindexregistry(handle, $0) }
+    }
+
+
+
+
+open func len()throws  -> UInt64  {
+    return try  FfiConverterUInt64.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingindexregistry_len(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func register(name: Data, generation: UInt64, extractorId: String, projection: IndexProjectionRecord, limits: SecondaryIndexLimitsRecord?, extractor: SecondaryIndexExtractorCallback)throws   {try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingindexregistry_register(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(name),
+        FfiConverterUInt64.lower(generation),
+        FfiConverterString.lower(extractorId),
+        FfiConverterTypeIndexProjectionRecord_lower(projection),
+        FfiConverterOptionTypeSecondaryIndexLimitsRecord.lower(limits),
+        FfiConverterTypeSecondaryIndexExtractorCallback_lower(extractor),$0
+    )
+}
+}
+
+
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBindingIndexRegistry: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = BindingIndexRegistry
+
+    public static func lift(_ handle: UInt64) throws -> BindingIndexRegistry {
+        return BindingIndexRegistry(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: BindingIndexRegistry) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BindingIndexRegistry {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: BindingIndexRegistry, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBindingIndexRegistry_lift(_ handle: UInt64) throws -> BindingIndexRegistry {
+    return try FfiConverterTypeBindingIndexRegistry.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBindingIndexRegistry_lower(_ value: BindingIndexRegistry) -> UInt64 {
+    return FfiConverterTypeBindingIndexRegistry.lower(value)
+}
+
+
+
+
+
+
+public protocol BindingIndexedMapProtocol: AnyObject, Sendable {
+
+    func apply(mutations: [MutationRecord]) throws  -> IndexedVersionRecord
+
+    func applyIf(expectedSource: Data?, mutations: [MutationRecord]) throws  -> IndexedUpdateRecord
+
+    func deactivateIndex(name: Data) throws  -> IndexedVersionRecord
+
+    func delete(key: Data) throws  -> IndexedVersionRecord
+
+    func ensureIndex(name: Data) throws  -> IndexBuildResultRecord
+
+    func exportCurrent() throws  -> Data
+
+    func get(key: Data) throws  -> Data?
+
+    func health() throws  -> IndexedMapHealthRecord
+
+    func id()  -> Data
+
+    func importCurrent(bundle: Data, expectedSource: Data?) throws  -> IndexedVersionRecord
+
+    func keepLast(count: UInt64) throws  -> IndexedRetentionRecord
+
+    func metrics() throws  -> IndexedMapMetricsRecord
+
+    func put(key: Data, value: Data) throws  -> IndexedVersionRecord
+
+    func repairIndex(name: Data, sourceVersion: Data) throws  -> IndexVerificationRecord
+
+    func snapshot() throws  -> BindingIndexedSnapshot
+
+    func snapshotAt(sourceVersion: Data) throws  -> BindingIndexedSnapshot
+
+    func snapshotById(snapshotId: IndexedSnapshotIdRecord) throws  -> BindingIndexedSnapshot
+
+    func verifyAll(sourceVersion: Data) throws  -> [IndexVerificationRecord]
+
+    func verifyIndex(name: Data, sourceVersion: Data) throws  -> IndexVerificationRecord
+
+}
+open class BindingIndexedMap: BindingIndexedMapProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_prolly_bindings_fn_clone_bindingindexedmap(self.handle, $0) }
+    }
+public convenience init(engine: ProllyEngine, id: Data, registry: BindingIndexRegistry)throws  {
+    let handle =
+        try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_constructor_bindingindexedmap_new(
+        FfiConverterTypeProllyEngine_lower(engine),
+        FfiConverterData.lower(id),
+        FfiConverterTypeBindingIndexRegistry_lower(registry),$0
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_prolly_bindings_fn_free_bindingindexedmap(handle, $0) }
+    }
+
+
+
+
+open func apply(mutations: [MutationRecord])throws  -> IndexedVersionRecord  {
+    return try  FfiConverterTypeIndexedVersionRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingindexedmap_apply(
+            self.uniffiCloneHandle(),
+        FfiConverterSequenceTypeMutationRecord.lower(mutations),$0
+    )
+})
+}
+
+open func applyIf(expectedSource: Data?, mutations: [MutationRecord])throws  -> IndexedUpdateRecord  {
+    return try  FfiConverterTypeIndexedUpdateRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingindexedmap_apply_if(
+            self.uniffiCloneHandle(),
+        FfiConverterOptionData.lower(expectedSource),
+        FfiConverterSequenceTypeMutationRecord.lower(mutations),$0
+    )
+})
+}
+
+open func deactivateIndex(name: Data)throws  -> IndexedVersionRecord  {
+    return try  FfiConverterTypeIndexedVersionRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingindexedmap_deactivate_index(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(name),$0
+    )
+})
+}
+
+open func delete(key: Data)throws  -> IndexedVersionRecord  {
+    return try  FfiConverterTypeIndexedVersionRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingindexedmap_delete(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(key),$0
+    )
+})
+}
+
+open func ensureIndex(name: Data)throws  -> IndexBuildResultRecord  {
+    return try  FfiConverterTypeIndexBuildResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingindexedmap_ensure_index(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(name),$0
+    )
+})
+}
+
+open func exportCurrent()throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingindexedmap_export_current(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func get(key: Data)throws  -> Data?  {
+    return try  FfiConverterOptionData.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingindexedmap_get(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(key),$0
+    )
+})
+}
+
+open func health()throws  -> IndexedMapHealthRecord  {
+    return try  FfiConverterTypeIndexedMapHealthRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingindexedmap_health(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func id() -> Data  {
+    return try!  FfiConverterData.lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_method_bindingindexedmap_id(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func importCurrent(bundle: Data, expectedSource: Data?)throws  -> IndexedVersionRecord  {
+    return try  FfiConverterTypeIndexedVersionRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingindexedmap_import_current(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(bundle),
+        FfiConverterOptionData.lower(expectedSource),$0
+    )
+})
+}
+
+open func keepLast(count: UInt64)throws  -> IndexedRetentionRecord  {
+    return try  FfiConverterTypeIndexedRetentionRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingindexedmap_keep_last(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt64.lower(count),$0
+    )
+})
+}
+
+open func metrics()throws  -> IndexedMapMetricsRecord  {
+    return try  FfiConverterTypeIndexedMapMetricsRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingindexedmap_metrics(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func put(key: Data, value: Data)throws  -> IndexedVersionRecord  {
+    return try  FfiConverterTypeIndexedVersionRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingindexedmap_put(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(key),
+        FfiConverterData.lower(value),$0
+    )
+})
+}
+
+open func repairIndex(name: Data, sourceVersion: Data)throws  -> IndexVerificationRecord  {
+    return try  FfiConverterTypeIndexVerificationRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingindexedmap_repair_index(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(name),
+        FfiConverterData.lower(sourceVersion),$0
+    )
+})
+}
+
+open func snapshot()throws  -> BindingIndexedSnapshot  {
+    return try  FfiConverterTypeBindingIndexedSnapshot_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingindexedmap_snapshot(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func snapshotAt(sourceVersion: Data)throws  -> BindingIndexedSnapshot  {
+    return try  FfiConverterTypeBindingIndexedSnapshot_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingindexedmap_snapshot_at(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(sourceVersion),$0
+    )
+})
+}
+
+open func snapshotById(snapshotId: IndexedSnapshotIdRecord)throws  -> BindingIndexedSnapshot  {
+    return try  FfiConverterTypeBindingIndexedSnapshot_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingindexedmap_snapshot_by_id(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeIndexedSnapshotIdRecord_lower(snapshotId),$0
+    )
+})
+}
+
+open func verifyAll(sourceVersion: Data)throws  -> [IndexVerificationRecord]  {
+    return try  FfiConverterSequenceTypeIndexVerificationRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingindexedmap_verify_all(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(sourceVersion),$0
+    )
+})
+}
+
+open func verifyIndex(name: Data, sourceVersion: Data)throws  -> IndexVerificationRecord  {
+    return try  FfiConverterTypeIndexVerificationRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingindexedmap_verify_index(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(name),
+        FfiConverterData.lower(sourceVersion),$0
+    )
+})
+}
+
+
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBindingIndexedMap: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = BindingIndexedMap
+
+    public static func lift(_ handle: UInt64) throws -> BindingIndexedMap {
+        return BindingIndexedMap(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: BindingIndexedMap) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BindingIndexedMap {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: BindingIndexedMap, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBindingIndexedMap_lift(_ handle: UInt64) throws -> BindingIndexedMap {
+    return try FfiConverterTypeBindingIndexedMap.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBindingIndexedMap_lower(_ value: BindingIndexedMap) -> UInt64 {
+    return FfiConverterTypeBindingIndexedMap.lower(value)
+}
+
+
+
+
+
+
+public protocol BindingIndexedSnapshotProtocol: AnyObject, Sendable {
+
+    func id()  -> IndexedSnapshotIdRecord
+
+    func index(name: Data) throws  -> BindingSecondaryIndexSnapshot
+
+}
+open class BindingIndexedSnapshot: BindingIndexedSnapshotProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_prolly_bindings_fn_clone_bindingindexedsnapshot(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_prolly_bindings_fn_free_bindingindexedsnapshot(handle, $0) }
+    }
+
+
+
+
+open func id() -> IndexedSnapshotIdRecord  {
+    return try!  FfiConverterTypeIndexedSnapshotIdRecord_lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_method_bindingindexedsnapshot_id(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func index(name: Data)throws  -> BindingSecondaryIndexSnapshot  {
+    return try  FfiConverterTypeBindingSecondaryIndexSnapshot_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingindexedsnapshot_index(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(name),$0
+    )
+})
+}
+
+
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBindingIndexedSnapshot: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = BindingIndexedSnapshot
+
+    public static func lift(_ handle: UInt64) throws -> BindingIndexedSnapshot {
+        return BindingIndexedSnapshot(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: BindingIndexedSnapshot) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BindingIndexedSnapshot {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: BindingIndexedSnapshot, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBindingIndexedSnapshot_lift(_ handle: UInt64) throws -> BindingIndexedSnapshot {
+    return try FfiConverterTypeBindingIndexedSnapshot.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBindingIndexedSnapshot_lower(_ value: BindingIndexedSnapshot) -> UInt64 {
+    return FfiConverterTypeBindingIndexedSnapshot.lower(value)
+}
+
+
+
+
+
+
+/**
+ * Owned version-pinned comparison. It never re-resolves head.
+ */
+public protocol BindingMapComparisonProtocol: AnyObject, Sendable {
+
+    func base()  -> MapVersionRecord
+
+    func changedSpans() throws  -> ChangedSpanHintRecord?
+
+    func debugView() throws  -> TreeDebugComparisonRecord
+
+    func diff() throws  -> [DiffRecord]
+
+    func diffPage(cursor: RangeCursorRecord?, rangeEnd: Data?, limit: UInt64) throws  -> DiffPageRecord
+
+    func proveDiffPage(cursor: RangeCursorRecord?, rangeEnd: Data?, limit: UInt64) throws  -> ProvedDiffPageRecord
+
+    func publishChangedSpans(spans: [ChangedSpanRecord]) throws  -> Bool
+
+    func scanDiff(visitor: DiffVisitorCallback) throws  -> ScanOutcomeRecord
+
+    func stats() throws  -> StatsComparisonRecord
+
+    func structuralDiffPage(cursor: StructuralDiffCursorRecord?, limit: UInt64) throws  -> StructuralDiffPageRecord
+
+    func target()  -> MapVersionRecord
+
+}
+/**
+ * Owned version-pinned comparison. It never re-resolves head.
+ */
+open class BindingMapComparison: BindingMapComparisonProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_prolly_bindings_fn_clone_bindingmapcomparison(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_prolly_bindings_fn_free_bindingmapcomparison(handle, $0) }
+    }
+
+
+
+
+open func base() -> MapVersionRecord  {
+    return try!  FfiConverterTypeMapVersionRecord_lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_method_bindingmapcomparison_base(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func changedSpans()throws  -> ChangedSpanHintRecord?  {
+    return try  FfiConverterOptionTypeChangedSpanHintRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingmapcomparison_changed_spans(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func debugView()throws  -> TreeDebugComparisonRecord  {
+    return try  FfiConverterTypeTreeDebugComparisonRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingmapcomparison_debug_view(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func diff()throws  -> [DiffRecord]  {
+    return try  FfiConverterSequenceTypeDiffRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingmapcomparison_diff(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func diffPage(cursor: RangeCursorRecord?, rangeEnd: Data?, limit: UInt64)throws  -> DiffPageRecord  {
+    return try  FfiConverterTypeDiffPageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingmapcomparison_diff_page(
+            self.uniffiCloneHandle(),
+        FfiConverterOptionTypeRangeCursorRecord.lower(cursor),
+        FfiConverterOptionData.lower(rangeEnd),
+        FfiConverterUInt64.lower(limit),$0
+    )
+})
+}
+
+open func proveDiffPage(cursor: RangeCursorRecord?, rangeEnd: Data?, limit: UInt64)throws  -> ProvedDiffPageRecord  {
+    return try  FfiConverterTypeProvedDiffPageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingmapcomparison_prove_diff_page(
+            self.uniffiCloneHandle(),
+        FfiConverterOptionTypeRangeCursorRecord.lower(cursor),
+        FfiConverterOptionData.lower(rangeEnd),
+        FfiConverterUInt64.lower(limit),$0
+    )
+})
+}
+
+open func publishChangedSpans(spans: [ChangedSpanRecord])throws  -> Bool  {
+    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingmapcomparison_publish_changed_spans(
+            self.uniffiCloneHandle(),
+        FfiConverterSequenceTypeChangedSpanRecord.lower(spans),$0
+    )
+})
+}
+
+open func scanDiff(visitor: DiffVisitorCallback)throws  -> ScanOutcomeRecord  {
+    return try  FfiConverterTypeScanOutcomeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingmapcomparison_scan_diff(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeDiffVisitorCallback_lower(visitor),$0
+    )
+})
+}
+
+open func stats()throws  -> StatsComparisonRecord  {
+    return try  FfiConverterTypeStatsComparisonRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingmapcomparison_stats(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func structuralDiffPage(cursor: StructuralDiffCursorRecord?, limit: UInt64)throws  -> StructuralDiffPageRecord  {
+    return try  FfiConverterTypeStructuralDiffPageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingmapcomparison_structural_diff_page(
+            self.uniffiCloneHandle(),
+        FfiConverterOptionTypeStructuralDiffCursorRecord.lower(cursor),
+        FfiConverterUInt64.lower(limit),$0
+    )
+})
+}
+
+open func target() -> MapVersionRecord  {
+    return try!  FfiConverterTypeMapVersionRecord_lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_method_bindingmapcomparison_target(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBindingMapComparison: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = BindingMapComparison
+
+    public static func lift(_ handle: UInt64) throws -> BindingMapComparison {
+        return BindingMapComparison(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: BindingMapComparison) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BindingMapComparison {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: BindingMapComparison, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBindingMapComparison_lift(_ handle: UInt64) throws -> BindingMapComparison {
+    return try FfiConverterTypeBindingMapComparison.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBindingMapComparison_lower(_ value: BindingMapComparison) -> UInt64 {
+    return FfiConverterTypeBindingMapComparison.lower(value)
+}
+
+
+
+
+
+
+/**
+ * Three-way merge pinned to a concrete base, head, and candidate.
+ */
+public protocol BindingMapMergeProtocol: AnyObject, Sendable {
+
+    func base()  -> MapVersionRecord
+
+    func candidate()  -> MapVersionRecord
+
+    func conflictPage(cursor: RangeCursorRecord?, limit: UInt64) throws  -> ConflictPageRecord
+
+    func crdtMerge(config: CrdtConfigRecord) throws  -> TreeRecord
+
+    func crdtMergeExplain(config: CrdtConfigRecord) throws  -> MergeExplanationRecord
+
+    func head()  -> MapVersionRecord
+
+    func merge(resolver: String?) throws  -> TreeRecord
+
+    func mergeWithPolicy(policy: MergePolicyRegistry) throws  -> TreeRecord
+
+    /**
+     * Publish only if the head pinned when this object was created is still current.
+     */
+    func publish(resolver: String?) throws  -> MapUpdateRecord
+
+    func publishCrdt(config: CrdtConfigRecord) throws  -> MapUpdateRecord
+
+    func publishWithPolicy(policy: MergePolicyRegistry) throws  -> MapUpdateRecord
+
+    func scanConflicts(visitor: ConflictVisitorCallback) throws  -> ScanOutcomeRecord
+
+}
+/**
+ * Three-way merge pinned to a concrete base, head, and candidate.
+ */
+open class BindingMapMerge: BindingMapMergeProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_prolly_bindings_fn_clone_bindingmapmerge(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_prolly_bindings_fn_free_bindingmapmerge(handle, $0) }
+    }
+
+
+
+
+open func base() -> MapVersionRecord  {
+    return try!  FfiConverterTypeMapVersionRecord_lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_method_bindingmapmerge_base(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func candidate() -> MapVersionRecord  {
+    return try!  FfiConverterTypeMapVersionRecord_lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_method_bindingmapmerge_candidate(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func conflictPage(cursor: RangeCursorRecord?, limit: UInt64)throws  -> ConflictPageRecord  {
+    return try  FfiConverterTypeConflictPageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingmapmerge_conflict_page(
+            self.uniffiCloneHandle(),
+        FfiConverterOptionTypeRangeCursorRecord.lower(cursor),
+        FfiConverterUInt64.lower(limit),$0
+    )
+})
+}
+
+open func crdtMerge(config: CrdtConfigRecord)throws  -> TreeRecord  {
+    return try  FfiConverterTypeTreeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingmapmerge_crdt_merge(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeCrdtConfigRecord_lower(config),$0
+    )
+})
+}
+
+open func crdtMergeExplain(config: CrdtConfigRecord)throws  -> MergeExplanationRecord  {
+    return try  FfiConverterTypeMergeExplanationRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingmapmerge_crdt_merge_explain(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeCrdtConfigRecord_lower(config),$0
+    )
+})
+}
+
+open func head() -> MapVersionRecord  {
+    return try!  FfiConverterTypeMapVersionRecord_lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_method_bindingmapmerge_head(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func merge(resolver: String?)throws  -> TreeRecord  {
+    return try  FfiConverterTypeTreeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingmapmerge_merge(
+            self.uniffiCloneHandle(),
+        FfiConverterOptionString.lower(resolver),$0
+    )
+})
+}
+
+open func mergeWithPolicy(policy: MergePolicyRegistry)throws  -> TreeRecord  {
+    return try  FfiConverterTypeTreeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingmapmerge_merge_with_policy(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeMergePolicyRegistry_lower(policy),$0
+    )
+})
+}
+
+    /**
+     * Publish only if the head pinned when this object was created is still current.
+     */
+open func publish(resolver: String?)throws  -> MapUpdateRecord  {
+    return try  FfiConverterTypeMapUpdateRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingmapmerge_publish(
+            self.uniffiCloneHandle(),
+        FfiConverterOptionString.lower(resolver),$0
+    )
+})
+}
+
+open func publishCrdt(config: CrdtConfigRecord)throws  -> MapUpdateRecord  {
+    return try  FfiConverterTypeMapUpdateRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingmapmerge_publish_crdt(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeCrdtConfigRecord_lower(config),$0
+    )
+})
+}
+
+open func publishWithPolicy(policy: MergePolicyRegistry)throws  -> MapUpdateRecord  {
+    return try  FfiConverterTypeMapUpdateRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingmapmerge_publish_with_policy(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeMergePolicyRegistry_lower(policy),$0
+    )
+})
+}
+
+open func scanConflicts(visitor: ConflictVisitorCallback)throws  -> ScanOutcomeRecord  {
+    return try  FfiConverterTypeScanOutcomeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingmapmerge_scan_conflicts(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeConflictVisitorCallback_lower(visitor),$0
+    )
+})
+}
+
+
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBindingMapMerge: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = BindingMapMerge
+
+    public static func lift(_ handle: UInt64) throws -> BindingMapMerge {
+        return BindingMapMerge(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: BindingMapMerge) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BindingMapMerge {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: BindingMapMerge, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBindingMapMerge_lift(_ handle: UInt64) throws -> BindingMapMerge {
+    return try FfiConverterTypeBindingMapMerge.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBindingMapMerge_lower(_ value: BindingMapMerge) -> UInt64 {
+    return FfiConverterTypeBindingMapMerge.lower(value)
+}
+
+
+
+
+
+
+/**
+ * Owned immutable snapshot that remains valid while the managed head advances.
+ */
+public protocol BindingMapSnapshotProtocol: AnyObject, Sendable {
+
+    func containsKey(key: Data) throws  -> Bool
+
+    func copyMissingNodes(destination: ProllyEngine) throws  -> MissingNodeCopyRecord
+
+    func cursorWindow(key: Data, rangeEnd: Data?, limit: UInt64) throws  -> CursorWindowRecord
+
+    func debugView() throws  -> TreeDebugViewRecord
+
+    func export() throws  -> SnapshotBundleRecord
+
+    func firstEntry() throws  -> EntryRecord?
+
+    func get(key: Data) throws  -> Data?
+
+    func getMany(keys: [Data]) throws  -> [Data?]
+
+    func getValueRef(key: Data) throws  -> ValueRefRecord?
+
+    func hydratePrefixHint(prefix: Data) throws  -> Bool
+
+    func id()  -> Data
+
+    func lastEntry() throws  -> EntryRecord?
+
+    func lowerBound(key: Data) throws  -> EntryRecord?
+
+    func pinPath(key: Data) throws  -> UInt64
+
+    func pinRoot() throws  -> UInt64
+
+    func planMissingNodes(destination: ProllyEngine) throws  -> MissingNodePlanRecord
+
+    func prefix(prefix: Data) throws  -> [EntryRecord]
+
+    func prefixPage(prefix: Data, cursor: RangeCursorRecord?, limit: UInt64) throws  -> RangePageRecord
+
+    func prefixReversePage(prefix: Data, cursor: ReverseCursorRecord?, limit: UInt64) throws  -> ReversePageRecord
+
+    func proveKey(key: Data) throws  -> KeyProofRecord
+
+    func proveKeys(keys: [Data]) throws  -> MultiKeyProofRecord
+
+    func provePrefix(prefix: Data) throws  -> RangeProofRecord
+
+    func proveRange(start: Data, rangeEnd: Data?) throws  -> RangeProofRecord
+
+    func proveRangePage(cursor: RangeCursorRecord?, rangeEnd: Data?, limit: UInt64) throws  -> ProvedRangePageRecord
+
+    func publishPrefixHint(prefix: Data) throws  -> Bool
+
+    func pushTo(destination: BindingVersionedMap) throws  -> MapVersionRecord
+
+    func range(start: Data, rangeEnd: Data?) throws  -> [EntryRecord]
+
+    func rangePage(cursor: RangeCursorRecord?, rangeEnd: Data?, limit: UInt64) throws  -> RangePageRecord
+
+    /**
+     * Bind this snapshot to a reusable session. Native adapters use the
+     * packed borrowed-read ABI from this session on performance-sensitive paths.
+     */
+    func readSession() throws  -> ProllyReadSession
+
+    func reversePage(cursor: ReverseCursorRecord?, start: Data, limit: UInt64) throws  -> ReversePageRecord
+
+    func scanPrefix(prefix: Data, visitor: EntryVisitorCallback) throws  -> ScanOutcomeRecord
+
+    func scanRange(start: Data, rangeEnd: Data?, visitor: EntryVisitorCallback) throws  -> ScanOutcomeRecord
+
+    func stats() throws  -> TreeStatsRecord
+
+    func tree()  -> TreeRecord
+
+    func upperBound(key: Data) throws  -> EntryRecord?
+
+    func version()  -> MapVersionRecord
+
+}
+/**
+ * Owned immutable snapshot that remains valid while the managed head advances.
+ */
+open class BindingMapSnapshot: BindingMapSnapshotProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_prolly_bindings_fn_clone_bindingmapsnapshot(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_prolly_bindings_fn_free_bindingmapsnapshot(handle, $0) }
+    }
+
+
+
+
+open func containsKey(key: Data)throws  -> Bool  {
+    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingmapsnapshot_contains_key(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(key),$0
+    )
+})
+}
+
+open func copyMissingNodes(destination: ProllyEngine)throws  -> MissingNodeCopyRecord  {
+    return try  FfiConverterTypeMissingNodeCopyRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingmapsnapshot_copy_missing_nodes(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeProllyEngine_lower(destination),$0
+    )
+})
+}
+
+open func cursorWindow(key: Data, rangeEnd: Data?, limit: UInt64)throws  -> CursorWindowRecord  {
+    return try  FfiConverterTypeCursorWindowRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingmapsnapshot_cursor_window(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(key),
+        FfiConverterOptionData.lower(rangeEnd),
+        FfiConverterUInt64.lower(limit),$0
+    )
+})
+}
+
+open func debugView()throws  -> TreeDebugViewRecord  {
+    return try  FfiConverterTypeTreeDebugViewRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingmapsnapshot_debug_view(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func export()throws  -> SnapshotBundleRecord  {
+    return try  FfiConverterTypeSnapshotBundleRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingmapsnapshot_export(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func firstEntry()throws  -> EntryRecord?  {
+    return try  FfiConverterOptionTypeEntryRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingmapsnapshot_first_entry(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func get(key: Data)throws  -> Data?  {
+    return try  FfiConverterOptionData.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingmapsnapshot_get(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(key),$0
+    )
+})
+}
+
+open func getMany(keys: [Data])throws  -> [Data?]  {
+    return try  FfiConverterSequenceOptionData.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingmapsnapshot_get_many(
+            self.uniffiCloneHandle(),
+        FfiConverterSequenceData.lower(keys),$0
+    )
+})
+}
+
+open func getValueRef(key: Data)throws  -> ValueRefRecord?  {
+    return try  FfiConverterOptionTypeValueRefRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingmapsnapshot_get_value_ref(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(key),$0
+    )
+})
+}
+
+open func hydratePrefixHint(prefix: Data)throws  -> Bool  {
+    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingmapsnapshot_hydrate_prefix_hint(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(prefix),$0
+    )
+})
+}
+
+open func id() -> Data  {
+    return try!  FfiConverterData.lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_method_bindingmapsnapshot_id(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func lastEntry()throws  -> EntryRecord?  {
+    return try  FfiConverterOptionTypeEntryRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingmapsnapshot_last_entry(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func lowerBound(key: Data)throws  -> EntryRecord?  {
+    return try  FfiConverterOptionTypeEntryRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingmapsnapshot_lower_bound(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(key),$0
+    )
+})
+}
+
+open func pinPath(key: Data)throws  -> UInt64  {
+    return try  FfiConverterUInt64.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingmapsnapshot_pin_path(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(key),$0
+    )
+})
+}
+
+open func pinRoot()throws  -> UInt64  {
+    return try  FfiConverterUInt64.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingmapsnapshot_pin_root(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func planMissingNodes(destination: ProllyEngine)throws  -> MissingNodePlanRecord  {
+    return try  FfiConverterTypeMissingNodePlanRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingmapsnapshot_plan_missing_nodes(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeProllyEngine_lower(destination),$0
+    )
+})
+}
+
+open func prefix(prefix: Data)throws  -> [EntryRecord]  {
+    return try  FfiConverterSequenceTypeEntryRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prefix(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(prefix),$0
+    )
+})
+}
+
+open func prefixPage(prefix: Data, cursor: RangeCursorRecord?, limit: UInt64)throws  -> RangePageRecord  {
+    return try  FfiConverterTypeRangePageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prefix_page(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(prefix),
+        FfiConverterOptionTypeRangeCursorRecord.lower(cursor),
+        FfiConverterUInt64.lower(limit),$0
+    )
+})
+}
+
+open func prefixReversePage(prefix: Data, cursor: ReverseCursorRecord?, limit: UInt64)throws  -> ReversePageRecord  {
+    return try  FfiConverterTypeReversePageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prefix_reverse_page(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(prefix),
+        FfiConverterOptionTypeReverseCursorRecord.lower(cursor),
+        FfiConverterUInt64.lower(limit),$0
+    )
+})
+}
+
+open func proveKey(key: Data)throws  -> KeyProofRecord  {
+    return try  FfiConverterTypeKeyProofRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prove_key(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(key),$0
+    )
+})
+}
+
+open func proveKeys(keys: [Data])throws  -> MultiKeyProofRecord  {
+    return try  FfiConverterTypeMultiKeyProofRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prove_keys(
+            self.uniffiCloneHandle(),
+        FfiConverterSequenceData.lower(keys),$0
+    )
+})
+}
+
+open func provePrefix(prefix: Data)throws  -> RangeProofRecord  {
+    return try  FfiConverterTypeRangeProofRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prove_prefix(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(prefix),$0
+    )
+})
+}
+
+open func proveRange(start: Data, rangeEnd: Data?)throws  -> RangeProofRecord  {
+    return try  FfiConverterTypeRangeProofRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prove_range(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(start),
+        FfiConverterOptionData.lower(rangeEnd),$0
+    )
+})
+}
+
+open func proveRangePage(cursor: RangeCursorRecord?, rangeEnd: Data?, limit: UInt64)throws  -> ProvedRangePageRecord  {
+    return try  FfiConverterTypeProvedRangePageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prove_range_page(
+            self.uniffiCloneHandle(),
+        FfiConverterOptionTypeRangeCursorRecord.lower(cursor),
+        FfiConverterOptionData.lower(rangeEnd),
+        FfiConverterUInt64.lower(limit),$0
+    )
+})
+}
+
+open func publishPrefixHint(prefix: Data)throws  -> Bool  {
+    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingmapsnapshot_publish_prefix_hint(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(prefix),$0
+    )
+})
+}
+
+open func pushTo(destination: BindingVersionedMap)throws  -> MapVersionRecord  {
+    return try  FfiConverterTypeMapVersionRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingmapsnapshot_push_to(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeBindingVersionedMap_lower(destination),$0
+    )
+})
+}
+
+open func range(start: Data, rangeEnd: Data?)throws  -> [EntryRecord]  {
+    return try  FfiConverterSequenceTypeEntryRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingmapsnapshot_range(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(start),
+        FfiConverterOptionData.lower(rangeEnd),$0
+    )
+})
+}
+
+open func rangePage(cursor: RangeCursorRecord?, rangeEnd: Data?, limit: UInt64)throws  -> RangePageRecord  {
+    return try  FfiConverterTypeRangePageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingmapsnapshot_range_page(
+            self.uniffiCloneHandle(),
+        FfiConverterOptionTypeRangeCursorRecord.lower(cursor),
+        FfiConverterOptionData.lower(rangeEnd),
+        FfiConverterUInt64.lower(limit),$0
+    )
+})
+}
+
+    /**
+     * Bind this snapshot to a reusable session. Native adapters use the
+     * packed borrowed-read ABI from this session on performance-sensitive paths.
+     */
+open func readSession()throws  -> ProllyReadSession  {
+    return try  FfiConverterTypeProllyReadSession_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingmapsnapshot_read_session(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func reversePage(cursor: ReverseCursorRecord?, start: Data, limit: UInt64)throws  -> ReversePageRecord  {
+    return try  FfiConverterTypeReversePageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingmapsnapshot_reverse_page(
+            self.uniffiCloneHandle(),
+        FfiConverterOptionTypeReverseCursorRecord.lower(cursor),
+        FfiConverterData.lower(start),
+        FfiConverterUInt64.lower(limit),$0
+    )
+})
+}
+
+open func scanPrefix(prefix: Data, visitor: EntryVisitorCallback)throws  -> ScanOutcomeRecord  {
+    return try  FfiConverterTypeScanOutcomeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingmapsnapshot_scan_prefix(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(prefix),
+        FfiConverterTypeEntryVisitorCallback_lower(visitor),$0
+    )
+})
+}
+
+open func scanRange(start: Data, rangeEnd: Data?, visitor: EntryVisitorCallback)throws  -> ScanOutcomeRecord  {
+    return try  FfiConverterTypeScanOutcomeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingmapsnapshot_scan_range(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(start),
+        FfiConverterOptionData.lower(rangeEnd),
+        FfiConverterTypeEntryVisitorCallback_lower(visitor),$0
+    )
+})
+}
+
+open func stats()throws  -> TreeStatsRecord  {
+    return try  FfiConverterTypeTreeStatsRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingmapsnapshot_stats(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func tree() -> TreeRecord  {
+    return try!  FfiConverterTypeTreeRecord_lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_method_bindingmapsnapshot_tree(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func upperBound(key: Data)throws  -> EntryRecord?  {
+    return try  FfiConverterOptionTypeEntryRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingmapsnapshot_upper_bound(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(key),$0
+    )
+})
+}
+
+open func version() -> MapVersionRecord  {
+    return try!  FfiConverterTypeMapVersionRecord_lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_method_bindingmapsnapshot_version(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBindingMapSnapshot: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = BindingMapSnapshot
+
+    public static func lift(_ handle: UInt64) throws -> BindingMapSnapshot {
+        return BindingMapSnapshot(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: BindingMapSnapshot) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BindingMapSnapshot {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: BindingMapSnapshot, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBindingMapSnapshot_lift(_ handle: UInt64) throws -> BindingMapSnapshot {
+    return try FfiConverterTypeBindingMapSnapshot.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBindingMapSnapshot_lower(_ value: BindingMapSnapshot) -> UInt64 {
+    return FfiConverterTypeBindingMapSnapshot.lower(value)
+}
+
+
+
+
+
+
+/**
+ * Resumable polling subscription with portable owned state.
+ */
+public protocol BindingMapSubscriptionProtocol: AnyObject, Sendable {
+
+    func lastSeen() throws  -> Data?
+
+    func poll() throws  -> MapChangeEventRecord?
+
+}
+/**
+ * Resumable polling subscription with portable owned state.
+ */
+open class BindingMapSubscription: BindingMapSubscriptionProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_prolly_bindings_fn_clone_bindingmapsubscription(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_prolly_bindings_fn_free_bindingmapsubscription(handle, $0) }
+    }
+
+
+
+
+open func lastSeen()throws  -> Data?  {
+    return try  FfiConverterOptionData.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingmapsubscription_last_seen(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func poll()throws  -> MapChangeEventRecord?  {
+    return try  FfiConverterOptionTypeMapChangeEventRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingmapsubscription_poll(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBindingMapSubscription: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = BindingMapSubscription
+
+    public static func lift(_ handle: UInt64) throws -> BindingMapSubscription {
+        return BindingMapSubscription(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: BindingMapSubscription) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BindingMapSubscription {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: BindingMapSubscription, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBindingMapSubscription_lift(_ handle: UInt64) throws -> BindingMapSubscription {
+    return try FfiConverterTypeBindingMapSubscription.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBindingMapSubscription_lower(_ value: BindingMapSubscription) -> UInt64 {
+    return FfiConverterTypeBindingMapSubscription.lower(value)
+}
+
+
+
+
+
+
+public protocol BindingProximityMapProtocol: AnyObject, Sendable {
+
+    func clearContentCache() throws
+
+    func config() throws  -> ProximityConfigRecord
+
+    func containsKey(key: Data) throws  -> Bool
+
+    func count() throws  -> UInt64
+
+    func descriptor()  -> Data
+
+    func fastHandle()  -> UInt64
+
+    func get(key: Data) throws  -> ExactProximityRecordRecord?
+
+    func mutate(mutations: [ProximityMutationRecord]) throws  -> ProximityMutationResultRecord
+
+    func proveMembership(key: Data) throws  -> ProximityMembershipProofRecord
+
+    func proveStructure(limits: ContentGraphLimitsRecord) throws  -> ProximityStructuralProofRecord
+
+    func readSession() throws  -> BindingProximityReadSession
+
+    func rebuild(mutations: [ProximityMutationRecord]) throws  -> BindingProximityMap
+
+    func scanRecords(visitor: ProximityRecordVisitorCallback) throws  -> UInt64
+
+    func search(request: ProximitySearchRequestRecord) throws  -> ProximitySearchResultRecord
+
+    func verify() throws  -> ProximityVerificationRecord
+
+}
+open class BindingProximityMap: BindingProximityMapProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_prolly_bindings_fn_clone_bindingproximitymap(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_prolly_bindings_fn_free_bindingproximitymap(handle, $0) }
+    }
+
+
+
+
+open func clearContentCache()throws   {try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingproximitymap_clear_content_cache(
+            self.uniffiCloneHandle(),$0
+    )
+}
+}
+
+open func config()throws  -> ProximityConfigRecord  {
+    return try  FfiConverterTypeProximityConfigRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingproximitymap_config(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func containsKey(key: Data)throws  -> Bool  {
+    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingproximitymap_contains_key(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(key),$0
+    )
+})
+}
+
+open func count()throws  -> UInt64  {
+    return try  FfiConverterUInt64.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingproximitymap_count(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func descriptor() -> Data  {
+    return try!  FfiConverterData.lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_method_bindingproximitymap_descriptor(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func fastHandle() -> UInt64  {
+    return try!  FfiConverterUInt64.lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_method_bindingproximitymap_fast_handle(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func get(key: Data)throws  -> ExactProximityRecordRecord?  {
+    return try  FfiConverterOptionTypeExactProximityRecordRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingproximitymap_get(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(key),$0
+    )
+})
+}
+
+open func mutate(mutations: [ProximityMutationRecord])throws  -> ProximityMutationResultRecord  {
+    return try  FfiConverterTypeProximityMutationResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingproximitymap_mutate(
+            self.uniffiCloneHandle(),
+        FfiConverterSequenceTypeProximityMutationRecord.lower(mutations),$0
+    )
+})
+}
+
+open func proveMembership(key: Data)throws  -> ProximityMembershipProofRecord  {
+    return try  FfiConverterTypeProximityMembershipProofRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingproximitymap_prove_membership(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(key),$0
+    )
+})
+}
+
+open func proveStructure(limits: ContentGraphLimitsRecord)throws  -> ProximityStructuralProofRecord  {
+    return try  FfiConverterTypeProximityStructuralProofRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingproximitymap_prove_structure(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeContentGraphLimitsRecord_lower(limits),$0
+    )
+})
+}
+
+open func readSession()throws  -> BindingProximityReadSession  {
+    return try  FfiConverterTypeBindingProximityReadSession_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingproximitymap_read_session(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func rebuild(mutations: [ProximityMutationRecord])throws  -> BindingProximityMap  {
+    return try  FfiConverterTypeBindingProximityMap_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingproximitymap_rebuild(
+            self.uniffiCloneHandle(),
+        FfiConverterSequenceTypeProximityMutationRecord.lower(mutations),$0
+    )
+})
+}
+
+open func scanRecords(visitor: ProximityRecordVisitorCallback)throws  -> UInt64  {
+    return try  FfiConverterUInt64.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingproximitymap_scan_records(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeProximityRecordVisitorCallback_lower(visitor),$0
+    )
+})
+}
+
+open func search(request: ProximitySearchRequestRecord)throws  -> ProximitySearchResultRecord  {
+    return try  FfiConverterTypeProximitySearchResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingproximitymap_search(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeProximitySearchRequestRecord_lower(request),$0
+    )
+})
+}
+
+open func verify()throws  -> ProximityVerificationRecord  {
+    return try  FfiConverterTypeProximityVerificationRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingproximitymap_verify(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBindingProximityMap: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = BindingProximityMap
+
+    public static func lift(_ handle: UInt64) throws -> BindingProximityMap {
+        return BindingProximityMap(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: BindingProximityMap) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BindingProximityMap {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: BindingProximityMap, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBindingProximityMap_lift(_ handle: UInt64) throws -> BindingProximityMap {
+    return try FfiConverterTypeBindingProximityMap.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBindingProximityMap_lower(_ value: BindingProximityMap) -> UInt64 {
+    return FfiConverterTypeBindingProximityMap.lower(value)
+}
+
+
+
+
+
+
+public protocol BindingProximityReadSessionProtocol: AnyObject, Sendable {
+
+    func containsKey(key: Data) throws  -> Bool
+
+    func get(key: Data) throws  -> ExactProximityRecordRecord?
+
+    func scanRecords(visitor: ProximityRecordVisitorCallback) throws  -> UInt64
+
+}
+open class BindingProximityReadSession: BindingProximityReadSessionProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_prolly_bindings_fn_clone_bindingproximityreadsession(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_prolly_bindings_fn_free_bindingproximityreadsession(handle, $0) }
+    }
+
+
+
+
+open func containsKey(key: Data)throws  -> Bool  {
+    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingproximityreadsession_contains_key(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(key),$0
+    )
+})
+}
+
+open func get(key: Data)throws  -> ExactProximityRecordRecord?  {
+    return try  FfiConverterOptionTypeExactProximityRecordRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingproximityreadsession_get(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(key),$0
+    )
+})
+}
+
+open func scanRecords(visitor: ProximityRecordVisitorCallback)throws  -> UInt64  {
+    return try  FfiConverterUInt64.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingproximityreadsession_scan_records(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeProximityRecordVisitorCallback_lower(visitor),$0
+    )
+})
+}
+
+
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBindingProximityReadSession: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = BindingProximityReadSession
+
+    public static func lift(_ handle: UInt64) throws -> BindingProximityReadSession {
+        return BindingProximityReadSession(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: BindingProximityReadSession) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BindingProximityReadSession {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: BindingProximityReadSession, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBindingProximityReadSession_lift(_ handle: UInt64) throws -> BindingProximityReadSession {
+    return try FfiConverterTypeBindingProximityReadSession.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBindingProximityReadSession_lower(_ value: BindingProximityReadSession) -> UInt64 {
+    return FfiConverterTypeBindingProximityReadSession.lower(value)
+}
+
+
+
+
+
+
+public protocol BindingSecondaryIndexSnapshotProtocol: AnyObject, Sendable {
+
+    func exact(term: Data) throws  -> [IndexMatchRecord]
+
+    func exactPage(term: Data, cursor: Data?, limit: UInt64) throws  -> IndexPageRecord
+
+    func exactReversePage(term: Data, cursor: Data?, limit: UInt64) throws  -> IndexPageRecord
+
+    func fastHandle()  -> UInt64
+
+    func name()  -> Data
+
+    func prefix(prefix: Data) throws  -> [IndexMatchRecord]
+
+    func prefixPage(prefix: Data, cursor: Data?, limit: UInt64) throws  -> IndexPageRecord
+
+    func prefixReversePage(prefix: Data, cursor: Data?, limit: UInt64) throws  -> IndexPageRecord
+
+    func range(start: Data, rangeEnd: Data?) throws  -> [IndexMatchRecord]
+
+    func rangePage(start: Data, rangeEnd: Data?, cursor: Data?, limit: UInt64) throws  -> IndexPageRecord
+
+    func rangeReversePage(start: Data, rangeEnd: Data?, cursor: Data?, limit: UInt64) throws  -> IndexPageRecord
+
+    func records(term: Data) throws  -> [IndexedSourceRecord]
+
+}
+open class BindingSecondaryIndexSnapshot: BindingSecondaryIndexSnapshotProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_prolly_bindings_fn_clone_bindingsecondaryindexsnapshot(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_prolly_bindings_fn_free_bindingsecondaryindexsnapshot(handle, $0) }
+    }
+
+
+
+
+open func exact(term: Data)throws  -> [IndexMatchRecord]  {
+    return try  FfiConverterSequenceTypeIndexMatchRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_exact(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(term),$0
+    )
+})
+}
+
+open func exactPage(term: Data, cursor: Data?, limit: UInt64)throws  -> IndexPageRecord  {
+    return try  FfiConverterTypeIndexPageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_exact_page(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(term),
+        FfiConverterOptionData.lower(cursor),
+        FfiConverterUInt64.lower(limit),$0
+    )
+})
+}
+
+open func exactReversePage(term: Data, cursor: Data?, limit: UInt64)throws  -> IndexPageRecord  {
+    return try  FfiConverterTypeIndexPageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_exact_reverse_page(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(term),
+        FfiConverterOptionData.lower(cursor),
+        FfiConverterUInt64.lower(limit),$0
+    )
+})
+}
+
+open func fastHandle() -> UInt64  {
+    return try!  FfiConverterUInt64.lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_fast_handle(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func name() -> Data  {
+    return try!  FfiConverterData.lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_name(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func prefix(prefix: Data)throws  -> [IndexMatchRecord]  {
+    return try  FfiConverterSequenceTypeIndexMatchRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_prefix(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(prefix),$0
+    )
+})
+}
+
+open func prefixPage(prefix: Data, cursor: Data?, limit: UInt64)throws  -> IndexPageRecord  {
+    return try  FfiConverterTypeIndexPageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_prefix_page(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(prefix),
+        FfiConverterOptionData.lower(cursor),
+        FfiConverterUInt64.lower(limit),$0
+    )
+})
+}
+
+open func prefixReversePage(prefix: Data, cursor: Data?, limit: UInt64)throws  -> IndexPageRecord  {
+    return try  FfiConverterTypeIndexPageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_prefix_reverse_page(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(prefix),
+        FfiConverterOptionData.lower(cursor),
+        FfiConverterUInt64.lower(limit),$0
+    )
+})
+}
+
+open func range(start: Data, rangeEnd: Data?)throws  -> [IndexMatchRecord]  {
+    return try  FfiConverterSequenceTypeIndexMatchRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_range(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(start),
+        FfiConverterOptionData.lower(rangeEnd),$0
+    )
+})
+}
+
+open func rangePage(start: Data, rangeEnd: Data?, cursor: Data?, limit: UInt64)throws  -> IndexPageRecord  {
+    return try  FfiConverterTypeIndexPageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_range_page(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(start),
+        FfiConverterOptionData.lower(rangeEnd),
+        FfiConverterOptionData.lower(cursor),
+        FfiConverterUInt64.lower(limit),$0
+    )
+})
+}
+
+open func rangeReversePage(start: Data, rangeEnd: Data?, cursor: Data?, limit: UInt64)throws  -> IndexPageRecord  {
+    return try  FfiConverterTypeIndexPageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_range_reverse_page(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(start),
+        FfiConverterOptionData.lower(rangeEnd),
+        FfiConverterOptionData.lower(cursor),
+        FfiConverterUInt64.lower(limit),$0
+    )
+})
+}
+
+open func records(term: Data)throws  -> [IndexedSourceRecord]  {
+    return try  FfiConverterSequenceTypeIndexedSourceRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_records(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(term),$0
+    )
+})
+}
+
+
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBindingSecondaryIndexSnapshot: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = BindingSecondaryIndexSnapshot
+
+    public static func lift(_ handle: UInt64) throws -> BindingSecondaryIndexSnapshot {
+        return BindingSecondaryIndexSnapshot(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: BindingSecondaryIndexSnapshot) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BindingSecondaryIndexSnapshot {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: BindingSecondaryIndexSnapshot, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBindingSecondaryIndexSnapshot_lift(_ handle: UInt64) throws -> BindingSecondaryIndexSnapshot {
+    return try FfiConverterTypeBindingSecondaryIndexSnapshot.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBindingSecondaryIndexSnapshot_lower(_ value: BindingSecondaryIndexSnapshot) -> UInt64 {
+    return FfiConverterTypeBindingSecondaryIndexSnapshot.lower(value)
+}
+
+
+
+
+
+
+/**
+ * Application-facing managed map with version history and optimistic updates.
+ */
+public protocol BindingVersionedMapProtocol: AnyObject, Sendable {
+
+    func append(mutations: [MutationRecord]) throws  -> MapVersionRecord
+
+    func apply(mutations: [MutationRecord]) throws  -> MapVersionRecord
+
+    func applyAtMillis(mutations: [MutationRecord], timestampMillis: UInt64) throws  -> MapVersionRecord
+
+    func applyIf(expected: Data?, mutations: [MutationRecord]) throws  -> MapUpdateRecord
+
+    func applyIfAtMillis(expected: Data?, mutations: [MutationRecord], timestampMillis: UInt64) throws  -> MapUpdateRecord
+
+    func backup() throws  -> Data
+
+    func changesSince(base: Data) throws  -> [DiffRecord]
+
+    func compare(base: Data, target: Data) throws  -> BindingMapComparison
+
+    func compareToHead(base: Data) throws  -> BindingMapComparison
+
+    func containsKey(key: Data) throws  -> Bool
+
+    func delete(key: Data) throws  -> MapVersionRecord
+
+    func deleteIf(expected: Data?, key: Data) throws  -> MapUpdateRecord
+
+    func diff(base: Data, target: Data) throws  -> [DiffRecord]
+
+    func edit(mutations: [MutationRecord]) throws  -> MapVersionRecord
+
+    func editIf(expected: Data?, mutations: [MutationRecord]) throws  -> MapUpdateRecord
+
+    func get(key: Data) throws  -> Data?
+
+    func getAt(id: Data, key: Data) throws  -> Data?
+
+    func getLargeValue(blobStore: ProllyBlobStore, key: Data) throws  -> Data?
+
+    func getMany(keys: [Data]) throws  -> [Data?]
+
+    func getManyAt(id: Data, keys: [Data]) throws  -> [Data?]
+
+    func getValueRef(key: Data) throws  -> ValueRefRecord?
+
+    func getValueRefAt(id: Data, key: Data) throws  -> ValueRefRecord?
+
+    func head() throws  -> MapVersionRecord?
+
+    func headId() throws  -> Data?
+
+    func headName()  -> Data
+
+    func id()  -> Data
+
+    func importAsHead(bundle: SnapshotBundleRecord) throws  -> MapVersionRecord
+
+    func importAsHeadAtMillis(bundle: SnapshotBundleRecord, timestampMillis: UInt64) throws  -> MapVersionRecord
+
+    func initialize() throws  -> MapVersionRecord
+
+    func initializeSorted(entries: [EntryRecord]) throws  -> MapUpdateRecord
+
+    func isInitialized() throws  -> Bool
+
+    func keepFor(maxAgeMillis: UInt64) throws  -> VersionPruneRecord
+
+    func keepForAt(nowMillis: UInt64, maxAgeMillis: UInt64) throws  -> VersionPruneRecord
+
+    func keepLast(count: UInt64) throws  -> VersionPruneRecord
+
+    func keepVersions(ids: [Data]) throws  -> VersionPruneRecord
+
+    func parallelApply(mutations: [MutationRecord], config: ParallelConfigRecord) throws  -> VersionedMapBatchResultRecord
+
+    func planBlobGc(blobStore: ProllyBlobStore) throws  -> BlobGcPlanRecord
+
+    func planGc() throws  -> GcPlanRecord
+
+    func prefix(prefix: Data) throws  -> [EntryRecord]
+
+    func prefixAt(id: Data, prefix: Data) throws  -> [EntryRecord]
+
+    func prefixPage(prefix: Data, cursor: RangeCursorRecord?, limit: UInt64) throws  -> RangePageRecord
+
+    func prefixPageAt(id: Data, prefix: Data, cursor: RangeCursorRecord?, limit: UInt64) throws  -> RangePageRecord
+
+    func prepareMerge(base: Data, candidate: Data) throws  -> BindingMapMerge
+
+    func pruneVersions(keepLatest: UInt64) throws  -> VersionPruneRecord
+
+    func put(key: Data, value: Data) throws  -> MapVersionRecord
+
+    func putIf(expected: Data?, key: Data, value: Data) throws  -> MapUpdateRecord
+
+    func putLargeValue(blobStore: ProllyBlobStore, key: Data, value: Data, config: LargeValueConfigRecord) throws  -> MapVersionRecord
+
+    func putLargeValueIf(blobStore: ProllyBlobStore, expected: Data?, key: Data, value: Data, config: LargeValueConfigRecord) throws  -> MapUpdateRecord
+
+    func range(start: Data, rangeEnd: Data?) throws  -> [EntryRecord]
+
+    func rangeAt(id: Data, start: Data, rangeEnd: Data?) throws  -> [EntryRecord]
+
+    func rangePage(cursor: RangeCursorRecord?, rangeEnd: Data?, limit: UInt64) throws  -> RangePageRecord
+
+    func rangePageAt(id: Data, cursor: RangeCursorRecord?, rangeEnd: Data?, limit: UInt64) throws  -> RangePageRecord
+
+    func readSession() throws  -> ProllyReadSession?
+
+    func rebuildFromEntriesIf(expected: Data?, entries: [EntryRecord]) throws  -> MapUpdateRecord
+
+    func rebuildFromIterIf(expected: Data?, entries: [EntryRecord]) throws  -> MapUpdateRecord
+
+    func rebuildSortedIf(expected: Data?, entries: [EntryRecord]) throws  -> MapUpdateRecord
+
+    func restoreBackup(bytes: Data) throws  -> MapVersionRecord
+
+    func retentionPolicy()  -> NamedRootRetentionRecord
+
+    func rollbackTo(id: Data) throws  -> MapVersionRecord
+
+    func scanPrefix(prefix: Data, visitor: EntryVisitorCallback) throws  -> ScanOutcomeRecord
+
+    func scanPrefixAt(id: Data, prefix: Data, visitor: EntryVisitorCallback) throws  -> ScanOutcomeRecord
+
+    func scanRange(start: Data, rangeEnd: Data?, visitor: EntryVisitorCallback) throws  -> ScanOutcomeRecord
+
+    func scanRangeAt(id: Data, start: Data, rangeEnd: Data?, visitor: EntryVisitorCallback) throws  -> ScanOutcomeRecord
+
+    func snapshot() throws  -> BindingMapSnapshot?
+
+    func snapshotAt(id: Data) throws  -> BindingMapSnapshot?
+
+    func subscribe() throws  -> BindingMapSubscription
+
+    func subscribeFrom(lastSeen: Data?) throws  -> BindingMapSubscription
+
+    func sweepBlobGc(blobStore: ProllyBlobStore) throws  -> BlobGcSweepRecord
+
+    func sweepGc() throws  -> GcSweepRecord
+
+    func verifyCatalog() throws  -> MapCatalogVerificationRecord
+
+    func version(id: Data) throws  -> MapVersionRecord?
+
+    func versions() throws  -> [MapVersionRecord]
+
+    func versionsPrefix()  -> Data
+
+}
+/**
+ * Application-facing managed map with version history and optimistic updates.
+ */
+open class BindingVersionedMap: BindingVersionedMapProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_prolly_bindings_fn_clone_bindingversionedmap(self.handle, $0) }
+    }
+public convenience init(engine: ProllyEngine, id: Data)throws  {
+    let handle =
+        try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_constructor_bindingversionedmap_new(
+        FfiConverterTypeProllyEngine_lower(engine),
+        FfiConverterData.lower(id),$0
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_prolly_bindings_fn_free_bindingversionedmap(handle, $0) }
+    }
+
+
+
+
+open func append(mutations: [MutationRecord])throws  -> MapVersionRecord  {
+    return try  FfiConverterTypeMapVersionRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_append(
+            self.uniffiCloneHandle(),
+        FfiConverterSequenceTypeMutationRecord.lower(mutations),$0
+    )
+})
+}
+
+open func apply(mutations: [MutationRecord])throws  -> MapVersionRecord  {
+    return try  FfiConverterTypeMapVersionRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_apply(
+            self.uniffiCloneHandle(),
+        FfiConverterSequenceTypeMutationRecord.lower(mutations),$0
+    )
+})
+}
+
+open func applyAtMillis(mutations: [MutationRecord], timestampMillis: UInt64)throws  -> MapVersionRecord  {
+    return try  FfiConverterTypeMapVersionRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_apply_at_millis(
+            self.uniffiCloneHandle(),
+        FfiConverterSequenceTypeMutationRecord.lower(mutations),
+        FfiConverterUInt64.lower(timestampMillis),$0
+    )
+})
+}
+
+open func applyIf(expected: Data?, mutations: [MutationRecord])throws  -> MapUpdateRecord  {
+    return try  FfiConverterTypeMapUpdateRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_apply_if(
+            self.uniffiCloneHandle(),
+        FfiConverterOptionData.lower(expected),
+        FfiConverterSequenceTypeMutationRecord.lower(mutations),$0
+    )
+})
+}
+
+open func applyIfAtMillis(expected: Data?, mutations: [MutationRecord], timestampMillis: UInt64)throws  -> MapUpdateRecord  {
+    return try  FfiConverterTypeMapUpdateRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_apply_if_at_millis(
+            self.uniffiCloneHandle(),
+        FfiConverterOptionData.lower(expected),
+        FfiConverterSequenceTypeMutationRecord.lower(mutations),
+        FfiConverterUInt64.lower(timestampMillis),$0
+    )
+})
+}
+
+open func backup()throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_backup(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func changesSince(base: Data)throws  -> [DiffRecord]  {
+    return try  FfiConverterSequenceTypeDiffRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_changes_since(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(base),$0
+    )
+})
+}
+
+open func compare(base: Data, target: Data)throws  -> BindingMapComparison  {
+    return try  FfiConverterTypeBindingMapComparison_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_compare(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(base),
+        FfiConverterData.lower(target),$0
+    )
+})
+}
+
+open func compareToHead(base: Data)throws  -> BindingMapComparison  {
+    return try  FfiConverterTypeBindingMapComparison_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_compare_to_head(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(base),$0
+    )
+})
+}
+
+open func containsKey(key: Data)throws  -> Bool  {
+    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_contains_key(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(key),$0
+    )
+})
+}
+
+open func delete(key: Data)throws  -> MapVersionRecord  {
+    return try  FfiConverterTypeMapVersionRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_delete(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(key),$0
+    )
+})
+}
+
+open func deleteIf(expected: Data?, key: Data)throws  -> MapUpdateRecord  {
+    return try  FfiConverterTypeMapUpdateRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_delete_if(
+            self.uniffiCloneHandle(),
+        FfiConverterOptionData.lower(expected),
+        FfiConverterData.lower(key),$0
+    )
+})
+}
+
+open func diff(base: Data, target: Data)throws  -> [DiffRecord]  {
+    return try  FfiConverterSequenceTypeDiffRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_diff(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(base),
+        FfiConverterData.lower(target),$0
+    )
+})
+}
+
+open func edit(mutations: [MutationRecord])throws  -> MapVersionRecord  {
+    return try  FfiConverterTypeMapVersionRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_edit(
+            self.uniffiCloneHandle(),
+        FfiConverterSequenceTypeMutationRecord.lower(mutations),$0
+    )
+})
+}
+
+open func editIf(expected: Data?, mutations: [MutationRecord])throws  -> MapUpdateRecord  {
+    return try  FfiConverterTypeMapUpdateRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_edit_if(
+            self.uniffiCloneHandle(),
+        FfiConverterOptionData.lower(expected),
+        FfiConverterSequenceTypeMutationRecord.lower(mutations),$0
+    )
+})
+}
+
+open func get(key: Data)throws  -> Data?  {
+    return try  FfiConverterOptionData.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_get(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(key),$0
+    )
+})
+}
+
+open func getAt(id: Data, key: Data)throws  -> Data?  {
+    return try  FfiConverterOptionData.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_get_at(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(id),
+        FfiConverterData.lower(key),$0
+    )
+})
+}
+
+open func getLargeValue(blobStore: ProllyBlobStore, key: Data)throws  -> Data?  {
+    return try  FfiConverterOptionData.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_get_large_value(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeProllyBlobStore_lower(blobStore),
+        FfiConverterData.lower(key),$0
+    )
+})
+}
+
+open func getMany(keys: [Data])throws  -> [Data?]  {
+    return try  FfiConverterSequenceOptionData.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_get_many(
+            self.uniffiCloneHandle(),
+        FfiConverterSequenceData.lower(keys),$0
+    )
+})
+}
+
+open func getManyAt(id: Data, keys: [Data])throws  -> [Data?]  {
+    return try  FfiConverterSequenceOptionData.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_get_many_at(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(id),
+        FfiConverterSequenceData.lower(keys),$0
+    )
+})
+}
+
+open func getValueRef(key: Data)throws  -> ValueRefRecord?  {
+    return try  FfiConverterOptionTypeValueRefRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_get_value_ref(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(key),$0
+    )
+})
+}
+
+open func getValueRefAt(id: Data, key: Data)throws  -> ValueRefRecord?  {
+    return try  FfiConverterOptionTypeValueRefRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_get_value_ref_at(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(id),
+        FfiConverterData.lower(key),$0
+    )
+})
+}
+
+open func head()throws  -> MapVersionRecord?  {
+    return try  FfiConverterOptionTypeMapVersionRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_head(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func headId()throws  -> Data?  {
+    return try  FfiConverterOptionData.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_head_id(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func headName() -> Data  {
+    return try!  FfiConverterData.lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_head_name(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func id() -> Data  {
+    return try!  FfiConverterData.lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_id(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func importAsHead(bundle: SnapshotBundleRecord)throws  -> MapVersionRecord  {
+    return try  FfiConverterTypeMapVersionRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_import_as_head(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeSnapshotBundleRecord_lower(bundle),$0
+    )
+})
+}
+
+open func importAsHeadAtMillis(bundle: SnapshotBundleRecord, timestampMillis: UInt64)throws  -> MapVersionRecord  {
+    return try  FfiConverterTypeMapVersionRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_import_as_head_at_millis(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeSnapshotBundleRecord_lower(bundle),
+        FfiConverterUInt64.lower(timestampMillis),$0
+    )
+})
+}
+
+open func initialize()throws  -> MapVersionRecord  {
+    return try  FfiConverterTypeMapVersionRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_initialize(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func initializeSorted(entries: [EntryRecord])throws  -> MapUpdateRecord  {
+    return try  FfiConverterTypeMapUpdateRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_initialize_sorted(
+            self.uniffiCloneHandle(),
+        FfiConverterSequenceTypeEntryRecord.lower(entries),$0
+    )
+})
+}
+
+open func isInitialized()throws  -> Bool  {
+    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_is_initialized(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func keepFor(maxAgeMillis: UInt64)throws  -> VersionPruneRecord  {
+    return try  FfiConverterTypeVersionPruneRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_keep_for(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt64.lower(maxAgeMillis),$0
+    )
+})
+}
+
+open func keepForAt(nowMillis: UInt64, maxAgeMillis: UInt64)throws  -> VersionPruneRecord  {
+    return try  FfiConverterTypeVersionPruneRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_keep_for_at(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt64.lower(nowMillis),
+        FfiConverterUInt64.lower(maxAgeMillis),$0
+    )
+})
+}
+
+open func keepLast(count: UInt64)throws  -> VersionPruneRecord  {
+    return try  FfiConverterTypeVersionPruneRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_keep_last(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt64.lower(count),$0
+    )
+})
+}
+
+open func keepVersions(ids: [Data])throws  -> VersionPruneRecord  {
+    return try  FfiConverterTypeVersionPruneRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_keep_versions(
+            self.uniffiCloneHandle(),
+        FfiConverterSequenceData.lower(ids),$0
+    )
+})
+}
+
+open func parallelApply(mutations: [MutationRecord], config: ParallelConfigRecord)throws  -> VersionedMapBatchResultRecord  {
+    return try  FfiConverterTypeVersionedMapBatchResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_parallel_apply(
+            self.uniffiCloneHandle(),
+        FfiConverterSequenceTypeMutationRecord.lower(mutations),
+        FfiConverterTypeParallelConfigRecord_lower(config),$0
+    )
+})
+}
+
+open func planBlobGc(blobStore: ProllyBlobStore)throws  -> BlobGcPlanRecord  {
+    return try  FfiConverterTypeBlobGcPlanRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_plan_blob_gc(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeProllyBlobStore_lower(blobStore),$0
+    )
+})
+}
+
+open func planGc()throws  -> GcPlanRecord  {
+    return try  FfiConverterTypeGcPlanRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_plan_gc(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func prefix(prefix: Data)throws  -> [EntryRecord]  {
+    return try  FfiConverterSequenceTypeEntryRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_prefix(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(prefix),$0
+    )
+})
+}
+
+open func prefixAt(id: Data, prefix: Data)throws  -> [EntryRecord]  {
+    return try  FfiConverterSequenceTypeEntryRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_prefix_at(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(id),
+        FfiConverterData.lower(prefix),$0
+    )
+})
+}
+
+open func prefixPage(prefix: Data, cursor: RangeCursorRecord?, limit: UInt64)throws  -> RangePageRecord  {
+    return try  FfiConverterTypeRangePageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_prefix_page(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(prefix),
+        FfiConverterOptionTypeRangeCursorRecord.lower(cursor),
+        FfiConverterUInt64.lower(limit),$0
+    )
+})
+}
+
+open func prefixPageAt(id: Data, prefix: Data, cursor: RangeCursorRecord?, limit: UInt64)throws  -> RangePageRecord  {
+    return try  FfiConverterTypeRangePageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_prefix_page_at(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(id),
+        FfiConverterData.lower(prefix),
+        FfiConverterOptionTypeRangeCursorRecord.lower(cursor),
+        FfiConverterUInt64.lower(limit),$0
+    )
+})
+}
+
+open func prepareMerge(base: Data, candidate: Data)throws  -> BindingMapMerge  {
+    return try  FfiConverterTypeBindingMapMerge_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_prepare_merge(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(base),
+        FfiConverterData.lower(candidate),$0
+    )
+})
+}
+
+open func pruneVersions(keepLatest: UInt64)throws  -> VersionPruneRecord  {
+    return try  FfiConverterTypeVersionPruneRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_prune_versions(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt64.lower(keepLatest),$0
+    )
+})
+}
+
+open func put(key: Data, value: Data)throws  -> MapVersionRecord  {
+    return try  FfiConverterTypeMapVersionRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_put(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(key),
+        FfiConverterData.lower(value),$0
+    )
+})
+}
+
+open func putIf(expected: Data?, key: Data, value: Data)throws  -> MapUpdateRecord  {
+    return try  FfiConverterTypeMapUpdateRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_put_if(
+            self.uniffiCloneHandle(),
+        FfiConverterOptionData.lower(expected),
+        FfiConverterData.lower(key),
+        FfiConverterData.lower(value),$0
+    )
+})
+}
+
+open func putLargeValue(blobStore: ProllyBlobStore, key: Data, value: Data, config: LargeValueConfigRecord)throws  -> MapVersionRecord  {
+    return try  FfiConverterTypeMapVersionRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_put_large_value(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeProllyBlobStore_lower(blobStore),
+        FfiConverterData.lower(key),
+        FfiConverterData.lower(value),
+        FfiConverterTypeLargeValueConfigRecord_lower(config),$0
+    )
+})
+}
+
+open func putLargeValueIf(blobStore: ProllyBlobStore, expected: Data?, key: Data, value: Data, config: LargeValueConfigRecord)throws  -> MapUpdateRecord  {
+    return try  FfiConverterTypeMapUpdateRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_put_large_value_if(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeProllyBlobStore_lower(blobStore),
+        FfiConverterOptionData.lower(expected),
+        FfiConverterData.lower(key),
+        FfiConverterData.lower(value),
+        FfiConverterTypeLargeValueConfigRecord_lower(config),$0
+    )
+})
+}
+
+open func range(start: Data, rangeEnd: Data?)throws  -> [EntryRecord]  {
+    return try  FfiConverterSequenceTypeEntryRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_range(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(start),
+        FfiConverterOptionData.lower(rangeEnd),$0
+    )
+})
+}
+
+open func rangeAt(id: Data, start: Data, rangeEnd: Data?)throws  -> [EntryRecord]  {
+    return try  FfiConverterSequenceTypeEntryRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_range_at(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(id),
+        FfiConverterData.lower(start),
+        FfiConverterOptionData.lower(rangeEnd),$0
+    )
+})
+}
+
+open func rangePage(cursor: RangeCursorRecord?, rangeEnd: Data?, limit: UInt64)throws  -> RangePageRecord  {
+    return try  FfiConverterTypeRangePageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_range_page(
+            self.uniffiCloneHandle(),
+        FfiConverterOptionTypeRangeCursorRecord.lower(cursor),
+        FfiConverterOptionData.lower(rangeEnd),
+        FfiConverterUInt64.lower(limit),$0
+    )
+})
+}
+
+open func rangePageAt(id: Data, cursor: RangeCursorRecord?, rangeEnd: Data?, limit: UInt64)throws  -> RangePageRecord  {
+    return try  FfiConverterTypeRangePageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_range_page_at(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(id),
+        FfiConverterOptionTypeRangeCursorRecord.lower(cursor),
+        FfiConverterOptionData.lower(rangeEnd),
+        FfiConverterUInt64.lower(limit),$0
+    )
+})
+}
+
+open func readSession()throws  -> ProllyReadSession?  {
+    return try  FfiConverterOptionTypeProllyReadSession.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_read_session(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func rebuildFromEntriesIf(expected: Data?, entries: [EntryRecord])throws  -> MapUpdateRecord  {
+    return try  FfiConverterTypeMapUpdateRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_rebuild_from_entries_if(
+            self.uniffiCloneHandle(),
+        FfiConverterOptionData.lower(expected),
+        FfiConverterSequenceTypeEntryRecord.lower(entries),$0
+    )
+})
+}
+
+open func rebuildFromIterIf(expected: Data?, entries: [EntryRecord])throws  -> MapUpdateRecord  {
+    return try  FfiConverterTypeMapUpdateRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_rebuild_from_iter_if(
+            self.uniffiCloneHandle(),
+        FfiConverterOptionData.lower(expected),
+        FfiConverterSequenceTypeEntryRecord.lower(entries),$0
+    )
+})
+}
+
+open func rebuildSortedIf(expected: Data?, entries: [EntryRecord])throws  -> MapUpdateRecord  {
+    return try  FfiConverterTypeMapUpdateRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_rebuild_sorted_if(
+            self.uniffiCloneHandle(),
+        FfiConverterOptionData.lower(expected),
+        FfiConverterSequenceTypeEntryRecord.lower(entries),$0
+    )
+})
+}
+
+open func restoreBackup(bytes: Data)throws  -> MapVersionRecord  {
+    return try  FfiConverterTypeMapVersionRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_restore_backup(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(bytes),$0
+    )
+})
+}
+
+open func retentionPolicy() -> NamedRootRetentionRecord  {
+    return try!  FfiConverterTypeNamedRootRetentionRecord_lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_retention_policy(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func rollbackTo(id: Data)throws  -> MapVersionRecord  {
+    return try  FfiConverterTypeMapVersionRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_rollback_to(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(id),$0
+    )
+})
+}
+
+open func scanPrefix(prefix: Data, visitor: EntryVisitorCallback)throws  -> ScanOutcomeRecord  {
+    return try  FfiConverterTypeScanOutcomeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_scan_prefix(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(prefix),
+        FfiConverterTypeEntryVisitorCallback_lower(visitor),$0
+    )
+})
+}
+
+open func scanPrefixAt(id: Data, prefix: Data, visitor: EntryVisitorCallback)throws  -> ScanOutcomeRecord  {
+    return try  FfiConverterTypeScanOutcomeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_scan_prefix_at(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(id),
+        FfiConverterData.lower(prefix),
+        FfiConverterTypeEntryVisitorCallback_lower(visitor),$0
+    )
+})
+}
+
+open func scanRange(start: Data, rangeEnd: Data?, visitor: EntryVisitorCallback)throws  -> ScanOutcomeRecord  {
+    return try  FfiConverterTypeScanOutcomeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_scan_range(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(start),
+        FfiConverterOptionData.lower(rangeEnd),
+        FfiConverterTypeEntryVisitorCallback_lower(visitor),$0
+    )
+})
+}
+
+open func scanRangeAt(id: Data, start: Data, rangeEnd: Data?, visitor: EntryVisitorCallback)throws  -> ScanOutcomeRecord  {
+    return try  FfiConverterTypeScanOutcomeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_scan_range_at(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(id),
+        FfiConverterData.lower(start),
+        FfiConverterOptionData.lower(rangeEnd),
+        FfiConverterTypeEntryVisitorCallback_lower(visitor),$0
+    )
+})
+}
+
+open func snapshot()throws  -> BindingMapSnapshot?  {
+    return try  FfiConverterOptionTypeBindingMapSnapshot.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_snapshot(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func snapshotAt(id: Data)throws  -> BindingMapSnapshot?  {
+    return try  FfiConverterOptionTypeBindingMapSnapshot.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_snapshot_at(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(id),$0
+    )
+})
+}
+
+open func subscribe()throws  -> BindingMapSubscription  {
+    return try  FfiConverterTypeBindingMapSubscription_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_subscribe(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func subscribeFrom(lastSeen: Data?)throws  -> BindingMapSubscription  {
+    return try  FfiConverterTypeBindingMapSubscription_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_subscribe_from(
+            self.uniffiCloneHandle(),
+        FfiConverterOptionData.lower(lastSeen),$0
+    )
+})
+}
+
+open func sweepBlobGc(blobStore: ProllyBlobStore)throws  -> BlobGcSweepRecord  {
+    return try  FfiConverterTypeBlobGcSweepRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_sweep_blob_gc(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeProllyBlobStore_lower(blobStore),$0
+    )
+})
+}
+
+open func sweepGc()throws  -> GcSweepRecord  {
+    return try  FfiConverterTypeGcSweepRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_sweep_gc(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func verifyCatalog()throws  -> MapCatalogVerificationRecord  {
+    return try  FfiConverterTypeMapCatalogVerificationRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_verify_catalog(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func version(id: Data)throws  -> MapVersionRecord?  {
+    return try  FfiConverterOptionTypeMapVersionRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_version(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(id),$0
+    )
+})
+}
+
+open func versions()throws  -> [MapVersionRecord]  {
+    return try  FfiConverterSequenceTypeMapVersionRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_versions(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func versionsPrefix() -> Data  {
+    return try!  FfiConverterData.lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_method_bindingversionedmap_versions_prefix(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBindingVersionedMap: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = BindingVersionedMap
+
+    public static func lift(_ handle: UInt64) throws -> BindingVersionedMap {
+        return BindingVersionedMap(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: BindingVersionedMap) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BindingVersionedMap {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: BindingVersionedMap, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBindingVersionedMap_lift(_ handle: UInt64) throws -> BindingVersionedMap {
+    return try FfiConverterTypeBindingVersionedMap.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBindingVersionedMap_lower(_ value: BindingVersionedMap) -> UInt64 {
+    return FfiConverterTypeBindingVersionedMap.lower(value)
+}
+
+
+
+
+
+
+/**
+ * Host-friendly atomic multi-map transaction. Mutations are accumulated in
+ * owned form, provide read-your-writes, and execute through Rust's strict
+ * `VersionedMapsTransaction` at commit.
+ */
+public protocol BindingVersionedTransactionProtocol: AnyObject, Sendable {
+
+    func apply(mapId: Data, mutations: [MutationRecord]) throws  -> MapVersionRecord
+
+    func applyIf(mapId: Data, expected: Data?, mutations: [MutationRecord]) throws  -> MapUpdateRecord
+
+    func commit() throws  -> VersionedTransactionCommitRecord
+
+    func delete(mapId: Data, key: Data) throws  -> MapVersionRecord
+
+    func get(mapId: Data, key: Data) throws  -> Data?
+
+    func head(mapId: Data) throws  -> MapVersionRecord?
+
+    func put(mapId: Data, key: Data, value: Data) throws  -> MapVersionRecord
+
+    func rollback() throws
+
+}
+/**
+ * Host-friendly atomic multi-map transaction. Mutations are accumulated in
+ * owned form, provide read-your-writes, and execute through Rust's strict
+ * `VersionedMapsTransaction` at commit.
+ */
+open class BindingVersionedTransaction: BindingVersionedTransactionProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_prolly_bindings_fn_clone_bindingversionedtransaction(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_prolly_bindings_fn_free_bindingversionedtransaction(handle, $0) }
+    }
+
+
+
+
+open func apply(mapId: Data, mutations: [MutationRecord])throws  -> MapVersionRecord  {
+    return try  FfiConverterTypeMapVersionRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedtransaction_apply(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(mapId),
+        FfiConverterSequenceTypeMutationRecord.lower(mutations),$0
+    )
+})
+}
+
+open func applyIf(mapId: Data, expected: Data?, mutations: [MutationRecord])throws  -> MapUpdateRecord  {
+    return try  FfiConverterTypeMapUpdateRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedtransaction_apply_if(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(mapId),
+        FfiConverterOptionData.lower(expected),
+        FfiConverterSequenceTypeMutationRecord.lower(mutations),$0
+    )
+})
+}
+
+open func commit()throws  -> VersionedTransactionCommitRecord  {
+    return try  FfiConverterTypeVersionedTransactionCommitRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedtransaction_commit(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func delete(mapId: Data, key: Data)throws  -> MapVersionRecord  {
+    return try  FfiConverterTypeMapVersionRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedtransaction_delete(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(mapId),
+        FfiConverterData.lower(key),$0
+    )
+})
+}
+
+open func get(mapId: Data, key: Data)throws  -> Data?  {
+    return try  FfiConverterOptionData.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedtransaction_get(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(mapId),
+        FfiConverterData.lower(key),$0
+    )
+})
+}
+
+open func head(mapId: Data)throws  -> MapVersionRecord?  {
+    return try  FfiConverterOptionTypeMapVersionRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedtransaction_head(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(mapId),$0
+    )
+})
+}
+
+open func put(mapId: Data, key: Data, value: Data)throws  -> MapVersionRecord  {
+    return try  FfiConverterTypeMapVersionRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedtransaction_put(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(mapId),
+        FfiConverterData.lower(key),
+        FfiConverterData.lower(value),$0
+    )
+})
+}
+
+open func rollback()throws   {try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingversionedtransaction_rollback(
+            self.uniffiCloneHandle(),$0
+    )
+}
+}
+
+
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBindingVersionedTransaction: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = BindingVersionedTransaction
+
+    public static func lift(_ handle: UInt64) throws -> BindingVersionedTransaction {
+        return BindingVersionedTransaction(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: BindingVersionedTransaction) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BindingVersionedTransaction {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: BindingVersionedTransaction, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBindingVersionedTransaction_lift(_ handle: UInt64) throws -> BindingVersionedTransaction {
+    return try FfiConverterTypeBindingVersionedTransaction.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBindingVersionedTransaction_lower(_ value: BindingVersionedTransaction) -> UInt64 {
+    return FfiConverterTypeBindingVersionedTransaction.lower(value)
+}
+
+
 
 
 
@@ -2635,9 +6212,17 @@ public protocol ProllyEngineProtocol: AnyObject, Sendable {
 
     func beginTransaction() throws  -> ProllyTransaction
 
+    func beginVersionedTransaction() throws  -> BindingVersionedTransaction
+
     func buildFromEntries(entries: [EntryRecord]) throws  -> TreeRecord
 
     func buildFromSortedEntries(entries: [EntryRecord]) throws  -> TreeRecord
+
+    /**
+     * Canonically build one immutable proximity map and return its
+     * descriptor-bound application handle.
+     */
+    func buildProximityMap(config: ProximityConfigRecord, records: [ProximityRecordRecord], threads: UInt64?) throws  -> BindingProximityMap
 
     func cacheStats() throws  -> CacheStatsRecord
 
@@ -2717,6 +6302,12 @@ public protocol ProllyEngineProtocol: AnyObject, Sendable {
 
     func importSnapshot(bundle: SnapshotBundleRecord) throws  -> TreeRecord
 
+    /**
+     * Open an application-facing indexed map using a frozen snapshot of the
+     * supplied extractor registry.
+     */
+    func indexedMap(id: Data, registry: BindingIndexRegistry) throws  -> BindingIndexedMap
+
     func lastEntry(tree: TreeRecord) throws  -> EntryRecord?
 
     func listNamedRootManifests() throws  -> [NamedRootManifestRecord]
@@ -2732,6 +6323,12 @@ public protocol ProllyEngineProtocol: AnyObject, Sendable {
     func loadNamedRoot(name: Data) throws  -> TreeRecord?
 
     func loadNamedRoots(names: [Data]) throws  -> NamedRootSelectionRecord
+
+    /**
+     * Reopen and validate an immutable proximity descriptor from this
+     * engine's content store.
+     */
+    func loadProximityMap(descriptor: Data) throws  -> BindingProximityMap
 
     func loadRetainedNamedRoots(retention: NamedRootRetentionRecord) throws  -> NamedRootSelectionRecord
 
@@ -2903,6 +6500,12 @@ public protocol ProllyEngineProtocol: AnyObject, Sendable {
 
     func upperBound(tree: TreeRecord, key: Data) throws  -> EntryRecord?
 
+    /**
+     * Open an application-facing managed map. The returned object shares the
+     * underlying engine and may outlive this particular foreign handle.
+     */
+    func versionedMap(id: Data) throws  -> BindingVersionedMap
+
 }
 open class ProllyEngine: ProllyEngineProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -3048,6 +6651,14 @@ open func beginTransaction()throws  -> ProllyTransaction  {
 })
 }
 
+open func beginVersionedTransaction()throws  -> BindingVersionedTransaction  {
+    return try  FfiConverterTypeBindingVersionedTransaction_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_prollyengine_begin_versioned_transaction(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
 open func buildFromEntries(entries: [EntryRecord])throws  -> TreeRecord  {
     return try  FfiConverterTypeTreeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_build_from_entries(
@@ -3062,6 +6673,21 @@ open func buildFromSortedEntries(entries: [EntryRecord])throws  -> TreeRecord  {
     uniffi_prolly_bindings_fn_method_prollyengine_build_from_sorted_entries(
             self.uniffiCloneHandle(),
         FfiConverterSequenceTypeEntryRecord.lower(entries),$0
+    )
+})
+}
+
+    /**
+     * Canonically build one immutable proximity map and return its
+     * descriptor-bound application handle.
+     */
+open func buildProximityMap(config: ProximityConfigRecord, records: [ProximityRecordRecord], threads: UInt64?)throws  -> BindingProximityMap  {
+    return try  FfiConverterTypeBindingProximityMap_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_prollyengine_build_proximity_map(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeProximityConfigRecord_lower(config),
+        FfiConverterSequenceTypeProximityRecordRecord.lower(records),
+        FfiConverterOptionUInt64.lower(threads),$0
     )
 })
 }
@@ -3440,6 +7066,20 @@ open func importSnapshot(bundle: SnapshotBundleRecord)throws  -> TreeRecord  {
 })
 }
 
+    /**
+     * Open an application-facing indexed map using a frozen snapshot of the
+     * supplied extractor registry.
+     */
+open func indexedMap(id: Data, registry: BindingIndexRegistry)throws  -> BindingIndexedMap  {
+    return try  FfiConverterTypeBindingIndexedMap_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_prollyengine_indexed_map(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(id),
+        FfiConverterTypeBindingIndexRegistry_lower(registry),$0
+    )
+})
+}
+
 open func lastEntry(tree: TreeRecord)throws  -> EntryRecord?  {
     return try  FfiConverterOptionTypeEntryRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_last_entry(
@@ -3506,6 +7146,19 @@ open func loadNamedRoots(names: [Data])throws  -> NamedRootSelectionRecord  {
     uniffi_prolly_bindings_fn_method_prollyengine_load_named_roots(
             self.uniffiCloneHandle(),
         FfiConverterSequenceData.lower(names),$0
+    )
+})
+}
+
+    /**
+     * Reopen and validate an immutable proximity descriptor from this
+     * engine's content store.
+     */
+open func loadProximityMap(descriptor: Data)throws  -> BindingProximityMap  {
+    return try  FfiConverterTypeBindingProximityMap_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_prollyengine_load_proximity_map(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(descriptor),$0
     )
 })
 }
@@ -4317,6 +7970,19 @@ open func upperBound(tree: TreeRecord, key: Data)throws  -> EntryRecord?  {
 })
 }
 
+    /**
+     * Open an application-facing managed map. The returned object shares the
+     * underlying engine and may outlive this particular foreign handle.
+     */
+open func versionedMap(id: Data)throws  -> BindingVersionedMap  {
+    return try  FfiConverterTypeBindingVersionedMap_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_prollyengine_versioned_map(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(id),$0
+    )
+})
+}
+
 
 
 }
@@ -4820,6 +8486,454 @@ public func FfiConverterTypeProllyTransaction_lower(_ value: ProllyTransaction) 
 }
 
 
+
+
+
+
+public protocol ProximityRecordVisitorCallback: AnyObject, Sendable {
+
+    func visit(record: ProximityRecordRecord)  -> Bool
+
+}
+open class ProximityRecordVisitorCallbackImpl: ProximityRecordVisitorCallback, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_prolly_bindings_fn_clone_proximityrecordvisitorcallback(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_prolly_bindings_fn_free_proximityrecordvisitorcallback(handle, $0) }
+    }
+
+
+
+
+open func visit(record: ProximityRecordRecord) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_method_proximityrecordvisitorcallback_visit(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeProximityRecordRecord_lower(record),$0
+    )
+})
+}
+
+
+
+}
+
+
+
+// Put the implementation in a struct so we don't pollute the top-level namespace
+fileprivate struct UniffiCallbackInterfaceProximityRecordVisitorCallback {
+
+    // Create the VTable using a series of closures.
+    // Swift automatically converts these into C callback functions.
+    //
+    // This creates 1-element array, since this seems to be the only way to construct a const
+    // pointer that we can pass to the Rust code.
+    static let vtable: [UniffiVTableCallbackInterfaceProximityRecordVisitorCallback] = [UniffiVTableCallbackInterfaceProximityRecordVisitorCallback(
+        uniffiFree: { (uniffiHandle: UInt64) -> () in
+            do {
+                try FfiConverterTypeProximityRecordVisitorCallback.handleMap.remove(handle: uniffiHandle)
+            } catch {
+                print("Uniffi callback interface ProximityRecordVisitorCallback: handle missing in uniffiFree")
+            }
+        },
+        uniffiClone: { (uniffiHandle: UInt64) -> UInt64 in
+            do {
+                return try FfiConverterTypeProximityRecordVisitorCallback.handleMap.clone(handle: uniffiHandle)
+            } catch {
+                fatalError("Uniffi callback interface ProximityRecordVisitorCallback: handle missing in uniffiClone")
+            }
+        },
+        visit: { (
+            uniffiHandle: UInt64,
+            record: RustBuffer,
+            uniffiOutReturn: UnsafeMutablePointer<Int8>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> Bool in
+                guard let uniffiObj = try? FfiConverterTypeProximityRecordVisitorCallback.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.visit(
+                     record: try FfiConverterTypeProximityRecordRecord_lift(record)
+                )
+            }
+
+
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterBool.lower($0) }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        }
+    )]
+}
+
+private func uniffiCallbackInitProximityRecordVisitorCallback() {
+    uniffi_prolly_bindings_fn_init_callback_vtable_proximityrecordvisitorcallback(UniffiCallbackInterfaceProximityRecordVisitorCallback.vtable)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProximityRecordVisitorCallback: FfiConverter {
+    fileprivate static let handleMap = UniffiHandleMap<ProximityRecordVisitorCallback>()
+
+    typealias FfiType = UInt64
+    typealias SwiftType = ProximityRecordVisitorCallback
+
+    public static func lift(_ handle: UInt64) throws -> ProximityRecordVisitorCallback {
+        if ((handle & 1) == 0) {
+            // Rust-generated handle, construct a new class that uses the handle to implement the
+            // interface
+            return ProximityRecordVisitorCallbackImpl(unsafeFromHandle: handle)
+        } else {
+            // Swift-generated handle, get the object from the handle map
+            return try handleMap.remove(handle: handle)
+        }
+    }
+
+    public static func lower(_ value: ProximityRecordVisitorCallback) -> UInt64 {
+         if let rustImpl = value as? ProximityRecordVisitorCallbackImpl {
+             // Rust-implemented object.  Clone the handle and return it
+            return rustImpl.uniffiCloneHandle()
+         } else {
+            // Swift object, generate a new vtable handle and return that.
+            return handleMap.insert(obj: value)
+         }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProximityRecordVisitorCallback {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: ProximityRecordVisitorCallback, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProximityRecordVisitorCallback_lift(_ handle: UInt64) throws -> ProximityRecordVisitorCallback {
+    return try FfiConverterTypeProximityRecordVisitorCallback.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProximityRecordVisitorCallback_lower(_ value: ProximityRecordVisitorCallback) -> UInt64 {
+    return FfiConverterTypeProximityRecordVisitorCallback.lower(value)
+}
+
+
+
+
+
+
+public protocol SecondaryIndexExtractorCallback: AnyObject, Sendable {
+
+    func extract(primaryKey: Data, sourceValue: Data) throws  -> [IndexEntryRecord]
+
+}
+open class SecondaryIndexExtractorCallbackImpl: SecondaryIndexExtractorCallback, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_prolly_bindings_fn_clone_secondaryindexextractorcallback(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_prolly_bindings_fn_free_secondaryindexextractorcallback(handle, $0) }
+    }
+
+
+
+
+open func extract(primaryKey: Data, sourceValue: Data)throws  -> [IndexEntryRecord]  {
+    return try  FfiConverterSequenceTypeIndexEntryRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_secondaryindexextractorcallback_extract(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(primaryKey),
+        FfiConverterData.lower(sourceValue),$0
+    )
+})
+}
+
+
+
+}
+
+
+
+// Put the implementation in a struct so we don't pollute the top-level namespace
+fileprivate struct UniffiCallbackInterfaceSecondaryIndexExtractorCallback {
+
+    // Create the VTable using a series of closures.
+    // Swift automatically converts these into C callback functions.
+    //
+    // This creates 1-element array, since this seems to be the only way to construct a const
+    // pointer that we can pass to the Rust code.
+    static let vtable: [UniffiVTableCallbackInterfaceSecondaryIndexExtractorCallback] = [UniffiVTableCallbackInterfaceSecondaryIndexExtractorCallback(
+        uniffiFree: { (uniffiHandle: UInt64) -> () in
+            do {
+                try FfiConverterTypeSecondaryIndexExtractorCallback.handleMap.remove(handle: uniffiHandle)
+            } catch {
+                print("Uniffi callback interface SecondaryIndexExtractorCallback: handle missing in uniffiFree")
+            }
+        },
+        uniffiClone: { (uniffiHandle: UInt64) -> UInt64 in
+            do {
+                return try FfiConverterTypeSecondaryIndexExtractorCallback.handleMap.clone(handle: uniffiHandle)
+            } catch {
+                fatalError("Uniffi callback interface SecondaryIndexExtractorCallback: handle missing in uniffiClone")
+            }
+        },
+        extract: { (
+            uniffiHandle: UInt64,
+            primaryKey: RustBuffer,
+            sourceValue: RustBuffer,
+            uniffiOutReturn: UnsafeMutablePointer<RustBuffer>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> [IndexEntryRecord] in
+                guard let uniffiObj = try? FfiConverterTypeSecondaryIndexExtractorCallback.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try uniffiObj.extract(
+                     primaryKey: try FfiConverterData.lift(primaryKey),
+                     sourceValue: try FfiConverterData.lift(sourceValue)
+                )
+            }
+
+
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterSequenceTypeIndexEntryRecord.lower($0) }
+            uniffiTraitInterfaceCallWithError(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn,
+                lowerError: FfiConverterTypeProllyBindingError_lower
+            )
+        }
+    )]
+}
+
+private func uniffiCallbackInitSecondaryIndexExtractorCallback() {
+    uniffi_prolly_bindings_fn_init_callback_vtable_secondaryindexextractorcallback(UniffiCallbackInterfaceSecondaryIndexExtractorCallback.vtable)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSecondaryIndexExtractorCallback: FfiConverter {
+    fileprivate static let handleMap = UniffiHandleMap<SecondaryIndexExtractorCallback>()
+
+    typealias FfiType = UInt64
+    typealias SwiftType = SecondaryIndexExtractorCallback
+
+    public static func lift(_ handle: UInt64) throws -> SecondaryIndexExtractorCallback {
+        if ((handle & 1) == 0) {
+            // Rust-generated handle, construct a new class that uses the handle to implement the
+            // interface
+            return SecondaryIndexExtractorCallbackImpl(unsafeFromHandle: handle)
+        } else {
+            // Swift-generated handle, get the object from the handle map
+            return try handleMap.remove(handle: handle)
+        }
+    }
+
+    public static func lower(_ value: SecondaryIndexExtractorCallback) -> UInt64 {
+         if let rustImpl = value as? SecondaryIndexExtractorCallbackImpl {
+             // Rust-implemented object.  Clone the handle and return it
+            return rustImpl.uniffiCloneHandle()
+         } else {
+            // Swift object, generate a new vtable handle and return that.
+            return handleMap.insert(obj: value)
+         }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SecondaryIndexExtractorCallback {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: SecondaryIndexExtractorCallback, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSecondaryIndexExtractorCallback_lift(_ handle: UInt64) throws -> SecondaryIndexExtractorCallback {
+    return try FfiConverterTypeSecondaryIndexExtractorCallback.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSecondaryIndexExtractorCallback_lower(_ value: SecondaryIndexExtractorCallback) -> UInt64 {
+    return FfiConverterTypeSecondaryIndexExtractorCallback.lower(value)
+}
+
+
+
+
+public struct ActiveIndexHealthRecord: Equatable, Hashable {
+    public var name: Data
+    public var generation: UInt64
+    public var fingerprint: Data
+    public var projection: IndexProjectionRecord
+    public var indexMapId: Data
+    public var indexVersion: Data
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(name: Data, generation: UInt64, fingerprint: Data, projection: IndexProjectionRecord, indexMapId: Data, indexVersion: Data) {
+        self.name = name
+        self.generation = generation
+        self.fingerprint = fingerprint
+        self.projection = projection
+        self.indexMapId = indexMapId
+        self.indexVersion = indexVersion
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension ActiveIndexHealthRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeActiveIndexHealthRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ActiveIndexHealthRecord {
+        return
+            try ActiveIndexHealthRecord(
+                name: FfiConverterData.read(from: &buf),
+                generation: FfiConverterUInt64.read(from: &buf),
+                fingerprint: FfiConverterData.read(from: &buf),
+                projection: FfiConverterTypeIndexProjectionRecord.read(from: &buf),
+                indexMapId: FfiConverterData.read(from: &buf),
+                indexVersion: FfiConverterData.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ActiveIndexHealthRecord, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.name, into: &buf)
+        FfiConverterUInt64.write(value.generation, into: &buf)
+        FfiConverterData.write(value.fingerprint, into: &buf)
+        FfiConverterTypeIndexProjectionRecord.write(value.projection, into: &buf)
+        FfiConverterData.write(value.indexMapId, into: &buf)
+        FfiConverterData.write(value.indexVersion, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeActiveIndexHealthRecord_lift(_ buf: RustBuffer) throws -> ActiveIndexHealthRecord {
+    return try FfiConverterTypeActiveIndexHealthRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeActiveIndexHealthRecord_lower(_ value: ActiveIndexHealthRecord) -> RustBuffer {
+    return FfiConverterTypeActiveIndexHealthRecord.lower(value)
+}
 
 
 public struct AuthenticatedProofBundleVerificationRecord: Equatable, Hashable {
@@ -5828,6 +9942,68 @@ public func FfiConverterTypeConflictRecord_lower(_ value: ConflictRecord) -> Rus
 }
 
 
+public struct ContentGraphLimitsRecord: Equatable, Hashable {
+    public var maxObjects: UInt64
+    public var maxDepth: UInt64
+    public var maxBytes: UInt64
+    public var maxReferencesPerObject: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(maxObjects: UInt64, maxDepth: UInt64, maxBytes: UInt64, maxReferencesPerObject: UInt64) {
+        self.maxObjects = maxObjects
+        self.maxDepth = maxDepth
+        self.maxBytes = maxBytes
+        self.maxReferencesPerObject = maxReferencesPerObject
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension ContentGraphLimitsRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeContentGraphLimitsRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ContentGraphLimitsRecord {
+        return
+            try ContentGraphLimitsRecord(
+                maxObjects: FfiConverterUInt64.read(from: &buf),
+                maxDepth: FfiConverterUInt64.read(from: &buf),
+                maxBytes: FfiConverterUInt64.read(from: &buf),
+                maxReferencesPerObject: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ContentGraphLimitsRecord, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.maxObjects, into: &buf)
+        FfiConverterUInt64.write(value.maxDepth, into: &buf)
+        FfiConverterUInt64.write(value.maxBytes, into: &buf)
+        FfiConverterUInt64.write(value.maxReferencesPerObject, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeContentGraphLimitsRecord_lift(_ buf: RustBuffer) throws -> ContentGraphLimitsRecord {
+    return try FfiConverterTypeContentGraphLimitsRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeContentGraphLimitsRecord_lower(_ value: ContentGraphLimitsRecord) -> RustBuffer {
+    return FfiConverterTypeContentGraphLimitsRecord.lower(value)
+}
+
+
 public struct CrdtConfigRecord: Equatable, Hashable {
     public var strategy: CrdtMergeStrategyKind
     public var deletePolicy: CrdtDeletePolicyKind
@@ -6461,6 +10637,60 @@ public func FfiConverterTypeEntryRecord_lift(_ buf: RustBuffer) throws -> EntryR
 #endif
 public func FfiConverterTypeEntryRecord_lower(_ value: EntryRecord) -> RustBuffer {
     return FfiConverterTypeEntryRecord.lower(value)
+}
+
+
+public struct ExactProximityRecordRecord: Equatable, Hashable {
+    public var vector: [Float]
+    public var value: Data
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(vector: [Float], value: Data) {
+        self.vector = vector
+        self.value = value
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension ExactProximityRecordRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeExactProximityRecordRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ExactProximityRecordRecord {
+        return
+            try ExactProximityRecordRecord(
+                vector: FfiConverterSequenceFloat.read(from: &buf),
+                value: FfiConverterData.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ExactProximityRecordRecord, into buf: inout [UInt8]) {
+        FfiConverterSequenceFloat.write(value.vector, into: &buf)
+        FfiConverterData.write(value.value, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeExactProximityRecordRecord_lift(_ buf: RustBuffer) throws -> ExactProximityRecordRecord {
+    return try FfiConverterTypeExactProximityRecordRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeExactProximityRecordRecord_lower(_ value: ExactProximityRecordRecord) -> RustBuffer {
+    return FfiConverterTypeExactProximityRecordRecord.lower(value)
 }
 
 
@@ -7144,6 +11374,802 @@ public func FfiConverterTypeHostStoreUnitResultRecord_lower(_ value: HostStoreUn
 }
 
 
+public struct IndexBuildResultRecord: Equatable, Hashable {
+    public var sourceVersion: Data
+    public var indexVersion: Data
+    public var catalogVersion: Data
+    public var generation: UInt64
+    public var entries: UInt64
+    public var attempts: UInt64
+    public var activated: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(sourceVersion: Data, indexVersion: Data, catalogVersion: Data, generation: UInt64, entries: UInt64, attempts: UInt64, activated: Bool) {
+        self.sourceVersion = sourceVersion
+        self.indexVersion = indexVersion
+        self.catalogVersion = catalogVersion
+        self.generation = generation
+        self.entries = entries
+        self.attempts = attempts
+        self.activated = activated
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension IndexBuildResultRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeIndexBuildResultRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IndexBuildResultRecord {
+        return
+            try IndexBuildResultRecord(
+                sourceVersion: FfiConverterData.read(from: &buf),
+                indexVersion: FfiConverterData.read(from: &buf),
+                catalogVersion: FfiConverterData.read(from: &buf),
+                generation: FfiConverterUInt64.read(from: &buf),
+                entries: FfiConverterUInt64.read(from: &buf),
+                attempts: FfiConverterUInt64.read(from: &buf),
+                activated: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: IndexBuildResultRecord, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.sourceVersion, into: &buf)
+        FfiConverterData.write(value.indexVersion, into: &buf)
+        FfiConverterData.write(value.catalogVersion, into: &buf)
+        FfiConverterUInt64.write(value.generation, into: &buf)
+        FfiConverterUInt64.write(value.entries, into: &buf)
+        FfiConverterUInt64.write(value.attempts, into: &buf)
+        FfiConverterBool.write(value.activated, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIndexBuildResultRecord_lift(_ buf: RustBuffer) throws -> IndexBuildResultRecord {
+    return try FfiConverterTypeIndexBuildResultRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIndexBuildResultRecord_lower(_ value: IndexBuildResultRecord) -> RustBuffer {
+    return FfiConverterTypeIndexBuildResultRecord.lower(value)
+}
+
+
+public struct IndexEntryRecord: Equatable, Hashable {
+    public var term: Data
+    public var projection: Data?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(term: Data, projection: Data?) {
+        self.term = term
+        self.projection = projection
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension IndexEntryRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeIndexEntryRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IndexEntryRecord {
+        return
+            try IndexEntryRecord(
+                term: FfiConverterData.read(from: &buf),
+                projection: FfiConverterOptionData.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: IndexEntryRecord, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.term, into: &buf)
+        FfiConverterOptionData.write(value.projection, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIndexEntryRecord_lift(_ buf: RustBuffer) throws -> IndexEntryRecord {
+    return try FfiConverterTypeIndexEntryRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIndexEntryRecord_lower(_ value: IndexEntryRecord) -> RustBuffer {
+    return FfiConverterTypeIndexEntryRecord.lower(value)
+}
+
+
+public struct IndexMatchRecord: Equatable, Hashable {
+    public var term: Data
+    public var primaryKey: Data
+    public var projection: Data?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(term: Data, primaryKey: Data, projection: Data?) {
+        self.term = term
+        self.primaryKey = primaryKey
+        self.projection = projection
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension IndexMatchRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeIndexMatchRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IndexMatchRecord {
+        return
+            try IndexMatchRecord(
+                term: FfiConverterData.read(from: &buf),
+                primaryKey: FfiConverterData.read(from: &buf),
+                projection: FfiConverterOptionData.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: IndexMatchRecord, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.term, into: &buf)
+        FfiConverterData.write(value.primaryKey, into: &buf)
+        FfiConverterOptionData.write(value.projection, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIndexMatchRecord_lift(_ buf: RustBuffer) throws -> IndexMatchRecord {
+    return try FfiConverterTypeIndexMatchRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIndexMatchRecord_lower(_ value: IndexMatchRecord) -> RustBuffer {
+    return FfiConverterTypeIndexMatchRecord.lower(value)
+}
+
+
+public struct IndexPageRecord: Equatable, Hashable {
+    public var matches: [IndexMatchRecord]
+    public var nextCursor: Data?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(matches: [IndexMatchRecord], nextCursor: Data?) {
+        self.matches = matches
+        self.nextCursor = nextCursor
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension IndexPageRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeIndexPageRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IndexPageRecord {
+        return
+            try IndexPageRecord(
+                matches: FfiConverterSequenceTypeIndexMatchRecord.read(from: &buf),
+                nextCursor: FfiConverterOptionData.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: IndexPageRecord, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeIndexMatchRecord.write(value.matches, into: &buf)
+        FfiConverterOptionData.write(value.nextCursor, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIndexPageRecord_lift(_ buf: RustBuffer) throws -> IndexPageRecord {
+    return try FfiConverterTypeIndexPageRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIndexPageRecord_lower(_ value: IndexPageRecord) -> RustBuffer {
+    return FfiConverterTypeIndexPageRecord.lower(value)
+}
+
+
+public struct IndexVerificationRecord: Equatable, Hashable {
+    public var name: Data
+    public var sourceVersion: Data
+    public var expectedIndexVersion: Data
+    public var actualIndexVersion: Data
+    public var expectedEntries: UInt64
+    public var actualEntries: UInt64
+    public var semanticDifferences: UInt64
+    public var valid: Bool
+    public var canonical: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(name: Data, sourceVersion: Data, expectedIndexVersion: Data, actualIndexVersion: Data, expectedEntries: UInt64, actualEntries: UInt64, semanticDifferences: UInt64, valid: Bool, canonical: Bool) {
+        self.name = name
+        self.sourceVersion = sourceVersion
+        self.expectedIndexVersion = expectedIndexVersion
+        self.actualIndexVersion = actualIndexVersion
+        self.expectedEntries = expectedEntries
+        self.actualEntries = actualEntries
+        self.semanticDifferences = semanticDifferences
+        self.valid = valid
+        self.canonical = canonical
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension IndexVerificationRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeIndexVerificationRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IndexVerificationRecord {
+        return
+            try IndexVerificationRecord(
+                name: FfiConverterData.read(from: &buf),
+                sourceVersion: FfiConverterData.read(from: &buf),
+                expectedIndexVersion: FfiConverterData.read(from: &buf),
+                actualIndexVersion: FfiConverterData.read(from: &buf),
+                expectedEntries: FfiConverterUInt64.read(from: &buf),
+                actualEntries: FfiConverterUInt64.read(from: &buf),
+                semanticDifferences: FfiConverterUInt64.read(from: &buf),
+                valid: FfiConverterBool.read(from: &buf),
+                canonical: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: IndexVerificationRecord, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.name, into: &buf)
+        FfiConverterData.write(value.sourceVersion, into: &buf)
+        FfiConverterData.write(value.expectedIndexVersion, into: &buf)
+        FfiConverterData.write(value.actualIndexVersion, into: &buf)
+        FfiConverterUInt64.write(value.expectedEntries, into: &buf)
+        FfiConverterUInt64.write(value.actualEntries, into: &buf)
+        FfiConverterUInt64.write(value.semanticDifferences, into: &buf)
+        FfiConverterBool.write(value.valid, into: &buf)
+        FfiConverterBool.write(value.canonical, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIndexVerificationRecord_lift(_ buf: RustBuffer) throws -> IndexVerificationRecord {
+    return try FfiConverterTypeIndexVerificationRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIndexVerificationRecord_lower(_ value: IndexVerificationRecord) -> RustBuffer {
+    return FfiConverterTypeIndexVerificationRecord.lower(value)
+}
+
+
+public struct IndexedMapHealthRecord: Equatable, Hashable {
+    public var sourceMapId: Data
+    public var sourceVersion: Data?
+    public var catalogVersion: Data?
+    public var activeIndexes: [ActiveIndexHealthRecord]
+    public var supportsTransactions: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(sourceMapId: Data, sourceVersion: Data?, catalogVersion: Data?, activeIndexes: [ActiveIndexHealthRecord], supportsTransactions: Bool) {
+        self.sourceMapId = sourceMapId
+        self.sourceVersion = sourceVersion
+        self.catalogVersion = catalogVersion
+        self.activeIndexes = activeIndexes
+        self.supportsTransactions = supportsTransactions
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension IndexedMapHealthRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeIndexedMapHealthRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IndexedMapHealthRecord {
+        return
+            try IndexedMapHealthRecord(
+                sourceMapId: FfiConverterData.read(from: &buf),
+                sourceVersion: FfiConverterOptionData.read(from: &buf),
+                catalogVersion: FfiConverterOptionData.read(from: &buf),
+                activeIndexes: FfiConverterSequenceTypeActiveIndexHealthRecord.read(from: &buf),
+                supportsTransactions: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: IndexedMapHealthRecord, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.sourceMapId, into: &buf)
+        FfiConverterOptionData.write(value.sourceVersion, into: &buf)
+        FfiConverterOptionData.write(value.catalogVersion, into: &buf)
+        FfiConverterSequenceTypeActiveIndexHealthRecord.write(value.activeIndexes, into: &buf)
+        FfiConverterBool.write(value.supportsTransactions, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIndexedMapHealthRecord_lift(_ buf: RustBuffer) throws -> IndexedMapHealthRecord {
+    return try FfiConverterTypeIndexedMapHealthRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIndexedMapHealthRecord_lower(_ value: IndexedMapHealthRecord) -> RustBuffer {
+    return FfiConverterTypeIndexedMapHealthRecord.lower(value)
+}
+
+
+public struct IndexedMapMetricsRecord: Equatable, Hashable {
+    public var normalizedSourceMutations: UInt64
+    public var recordsExtracted: UInt64
+    public var termsEmitted: UInt64
+    public var projectedBytes: UInt64
+    public var physicalUpserts: UInt64
+    public var physicalDeletes: UInt64
+    public var unchangedEmissionsSkipped: UInt64
+    public var sourceNodesWritten: UInt64
+    public var indexNodesWritten: UInt64
+    public var catalogNodesWritten: UInt64
+    public var retries: UInt64
+    public var buildAttempts: UInt64
+    public var verificationOutcomes: UInt64
+    public var retainedRoots: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(normalizedSourceMutations: UInt64, recordsExtracted: UInt64, termsEmitted: UInt64, projectedBytes: UInt64, physicalUpserts: UInt64, physicalDeletes: UInt64, unchangedEmissionsSkipped: UInt64, sourceNodesWritten: UInt64, indexNodesWritten: UInt64, catalogNodesWritten: UInt64, retries: UInt64, buildAttempts: UInt64, verificationOutcomes: UInt64, retainedRoots: UInt64) {
+        self.normalizedSourceMutations = normalizedSourceMutations
+        self.recordsExtracted = recordsExtracted
+        self.termsEmitted = termsEmitted
+        self.projectedBytes = projectedBytes
+        self.physicalUpserts = physicalUpserts
+        self.physicalDeletes = physicalDeletes
+        self.unchangedEmissionsSkipped = unchangedEmissionsSkipped
+        self.sourceNodesWritten = sourceNodesWritten
+        self.indexNodesWritten = indexNodesWritten
+        self.catalogNodesWritten = catalogNodesWritten
+        self.retries = retries
+        self.buildAttempts = buildAttempts
+        self.verificationOutcomes = verificationOutcomes
+        self.retainedRoots = retainedRoots
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension IndexedMapMetricsRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeIndexedMapMetricsRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IndexedMapMetricsRecord {
+        return
+            try IndexedMapMetricsRecord(
+                normalizedSourceMutations: FfiConverterUInt64.read(from: &buf),
+                recordsExtracted: FfiConverterUInt64.read(from: &buf),
+                termsEmitted: FfiConverterUInt64.read(from: &buf),
+                projectedBytes: FfiConverterUInt64.read(from: &buf),
+                physicalUpserts: FfiConverterUInt64.read(from: &buf),
+                physicalDeletes: FfiConverterUInt64.read(from: &buf),
+                unchangedEmissionsSkipped: FfiConverterUInt64.read(from: &buf),
+                sourceNodesWritten: FfiConverterUInt64.read(from: &buf),
+                indexNodesWritten: FfiConverterUInt64.read(from: &buf),
+                catalogNodesWritten: FfiConverterUInt64.read(from: &buf),
+                retries: FfiConverterUInt64.read(from: &buf),
+                buildAttempts: FfiConverterUInt64.read(from: &buf),
+                verificationOutcomes: FfiConverterUInt64.read(from: &buf),
+                retainedRoots: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: IndexedMapMetricsRecord, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.normalizedSourceMutations, into: &buf)
+        FfiConverterUInt64.write(value.recordsExtracted, into: &buf)
+        FfiConverterUInt64.write(value.termsEmitted, into: &buf)
+        FfiConverterUInt64.write(value.projectedBytes, into: &buf)
+        FfiConverterUInt64.write(value.physicalUpserts, into: &buf)
+        FfiConverterUInt64.write(value.physicalDeletes, into: &buf)
+        FfiConverterUInt64.write(value.unchangedEmissionsSkipped, into: &buf)
+        FfiConverterUInt64.write(value.sourceNodesWritten, into: &buf)
+        FfiConverterUInt64.write(value.indexNodesWritten, into: &buf)
+        FfiConverterUInt64.write(value.catalogNodesWritten, into: &buf)
+        FfiConverterUInt64.write(value.retries, into: &buf)
+        FfiConverterUInt64.write(value.buildAttempts, into: &buf)
+        FfiConverterUInt64.write(value.verificationOutcomes, into: &buf)
+        FfiConverterUInt64.write(value.retainedRoots, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIndexedMapMetricsRecord_lift(_ buf: RustBuffer) throws -> IndexedMapMetricsRecord {
+    return try FfiConverterTypeIndexedMapMetricsRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIndexedMapMetricsRecord_lower(_ value: IndexedMapMetricsRecord) -> RustBuffer {
+    return FfiConverterTypeIndexedMapMetricsRecord.lower(value)
+}
+
+
+public struct IndexedRetentionRecord: Equatable, Hashable {
+    public var retainedSourceVersions: [Data]
+    public var removedSourceVersions: [Data]
+    public var retainedIndexVersions: [Data]
+    public var removedIndexVersions: [Data]
+    public var removedCatalogVersions: [Data]
+    public var removedCheckpointRecords: UInt64
+    public var removedNamedRoots: [Data]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(retainedSourceVersions: [Data], removedSourceVersions: [Data], retainedIndexVersions: [Data], removedIndexVersions: [Data], removedCatalogVersions: [Data], removedCheckpointRecords: UInt64, removedNamedRoots: [Data]) {
+        self.retainedSourceVersions = retainedSourceVersions
+        self.removedSourceVersions = removedSourceVersions
+        self.retainedIndexVersions = retainedIndexVersions
+        self.removedIndexVersions = removedIndexVersions
+        self.removedCatalogVersions = removedCatalogVersions
+        self.removedCheckpointRecords = removedCheckpointRecords
+        self.removedNamedRoots = removedNamedRoots
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension IndexedRetentionRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeIndexedRetentionRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IndexedRetentionRecord {
+        return
+            try IndexedRetentionRecord(
+                retainedSourceVersions: FfiConverterSequenceData.read(from: &buf),
+                removedSourceVersions: FfiConverterSequenceData.read(from: &buf),
+                retainedIndexVersions: FfiConverterSequenceData.read(from: &buf),
+                removedIndexVersions: FfiConverterSequenceData.read(from: &buf),
+                removedCatalogVersions: FfiConverterSequenceData.read(from: &buf),
+                removedCheckpointRecords: FfiConverterUInt64.read(from: &buf),
+                removedNamedRoots: FfiConverterSequenceData.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: IndexedRetentionRecord, into buf: inout [UInt8]) {
+        FfiConverterSequenceData.write(value.retainedSourceVersions, into: &buf)
+        FfiConverterSequenceData.write(value.removedSourceVersions, into: &buf)
+        FfiConverterSequenceData.write(value.retainedIndexVersions, into: &buf)
+        FfiConverterSequenceData.write(value.removedIndexVersions, into: &buf)
+        FfiConverterSequenceData.write(value.removedCatalogVersions, into: &buf)
+        FfiConverterUInt64.write(value.removedCheckpointRecords, into: &buf)
+        FfiConverterSequenceData.write(value.removedNamedRoots, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIndexedRetentionRecord_lift(_ buf: RustBuffer) throws -> IndexedRetentionRecord {
+    return try FfiConverterTypeIndexedRetentionRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIndexedRetentionRecord_lower(_ value: IndexedRetentionRecord) -> RustBuffer {
+    return FfiConverterTypeIndexedRetentionRecord.lower(value)
+}
+
+
+public struct IndexedSnapshotIdRecord: Equatable, Hashable {
+    public var sourceVersion: Data
+    public var catalogVersion: Data
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(sourceVersion: Data, catalogVersion: Data) {
+        self.sourceVersion = sourceVersion
+        self.catalogVersion = catalogVersion
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension IndexedSnapshotIdRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeIndexedSnapshotIdRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IndexedSnapshotIdRecord {
+        return
+            try IndexedSnapshotIdRecord(
+                sourceVersion: FfiConverterData.read(from: &buf),
+                catalogVersion: FfiConverterData.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: IndexedSnapshotIdRecord, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.sourceVersion, into: &buf)
+        FfiConverterData.write(value.catalogVersion, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIndexedSnapshotIdRecord_lift(_ buf: RustBuffer) throws -> IndexedSnapshotIdRecord {
+    return try FfiConverterTypeIndexedSnapshotIdRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIndexedSnapshotIdRecord_lower(_ value: IndexedSnapshotIdRecord) -> RustBuffer {
+    return FfiConverterTypeIndexedSnapshotIdRecord.lower(value)
+}
+
+
+public struct IndexedSourceRecord: Equatable, Hashable {
+    public var term: Data
+    public var primaryKey: Data
+    public var projection: Data?
+    public var sourceValue: Data
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(term: Data, primaryKey: Data, projection: Data?, sourceValue: Data) {
+        self.term = term
+        self.primaryKey = primaryKey
+        self.projection = projection
+        self.sourceValue = sourceValue
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension IndexedSourceRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeIndexedSourceRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IndexedSourceRecord {
+        return
+            try IndexedSourceRecord(
+                term: FfiConverterData.read(from: &buf),
+                primaryKey: FfiConverterData.read(from: &buf),
+                projection: FfiConverterOptionData.read(from: &buf),
+                sourceValue: FfiConverterData.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: IndexedSourceRecord, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.term, into: &buf)
+        FfiConverterData.write(value.primaryKey, into: &buf)
+        FfiConverterOptionData.write(value.projection, into: &buf)
+        FfiConverterData.write(value.sourceValue, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIndexedSourceRecord_lift(_ buf: RustBuffer) throws -> IndexedSourceRecord {
+    return try FfiConverterTypeIndexedSourceRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIndexedSourceRecord_lower(_ value: IndexedSourceRecord) -> RustBuffer {
+    return FfiConverterTypeIndexedSourceRecord.lower(value)
+}
+
+
+public struct IndexedUpdateRecord: Equatable, Hashable {
+    public var kind: IndexedUpdateKind
+    public var previousSourceVersion: Data?
+    public var current: IndexedVersionRecord?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(kind: IndexedUpdateKind, previousSourceVersion: Data?, current: IndexedVersionRecord?) {
+        self.kind = kind
+        self.previousSourceVersion = previousSourceVersion
+        self.current = current
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension IndexedUpdateRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeIndexedUpdateRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IndexedUpdateRecord {
+        return
+            try IndexedUpdateRecord(
+                kind: FfiConverterTypeIndexedUpdateKind.read(from: &buf),
+                previousSourceVersion: FfiConverterOptionData.read(from: &buf),
+                current: FfiConverterOptionTypeIndexedVersionRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: IndexedUpdateRecord, into buf: inout [UInt8]) {
+        FfiConverterTypeIndexedUpdateKind.write(value.kind, into: &buf)
+        FfiConverterOptionData.write(value.previousSourceVersion, into: &buf)
+        FfiConverterOptionTypeIndexedVersionRecord.write(value.current, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIndexedUpdateRecord_lift(_ buf: RustBuffer) throws -> IndexedUpdateRecord {
+    return try FfiConverterTypeIndexedUpdateRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIndexedUpdateRecord_lower(_ value: IndexedUpdateRecord) -> RustBuffer {
+    return FfiConverterTypeIndexedUpdateRecord.lower(value)
+}
+
+
+public struct IndexedVersionRecord: Equatable, Hashable {
+    public var sourceVersion: Data
+    public var catalogVersion: Data?
+    public var indexCount: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(sourceVersion: Data, catalogVersion: Data?, indexCount: UInt64) {
+        self.sourceVersion = sourceVersion
+        self.catalogVersion = catalogVersion
+        self.indexCount = indexCount
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension IndexedVersionRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeIndexedVersionRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IndexedVersionRecord {
+        return
+            try IndexedVersionRecord(
+                sourceVersion: FfiConverterData.read(from: &buf),
+                catalogVersion: FfiConverterOptionData.read(from: &buf),
+                indexCount: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: IndexedVersionRecord, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.sourceVersion, into: &buf)
+        FfiConverterOptionData.write(value.catalogVersion, into: &buf)
+        FfiConverterUInt64.write(value.indexCount, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIndexedVersionRecord_lift(_ buf: RustBuffer) throws -> IndexedVersionRecord {
+    return try FfiConverterTypeIndexedVersionRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIndexedVersionRecord_lower(_ value: IndexedVersionRecord) -> RustBuffer {
+    return FfiConverterTypeIndexedVersionRecord.lower(value)
+}
+
+
 public struct JsonDocumentRecord: Equatable, Hashable {
     public var json: String
 
@@ -7369,6 +12395,273 @@ public func FfiConverterTypeLargeValueConfigRecord_lift(_ buf: RustBuffer) throw
 #endif
 public func FfiConverterTypeLargeValueConfigRecord_lower(_ value: LargeValueConfigRecord) -> RustBuffer {
     return FfiConverterTypeLargeValueConfigRecord.lower(value)
+}
+
+
+public struct MapCatalogVerificationRecord: Equatable, Hashable {
+    public var head: Data
+    public var versionCount: UInt64
+    public var reachableNodes: UInt64
+    public var reachableBytes: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(head: Data, versionCount: UInt64, reachableNodes: UInt64, reachableBytes: UInt64) {
+        self.head = head
+        self.versionCount = versionCount
+        self.reachableNodes = reachableNodes
+        self.reachableBytes = reachableBytes
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension MapCatalogVerificationRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMapCatalogVerificationRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MapCatalogVerificationRecord {
+        return
+            try MapCatalogVerificationRecord(
+                head: FfiConverterData.read(from: &buf),
+                versionCount: FfiConverterUInt64.read(from: &buf),
+                reachableNodes: FfiConverterUInt64.read(from: &buf),
+                reachableBytes: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: MapCatalogVerificationRecord, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.head, into: &buf)
+        FfiConverterUInt64.write(value.versionCount, into: &buf)
+        FfiConverterUInt64.write(value.reachableNodes, into: &buf)
+        FfiConverterUInt64.write(value.reachableBytes, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMapCatalogVerificationRecord_lift(_ buf: RustBuffer) throws -> MapCatalogVerificationRecord {
+    return try FfiConverterTypeMapCatalogVerificationRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMapCatalogVerificationRecord_lower(_ value: MapCatalogVerificationRecord) -> RustBuffer {
+    return FfiConverterTypeMapCatalogVerificationRecord.lower(value)
+}
+
+
+public struct MapChangeEventRecord: Equatable, Hashable {
+    public var previous: Data?
+    public var current: MapVersionRecord
+    public var diffs: [DiffRecord]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(previous: Data?, current: MapVersionRecord, diffs: [DiffRecord]) {
+        self.previous = previous
+        self.current = current
+        self.diffs = diffs
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension MapChangeEventRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMapChangeEventRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MapChangeEventRecord {
+        return
+            try MapChangeEventRecord(
+                previous: FfiConverterOptionData.read(from: &buf),
+                current: FfiConverterTypeMapVersionRecord.read(from: &buf),
+                diffs: FfiConverterSequenceTypeDiffRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: MapChangeEventRecord, into buf: inout [UInt8]) {
+        FfiConverterOptionData.write(value.previous, into: &buf)
+        FfiConverterTypeMapVersionRecord.write(value.current, into: &buf)
+        FfiConverterSequenceTypeDiffRecord.write(value.diffs, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMapChangeEventRecord_lift(_ buf: RustBuffer) throws -> MapChangeEventRecord {
+    return try FfiConverterTypeMapChangeEventRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMapChangeEventRecord_lower(_ value: MapChangeEventRecord) -> RustBuffer {
+    return FfiConverterTypeMapChangeEventRecord.lower(value)
+}
+
+
+public struct MapUpdateRecord: Equatable, Hashable {
+    public var kind: MapUpdateKind
+    public var previous: Data?
+    public var current: MapVersionRecord?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(kind: MapUpdateKind, previous: Data?, current: MapVersionRecord?) {
+        self.kind = kind
+        self.previous = previous
+        self.current = current
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension MapUpdateRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMapUpdateRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MapUpdateRecord {
+        return
+            try MapUpdateRecord(
+                kind: FfiConverterTypeMapUpdateKind.read(from: &buf),
+                previous: FfiConverterOptionData.read(from: &buf),
+                current: FfiConverterOptionTypeMapVersionRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: MapUpdateRecord, into buf: inout [UInt8]) {
+        FfiConverterTypeMapUpdateKind.write(value.kind, into: &buf)
+        FfiConverterOptionData.write(value.previous, into: &buf)
+        FfiConverterOptionTypeMapVersionRecord.write(value.current, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMapUpdateRecord_lift(_ buf: RustBuffer) throws -> MapUpdateRecord {
+    return try FfiConverterTypeMapUpdateRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMapUpdateRecord_lower(_ value: MapUpdateRecord) -> RustBuffer {
+    return FfiConverterTypeMapUpdateRecord.lower(value)
+}
+
+
+/**
+ * Portable, owned description of one durable managed-map version.
+ */
+public struct MapVersionRecord: Equatable, Hashable {
+    /**
+     * Raw 32-byte content-derived version identifier.
+     */
+    public var id: Data
+    /**
+     * Immutable tree handle for this version.
+     */
+    public var tree: TreeRecord
+    /**
+     * Creation timestamp recorded by the version root, when available.
+     */
+    public var createdAtMillis: UInt64?
+    /**
+     * Whether this version was the head when resolved.
+     */
+    public var isHead: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Raw 32-byte content-derived version identifier.
+         */id: Data,
+        /**
+         * Immutable tree handle for this version.
+         */tree: TreeRecord,
+        /**
+         * Creation timestamp recorded by the version root, when available.
+         */createdAtMillis: UInt64?,
+        /**
+         * Whether this version was the head when resolved.
+         */isHead: Bool) {
+        self.id = id
+        self.tree = tree
+        self.createdAtMillis = createdAtMillis
+        self.isHead = isHead
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension MapVersionRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMapVersionRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MapVersionRecord {
+        return
+            try MapVersionRecord(
+                id: FfiConverterData.read(from: &buf),
+                tree: FfiConverterTypeTreeRecord.read(from: &buf),
+                createdAtMillis: FfiConverterOptionUInt64.read(from: &buf),
+                isHead: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: MapVersionRecord, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.id, into: &buf)
+        FfiConverterTypeTreeRecord.write(value.tree, into: &buf)
+        FfiConverterOptionUInt64.write(value.createdAtMillis, into: &buf)
+        FfiConverterBool.write(value.isHead, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMapVersionRecord_lift(_ buf: RustBuffer) throws -> MapVersionRecord {
+    return try FfiConverterTypeMapVersionRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMapVersionRecord_lower(_ value: MapVersionRecord) -> RustBuffer {
+    return FfiConverterTypeMapVersionRecord.lower(value)
 }
 
 
@@ -8700,6 +13993,1044 @@ public func FfiConverterTypeProvedRangePageRecord_lower(_ value: ProvedRangePage
 }
 
 
+public struct ProximityConfigRecord: Equatable, Hashable {
+    public var dimensions: UInt32
+    public var metric: DistanceMetricRecord
+    public var logChunkSize: UInt8
+    public var levelHashSeed: UInt64
+    public var minPageBytes: UInt32
+    public var targetPageBytes: UInt32
+    public var maxPageBytes: UInt32
+    public var overflowHashSeed: UInt64
+    public var inlineThresholdBytes: UInt32
+    public var scalarQuantizationGroupSize: UInt32?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(dimensions: UInt32, metric: DistanceMetricRecord, logChunkSize: UInt8, levelHashSeed: UInt64, minPageBytes: UInt32, targetPageBytes: UInt32, maxPageBytes: UInt32, overflowHashSeed: UInt64, inlineThresholdBytes: UInt32, scalarQuantizationGroupSize: UInt32?) {
+        self.dimensions = dimensions
+        self.metric = metric
+        self.logChunkSize = logChunkSize
+        self.levelHashSeed = levelHashSeed
+        self.minPageBytes = minPageBytes
+        self.targetPageBytes = targetPageBytes
+        self.maxPageBytes = maxPageBytes
+        self.overflowHashSeed = overflowHashSeed
+        self.inlineThresholdBytes = inlineThresholdBytes
+        self.scalarQuantizationGroupSize = scalarQuantizationGroupSize
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension ProximityConfigRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProximityConfigRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProximityConfigRecord {
+        return
+            try ProximityConfigRecord(
+                dimensions: FfiConverterUInt32.read(from: &buf),
+                metric: FfiConverterTypeDistanceMetricRecord.read(from: &buf),
+                logChunkSize: FfiConverterUInt8.read(from: &buf),
+                levelHashSeed: FfiConverterUInt64.read(from: &buf),
+                minPageBytes: FfiConverterUInt32.read(from: &buf),
+                targetPageBytes: FfiConverterUInt32.read(from: &buf),
+                maxPageBytes: FfiConverterUInt32.read(from: &buf),
+                overflowHashSeed: FfiConverterUInt64.read(from: &buf),
+                inlineThresholdBytes: FfiConverterUInt32.read(from: &buf),
+                scalarQuantizationGroupSize: FfiConverterOptionUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProximityConfigRecord, into buf: inout [UInt8]) {
+        FfiConverterUInt32.write(value.dimensions, into: &buf)
+        FfiConverterTypeDistanceMetricRecord.write(value.metric, into: &buf)
+        FfiConverterUInt8.write(value.logChunkSize, into: &buf)
+        FfiConverterUInt64.write(value.levelHashSeed, into: &buf)
+        FfiConverterUInt32.write(value.minPageBytes, into: &buf)
+        FfiConverterUInt32.write(value.targetPageBytes, into: &buf)
+        FfiConverterUInt32.write(value.maxPageBytes, into: &buf)
+        FfiConverterUInt64.write(value.overflowHashSeed, into: &buf)
+        FfiConverterUInt32.write(value.inlineThresholdBytes, into: &buf)
+        FfiConverterOptionUInt32.write(value.scalarQuantizationGroupSize, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProximityConfigRecord_lift(_ buf: RustBuffer) throws -> ProximityConfigRecord {
+    return try FfiConverterTypeProximityConfigRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProximityConfigRecord_lower(_ value: ProximityConfigRecord) -> RustBuffer {
+    return FfiConverterTypeProximityConfigRecord.lower(value)
+}
+
+
+public struct ProximityFilterRecord: Equatable, Hashable {
+    public var kind: ProximityFilterKind
+    public var start: Data?
+    public var rangeEnd: Data?
+    public var prefix: Data?
+    public var eligibleKeys: [Data]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(kind: ProximityFilterKind, start: Data?, rangeEnd: Data?, prefix: Data?, eligibleKeys: [Data]) {
+        self.kind = kind
+        self.start = start
+        self.rangeEnd = rangeEnd
+        self.prefix = prefix
+        self.eligibleKeys = eligibleKeys
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension ProximityFilterRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProximityFilterRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProximityFilterRecord {
+        return
+            try ProximityFilterRecord(
+                kind: FfiConverterTypeProximityFilterKind.read(from: &buf),
+                start: FfiConverterOptionData.read(from: &buf),
+                rangeEnd: FfiConverterOptionData.read(from: &buf),
+                prefix: FfiConverterOptionData.read(from: &buf),
+                eligibleKeys: FfiConverterSequenceData.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProximityFilterRecord, into buf: inout [UInt8]) {
+        FfiConverterTypeProximityFilterKind.write(value.kind, into: &buf)
+        FfiConverterOptionData.write(value.start, into: &buf)
+        FfiConverterOptionData.write(value.rangeEnd, into: &buf)
+        FfiConverterOptionData.write(value.prefix, into: &buf)
+        FfiConverterSequenceData.write(value.eligibleKeys, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProximityFilterRecord_lift(_ buf: RustBuffer) throws -> ProximityFilterRecord {
+    return try FfiConverterTypeProximityFilterRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProximityFilterRecord_lower(_ value: ProximityFilterRecord) -> RustBuffer {
+    return FfiConverterTypeProximityFilterRecord.lower(value)
+}
+
+
+public struct ProximityMembershipProofRecord: Equatable, Hashable {
+    public var descriptor: Data
+    public var descriptorBytes: Data
+    public var directoryProof: KeyProofRecord
+    public var recordBytes: Data?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(descriptor: Data, descriptorBytes: Data, directoryProof: KeyProofRecord, recordBytes: Data?) {
+        self.descriptor = descriptor
+        self.descriptorBytes = descriptorBytes
+        self.directoryProof = directoryProof
+        self.recordBytes = recordBytes
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension ProximityMembershipProofRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProximityMembershipProofRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProximityMembershipProofRecord {
+        return
+            try ProximityMembershipProofRecord(
+                descriptor: FfiConverterData.read(from: &buf),
+                descriptorBytes: FfiConverterData.read(from: &buf),
+                directoryProof: FfiConverterTypeKeyProofRecord.read(from: &buf),
+                recordBytes: FfiConverterOptionData.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProximityMembershipProofRecord, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.descriptor, into: &buf)
+        FfiConverterData.write(value.descriptorBytes, into: &buf)
+        FfiConverterTypeKeyProofRecord.write(value.directoryProof, into: &buf)
+        FfiConverterOptionData.write(value.recordBytes, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProximityMembershipProofRecord_lift(_ buf: RustBuffer) throws -> ProximityMembershipProofRecord {
+    return try FfiConverterTypeProximityMembershipProofRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProximityMembershipProofRecord_lower(_ value: ProximityMembershipProofRecord) -> RustBuffer {
+    return FfiConverterTypeProximityMembershipProofRecord.lower(value)
+}
+
+
+public struct ProximityMembershipVerificationRecord: Equatable, Hashable {
+    public var descriptor: Data
+    public var key: Data
+    public var record: ExactProximityRecordRecord?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(descriptor: Data, key: Data, record: ExactProximityRecordRecord?) {
+        self.descriptor = descriptor
+        self.key = key
+        self.record = record
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension ProximityMembershipVerificationRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProximityMembershipVerificationRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProximityMembershipVerificationRecord {
+        return
+            try ProximityMembershipVerificationRecord(
+                descriptor: FfiConverterData.read(from: &buf),
+                key: FfiConverterData.read(from: &buf),
+                record: FfiConverterOptionTypeExactProximityRecordRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProximityMembershipVerificationRecord, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.descriptor, into: &buf)
+        FfiConverterData.write(value.key, into: &buf)
+        FfiConverterOptionTypeExactProximityRecordRecord.write(value.record, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProximityMembershipVerificationRecord_lift(_ buf: RustBuffer) throws -> ProximityMembershipVerificationRecord {
+    return try FfiConverterTypeProximityMembershipVerificationRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProximityMembershipVerificationRecord_lower(_ value: ProximityMembershipVerificationRecord) -> RustBuffer {
+    return FfiConverterTypeProximityMembershipVerificationRecord.lower(value)
+}
+
+
+public struct ProximityMutationRecord: Equatable, Hashable {
+    public var key: Data
+    public var vector: [Float]?
+    public var value: Data?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(key: Data, vector: [Float]?, value: Data?) {
+        self.key = key
+        self.vector = vector
+        self.value = value
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension ProximityMutationRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProximityMutationRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProximityMutationRecord {
+        return
+            try ProximityMutationRecord(
+                key: FfiConverterData.read(from: &buf),
+                vector: FfiConverterOptionSequenceFloat.read(from: &buf),
+                value: FfiConverterOptionData.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProximityMutationRecord, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.key, into: &buf)
+        FfiConverterOptionSequenceFloat.write(value.vector, into: &buf)
+        FfiConverterOptionData.write(value.value, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProximityMutationRecord_lift(_ buf: RustBuffer) throws -> ProximityMutationRecord {
+    return try FfiConverterTypeProximityMutationRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProximityMutationRecord_lower(_ value: ProximityMutationRecord) -> RustBuffer {
+    return FfiConverterTypeProximityMutationRecord.lower(value)
+}
+
+
+public struct ProximityMutationResultRecord {
+    public var map: BindingProximityMap
+    public var stats: ProximityMutationStatsRecord
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(map: BindingProximityMap, stats: ProximityMutationStatsRecord) {
+        self.map = map
+        self.stats = stats
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension ProximityMutationResultRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProximityMutationResultRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProximityMutationResultRecord {
+        return
+            try ProximityMutationResultRecord(
+                map: FfiConverterTypeBindingProximityMap.read(from: &buf),
+                stats: FfiConverterTypeProximityMutationStatsRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProximityMutationResultRecord, into buf: inout [UInt8]) {
+        FfiConverterTypeBindingProximityMap.write(value.map, into: &buf)
+        FfiConverterTypeProximityMutationStatsRecord.write(value.stats, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProximityMutationResultRecord_lift(_ buf: RustBuffer) throws -> ProximityMutationResultRecord {
+    return try FfiConverterTypeProximityMutationResultRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProximityMutationResultRecord_lower(_ value: ProximityMutationResultRecord) -> RustBuffer {
+    return FfiConverterTypeProximityMutationResultRecord.lower(value)
+}
+
+
+public struct ProximityMutationStatsRecord: Equatable, Hashable {
+    public var directoryEntriesScanned: UInt64
+    public var directoryNodesRead: UInt64
+    public var directoryNodesRebuilt: UInt64
+    public var directoryNodesWritten: UInt64
+    public var directoryNodesReused: UInt64
+    public var directoryLevelsRebuilt: UInt64
+    public var directoryRightEdgeRebuilt: Bool
+    public var nodesRead: UInt64
+    public var nodesWritten: UInt64
+    public var nodesReused: UInt64
+    public var recordsRebuilt: UInt64
+    public var distanceEvaluations: UInt64
+    public var fullProximityRebuild: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(directoryEntriesScanned: UInt64, directoryNodesRead: UInt64, directoryNodesRebuilt: UInt64, directoryNodesWritten: UInt64, directoryNodesReused: UInt64, directoryLevelsRebuilt: UInt64, directoryRightEdgeRebuilt: Bool, nodesRead: UInt64, nodesWritten: UInt64, nodesReused: UInt64, recordsRebuilt: UInt64, distanceEvaluations: UInt64, fullProximityRebuild: Bool) {
+        self.directoryEntriesScanned = directoryEntriesScanned
+        self.directoryNodesRead = directoryNodesRead
+        self.directoryNodesRebuilt = directoryNodesRebuilt
+        self.directoryNodesWritten = directoryNodesWritten
+        self.directoryNodesReused = directoryNodesReused
+        self.directoryLevelsRebuilt = directoryLevelsRebuilt
+        self.directoryRightEdgeRebuilt = directoryRightEdgeRebuilt
+        self.nodesRead = nodesRead
+        self.nodesWritten = nodesWritten
+        self.nodesReused = nodesReused
+        self.recordsRebuilt = recordsRebuilt
+        self.distanceEvaluations = distanceEvaluations
+        self.fullProximityRebuild = fullProximityRebuild
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension ProximityMutationStatsRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProximityMutationStatsRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProximityMutationStatsRecord {
+        return
+            try ProximityMutationStatsRecord(
+                directoryEntriesScanned: FfiConverterUInt64.read(from: &buf),
+                directoryNodesRead: FfiConverterUInt64.read(from: &buf),
+                directoryNodesRebuilt: FfiConverterUInt64.read(from: &buf),
+                directoryNodesWritten: FfiConverterUInt64.read(from: &buf),
+                directoryNodesReused: FfiConverterUInt64.read(from: &buf),
+                directoryLevelsRebuilt: FfiConverterUInt64.read(from: &buf),
+                directoryRightEdgeRebuilt: FfiConverterBool.read(from: &buf),
+                nodesRead: FfiConverterUInt64.read(from: &buf),
+                nodesWritten: FfiConverterUInt64.read(from: &buf),
+                nodesReused: FfiConverterUInt64.read(from: &buf),
+                recordsRebuilt: FfiConverterUInt64.read(from: &buf),
+                distanceEvaluations: FfiConverterUInt64.read(from: &buf),
+                fullProximityRebuild: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProximityMutationStatsRecord, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.directoryEntriesScanned, into: &buf)
+        FfiConverterUInt64.write(value.directoryNodesRead, into: &buf)
+        FfiConverterUInt64.write(value.directoryNodesRebuilt, into: &buf)
+        FfiConverterUInt64.write(value.directoryNodesWritten, into: &buf)
+        FfiConverterUInt64.write(value.directoryNodesReused, into: &buf)
+        FfiConverterUInt64.write(value.directoryLevelsRebuilt, into: &buf)
+        FfiConverterBool.write(value.directoryRightEdgeRebuilt, into: &buf)
+        FfiConverterUInt64.write(value.nodesRead, into: &buf)
+        FfiConverterUInt64.write(value.nodesWritten, into: &buf)
+        FfiConverterUInt64.write(value.nodesReused, into: &buf)
+        FfiConverterUInt64.write(value.recordsRebuilt, into: &buf)
+        FfiConverterUInt64.write(value.distanceEvaluations, into: &buf)
+        FfiConverterBool.write(value.fullProximityRebuild, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProximityMutationStatsRecord_lift(_ buf: RustBuffer) throws -> ProximityMutationStatsRecord {
+    return try FfiConverterTypeProximityMutationStatsRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProximityMutationStatsRecord_lower(_ value: ProximityMutationStatsRecord) -> RustBuffer {
+    return FfiConverterTypeProximityMutationStatsRecord.lower(value)
+}
+
+
+public struct ProximityNeighborRecord: Equatable, Hashable {
+    public var key: Data
+    public var value: Data
+    public var distance: Double
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(key: Data, value: Data, distance: Double) {
+        self.key = key
+        self.value = value
+        self.distance = distance
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension ProximityNeighborRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProximityNeighborRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProximityNeighborRecord {
+        return
+            try ProximityNeighborRecord(
+                key: FfiConverterData.read(from: &buf),
+                value: FfiConverterData.read(from: &buf),
+                distance: FfiConverterDouble.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProximityNeighborRecord, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.key, into: &buf)
+        FfiConverterData.write(value.value, into: &buf)
+        FfiConverterDouble.write(value.distance, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProximityNeighborRecord_lift(_ buf: RustBuffer) throws -> ProximityNeighborRecord {
+    return try FfiConverterTypeProximityNeighborRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProximityNeighborRecord_lower(_ value: ProximityNeighborRecord) -> RustBuffer {
+    return FfiConverterTypeProximityNeighborRecord.lower(value)
+}
+
+
+public struct ProximityRecordRecord: Equatable, Hashable {
+    public var key: Data
+    public var vector: [Float]
+    public var value: Data
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(key: Data, vector: [Float], value: Data) {
+        self.key = key
+        self.vector = vector
+        self.value = value
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension ProximityRecordRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProximityRecordRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProximityRecordRecord {
+        return
+            try ProximityRecordRecord(
+                key: FfiConverterData.read(from: &buf),
+                vector: FfiConverterSequenceFloat.read(from: &buf),
+                value: FfiConverterData.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProximityRecordRecord, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.key, into: &buf)
+        FfiConverterSequenceFloat.write(value.vector, into: &buf)
+        FfiConverterData.write(value.value, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProximityRecordRecord_lift(_ buf: RustBuffer) throws -> ProximityRecordRecord {
+    return try FfiConverterTypeProximityRecordRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProximityRecordRecord_lower(_ value: ProximityRecordRecord) -> RustBuffer {
+    return FfiConverterTypeProximityRecordRecord.lower(value)
+}
+
+
+public struct ProximitySearchRequestRecord: Equatable, Hashable {
+    public var query: [Float]
+    public var k: UInt64
+    public var policy: SearchPolicyKind
+    public var adaptiveQuality: AdaptiveQualityRecord?
+    public var budget: SearchBudgetRecord
+    public var filter: ProximityFilterRecord
+    public var kernel: QueryKernelRecord
+    public var backend: SearchBackendRecord
+    public var hnswEfSearch: UInt32?
+    public var pqRerankMultiplier: UInt16?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(query: [Float], k: UInt64, policy: SearchPolicyKind, adaptiveQuality: AdaptiveQualityRecord?, budget: SearchBudgetRecord, filter: ProximityFilterRecord, kernel: QueryKernelRecord, backend: SearchBackendRecord, hnswEfSearch: UInt32?, pqRerankMultiplier: UInt16?) {
+        self.query = query
+        self.k = k
+        self.policy = policy
+        self.adaptiveQuality = adaptiveQuality
+        self.budget = budget
+        self.filter = filter
+        self.kernel = kernel
+        self.backend = backend
+        self.hnswEfSearch = hnswEfSearch
+        self.pqRerankMultiplier = pqRerankMultiplier
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension ProximitySearchRequestRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProximitySearchRequestRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProximitySearchRequestRecord {
+        return
+            try ProximitySearchRequestRecord(
+                query: FfiConverterSequenceFloat.read(from: &buf),
+                k: FfiConverterUInt64.read(from: &buf),
+                policy: FfiConverterTypeSearchPolicyKind.read(from: &buf),
+                adaptiveQuality: FfiConverterOptionTypeAdaptiveQualityRecord.read(from: &buf),
+                budget: FfiConverterTypeSearchBudgetRecord.read(from: &buf),
+                filter: FfiConverterTypeProximityFilterRecord.read(from: &buf),
+                kernel: FfiConverterTypeQueryKernelRecord.read(from: &buf),
+                backend: FfiConverterTypeSearchBackendRecord.read(from: &buf),
+                hnswEfSearch: FfiConverterOptionUInt32.read(from: &buf),
+                pqRerankMultiplier: FfiConverterOptionUInt16.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProximitySearchRequestRecord, into buf: inout [UInt8]) {
+        FfiConverterSequenceFloat.write(value.query, into: &buf)
+        FfiConverterUInt64.write(value.k, into: &buf)
+        FfiConverterTypeSearchPolicyKind.write(value.policy, into: &buf)
+        FfiConverterOptionTypeAdaptiveQualityRecord.write(value.adaptiveQuality, into: &buf)
+        FfiConverterTypeSearchBudgetRecord.write(value.budget, into: &buf)
+        FfiConverterTypeProximityFilterRecord.write(value.filter, into: &buf)
+        FfiConverterTypeQueryKernelRecord.write(value.kernel, into: &buf)
+        FfiConverterTypeSearchBackendRecord.write(value.backend, into: &buf)
+        FfiConverterOptionUInt32.write(value.hnswEfSearch, into: &buf)
+        FfiConverterOptionUInt16.write(value.pqRerankMultiplier, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProximitySearchRequestRecord_lift(_ buf: RustBuffer) throws -> ProximitySearchRequestRecord {
+    return try FfiConverterTypeProximitySearchRequestRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProximitySearchRequestRecord_lower(_ value: ProximitySearchRequestRecord) -> RustBuffer {
+    return FfiConverterTypeProximitySearchRequestRecord.lower(value)
+}
+
+
+public struct ProximitySearchResultRecord: Equatable, Hashable {
+    public var neighbors: [ProximityNeighborRecord]
+    public var stats: ProximitySearchStatsRecord
+    public var completion: SearchCompletionRecord
+    public var backend: SearchBackendRecord
+    public var planFormatVersion: UInt8
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(neighbors: [ProximityNeighborRecord], stats: ProximitySearchStatsRecord, completion: SearchCompletionRecord, backend: SearchBackendRecord, planFormatVersion: UInt8) {
+        self.neighbors = neighbors
+        self.stats = stats
+        self.completion = completion
+        self.backend = backend
+        self.planFormatVersion = planFormatVersion
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension ProximitySearchResultRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProximitySearchResultRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProximitySearchResultRecord {
+        return
+            try ProximitySearchResultRecord(
+                neighbors: FfiConverterSequenceTypeProximityNeighborRecord.read(from: &buf),
+                stats: FfiConverterTypeProximitySearchStatsRecord.read(from: &buf),
+                completion: FfiConverterTypeSearchCompletionRecord.read(from: &buf),
+                backend: FfiConverterTypeSearchBackendRecord.read(from: &buf),
+                planFormatVersion: FfiConverterUInt8.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProximitySearchResultRecord, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeProximityNeighborRecord.write(value.neighbors, into: &buf)
+        FfiConverterTypeProximitySearchStatsRecord.write(value.stats, into: &buf)
+        FfiConverterTypeSearchCompletionRecord.write(value.completion, into: &buf)
+        FfiConverterTypeSearchBackendRecord.write(value.backend, into: &buf)
+        FfiConverterUInt8.write(value.planFormatVersion, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProximitySearchResultRecord_lift(_ buf: RustBuffer) throws -> ProximitySearchResultRecord {
+    return try FfiConverterTypeProximitySearchResultRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProximitySearchResultRecord_lower(_ value: ProximitySearchResultRecord) -> RustBuffer {
+    return FfiConverterTypeProximitySearchResultRecord.lower(value)
+}
+
+
+public struct ProximitySearchStatsRecord: Equatable, Hashable {
+    public var levelsVisited: UInt64
+    public var nodesRead: UInt64
+    public var bytesRead: UInt64
+    public var physicalBytesRead: UInt64
+    public var committedBytes: UInt64
+    public var distanceEvaluations: UInt64
+    public var quantizedDistanceEvaluations: UInt64
+    public var rerankedCandidates: UInt64
+    public var frontierPeak: UInt64
+    public var candidateHandlesPeak: UInt64
+    public var candidateRetainedBytesPeak: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(levelsVisited: UInt64, nodesRead: UInt64, bytesRead: UInt64, physicalBytesRead: UInt64, committedBytes: UInt64, distanceEvaluations: UInt64, quantizedDistanceEvaluations: UInt64, rerankedCandidates: UInt64, frontierPeak: UInt64, candidateHandlesPeak: UInt64, candidateRetainedBytesPeak: UInt64) {
+        self.levelsVisited = levelsVisited
+        self.nodesRead = nodesRead
+        self.bytesRead = bytesRead
+        self.physicalBytesRead = physicalBytesRead
+        self.committedBytes = committedBytes
+        self.distanceEvaluations = distanceEvaluations
+        self.quantizedDistanceEvaluations = quantizedDistanceEvaluations
+        self.rerankedCandidates = rerankedCandidates
+        self.frontierPeak = frontierPeak
+        self.candidateHandlesPeak = candidateHandlesPeak
+        self.candidateRetainedBytesPeak = candidateRetainedBytesPeak
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension ProximitySearchStatsRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProximitySearchStatsRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProximitySearchStatsRecord {
+        return
+            try ProximitySearchStatsRecord(
+                levelsVisited: FfiConverterUInt64.read(from: &buf),
+                nodesRead: FfiConverterUInt64.read(from: &buf),
+                bytesRead: FfiConverterUInt64.read(from: &buf),
+                physicalBytesRead: FfiConverterUInt64.read(from: &buf),
+                committedBytes: FfiConverterUInt64.read(from: &buf),
+                distanceEvaluations: FfiConverterUInt64.read(from: &buf),
+                quantizedDistanceEvaluations: FfiConverterUInt64.read(from: &buf),
+                rerankedCandidates: FfiConverterUInt64.read(from: &buf),
+                frontierPeak: FfiConverterUInt64.read(from: &buf),
+                candidateHandlesPeak: FfiConverterUInt64.read(from: &buf),
+                candidateRetainedBytesPeak: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProximitySearchStatsRecord, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.levelsVisited, into: &buf)
+        FfiConverterUInt64.write(value.nodesRead, into: &buf)
+        FfiConverterUInt64.write(value.bytesRead, into: &buf)
+        FfiConverterUInt64.write(value.physicalBytesRead, into: &buf)
+        FfiConverterUInt64.write(value.committedBytes, into: &buf)
+        FfiConverterUInt64.write(value.distanceEvaluations, into: &buf)
+        FfiConverterUInt64.write(value.quantizedDistanceEvaluations, into: &buf)
+        FfiConverterUInt64.write(value.rerankedCandidates, into: &buf)
+        FfiConverterUInt64.write(value.frontierPeak, into: &buf)
+        FfiConverterUInt64.write(value.candidateHandlesPeak, into: &buf)
+        FfiConverterUInt64.write(value.candidateRetainedBytesPeak, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProximitySearchStatsRecord_lift(_ buf: RustBuffer) throws -> ProximitySearchStatsRecord {
+    return try FfiConverterTypeProximitySearchStatsRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProximitySearchStatsRecord_lower(_ value: ProximitySearchStatsRecord) -> RustBuffer {
+    return FfiConverterTypeProximitySearchStatsRecord.lower(value)
+}
+
+
+public struct ProximityStructuralProofRecord: Equatable, Hashable {
+    public var descriptor: Data
+    public var objects: [TypedContentObjectRecord]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(descriptor: Data, objects: [TypedContentObjectRecord]) {
+        self.descriptor = descriptor
+        self.objects = objects
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension ProximityStructuralProofRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProximityStructuralProofRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProximityStructuralProofRecord {
+        return
+            try ProximityStructuralProofRecord(
+                descriptor: FfiConverterData.read(from: &buf),
+                objects: FfiConverterSequenceTypeTypedContentObjectRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProximityStructuralProofRecord, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.descriptor, into: &buf)
+        FfiConverterSequenceTypeTypedContentObjectRecord.write(value.objects, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProximityStructuralProofRecord_lift(_ buf: RustBuffer) throws -> ProximityStructuralProofRecord {
+    return try FfiConverterTypeProximityStructuralProofRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProximityStructuralProofRecord_lower(_ value: ProximityStructuralProofRecord) -> RustBuffer {
+    return FfiConverterTypeProximityStructuralProofRecord.lower(value)
+}
+
+
+public struct ProximityStructuralVerificationRecord: Equatable, Hashable {
+    public var descriptor: Data
+    public var objectCount: UInt64
+    public var summary: ProximityVerificationRecord
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(descriptor: Data, objectCount: UInt64, summary: ProximityVerificationRecord) {
+        self.descriptor = descriptor
+        self.objectCount = objectCount
+        self.summary = summary
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension ProximityStructuralVerificationRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProximityStructuralVerificationRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProximityStructuralVerificationRecord {
+        return
+            try ProximityStructuralVerificationRecord(
+                descriptor: FfiConverterData.read(from: &buf),
+                objectCount: FfiConverterUInt64.read(from: &buf),
+                summary: FfiConverterTypeProximityVerificationRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProximityStructuralVerificationRecord, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.descriptor, into: &buf)
+        FfiConverterUInt64.write(value.objectCount, into: &buf)
+        FfiConverterTypeProximityVerificationRecord.write(value.summary, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProximityStructuralVerificationRecord_lift(_ buf: RustBuffer) throws -> ProximityStructuralVerificationRecord {
+    return try FfiConverterTypeProximityStructuralVerificationRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProximityStructuralVerificationRecord_lower(_ value: ProximityStructuralVerificationRecord) -> RustBuffer {
+    return FfiConverterTypeProximityStructuralVerificationRecord.lower(value)
+}
+
+
+public struct ProximityVerificationRecord: Equatable, Hashable {
+    public var recordCount: UInt64
+    public var proximityNodeCount: UInt64
+    public var externalVectorCount: UInt64
+    public var quantizedNodeCount: UInt64
+    public var scalarQuantizerCount: UInt64
+    public var overflowPageCount: UInt64
+    public var overflowDirectoryCount: UInt64
+    public var maximumLevel: UInt8
+    public var maximumNodeBytes: UInt64
+    public var distanceChecks: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(recordCount: UInt64, proximityNodeCount: UInt64, externalVectorCount: UInt64, quantizedNodeCount: UInt64, scalarQuantizerCount: UInt64, overflowPageCount: UInt64, overflowDirectoryCount: UInt64, maximumLevel: UInt8, maximumNodeBytes: UInt64, distanceChecks: UInt64) {
+        self.recordCount = recordCount
+        self.proximityNodeCount = proximityNodeCount
+        self.externalVectorCount = externalVectorCount
+        self.quantizedNodeCount = quantizedNodeCount
+        self.scalarQuantizerCount = scalarQuantizerCount
+        self.overflowPageCount = overflowPageCount
+        self.overflowDirectoryCount = overflowDirectoryCount
+        self.maximumLevel = maximumLevel
+        self.maximumNodeBytes = maximumNodeBytes
+        self.distanceChecks = distanceChecks
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension ProximityVerificationRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProximityVerificationRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProximityVerificationRecord {
+        return
+            try ProximityVerificationRecord(
+                recordCount: FfiConverterUInt64.read(from: &buf),
+                proximityNodeCount: FfiConverterUInt64.read(from: &buf),
+                externalVectorCount: FfiConverterUInt64.read(from: &buf),
+                quantizedNodeCount: FfiConverterUInt64.read(from: &buf),
+                scalarQuantizerCount: FfiConverterUInt64.read(from: &buf),
+                overflowPageCount: FfiConverterUInt64.read(from: &buf),
+                overflowDirectoryCount: FfiConverterUInt64.read(from: &buf),
+                maximumLevel: FfiConverterUInt8.read(from: &buf),
+                maximumNodeBytes: FfiConverterUInt64.read(from: &buf),
+                distanceChecks: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProximityVerificationRecord, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.recordCount, into: &buf)
+        FfiConverterUInt64.write(value.proximityNodeCount, into: &buf)
+        FfiConverterUInt64.write(value.externalVectorCount, into: &buf)
+        FfiConverterUInt64.write(value.quantizedNodeCount, into: &buf)
+        FfiConverterUInt64.write(value.scalarQuantizerCount, into: &buf)
+        FfiConverterUInt64.write(value.overflowPageCount, into: &buf)
+        FfiConverterUInt64.write(value.overflowDirectoryCount, into: &buf)
+        FfiConverterUInt8.write(value.maximumLevel, into: &buf)
+        FfiConverterUInt64.write(value.maximumNodeBytes, into: &buf)
+        FfiConverterUInt64.write(value.distanceChecks, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProximityVerificationRecord_lift(_ buf: RustBuffer) throws -> ProximityVerificationRecord {
+    return try FfiConverterTypeProximityVerificationRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProximityVerificationRecord_lower(_ value: ProximityVerificationRecord) -> RustBuffer {
+    return FfiConverterTypeProximityVerificationRecord.lower(value)
+}
+
+
 public struct RangeBoundsRecord: Equatable, Hashable {
     public var start: Data
     public var end: Data?
@@ -9388,6 +15719,174 @@ public func FfiConverterTypeScanOutcomeRecord_lift(_ buf: RustBuffer) throws -> 
 #endif
 public func FfiConverterTypeScanOutcomeRecord_lower(_ value: ScanOutcomeRecord) -> RustBuffer {
     return FfiConverterTypeScanOutcomeRecord.lower(value)
+}
+
+
+public struct SearchBudgetRecord: Equatable, Hashable {
+    public var maxNodes: UInt64?
+    public var maxCommittedBytes: UInt64?
+    public var maxDistanceEvaluations: UInt64?
+    public var maxFrontierEntries: UInt64?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(maxNodes: UInt64?, maxCommittedBytes: UInt64?, maxDistanceEvaluations: UInt64?, maxFrontierEntries: UInt64?) {
+        self.maxNodes = maxNodes
+        self.maxCommittedBytes = maxCommittedBytes
+        self.maxDistanceEvaluations = maxDistanceEvaluations
+        self.maxFrontierEntries = maxFrontierEntries
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension SearchBudgetRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSearchBudgetRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchBudgetRecord {
+        return
+            try SearchBudgetRecord(
+                maxNodes: FfiConverterOptionUInt64.read(from: &buf),
+                maxCommittedBytes: FfiConverterOptionUInt64.read(from: &buf),
+                maxDistanceEvaluations: FfiConverterOptionUInt64.read(from: &buf),
+                maxFrontierEntries: FfiConverterOptionUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SearchBudgetRecord, into buf: inout [UInt8]) {
+        FfiConverterOptionUInt64.write(value.maxNodes, into: &buf)
+        FfiConverterOptionUInt64.write(value.maxCommittedBytes, into: &buf)
+        FfiConverterOptionUInt64.write(value.maxDistanceEvaluations, into: &buf)
+        FfiConverterOptionUInt64.write(value.maxFrontierEntries, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchBudgetRecord_lift(_ buf: RustBuffer) throws -> SearchBudgetRecord {
+    return try FfiConverterTypeSearchBudgetRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchBudgetRecord_lower(_ value: SearchBudgetRecord) -> RustBuffer {
+    return FfiConverterTypeSearchBudgetRecord.lower(value)
+}
+
+
+public struct SecondaryIndexLimitsRecord: Equatable, Hashable {
+    public var maxTermBytes: UInt64
+    public var maxProjectionBytes: UInt64
+    public var maxAllValueBytes: UInt64
+    public var maxTermsPerRecord: UInt64
+    public var maxProjectedBytesPerRecord: UInt64
+    public var maxDerivedMutationsPerTransaction: UInt64
+    public var maxProjectedBytesPerTransaction: UInt64
+    public var maxIndexes: UInt64
+    public var buildPageSize: UInt64
+    public var maxTemporarySortBytes: UInt64
+    public var maxBundleNodes: UInt64
+    public var maxBundleBytes: UInt64
+    public var maxVerificationEntries: UInt64
+    public var maxWriteRetries: UInt64
+    public var maxBuildRetries: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(maxTermBytes: UInt64, maxProjectionBytes: UInt64, maxAllValueBytes: UInt64, maxTermsPerRecord: UInt64, maxProjectedBytesPerRecord: UInt64, maxDerivedMutationsPerTransaction: UInt64, maxProjectedBytesPerTransaction: UInt64, maxIndexes: UInt64, buildPageSize: UInt64, maxTemporarySortBytes: UInt64, maxBundleNodes: UInt64, maxBundleBytes: UInt64, maxVerificationEntries: UInt64, maxWriteRetries: UInt64, maxBuildRetries: UInt64) {
+        self.maxTermBytes = maxTermBytes
+        self.maxProjectionBytes = maxProjectionBytes
+        self.maxAllValueBytes = maxAllValueBytes
+        self.maxTermsPerRecord = maxTermsPerRecord
+        self.maxProjectedBytesPerRecord = maxProjectedBytesPerRecord
+        self.maxDerivedMutationsPerTransaction = maxDerivedMutationsPerTransaction
+        self.maxProjectedBytesPerTransaction = maxProjectedBytesPerTransaction
+        self.maxIndexes = maxIndexes
+        self.buildPageSize = buildPageSize
+        self.maxTemporarySortBytes = maxTemporarySortBytes
+        self.maxBundleNodes = maxBundleNodes
+        self.maxBundleBytes = maxBundleBytes
+        self.maxVerificationEntries = maxVerificationEntries
+        self.maxWriteRetries = maxWriteRetries
+        self.maxBuildRetries = maxBuildRetries
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension SecondaryIndexLimitsRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSecondaryIndexLimitsRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SecondaryIndexLimitsRecord {
+        return
+            try SecondaryIndexLimitsRecord(
+                maxTermBytes: FfiConverterUInt64.read(from: &buf),
+                maxProjectionBytes: FfiConverterUInt64.read(from: &buf),
+                maxAllValueBytes: FfiConverterUInt64.read(from: &buf),
+                maxTermsPerRecord: FfiConverterUInt64.read(from: &buf),
+                maxProjectedBytesPerRecord: FfiConverterUInt64.read(from: &buf),
+                maxDerivedMutationsPerTransaction: FfiConverterUInt64.read(from: &buf),
+                maxProjectedBytesPerTransaction: FfiConverterUInt64.read(from: &buf),
+                maxIndexes: FfiConverterUInt64.read(from: &buf),
+                buildPageSize: FfiConverterUInt64.read(from: &buf),
+                maxTemporarySortBytes: FfiConverterUInt64.read(from: &buf),
+                maxBundleNodes: FfiConverterUInt64.read(from: &buf),
+                maxBundleBytes: FfiConverterUInt64.read(from: &buf),
+                maxVerificationEntries: FfiConverterUInt64.read(from: &buf),
+                maxWriteRetries: FfiConverterUInt64.read(from: &buf),
+                maxBuildRetries: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SecondaryIndexLimitsRecord, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.maxTermBytes, into: &buf)
+        FfiConverterUInt64.write(value.maxProjectionBytes, into: &buf)
+        FfiConverterUInt64.write(value.maxAllValueBytes, into: &buf)
+        FfiConverterUInt64.write(value.maxTermsPerRecord, into: &buf)
+        FfiConverterUInt64.write(value.maxProjectedBytesPerRecord, into: &buf)
+        FfiConverterUInt64.write(value.maxDerivedMutationsPerTransaction, into: &buf)
+        FfiConverterUInt64.write(value.maxProjectedBytesPerTransaction, into: &buf)
+        FfiConverterUInt64.write(value.maxIndexes, into: &buf)
+        FfiConverterUInt64.write(value.buildPageSize, into: &buf)
+        FfiConverterUInt64.write(value.maxTemporarySortBytes, into: &buf)
+        FfiConverterUInt64.write(value.maxBundleNodes, into: &buf)
+        FfiConverterUInt64.write(value.maxBundleBytes, into: &buf)
+        FfiConverterUInt64.write(value.maxVerificationEntries, into: &buf)
+        FfiConverterUInt64.write(value.maxWriteRetries, into: &buf)
+        FfiConverterUInt64.write(value.maxBuildRetries, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSecondaryIndexLimitsRecord_lift(_ buf: RustBuffer) throws -> SecondaryIndexLimitsRecord {
+    return try FfiConverterTypeSecondaryIndexLimitsRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSecondaryIndexLimitsRecord_lower(_ value: SecondaryIndexLimitsRecord) -> RustBuffer {
+    return FfiConverterTypeSecondaryIndexLimitsRecord.lower(value)
 }
 
 
@@ -11359,6 +17858,72 @@ public func FfiConverterTypeTreeStatsRecord_lower(_ value: TreeStatsRecord) -> R
 }
 
 
+public struct TypedContentObjectRecord: Equatable, Hashable {
+    public var kind: ContentObjectKindRecord
+    public var cid: Data
+    public var dimensions: UInt32?
+    public var bytes: Data
+    public var depth: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(kind: ContentObjectKindRecord, cid: Data, dimensions: UInt32?, bytes: Data, depth: UInt64) {
+        self.kind = kind
+        self.cid = cid
+        self.dimensions = dimensions
+        self.bytes = bytes
+        self.depth = depth
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension TypedContentObjectRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTypedContentObjectRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TypedContentObjectRecord {
+        return
+            try TypedContentObjectRecord(
+                kind: FfiConverterTypeContentObjectKindRecord.read(from: &buf),
+                cid: FfiConverterData.read(from: &buf),
+                dimensions: FfiConverterOptionUInt32.read(from: &buf),
+                bytes: FfiConverterData.read(from: &buf),
+                depth: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: TypedContentObjectRecord, into buf: inout [UInt8]) {
+        FfiConverterTypeContentObjectKindRecord.write(value.kind, into: &buf)
+        FfiConverterData.write(value.cid, into: &buf)
+        FfiConverterOptionUInt32.write(value.dimensions, into: &buf)
+        FfiConverterData.write(value.bytes, into: &buf)
+        FfiConverterUInt64.write(value.depth, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTypedContentObjectRecord_lift(_ buf: RustBuffer) throws -> TypedContentObjectRecord {
+    return try FfiConverterTypeTypedContentObjectRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTypedContentObjectRecord_lower(_ value: TypedContentObjectRecord) -> RustBuffer {
+    return FfiConverterTypeTypedContentObjectRecord.lower(value)
+}
+
+
 public struct ValueRefRecord: Equatable, Hashable {
     public var kind: ValueRefKind
     public var value: Data?
@@ -11414,6 +17979,176 @@ public func FfiConverterTypeValueRefRecord_lift(_ buf: RustBuffer) throws -> Val
 #endif
 public func FfiConverterTypeValueRefRecord_lower(_ value: ValueRefRecord) -> RustBuffer {
     return FfiConverterTypeValueRefRecord.lower(value)
+}
+
+
+public struct VersionPruneRecord: Equatable, Hashable {
+    public var retained: [Data]
+    public var removed: [Data]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(retained: [Data], removed: [Data]) {
+        self.retained = retained
+        self.removed = removed
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension VersionPruneRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeVersionPruneRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> VersionPruneRecord {
+        return
+            try VersionPruneRecord(
+                retained: FfiConverterSequenceData.read(from: &buf),
+                removed: FfiConverterSequenceData.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: VersionPruneRecord, into buf: inout [UInt8]) {
+        FfiConverterSequenceData.write(value.retained, into: &buf)
+        FfiConverterSequenceData.write(value.removed, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeVersionPruneRecord_lift(_ buf: RustBuffer) throws -> VersionPruneRecord {
+    return try FfiConverterTypeVersionPruneRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeVersionPruneRecord_lower(_ value: VersionPruneRecord) -> RustBuffer {
+    return FfiConverterTypeVersionPruneRecord.lower(value)
+}
+
+
+public struct VersionedMapBatchResultRecord: Equatable, Hashable {
+    public var version: MapVersionRecord
+    public var stats: BatchApplyStatsRecord
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(version: MapVersionRecord, stats: BatchApplyStatsRecord) {
+        self.version = version
+        self.stats = stats
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension VersionedMapBatchResultRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeVersionedMapBatchResultRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> VersionedMapBatchResultRecord {
+        return
+            try VersionedMapBatchResultRecord(
+                version: FfiConverterTypeMapVersionRecord.read(from: &buf),
+                stats: FfiConverterTypeBatchApplyStatsRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: VersionedMapBatchResultRecord, into buf: inout [UInt8]) {
+        FfiConverterTypeMapVersionRecord.write(value.version, into: &buf)
+        FfiConverterTypeBatchApplyStatsRecord.write(value.stats, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeVersionedMapBatchResultRecord_lift(_ buf: RustBuffer) throws -> VersionedMapBatchResultRecord {
+    return try FfiConverterTypeVersionedMapBatchResultRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeVersionedMapBatchResultRecord_lower(_ value: VersionedMapBatchResultRecord) -> RustBuffer {
+    return FfiConverterTypeVersionedMapBatchResultRecord.lower(value)
+}
+
+
+public struct VersionedTransactionCommitRecord: Equatable, Hashable {
+    public var applied: Bool
+    public var versions: [MapVersionRecord]
+    public var conflictMapId: Data?
+    public var conflictCurrent: MapVersionRecord?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(applied: Bool, versions: [MapVersionRecord], conflictMapId: Data?, conflictCurrent: MapVersionRecord?) {
+        self.applied = applied
+        self.versions = versions
+        self.conflictMapId = conflictMapId
+        self.conflictCurrent = conflictCurrent
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension VersionedTransactionCommitRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeVersionedTransactionCommitRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> VersionedTransactionCommitRecord {
+        return
+            try VersionedTransactionCommitRecord(
+                applied: FfiConverterBool.read(from: &buf),
+                versions: FfiConverterSequenceTypeMapVersionRecord.read(from: &buf),
+                conflictMapId: FfiConverterOptionData.read(from: &buf),
+                conflictCurrent: FfiConverterOptionTypeMapVersionRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: VersionedTransactionCommitRecord, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.applied, into: &buf)
+        FfiConverterSequenceTypeMapVersionRecord.write(value.versions, into: &buf)
+        FfiConverterOptionData.write(value.conflictMapId, into: &buf)
+        FfiConverterOptionTypeMapVersionRecord.write(value.conflictCurrent, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeVersionedTransactionCommitRecord_lift(_ buf: RustBuffer) throws -> VersionedTransactionCommitRecord {
+    return try FfiConverterTypeVersionedTransactionCommitRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeVersionedTransactionCommitRecord_lower(_ value: VersionedTransactionCommitRecord) -> RustBuffer {
+    return FfiConverterTypeVersionedTransactionCommitRecord.lower(value)
 }
 
 
@@ -11625,6 +18360,217 @@ public func FfiConverterTypeWriteStatsRecord_lift(_ buf: RustBuffer) throws -> W
 public func FfiConverterTypeWriteStatsRecord_lower(_ value: WriteStatsRecord) -> RustBuffer {
     return FfiConverterTypeWriteStatsRecord.lower(value)
 }
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum AdaptiveQualityRecord: Equatable, Hashable {
+
+    case fast
+    case balanced
+    case highRecall
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension AdaptiveQualityRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAdaptiveQualityRecord: FfiConverterRustBuffer {
+    typealias SwiftType = AdaptiveQualityRecord
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AdaptiveQualityRecord {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .fast
+
+        case 2: return .balanced
+
+        case 3: return .highRecall
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: AdaptiveQualityRecord, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .fast:
+            writeInt(&buf, Int32(1))
+
+
+        case .balanced:
+            writeInt(&buf, Int32(2))
+
+
+        case .highRecall:
+            writeInt(&buf, Int32(3))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAdaptiveQualityRecord_lift(_ buf: RustBuffer) throws -> AdaptiveQualityRecord {
+    return try FfiConverterTypeAdaptiveQualityRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAdaptiveQualityRecord_lower(_ value: AdaptiveQualityRecord) -> RustBuffer {
+    return FfiConverterTypeAdaptiveQualityRecord.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum ContentObjectKindRecord: Equatable, Hashable {
+
+    case orderedNode
+    case proximityDescriptor
+    case proximityNode
+    case overflowDirectory
+    case overflowPage
+    case externalVector
+    case scalarQuantization
+    case productQuantization
+    case hnswManifest
+    case hnswPage
+    case compositeAccelerator
+    case acceleratorCatalog
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension ContentObjectKindRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeContentObjectKindRecord: FfiConverterRustBuffer {
+    typealias SwiftType = ContentObjectKindRecord
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ContentObjectKindRecord {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .orderedNode
+
+        case 2: return .proximityDescriptor
+
+        case 3: return .proximityNode
+
+        case 4: return .overflowDirectory
+
+        case 5: return .overflowPage
+
+        case 6: return .externalVector
+
+        case 7: return .scalarQuantization
+
+        case 8: return .productQuantization
+
+        case 9: return .hnswManifest
+
+        case 10: return .hnswPage
+
+        case 11: return .compositeAccelerator
+
+        case 12: return .acceleratorCatalog
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ContentObjectKindRecord, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .orderedNode:
+            writeInt(&buf, Int32(1))
+
+
+        case .proximityDescriptor:
+            writeInt(&buf, Int32(2))
+
+
+        case .proximityNode:
+            writeInt(&buf, Int32(3))
+
+
+        case .overflowDirectory:
+            writeInt(&buf, Int32(4))
+
+
+        case .overflowPage:
+            writeInt(&buf, Int32(5))
+
+
+        case .externalVector:
+            writeInt(&buf, Int32(6))
+
+
+        case .scalarQuantization:
+            writeInt(&buf, Int32(7))
+
+
+        case .productQuantization:
+            writeInt(&buf, Int32(8))
+
+
+        case .hnswManifest:
+            writeInt(&buf, Int32(9))
+
+
+        case .hnswPage:
+            writeInt(&buf, Int32(10))
+
+
+        case .compositeAccelerator:
+            writeInt(&buf, Int32(11))
+
+
+        case .acceleratorCatalog:
+            writeInt(&buf, Int32(12))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeContentObjectKindRecord_lift(_ buf: RustBuffer) throws -> ContentObjectKindRecord {
+    return try FfiConverterTypeContentObjectKindRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeContentObjectKindRecord_lower(_ value: ContentObjectKindRecord) -> RustBuffer {
+    return FfiConverterTypeContentObjectKindRecord.lower(value)
+}
+
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
@@ -11904,6 +18850,80 @@ public func FfiConverterTypeDiffKind_lower(_ value: DiffKind) -> RustBuffer {
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
+public enum DistanceMetricRecord: Equatable, Hashable {
+
+    case l2Squared
+    case cosine
+    case innerProduct
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension DistanceMetricRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDistanceMetricRecord: FfiConverterRustBuffer {
+    typealias SwiftType = DistanceMetricRecord
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DistanceMetricRecord {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .l2Squared
+
+        case 2: return .cosine
+
+        case 3: return .innerProduct
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: DistanceMetricRecord, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .l2Squared:
+            writeInt(&buf, Int32(1))
+
+
+        case .cosine:
+            writeInt(&buf, Int32(2))
+
+
+        case .innerProduct:
+            writeInt(&buf, Int32(3))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDistanceMetricRecord_lift(_ buf: RustBuffer) throws -> DistanceMetricRecord {
+    return try FfiConverterTypeDistanceMetricRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDistanceMetricRecord_lower(_ value: DistanceMetricRecord) -> RustBuffer {
+    return FfiConverterTypeDistanceMetricRecord.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 public enum EncodingKind: Equatable, Hashable {
 
     case raw
@@ -11979,6 +18999,228 @@ public func FfiConverterTypeEncodingKind_lift(_ buf: RustBuffer) throws -> Encod
 #endif
 public func FfiConverterTypeEncodingKind_lower(_ value: EncodingKind) -> RustBuffer {
     return FfiConverterTypeEncodingKind.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum IndexProjectionRecord: Equatable, Hashable {
+
+    case keysOnly
+    case include
+    case all
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension IndexProjectionRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeIndexProjectionRecord: FfiConverterRustBuffer {
+    typealias SwiftType = IndexProjectionRecord
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IndexProjectionRecord {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .keysOnly
+
+        case 2: return .include
+
+        case 3: return .all
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: IndexProjectionRecord, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .keysOnly:
+            writeInt(&buf, Int32(1))
+
+
+        case .include:
+            writeInt(&buf, Int32(2))
+
+
+        case .all:
+            writeInt(&buf, Int32(3))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIndexProjectionRecord_lift(_ buf: RustBuffer) throws -> IndexProjectionRecord {
+    return try FfiConverterTypeIndexProjectionRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIndexProjectionRecord_lower(_ value: IndexProjectionRecord) -> RustBuffer {
+    return FfiConverterTypeIndexProjectionRecord.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum IndexedUpdateKind: Equatable, Hashable {
+
+    case applied
+    case unchanged
+    case conflict
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension IndexedUpdateKind: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeIndexedUpdateKind: FfiConverterRustBuffer {
+    typealias SwiftType = IndexedUpdateKind
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IndexedUpdateKind {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .applied
+
+        case 2: return .unchanged
+
+        case 3: return .conflict
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: IndexedUpdateKind, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .applied:
+            writeInt(&buf, Int32(1))
+
+
+        case .unchanged:
+            writeInt(&buf, Int32(2))
+
+
+        case .conflict:
+            writeInt(&buf, Int32(3))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIndexedUpdateKind_lift(_ buf: RustBuffer) throws -> IndexedUpdateKind {
+    return try FfiConverterTypeIndexedUpdateKind.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIndexedUpdateKind_lower(_ value: IndexedUpdateKind) -> RustBuffer {
+    return FfiConverterTypeIndexedUpdateKind.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum MapUpdateKind: Equatable, Hashable {
+
+    case applied
+    case unchanged
+    case conflict
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension MapUpdateKind: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMapUpdateKind: FfiConverterRustBuffer {
+    typealias SwiftType = MapUpdateKind
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MapUpdateKind {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .applied
+
+        case 2: return .unchanged
+
+        case 3: return .conflict
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: MapUpdateKind, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .applied:
+            writeInt(&buf, Int32(1))
+
+
+        case .unchanged:
+            writeInt(&buf, Int32(2))
+
+
+        case .conflict:
+            writeInt(&buf, Int32(3))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMapUpdateKind_lift(_ buf: RustBuffer) throws -> MapUpdateKind {
+    return try FfiConverterTypeMapUpdateKind.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMapUpdateKind_lower(_ value: MapUpdateKind) -> RustBuffer {
+    return FfiConverterTypeMapUpdateKind.lower(value)
 }
 
 
@@ -12798,6 +20040,161 @@ public func FfiConverterTypeProllyBindingError_lower(_ value: ProllyBindingError
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
+public enum ProximityFilterKind: Equatable, Hashable {
+
+    case all
+    case keyRange
+    case prefix
+    case eligibleKeys
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension ProximityFilterKind: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProximityFilterKind: FfiConverterRustBuffer {
+    typealias SwiftType = ProximityFilterKind
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProximityFilterKind {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .all
+
+        case 2: return .keyRange
+
+        case 3: return .prefix
+
+        case 4: return .eligibleKeys
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ProximityFilterKind, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .all:
+            writeInt(&buf, Int32(1))
+
+
+        case .keyRange:
+            writeInt(&buf, Int32(2))
+
+
+        case .prefix:
+            writeInt(&buf, Int32(3))
+
+
+        case .eligibleKeys:
+            writeInt(&buf, Int32(4))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProximityFilterKind_lift(_ buf: RustBuffer) throws -> ProximityFilterKind {
+    return try FfiConverterTypeProximityFilterKind.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProximityFilterKind_lower(_ value: ProximityFilterKind) -> RustBuffer {
+    return FfiConverterTypeProximityFilterKind.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum QueryKernelRecord: Equatable, Hashable {
+
+    case scalarDeterministic
+    case simdDeterministic
+    case autoDeterministic
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension QueryKernelRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeQueryKernelRecord: FfiConverterRustBuffer {
+    typealias SwiftType = QueryKernelRecord
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> QueryKernelRecord {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .scalarDeterministic
+
+        case 2: return .simdDeterministic
+
+        case 3: return .autoDeterministic
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: QueryKernelRecord, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .scalarDeterministic:
+            writeInt(&buf, Int32(1))
+
+
+        case .simdDeterministic:
+            writeInt(&buf, Int32(2))
+
+
+        case .autoDeterministic:
+            writeInt(&buf, Int32(3))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeQueryKernelRecord_lift(_ buf: RustBuffer) throws -> QueryKernelRecord {
+    return try FfiConverterTypeQueryKernelRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeQueryKernelRecord_lower(_ value: QueryKernelRecord) -> RustBuffer {
+    return FfiConverterTypeQueryKernelRecord.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 public enum ResolutionKind: Equatable, Hashable {
 
     case value
@@ -12866,6 +20263,256 @@ public func FfiConverterTypeResolutionKind_lift(_ buf: RustBuffer) throws -> Res
 #endif
 public func FfiConverterTypeResolutionKind_lower(_ value: ResolutionKind) -> RustBuffer {
     return FfiConverterTypeResolutionKind.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum SearchBackendRecord: Equatable, Hashable {
+
+    case native
+    case productQuantized
+    case hnsw
+    case composite
+    case auto
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension SearchBackendRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSearchBackendRecord: FfiConverterRustBuffer {
+    typealias SwiftType = SearchBackendRecord
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchBackendRecord {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .native
+
+        case 2: return .productQuantized
+
+        case 3: return .hnsw
+
+        case 4: return .composite
+
+        case 5: return .auto
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: SearchBackendRecord, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .native:
+            writeInt(&buf, Int32(1))
+
+
+        case .productQuantized:
+            writeInt(&buf, Int32(2))
+
+
+        case .hnsw:
+            writeInt(&buf, Int32(3))
+
+
+        case .composite:
+            writeInt(&buf, Int32(4))
+
+
+        case .auto:
+            writeInt(&buf, Int32(5))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchBackendRecord_lift(_ buf: RustBuffer) throws -> SearchBackendRecord {
+    return try FfiConverterTypeSearchBackendRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchBackendRecord_lower(_ value: SearchBackendRecord) -> RustBuffer {
+    return FfiConverterTypeSearchBackendRecord.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum SearchCompletionRecord: Equatable, Hashable {
+
+    case exact
+    case approximatePolicySatisfied
+    case budgetExhausted
+    case cancelled
+    case deadlineExceeded
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension SearchCompletionRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSearchCompletionRecord: FfiConverterRustBuffer {
+    typealias SwiftType = SearchCompletionRecord
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchCompletionRecord {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .exact
+
+        case 2: return .approximatePolicySatisfied
+
+        case 3: return .budgetExhausted
+
+        case 4: return .cancelled
+
+        case 5: return .deadlineExceeded
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: SearchCompletionRecord, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .exact:
+            writeInt(&buf, Int32(1))
+
+
+        case .approximatePolicySatisfied:
+            writeInt(&buf, Int32(2))
+
+
+        case .budgetExhausted:
+            writeInt(&buf, Int32(3))
+
+
+        case .cancelled:
+            writeInt(&buf, Int32(4))
+
+
+        case .deadlineExceeded:
+            writeInt(&buf, Int32(5))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchCompletionRecord_lift(_ buf: RustBuffer) throws -> SearchCompletionRecord {
+    return try FfiConverterTypeSearchCompletionRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchCompletionRecord_lower(_ value: SearchCompletionRecord) -> RustBuffer {
+    return FfiConverterTypeSearchCompletionRecord.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum SearchPolicyKind: Equatable, Hashable {
+
+    case exact
+    case fixedBudget
+    case adaptive
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension SearchPolicyKind: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSearchPolicyKind: FfiConverterRustBuffer {
+    typealias SwiftType = SearchPolicyKind
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchPolicyKind {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .exact
+
+        case 2: return .fixedBudget
+
+        case 3: return .adaptive
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: SearchPolicyKind, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .exact:
+            writeInt(&buf, Int32(1))
+
+
+        case .fixedBudget:
+            writeInt(&buf, Int32(2))
+
+
+        case .adaptive:
+            writeInt(&buf, Int32(3))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchPolicyKind_lift(_ buf: RustBuffer) throws -> SearchPolicyKind {
+    return try FfiConverterTypeSearchPolicyKind.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchPolicyKind_lower(_ value: SearchPolicyKind) -> RustBuffer {
+    return FfiConverterTypeSearchPolicyKind.lower(value)
 }
 
 
@@ -13168,6 +20815,54 @@ public func FfiConverterTypeValueRefKind_lower(_ value: ValueRefKind) -> RustBuf
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionUInt16: FfiConverterRustBuffer {
+    typealias SwiftType = UInt16?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterUInt16.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterUInt16.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionUInt32: FfiConverterRustBuffer {
+    typealias SwiftType = UInt32?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterUInt32.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterUInt32.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionUInt64: FfiConverterRustBuffer {
     typealias SwiftType = UInt64?
 
@@ -13256,6 +20951,54 @@ fileprivate struct FfiConverterOptionData: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterData.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeBindingMapSnapshot: FfiConverterRustBuffer {
+    typealias SwiftType = BindingMapSnapshot?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeBindingMapSnapshot.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeBindingMapSnapshot.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeProllyReadSession: FfiConverterRustBuffer {
+    typealias SwiftType = ProllyReadSession?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeProllyReadSession.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeProllyReadSession.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -13360,6 +21103,54 @@ fileprivate struct FfiConverterOptionTypeEntryRecord: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeExactProximityRecordRecord: FfiConverterRustBuffer {
+    typealias SwiftType = ExactProximityRecordRecord?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeExactProximityRecordRecord.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeExactProximityRecordRecord.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeIndexedVersionRecord: FfiConverterRustBuffer {
+    typealias SwiftType = IndexedVersionRecord?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeIndexedVersionRecord.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeIndexedVersionRecord.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeKeyProofRecord: FfiConverterRustBuffer {
     typealias SwiftType = KeyProofRecord?
 
@@ -13376,6 +21167,54 @@ fileprivate struct FfiConverterOptionTypeKeyProofRecord: FfiConverterRustBuffer 
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeKeyProofRecord.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeMapChangeEventRecord: FfiConverterRustBuffer {
+    typealias SwiftType = MapChangeEventRecord?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeMapChangeEventRecord.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeMapChangeEventRecord.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeMapVersionRecord: FfiConverterRustBuffer {
+    typealias SwiftType = MapVersionRecord?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeMapVersionRecord.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeMapVersionRecord.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -13504,6 +21343,30 @@ fileprivate struct FfiConverterOptionTypeRootManifestRecord: FfiConverterRustBuf
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeSecondaryIndexLimitsRecord: FfiConverterRustBuffer {
+    typealias SwiftType = SecondaryIndexLimitsRecord?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeSecondaryIndexLimitsRecord.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeSecondaryIndexLimitsRecord.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeStructuralDiffCursorRecord: FfiConverterRustBuffer {
     typealias SwiftType = StructuralDiffCursorRecord?
 
@@ -13616,6 +21479,30 @@ fileprivate struct FfiConverterOptionTypeValueRefRecord: FfiConverterRustBuffer 
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeValueRefRecord.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeAdaptiveQualityRecord: FfiConverterRustBuffer {
+    typealias SwiftType = AdaptiveQualityRecord?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeAdaptiveQualityRecord.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeAdaptiveQualityRecord.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -13744,6 +21631,30 @@ fileprivate struct FfiConverterOptionTypeMergeTraceStageKind: FfiConverterRustBu
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionSequenceFloat: FfiConverterRustBuffer {
+    typealias SwiftType = [Float]?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterSequenceFloat.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterSequenceFloat.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceUInt64: FfiConverterRustBuffer {
     typealias SwiftType = [UInt64]
 
@@ -13769,6 +21680,31 @@ fileprivate struct FfiConverterSequenceUInt64: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceFloat: FfiConverterRustBuffer {
+    typealias SwiftType = [Float]
+
+    public static func write(_ value: [Float], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterFloat.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [Float] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [Float]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterFloat.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceData: FfiConverterRustBuffer {
     typealias SwiftType = [Data]
 
@@ -13786,6 +21722,31 @@ fileprivate struct FfiConverterSequenceData: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterData.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeActiveIndexHealthRecord: FfiConverterRustBuffer {
+    typealias SwiftType = [ActiveIndexHealthRecord]
+
+    public static func write(_ value: [ActiveIndexHealthRecord], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeActiveIndexHealthRecord.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [ActiveIndexHealthRecord] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [ActiveIndexHealthRecord]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeActiveIndexHealthRecord.read(from: &buf))
         }
         return seq
     }
@@ -13944,6 +21905,106 @@ fileprivate struct FfiConverterSequenceTypeHostStoreNamedRootManifestRecord: Ffi
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeIndexEntryRecord: FfiConverterRustBuffer {
+    typealias SwiftType = [IndexEntryRecord]
+
+    public static func write(_ value: [IndexEntryRecord], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeIndexEntryRecord.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [IndexEntryRecord] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [IndexEntryRecord]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeIndexEntryRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeIndexMatchRecord: FfiConverterRustBuffer {
+    typealias SwiftType = [IndexMatchRecord]
+
+    public static func write(_ value: [IndexMatchRecord], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeIndexMatchRecord.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [IndexMatchRecord] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [IndexMatchRecord]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeIndexMatchRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeIndexVerificationRecord: FfiConverterRustBuffer {
+    typealias SwiftType = [IndexVerificationRecord]
+
+    public static func write(_ value: [IndexVerificationRecord], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeIndexVerificationRecord.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [IndexVerificationRecord] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [IndexVerificationRecord]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeIndexVerificationRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeIndexedSourceRecord: FfiConverterRustBuffer {
+    typealias SwiftType = [IndexedSourceRecord]
+
+    public static func write(_ value: [IndexedSourceRecord], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeIndexedSourceRecord.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [IndexedSourceRecord] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [IndexedSourceRecord]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeIndexedSourceRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeKeyProofVerificationRecord: FfiConverterRustBuffer {
     typealias SwiftType = [KeyProofVerificationRecord]
 
@@ -13961,6 +22022,31 @@ fileprivate struct FfiConverterSequenceTypeKeyProofVerificationRecord: FfiConver
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeKeyProofVerificationRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeMapVersionRecord: FfiConverterRustBuffer {
+    typealias SwiftType = [MapVersionRecord]
+
+    public static func write(_ value: [MapVersionRecord], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeMapVersionRecord.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [MapVersionRecord] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [MapVersionRecord]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeMapVersionRecord.read(from: &buf))
         }
         return seq
     }
@@ -14086,6 +22172,81 @@ fileprivate struct FfiConverterSequenceTypeNodeRecord: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeNodeRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeProximityMutationRecord: FfiConverterRustBuffer {
+    typealias SwiftType = [ProximityMutationRecord]
+
+    public static func write(_ value: [ProximityMutationRecord], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeProximityMutationRecord.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [ProximityMutationRecord] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [ProximityMutationRecord]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeProximityMutationRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeProximityNeighborRecord: FfiConverterRustBuffer {
+    typealias SwiftType = [ProximityNeighborRecord]
+
+    public static func write(_ value: [ProximityNeighborRecord], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeProximityNeighborRecord.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [ProximityNeighborRecord] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [ProximityNeighborRecord]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeProximityNeighborRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeProximityRecordRecord: FfiConverterRustBuffer {
+    typealias SwiftType = [ProximityRecordRecord]
+
+    public static func write(_ value: [ProximityRecordRecord], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeProximityRecordRecord.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [ProximityRecordRecord] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [ProximityRecordRecord]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeProximityRecordRecord.read(from: &buf))
         }
         return seq
     }
@@ -14361,6 +22522,31 @@ fileprivate struct FfiConverterSequenceTypeTreeStatsLevelU64Record: FfiConverter
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeTreeStatsLevelU64Record.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeTypedContentObjectRecord: FfiConverterRustBuffer {
+    typealias SwiftType = [TypedContentObjectRecord]
+
+    public static func write(_ value: [TypedContentObjectRecord], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeTypedContentObjectRecord.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [TypedContentObjectRecord] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [TypedContentObjectRecord]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeTypedContentObjectRecord.read(from: &buf))
         }
         return seq
     }
@@ -15283,6 +23469,44 @@ public func versionedValueToBytes(record: VersionedValueRecord)throws  -> Data  
     )
 })
 }
+public func defaultContentGraphLimits() -> ContentGraphLimitsRecord  {
+    return try!  FfiConverterTypeContentGraphLimitsRecord_lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_func_default_content_graph_limits($0
+    )
+})
+}
+public func defaultProximityConfig(dimensions: UInt32) -> ProximityConfigRecord  {
+    return try!  FfiConverterTypeProximityConfigRecord_lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_func_default_proximity_config(
+        FfiConverterUInt32.lower(dimensions),$0
+    )
+})
+}
+public func exactProximitySearchRequest(query: [Float], k: UInt64) -> ProximitySearchRequestRecord  {
+    return try!  FfiConverterTypeProximitySearchRequestRecord_lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_func_exact_proximity_search_request(
+        FfiConverterSequenceFloat.lower(query),
+        FfiConverterUInt64.lower(k),$0
+    )
+})
+}
+public func verifyProximityMembershipProof(proof: ProximityMembershipProofRecord, expectedDescriptor: Data?)throws  -> ProximityMembershipVerificationRecord  {
+    return try  FfiConverterTypeProximityMembershipVerificationRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_func_verify_proximity_membership_proof(
+        FfiConverterTypeProximityMembershipProofRecord_lower(proof),
+        FfiConverterOptionData.lower(expectedDescriptor),$0
+    )
+})
+}
+public func verifyProximityStructureProof(proof: ProximityStructuralProofRecord, expectedDescriptor: Data?, limits: ContentGraphLimitsRecord)throws  -> ProximityStructuralVerificationRecord  {
+    return try  FfiConverterTypeProximityStructuralVerificationRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_func_verify_proximity_structure_proof(
+        FfiConverterTypeProximityStructuralProofRecord_lower(proof),
+        FfiConverterOptionData.lower(expectedDescriptor),
+        FfiConverterTypeContentGraphLimitsRecord_lower(limits),$0
+    )
+})
+}
 
 private enum InitializationResult {
     case ok
@@ -15668,6 +23892,21 @@ private let initializationResult: InitializationResult = {
     if (uniffi_prolly_bindings_checksum_func_versioned_value_to_bytes() != 30630) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_prolly_bindings_checksum_func_default_content_graph_limits() != 63706) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_func_default_proximity_config() != 43437) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_func_exact_proximity_search_request() != 59384) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_func_verify_proximity_membership_proof() != 51777) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_func_verify_proximity_structure_proof() != 14090) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_prolly_bindings_checksum_method_conflictvisitorcallback_visit() != 1459) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -15785,10 +24024,16 @@ private let initializationResult: InitializationResult = {
     if (uniffi_prolly_bindings_checksum_method_prollyengine_begin_transaction() != 46980) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_prolly_bindings_checksum_method_prollyengine_begin_versioned_transaction() != 24600) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_prolly_bindings_checksum_method_prollyengine_build_from_entries() != 64496) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_prollyengine_build_from_sorted_entries() != 55031) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_prollyengine_build_proximity_map() != 21319) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_prollyengine_cache_stats() != 60778) {
@@ -15899,6 +24144,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_prolly_bindings_checksum_method_prollyengine_import_snapshot() != 14533) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_prolly_bindings_checksum_method_prollyengine_indexed_map() != 37913) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_prolly_bindings_checksum_method_prollyengine_last_entry() != 35726) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -15921,6 +24169,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_prollyengine_load_named_roots() != 13836) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_prollyengine_load_proximity_map() != 13425) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_prollyengine_load_retained_named_roots() != 62254) {
@@ -16139,7 +24390,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_prolly_bindings_checksum_method_prollyengine_upper_bound() != 36418) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_prolly_bindings_checksum_method_prollyreadsession_fast_handle() != 48376) {
+    if (uniffi_prolly_bindings_checksum_method_prollyengine_versioned_map() != 45760) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_prollyreadsession_fast_handle() != 12185) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_prollyreadsession_get() != 9311) {
@@ -16190,6 +24444,597 @@ private let initializationResult: InitializationResult = {
     if (uniffi_prolly_bindings_checksum_method_prollytransaction_rollback() != 34302) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_prolly_bindings_checksum_method_bindingindexregistry_len() != 2337) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingindexregistry_register() != 8245) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingindexedmap_apply() != 28677) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingindexedmap_apply_if() != 19535) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingindexedmap_deactivate_index() != 37394) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingindexedmap_delete() != 23143) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingindexedmap_ensure_index() != 43748) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingindexedmap_export_current() != 22167) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingindexedmap_get() != 7518) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingindexedmap_health() != 60950) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingindexedmap_id() != 12330) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingindexedmap_import_current() != 27402) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingindexedmap_keep_last() != 26671) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingindexedmap_metrics() != 61793) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingindexedmap_put() != 8190) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingindexedmap_repair_index() != 41978) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingindexedmap_snapshot() != 23616) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingindexedmap_snapshot_at() != 6975) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingindexedmap_snapshot_by_id() != 21486) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingindexedmap_verify_all() != 26046) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingindexedmap_verify_index() != 33449) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingindexedsnapshot_id() != 34471) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingindexedsnapshot_index() != 17790) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingsecondaryindexsnapshot_exact() != 43001) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingsecondaryindexsnapshot_exact_page() != 53200) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingsecondaryindexsnapshot_exact_reverse_page() != 25279) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingsecondaryindexsnapshot_fast_handle() != 32673) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingsecondaryindexsnapshot_name() != 55322) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingsecondaryindexsnapshot_prefix() != 37898) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingsecondaryindexsnapshot_prefix_page() != 19156) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingsecondaryindexsnapshot_prefix_reverse_page() != 57553) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingsecondaryindexsnapshot_range() != 4911) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingsecondaryindexsnapshot_range_page() != 39819) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingsecondaryindexsnapshot_range_reverse_page() != 64808) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingsecondaryindexsnapshot_records() != 3203) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_secondaryindexextractorcallback_extract() != 330) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingproximitymap_clear_content_cache() != 42240) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingproximitymap_config() != 38616) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingproximitymap_contains_key() != 60663) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingproximitymap_count() != 47353) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingproximitymap_descriptor() != 63660) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingproximitymap_fast_handle() != 63102) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingproximitymap_get() != 51400) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingproximitymap_mutate() != 39394) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingproximitymap_prove_membership() != 16834) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingproximitymap_prove_structure() != 54262) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingproximitymap_read_session() != 65389) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingproximitymap_rebuild() != 37812) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingproximitymap_scan_records() != 19817) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingproximitymap_search() != 3285) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingproximitymap_verify() != 62601) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_contains_key() != 45374) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_get() != 6612) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_scan_records() != 20861) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_proximityrecordvisitorcallback_visit() != 31782) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapcomparison_base() != 36846) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapcomparison_changed_spans() != 46072) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapcomparison_debug_view() != 2328) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapcomparison_diff() != 43893) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapcomparison_diff_page() != 60977) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapcomparison_prove_diff_page() != 35460) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapcomparison_publish_changed_spans() != 61929) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapcomparison_scan_diff() != 26703) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapcomparison_stats() != 60113) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapcomparison_structural_diff_page() != 50195) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapcomparison_target() != 35554) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapmerge_base() != 61435) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapmerge_candidate() != 41277) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapmerge_conflict_page() != 20604) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapmerge_crdt_merge() != 18465) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapmerge_crdt_merge_explain() != 55604) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapmerge_head() != 7516) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapmerge_merge() != 40815) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapmerge_merge_with_policy() != 60247) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapmerge_publish() != 7527) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapmerge_publish_crdt() != 57895) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapmerge_publish_with_policy() != 42291) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapmerge_scan_conflicts() != 42348) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_contains_key() != 21138) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_copy_missing_nodes() != 19285) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_cursor_window() != 30078) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_debug_view() != 16451) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_export() != 43158) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_first_entry() != 19800) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_get() != 23982) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_get_many() != 59146) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_get_value_ref() != 28540) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_hydrate_prefix_hint() != 17870) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_id() != 54826) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_last_entry() != 50662) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_lower_bound() != 53520) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_pin_path() != 60822) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_pin_root() != 50) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_plan_missing_nodes() != 13769) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_prefix() != 13443) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_prefix_page() != 30610) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_prefix_reverse_page() != 41517) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_prove_key() != 43676) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_prove_keys() != 57323) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_prove_prefix() != 38893) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_prove_range() != 51288) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_prove_range_page() != 61166) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_publish_prefix_hint() != 61954) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_push_to() != 30296) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_range() != 35382) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_range_page() != 15503) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_read_session() != 12900) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_reverse_page() != 52866) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_scan_prefix() != 13577) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_scan_range() != 56478) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_stats() != 46923) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_tree() != 37601) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_upper_bound() != 46013) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_version() != 24194) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapsubscription_last_seen() != 47330) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingmapsubscription_poll() != 36190) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_append() != 3269) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_apply() != 61319) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_apply_at_millis() != 33151) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_apply_if() != 11831) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_apply_if_at_millis() != 27759) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_backup() != 15339) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_changes_since() != 2410) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_compare() != 15653) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_compare_to_head() != 9429) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_contains_key() != 48908) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_delete() != 4038) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_delete_if() != 20405) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_diff() != 28532) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_edit() != 48889) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_edit_if() != 7063) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_get() != 21736) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_get_at() != 49953) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_get_large_value() != 32009) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_get_many() != 35647) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_get_many_at() != 9804) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_get_value_ref() != 55870) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_get_value_ref_at() != 53232) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_head() != 6620) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_head_id() != 32007) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_head_name() != 42727) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_id() != 19017) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_import_as_head() != 19956) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_import_as_head_at_millis() != 39252) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_initialize() != 47839) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_initialize_sorted() != 57780) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_is_initialized() != 59171) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_keep_for() != 21945) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_keep_for_at() != 34575) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_keep_last() != 10933) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_keep_versions() != 8516) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_parallel_apply() != 18342) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_plan_blob_gc() != 41422) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_plan_gc() != 42395) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_prefix() != 39768) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_prefix_at() != 41303) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_prefix_page() != 50457) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_prefix_page_at() != 1244) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_prepare_merge() != 8932) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_prune_versions() != 41584) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_put() != 35839) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_put_if() != 59447) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_put_large_value() != 9852) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_put_large_value_if() != 30804) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_range() != 28407) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_range_at() != 26041) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_range_page() != 61783) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_range_page_at() != 28877) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_read_session() != 57324) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_rebuild_from_entries_if() != 64844) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_rebuild_from_iter_if() != 50372) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_rebuild_sorted_if() != 10578) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_restore_backup() != 48136) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_retention_policy() != 22545) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_rollback_to() != 61205) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_scan_prefix() != 24017) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_scan_prefix_at() != 51127) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_scan_range() != 21020) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_scan_range_at() != 29493) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_snapshot() != 28937) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_snapshot_at() != 13298) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_subscribe() != 15356) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_subscribe_from() != 11541) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_sweep_blob_gc() != 28502) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_sweep_gc() != 20359) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_verify_catalog() != 55371) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_version() != 49800) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_versions() != 11528) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedmap_versions_prefix() != 13670) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedtransaction_apply() != 9584) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedtransaction_apply_if() != 57670) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedtransaction_commit() != 22678) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedtransaction_delete() != 16598) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedtransaction_get() != 21512) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedtransaction_head() != 45055) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedtransaction_put() != 55787) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingversionedtransaction_rollback() != 45393) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_prolly_bindings_checksum_constructor_mergepolicyregistry_new() != 19304) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -16214,6 +25059,15 @@ private let initializationResult: InitializationResult = {
     if (uniffi_prolly_bindings_checksum_constructor_prollyengine_sqlite_in_memory() != 5409) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_prolly_bindings_checksum_constructor_bindingindexregistry_new() != 46129) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_constructor_bindingindexedmap_new() != 57256) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_constructor_bindingversionedmap_new() != 64633) {
+        return InitializationResult.apiChecksumMismatch
+    }
 
     uniffiCallbackInitConflictVisitorCallback()
     uniffiCallbackInitCrdtResolverCallback()
@@ -16221,6 +25075,8 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitEntryVisitorCallback()
     uniffiCallbackInitHostStoreCallback()
     uniffiCallbackInitMergeResolverCallback()
+    uniffiCallbackInitProximityRecordVisitorCallback()
+    uniffiCallbackInitSecondaryIndexExtractorCallback()
     return InitializationResult.ok
 }()
 

@@ -13,6 +13,7 @@ let package = Package(
     ],
     products: [
         .library(name: "Prolly", targets: ["Prolly"]),
+        .library(name: "ProllyAPI", targets: ["ProllyAPI"]),
         .executable(name: "prolly-agent-event-log", targets: ["AgentEventLog"]),
         .executable(name: "prolly-background-compaction", targets: ["BackgroundCompaction"]),
         .executable(name: "prolly-basic-map", targets: ["BasicMap"]),
@@ -47,6 +48,14 @@ let package = Package(
                 .unsafeFlags(["-L\(localLibrarySearchPath)"]),
                 .linkedLibrary("prolly_bindings"),
             ]
+        ),
+        .target(
+            name: "ProllyAPI",
+            dependencies: ["Prolly", "prollyFFI"]
+        ),
+        .testTarget(
+            name: "ProllyTests",
+            dependencies: ["Prolly", "ProllyAPI"]
         ),
         .executableTarget(
             name: "AgentEventLog",

@@ -126,6 +126,30 @@ end
     end
   end
 
+  # The Record type ActiveIndexHealthRecord.
+
+  def self.check_lower_TypeActiveIndexHealthRecord(v)
+
+
+
+    RustBuffer.check_lower_TypeIndexProjectionRecord(v.projection)
+
+
+  end
+
+  def self.alloc_from_TypeActiveIndexHealthRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeActiveIndexHealthRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeActiveIndexHealthRecord
+    consumeWithStream do |stream|
+      return stream.readTypeActiveIndexHealthRecord
+    end
+  end
+
   # The Record type AuthenticatedProofBundleVerificationRecord.
 
   def self.check_lower_TypeAuthenticatedProofBundleVerificationRecord(v)
@@ -475,6 +499,28 @@ end
     end
   end
 
+  # The Record type ContentGraphLimitsRecord.
+
+  def self.check_lower_TypeContentGraphLimitsRecord(v)
+
+
+
+
+  end
+
+  def self.alloc_from_TypeContentGraphLimitsRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeContentGraphLimitsRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeContentGraphLimitsRecord
+    consumeWithStream do |stream|
+      return stream.readTypeContentGraphLimitsRecord
+    end
+  end
+
   # The Record type CrdtConfigRecord.
 
   def self.check_lower_TypeCrdtConfigRecord(v)
@@ -696,6 +742,26 @@ end
   def consumeIntoTypeEntryRecord
     consumeWithStream do |stream|
       return stream.readTypeEntryRecord
+    end
+  end
+
+  # The Record type ExactProximityRecordRecord.
+
+  def self.check_lower_TypeExactProximityRecordRecord(v)
+    RustBuffer.check_lower_Sequencef32(v.vector)
+
+  end
+
+  def self.alloc_from_TypeExactProximityRecordRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeExactProximityRecordRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeExactProximityRecordRecord
+    consumeWithStream do |stream|
+      return stream.readTypeExactProximityRecordRecord
     end
   end
 
@@ -947,6 +1013,283 @@ end
     end
   end
 
+  # The Record type IndexBuildResultRecord.
+
+  def self.check_lower_TypeIndexBuildResultRecord(v)
+
+
+
+
+
+
+
+  end
+
+  def self.alloc_from_TypeIndexBuildResultRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeIndexBuildResultRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeIndexBuildResultRecord
+    consumeWithStream do |stream|
+      return stream.readTypeIndexBuildResultRecord
+    end
+  end
+
+  # The Record type IndexEntryRecord.
+
+  def self.check_lower_TypeIndexEntryRecord(v)
+
+    RustBuffer.check_lower_Optionalbytes(v.projection)
+  end
+
+  def self.alloc_from_TypeIndexEntryRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeIndexEntryRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeIndexEntryRecord
+    consumeWithStream do |stream|
+      return stream.readTypeIndexEntryRecord
+    end
+  end
+
+  # The Record type IndexMatchRecord.
+
+  def self.check_lower_TypeIndexMatchRecord(v)
+
+
+    RustBuffer.check_lower_Optionalbytes(v.projection)
+  end
+
+  def self.alloc_from_TypeIndexMatchRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeIndexMatchRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeIndexMatchRecord
+    consumeWithStream do |stream|
+      return stream.readTypeIndexMatchRecord
+    end
+  end
+
+  # The Record type IndexPageRecord.
+
+  def self.check_lower_TypeIndexPageRecord(v)
+    RustBuffer.check_lower_SequenceTypeIndexMatchRecord(v.matches)
+    RustBuffer.check_lower_Optionalbytes(v.next_cursor)
+  end
+
+  def self.alloc_from_TypeIndexPageRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeIndexPageRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeIndexPageRecord
+    consumeWithStream do |stream|
+      return stream.readTypeIndexPageRecord
+    end
+  end
+
+  # The Record type IndexVerificationRecord.
+
+  def self.check_lower_TypeIndexVerificationRecord(v)
+
+
+
+
+
+
+
+
+
+  end
+
+  def self.alloc_from_TypeIndexVerificationRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeIndexVerificationRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeIndexVerificationRecord
+    consumeWithStream do |stream|
+      return stream.readTypeIndexVerificationRecord
+    end
+  end
+
+  # The Record type IndexedMapHealthRecord.
+
+  def self.check_lower_TypeIndexedMapHealthRecord(v)
+
+    RustBuffer.check_lower_Optionalbytes(v.source_version)
+    RustBuffer.check_lower_Optionalbytes(v.catalog_version)
+    RustBuffer.check_lower_SequenceTypeActiveIndexHealthRecord(v.active_indexes)
+
+  end
+
+  def self.alloc_from_TypeIndexedMapHealthRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeIndexedMapHealthRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeIndexedMapHealthRecord
+    consumeWithStream do |stream|
+      return stream.readTypeIndexedMapHealthRecord
+    end
+  end
+
+  # The Record type IndexedMapMetricsRecord.
+
+  def self.check_lower_TypeIndexedMapMetricsRecord(v)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  end
+
+  def self.alloc_from_TypeIndexedMapMetricsRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeIndexedMapMetricsRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeIndexedMapMetricsRecord
+    consumeWithStream do |stream|
+      return stream.readTypeIndexedMapMetricsRecord
+    end
+  end
+
+  # The Record type IndexedRetentionRecord.
+
+  def self.check_lower_TypeIndexedRetentionRecord(v)
+    RustBuffer.check_lower_Sequencebytes(v.retained_source_versions)
+    RustBuffer.check_lower_Sequencebytes(v.removed_source_versions)
+    RustBuffer.check_lower_Sequencebytes(v.retained_index_versions)
+    RustBuffer.check_lower_Sequencebytes(v.removed_index_versions)
+    RustBuffer.check_lower_Sequencebytes(v.removed_catalog_versions)
+
+    RustBuffer.check_lower_Sequencebytes(v.removed_named_roots)
+  end
+
+  def self.alloc_from_TypeIndexedRetentionRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeIndexedRetentionRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeIndexedRetentionRecord
+    consumeWithStream do |stream|
+      return stream.readTypeIndexedRetentionRecord
+    end
+  end
+
+  # The Record type IndexedSnapshotIdRecord.
+
+  def self.check_lower_TypeIndexedSnapshotIdRecord(v)
+
+
+  end
+
+  def self.alloc_from_TypeIndexedSnapshotIdRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeIndexedSnapshotIdRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeIndexedSnapshotIdRecord
+    consumeWithStream do |stream|
+      return stream.readTypeIndexedSnapshotIdRecord
+    end
+  end
+
+  # The Record type IndexedSourceRecord.
+
+  def self.check_lower_TypeIndexedSourceRecord(v)
+
+
+    RustBuffer.check_lower_Optionalbytes(v.projection)
+
+  end
+
+  def self.alloc_from_TypeIndexedSourceRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeIndexedSourceRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeIndexedSourceRecord
+    consumeWithStream do |stream|
+      return stream.readTypeIndexedSourceRecord
+    end
+  end
+
+  # The Record type IndexedUpdateRecord.
+
+  def self.check_lower_TypeIndexedUpdateRecord(v)
+    RustBuffer.check_lower_TypeIndexedUpdateKind(v.kind)
+    RustBuffer.check_lower_Optionalbytes(v.previous_source_version)
+    RustBuffer.check_lower_OptionalTypeIndexedVersionRecord(v.current)
+  end
+
+  def self.alloc_from_TypeIndexedUpdateRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeIndexedUpdateRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeIndexedUpdateRecord
+    consumeWithStream do |stream|
+      return stream.readTypeIndexedUpdateRecord
+    end
+  end
+
+  # The Record type IndexedVersionRecord.
+
+  def self.check_lower_TypeIndexedVersionRecord(v)
+
+    RustBuffer.check_lower_Optionalbytes(v.catalog_version)
+
+  end
+
+  def self.alloc_from_TypeIndexedVersionRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeIndexedVersionRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeIndexedVersionRecord
+    consumeWithStream do |stream|
+      return stream.readTypeIndexedVersionRecord
+    end
+  end
+
   # The Record type JsonDocumentRecord.
 
   def self.check_lower_TypeJsonDocumentRecord(v)
@@ -1027,6 +1370,92 @@ end
   def consumeIntoTypeLargeValueConfigRecord
     consumeWithStream do |stream|
       return stream.readTypeLargeValueConfigRecord
+    end
+  end
+
+  # The Record type MapCatalogVerificationRecord.
+
+  def self.check_lower_TypeMapCatalogVerificationRecord(v)
+
+
+
+
+  end
+
+  def self.alloc_from_TypeMapCatalogVerificationRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeMapCatalogVerificationRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeMapCatalogVerificationRecord
+    consumeWithStream do |stream|
+      return stream.readTypeMapCatalogVerificationRecord
+    end
+  end
+
+  # The Record type MapChangeEventRecord.
+
+  def self.check_lower_TypeMapChangeEventRecord(v)
+    RustBuffer.check_lower_Optionalbytes(v.previous)
+    RustBuffer.check_lower_TypeMapVersionRecord(v.current)
+    RustBuffer.check_lower_SequenceTypeDiffRecord(v.diffs)
+  end
+
+  def self.alloc_from_TypeMapChangeEventRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeMapChangeEventRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeMapChangeEventRecord
+    consumeWithStream do |stream|
+      return stream.readTypeMapChangeEventRecord
+    end
+  end
+
+  # The Record type MapUpdateRecord.
+
+  def self.check_lower_TypeMapUpdateRecord(v)
+    RustBuffer.check_lower_TypeMapUpdateKind(v.kind)
+    RustBuffer.check_lower_Optionalbytes(v.previous)
+    RustBuffer.check_lower_OptionalTypeMapVersionRecord(v.current)
+  end
+
+  def self.alloc_from_TypeMapUpdateRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeMapUpdateRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeMapUpdateRecord
+    consumeWithStream do |stream|
+      return stream.readTypeMapUpdateRecord
+    end
+  end
+
+  # The Record type MapVersionRecord.
+
+  def self.check_lower_TypeMapVersionRecord(v)
+
+    RustBuffer.check_lower_TypeTreeRecord(v.tree)
+    RustBuffer.check_lower_Optionalu64(v.created_at_millis)
+
+  end
+
+  def self.alloc_from_TypeMapVersionRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeMapVersionRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeMapVersionRecord
+    consumeWithStream do |stream|
+      return stream.readTypeMapVersionRecord
     end
   end
 
@@ -1492,6 +1921,363 @@ end
     end
   end
 
+  # The Record type ProximityConfigRecord.
+
+  def self.check_lower_TypeProximityConfigRecord(v)
+
+    RustBuffer.check_lower_TypeDistanceMetricRecord(v.metric)
+
+
+
+
+
+
+
+    RustBuffer.check_lower_Optionalu32(v.scalar_quantization_group_size)
+  end
+
+  def self.alloc_from_TypeProximityConfigRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeProximityConfigRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeProximityConfigRecord
+    consumeWithStream do |stream|
+      return stream.readTypeProximityConfigRecord
+    end
+  end
+
+  # The Record type ProximityFilterRecord.
+
+  def self.check_lower_TypeProximityFilterRecord(v)
+    RustBuffer.check_lower_TypeProximityFilterKind(v.kind)
+    RustBuffer.check_lower_Optionalbytes(v.start)
+    RustBuffer.check_lower_Optionalbytes(v.range_end)
+    RustBuffer.check_lower_Optionalbytes(v.prefix)
+    RustBuffer.check_lower_Sequencebytes(v.eligible_keys)
+  end
+
+  def self.alloc_from_TypeProximityFilterRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeProximityFilterRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeProximityFilterRecord
+    consumeWithStream do |stream|
+      return stream.readTypeProximityFilterRecord
+    end
+  end
+
+  # The Record type ProximityMembershipProofRecord.
+
+  def self.check_lower_TypeProximityMembershipProofRecord(v)
+
+
+    RustBuffer.check_lower_TypeKeyProofRecord(v.directory_proof)
+    RustBuffer.check_lower_Optionalbytes(v.record_bytes)
+  end
+
+  def self.alloc_from_TypeProximityMembershipProofRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeProximityMembershipProofRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeProximityMembershipProofRecord
+    consumeWithStream do |stream|
+      return stream.readTypeProximityMembershipProofRecord
+    end
+  end
+
+  # The Record type ProximityMembershipVerificationRecord.
+
+  def self.check_lower_TypeProximityMembershipVerificationRecord(v)
+
+
+    RustBuffer.check_lower_OptionalTypeExactProximityRecordRecord(v.record)
+  end
+
+  def self.alloc_from_TypeProximityMembershipVerificationRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeProximityMembershipVerificationRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeProximityMembershipVerificationRecord
+    consumeWithStream do |stream|
+      return stream.readTypeProximityMembershipVerificationRecord
+    end
+  end
+
+  # The Record type ProximityMutationRecord.
+
+  def self.check_lower_TypeProximityMutationRecord(v)
+
+    RustBuffer.check_lower_OptionalSequencef32(v.vector)
+    RustBuffer.check_lower_Optionalbytes(v.value)
+  end
+
+  def self.alloc_from_TypeProximityMutationRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeProximityMutationRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeProximityMutationRecord
+    consumeWithStream do |stream|
+      return stream.readTypeProximityMutationRecord
+    end
+  end
+
+  # The Record type ProximityMutationResultRecord.
+
+  def self.check_lower_TypeProximityMutationResultRecord(v)
+    (BindingProximityMap.uniffi_check_lower v.map)
+    RustBuffer.check_lower_TypeProximityMutationStatsRecord(v.stats)
+  end
+
+  def self.alloc_from_TypeProximityMutationResultRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeProximityMutationResultRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeProximityMutationResultRecord
+    consumeWithStream do |stream|
+      return stream.readTypeProximityMutationResultRecord
+    end
+  end
+
+  # The Record type ProximityMutationStatsRecord.
+
+  def self.check_lower_TypeProximityMutationStatsRecord(v)
+
+
+
+
+
+
+
+
+
+
+
+
+
+  end
+
+  def self.alloc_from_TypeProximityMutationStatsRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeProximityMutationStatsRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeProximityMutationStatsRecord
+    consumeWithStream do |stream|
+      return stream.readTypeProximityMutationStatsRecord
+    end
+  end
+
+  # The Record type ProximityNeighborRecord.
+
+  def self.check_lower_TypeProximityNeighborRecord(v)
+
+
+
+  end
+
+  def self.alloc_from_TypeProximityNeighborRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeProximityNeighborRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeProximityNeighborRecord
+    consumeWithStream do |stream|
+      return stream.readTypeProximityNeighborRecord
+    end
+  end
+
+  # The Record type ProximityRecordRecord.
+
+  def self.check_lower_TypeProximityRecordRecord(v)
+
+    RustBuffer.check_lower_Sequencef32(v.vector)
+
+  end
+
+  def self.alloc_from_TypeProximityRecordRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeProximityRecordRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeProximityRecordRecord
+    consumeWithStream do |stream|
+      return stream.readTypeProximityRecordRecord
+    end
+  end
+
+  # The Record type ProximitySearchRequestRecord.
+
+  def self.check_lower_TypeProximitySearchRequestRecord(v)
+    RustBuffer.check_lower_Sequencef32(v.query)
+
+    RustBuffer.check_lower_TypeSearchPolicyKind(v.policy)
+    RustBuffer.check_lower_OptionalTypeAdaptiveQualityRecord(v.adaptive_quality)
+    RustBuffer.check_lower_TypeSearchBudgetRecord(v.budget)
+    RustBuffer.check_lower_TypeProximityFilterRecord(v.filter)
+    RustBuffer.check_lower_TypeQueryKernelRecord(v.kernel)
+    RustBuffer.check_lower_TypeSearchBackendRecord(v.backend)
+    RustBuffer.check_lower_Optionalu32(v.hnsw_ef_search)
+    RustBuffer.check_lower_Optionalu16(v.pq_rerank_multiplier)
+  end
+
+  def self.alloc_from_TypeProximitySearchRequestRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeProximitySearchRequestRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeProximitySearchRequestRecord
+    consumeWithStream do |stream|
+      return stream.readTypeProximitySearchRequestRecord
+    end
+  end
+
+  # The Record type ProximitySearchResultRecord.
+
+  def self.check_lower_TypeProximitySearchResultRecord(v)
+    RustBuffer.check_lower_SequenceTypeProximityNeighborRecord(v.neighbors)
+    RustBuffer.check_lower_TypeProximitySearchStatsRecord(v.stats)
+    RustBuffer.check_lower_TypeSearchCompletionRecord(v.completion)
+    RustBuffer.check_lower_TypeSearchBackendRecord(v.backend)
+
+  end
+
+  def self.alloc_from_TypeProximitySearchResultRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeProximitySearchResultRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeProximitySearchResultRecord
+    consumeWithStream do |stream|
+      return stream.readTypeProximitySearchResultRecord
+    end
+  end
+
+  # The Record type ProximitySearchStatsRecord.
+
+  def self.check_lower_TypeProximitySearchStatsRecord(v)
+
+
+
+
+
+
+
+
+
+
+
+  end
+
+  def self.alloc_from_TypeProximitySearchStatsRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeProximitySearchStatsRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeProximitySearchStatsRecord
+    consumeWithStream do |stream|
+      return stream.readTypeProximitySearchStatsRecord
+    end
+  end
+
+  # The Record type ProximityStructuralProofRecord.
+
+  def self.check_lower_TypeProximityStructuralProofRecord(v)
+
+    RustBuffer.check_lower_SequenceTypeTypedContentObjectRecord(v.objects)
+  end
+
+  def self.alloc_from_TypeProximityStructuralProofRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeProximityStructuralProofRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeProximityStructuralProofRecord
+    consumeWithStream do |stream|
+      return stream.readTypeProximityStructuralProofRecord
+    end
+  end
+
+  # The Record type ProximityStructuralVerificationRecord.
+
+  def self.check_lower_TypeProximityStructuralVerificationRecord(v)
+
+
+    RustBuffer.check_lower_TypeProximityVerificationRecord(v.summary)
+  end
+
+  def self.alloc_from_TypeProximityStructuralVerificationRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeProximityStructuralVerificationRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeProximityStructuralVerificationRecord
+    consumeWithStream do |stream|
+      return stream.readTypeProximityStructuralVerificationRecord
+    end
+  end
+
+  # The Record type ProximityVerificationRecord.
+
+  def self.check_lower_TypeProximityVerificationRecord(v)
+
+
+
+
+
+
+
+
+
+
+  end
+
+  def self.alloc_from_TypeProximityVerificationRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeProximityVerificationRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeProximityVerificationRecord
+    consumeWithStream do |stream|
+      return stream.readTypeProximityVerificationRecord
+    end
+  end
+
   # The Record type RangeBoundsRecord.
 
   def self.check_lower_TypeRangeBoundsRecord(v)
@@ -1738,6 +2524,61 @@ end
   def consumeIntoTypeScanOutcomeRecord
     consumeWithStream do |stream|
       return stream.readTypeScanOutcomeRecord
+    end
+  end
+
+  # The Record type SearchBudgetRecord.
+
+  def self.check_lower_TypeSearchBudgetRecord(v)
+    RustBuffer.check_lower_Optionalu64(v.max_nodes)
+    RustBuffer.check_lower_Optionalu64(v.max_committed_bytes)
+    RustBuffer.check_lower_Optionalu64(v.max_distance_evaluations)
+    RustBuffer.check_lower_Optionalu64(v.max_frontier_entries)
+  end
+
+  def self.alloc_from_TypeSearchBudgetRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeSearchBudgetRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeSearchBudgetRecord
+    consumeWithStream do |stream|
+      return stream.readTypeSearchBudgetRecord
+    end
+  end
+
+  # The Record type SecondaryIndexLimitsRecord.
+
+  def self.check_lower_TypeSecondaryIndexLimitsRecord(v)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  end
+
+  def self.alloc_from_TypeSecondaryIndexLimitsRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeSecondaryIndexLimitsRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeSecondaryIndexLimitsRecord
+    consumeWithStream do |stream|
+      return stream.readTypeSecondaryIndexLimitsRecord
     end
   end
 
@@ -2415,6 +3256,29 @@ end
     end
   end
 
+  # The Record type TypedContentObjectRecord.
+
+  def self.check_lower_TypeTypedContentObjectRecord(v)
+    RustBuffer.check_lower_TypeContentObjectKindRecord(v.kind)
+
+    RustBuffer.check_lower_Optionalu32(v.dimensions)
+
+
+  end
+
+  def self.alloc_from_TypeTypedContentObjectRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeTypedContentObjectRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeTypedContentObjectRecord
+    consumeWithStream do |stream|
+      return stream.readTypeTypedContentObjectRecord
+    end
+  end
+
   # The Record type ValueRefRecord.
 
   def self.check_lower_TypeValueRefRecord(v)
@@ -2433,6 +3297,68 @@ end
   def consumeIntoTypeValueRefRecord
     consumeWithStream do |stream|
       return stream.readTypeValueRefRecord
+    end
+  end
+
+  # The Record type VersionPruneRecord.
+
+  def self.check_lower_TypeVersionPruneRecord(v)
+    RustBuffer.check_lower_Sequencebytes(v.retained)
+    RustBuffer.check_lower_Sequencebytes(v.removed)
+  end
+
+  def self.alloc_from_TypeVersionPruneRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeVersionPruneRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeVersionPruneRecord
+    consumeWithStream do |stream|
+      return stream.readTypeVersionPruneRecord
+    end
+  end
+
+  # The Record type VersionedMapBatchResultRecord.
+
+  def self.check_lower_TypeVersionedMapBatchResultRecord(v)
+    RustBuffer.check_lower_TypeMapVersionRecord(v.version)
+    RustBuffer.check_lower_TypeBatchApplyStatsRecord(v.stats)
+  end
+
+  def self.alloc_from_TypeVersionedMapBatchResultRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeVersionedMapBatchResultRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeVersionedMapBatchResultRecord
+    consumeWithStream do |stream|
+      return stream.readTypeVersionedMapBatchResultRecord
+    end
+  end
+
+  # The Record type VersionedTransactionCommitRecord.
+
+  def self.check_lower_TypeVersionedTransactionCommitRecord(v)
+
+    RustBuffer.check_lower_SequenceTypeMapVersionRecord(v.versions)
+    RustBuffer.check_lower_Optionalbytes(v.conflict_map_id)
+    RustBuffer.check_lower_OptionalTypeMapVersionRecord(v.conflict_current)
+  end
+
+  def self.alloc_from_TypeVersionedTransactionCommitRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeVersionedTransactionCommitRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeVersionedTransactionCommitRecord
+    consumeWithStream do |stream|
+      return stream.readTypeVersionedTransactionCommitRecord
     end
   end
 
@@ -2507,6 +3433,44 @@ end
       return stream.readTypeWriteStatsRecord
     end
   end
+
+  # The Enum type AdaptiveQualityRecord.
+
+  def self.check_lower_TypeAdaptiveQualityRecord(v)
+  end
+
+  def self.alloc_from_TypeAdaptiveQualityRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeAdaptiveQualityRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeAdaptiveQualityRecord
+    consumeWithStream do |stream|
+      return stream.readTypeAdaptiveQualityRecord
+    end
+  end
+
+
+  # The Enum type ContentObjectKindRecord.
+
+  def self.check_lower_TypeContentObjectKindRecord(v)
+  end
+
+  def self.alloc_from_TypeContentObjectKindRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeContentObjectKindRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeContentObjectKindRecord
+    consumeWithStream do |stream|
+      return stream.readTypeContentObjectKindRecord
+    end
+  end
+
 
   # The Enum type CrdtDeletePolicyKind.
 
@@ -2584,6 +3548,25 @@ end
   end
 
 
+  # The Enum type DistanceMetricRecord.
+
+  def self.check_lower_TypeDistanceMetricRecord(v)
+  end
+
+  def self.alloc_from_TypeDistanceMetricRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeDistanceMetricRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeDistanceMetricRecord
+    consumeWithStream do |stream|
+      return stream.readTypeDistanceMetricRecord
+    end
+  end
+
+
   # The Enum type EncodingKind.
 
   def self.check_lower_TypeEncodingKind(v)
@@ -2599,6 +3582,63 @@ end
   def consumeIntoTypeEncodingKind
     consumeWithStream do |stream|
       return stream.readTypeEncodingKind
+    end
+  end
+
+
+  # The Enum type IndexProjectionRecord.
+
+  def self.check_lower_TypeIndexProjectionRecord(v)
+  end
+
+  def self.alloc_from_TypeIndexProjectionRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeIndexProjectionRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeIndexProjectionRecord
+    consumeWithStream do |stream|
+      return stream.readTypeIndexProjectionRecord
+    end
+  end
+
+
+  # The Enum type IndexedUpdateKind.
+
+  def self.check_lower_TypeIndexedUpdateKind(v)
+  end
+
+  def self.alloc_from_TypeIndexedUpdateKind(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeIndexedUpdateKind(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeIndexedUpdateKind
+    consumeWithStream do |stream|
+      return stream.readTypeIndexedUpdateKind
+    end
+  end
+
+
+  # The Enum type MapUpdateKind.
+
+  def self.check_lower_TypeMapUpdateKind(v)
+  end
+
+  def self.alloc_from_TypeMapUpdateKind(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeMapUpdateKind(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeMapUpdateKind
+    consumeWithStream do |stream|
+      return stream.readTypeMapUpdateKind
     end
   end
 
@@ -2757,6 +3797,44 @@ end
 
 
 
+  # The Enum type ProximityFilterKind.
+
+  def self.check_lower_TypeProximityFilterKind(v)
+  end
+
+  def self.alloc_from_TypeProximityFilterKind(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeProximityFilterKind(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeProximityFilterKind
+    consumeWithStream do |stream|
+      return stream.readTypeProximityFilterKind
+    end
+  end
+
+
+  # The Enum type QueryKernelRecord.
+
+  def self.check_lower_TypeQueryKernelRecord(v)
+  end
+
+  def self.alloc_from_TypeQueryKernelRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeQueryKernelRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeQueryKernelRecord
+    consumeWithStream do |stream|
+      return stream.readTypeQueryKernelRecord
+    end
+  end
+
+
   # The Enum type ResolutionKind.
 
   def self.check_lower_TypeResolutionKind(v)
@@ -2772,6 +3850,63 @@ end
   def consumeIntoTypeResolutionKind
     consumeWithStream do |stream|
       return stream.readTypeResolutionKind
+    end
+  end
+
+
+  # The Enum type SearchBackendRecord.
+
+  def self.check_lower_TypeSearchBackendRecord(v)
+  end
+
+  def self.alloc_from_TypeSearchBackendRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeSearchBackendRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeSearchBackendRecord
+    consumeWithStream do |stream|
+      return stream.readTypeSearchBackendRecord
+    end
+  end
+
+
+  # The Enum type SearchCompletionRecord.
+
+  def self.check_lower_TypeSearchCompletionRecord(v)
+  end
+
+  def self.alloc_from_TypeSearchCompletionRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeSearchCompletionRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeSearchCompletionRecord
+    consumeWithStream do |stream|
+      return stream.readTypeSearchCompletionRecord
+    end
+  end
+
+
+  # The Enum type SearchPolicyKind.
+
+  def self.check_lower_TypeSearchPolicyKind(v)
+  end
+
+  def self.alloc_from_TypeSearchPolicyKind(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeSearchPolicyKind(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeSearchPolicyKind
+    consumeWithStream do |stream|
+      return stream.readTypeSearchPolicyKind
     end
   end
 
@@ -2851,6 +3986,48 @@ end
     end
   end
 
+
+  # The Optional<T> type for u16.
+
+  def self.check_lower_Optionalu16(v)
+    if not v.nil?
+
+    end
+  end
+
+  def self.alloc_from_Optionalu16(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_Optionalu16(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoOptionalu16
+    consumeWithStream do |stream|
+      return stream.readOptionalu16
+    end
+  end
+
+  # The Optional<T> type for u32.
+
+  def self.check_lower_Optionalu32(v)
+    if not v.nil?
+
+    end
+  end
+
+  def self.alloc_from_Optionalu32(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_Optionalu32(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoOptionalu32
+    consumeWithStream do |stream|
+      return stream.readOptionalu32
+    end
+  end
 
   # The Optional<T> type for u64.
 
@@ -2933,6 +4110,48 @@ end
   def consumeIntoOptionalbytes
     consumeWithStream do |stream|
       return stream.readOptionalbytes
+    end
+  end
+
+  # The Optional<T> type for TypeBindingMapSnapshot.
+
+  def self.check_lower_OptionalTypeBindingMapSnapshot(v)
+    if not v.nil?
+      (BindingMapSnapshot.uniffi_check_lower v)
+    end
+  end
+
+  def self.alloc_from_OptionalTypeBindingMapSnapshot(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_OptionalTypeBindingMapSnapshot(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoOptionalTypeBindingMapSnapshot
+    consumeWithStream do |stream|
+      return stream.readOptionalTypeBindingMapSnapshot
+    end
+  end
+
+  # The Optional<T> type for TypeProllyReadSession.
+
+  def self.check_lower_OptionalTypeProllyReadSession(v)
+    if not v.nil?
+      (ProllyReadSession.uniffi_check_lower v)
+    end
+  end
+
+  def self.alloc_from_OptionalTypeProllyReadSession(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_OptionalTypeProllyReadSession(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoOptionalTypeProllyReadSession
+    consumeWithStream do |stream|
+      return stream.readOptionalTypeProllyReadSession
     end
   end
 
@@ -3020,6 +4239,48 @@ end
     end
   end
 
+  # The Optional<T> type for TypeExactProximityRecordRecord.
+
+  def self.check_lower_OptionalTypeExactProximityRecordRecord(v)
+    if not v.nil?
+      RustBuffer.check_lower_TypeExactProximityRecordRecord(v)
+    end
+  end
+
+  def self.alloc_from_OptionalTypeExactProximityRecordRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_OptionalTypeExactProximityRecordRecord(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoOptionalTypeExactProximityRecordRecord
+    consumeWithStream do |stream|
+      return stream.readOptionalTypeExactProximityRecordRecord
+    end
+  end
+
+  # The Optional<T> type for TypeIndexedVersionRecord.
+
+  def self.check_lower_OptionalTypeIndexedVersionRecord(v)
+    if not v.nil?
+      RustBuffer.check_lower_TypeIndexedVersionRecord(v)
+    end
+  end
+
+  def self.alloc_from_OptionalTypeIndexedVersionRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_OptionalTypeIndexedVersionRecord(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoOptionalTypeIndexedVersionRecord
+    consumeWithStream do |stream|
+      return stream.readOptionalTypeIndexedVersionRecord
+    end
+  end
+
   # The Optional<T> type for TypeKeyProofRecord.
 
   def self.check_lower_OptionalTypeKeyProofRecord(v)
@@ -3038,6 +4299,48 @@ end
   def consumeIntoOptionalTypeKeyProofRecord
     consumeWithStream do |stream|
       return stream.readOptionalTypeKeyProofRecord
+    end
+  end
+
+  # The Optional<T> type for TypeMapChangeEventRecord.
+
+  def self.check_lower_OptionalTypeMapChangeEventRecord(v)
+    if not v.nil?
+      RustBuffer.check_lower_TypeMapChangeEventRecord(v)
+    end
+  end
+
+  def self.alloc_from_OptionalTypeMapChangeEventRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_OptionalTypeMapChangeEventRecord(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoOptionalTypeMapChangeEventRecord
+    consumeWithStream do |stream|
+      return stream.readOptionalTypeMapChangeEventRecord
+    end
+  end
+
+  # The Optional<T> type for TypeMapVersionRecord.
+
+  def self.check_lower_OptionalTypeMapVersionRecord(v)
+    if not v.nil?
+      RustBuffer.check_lower_TypeMapVersionRecord(v)
+    end
+  end
+
+  def self.alloc_from_OptionalTypeMapVersionRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_OptionalTypeMapVersionRecord(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoOptionalTypeMapVersionRecord
+    consumeWithStream do |stream|
+      return stream.readOptionalTypeMapVersionRecord
     end
   end
 
@@ -3146,6 +4449,27 @@ end
     end
   end
 
+  # The Optional<T> type for TypeSecondaryIndexLimitsRecord.
+
+  def self.check_lower_OptionalTypeSecondaryIndexLimitsRecord(v)
+    if not v.nil?
+      RustBuffer.check_lower_TypeSecondaryIndexLimitsRecord(v)
+    end
+  end
+
+  def self.alloc_from_OptionalTypeSecondaryIndexLimitsRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_OptionalTypeSecondaryIndexLimitsRecord(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoOptionalTypeSecondaryIndexLimitsRecord
+    consumeWithStream do |stream|
+      return stream.readOptionalTypeSecondaryIndexLimitsRecord
+    end
+  end
+
   # The Optional<T> type for TypeStructuralDiffCursorRecord.
 
   def self.check_lower_OptionalTypeStructuralDiffCursorRecord(v)
@@ -3248,6 +4572,27 @@ end
   def consumeIntoOptionalTypeValueRefRecord
     consumeWithStream do |stream|
       return stream.readOptionalTypeValueRefRecord
+    end
+  end
+
+  # The Optional<T> type for TypeAdaptiveQualityRecord.
+
+  def self.check_lower_OptionalTypeAdaptiveQualityRecord(v)
+    if not v.nil?
+      RustBuffer.check_lower_TypeAdaptiveQualityRecord(v)
+    end
+  end
+
+  def self.alloc_from_OptionalTypeAdaptiveQualityRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_OptionalTypeAdaptiveQualityRecord(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoOptionalTypeAdaptiveQualityRecord
+    consumeWithStream do |stream|
+      return stream.readOptionalTypeAdaptiveQualityRecord
     end
   end
 
@@ -3356,6 +4701,27 @@ end
     end
   end
 
+  # The Optional<T> type for Sequencef32.
+
+  def self.check_lower_OptionalSequencef32(v)
+    if not v.nil?
+      RustBuffer.check_lower_Sequencef32(v)
+    end
+  end
+
+  def self.alloc_from_OptionalSequencef32(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_OptionalSequencef32(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoOptionalSequencef32
+    consumeWithStream do |stream|
+      return stream.readOptionalSequencef32
+    end
+  end
+
   # The Sequence<T> type for u64.
 
   def self.check_lower_Sequenceu64(v)
@@ -3377,6 +4743,27 @@ end
     end
   end
 
+  # The Sequence<T> type for f32.
+
+  def self.check_lower_Sequencef32(v)
+    v.each do |item|
+
+    end
+  end
+
+  def self.alloc_from_Sequencef32(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_Sequencef32(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoSequencef32
+    consumeWithStream do |stream|
+      return stream.readSequencef32
+    end
+  end
+
   # The Sequence<T> type for bytes.
 
   def self.check_lower_Sequencebytes(v)
@@ -3395,6 +4782,27 @@ end
   def consumeIntoSequencebytes
     consumeWithStream do |stream|
       return stream.readSequencebytes
+    end
+  end
+
+  # The Sequence<T> type for TypeActiveIndexHealthRecord.
+
+  def self.check_lower_SequenceTypeActiveIndexHealthRecord(v)
+    v.each do |item|
+      RustBuffer.check_lower_TypeActiveIndexHealthRecord(item)
+    end
+  end
+
+  def self.alloc_from_SequenceTypeActiveIndexHealthRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_SequenceTypeActiveIndexHealthRecord(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoSequenceTypeActiveIndexHealthRecord
+    consumeWithStream do |stream|
+      return stream.readSequenceTypeActiveIndexHealthRecord
     end
   end
 
@@ -3524,6 +4932,90 @@ end
     end
   end
 
+  # The Sequence<T> type for TypeIndexEntryRecord.
+
+  def self.check_lower_SequenceTypeIndexEntryRecord(v)
+    v.each do |item|
+      RustBuffer.check_lower_TypeIndexEntryRecord(item)
+    end
+  end
+
+  def self.alloc_from_SequenceTypeIndexEntryRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_SequenceTypeIndexEntryRecord(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoSequenceTypeIndexEntryRecord
+    consumeWithStream do |stream|
+      return stream.readSequenceTypeIndexEntryRecord
+    end
+  end
+
+  # The Sequence<T> type for TypeIndexMatchRecord.
+
+  def self.check_lower_SequenceTypeIndexMatchRecord(v)
+    v.each do |item|
+      RustBuffer.check_lower_TypeIndexMatchRecord(item)
+    end
+  end
+
+  def self.alloc_from_SequenceTypeIndexMatchRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_SequenceTypeIndexMatchRecord(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoSequenceTypeIndexMatchRecord
+    consumeWithStream do |stream|
+      return stream.readSequenceTypeIndexMatchRecord
+    end
+  end
+
+  # The Sequence<T> type for TypeIndexVerificationRecord.
+
+  def self.check_lower_SequenceTypeIndexVerificationRecord(v)
+    v.each do |item|
+      RustBuffer.check_lower_TypeIndexVerificationRecord(item)
+    end
+  end
+
+  def self.alloc_from_SequenceTypeIndexVerificationRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_SequenceTypeIndexVerificationRecord(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoSequenceTypeIndexVerificationRecord
+    consumeWithStream do |stream|
+      return stream.readSequenceTypeIndexVerificationRecord
+    end
+  end
+
+  # The Sequence<T> type for TypeIndexedSourceRecord.
+
+  def self.check_lower_SequenceTypeIndexedSourceRecord(v)
+    v.each do |item|
+      RustBuffer.check_lower_TypeIndexedSourceRecord(item)
+    end
+  end
+
+  def self.alloc_from_SequenceTypeIndexedSourceRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_SequenceTypeIndexedSourceRecord(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoSequenceTypeIndexedSourceRecord
+    consumeWithStream do |stream|
+      return stream.readSequenceTypeIndexedSourceRecord
+    end
+  end
+
   # The Sequence<T> type for TypeKeyProofVerificationRecord.
 
   def self.check_lower_SequenceTypeKeyProofVerificationRecord(v)
@@ -3542,6 +5034,27 @@ end
   def consumeIntoSequenceTypeKeyProofVerificationRecord
     consumeWithStream do |stream|
       return stream.readSequenceTypeKeyProofVerificationRecord
+    end
+  end
+
+  # The Sequence<T> type for TypeMapVersionRecord.
+
+  def self.check_lower_SequenceTypeMapVersionRecord(v)
+    v.each do |item|
+      RustBuffer.check_lower_TypeMapVersionRecord(item)
+    end
+  end
+
+  def self.alloc_from_SequenceTypeMapVersionRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_SequenceTypeMapVersionRecord(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoSequenceTypeMapVersionRecord
+    consumeWithStream do |stream|
+      return stream.readSequenceTypeMapVersionRecord
     end
   end
 
@@ -3647,6 +5160,69 @@ end
   def consumeIntoSequenceTypeNodeRecord
     consumeWithStream do |stream|
       return stream.readSequenceTypeNodeRecord
+    end
+  end
+
+  # The Sequence<T> type for TypeProximityMutationRecord.
+
+  def self.check_lower_SequenceTypeProximityMutationRecord(v)
+    v.each do |item|
+      RustBuffer.check_lower_TypeProximityMutationRecord(item)
+    end
+  end
+
+  def self.alloc_from_SequenceTypeProximityMutationRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_SequenceTypeProximityMutationRecord(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoSequenceTypeProximityMutationRecord
+    consumeWithStream do |stream|
+      return stream.readSequenceTypeProximityMutationRecord
+    end
+  end
+
+  # The Sequence<T> type for TypeProximityNeighborRecord.
+
+  def self.check_lower_SequenceTypeProximityNeighborRecord(v)
+    v.each do |item|
+      RustBuffer.check_lower_TypeProximityNeighborRecord(item)
+    end
+  end
+
+  def self.alloc_from_SequenceTypeProximityNeighborRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_SequenceTypeProximityNeighborRecord(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoSequenceTypeProximityNeighborRecord
+    consumeWithStream do |stream|
+      return stream.readSequenceTypeProximityNeighborRecord
+    end
+  end
+
+  # The Sequence<T> type for TypeProximityRecordRecord.
+
+  def self.check_lower_SequenceTypeProximityRecordRecord(v)
+    v.each do |item|
+      RustBuffer.check_lower_TypeProximityRecordRecord(item)
+    end
+  end
+
+  def self.alloc_from_SequenceTypeProximityRecordRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_SequenceTypeProximityRecordRecord(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoSequenceTypeProximityRecordRecord
+    consumeWithStream do |stream|
+      return stream.readSequenceTypeProximityRecordRecord
     end
   end
 
@@ -3881,6 +5457,27 @@ end
     end
   end
 
+  # The Sequence<T> type for TypeTypedContentObjectRecord.
+
+  def self.check_lower_SequenceTypeTypedContentObjectRecord(v)
+    v.each do |item|
+      RustBuffer.check_lower_TypeTypedContentObjectRecord(item)
+    end
+  end
+
+  def self.alloc_from_SequenceTypeTypedContentObjectRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_SequenceTypeTypedContentObjectRecord(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoSequenceTypeTypedContentObjectRecord
+    consumeWithStream do |stream|
+      return stream.readSequenceTypeTypedContentObjectRecord
+    end
+  end
+
   # The Sequence<T> type for Optionalbytes.
 
   def self.check_lower_SequenceOptionalbytes(v)
@@ -3956,6 +5553,10 @@ class RustBufferStream
     unpack_from 1, 'c'
   end
 
+  def readU16
+    unpack_from 2, 'S>'
+  end
+
   def readU32
     unpack_from 4, 'L>'
   end
@@ -3966,6 +5567,10 @@ class RustBufferStream
 
   def readI64
     unpack_from 8, 'q>'
+  end
+
+  def readF32
+    unpack_from 4, 'g'
   end
 
   def readF64
@@ -3995,6 +5600,90 @@ class RustBufferStream
     raise InternalError, 'Unexpected negative byte string length' if size.negative?
 
     read(size).force_encoding(Encoding::BINARY)
+  end
+
+  # The Object type BindingIndexRegistry.
+
+  def readTypeBindingIndexRegistry
+    handle = unpack_from 8, 'Q>'
+    return BindingIndexRegistry.uniffi_allocate(handle)
+  end
+
+  # The Object type BindingIndexedMap.
+
+  def readTypeBindingIndexedMap
+    handle = unpack_from 8, 'Q>'
+    return BindingIndexedMap.uniffi_allocate(handle)
+  end
+
+  # The Object type BindingIndexedSnapshot.
+
+  def readTypeBindingIndexedSnapshot
+    handle = unpack_from 8, 'Q>'
+    return BindingIndexedSnapshot.uniffi_allocate(handle)
+  end
+
+  # The Object type BindingMapComparison.
+
+  def readTypeBindingMapComparison
+    handle = unpack_from 8, 'Q>'
+    return BindingMapComparison.uniffi_allocate(handle)
+  end
+
+  # The Object type BindingMapMerge.
+
+  def readTypeBindingMapMerge
+    handle = unpack_from 8, 'Q>'
+    return BindingMapMerge.uniffi_allocate(handle)
+  end
+
+  # The Object type BindingMapSnapshot.
+
+  def readTypeBindingMapSnapshot
+    handle = unpack_from 8, 'Q>'
+    return BindingMapSnapshot.uniffi_allocate(handle)
+  end
+
+  # The Object type BindingMapSubscription.
+
+  def readTypeBindingMapSubscription
+    handle = unpack_from 8, 'Q>'
+    return BindingMapSubscription.uniffi_allocate(handle)
+  end
+
+  # The Object type BindingProximityMap.
+
+  def readTypeBindingProximityMap
+    handle = unpack_from 8, 'Q>'
+    return BindingProximityMap.uniffi_allocate(handle)
+  end
+
+  # The Object type BindingProximityReadSession.
+
+  def readTypeBindingProximityReadSession
+    handle = unpack_from 8, 'Q>'
+    return BindingProximityReadSession.uniffi_allocate(handle)
+  end
+
+  # The Object type BindingSecondaryIndexSnapshot.
+
+  def readTypeBindingSecondaryIndexSnapshot
+    handle = unpack_from 8, 'Q>'
+    return BindingSecondaryIndexSnapshot.uniffi_allocate(handle)
+  end
+
+  # The Object type BindingVersionedMap.
+
+  def readTypeBindingVersionedMap
+    handle = unpack_from 8, 'Q>'
+    return BindingVersionedMap.uniffi_allocate(handle)
+  end
+
+  # The Object type BindingVersionedTransaction.
+
+  def readTypeBindingVersionedTransaction
+    handle = unpack_from 8, 'Q>'
+    return BindingVersionedTransaction.uniffi_allocate(handle)
   end
 
   # The Object type ConflictVisitorCallback.
@@ -4072,6 +5761,33 @@ class RustBufferStream
   def readTypeProllyTransaction
     handle = unpack_from 8, 'Q>'
     return ProllyTransaction.uniffi_allocate(handle)
+  end
+
+  # The Object type ProximityRecordVisitorCallback.
+
+  def readTypeProximityRecordVisitorCallback
+    handle = unpack_from 8, 'Q>'
+    return ProximityRecordVisitorCallback.uniffi_allocate(handle)
+  end
+
+  # The Object type SecondaryIndexExtractorCallback.
+
+  def readTypeSecondaryIndexExtractorCallback
+    handle = unpack_from 8, 'Q>'
+    return SecondaryIndexExtractorCallback.uniffi_allocate(handle)
+  end
+
+  # The Record type ActiveIndexHealthRecord.
+
+  def readTypeActiveIndexHealthRecord
+    ActiveIndexHealthRecord.new(
+      name: readBytes,
+      generation: readU64,
+      fingerprint: readBytes,
+      projection: readTypeIndexProjectionRecord,
+      index_map_id: readBytes,
+      index_version: readBytes
+    )
   end
 
   # The Record type AuthenticatedProofBundleVerificationRecord.
@@ -4258,6 +5974,17 @@ class RustBufferStream
     )
   end
 
+  # The Record type ContentGraphLimitsRecord.
+
+  def readTypeContentGraphLimitsRecord
+    ContentGraphLimitsRecord.new(
+      max_objects: readU64,
+      max_depth: readU64,
+      max_bytes: readU64,
+      max_references_per_object: readU64
+    )
+  end
+
   # The Record type CrdtConfigRecord.
 
   def readTypeCrdtConfigRecord
@@ -4368,6 +6095,15 @@ class RustBufferStream
   def readTypeEntryRecord
     EntryRecord.new(
       key: readBytes,
+      value: readBytes
+    )
+  end
+
+  # The Record type ExactProximityRecordRecord.
+
+  def readTypeExactProximityRecordRecord
+    ExactProximityRecordRecord.new(
+      vector: readSequencef32,
       value: readBytes
     )
   end
@@ -4488,6 +6224,151 @@ class RustBufferStream
     )
   end
 
+  # The Record type IndexBuildResultRecord.
+
+  def readTypeIndexBuildResultRecord
+    IndexBuildResultRecord.new(
+      source_version: readBytes,
+      index_version: readBytes,
+      catalog_version: readBytes,
+      generation: readU64,
+      entries: readU64,
+      attempts: readU64,
+      activated: readBool
+    )
+  end
+
+  # The Record type IndexEntryRecord.
+
+  def readTypeIndexEntryRecord
+    IndexEntryRecord.new(
+      term: readBytes,
+      projection: readOptionalbytes
+    )
+  end
+
+  # The Record type IndexMatchRecord.
+
+  def readTypeIndexMatchRecord
+    IndexMatchRecord.new(
+      term: readBytes,
+      primary_key: readBytes,
+      projection: readOptionalbytes
+    )
+  end
+
+  # The Record type IndexPageRecord.
+
+  def readTypeIndexPageRecord
+    IndexPageRecord.new(
+      matches: readSequenceTypeIndexMatchRecord,
+      next_cursor: readOptionalbytes
+    )
+  end
+
+  # The Record type IndexVerificationRecord.
+
+  def readTypeIndexVerificationRecord
+    IndexVerificationRecord.new(
+      name: readBytes,
+      source_version: readBytes,
+      expected_index_version: readBytes,
+      actual_index_version: readBytes,
+      expected_entries: readU64,
+      actual_entries: readU64,
+      semantic_differences: readU64,
+      valid: readBool,
+      canonical: readBool
+    )
+  end
+
+  # The Record type IndexedMapHealthRecord.
+
+  def readTypeIndexedMapHealthRecord
+    IndexedMapHealthRecord.new(
+      source_map_id: readBytes,
+      source_version: readOptionalbytes,
+      catalog_version: readOptionalbytes,
+      active_indexes: readSequenceTypeActiveIndexHealthRecord,
+      supports_transactions: readBool
+    )
+  end
+
+  # The Record type IndexedMapMetricsRecord.
+
+  def readTypeIndexedMapMetricsRecord
+    IndexedMapMetricsRecord.new(
+      normalized_source_mutations: readU64,
+      records_extracted: readU64,
+      terms_emitted: readU64,
+      projected_bytes: readU64,
+      physical_upserts: readU64,
+      physical_deletes: readU64,
+      unchanged_emissions_skipped: readU64,
+      source_nodes_written: readU64,
+      index_nodes_written: readU64,
+      catalog_nodes_written: readU64,
+      retries: readU64,
+      build_attempts: readU64,
+      verification_outcomes: readU64,
+      retained_roots: readU64
+    )
+  end
+
+  # The Record type IndexedRetentionRecord.
+
+  def readTypeIndexedRetentionRecord
+    IndexedRetentionRecord.new(
+      retained_source_versions: readSequencebytes,
+      removed_source_versions: readSequencebytes,
+      retained_index_versions: readSequencebytes,
+      removed_index_versions: readSequencebytes,
+      removed_catalog_versions: readSequencebytes,
+      removed_checkpoint_records: readU64,
+      removed_named_roots: readSequencebytes
+    )
+  end
+
+  # The Record type IndexedSnapshotIdRecord.
+
+  def readTypeIndexedSnapshotIdRecord
+    IndexedSnapshotIdRecord.new(
+      source_version: readBytes,
+      catalog_version: readBytes
+    )
+  end
+
+  # The Record type IndexedSourceRecord.
+
+  def readTypeIndexedSourceRecord
+    IndexedSourceRecord.new(
+      term: readBytes,
+      primary_key: readBytes,
+      projection: readOptionalbytes,
+      source_value: readBytes
+    )
+  end
+
+  # The Record type IndexedUpdateRecord.
+
+  def readTypeIndexedUpdateRecord
+    IndexedUpdateRecord.new(
+      kind: readTypeIndexedUpdateKind,
+      previous_source_version: readOptionalbytes,
+      current: readOptionalTypeIndexedVersionRecord
+    )
+  end
+
+  # The Record type IndexedVersionRecord.
+
+  def readTypeIndexedVersionRecord
+    IndexedVersionRecord.new(
+      source_version: readBytes,
+      catalog_version: readOptionalbytes,
+      index_count: readU64
+    )
+  end
+
   # The Record type JsonDocumentRecord.
 
   def readTypeJsonDocumentRecord
@@ -4524,6 +6405,48 @@ class RustBufferStream
   def readTypeLargeValueConfigRecord
     LargeValueConfigRecord.new(
       inline_threshold: readU64
+    )
+  end
+
+  # The Record type MapCatalogVerificationRecord.
+
+  def readTypeMapCatalogVerificationRecord
+    MapCatalogVerificationRecord.new(
+      head: readBytes,
+      version_count: readU64,
+      reachable_nodes: readU64,
+      reachable_bytes: readU64
+    )
+  end
+
+  # The Record type MapChangeEventRecord.
+
+  def readTypeMapChangeEventRecord
+    MapChangeEventRecord.new(
+      previous: readOptionalbytes,
+      current: readTypeMapVersionRecord,
+      diffs: readSequenceTypeDiffRecord
+    )
+  end
+
+  # The Record type MapUpdateRecord.
+
+  def readTypeMapUpdateRecord
+    MapUpdateRecord.new(
+      kind: readTypeMapUpdateKind,
+      previous: readOptionalbytes,
+      current: readOptionalTypeMapVersionRecord
+    )
+  end
+
+  # The Record type MapVersionRecord.
+
+  def readTypeMapVersionRecord
+    MapVersionRecord.new(
+      id: readBytes,
+      tree: readTypeTreeRecord,
+      created_at_millis: readOptionalu64,
+      is_head: readBool
     )
   end
 
@@ -4769,6 +6692,198 @@ class RustBufferStream
     )
   end
 
+  # The Record type ProximityConfigRecord.
+
+  def readTypeProximityConfigRecord
+    ProximityConfigRecord.new(
+      dimensions: readU32,
+      metric: readTypeDistanceMetricRecord,
+      log_chunk_size: readU8,
+      level_hash_seed: readU64,
+      min_page_bytes: readU32,
+      target_page_bytes: readU32,
+      max_page_bytes: readU32,
+      overflow_hash_seed: readU64,
+      inline_threshold_bytes: readU32,
+      scalar_quantization_group_size: readOptionalu32
+    )
+  end
+
+  # The Record type ProximityFilterRecord.
+
+  def readTypeProximityFilterRecord
+    ProximityFilterRecord.new(
+      kind: readTypeProximityFilterKind,
+      start: readOptionalbytes,
+      range_end: readOptionalbytes,
+      prefix: readOptionalbytes,
+      eligible_keys: readSequencebytes
+    )
+  end
+
+  # The Record type ProximityMembershipProofRecord.
+
+  def readTypeProximityMembershipProofRecord
+    ProximityMembershipProofRecord.new(
+      descriptor: readBytes,
+      descriptor_bytes: readBytes,
+      directory_proof: readTypeKeyProofRecord,
+      record_bytes: readOptionalbytes
+    )
+  end
+
+  # The Record type ProximityMembershipVerificationRecord.
+
+  def readTypeProximityMembershipVerificationRecord
+    ProximityMembershipVerificationRecord.new(
+      descriptor: readBytes,
+      key: readBytes,
+      record: readOptionalTypeExactProximityRecordRecord
+    )
+  end
+
+  # The Record type ProximityMutationRecord.
+
+  def readTypeProximityMutationRecord
+    ProximityMutationRecord.new(
+      key: readBytes,
+      vector: readOptionalSequencef32,
+      value: readOptionalbytes
+    )
+  end
+
+  # The Record type ProximityMutationResultRecord.
+
+  def readTypeProximityMutationResultRecord
+    ProximityMutationResultRecord.new(
+      map: readTypeBindingProximityMap,
+      stats: readTypeProximityMutationStatsRecord
+    )
+  end
+
+  # The Record type ProximityMutationStatsRecord.
+
+  def readTypeProximityMutationStatsRecord
+    ProximityMutationStatsRecord.new(
+      directory_entries_scanned: readU64,
+      directory_nodes_read: readU64,
+      directory_nodes_rebuilt: readU64,
+      directory_nodes_written: readU64,
+      directory_nodes_reused: readU64,
+      directory_levels_rebuilt: readU64,
+      directory_right_edge_rebuilt: readBool,
+      nodes_read: readU64,
+      nodes_written: readU64,
+      nodes_reused: readU64,
+      records_rebuilt: readU64,
+      distance_evaluations: readU64,
+      full_proximity_rebuild: readBool
+    )
+  end
+
+  # The Record type ProximityNeighborRecord.
+
+  def readTypeProximityNeighborRecord
+    ProximityNeighborRecord.new(
+      key: readBytes,
+      value: readBytes,
+      distance: readF64
+    )
+  end
+
+  # The Record type ProximityRecordRecord.
+
+  def readTypeProximityRecordRecord
+    ProximityRecordRecord.new(
+      key: readBytes,
+      vector: readSequencef32,
+      value: readBytes
+    )
+  end
+
+  # The Record type ProximitySearchRequestRecord.
+
+  def readTypeProximitySearchRequestRecord
+    ProximitySearchRequestRecord.new(
+      query: readSequencef32,
+      k: readU64,
+      policy: readTypeSearchPolicyKind,
+      adaptive_quality: readOptionalTypeAdaptiveQualityRecord,
+      budget: readTypeSearchBudgetRecord,
+      filter: readTypeProximityFilterRecord,
+      kernel: readTypeQueryKernelRecord,
+      backend: readTypeSearchBackendRecord,
+      hnsw_ef_search: readOptionalu32,
+      pq_rerank_multiplier: readOptionalu16
+    )
+  end
+
+  # The Record type ProximitySearchResultRecord.
+
+  def readTypeProximitySearchResultRecord
+    ProximitySearchResultRecord.new(
+      neighbors: readSequenceTypeProximityNeighborRecord,
+      stats: readTypeProximitySearchStatsRecord,
+      completion: readTypeSearchCompletionRecord,
+      backend: readTypeSearchBackendRecord,
+      plan_format_version: readU8
+    )
+  end
+
+  # The Record type ProximitySearchStatsRecord.
+
+  def readTypeProximitySearchStatsRecord
+    ProximitySearchStatsRecord.new(
+      levels_visited: readU64,
+      nodes_read: readU64,
+      bytes_read: readU64,
+      physical_bytes_read: readU64,
+      committed_bytes: readU64,
+      distance_evaluations: readU64,
+      quantized_distance_evaluations: readU64,
+      reranked_candidates: readU64,
+      frontier_peak: readU64,
+      candidate_handles_peak: readU64,
+      candidate_retained_bytes_peak: readU64
+    )
+  end
+
+  # The Record type ProximityStructuralProofRecord.
+
+  def readTypeProximityStructuralProofRecord
+    ProximityStructuralProofRecord.new(
+      descriptor: readBytes,
+      objects: readSequenceTypeTypedContentObjectRecord
+    )
+  end
+
+  # The Record type ProximityStructuralVerificationRecord.
+
+  def readTypeProximityStructuralVerificationRecord
+    ProximityStructuralVerificationRecord.new(
+      descriptor: readBytes,
+      object_count: readU64,
+      summary: readTypeProximityVerificationRecord
+    )
+  end
+
+  # The Record type ProximityVerificationRecord.
+
+  def readTypeProximityVerificationRecord
+    ProximityVerificationRecord.new(
+      record_count: readU64,
+      proximity_node_count: readU64,
+      external_vector_count: readU64,
+      quantized_node_count: readU64,
+      scalar_quantizer_count: readU64,
+      overflow_page_count: readU64,
+      overflow_directory_count: readU64,
+      maximum_level: readU8,
+      maximum_node_bytes: readU64,
+      distance_checks: readU64
+    )
+  end
+
   # The Record type RangeBoundsRecord.
 
   def readTypeRangeBoundsRecord
@@ -4883,6 +6998,39 @@ class RustBufferStream
     ScanOutcomeRecord.new(
       visited: readU64,
       stopped: readBool
+    )
+  end
+
+  # The Record type SearchBudgetRecord.
+
+  def readTypeSearchBudgetRecord
+    SearchBudgetRecord.new(
+      max_nodes: readOptionalu64,
+      max_committed_bytes: readOptionalu64,
+      max_distance_evaluations: readOptionalu64,
+      max_frontier_entries: readOptionalu64
+    )
+  end
+
+  # The Record type SecondaryIndexLimitsRecord.
+
+  def readTypeSecondaryIndexLimitsRecord
+    SecondaryIndexLimitsRecord.new(
+      max_term_bytes: readU64,
+      max_projection_bytes: readU64,
+      max_all_value_bytes: readU64,
+      max_terms_per_record: readU64,
+      max_projected_bytes_per_record: readU64,
+      max_derived_mutations_per_transaction: readU64,
+      max_projected_bytes_per_transaction: readU64,
+      max_indexes: readU64,
+      build_page_size: readU64,
+      max_temporary_sort_bytes: readU64,
+      max_bundle_nodes: readU64,
+      max_bundle_bytes: readU64,
+      max_verification_entries: readU64,
+      max_write_retries: readU64,
+      max_build_retries: readU64
     )
   end
 
@@ -5252,6 +7400,18 @@ class RustBufferStream
     )
   end
 
+  # The Record type TypedContentObjectRecord.
+
+  def readTypeTypedContentObjectRecord
+    TypedContentObjectRecord.new(
+      kind: readTypeContentObjectKindRecord,
+      cid: readBytes,
+      dimensions: readOptionalu32,
+      bytes: readBytes,
+      depth: readU64
+    )
+  end
+
   # The Record type ValueRefRecord.
 
   def readTypeValueRefRecord
@@ -5259,6 +7419,35 @@ class RustBufferStream
       kind: readTypeValueRefKind,
       value: readOptionalbytes,
       blob: readOptionalTypeBlobRefRecord
+    )
+  end
+
+  # The Record type VersionPruneRecord.
+
+  def readTypeVersionPruneRecord
+    VersionPruneRecord.new(
+      retained: readSequencebytes,
+      removed: readSequencebytes
+    )
+  end
+
+  # The Record type VersionedMapBatchResultRecord.
+
+  def readTypeVersionedMapBatchResultRecord
+    VersionedMapBatchResultRecord.new(
+      version: readTypeMapVersionRecord,
+      stats: readTypeBatchApplyStatsRecord
+    )
+  end
+
+  # The Record type VersionedTransactionCommitRecord.
+
+  def readTypeVersionedTransactionCommitRecord
+    VersionedTransactionCommitRecord.new(
+      applied: readBool,
+      versions: readSequenceTypeMapVersionRecord,
+      conflict_map_id: readOptionalbytes,
+      conflict_current: readOptionalTypeMapVersionRecord
     )
   end
 
@@ -5300,6 +7489,77 @@ class RustBufferStream
       used_batched_value_update_path: readBool
     )
   end
+
+
+
+  # The Enum type AdaptiveQualityRecord.
+
+  def readTypeAdaptiveQualityRecord
+    variant = unpack_from 4, 'l>'
+
+    if variant == 1
+      return AdaptiveQualityRecord::FAST
+    end
+    if variant == 2
+      return AdaptiveQualityRecord::BALANCED
+    end
+    if variant == 3
+      return AdaptiveQualityRecord::HIGH_RECALL
+    end
+
+    raise InternalError, 'Unexpected variant tag for TypeAdaptiveQualityRecord'
+  end
+
+
+
+
+
+  # The Enum type ContentObjectKindRecord.
+
+  def readTypeContentObjectKindRecord
+    variant = unpack_from 4, 'l>'
+
+    if variant == 1
+      return ContentObjectKindRecord::ORDERED_NODE
+    end
+    if variant == 2
+      return ContentObjectKindRecord::PROXIMITY_DESCRIPTOR
+    end
+    if variant == 3
+      return ContentObjectKindRecord::PROXIMITY_NODE
+    end
+    if variant == 4
+      return ContentObjectKindRecord::OVERFLOW_DIRECTORY
+    end
+    if variant == 5
+      return ContentObjectKindRecord::OVERFLOW_PAGE
+    end
+    if variant == 6
+      return ContentObjectKindRecord::EXTERNAL_VECTOR
+    end
+    if variant == 7
+      return ContentObjectKindRecord::SCALAR_QUANTIZATION
+    end
+    if variant == 8
+      return ContentObjectKindRecord::PRODUCT_QUANTIZATION
+    end
+    if variant == 9
+      return ContentObjectKindRecord::HNSW_MANIFEST
+    end
+    if variant == 10
+      return ContentObjectKindRecord::HNSW_PAGE
+    end
+    if variant == 11
+      return ContentObjectKindRecord::COMPOSITE_ACCELERATOR
+    end
+    if variant == 12
+      return ContentObjectKindRecord::ACCELERATOR_CATALOG
+    end
+
+    raise InternalError, 'Unexpected variant tag for TypeContentObjectKindRecord'
+  end
+
+
 
 
 
@@ -5382,6 +7642,28 @@ class RustBufferStream
 
 
 
+  # The Enum type DistanceMetricRecord.
+
+  def readTypeDistanceMetricRecord
+    variant = unpack_from 4, 'l>'
+
+    if variant == 1
+      return DistanceMetricRecord::L2_SQUARED
+    end
+    if variant == 2
+      return DistanceMetricRecord::COSINE
+    end
+    if variant == 3
+      return DistanceMetricRecord::INNER_PRODUCT
+    end
+
+    raise InternalError, 'Unexpected variant tag for TypeDistanceMetricRecord'
+  end
+
+
+
+
+
   # The Enum type EncodingKind.
 
   def readTypeEncodingKind
@@ -5401,6 +7683,72 @@ class RustBufferStream
     end
 
     raise InternalError, 'Unexpected variant tag for TypeEncodingKind'
+  end
+
+
+
+
+
+  # The Enum type IndexProjectionRecord.
+
+  def readTypeIndexProjectionRecord
+    variant = unpack_from 4, 'l>'
+
+    if variant == 1
+      return IndexProjectionRecord::KEYS_ONLY
+    end
+    if variant == 2
+      return IndexProjectionRecord::INCLUDE
+    end
+    if variant == 3
+      return IndexProjectionRecord::ALL
+    end
+
+    raise InternalError, 'Unexpected variant tag for TypeIndexProjectionRecord'
+  end
+
+
+
+
+
+  # The Enum type IndexedUpdateKind.
+
+  def readTypeIndexedUpdateKind
+    variant = unpack_from 4, 'l>'
+
+    if variant == 1
+      return IndexedUpdateKind::APPLIED
+    end
+    if variant == 2
+      return IndexedUpdateKind::UNCHANGED
+    end
+    if variant == 3
+      return IndexedUpdateKind::CONFLICT
+    end
+
+    raise InternalError, 'Unexpected variant tag for TypeIndexedUpdateKind'
+  end
+
+
+
+
+
+  # The Enum type MapUpdateKind.
+
+  def readTypeMapUpdateKind
+    variant = unpack_from 4, 'l>'
+
+    if variant == 1
+      return MapUpdateKind::APPLIED
+    end
+    if variant == 2
+      return MapUpdateKind::UNCHANGED
+    end
+    if variant == 3
+      return MapUpdateKind::CONFLICT
+    end
+
+    raise InternalError, 'Unexpected variant tag for TypeMapUpdateKind'
   end
 
 
@@ -5670,6 +8018,53 @@ class RustBufferStream
 
 
 
+  # The Enum type ProximityFilterKind.
+
+  def readTypeProximityFilterKind
+    variant = unpack_from 4, 'l>'
+
+    if variant == 1
+      return ProximityFilterKind::ALL
+    end
+    if variant == 2
+      return ProximityFilterKind::KEY_RANGE
+    end
+    if variant == 3
+      return ProximityFilterKind::PREFIX
+    end
+    if variant == 4
+      return ProximityFilterKind::ELIGIBLE_KEYS
+    end
+
+    raise InternalError, 'Unexpected variant tag for TypeProximityFilterKind'
+  end
+
+
+
+
+
+  # The Enum type QueryKernelRecord.
+
+  def readTypeQueryKernelRecord
+    variant = unpack_from 4, 'l>'
+
+    if variant == 1
+      return QueryKernelRecord::SCALAR_DETERMINISTIC
+    end
+    if variant == 2
+      return QueryKernelRecord::SIMD_DETERMINISTIC
+    end
+    if variant == 3
+      return QueryKernelRecord::AUTO_DETERMINISTIC
+    end
+
+    raise InternalError, 'Unexpected variant tag for TypeQueryKernelRecord'
+  end
+
+
+
+
+
   # The Enum type ResolutionKind.
 
   def readTypeResolutionKind
@@ -5686,6 +8081,84 @@ class RustBufferStream
     end
 
     raise InternalError, 'Unexpected variant tag for TypeResolutionKind'
+  end
+
+
+
+
+
+  # The Enum type SearchBackendRecord.
+
+  def readTypeSearchBackendRecord
+    variant = unpack_from 4, 'l>'
+
+    if variant == 1
+      return SearchBackendRecord::NATIVE
+    end
+    if variant == 2
+      return SearchBackendRecord::PRODUCT_QUANTIZED
+    end
+    if variant == 3
+      return SearchBackendRecord::HNSW
+    end
+    if variant == 4
+      return SearchBackendRecord::COMPOSITE
+    end
+    if variant == 5
+      return SearchBackendRecord::AUTO
+    end
+
+    raise InternalError, 'Unexpected variant tag for TypeSearchBackendRecord'
+  end
+
+
+
+
+
+  # The Enum type SearchCompletionRecord.
+
+  def readTypeSearchCompletionRecord
+    variant = unpack_from 4, 'l>'
+
+    if variant == 1
+      return SearchCompletionRecord::EXACT
+    end
+    if variant == 2
+      return SearchCompletionRecord::APPROXIMATE_POLICY_SATISFIED
+    end
+    if variant == 3
+      return SearchCompletionRecord::BUDGET_EXHAUSTED
+    end
+    if variant == 4
+      return SearchCompletionRecord::CANCELLED
+    end
+    if variant == 5
+      return SearchCompletionRecord::DEADLINE_EXCEEDED
+    end
+
+    raise InternalError, 'Unexpected variant tag for TypeSearchCompletionRecord'
+  end
+
+
+
+
+
+  # The Enum type SearchPolicyKind.
+
+  def readTypeSearchPolicyKind
+    variant = unpack_from 4, 'l>'
+
+    if variant == 1
+      return SearchPolicyKind::EXACT
+    end
+    if variant == 2
+      return SearchPolicyKind::FIXED_BUDGET
+    end
+    if variant == 3
+      return SearchPolicyKind::ADAPTIVE
+    end
+
+    raise InternalError, 'Unexpected variant tag for TypeSearchPolicyKind'
   end
 
 
@@ -5778,6 +8251,34 @@ class RustBufferStream
 
 
 
+  # The Optional<T> type for u16.
+
+  def readOptionalu16
+    flag = unpack_from 1, 'c'
+
+    if flag == 0
+      return nil
+    elsif flag == 1
+      return readU16
+    else
+      raise InternalError, 'Unexpected flag byte for Optionalu16'
+    end
+  end
+
+  # The Optional<T> type for u32.
+
+  def readOptionalu32
+    flag = unpack_from 1, 'c'
+
+    if flag == 0
+      return nil
+    elsif flag == 1
+      return readU32
+    else
+      raise InternalError, 'Unexpected flag byte for Optionalu32'
+    end
+  end
+
   # The Optional<T> type for u64.
 
   def readOptionalu64
@@ -5831,6 +8332,34 @@ class RustBufferStream
       return readBytes
     else
       raise InternalError, 'Unexpected flag byte for Optionalbytes'
+    end
+  end
+
+  # The Optional<T> type for TypeBindingMapSnapshot.
+
+  def readOptionalTypeBindingMapSnapshot
+    flag = unpack_from 1, 'c'
+
+    if flag == 0
+      return nil
+    elsif flag == 1
+      return readTypeBindingMapSnapshot
+    else
+      raise InternalError, 'Unexpected flag byte for OptionalTypeBindingMapSnapshot'
+    end
+  end
+
+  # The Optional<T> type for TypeProllyReadSession.
+
+  def readOptionalTypeProllyReadSession
+    flag = unpack_from 1, 'c'
+
+    if flag == 0
+      return nil
+    elsif flag == 1
+      return readTypeProllyReadSession
+    else
+      raise InternalError, 'Unexpected flag byte for OptionalTypeProllyReadSession'
     end
   end
 
@@ -5890,6 +8419,34 @@ class RustBufferStream
     end
   end
 
+  # The Optional<T> type for TypeExactProximityRecordRecord.
+
+  def readOptionalTypeExactProximityRecordRecord
+    flag = unpack_from 1, 'c'
+
+    if flag == 0
+      return nil
+    elsif flag == 1
+      return readTypeExactProximityRecordRecord
+    else
+      raise InternalError, 'Unexpected flag byte for OptionalTypeExactProximityRecordRecord'
+    end
+  end
+
+  # The Optional<T> type for TypeIndexedVersionRecord.
+
+  def readOptionalTypeIndexedVersionRecord
+    flag = unpack_from 1, 'c'
+
+    if flag == 0
+      return nil
+    elsif flag == 1
+      return readTypeIndexedVersionRecord
+    else
+      raise InternalError, 'Unexpected flag byte for OptionalTypeIndexedVersionRecord'
+    end
+  end
+
   # The Optional<T> type for TypeKeyProofRecord.
 
   def readOptionalTypeKeyProofRecord
@@ -5901,6 +8458,34 @@ class RustBufferStream
       return readTypeKeyProofRecord
     else
       raise InternalError, 'Unexpected flag byte for OptionalTypeKeyProofRecord'
+    end
+  end
+
+  # The Optional<T> type for TypeMapChangeEventRecord.
+
+  def readOptionalTypeMapChangeEventRecord
+    flag = unpack_from 1, 'c'
+
+    if flag == 0
+      return nil
+    elsif flag == 1
+      return readTypeMapChangeEventRecord
+    else
+      raise InternalError, 'Unexpected flag byte for OptionalTypeMapChangeEventRecord'
+    end
+  end
+
+  # The Optional<T> type for TypeMapVersionRecord.
+
+  def readOptionalTypeMapVersionRecord
+    flag = unpack_from 1, 'c'
+
+    if flag == 0
+      return nil
+    elsif flag == 1
+      return readTypeMapVersionRecord
+    else
+      raise InternalError, 'Unexpected flag byte for OptionalTypeMapVersionRecord'
     end
   end
 
@@ -5974,6 +8559,20 @@ class RustBufferStream
     end
   end
 
+  # The Optional<T> type for TypeSecondaryIndexLimitsRecord.
+
+  def readOptionalTypeSecondaryIndexLimitsRecord
+    flag = unpack_from 1, 'c'
+
+    if flag == 0
+      return nil
+    elsif flag == 1
+      return readTypeSecondaryIndexLimitsRecord
+    else
+      raise InternalError, 'Unexpected flag byte for OptionalTypeSecondaryIndexLimitsRecord'
+    end
+  end
+
   # The Optional<T> type for TypeStructuralDiffCursorRecord.
 
   def readOptionalTypeStructuralDiffCursorRecord
@@ -6041,6 +8640,20 @@ class RustBufferStream
       return readTypeValueRefRecord
     else
       raise InternalError, 'Unexpected flag byte for OptionalTypeValueRefRecord'
+    end
+  end
+
+  # The Optional<T> type for TypeAdaptiveQualityRecord.
+
+  def readOptionalTypeAdaptiveQualityRecord
+    flag = unpack_from 1, 'c'
+
+    if flag == 0
+      return nil
+    elsif flag == 1
+      return readTypeAdaptiveQualityRecord
+    else
+      raise InternalError, 'Unexpected flag byte for OptionalTypeAdaptiveQualityRecord'
     end
   end
 
@@ -6114,6 +8727,20 @@ class RustBufferStream
     end
   end
 
+  # The Optional<T> type for Sequencef32.
+
+  def readOptionalSequencef32
+    flag = unpack_from 1, 'c'
+
+    if flag == 0
+      return nil
+    elsif flag == 1
+      return readSequencef32
+    else
+      raise InternalError, 'Unexpected flag byte for OptionalSequencef32'
+    end
+  end
+
   # The Sequence<T> type for u64.
 
   def readSequenceu64
@@ -6130,6 +8757,22 @@ class RustBufferStream
     items
   end
 
+  # The Sequence<T> type for f32.
+
+  def readSequencef32
+    count = unpack_from 4, 'l>'
+
+    raise InternalError, 'Unexpected negative sequence length' if count.negative?
+
+    items = []
+
+    count.times do
+      items.append readF32
+    end
+
+    items
+  end
+
   # The Sequence<T> type for bytes.
 
   def readSequencebytes
@@ -6141,6 +8784,22 @@ class RustBufferStream
 
     count.times do
       items.append readBytes
+    end
+
+    items
+  end
+
+  # The Sequence<T> type for TypeActiveIndexHealthRecord.
+
+  def readSequenceTypeActiveIndexHealthRecord
+    count = unpack_from 4, 'l>'
+
+    raise InternalError, 'Unexpected negative sequence length' if count.negative?
+
+    items = []
+
+    count.times do
+      items.append readTypeActiveIndexHealthRecord
     end
 
     items
@@ -6242,6 +8901,70 @@ class RustBufferStream
     items
   end
 
+  # The Sequence<T> type for TypeIndexEntryRecord.
+
+  def readSequenceTypeIndexEntryRecord
+    count = unpack_from 4, 'l>'
+
+    raise InternalError, 'Unexpected negative sequence length' if count.negative?
+
+    items = []
+
+    count.times do
+      items.append readTypeIndexEntryRecord
+    end
+
+    items
+  end
+
+  # The Sequence<T> type for TypeIndexMatchRecord.
+
+  def readSequenceTypeIndexMatchRecord
+    count = unpack_from 4, 'l>'
+
+    raise InternalError, 'Unexpected negative sequence length' if count.negative?
+
+    items = []
+
+    count.times do
+      items.append readTypeIndexMatchRecord
+    end
+
+    items
+  end
+
+  # The Sequence<T> type for TypeIndexVerificationRecord.
+
+  def readSequenceTypeIndexVerificationRecord
+    count = unpack_from 4, 'l>'
+
+    raise InternalError, 'Unexpected negative sequence length' if count.negative?
+
+    items = []
+
+    count.times do
+      items.append readTypeIndexVerificationRecord
+    end
+
+    items
+  end
+
+  # The Sequence<T> type for TypeIndexedSourceRecord.
+
+  def readSequenceTypeIndexedSourceRecord
+    count = unpack_from 4, 'l>'
+
+    raise InternalError, 'Unexpected negative sequence length' if count.negative?
+
+    items = []
+
+    count.times do
+      items.append readTypeIndexedSourceRecord
+    end
+
+    items
+  end
+
   # The Sequence<T> type for TypeKeyProofVerificationRecord.
 
   def readSequenceTypeKeyProofVerificationRecord
@@ -6253,6 +8976,22 @@ class RustBufferStream
 
     count.times do
       items.append readTypeKeyProofVerificationRecord
+    end
+
+    items
+  end
+
+  # The Sequence<T> type for TypeMapVersionRecord.
+
+  def readSequenceTypeMapVersionRecord
+    count = unpack_from 4, 'l>'
+
+    raise InternalError, 'Unexpected negative sequence length' if count.negative?
+
+    items = []
+
+    count.times do
+      items.append readTypeMapVersionRecord
     end
 
     items
@@ -6333,6 +9072,54 @@ class RustBufferStream
 
     count.times do
       items.append readTypeNodeRecord
+    end
+
+    items
+  end
+
+  # The Sequence<T> type for TypeProximityMutationRecord.
+
+  def readSequenceTypeProximityMutationRecord
+    count = unpack_from 4, 'l>'
+
+    raise InternalError, 'Unexpected negative sequence length' if count.negative?
+
+    items = []
+
+    count.times do
+      items.append readTypeProximityMutationRecord
+    end
+
+    items
+  end
+
+  # The Sequence<T> type for TypeProximityNeighborRecord.
+
+  def readSequenceTypeProximityNeighborRecord
+    count = unpack_from 4, 'l>'
+
+    raise InternalError, 'Unexpected negative sequence length' if count.negative?
+
+    items = []
+
+    count.times do
+      items.append readTypeProximityNeighborRecord
+    end
+
+    items
+  end
+
+  # The Sequence<T> type for TypeProximityRecordRecord.
+
+  def readSequenceTypeProximityRecordRecord
+    count = unpack_from 4, 'l>'
+
+    raise InternalError, 'Unexpected negative sequence length' if count.negative?
+
+    items = []
+
+    count.times do
+      items.append readTypeProximityRecordRecord
     end
 
     items
@@ -6514,6 +9301,22 @@ class RustBufferStream
     items
   end
 
+  # The Sequence<T> type for TypeTypedContentObjectRecord.
+
+  def readSequenceTypeTypedContentObjectRecord
+    count = unpack_from 4, 'l>'
+
+    raise InternalError, 'Unexpected negative sequence length' if count.negative?
+
+    items = []
+
+    count.times do
+      items.append readTypeTypedContentObjectRecord
+    end
+
+    items
+  end
+
   # The Sequence<T> type for Optionalbytes.
 
   def readSequenceOptionalbytes
@@ -6586,6 +9389,11 @@ class RustBufferBuilder
     pack_into(1, 'c', v)
   end
 
+  def write_U16(v)
+    v = Prolly::uniffi_in_range(v, "u16", 0, 2**16)
+    pack_into(2, 'S>', v)
+  end
+
   def write_U32(v)
     v = Prolly::uniffi_in_range(v, "u32", 0, 2**32)
     pack_into(4, 'L>', v)
@@ -6599,6 +9407,10 @@ class RustBufferBuilder
   def write_I64(v)
     v = Prolly::uniffi_in_range(v, "i64", -2**63, 2**63)
     pack_into(8, 'q>', v)
+  end
+
+  def write_F32(v)
+    pack_into(4, 'g', v)
   end
 
   def write_F64(v)
@@ -6619,6 +9431,90 @@ class RustBufferBuilder
     v = Prolly::uniffi_bytes(v)
     pack_into 4, 'l>', v.bytes.size
     write v
+  end
+
+  # The Object type BindingIndexRegistry.
+
+  def write_TypeBindingIndexRegistry(obj)
+    handle = BindingIndexRegistry.uniffi_lower obj
+    pack_into(8, 'Q>', handle)
+  end
+
+  # The Object type BindingIndexedMap.
+
+  def write_TypeBindingIndexedMap(obj)
+    handle = BindingIndexedMap.uniffi_lower obj
+    pack_into(8, 'Q>', handle)
+  end
+
+  # The Object type BindingIndexedSnapshot.
+
+  def write_TypeBindingIndexedSnapshot(obj)
+    handle = BindingIndexedSnapshot.uniffi_lower obj
+    pack_into(8, 'Q>', handle)
+  end
+
+  # The Object type BindingMapComparison.
+
+  def write_TypeBindingMapComparison(obj)
+    handle = BindingMapComparison.uniffi_lower obj
+    pack_into(8, 'Q>', handle)
+  end
+
+  # The Object type BindingMapMerge.
+
+  def write_TypeBindingMapMerge(obj)
+    handle = BindingMapMerge.uniffi_lower obj
+    pack_into(8, 'Q>', handle)
+  end
+
+  # The Object type BindingMapSnapshot.
+
+  def write_TypeBindingMapSnapshot(obj)
+    handle = BindingMapSnapshot.uniffi_lower obj
+    pack_into(8, 'Q>', handle)
+  end
+
+  # The Object type BindingMapSubscription.
+
+  def write_TypeBindingMapSubscription(obj)
+    handle = BindingMapSubscription.uniffi_lower obj
+    pack_into(8, 'Q>', handle)
+  end
+
+  # The Object type BindingProximityMap.
+
+  def write_TypeBindingProximityMap(obj)
+    handle = BindingProximityMap.uniffi_lower obj
+    pack_into(8, 'Q>', handle)
+  end
+
+  # The Object type BindingProximityReadSession.
+
+  def write_TypeBindingProximityReadSession(obj)
+    handle = BindingProximityReadSession.uniffi_lower obj
+    pack_into(8, 'Q>', handle)
+  end
+
+  # The Object type BindingSecondaryIndexSnapshot.
+
+  def write_TypeBindingSecondaryIndexSnapshot(obj)
+    handle = BindingSecondaryIndexSnapshot.uniffi_lower obj
+    pack_into(8, 'Q>', handle)
+  end
+
+  # The Object type BindingVersionedMap.
+
+  def write_TypeBindingVersionedMap(obj)
+    handle = BindingVersionedMap.uniffi_lower obj
+    pack_into(8, 'Q>', handle)
+  end
+
+  # The Object type BindingVersionedTransaction.
+
+  def write_TypeBindingVersionedTransaction(obj)
+    handle = BindingVersionedTransaction.uniffi_lower obj
+    pack_into(8, 'Q>', handle)
   end
 
   # The Object type ConflictVisitorCallback.
@@ -6696,6 +9592,31 @@ class RustBufferBuilder
   def write_TypeProllyTransaction(obj)
     handle = ProllyTransaction.uniffi_lower obj
     pack_into(8, 'Q>', handle)
+  end
+
+  # The Object type ProximityRecordVisitorCallback.
+
+  def write_TypeProximityRecordVisitorCallback(obj)
+    handle = ProximityRecordVisitorCallback.uniffi_lower obj
+    pack_into(8, 'Q>', handle)
+  end
+
+  # The Object type SecondaryIndexExtractorCallback.
+
+  def write_TypeSecondaryIndexExtractorCallback(obj)
+    handle = SecondaryIndexExtractorCallback.uniffi_lower obj
+    pack_into(8, 'Q>', handle)
+  end
+
+  # The Record type ActiveIndexHealthRecord.
+
+  def write_TypeActiveIndexHealthRecord(v)
+    self.write_Bytes(v.name)
+    self.write_U64(v.generation)
+    self.write_Bytes(v.fingerprint)
+    self.write_TypeIndexProjectionRecord(v.projection)
+    self.write_Bytes(v.index_map_id)
+    self.write_Bytes(v.index_version)
   end
 
   # The Record type AuthenticatedProofBundleVerificationRecord.
@@ -6852,6 +9773,15 @@ class RustBufferBuilder
     self.write_Optionalbytes(v.right)
   end
 
+  # The Record type ContentGraphLimitsRecord.
+
+  def write_TypeContentGraphLimitsRecord(v)
+    self.write_U64(v.max_objects)
+    self.write_U64(v.max_depth)
+    self.write_U64(v.max_bytes)
+    self.write_U64(v.max_references_per_object)
+  end
+
   # The Record type CrdtConfigRecord.
 
   def write_TypeCrdtConfigRecord(v)
@@ -6943,6 +9873,13 @@ class RustBufferBuilder
 
   def write_TypeEntryRecord(v)
     self.write_Bytes(v.key)
+    self.write_Bytes(v.value)
+  end
+
+  # The Record type ExactProximityRecordRecord.
+
+  def write_TypeExactProximityRecordRecord(v)
+    self.write_Sequencef32(v.vector)
     self.write_Bytes(v.value)
   end
 
@@ -7038,6 +9975,127 @@ class RustBufferBuilder
     self.write_Optionalstring(v.error)
   end
 
+  # The Record type IndexBuildResultRecord.
+
+  def write_TypeIndexBuildResultRecord(v)
+    self.write_Bytes(v.source_version)
+    self.write_Bytes(v.index_version)
+    self.write_Bytes(v.catalog_version)
+    self.write_U64(v.generation)
+    self.write_U64(v.entries)
+    self.write_U64(v.attempts)
+    self.write_Bool(v.activated)
+  end
+
+  # The Record type IndexEntryRecord.
+
+  def write_TypeIndexEntryRecord(v)
+    self.write_Bytes(v.term)
+    self.write_Optionalbytes(v.projection)
+  end
+
+  # The Record type IndexMatchRecord.
+
+  def write_TypeIndexMatchRecord(v)
+    self.write_Bytes(v.term)
+    self.write_Bytes(v.primary_key)
+    self.write_Optionalbytes(v.projection)
+  end
+
+  # The Record type IndexPageRecord.
+
+  def write_TypeIndexPageRecord(v)
+    self.write_SequenceTypeIndexMatchRecord(v.matches)
+    self.write_Optionalbytes(v.next_cursor)
+  end
+
+  # The Record type IndexVerificationRecord.
+
+  def write_TypeIndexVerificationRecord(v)
+    self.write_Bytes(v.name)
+    self.write_Bytes(v.source_version)
+    self.write_Bytes(v.expected_index_version)
+    self.write_Bytes(v.actual_index_version)
+    self.write_U64(v.expected_entries)
+    self.write_U64(v.actual_entries)
+    self.write_U64(v.semantic_differences)
+    self.write_Bool(v.valid)
+    self.write_Bool(v.canonical)
+  end
+
+  # The Record type IndexedMapHealthRecord.
+
+  def write_TypeIndexedMapHealthRecord(v)
+    self.write_Bytes(v.source_map_id)
+    self.write_Optionalbytes(v.source_version)
+    self.write_Optionalbytes(v.catalog_version)
+    self.write_SequenceTypeActiveIndexHealthRecord(v.active_indexes)
+    self.write_Bool(v.supports_transactions)
+  end
+
+  # The Record type IndexedMapMetricsRecord.
+
+  def write_TypeIndexedMapMetricsRecord(v)
+    self.write_U64(v.normalized_source_mutations)
+    self.write_U64(v.records_extracted)
+    self.write_U64(v.terms_emitted)
+    self.write_U64(v.projected_bytes)
+    self.write_U64(v.physical_upserts)
+    self.write_U64(v.physical_deletes)
+    self.write_U64(v.unchanged_emissions_skipped)
+    self.write_U64(v.source_nodes_written)
+    self.write_U64(v.index_nodes_written)
+    self.write_U64(v.catalog_nodes_written)
+    self.write_U64(v.retries)
+    self.write_U64(v.build_attempts)
+    self.write_U64(v.verification_outcomes)
+    self.write_U64(v.retained_roots)
+  end
+
+  # The Record type IndexedRetentionRecord.
+
+  def write_TypeIndexedRetentionRecord(v)
+    self.write_Sequencebytes(v.retained_source_versions)
+    self.write_Sequencebytes(v.removed_source_versions)
+    self.write_Sequencebytes(v.retained_index_versions)
+    self.write_Sequencebytes(v.removed_index_versions)
+    self.write_Sequencebytes(v.removed_catalog_versions)
+    self.write_U64(v.removed_checkpoint_records)
+    self.write_Sequencebytes(v.removed_named_roots)
+  end
+
+  # The Record type IndexedSnapshotIdRecord.
+
+  def write_TypeIndexedSnapshotIdRecord(v)
+    self.write_Bytes(v.source_version)
+    self.write_Bytes(v.catalog_version)
+  end
+
+  # The Record type IndexedSourceRecord.
+
+  def write_TypeIndexedSourceRecord(v)
+    self.write_Bytes(v.term)
+    self.write_Bytes(v.primary_key)
+    self.write_Optionalbytes(v.projection)
+    self.write_Bytes(v.source_value)
+  end
+
+  # The Record type IndexedUpdateRecord.
+
+  def write_TypeIndexedUpdateRecord(v)
+    self.write_TypeIndexedUpdateKind(v.kind)
+    self.write_Optionalbytes(v.previous_source_version)
+    self.write_OptionalTypeIndexedVersionRecord(v.current)
+  end
+
+  # The Record type IndexedVersionRecord.
+
+  def write_TypeIndexedVersionRecord(v)
+    self.write_Bytes(v.source_version)
+    self.write_Optionalbytes(v.catalog_version)
+    self.write_U64(v.index_count)
+  end
+
   # The Record type JsonDocumentRecord.
 
   def write_TypeJsonDocumentRecord(v)
@@ -7067,6 +10125,40 @@ class RustBufferBuilder
 
   def write_TypeLargeValueConfigRecord(v)
     self.write_U64(v.inline_threshold)
+  end
+
+  # The Record type MapCatalogVerificationRecord.
+
+  def write_TypeMapCatalogVerificationRecord(v)
+    self.write_Bytes(v.head)
+    self.write_U64(v.version_count)
+    self.write_U64(v.reachable_nodes)
+    self.write_U64(v.reachable_bytes)
+  end
+
+  # The Record type MapChangeEventRecord.
+
+  def write_TypeMapChangeEventRecord(v)
+    self.write_Optionalbytes(v.previous)
+    self.write_TypeMapVersionRecord(v.current)
+    self.write_SequenceTypeDiffRecord(v.diffs)
+  end
+
+  # The Record type MapUpdateRecord.
+
+  def write_TypeMapUpdateRecord(v)
+    self.write_TypeMapUpdateKind(v.kind)
+    self.write_Optionalbytes(v.previous)
+    self.write_OptionalTypeMapVersionRecord(v.current)
+  end
+
+  # The Record type MapVersionRecord.
+
+  def write_TypeMapVersionRecord(v)
+    self.write_Bytes(v.id)
+    self.write_TypeTreeRecord(v.tree)
+    self.write_Optionalu64(v.created_at_millis)
+    self.write_Bool(v.is_head)
   end
 
   # The Record type MergeExplanationRecord.
@@ -7271,6 +10363,168 @@ class RustBufferBuilder
     self.write_TypeRangePageProofRecord(v.proof)
   end
 
+  # The Record type ProximityConfigRecord.
+
+  def write_TypeProximityConfigRecord(v)
+    self.write_U32(v.dimensions)
+    self.write_TypeDistanceMetricRecord(v.metric)
+    self.write_U8(v.log_chunk_size)
+    self.write_U64(v.level_hash_seed)
+    self.write_U32(v.min_page_bytes)
+    self.write_U32(v.target_page_bytes)
+    self.write_U32(v.max_page_bytes)
+    self.write_U64(v.overflow_hash_seed)
+    self.write_U32(v.inline_threshold_bytes)
+    self.write_Optionalu32(v.scalar_quantization_group_size)
+  end
+
+  # The Record type ProximityFilterRecord.
+
+  def write_TypeProximityFilterRecord(v)
+    self.write_TypeProximityFilterKind(v.kind)
+    self.write_Optionalbytes(v.start)
+    self.write_Optionalbytes(v.range_end)
+    self.write_Optionalbytes(v.prefix)
+    self.write_Sequencebytes(v.eligible_keys)
+  end
+
+  # The Record type ProximityMembershipProofRecord.
+
+  def write_TypeProximityMembershipProofRecord(v)
+    self.write_Bytes(v.descriptor)
+    self.write_Bytes(v.descriptor_bytes)
+    self.write_TypeKeyProofRecord(v.directory_proof)
+    self.write_Optionalbytes(v.record_bytes)
+  end
+
+  # The Record type ProximityMembershipVerificationRecord.
+
+  def write_TypeProximityMembershipVerificationRecord(v)
+    self.write_Bytes(v.descriptor)
+    self.write_Bytes(v.key)
+    self.write_OptionalTypeExactProximityRecordRecord(v.record)
+  end
+
+  # The Record type ProximityMutationRecord.
+
+  def write_TypeProximityMutationRecord(v)
+    self.write_Bytes(v.key)
+    self.write_OptionalSequencef32(v.vector)
+    self.write_Optionalbytes(v.value)
+  end
+
+  # The Record type ProximityMutationResultRecord.
+
+  def write_TypeProximityMutationResultRecord(v)
+    self.write_TypeBindingProximityMap(v.map)
+    self.write_TypeProximityMutationStatsRecord(v.stats)
+  end
+
+  # The Record type ProximityMutationStatsRecord.
+
+  def write_TypeProximityMutationStatsRecord(v)
+    self.write_U64(v.directory_entries_scanned)
+    self.write_U64(v.directory_nodes_read)
+    self.write_U64(v.directory_nodes_rebuilt)
+    self.write_U64(v.directory_nodes_written)
+    self.write_U64(v.directory_nodes_reused)
+    self.write_U64(v.directory_levels_rebuilt)
+    self.write_Bool(v.directory_right_edge_rebuilt)
+    self.write_U64(v.nodes_read)
+    self.write_U64(v.nodes_written)
+    self.write_U64(v.nodes_reused)
+    self.write_U64(v.records_rebuilt)
+    self.write_U64(v.distance_evaluations)
+    self.write_Bool(v.full_proximity_rebuild)
+  end
+
+  # The Record type ProximityNeighborRecord.
+
+  def write_TypeProximityNeighborRecord(v)
+    self.write_Bytes(v.key)
+    self.write_Bytes(v.value)
+    self.write_F64(v.distance)
+  end
+
+  # The Record type ProximityRecordRecord.
+
+  def write_TypeProximityRecordRecord(v)
+    self.write_Bytes(v.key)
+    self.write_Sequencef32(v.vector)
+    self.write_Bytes(v.value)
+  end
+
+  # The Record type ProximitySearchRequestRecord.
+
+  def write_TypeProximitySearchRequestRecord(v)
+    self.write_Sequencef32(v.query)
+    self.write_U64(v.k)
+    self.write_TypeSearchPolicyKind(v.policy)
+    self.write_OptionalTypeAdaptiveQualityRecord(v.adaptive_quality)
+    self.write_TypeSearchBudgetRecord(v.budget)
+    self.write_TypeProximityFilterRecord(v.filter)
+    self.write_TypeQueryKernelRecord(v.kernel)
+    self.write_TypeSearchBackendRecord(v.backend)
+    self.write_Optionalu32(v.hnsw_ef_search)
+    self.write_Optionalu16(v.pq_rerank_multiplier)
+  end
+
+  # The Record type ProximitySearchResultRecord.
+
+  def write_TypeProximitySearchResultRecord(v)
+    self.write_SequenceTypeProximityNeighborRecord(v.neighbors)
+    self.write_TypeProximitySearchStatsRecord(v.stats)
+    self.write_TypeSearchCompletionRecord(v.completion)
+    self.write_TypeSearchBackendRecord(v.backend)
+    self.write_U8(v.plan_format_version)
+  end
+
+  # The Record type ProximitySearchStatsRecord.
+
+  def write_TypeProximitySearchStatsRecord(v)
+    self.write_U64(v.levels_visited)
+    self.write_U64(v.nodes_read)
+    self.write_U64(v.bytes_read)
+    self.write_U64(v.physical_bytes_read)
+    self.write_U64(v.committed_bytes)
+    self.write_U64(v.distance_evaluations)
+    self.write_U64(v.quantized_distance_evaluations)
+    self.write_U64(v.reranked_candidates)
+    self.write_U64(v.frontier_peak)
+    self.write_U64(v.candidate_handles_peak)
+    self.write_U64(v.candidate_retained_bytes_peak)
+  end
+
+  # The Record type ProximityStructuralProofRecord.
+
+  def write_TypeProximityStructuralProofRecord(v)
+    self.write_Bytes(v.descriptor)
+    self.write_SequenceTypeTypedContentObjectRecord(v.objects)
+  end
+
+  # The Record type ProximityStructuralVerificationRecord.
+
+  def write_TypeProximityStructuralVerificationRecord(v)
+    self.write_Bytes(v.descriptor)
+    self.write_U64(v.object_count)
+    self.write_TypeProximityVerificationRecord(v.summary)
+  end
+
+  # The Record type ProximityVerificationRecord.
+
+  def write_TypeProximityVerificationRecord(v)
+    self.write_U64(v.record_count)
+    self.write_U64(v.proximity_node_count)
+    self.write_U64(v.external_vector_count)
+    self.write_U64(v.quantized_node_count)
+    self.write_U64(v.scalar_quantizer_count)
+    self.write_U64(v.overflow_page_count)
+    self.write_U64(v.overflow_directory_count)
+    self.write_U8(v.maximum_level)
+    self.write_U64(v.maximum_node_bytes)
+    self.write_U64(v.distance_checks)
+  end
+
   # The Record type RangeBoundsRecord.
 
   def write_TypeRangeBoundsRecord(v)
@@ -7362,6 +10616,35 @@ class RustBufferBuilder
   def write_TypeScanOutcomeRecord(v)
     self.write_U64(v.visited)
     self.write_Bool(v.stopped)
+  end
+
+  # The Record type SearchBudgetRecord.
+
+  def write_TypeSearchBudgetRecord(v)
+    self.write_Optionalu64(v.max_nodes)
+    self.write_Optionalu64(v.max_committed_bytes)
+    self.write_Optionalu64(v.max_distance_evaluations)
+    self.write_Optionalu64(v.max_frontier_entries)
+  end
+
+  # The Record type SecondaryIndexLimitsRecord.
+
+  def write_TypeSecondaryIndexLimitsRecord(v)
+    self.write_U64(v.max_term_bytes)
+    self.write_U64(v.max_projection_bytes)
+    self.write_U64(v.max_all_value_bytes)
+    self.write_U64(v.max_terms_per_record)
+    self.write_U64(v.max_projected_bytes_per_record)
+    self.write_U64(v.max_derived_mutations_per_transaction)
+    self.write_U64(v.max_projected_bytes_per_transaction)
+    self.write_U64(v.max_indexes)
+    self.write_U64(v.build_page_size)
+    self.write_U64(v.max_temporary_sort_bytes)
+    self.write_U64(v.max_bundle_nodes)
+    self.write_U64(v.max_bundle_bytes)
+    self.write_U64(v.max_verification_entries)
+    self.write_U64(v.max_write_retries)
+    self.write_U64(v.max_build_retries)
   end
 
   # The Record type SnapshotBundleNodeRecord.
@@ -7674,12 +10957,45 @@ class RustBufferBuilder
     self.write_U64(v.total_values_size_bytes)
   end
 
+  # The Record type TypedContentObjectRecord.
+
+  def write_TypeTypedContentObjectRecord(v)
+    self.write_TypeContentObjectKindRecord(v.kind)
+    self.write_Bytes(v.cid)
+    self.write_Optionalu32(v.dimensions)
+    self.write_Bytes(v.bytes)
+    self.write_U64(v.depth)
+  end
+
   # The Record type ValueRefRecord.
 
   def write_TypeValueRefRecord(v)
     self.write_TypeValueRefKind(v.kind)
     self.write_Optionalbytes(v.value)
     self.write_OptionalTypeBlobRefRecord(v.blob)
+  end
+
+  # The Record type VersionPruneRecord.
+
+  def write_TypeVersionPruneRecord(v)
+    self.write_Sequencebytes(v.retained)
+    self.write_Sequencebytes(v.removed)
+  end
+
+  # The Record type VersionedMapBatchResultRecord.
+
+  def write_TypeVersionedMapBatchResultRecord(v)
+    self.write_TypeMapVersionRecord(v.version)
+    self.write_TypeBatchApplyStatsRecord(v.stats)
+  end
+
+  # The Record type VersionedTransactionCommitRecord.
+
+  def write_TypeVersionedTransactionCommitRecord(v)
+    self.write_Bool(v.applied)
+    self.write_SequenceTypeMapVersionRecord(v.versions)
+    self.write_Optionalbytes(v.conflict_map_id)
+    self.write_OptionalTypeMapVersionRecord(v.conflict_current)
   end
 
   # The Record type VersionedValueRecord.
@@ -7715,6 +11031,20 @@ class RustBufferBuilder
     self.write_Bool(v.used_batched_value_update_path)
   end
 
+  # The Enum type AdaptiveQualityRecord.
+
+  def write_TypeAdaptiveQualityRecord(v)
+    pack_into(4, 'l>', v)
+ end
+
+
+  # The Enum type ContentObjectKindRecord.
+
+  def write_TypeContentObjectKindRecord(v)
+    pack_into(4, 'l>', v)
+ end
+
+
   # The Enum type CrdtDeletePolicyKind.
 
   def write_TypeCrdtDeletePolicyKind(v)
@@ -7743,9 +11073,37 @@ class RustBufferBuilder
  end
 
 
+  # The Enum type DistanceMetricRecord.
+
+  def write_TypeDistanceMetricRecord(v)
+    pack_into(4, 'l>', v)
+ end
+
+
   # The Enum type EncodingKind.
 
   def write_TypeEncodingKind(v)
+    pack_into(4, 'l>', v)
+ end
+
+
+  # The Enum type IndexProjectionRecord.
+
+  def write_TypeIndexProjectionRecord(v)
+    pack_into(4, 'l>', v)
+ end
+
+
+  # The Enum type IndexedUpdateKind.
+
+  def write_TypeIndexedUpdateKind(v)
+    pack_into(4, 'l>', v)
+ end
+
+
+  # The Enum type MapUpdateKind.
+
+  def write_TypeMapUpdateKind(v)
     pack_into(4, 'l>', v)
  end
 
@@ -7808,9 +11166,44 @@ class RustBufferBuilder
 
 
 
+  # The Enum type ProximityFilterKind.
+
+  def write_TypeProximityFilterKind(v)
+    pack_into(4, 'l>', v)
+ end
+
+
+  # The Enum type QueryKernelRecord.
+
+  def write_TypeQueryKernelRecord(v)
+    pack_into(4, 'l>', v)
+ end
+
+
   # The Enum type ResolutionKind.
 
   def write_TypeResolutionKind(v)
+    pack_into(4, 'l>', v)
+ end
+
+
+  # The Enum type SearchBackendRecord.
+
+  def write_TypeSearchBackendRecord(v)
+    pack_into(4, 'l>', v)
+ end
+
+
+  # The Enum type SearchCompletionRecord.
+
+  def write_TypeSearchCompletionRecord(v)
+    pack_into(4, 'l>', v)
+ end
+
+
+  # The Enum type SearchPolicyKind.
+
+  def write_TypeSearchPolicyKind(v)
     pack_into(4, 'l>', v)
  end
 
@@ -7842,6 +11235,28 @@ class RustBufferBuilder
     pack_into(4, 'l>', v)
  end
 
+
+  # The Optional<T> type for u16.
+
+  def write_Optionalu16(v)
+    if v.nil?
+      pack_into(1, 'c', 0)
+    else
+      pack_into(1, 'c', 1)
+      self.write_U16(v)
+    end
+  end
+
+  # The Optional<T> type for u32.
+
+  def write_Optionalu32(v)
+    if v.nil?
+      pack_into(1, 'c', 0)
+    else
+      pack_into(1, 'c', 1)
+      self.write_U32(v)
+    end
+  end
 
   # The Optional<T> type for u64.
 
@@ -7884,6 +11299,28 @@ class RustBufferBuilder
     else
       pack_into(1, 'c', 1)
       self.write_Bytes(v)
+    end
+  end
+
+  # The Optional<T> type for TypeBindingMapSnapshot.
+
+  def write_OptionalTypeBindingMapSnapshot(v)
+    if v.nil?
+      pack_into(1, 'c', 0)
+    else
+      pack_into(1, 'c', 1)
+      self.write_TypeBindingMapSnapshot(v)
+    end
+  end
+
+  # The Optional<T> type for TypeProllyReadSession.
+
+  def write_OptionalTypeProllyReadSession(v)
+    if v.nil?
+      pack_into(1, 'c', 0)
+    else
+      pack_into(1, 'c', 1)
+      self.write_TypeProllyReadSession(v)
     end
   end
 
@@ -7931,6 +11368,28 @@ class RustBufferBuilder
     end
   end
 
+  # The Optional<T> type for TypeExactProximityRecordRecord.
+
+  def write_OptionalTypeExactProximityRecordRecord(v)
+    if v.nil?
+      pack_into(1, 'c', 0)
+    else
+      pack_into(1, 'c', 1)
+      self.write_TypeExactProximityRecordRecord(v)
+    end
+  end
+
+  # The Optional<T> type for TypeIndexedVersionRecord.
+
+  def write_OptionalTypeIndexedVersionRecord(v)
+    if v.nil?
+      pack_into(1, 'c', 0)
+    else
+      pack_into(1, 'c', 1)
+      self.write_TypeIndexedVersionRecord(v)
+    end
+  end
+
   # The Optional<T> type for TypeKeyProofRecord.
 
   def write_OptionalTypeKeyProofRecord(v)
@@ -7939,6 +11398,28 @@ class RustBufferBuilder
     else
       pack_into(1, 'c', 1)
       self.write_TypeKeyProofRecord(v)
+    end
+  end
+
+  # The Optional<T> type for TypeMapChangeEventRecord.
+
+  def write_OptionalTypeMapChangeEventRecord(v)
+    if v.nil?
+      pack_into(1, 'c', 0)
+    else
+      pack_into(1, 'c', 1)
+      self.write_TypeMapChangeEventRecord(v)
+    end
+  end
+
+  # The Optional<T> type for TypeMapVersionRecord.
+
+  def write_OptionalTypeMapVersionRecord(v)
+    if v.nil?
+      pack_into(1, 'c', 0)
+    else
+      pack_into(1, 'c', 1)
+      self.write_TypeMapVersionRecord(v)
     end
   end
 
@@ -7997,6 +11478,17 @@ class RustBufferBuilder
     end
   end
 
+  # The Optional<T> type for TypeSecondaryIndexLimitsRecord.
+
+  def write_OptionalTypeSecondaryIndexLimitsRecord(v)
+    if v.nil?
+      pack_into(1, 'c', 0)
+    else
+      pack_into(1, 'c', 1)
+      self.write_TypeSecondaryIndexLimitsRecord(v)
+    end
+  end
+
   # The Optional<T> type for TypeStructuralDiffCursorRecord.
 
   def write_OptionalTypeStructuralDiffCursorRecord(v)
@@ -8049,6 +11541,17 @@ class RustBufferBuilder
     else
       pack_into(1, 'c', 1)
       self.write_TypeValueRefRecord(v)
+    end
+  end
+
+  # The Optional<T> type for TypeAdaptiveQualityRecord.
+
+  def write_OptionalTypeAdaptiveQualityRecord(v)
+    if v.nil?
+      pack_into(1, 'c', 0)
+    else
+      pack_into(1, 'c', 1)
+      self.write_TypeAdaptiveQualityRecord(v)
     end
   end
 
@@ -8107,6 +11610,17 @@ class RustBufferBuilder
     end
   end
 
+  # The Optional<T> type for Sequencef32.
+
+  def write_OptionalSequencef32(v)
+    if v.nil?
+      pack_into(1, 'c', 0)
+    else
+      pack_into(1, 'c', 1)
+      self.write_Sequencef32(v)
+    end
+  end
+
   # The Sequence<T> type for u64.
 
   def write_Sequenceu64(items)
@@ -8117,6 +11631,16 @@ class RustBufferBuilder
     end
   end
 
+  # The Sequence<T> type for f32.
+
+  def write_Sequencef32(items)
+    pack_into(4, 'l>', items.size)
+
+    items.each do |item|
+      self.write_F32(item)
+    end
+  end
+
   # The Sequence<T> type for bytes.
 
   def write_Sequencebytes(items)
@@ -8124,6 +11648,16 @@ class RustBufferBuilder
 
     items.each do |item|
       self.write_Bytes(item)
+    end
+  end
+
+  # The Sequence<T> type for TypeActiveIndexHealthRecord.
+
+  def write_SequenceTypeActiveIndexHealthRecord(items)
+    pack_into(4, 'l>', items.size)
+
+    items.each do |item|
+      self.write_TypeActiveIndexHealthRecord(item)
     end
   end
 
@@ -8187,6 +11721,46 @@ class RustBufferBuilder
     end
   end
 
+  # The Sequence<T> type for TypeIndexEntryRecord.
+
+  def write_SequenceTypeIndexEntryRecord(items)
+    pack_into(4, 'l>', items.size)
+
+    items.each do |item|
+      self.write_TypeIndexEntryRecord(item)
+    end
+  end
+
+  # The Sequence<T> type for TypeIndexMatchRecord.
+
+  def write_SequenceTypeIndexMatchRecord(items)
+    pack_into(4, 'l>', items.size)
+
+    items.each do |item|
+      self.write_TypeIndexMatchRecord(item)
+    end
+  end
+
+  # The Sequence<T> type for TypeIndexVerificationRecord.
+
+  def write_SequenceTypeIndexVerificationRecord(items)
+    pack_into(4, 'l>', items.size)
+
+    items.each do |item|
+      self.write_TypeIndexVerificationRecord(item)
+    end
+  end
+
+  # The Sequence<T> type for TypeIndexedSourceRecord.
+
+  def write_SequenceTypeIndexedSourceRecord(items)
+    pack_into(4, 'l>', items.size)
+
+    items.each do |item|
+      self.write_TypeIndexedSourceRecord(item)
+    end
+  end
+
   # The Sequence<T> type for TypeKeyProofVerificationRecord.
 
   def write_SequenceTypeKeyProofVerificationRecord(items)
@@ -8194,6 +11768,16 @@ class RustBufferBuilder
 
     items.each do |item|
       self.write_TypeKeyProofVerificationRecord(item)
+    end
+  end
+
+  # The Sequence<T> type for TypeMapVersionRecord.
+
+  def write_SequenceTypeMapVersionRecord(items)
+    pack_into(4, 'l>', items.size)
+
+    items.each do |item|
+      self.write_TypeMapVersionRecord(item)
     end
   end
 
@@ -8244,6 +11828,36 @@ class RustBufferBuilder
 
     items.each do |item|
       self.write_TypeNodeRecord(item)
+    end
+  end
+
+  # The Sequence<T> type for TypeProximityMutationRecord.
+
+  def write_SequenceTypeProximityMutationRecord(items)
+    pack_into(4, 'l>', items.size)
+
+    items.each do |item|
+      self.write_TypeProximityMutationRecord(item)
+    end
+  end
+
+  # The Sequence<T> type for TypeProximityNeighborRecord.
+
+  def write_SequenceTypeProximityNeighborRecord(items)
+    pack_into(4, 'l>', items.size)
+
+    items.each do |item|
+      self.write_TypeProximityNeighborRecord(item)
+    end
+  end
+
+  # The Sequence<T> type for TypeProximityRecordRecord.
+
+  def write_SequenceTypeProximityRecordRecord(items)
+    pack_into(4, 'l>', items.size)
+
+    items.each do |item|
+      self.write_TypeProximityRecordRecord(item)
     end
   end
 
@@ -8354,6 +11968,16 @@ class RustBufferBuilder
 
     items.each do |item|
       self.write_TypeTreeStatsLevelU64Record(item)
+    end
+  end
+
+  # The Sequence<T> type for TypeTypedContentObjectRecord.
+
+  def write_SequenceTypeTypedContentObjectRecord(items)
+    pack_into(4, 'l>', items.size)
+
+    items.each do |item|
+      self.write_TypeTypedContentObjectRecord(item)
     end
   end
 
@@ -8541,6 +12165,17 @@ end
 
 
 
+
+
+
+
+
+
+
+
+
+
+
 # Map error modules to the RustBuffer method name that reads them
 ERROR_MODULE_TO_READER_METHOD = {
 
@@ -8558,6 +12193,17 @@ ERROR_MODULE_TO_READER_METHOD = {
 
 
   ProllyBindingError => :readTypeProllyBindingError,
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -8846,12 +12492,18 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_fn_method_prollyengine_begin_transaction,
     [:uint64, RustCallStatus.by_ref],
     :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_prollyengine_begin_versioned_transaction,
+    [:uint64, RustCallStatus.by_ref],
+    :uint64
   attach_function :uniffi_prolly_bindings_fn_method_prollyengine_build_from_entries,
     [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_method_prollyengine_build_from_sorted_entries,
     [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_prollyengine_build_proximity_map,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
   attach_function :uniffi_prolly_bindings_fn_method_prollyengine_cache_stats,
     [:uint64, RustCallStatus.by_ref],
     RustBuffer.by_value
@@ -8960,6 +12612,9 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_fn_method_prollyengine_import_snapshot,
     [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_prollyengine_indexed_map,
+    [:uint64, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
+    :uint64
   attach_function :uniffi_prolly_bindings_fn_method_prollyengine_last_entry,
     [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
@@ -8984,6 +12639,9 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_fn_method_prollyengine_load_named_roots,
     [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_prollyengine_load_proximity_map,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
   attach_function :uniffi_prolly_bindings_fn_method_prollyengine_load_retained_named_roots,
     [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
@@ -9200,6 +12858,9 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_fn_method_prollyengine_upper_bound,
     [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_prollyengine_versioned_map,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
   attach_function :uniffi_prolly_bindings_fn_clone_prollyreadsession,
     [:uint64, RustCallStatus.by_ref],
     :uint64
@@ -9261,6 +12922,696 @@ module UniFFILib
     [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_method_prollytransaction_rollback,
+    [:uint64, RustCallStatus.by_ref],
+    :void
+  attach_function :uniffi_prolly_bindings_fn_clone_bindingindexregistry,
+    [:uint64, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_free_bindingindexregistry,
+    [:uint64, RustCallStatus.by_ref],
+    :void
+  attach_function :uniffi_prolly_bindings_fn_constructor_bindingindexregistry_new,
+    [RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_bindingindexregistry_len,
+    [:uint64, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_bindingindexregistry_register,
+    [:uint64, RustBuffer.by_value, :uint64, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
+    :void
+  attach_function :uniffi_prolly_bindings_fn_clone_bindingindexedmap,
+    [:uint64, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_free_bindingindexedmap,
+    [:uint64, RustCallStatus.by_ref],
+    :void
+  attach_function :uniffi_prolly_bindings_fn_constructor_bindingindexedmap_new,
+    [:uint64, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_bindingindexedmap_apply,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingindexedmap_apply_if,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingindexedmap_deactivate_index,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingindexedmap_delete,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingindexedmap_ensure_index,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingindexedmap_export_current,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingindexedmap_get,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingindexedmap_health,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingindexedmap_id,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingindexedmap_import_current,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingindexedmap_keep_last,
+    [:uint64, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingindexedmap_metrics,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingindexedmap_put,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingindexedmap_repair_index,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingindexedmap_snapshot,
+    [:uint64, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_bindingindexedmap_snapshot_at,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_bindingindexedmap_snapshot_by_id,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_bindingindexedmap_verify_all,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingindexedmap_verify_index,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_clone_bindingindexedsnapshot,
+    [:uint64, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_free_bindingindexedsnapshot,
+    [:uint64, RustCallStatus.by_ref],
+    :void
+  attach_function :uniffi_prolly_bindings_fn_method_bindingindexedsnapshot_id,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingindexedsnapshot_index,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_clone_bindingsecondaryindexsnapshot,
+    [:uint64, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_free_bindingsecondaryindexsnapshot,
+    [:uint64, RustCallStatus.by_ref],
+    :void
+  attach_function :uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_exact,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_exact_page,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_exact_reverse_page,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_fast_handle,
+    [:uint64, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_name,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_prefix,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_prefix_page,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_prefix_reverse_page,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_range,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_range_page,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_range_reverse_page,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_records,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_clone_secondaryindexextractorcallback,
+    [:uint64, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_free_secondaryindexextractorcallback,
+    [:uint64, RustCallStatus.by_ref],
+    :void
+  attach_function :uniffi_prolly_bindings_fn_init_callback_vtable_secondaryindexextractorcallback,
+    [:pointer, RustCallStatus.by_ref],
+    :void
+  attach_function :uniffi_prolly_bindings_fn_method_secondaryindexextractorcallback_extract,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_clone_bindingproximitymap,
+    [:uint64, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_free_bindingproximitymap,
+    [:uint64, RustCallStatus.by_ref],
+    :void
+  attach_function :uniffi_prolly_bindings_fn_method_bindingproximitymap_clear_content_cache,
+    [:uint64, RustCallStatus.by_ref],
+    :void
+  attach_function :uniffi_prolly_bindings_fn_method_bindingproximitymap_config,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingproximitymap_contains_key,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    :int8
+  attach_function :uniffi_prolly_bindings_fn_method_bindingproximitymap_count,
+    [:uint64, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_bindingproximitymap_descriptor,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingproximitymap_fast_handle,
+    [:uint64, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_bindingproximitymap_get,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingproximitymap_mutate,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingproximitymap_prove_membership,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingproximitymap_prove_structure,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingproximitymap_read_session,
+    [:uint64, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_bindingproximitymap_rebuild,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_bindingproximitymap_scan_records,
+    [:uint64, :uint64, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_bindingproximitymap_search,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingproximitymap_verify,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_clone_bindingproximityreadsession,
+    [:uint64, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_free_bindingproximityreadsession,
+    [:uint64, RustCallStatus.by_ref],
+    :void
+  attach_function :uniffi_prolly_bindings_fn_method_bindingproximityreadsession_contains_key,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    :int8
+  attach_function :uniffi_prolly_bindings_fn_method_bindingproximityreadsession_get,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingproximityreadsession_scan_records,
+    [:uint64, :uint64, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_clone_proximityrecordvisitorcallback,
+    [:uint64, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_free_proximityrecordvisitorcallback,
+    [:uint64, RustCallStatus.by_ref],
+    :void
+  attach_function :uniffi_prolly_bindings_fn_init_callback_vtable_proximityrecordvisitorcallback,
+    [:pointer, RustCallStatus.by_ref],
+    :void
+  attach_function :uniffi_prolly_bindings_fn_method_proximityrecordvisitorcallback_visit,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    :int8
+  attach_function :uniffi_prolly_bindings_fn_clone_bindingmapcomparison,
+    [:uint64, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_free_bindingmapcomparison,
+    [:uint64, RustCallStatus.by_ref],
+    :void
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapcomparison_base,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapcomparison_changed_spans,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapcomparison_debug_view,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapcomparison_diff,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapcomparison_diff_page,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapcomparison_prove_diff_page,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapcomparison_publish_changed_spans,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    :int8
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapcomparison_scan_diff,
+    [:uint64, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapcomparison_stats,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapcomparison_structural_diff_page,
+    [:uint64, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapcomparison_target,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_clone_bindingmapmerge,
+    [:uint64, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_free_bindingmapmerge,
+    [:uint64, RustCallStatus.by_ref],
+    :void
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapmerge_base,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapmerge_candidate,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapmerge_conflict_page,
+    [:uint64, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapmerge_crdt_merge,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapmerge_crdt_merge_explain,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapmerge_head,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapmerge_merge,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapmerge_merge_with_policy,
+    [:uint64, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapmerge_publish,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapmerge_publish_crdt,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapmerge_publish_with_policy,
+    [:uint64, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapmerge_scan_conflicts,
+    [:uint64, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_clone_bindingmapsnapshot,
+    [:uint64, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_free_bindingmapsnapshot,
+    [:uint64, RustCallStatus.by_ref],
+    :void
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapsnapshot_contains_key,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    :int8
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapsnapshot_copy_missing_nodes,
+    [:uint64, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapsnapshot_cursor_window,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapsnapshot_debug_view,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapsnapshot_export,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapsnapshot_first_entry,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapsnapshot_get,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapsnapshot_get_many,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapsnapshot_get_value_ref,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapsnapshot_hydrate_prefix_hint,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    :int8
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapsnapshot_id,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapsnapshot_last_entry,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapsnapshot_lower_bound,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapsnapshot_pin_path,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapsnapshot_pin_root,
+    [:uint64, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapsnapshot_plan_missing_nodes,
+    [:uint64, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prefix,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prefix_page,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prefix_reverse_page,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prove_key,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prove_keys,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prove_prefix,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prove_range,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prove_range_page,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapsnapshot_publish_prefix_hint,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    :int8
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapsnapshot_push_to,
+    [:uint64, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapsnapshot_range,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapsnapshot_range_page,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapsnapshot_read_session,
+    [:uint64, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapsnapshot_reverse_page,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapsnapshot_scan_prefix,
+    [:uint64, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapsnapshot_scan_range,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapsnapshot_stats,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapsnapshot_tree,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapsnapshot_upper_bound,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapsnapshot_version,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_clone_bindingmapsubscription,
+    [:uint64, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_free_bindingmapsubscription,
+    [:uint64, RustCallStatus.by_ref],
+    :void
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapsubscription_last_seen,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingmapsubscription_poll,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_clone_bindingversionedmap,
+    [:uint64, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_free_bindingversionedmap,
+    [:uint64, RustCallStatus.by_ref],
+    :void
+  attach_function :uniffi_prolly_bindings_fn_constructor_bindingversionedmap_new,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_append,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_apply,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_apply_at_millis,
+    [:uint64, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_apply_if,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_apply_if_at_millis,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_backup,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_changes_since,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_compare,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_compare_to_head,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_contains_key,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    :int8
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_delete,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_delete_if,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_diff,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_edit,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_edit_if,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_get,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_get_at,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_get_large_value,
+    [:uint64, :uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_get_many,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_get_many_at,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_get_value_ref,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_get_value_ref_at,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_head,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_head_id,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_head_name,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_id,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_import_as_head,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_import_as_head_at_millis,
+    [:uint64, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_initialize,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_initialize_sorted,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_is_initialized,
+    [:uint64, RustCallStatus.by_ref],
+    :int8
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_keep_for,
+    [:uint64, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_keep_for_at,
+    [:uint64, :uint64, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_keep_last,
+    [:uint64, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_keep_versions,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_parallel_apply,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_plan_blob_gc,
+    [:uint64, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_plan_gc,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_prefix,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_prefix_at,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_prefix_page,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_prefix_page_at,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_prepare_merge,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_prune_versions,
+    [:uint64, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_put,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_put_if,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_put_large_value,
+    [:uint64, :uint64, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_put_large_value_if,
+    [:uint64, :uint64, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_range,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_range_at,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_range_page,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_range_page_at,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_read_session,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_rebuild_from_entries_if,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_rebuild_from_iter_if,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_rebuild_sorted_if,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_restore_backup,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_retention_policy,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_rollback_to,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_scan_prefix,
+    [:uint64, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_scan_prefix_at,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_scan_range,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_scan_range_at,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_snapshot,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_snapshot_at,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_subscribe,
+    [:uint64, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_subscribe_from,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_sweep_blob_gc,
+    [:uint64, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_sweep_gc,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_verify_catalog,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_version,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_versions,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedmap_versions_prefix,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_clone_bindingversionedtransaction,
+    [:uint64, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_free_bindingversionedtransaction,
+    [:uint64, RustCallStatus.by_ref],
+    :void
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedtransaction_apply,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedtransaction_apply_if,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedtransaction_commit,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedtransaction_delete,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedtransaction_get,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedtransaction_head,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedtransaction_put,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingversionedtransaction_rollback,
     [:uint64, RustCallStatus.by_ref],
     :void
   attach_function :uniffi_prolly_bindings_fn_func_authenticated_proof_envelope_from_bytes,
@@ -9631,6 +13982,21 @@ module UniFFILib
     :void
   attach_function :uniffi_prolly_bindings_fn_func_versioned_value_to_bytes,
     [RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_func_default_content_graph_limits,
+    [RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_func_default_proximity_config,
+    [:uint32, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_func_exact_proximity_search_request,
+    [RustBuffer.by_value, :uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_func_verify_proximity_membership_proof,
+    [RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_func_verify_proximity_structure_proof,
+    [RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
   attach_function :ffi_prolly_bindings_rustbuffer_alloc,
     [:uint64, RustCallStatus.by_ref],
@@ -10013,6 +14379,21 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_checksum_func_versioned_value_to_bytes,
     [RustCallStatus.by_ref],
     :uint16
+  attach_function :uniffi_prolly_bindings_checksum_func_default_content_graph_limits,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_func_default_proximity_config,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_func_exact_proximity_search_request,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_func_verify_proximity_membership_proof,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_func_verify_proximity_structure_proof,
+    [RustCallStatus.by_ref],
+    :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_conflictvisitorcallback_visit,
     [RustCallStatus.by_ref],
     :uint16
@@ -10130,10 +14511,16 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_begin_transaction,
     [RustCallStatus.by_ref],
     :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_begin_versioned_transaction,
+    [RustCallStatus.by_ref],
+    :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_build_from_entries,
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_build_from_sorted_entries,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_build_proximity_map,
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_cache_stats,
@@ -10244,6 +14631,9 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_import_snapshot,
     [RustCallStatus.by_ref],
     :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_indexed_map,
+    [RustCallStatus.by_ref],
+    :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_last_entry,
     [RustCallStatus.by_ref],
     :uint16
@@ -10266,6 +14656,9 @@ module UniFFILib
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_load_named_roots,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_load_proximity_map,
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_load_retained_named_roots,
@@ -10484,6 +14877,9 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_upper_bound,
     [RustCallStatus.by_ref],
     :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_prollyengine_versioned_map,
+    [RustCallStatus.by_ref],
+    :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_prollyreadsession_fast_handle,
     [RustCallStatus.by_ref],
     :uint16
@@ -10535,6 +14931,597 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_checksum_method_prollytransaction_rollback,
     [RustCallStatus.by_ref],
     :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingindexregistry_len,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingindexregistry_register,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingindexedmap_apply,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingindexedmap_apply_if,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingindexedmap_deactivate_index,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingindexedmap_delete,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingindexedmap_ensure_index,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingindexedmap_export_current,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingindexedmap_get,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingindexedmap_health,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingindexedmap_id,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingindexedmap_import_current,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingindexedmap_keep_last,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingindexedmap_metrics,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingindexedmap_put,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingindexedmap_repair_index,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingindexedmap_snapshot,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingindexedmap_snapshot_at,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingindexedmap_snapshot_by_id,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingindexedmap_verify_all,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingindexedmap_verify_index,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingindexedsnapshot_id,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingindexedsnapshot_index,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingsecondaryindexsnapshot_exact,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingsecondaryindexsnapshot_exact_page,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingsecondaryindexsnapshot_exact_reverse_page,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingsecondaryindexsnapshot_fast_handle,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingsecondaryindexsnapshot_name,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingsecondaryindexsnapshot_prefix,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingsecondaryindexsnapshot_prefix_page,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingsecondaryindexsnapshot_prefix_reverse_page,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingsecondaryindexsnapshot_range,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingsecondaryindexsnapshot_range_page,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingsecondaryindexsnapshot_range_reverse_page,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingsecondaryindexsnapshot_records,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_secondaryindexextractorcallback_extract,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingproximitymap_clear_content_cache,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingproximitymap_config,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingproximitymap_contains_key,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingproximitymap_count,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingproximitymap_descriptor,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingproximitymap_fast_handle,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingproximitymap_get,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingproximitymap_mutate,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingproximitymap_prove_membership,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingproximitymap_prove_structure,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingproximitymap_read_session,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingproximitymap_rebuild,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingproximitymap_scan_records,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingproximitymap_search,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingproximitymap_verify,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_contains_key,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_get,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_scan_records,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_proximityrecordvisitorcallback_visit,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapcomparison_base,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapcomparison_changed_spans,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapcomparison_debug_view,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapcomparison_diff,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapcomparison_diff_page,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapcomparison_prove_diff_page,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapcomparison_publish_changed_spans,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapcomparison_scan_diff,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapcomparison_stats,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapcomparison_structural_diff_page,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapcomparison_target,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapmerge_base,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapmerge_candidate,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapmerge_conflict_page,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapmerge_crdt_merge,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapmerge_crdt_merge_explain,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapmerge_head,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapmerge_merge,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapmerge_merge_with_policy,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapmerge_publish,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapmerge_publish_crdt,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapmerge_publish_with_policy,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapmerge_scan_conflicts,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_contains_key,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_copy_missing_nodes,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_cursor_window,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_debug_view,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_export,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_first_entry,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_get,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_get_many,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_get_value_ref,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_hydrate_prefix_hint,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_id,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_last_entry,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_lower_bound,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_pin_path,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_pin_root,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_plan_missing_nodes,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_prefix,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_prefix_page,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_prefix_reverse_page,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_prove_key,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_prove_keys,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_prove_prefix,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_prove_range,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_prove_range_page,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_publish_prefix_hint,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_push_to,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_range,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_range_page,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_read_session,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_reverse_page,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_scan_prefix,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_scan_range,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_stats,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_tree,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_upper_bound,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_version,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapsubscription_last_seen,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingmapsubscription_poll,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_append,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_apply,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_apply_at_millis,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_apply_if,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_apply_if_at_millis,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_backup,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_changes_since,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_compare,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_compare_to_head,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_contains_key,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_delete,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_delete_if,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_diff,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_edit,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_edit_if,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_get,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_get_at,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_get_large_value,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_get_many,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_get_many_at,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_get_value_ref,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_get_value_ref_at,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_head,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_head_id,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_head_name,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_id,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_import_as_head,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_import_as_head_at_millis,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_initialize,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_initialize_sorted,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_is_initialized,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_keep_for,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_keep_for_at,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_keep_last,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_keep_versions,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_parallel_apply,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_plan_blob_gc,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_plan_gc,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_prefix,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_prefix_at,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_prefix_page,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_prefix_page_at,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_prepare_merge,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_prune_versions,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_put,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_put_if,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_put_large_value,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_put_large_value_if,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_range,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_range_at,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_range_page,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_range_page_at,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_read_session,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_rebuild_from_entries_if,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_rebuild_from_iter_if,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_rebuild_sorted_if,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_restore_backup,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_retention_policy,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_rollback_to,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_scan_prefix,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_scan_prefix_at,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_scan_range,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_scan_range_at,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_snapshot,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_snapshot_at,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_subscribe,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_subscribe_from,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_sweep_blob_gc,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_sweep_gc,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_verify_catalog,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_version,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_versions,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedmap_versions_prefix,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedtransaction_apply,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedtransaction_apply_if,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedtransaction_commit,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedtransaction_delete,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedtransaction_get,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedtransaction_head,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedtransaction_put,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingversionedtransaction_rollback,
+    [RustCallStatus.by_ref],
+    :uint16
   attach_function :uniffi_prolly_bindings_checksum_constructor_mergepolicyregistry_new,
     [RustCallStatus.by_ref],
     :uint16
@@ -10557,6 +15544,15 @@ module UniFFILib
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_constructor_prollyengine_sqlite_in_memory,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_constructor_bindingindexregistry_new,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_constructor_bindingindexedmap_new,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_constructor_bindingversionedmap_new,
     [RustCallStatus.by_ref],
     :uint16
   attach_function :ffi_prolly_bindings_uniffi_contract_version,
@@ -10789,6 +15785,152 @@ end
 class ValueRefKind
   INLINE = 1
   BLOB = 2
+
+end
+
+
+
+
+
+
+class IndexProjectionRecord
+  KEYS_ONLY = 1
+  INCLUDE = 2
+  ALL = 3
+
+end
+
+
+
+
+
+
+class IndexedUpdateKind
+  APPLIED = 1
+  UNCHANGED = 2
+  CONFLICT = 3
+
+end
+
+
+
+
+
+
+class AdaptiveQualityRecord
+  FAST = 1
+  BALANCED = 2
+  HIGH_RECALL = 3
+
+end
+
+
+
+
+
+
+class ContentObjectKindRecord
+  ORDERED_NODE = 1
+  PROXIMITY_DESCRIPTOR = 2
+  PROXIMITY_NODE = 3
+  OVERFLOW_DIRECTORY = 4
+  OVERFLOW_PAGE = 5
+  EXTERNAL_VECTOR = 6
+  SCALAR_QUANTIZATION = 7
+  PRODUCT_QUANTIZATION = 8
+  HNSW_MANIFEST = 9
+  HNSW_PAGE = 10
+  COMPOSITE_ACCELERATOR = 11
+  ACCELERATOR_CATALOG = 12
+
+end
+
+
+
+
+
+
+class DistanceMetricRecord
+  L2_SQUARED = 1
+  COSINE = 2
+  INNER_PRODUCT = 3
+
+end
+
+
+
+
+
+
+class ProximityFilterKind
+  ALL = 1
+  KEY_RANGE = 2
+  PREFIX = 3
+  ELIGIBLE_KEYS = 4
+
+end
+
+
+
+
+
+
+class QueryKernelRecord
+  SCALAR_DETERMINISTIC = 1
+  SIMD_DETERMINISTIC = 2
+  AUTO_DETERMINISTIC = 3
+
+end
+
+
+
+
+
+
+class SearchBackendRecord
+  NATIVE = 1
+  PRODUCT_QUANTIZED = 2
+  HNSW = 3
+  COMPOSITE = 4
+  AUTO = 5
+
+end
+
+
+
+
+
+
+class SearchCompletionRecord
+  EXACT = 1
+  APPROXIMATE_POLICY_SATISFIED = 2
+  BUDGET_EXHAUSTED = 3
+  CANCELLED = 4
+  DEADLINE_EXCEEDED = 5
+
+end
+
+
+
+
+
+
+class SearchPolicyKind
+  EXACT = 1
+  FIXED_BUDGET = 2
+  ADAPTIVE = 3
+
+end
+
+
+
+
+
+
+class MapUpdateKind
+  APPLIED = 1
+  UNCHANGED = 2
+  CONFLICT = 3
 
 end
 
@@ -14127,6 +19269,1350 @@ class WriteStatsRecord
   end
 end
 
+  # Record type ActiveIndexHealthRecord
+class ActiveIndexHealthRecord
+  attr_reader :name, :generation, :fingerprint, :projection, :index_map_id, :index_version
+
+  def initialize(name:, generation:, fingerprint:, projection:, index_map_id:, index_version:)
+    @name = name
+    @generation = generation
+    @fingerprint = fingerprint
+    @projection = projection
+    @index_map_id = index_map_id
+    @index_version = index_version
+  end
+
+  def ==(other)
+    if @name != other.name
+      return false
+    end
+    if @generation != other.generation
+      return false
+    end
+    if @fingerprint != other.fingerprint
+      return false
+    end
+    if @projection != other.projection
+      return false
+    end
+    if @index_map_id != other.index_map_id
+      return false
+    end
+    if @index_version != other.index_version
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type IndexBuildResultRecord
+class IndexBuildResultRecord
+  attr_reader :source_version, :index_version, :catalog_version, :generation, :entries, :attempts, :activated
+
+  def initialize(source_version:, index_version:, catalog_version:, generation:, entries:, attempts:, activated:)
+    @source_version = source_version
+    @index_version = index_version
+    @catalog_version = catalog_version
+    @generation = generation
+    @entries = entries
+    @attempts = attempts
+    @activated = activated
+  end
+
+  def ==(other)
+    if @source_version != other.source_version
+      return false
+    end
+    if @index_version != other.index_version
+      return false
+    end
+    if @catalog_version != other.catalog_version
+      return false
+    end
+    if @generation != other.generation
+      return false
+    end
+    if @entries != other.entries
+      return false
+    end
+    if @attempts != other.attempts
+      return false
+    end
+    if @activated != other.activated
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type IndexEntryRecord
+class IndexEntryRecord
+  attr_reader :term, :projection
+
+  def initialize(term:, projection:)
+    @term = term
+    @projection = projection
+  end
+
+  def ==(other)
+    if @term != other.term
+      return false
+    end
+    if @projection != other.projection
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type IndexMatchRecord
+class IndexMatchRecord
+  attr_reader :term, :primary_key, :projection
+
+  def initialize(term:, primary_key:, projection:)
+    @term = term
+    @primary_key = primary_key
+    @projection = projection
+  end
+
+  def ==(other)
+    if @term != other.term
+      return false
+    end
+    if @primary_key != other.primary_key
+      return false
+    end
+    if @projection != other.projection
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type IndexPageRecord
+class IndexPageRecord
+  attr_reader :matches, :next_cursor
+
+  def initialize(matches:, next_cursor:)
+    @matches = matches
+    @next_cursor = next_cursor
+  end
+
+  def ==(other)
+    if @matches != other.matches
+      return false
+    end
+    if @next_cursor != other.next_cursor
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type IndexVerificationRecord
+class IndexVerificationRecord
+  attr_reader :name, :source_version, :expected_index_version, :actual_index_version, :expected_entries, :actual_entries, :semantic_differences, :valid, :canonical
+
+  def initialize(name:, source_version:, expected_index_version:, actual_index_version:, expected_entries:, actual_entries:, semantic_differences:, valid:, canonical:)
+    @name = name
+    @source_version = source_version
+    @expected_index_version = expected_index_version
+    @actual_index_version = actual_index_version
+    @expected_entries = expected_entries
+    @actual_entries = actual_entries
+    @semantic_differences = semantic_differences
+    @valid = valid
+    @canonical = canonical
+  end
+
+  def ==(other)
+    if @name != other.name
+      return false
+    end
+    if @source_version != other.source_version
+      return false
+    end
+    if @expected_index_version != other.expected_index_version
+      return false
+    end
+    if @actual_index_version != other.actual_index_version
+      return false
+    end
+    if @expected_entries != other.expected_entries
+      return false
+    end
+    if @actual_entries != other.actual_entries
+      return false
+    end
+    if @semantic_differences != other.semantic_differences
+      return false
+    end
+    if @valid != other.valid
+      return false
+    end
+    if @canonical != other.canonical
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type IndexedMapHealthRecord
+class IndexedMapHealthRecord
+  attr_reader :source_map_id, :source_version, :catalog_version, :active_indexes, :supports_transactions
+
+  def initialize(source_map_id:, source_version:, catalog_version:, active_indexes:, supports_transactions:)
+    @source_map_id = source_map_id
+    @source_version = source_version
+    @catalog_version = catalog_version
+    @active_indexes = active_indexes
+    @supports_transactions = supports_transactions
+  end
+
+  def ==(other)
+    if @source_map_id != other.source_map_id
+      return false
+    end
+    if @source_version != other.source_version
+      return false
+    end
+    if @catalog_version != other.catalog_version
+      return false
+    end
+    if @active_indexes != other.active_indexes
+      return false
+    end
+    if @supports_transactions != other.supports_transactions
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type IndexedMapMetricsRecord
+class IndexedMapMetricsRecord
+  attr_reader :normalized_source_mutations, :records_extracted, :terms_emitted, :projected_bytes, :physical_upserts, :physical_deletes, :unchanged_emissions_skipped, :source_nodes_written, :index_nodes_written, :catalog_nodes_written, :retries, :build_attempts, :verification_outcomes, :retained_roots
+
+  def initialize(normalized_source_mutations:, records_extracted:, terms_emitted:, projected_bytes:, physical_upserts:, physical_deletes:, unchanged_emissions_skipped:, source_nodes_written:, index_nodes_written:, catalog_nodes_written:, retries:, build_attempts:, verification_outcomes:, retained_roots:)
+    @normalized_source_mutations = normalized_source_mutations
+    @records_extracted = records_extracted
+    @terms_emitted = terms_emitted
+    @projected_bytes = projected_bytes
+    @physical_upserts = physical_upserts
+    @physical_deletes = physical_deletes
+    @unchanged_emissions_skipped = unchanged_emissions_skipped
+    @source_nodes_written = source_nodes_written
+    @index_nodes_written = index_nodes_written
+    @catalog_nodes_written = catalog_nodes_written
+    @retries = retries
+    @build_attempts = build_attempts
+    @verification_outcomes = verification_outcomes
+    @retained_roots = retained_roots
+  end
+
+  def ==(other)
+    if @normalized_source_mutations != other.normalized_source_mutations
+      return false
+    end
+    if @records_extracted != other.records_extracted
+      return false
+    end
+    if @terms_emitted != other.terms_emitted
+      return false
+    end
+    if @projected_bytes != other.projected_bytes
+      return false
+    end
+    if @physical_upserts != other.physical_upserts
+      return false
+    end
+    if @physical_deletes != other.physical_deletes
+      return false
+    end
+    if @unchanged_emissions_skipped != other.unchanged_emissions_skipped
+      return false
+    end
+    if @source_nodes_written != other.source_nodes_written
+      return false
+    end
+    if @index_nodes_written != other.index_nodes_written
+      return false
+    end
+    if @catalog_nodes_written != other.catalog_nodes_written
+      return false
+    end
+    if @retries != other.retries
+      return false
+    end
+    if @build_attempts != other.build_attempts
+      return false
+    end
+    if @verification_outcomes != other.verification_outcomes
+      return false
+    end
+    if @retained_roots != other.retained_roots
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type IndexedRetentionRecord
+class IndexedRetentionRecord
+  attr_reader :retained_source_versions, :removed_source_versions, :retained_index_versions, :removed_index_versions, :removed_catalog_versions, :removed_checkpoint_records, :removed_named_roots
+
+  def initialize(retained_source_versions:, removed_source_versions:, retained_index_versions:, removed_index_versions:, removed_catalog_versions:, removed_checkpoint_records:, removed_named_roots:)
+    @retained_source_versions = retained_source_versions
+    @removed_source_versions = removed_source_versions
+    @retained_index_versions = retained_index_versions
+    @removed_index_versions = removed_index_versions
+    @removed_catalog_versions = removed_catalog_versions
+    @removed_checkpoint_records = removed_checkpoint_records
+    @removed_named_roots = removed_named_roots
+  end
+
+  def ==(other)
+    if @retained_source_versions != other.retained_source_versions
+      return false
+    end
+    if @removed_source_versions != other.removed_source_versions
+      return false
+    end
+    if @retained_index_versions != other.retained_index_versions
+      return false
+    end
+    if @removed_index_versions != other.removed_index_versions
+      return false
+    end
+    if @removed_catalog_versions != other.removed_catalog_versions
+      return false
+    end
+    if @removed_checkpoint_records != other.removed_checkpoint_records
+      return false
+    end
+    if @removed_named_roots != other.removed_named_roots
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type IndexedSnapshotIdRecord
+class IndexedSnapshotIdRecord
+  attr_reader :source_version, :catalog_version
+
+  def initialize(source_version:, catalog_version:)
+    @source_version = source_version
+    @catalog_version = catalog_version
+  end
+
+  def ==(other)
+    if @source_version != other.source_version
+      return false
+    end
+    if @catalog_version != other.catalog_version
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type IndexedSourceRecord
+class IndexedSourceRecord
+  attr_reader :term, :primary_key, :projection, :source_value
+
+  def initialize(term:, primary_key:, projection:, source_value:)
+    @term = term
+    @primary_key = primary_key
+    @projection = projection
+    @source_value = source_value
+  end
+
+  def ==(other)
+    if @term != other.term
+      return false
+    end
+    if @primary_key != other.primary_key
+      return false
+    end
+    if @projection != other.projection
+      return false
+    end
+    if @source_value != other.source_value
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type IndexedUpdateRecord
+class IndexedUpdateRecord
+  attr_reader :kind, :previous_source_version, :current
+
+  def initialize(kind:, previous_source_version:, current:)
+    @kind = kind
+    @previous_source_version = previous_source_version
+    @current = current
+  end
+
+  def ==(other)
+    if @kind != other.kind
+      return false
+    end
+    if @previous_source_version != other.previous_source_version
+      return false
+    end
+    if @current != other.current
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type IndexedVersionRecord
+class IndexedVersionRecord
+  attr_reader :source_version, :catalog_version, :index_count
+
+  def initialize(source_version:, catalog_version:, index_count:)
+    @source_version = source_version
+    @catalog_version = catalog_version
+    @index_count = index_count
+  end
+
+  def ==(other)
+    if @source_version != other.source_version
+      return false
+    end
+    if @catalog_version != other.catalog_version
+      return false
+    end
+    if @index_count != other.index_count
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type SecondaryIndexLimitsRecord
+class SecondaryIndexLimitsRecord
+  attr_reader :max_term_bytes, :max_projection_bytes, :max_all_value_bytes, :max_terms_per_record, :max_projected_bytes_per_record, :max_derived_mutations_per_transaction, :max_projected_bytes_per_transaction, :max_indexes, :build_page_size, :max_temporary_sort_bytes, :max_bundle_nodes, :max_bundle_bytes, :max_verification_entries, :max_write_retries, :max_build_retries
+
+  def initialize(max_term_bytes:, max_projection_bytes:, max_all_value_bytes:, max_terms_per_record:, max_projected_bytes_per_record:, max_derived_mutations_per_transaction:, max_projected_bytes_per_transaction:, max_indexes:, build_page_size:, max_temporary_sort_bytes:, max_bundle_nodes:, max_bundle_bytes:, max_verification_entries:, max_write_retries:, max_build_retries:)
+    @max_term_bytes = max_term_bytes
+    @max_projection_bytes = max_projection_bytes
+    @max_all_value_bytes = max_all_value_bytes
+    @max_terms_per_record = max_terms_per_record
+    @max_projected_bytes_per_record = max_projected_bytes_per_record
+    @max_derived_mutations_per_transaction = max_derived_mutations_per_transaction
+    @max_projected_bytes_per_transaction = max_projected_bytes_per_transaction
+    @max_indexes = max_indexes
+    @build_page_size = build_page_size
+    @max_temporary_sort_bytes = max_temporary_sort_bytes
+    @max_bundle_nodes = max_bundle_nodes
+    @max_bundle_bytes = max_bundle_bytes
+    @max_verification_entries = max_verification_entries
+    @max_write_retries = max_write_retries
+    @max_build_retries = max_build_retries
+  end
+
+  def ==(other)
+    if @max_term_bytes != other.max_term_bytes
+      return false
+    end
+    if @max_projection_bytes != other.max_projection_bytes
+      return false
+    end
+    if @max_all_value_bytes != other.max_all_value_bytes
+      return false
+    end
+    if @max_terms_per_record != other.max_terms_per_record
+      return false
+    end
+    if @max_projected_bytes_per_record != other.max_projected_bytes_per_record
+      return false
+    end
+    if @max_derived_mutations_per_transaction != other.max_derived_mutations_per_transaction
+      return false
+    end
+    if @max_projected_bytes_per_transaction != other.max_projected_bytes_per_transaction
+      return false
+    end
+    if @max_indexes != other.max_indexes
+      return false
+    end
+    if @build_page_size != other.build_page_size
+      return false
+    end
+    if @max_temporary_sort_bytes != other.max_temporary_sort_bytes
+      return false
+    end
+    if @max_bundle_nodes != other.max_bundle_nodes
+      return false
+    end
+    if @max_bundle_bytes != other.max_bundle_bytes
+      return false
+    end
+    if @max_verification_entries != other.max_verification_entries
+      return false
+    end
+    if @max_write_retries != other.max_write_retries
+      return false
+    end
+    if @max_build_retries != other.max_build_retries
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type ContentGraphLimitsRecord
+class ContentGraphLimitsRecord
+  attr_reader :max_objects, :max_depth, :max_bytes, :max_references_per_object
+
+  def initialize(max_objects:, max_depth:, max_bytes:, max_references_per_object:)
+    @max_objects = max_objects
+    @max_depth = max_depth
+    @max_bytes = max_bytes
+    @max_references_per_object = max_references_per_object
+  end
+
+  def ==(other)
+    if @max_objects != other.max_objects
+      return false
+    end
+    if @max_depth != other.max_depth
+      return false
+    end
+    if @max_bytes != other.max_bytes
+      return false
+    end
+    if @max_references_per_object != other.max_references_per_object
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type ExactProximityRecordRecord
+class ExactProximityRecordRecord
+  attr_reader :vector, :value
+
+  def initialize(vector:, value:)
+    @vector = vector
+    @value = value
+  end
+
+  def ==(other)
+    if @vector != other.vector
+      return false
+    end
+    if @value != other.value
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type ProximityConfigRecord
+class ProximityConfigRecord
+  attr_reader :dimensions, :metric, :log_chunk_size, :level_hash_seed, :min_page_bytes, :target_page_bytes, :max_page_bytes, :overflow_hash_seed, :inline_threshold_bytes, :scalar_quantization_group_size
+
+  def initialize(dimensions:, metric:, log_chunk_size:, level_hash_seed:, min_page_bytes:, target_page_bytes:, max_page_bytes:, overflow_hash_seed:, inline_threshold_bytes:, scalar_quantization_group_size:)
+    @dimensions = dimensions
+    @metric = metric
+    @log_chunk_size = log_chunk_size
+    @level_hash_seed = level_hash_seed
+    @min_page_bytes = min_page_bytes
+    @target_page_bytes = target_page_bytes
+    @max_page_bytes = max_page_bytes
+    @overflow_hash_seed = overflow_hash_seed
+    @inline_threshold_bytes = inline_threshold_bytes
+    @scalar_quantization_group_size = scalar_quantization_group_size
+  end
+
+  def ==(other)
+    if @dimensions != other.dimensions
+      return false
+    end
+    if @metric != other.metric
+      return false
+    end
+    if @log_chunk_size != other.log_chunk_size
+      return false
+    end
+    if @level_hash_seed != other.level_hash_seed
+      return false
+    end
+    if @min_page_bytes != other.min_page_bytes
+      return false
+    end
+    if @target_page_bytes != other.target_page_bytes
+      return false
+    end
+    if @max_page_bytes != other.max_page_bytes
+      return false
+    end
+    if @overflow_hash_seed != other.overflow_hash_seed
+      return false
+    end
+    if @inline_threshold_bytes != other.inline_threshold_bytes
+      return false
+    end
+    if @scalar_quantization_group_size != other.scalar_quantization_group_size
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type ProximityFilterRecord
+class ProximityFilterRecord
+  attr_reader :kind, :start, :range_end, :prefix, :eligible_keys
+
+  def initialize(kind:, start:, range_end:, prefix:, eligible_keys:)
+    @kind = kind
+    @start = start
+    @range_end = range_end
+    @prefix = prefix
+    @eligible_keys = eligible_keys
+  end
+
+  def ==(other)
+    if @kind != other.kind
+      return false
+    end
+    if @start != other.start
+      return false
+    end
+    if @range_end != other.range_end
+      return false
+    end
+    if @prefix != other.prefix
+      return false
+    end
+    if @eligible_keys != other.eligible_keys
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type ProximityMembershipProofRecord
+class ProximityMembershipProofRecord
+  attr_reader :descriptor, :descriptor_bytes, :directory_proof, :record_bytes
+
+  def initialize(descriptor:, descriptor_bytes:, directory_proof:, record_bytes:)
+    @descriptor = descriptor
+    @descriptor_bytes = descriptor_bytes
+    @directory_proof = directory_proof
+    @record_bytes = record_bytes
+  end
+
+  def ==(other)
+    if @descriptor != other.descriptor
+      return false
+    end
+    if @descriptor_bytes != other.descriptor_bytes
+      return false
+    end
+    if @directory_proof != other.directory_proof
+      return false
+    end
+    if @record_bytes != other.record_bytes
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type ProximityMembershipVerificationRecord
+class ProximityMembershipVerificationRecord
+  attr_reader :descriptor, :key, :record
+
+  def initialize(descriptor:, key:, record:)
+    @descriptor = descriptor
+    @key = key
+    @record = record
+  end
+
+  def ==(other)
+    if @descriptor != other.descriptor
+      return false
+    end
+    if @key != other.key
+      return false
+    end
+    if @record != other.record
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type ProximityMutationRecord
+class ProximityMutationRecord
+  attr_reader :key, :vector, :value
+
+  def initialize(key:, vector:, value:)
+    @key = key
+    @vector = vector
+    @value = value
+  end
+
+  def ==(other)
+    if @key != other.key
+      return false
+    end
+    if @vector != other.vector
+      return false
+    end
+    if @value != other.value
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type ProximityMutationResultRecord
+class ProximityMutationResultRecord
+  attr_reader :map, :stats
+
+  def initialize(map:, stats:)
+    @map = map
+    @stats = stats
+  end
+
+  def ==(other)
+    if @map != other.map
+      return false
+    end
+    if @stats != other.stats
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type ProximityMutationStatsRecord
+class ProximityMutationStatsRecord
+  attr_reader :directory_entries_scanned, :directory_nodes_read, :directory_nodes_rebuilt, :directory_nodes_written, :directory_nodes_reused, :directory_levels_rebuilt, :directory_right_edge_rebuilt, :nodes_read, :nodes_written, :nodes_reused, :records_rebuilt, :distance_evaluations, :full_proximity_rebuild
+
+  def initialize(directory_entries_scanned:, directory_nodes_read:, directory_nodes_rebuilt:, directory_nodes_written:, directory_nodes_reused:, directory_levels_rebuilt:, directory_right_edge_rebuilt:, nodes_read:, nodes_written:, nodes_reused:, records_rebuilt:, distance_evaluations:, full_proximity_rebuild:)
+    @directory_entries_scanned = directory_entries_scanned
+    @directory_nodes_read = directory_nodes_read
+    @directory_nodes_rebuilt = directory_nodes_rebuilt
+    @directory_nodes_written = directory_nodes_written
+    @directory_nodes_reused = directory_nodes_reused
+    @directory_levels_rebuilt = directory_levels_rebuilt
+    @directory_right_edge_rebuilt = directory_right_edge_rebuilt
+    @nodes_read = nodes_read
+    @nodes_written = nodes_written
+    @nodes_reused = nodes_reused
+    @records_rebuilt = records_rebuilt
+    @distance_evaluations = distance_evaluations
+    @full_proximity_rebuild = full_proximity_rebuild
+  end
+
+  def ==(other)
+    if @directory_entries_scanned != other.directory_entries_scanned
+      return false
+    end
+    if @directory_nodes_read != other.directory_nodes_read
+      return false
+    end
+    if @directory_nodes_rebuilt != other.directory_nodes_rebuilt
+      return false
+    end
+    if @directory_nodes_written != other.directory_nodes_written
+      return false
+    end
+    if @directory_nodes_reused != other.directory_nodes_reused
+      return false
+    end
+    if @directory_levels_rebuilt != other.directory_levels_rebuilt
+      return false
+    end
+    if @directory_right_edge_rebuilt != other.directory_right_edge_rebuilt
+      return false
+    end
+    if @nodes_read != other.nodes_read
+      return false
+    end
+    if @nodes_written != other.nodes_written
+      return false
+    end
+    if @nodes_reused != other.nodes_reused
+      return false
+    end
+    if @records_rebuilt != other.records_rebuilt
+      return false
+    end
+    if @distance_evaluations != other.distance_evaluations
+      return false
+    end
+    if @full_proximity_rebuild != other.full_proximity_rebuild
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type ProximityNeighborRecord
+class ProximityNeighborRecord
+  attr_reader :key, :value, :distance
+
+  def initialize(key:, value:, distance:)
+    @key = key
+    @value = value
+    @distance = distance
+  end
+
+  def ==(other)
+    if @key != other.key
+      return false
+    end
+    if @value != other.value
+      return false
+    end
+    if @distance != other.distance
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type ProximityRecordRecord
+class ProximityRecordRecord
+  attr_reader :key, :vector, :value
+
+  def initialize(key:, vector:, value:)
+    @key = key
+    @vector = vector
+    @value = value
+  end
+
+  def ==(other)
+    if @key != other.key
+      return false
+    end
+    if @vector != other.vector
+      return false
+    end
+    if @value != other.value
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type ProximitySearchRequestRecord
+class ProximitySearchRequestRecord
+  attr_reader :query, :k, :policy, :adaptive_quality, :budget, :filter, :kernel, :backend, :hnsw_ef_search, :pq_rerank_multiplier
+
+  def initialize(query:, k:, policy:, adaptive_quality:, budget:, filter:, kernel:, backend:, hnsw_ef_search:, pq_rerank_multiplier:)
+    @query = query
+    @k = k
+    @policy = policy
+    @adaptive_quality = adaptive_quality
+    @budget = budget
+    @filter = filter
+    @kernel = kernel
+    @backend = backend
+    @hnsw_ef_search = hnsw_ef_search
+    @pq_rerank_multiplier = pq_rerank_multiplier
+  end
+
+  def ==(other)
+    if @query != other.query
+      return false
+    end
+    if @k != other.k
+      return false
+    end
+    if @policy != other.policy
+      return false
+    end
+    if @adaptive_quality != other.adaptive_quality
+      return false
+    end
+    if @budget != other.budget
+      return false
+    end
+    if @filter != other.filter
+      return false
+    end
+    if @kernel != other.kernel
+      return false
+    end
+    if @backend != other.backend
+      return false
+    end
+    if @hnsw_ef_search != other.hnsw_ef_search
+      return false
+    end
+    if @pq_rerank_multiplier != other.pq_rerank_multiplier
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type ProximitySearchResultRecord
+class ProximitySearchResultRecord
+  attr_reader :neighbors, :stats, :completion, :backend, :plan_format_version
+
+  def initialize(neighbors:, stats:, completion:, backend:, plan_format_version:)
+    @neighbors = neighbors
+    @stats = stats
+    @completion = completion
+    @backend = backend
+    @plan_format_version = plan_format_version
+  end
+
+  def ==(other)
+    if @neighbors != other.neighbors
+      return false
+    end
+    if @stats != other.stats
+      return false
+    end
+    if @completion != other.completion
+      return false
+    end
+    if @backend != other.backend
+      return false
+    end
+    if @plan_format_version != other.plan_format_version
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type ProximitySearchStatsRecord
+class ProximitySearchStatsRecord
+  attr_reader :levels_visited, :nodes_read, :bytes_read, :physical_bytes_read, :committed_bytes, :distance_evaluations, :quantized_distance_evaluations, :reranked_candidates, :frontier_peak, :candidate_handles_peak, :candidate_retained_bytes_peak
+
+  def initialize(levels_visited:, nodes_read:, bytes_read:, physical_bytes_read:, committed_bytes:, distance_evaluations:, quantized_distance_evaluations:, reranked_candidates:, frontier_peak:, candidate_handles_peak:, candidate_retained_bytes_peak:)
+    @levels_visited = levels_visited
+    @nodes_read = nodes_read
+    @bytes_read = bytes_read
+    @physical_bytes_read = physical_bytes_read
+    @committed_bytes = committed_bytes
+    @distance_evaluations = distance_evaluations
+    @quantized_distance_evaluations = quantized_distance_evaluations
+    @reranked_candidates = reranked_candidates
+    @frontier_peak = frontier_peak
+    @candidate_handles_peak = candidate_handles_peak
+    @candidate_retained_bytes_peak = candidate_retained_bytes_peak
+  end
+
+  def ==(other)
+    if @levels_visited != other.levels_visited
+      return false
+    end
+    if @nodes_read != other.nodes_read
+      return false
+    end
+    if @bytes_read != other.bytes_read
+      return false
+    end
+    if @physical_bytes_read != other.physical_bytes_read
+      return false
+    end
+    if @committed_bytes != other.committed_bytes
+      return false
+    end
+    if @distance_evaluations != other.distance_evaluations
+      return false
+    end
+    if @quantized_distance_evaluations != other.quantized_distance_evaluations
+      return false
+    end
+    if @reranked_candidates != other.reranked_candidates
+      return false
+    end
+    if @frontier_peak != other.frontier_peak
+      return false
+    end
+    if @candidate_handles_peak != other.candidate_handles_peak
+      return false
+    end
+    if @candidate_retained_bytes_peak != other.candidate_retained_bytes_peak
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type ProximityStructuralProofRecord
+class ProximityStructuralProofRecord
+  attr_reader :descriptor, :objects
+
+  def initialize(descriptor:, objects:)
+    @descriptor = descriptor
+    @objects = objects
+  end
+
+  def ==(other)
+    if @descriptor != other.descriptor
+      return false
+    end
+    if @objects != other.objects
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type ProximityStructuralVerificationRecord
+class ProximityStructuralVerificationRecord
+  attr_reader :descriptor, :object_count, :summary
+
+  def initialize(descriptor:, object_count:, summary:)
+    @descriptor = descriptor
+    @object_count = object_count
+    @summary = summary
+  end
+
+  def ==(other)
+    if @descriptor != other.descriptor
+      return false
+    end
+    if @object_count != other.object_count
+      return false
+    end
+    if @summary != other.summary
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type ProximityVerificationRecord
+class ProximityVerificationRecord
+  attr_reader :record_count, :proximity_node_count, :external_vector_count, :quantized_node_count, :scalar_quantizer_count, :overflow_page_count, :overflow_directory_count, :maximum_level, :maximum_node_bytes, :distance_checks
+
+  def initialize(record_count:, proximity_node_count:, external_vector_count:, quantized_node_count:, scalar_quantizer_count:, overflow_page_count:, overflow_directory_count:, maximum_level:, maximum_node_bytes:, distance_checks:)
+    @record_count = record_count
+    @proximity_node_count = proximity_node_count
+    @external_vector_count = external_vector_count
+    @quantized_node_count = quantized_node_count
+    @scalar_quantizer_count = scalar_quantizer_count
+    @overflow_page_count = overflow_page_count
+    @overflow_directory_count = overflow_directory_count
+    @maximum_level = maximum_level
+    @maximum_node_bytes = maximum_node_bytes
+    @distance_checks = distance_checks
+  end
+
+  def ==(other)
+    if @record_count != other.record_count
+      return false
+    end
+    if @proximity_node_count != other.proximity_node_count
+      return false
+    end
+    if @external_vector_count != other.external_vector_count
+      return false
+    end
+    if @quantized_node_count != other.quantized_node_count
+      return false
+    end
+    if @scalar_quantizer_count != other.scalar_quantizer_count
+      return false
+    end
+    if @overflow_page_count != other.overflow_page_count
+      return false
+    end
+    if @overflow_directory_count != other.overflow_directory_count
+      return false
+    end
+    if @maximum_level != other.maximum_level
+      return false
+    end
+    if @maximum_node_bytes != other.maximum_node_bytes
+      return false
+    end
+    if @distance_checks != other.distance_checks
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type SearchBudgetRecord
+class SearchBudgetRecord
+  attr_reader :max_nodes, :max_committed_bytes, :max_distance_evaluations, :max_frontier_entries
+
+  def initialize(max_nodes:, max_committed_bytes:, max_distance_evaluations:, max_frontier_entries:)
+    @max_nodes = max_nodes
+    @max_committed_bytes = max_committed_bytes
+    @max_distance_evaluations = max_distance_evaluations
+    @max_frontier_entries = max_frontier_entries
+  end
+
+  def ==(other)
+    if @max_nodes != other.max_nodes
+      return false
+    end
+    if @max_committed_bytes != other.max_committed_bytes
+      return false
+    end
+    if @max_distance_evaluations != other.max_distance_evaluations
+      return false
+    end
+    if @max_frontier_entries != other.max_frontier_entries
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type TypedContentObjectRecord
+class TypedContentObjectRecord
+  attr_reader :kind, :cid, :dimensions, :bytes, :depth
+
+  def initialize(kind:, cid:, dimensions:, bytes:, depth:)
+    @kind = kind
+    @cid = cid
+    @dimensions = dimensions
+    @bytes = bytes
+    @depth = depth
+  end
+
+  def ==(other)
+    if @kind != other.kind
+      return false
+    end
+    if @cid != other.cid
+      return false
+    end
+    if @dimensions != other.dimensions
+      return false
+    end
+    if @bytes != other.bytes
+      return false
+    end
+    if @depth != other.depth
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type MapCatalogVerificationRecord
+class MapCatalogVerificationRecord
+  attr_reader :head, :version_count, :reachable_nodes, :reachable_bytes
+
+  def initialize(head:, version_count:, reachable_nodes:, reachable_bytes:)
+    @head = head
+    @version_count = version_count
+    @reachable_nodes = reachable_nodes
+    @reachable_bytes = reachable_bytes
+  end
+
+  def ==(other)
+    if @head != other.head
+      return false
+    end
+    if @version_count != other.version_count
+      return false
+    end
+    if @reachable_nodes != other.reachable_nodes
+      return false
+    end
+    if @reachable_bytes != other.reachable_bytes
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type MapChangeEventRecord
+class MapChangeEventRecord
+  attr_reader :previous, :current, :diffs
+
+  def initialize(previous:, current:, diffs:)
+    @previous = previous
+    @current = current
+    @diffs = diffs
+  end
+
+  def ==(other)
+    if @previous != other.previous
+      return false
+    end
+    if @current != other.current
+      return false
+    end
+    if @diffs != other.diffs
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type MapUpdateRecord
+class MapUpdateRecord
+  attr_reader :kind, :previous, :current
+
+  def initialize(kind:, previous:, current:)
+    @kind = kind
+    @previous = previous
+    @current = current
+  end
+
+  def ==(other)
+    if @kind != other.kind
+      return false
+    end
+    if @previous != other.previous
+      return false
+    end
+    if @current != other.current
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type MapVersionRecord
+class MapVersionRecord
+  attr_reader :id, :tree, :created_at_millis, :is_head
+
+  def initialize(id:, tree:, created_at_millis:, is_head:)
+    @id = id
+    @tree = tree
+    @created_at_millis = created_at_millis
+    @is_head = is_head
+  end
+
+  def ==(other)
+    if @id != other.id
+      return false
+    end
+    if @tree != other.tree
+      return false
+    end
+    if @created_at_millis != other.created_at_millis
+      return false
+    end
+    if @is_head != other.is_head
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type VersionPruneRecord
+class VersionPruneRecord
+  attr_reader :retained, :removed
+
+  def initialize(retained:, removed:)
+    @retained = retained
+    @removed = removed
+  end
+
+  def ==(other)
+    if @retained != other.retained
+      return false
+    end
+    if @removed != other.removed
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type VersionedMapBatchResultRecord
+class VersionedMapBatchResultRecord
+  attr_reader :version, :stats
+
+  def initialize(version:, stats:)
+    @version = version
+    @stats = stats
+  end
+
+  def ==(other)
+    if @version != other.version
+      return false
+    end
+    if @stats != other.stats
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type VersionedTransactionCommitRecord
+class VersionedTransactionCommitRecord
+  attr_reader :applied, :versions, :conflict_map_id, :conflict_current
+
+  def initialize(applied:, versions:, conflict_map_id:, conflict_current:)
+    @applied = applied
+    @versions = versions
+    @conflict_map_id = conflict_map_id
+    @conflict_current = conflict_current
+  end
+
+  def ==(other)
+    if @applied != other.applied
+      return false
+    end
+    if @versions != other.versions
+      return false
+    end
+    if @conflict_map_id != other.conflict_map_id
+      return false
+    end
+    if @conflict_current != other.conflict_current
+      return false
+    end
+
+    true
+  end
+end
+
 
 
 
@@ -15706,6 +22192,75 @@ end
 
 
 
+def self.default_content_graph_limits()
+  result = Prolly.rust_call(:uniffi_prolly_bindings_fn_func_default_content_graph_limits,)
+  return result.consumeIntoTypeContentGraphLimitsRecord
+end
+
+
+
+
+
+def self.default_proximity_config(dimensions)
+    dimensions = Prolly::uniffi_in_range(dimensions, "u32", 0, 2**32)
+
+
+  result = Prolly.rust_call(:uniffi_prolly_bindings_fn_func_default_proximity_config,dimensions)
+  return result.consumeIntoTypeProximityConfigRecord
+end
+
+
+
+
+
+def self.exact_proximity_search_request(query, k)
+    query = query
+    RustBuffer.check_lower_Sequencef32(query)
+
+    k = Prolly::uniffi_in_range(k, "u64", 0, 2**64)
+
+
+  result = Prolly.rust_call(:uniffi_prolly_bindings_fn_func_exact_proximity_search_request,RustBuffer.alloc_from_Sequencef32(query),k)
+  return result.consumeIntoTypeProximitySearchRequestRecord
+end
+
+
+
+
+
+def self.verify_proximity_membership_proof(proof, expected_descriptor)
+    proof = proof
+    RustBuffer.check_lower_TypeProximityMembershipProofRecord(proof)
+
+    expected_descriptor = (expected_descriptor ? Prolly::uniffi_bytes(expected_descriptor) : nil)
+    RustBuffer.check_lower_Optionalbytes(expected_descriptor)
+
+  result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_func_verify_proximity_membership_proof,RustBuffer.alloc_from_TypeProximityMembershipProofRecord(proof),RustBuffer.alloc_from_Optionalbytes(expected_descriptor))
+  return result.consumeIntoTypeProximityMembershipVerificationRecord
+end
+
+
+
+
+
+def self.verify_proximity_structure_proof(proof, expected_descriptor, limits)
+    proof = proof
+    RustBuffer.check_lower_TypeProximityStructuralProofRecord(proof)
+
+    expected_descriptor = (expected_descriptor ? Prolly::uniffi_bytes(expected_descriptor) : nil)
+    RustBuffer.check_lower_Optionalbytes(expected_descriptor)
+
+    limits = limits
+    RustBuffer.check_lower_TypeContentGraphLimitsRecord(limits)
+
+  result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_func_verify_proximity_structure_proof,RustBuffer.alloc_from_TypeProximityStructuralProofRecord(proof),RustBuffer.alloc_from_Optionalbytes(expected_descriptor),RustBuffer.alloc_from_TypeContentGraphLimitsRecord(limits))
+  return result.consumeIntoTypeProximityStructuralVerificationRecord
+end
+
+
+
+
+
   class ConflictVisitorCallback
 
   # A private helper for initializing instances of the class from a raw handle,
@@ -16444,6 +22999,10 @@ end
     result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_begin_transaction,uniffi_clone_handle(),)
     return ProllyTransaction.uniffi_allocate(result)
   end
+  def begin_versioned_transaction()
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_begin_versioned_transaction,uniffi_clone_handle(),)
+    return BindingVersionedTransaction.uniffi_allocate(result)
+  end
   def build_from_entries(entries)
         entries = entries
         RustBuffer.check_lower_SequenceTypeEntryRecord(entries)
@@ -16455,6 +23014,16 @@ end
         RustBuffer.check_lower_SequenceTypeEntryRecord(entries)
     result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_build_from_sorted_entries,uniffi_clone_handle(),RustBuffer.alloc_from_SequenceTypeEntryRecord(entries))
     return result.consumeIntoTypeTreeRecord
+  end
+  def build_proximity_map(config, records, threads)
+        config = config
+        RustBuffer.check_lower_TypeProximityConfigRecord(config)
+        records = records
+        RustBuffer.check_lower_SequenceTypeProximityRecordRecord(records)
+        threads = (threads ? Prolly::uniffi_in_range(threads, "u64", 0, 2**64) : nil)
+        RustBuffer.check_lower_Optionalu64(threads)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_build_proximity_map,uniffi_clone_handle(),RustBuffer.alloc_from_TypeProximityConfigRecord(config),RustBuffer.alloc_from_SequenceTypeProximityRecordRecord(records),RustBuffer.alloc_from_Optionalu64(threads))
+    return BindingProximityMap.uniffi_allocate(result)
   end
   def cache_stats()
     result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_cache_stats,uniffi_clone_handle(),)
@@ -16766,6 +23335,14 @@ end
     result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_import_snapshot,uniffi_clone_handle(),RustBuffer.alloc_from_TypeSnapshotBundleRecord(bundle))
     return result.consumeIntoTypeTreeRecord
   end
+  def indexed_map(id, registry)
+        id = Prolly::uniffi_bytes(id)
+
+        registry = registry
+        (BindingIndexRegistry.uniffi_check_lower registry)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_indexed_map,uniffi_clone_handle(),RustBuffer.allocFromBytes(id),(BindingIndexRegistry.uniffi_lower registry))
+    return BindingIndexedMap.uniffi_allocate(result)
+  end
   def last_entry(tree)
         tree = tree
         RustBuffer.check_lower_TypeTreeRecord(tree)
@@ -16809,6 +23386,12 @@ end
         RustBuffer.check_lower_Sequencebytes(names)
     result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_load_named_roots,uniffi_clone_handle(),RustBuffer.alloc_from_Sequencebytes(names))
     return result.consumeIntoTypeNamedRootSelectionRecord
+  end
+  def load_proximity_map(descriptor)
+        descriptor = Prolly::uniffi_bytes(descriptor)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_load_proximity_map,uniffi_clone_handle(),RustBuffer.allocFromBytes(descriptor))
+    return BindingProximityMap.uniffi_allocate(result)
   end
   def load_retained_named_roots(retention)
         retention = retention
@@ -17518,6 +24101,12 @@ end
     result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_upper_bound,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.allocFromBytes(key))
     return result.consumeIntoOptionalTypeEntryRecord
   end
+  def versioned_map(id)
+        id = Prolly::uniffi_bytes(id)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollyengine_versioned_map,uniffi_clone_handle(),RustBuffer.allocFromBytes(id))
+    return BindingVersionedMap.uniffi_allocate(result)
+  end
 
 end
 
@@ -17736,6 +24325,1989 @@ end
   end
   def rollback()
       Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_prollytransaction_rollback,uniffi_clone_handle(),)
+  end
+
+
+end
+
+  class BindingIndexRegistry
+
+  # A private helper for initializing instances of the class from a raw handle,
+  # bypassing any initialization logic and ensuring they are GC'd properly.
+  def self.uniffi_allocate(handle)
+    inst = allocate
+    inst.instance_variable_set :@handle, handle
+    ObjectSpace.define_finalizer(inst, uniffi_define_finalizer_by_handle(handle, inst.object_id))
+    return inst
+  end
+
+  # A private helper for registering an object finalizer.
+  # N.B. it's important that this does not capture a reference
+  # to the actual instance, only its underlying handle.
+  def self.uniffi_define_finalizer_by_handle(handle, object_id)
+    Proc.new do |_id|
+      Prolly.rust_call(
+        :uniffi_prolly_bindings_fn_free_bindingindexregistry,
+        handle
+      )
+    end
+  end
+
+  # A private helper for lowering instances into a raw handle.
+  # This does an explicit typecheck, because accidentally lowering a different type of
+  # object in a place where this type is expected, could lead to memory unsafety.
+  def self.uniffi_check_lower(inst)
+    if not inst.is_a? self
+      raise TypeError.new "Expected a BindingIndexRegistry instance, got #{inst}"
+    end
+  end
+
+  def uniffi_clone_handle()
+    return Prolly.rust_call(
+      :uniffi_prolly_bindings_fn_clone_bindingindexregistry,
+      @handle
+    )
+  end
+
+  def self.uniffi_lower(inst)
+    return inst.uniffi_clone_handle()
+  end
+  def initialize()
+    handle = Prolly.rust_call(:uniffi_prolly_bindings_fn_constructor_bindingindexregistry_new,)
+    @handle = handle
+    ObjectSpace.define_finalizer(self, self.class.uniffi_define_finalizer_by_handle(handle, self.object_id))
+  end
+
+
+
+  def len()
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingindexregistry_len,uniffi_clone_handle(),)
+    return result.to_i
+  end
+  def register(name, generation, extractor_id, projection, limits, extractor)
+        name = Prolly::uniffi_bytes(name)
+
+        generation = Prolly::uniffi_in_range(generation, "u64", 0, 2**64)
+
+        extractor_id = Prolly::uniffi_utf8(extractor_id)
+
+        projection = projection
+        RustBuffer.check_lower_TypeIndexProjectionRecord(projection)
+        limits = (limits ? limits : nil)
+        RustBuffer.check_lower_OptionalTypeSecondaryIndexLimitsRecord(limits)
+        extractor = extractor
+        (SecondaryIndexExtractorCallback.uniffi_check_lower extractor)
+      Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingindexregistry_register,uniffi_clone_handle(),RustBuffer.allocFromBytes(name),generation,RustBuffer.allocFromString(extractor_id),RustBuffer.alloc_from_TypeIndexProjectionRecord(projection),RustBuffer.alloc_from_OptionalTypeSecondaryIndexLimitsRecord(limits),(SecondaryIndexExtractorCallback.uniffi_lower extractor))
+  end
+
+
+end
+
+  class BindingIndexedMap
+
+  # A private helper for initializing instances of the class from a raw handle,
+  # bypassing any initialization logic and ensuring they are GC'd properly.
+  def self.uniffi_allocate(handle)
+    inst = allocate
+    inst.instance_variable_set :@handle, handle
+    ObjectSpace.define_finalizer(inst, uniffi_define_finalizer_by_handle(handle, inst.object_id))
+    return inst
+  end
+
+  # A private helper for registering an object finalizer.
+  # N.B. it's important that this does not capture a reference
+  # to the actual instance, only its underlying handle.
+  def self.uniffi_define_finalizer_by_handle(handle, object_id)
+    Proc.new do |_id|
+      Prolly.rust_call(
+        :uniffi_prolly_bindings_fn_free_bindingindexedmap,
+        handle
+      )
+    end
+  end
+
+  # A private helper for lowering instances into a raw handle.
+  # This does an explicit typecheck, because accidentally lowering a different type of
+  # object in a place where this type is expected, could lead to memory unsafety.
+  def self.uniffi_check_lower(inst)
+    if not inst.is_a? self
+      raise TypeError.new "Expected a BindingIndexedMap instance, got #{inst}"
+    end
+  end
+
+  def uniffi_clone_handle()
+    return Prolly.rust_call(
+      :uniffi_prolly_bindings_fn_clone_bindingindexedmap,
+      @handle
+    )
+  end
+
+  def self.uniffi_lower(inst)
+    return inst.uniffi_clone_handle()
+  end
+  def initialize(engine, id, registry)
+        engine = engine
+        (ProllyEngine.uniffi_check_lower engine)
+        id = Prolly::uniffi_bytes(id)
+
+        registry = registry
+        (BindingIndexRegistry.uniffi_check_lower registry)
+    handle = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_constructor_bindingindexedmap_new,(ProllyEngine.uniffi_lower engine),RustBuffer.allocFromBytes(id),(BindingIndexRegistry.uniffi_lower registry))
+    @handle = handle
+    ObjectSpace.define_finalizer(self, self.class.uniffi_define_finalizer_by_handle(handle, self.object_id))
+  end
+
+
+
+  def apply(mutations)
+        mutations = mutations
+        RustBuffer.check_lower_SequenceTypeMutationRecord(mutations)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingindexedmap_apply,uniffi_clone_handle(),RustBuffer.alloc_from_SequenceTypeMutationRecord(mutations))
+    return result.consumeIntoTypeIndexedVersionRecord
+  end
+  def apply_if(expected_source, mutations)
+        expected_source = (expected_source ? Prolly::uniffi_bytes(expected_source) : nil)
+        RustBuffer.check_lower_Optionalbytes(expected_source)
+        mutations = mutations
+        RustBuffer.check_lower_SequenceTypeMutationRecord(mutations)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingindexedmap_apply_if,uniffi_clone_handle(),RustBuffer.alloc_from_Optionalbytes(expected_source),RustBuffer.alloc_from_SequenceTypeMutationRecord(mutations))
+    return result.consumeIntoTypeIndexedUpdateRecord
+  end
+  def deactivate_index(name)
+        name = Prolly::uniffi_bytes(name)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingindexedmap_deactivate_index,uniffi_clone_handle(),RustBuffer.allocFromBytes(name))
+    return result.consumeIntoTypeIndexedVersionRecord
+  end
+  def delete(key)
+        key = Prolly::uniffi_bytes(key)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingindexedmap_delete,uniffi_clone_handle(),RustBuffer.allocFromBytes(key))
+    return result.consumeIntoTypeIndexedVersionRecord
+  end
+  def ensure_index(name)
+        name = Prolly::uniffi_bytes(name)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingindexedmap_ensure_index,uniffi_clone_handle(),RustBuffer.allocFromBytes(name))
+    return result.consumeIntoTypeIndexBuildResultRecord
+  end
+  def export_current()
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingindexedmap_export_current,uniffi_clone_handle(),)
+    return result.consumeIntoBytes
+  end
+  def get(key)
+        key = Prolly::uniffi_bytes(key)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingindexedmap_get,uniffi_clone_handle(),RustBuffer.allocFromBytes(key))
+    return result.consumeIntoOptionalbytes
+  end
+  def health()
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingindexedmap_health,uniffi_clone_handle(),)
+    return result.consumeIntoTypeIndexedMapHealthRecord
+  end
+  def id()
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_bindingindexedmap_id,uniffi_clone_handle(),)
+    return result.consumeIntoBytes
+  end
+  def import_current(bundle, expected_source)
+        bundle = Prolly::uniffi_bytes(bundle)
+
+        expected_source = (expected_source ? Prolly::uniffi_bytes(expected_source) : nil)
+        RustBuffer.check_lower_Optionalbytes(expected_source)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingindexedmap_import_current,uniffi_clone_handle(),RustBuffer.allocFromBytes(bundle),RustBuffer.alloc_from_Optionalbytes(expected_source))
+    return result.consumeIntoTypeIndexedVersionRecord
+  end
+  def keep_last(count)
+        count = Prolly::uniffi_in_range(count, "u64", 0, 2**64)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingindexedmap_keep_last,uniffi_clone_handle(),count)
+    return result.consumeIntoTypeIndexedRetentionRecord
+  end
+  def metrics()
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingindexedmap_metrics,uniffi_clone_handle(),)
+    return result.consumeIntoTypeIndexedMapMetricsRecord
+  end
+  def put(key, value)
+        key = Prolly::uniffi_bytes(key)
+
+        value = Prolly::uniffi_bytes(value)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingindexedmap_put,uniffi_clone_handle(),RustBuffer.allocFromBytes(key),RustBuffer.allocFromBytes(value))
+    return result.consumeIntoTypeIndexedVersionRecord
+  end
+  def repair_index(name, source_version)
+        name = Prolly::uniffi_bytes(name)
+
+        source_version = Prolly::uniffi_bytes(source_version)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingindexedmap_repair_index,uniffi_clone_handle(),RustBuffer.allocFromBytes(name),RustBuffer.allocFromBytes(source_version))
+    return result.consumeIntoTypeIndexVerificationRecord
+  end
+  def snapshot()
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingindexedmap_snapshot,uniffi_clone_handle(),)
+    return BindingIndexedSnapshot.uniffi_allocate(result)
+  end
+  def snapshot_at(source_version)
+        source_version = Prolly::uniffi_bytes(source_version)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingindexedmap_snapshot_at,uniffi_clone_handle(),RustBuffer.allocFromBytes(source_version))
+    return BindingIndexedSnapshot.uniffi_allocate(result)
+  end
+  def snapshot_by_id(snapshot_id)
+        snapshot_id = snapshot_id
+        RustBuffer.check_lower_TypeIndexedSnapshotIdRecord(snapshot_id)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingindexedmap_snapshot_by_id,uniffi_clone_handle(),RustBuffer.alloc_from_TypeIndexedSnapshotIdRecord(snapshot_id))
+    return BindingIndexedSnapshot.uniffi_allocate(result)
+  end
+  def verify_all(source_version)
+        source_version = Prolly::uniffi_bytes(source_version)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingindexedmap_verify_all,uniffi_clone_handle(),RustBuffer.allocFromBytes(source_version))
+    return result.consumeIntoSequenceTypeIndexVerificationRecord
+  end
+  def verify_index(name, source_version)
+        name = Prolly::uniffi_bytes(name)
+
+        source_version = Prolly::uniffi_bytes(source_version)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingindexedmap_verify_index,uniffi_clone_handle(),RustBuffer.allocFromBytes(name),RustBuffer.allocFromBytes(source_version))
+    return result.consumeIntoTypeIndexVerificationRecord
+  end
+
+end
+
+  class BindingIndexedSnapshot
+
+  # A private helper for initializing instances of the class from a raw handle,
+  # bypassing any initialization logic and ensuring they are GC'd properly.
+  def self.uniffi_allocate(handle)
+    inst = allocate
+    inst.instance_variable_set :@handle, handle
+    ObjectSpace.define_finalizer(inst, uniffi_define_finalizer_by_handle(handle, inst.object_id))
+    return inst
+  end
+
+  # A private helper for registering an object finalizer.
+  # N.B. it's important that this does not capture a reference
+  # to the actual instance, only its underlying handle.
+  def self.uniffi_define_finalizer_by_handle(handle, object_id)
+    Proc.new do |_id|
+      Prolly.rust_call(
+        :uniffi_prolly_bindings_fn_free_bindingindexedsnapshot,
+        handle
+      )
+    end
+  end
+
+  # A private helper for lowering instances into a raw handle.
+  # This does an explicit typecheck, because accidentally lowering a different type of
+  # object in a place where this type is expected, could lead to memory unsafety.
+  def self.uniffi_check_lower(inst)
+    if not inst.is_a? self
+      raise TypeError.new "Expected a BindingIndexedSnapshot instance, got #{inst}"
+    end
+  end
+
+  def uniffi_clone_handle()
+    return Prolly.rust_call(
+      :uniffi_prolly_bindings_fn_clone_bindingindexedsnapshot,
+      @handle
+    )
+  end
+
+  def self.uniffi_lower(inst)
+    return inst.uniffi_clone_handle()
+  end
+
+
+
+  def id()
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_bindingindexedsnapshot_id,uniffi_clone_handle(),)
+    return result.consumeIntoTypeIndexedSnapshotIdRecord
+  end
+  def index(name)
+        name = Prolly::uniffi_bytes(name)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingindexedsnapshot_index,uniffi_clone_handle(),RustBuffer.allocFromBytes(name))
+    return BindingSecondaryIndexSnapshot.uniffi_allocate(result)
+  end
+
+end
+
+  class BindingSecondaryIndexSnapshot
+
+  # A private helper for initializing instances of the class from a raw handle,
+  # bypassing any initialization logic and ensuring they are GC'd properly.
+  def self.uniffi_allocate(handle)
+    inst = allocate
+    inst.instance_variable_set :@handle, handle
+    ObjectSpace.define_finalizer(inst, uniffi_define_finalizer_by_handle(handle, inst.object_id))
+    return inst
+  end
+
+  # A private helper for registering an object finalizer.
+  # N.B. it's important that this does not capture a reference
+  # to the actual instance, only its underlying handle.
+  def self.uniffi_define_finalizer_by_handle(handle, object_id)
+    Proc.new do |_id|
+      Prolly.rust_call(
+        :uniffi_prolly_bindings_fn_free_bindingsecondaryindexsnapshot,
+        handle
+      )
+    end
+  end
+
+  # A private helper for lowering instances into a raw handle.
+  # This does an explicit typecheck, because accidentally lowering a different type of
+  # object in a place where this type is expected, could lead to memory unsafety.
+  def self.uniffi_check_lower(inst)
+    if not inst.is_a? self
+      raise TypeError.new "Expected a BindingSecondaryIndexSnapshot instance, got #{inst}"
+    end
+  end
+
+  def uniffi_clone_handle()
+    return Prolly.rust_call(
+      :uniffi_prolly_bindings_fn_clone_bindingsecondaryindexsnapshot,
+      @handle
+    )
+  end
+
+  def self.uniffi_lower(inst)
+    return inst.uniffi_clone_handle()
+  end
+
+
+
+  def exact(term)
+        term = Prolly::uniffi_bytes(term)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_exact,uniffi_clone_handle(),RustBuffer.allocFromBytes(term))
+    return result.consumeIntoSequenceTypeIndexMatchRecord
+  end
+  def exact_page(term, cursor, limit)
+        term = Prolly::uniffi_bytes(term)
+
+        cursor = (cursor ? Prolly::uniffi_bytes(cursor) : nil)
+        RustBuffer.check_lower_Optionalbytes(cursor)
+        limit = Prolly::uniffi_in_range(limit, "u64", 0, 2**64)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_exact_page,uniffi_clone_handle(),RustBuffer.allocFromBytes(term),RustBuffer.alloc_from_Optionalbytes(cursor),limit)
+    return result.consumeIntoTypeIndexPageRecord
+  end
+  def exact_reverse_page(term, cursor, limit)
+        term = Prolly::uniffi_bytes(term)
+
+        cursor = (cursor ? Prolly::uniffi_bytes(cursor) : nil)
+        RustBuffer.check_lower_Optionalbytes(cursor)
+        limit = Prolly::uniffi_in_range(limit, "u64", 0, 2**64)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_exact_reverse_page,uniffi_clone_handle(),RustBuffer.allocFromBytes(term),RustBuffer.alloc_from_Optionalbytes(cursor),limit)
+    return result.consumeIntoTypeIndexPageRecord
+  end
+  def fast_handle()
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_fast_handle,uniffi_clone_handle(),)
+    return result.to_i
+  end
+  def name()
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_name,uniffi_clone_handle(),)
+    return result.consumeIntoBytes
+  end
+  def prefix(prefix)
+        prefix = Prolly::uniffi_bytes(prefix)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_prefix,uniffi_clone_handle(),RustBuffer.allocFromBytes(prefix))
+    return result.consumeIntoSequenceTypeIndexMatchRecord
+  end
+  def prefix_page(prefix, cursor, limit)
+        prefix = Prolly::uniffi_bytes(prefix)
+
+        cursor = (cursor ? Prolly::uniffi_bytes(cursor) : nil)
+        RustBuffer.check_lower_Optionalbytes(cursor)
+        limit = Prolly::uniffi_in_range(limit, "u64", 0, 2**64)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_prefix_page,uniffi_clone_handle(),RustBuffer.allocFromBytes(prefix),RustBuffer.alloc_from_Optionalbytes(cursor),limit)
+    return result.consumeIntoTypeIndexPageRecord
+  end
+  def prefix_reverse_page(prefix, cursor, limit)
+        prefix = Prolly::uniffi_bytes(prefix)
+
+        cursor = (cursor ? Prolly::uniffi_bytes(cursor) : nil)
+        RustBuffer.check_lower_Optionalbytes(cursor)
+        limit = Prolly::uniffi_in_range(limit, "u64", 0, 2**64)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_prefix_reverse_page,uniffi_clone_handle(),RustBuffer.allocFromBytes(prefix),RustBuffer.alloc_from_Optionalbytes(cursor),limit)
+    return result.consumeIntoTypeIndexPageRecord
+  end
+  def range(start, range_end)
+        start = Prolly::uniffi_bytes(start)
+
+        range_end = (range_end ? Prolly::uniffi_bytes(range_end) : nil)
+        RustBuffer.check_lower_Optionalbytes(range_end)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_range,uniffi_clone_handle(),RustBuffer.allocFromBytes(start),RustBuffer.alloc_from_Optionalbytes(range_end))
+    return result.consumeIntoSequenceTypeIndexMatchRecord
+  end
+  def range_page(start, range_end, cursor, limit)
+        start = Prolly::uniffi_bytes(start)
+
+        range_end = (range_end ? Prolly::uniffi_bytes(range_end) : nil)
+        RustBuffer.check_lower_Optionalbytes(range_end)
+        cursor = (cursor ? Prolly::uniffi_bytes(cursor) : nil)
+        RustBuffer.check_lower_Optionalbytes(cursor)
+        limit = Prolly::uniffi_in_range(limit, "u64", 0, 2**64)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_range_page,uniffi_clone_handle(),RustBuffer.allocFromBytes(start),RustBuffer.alloc_from_Optionalbytes(range_end),RustBuffer.alloc_from_Optionalbytes(cursor),limit)
+    return result.consumeIntoTypeIndexPageRecord
+  end
+  def range_reverse_page(start, range_end, cursor, limit)
+        start = Prolly::uniffi_bytes(start)
+
+        range_end = (range_end ? Prolly::uniffi_bytes(range_end) : nil)
+        RustBuffer.check_lower_Optionalbytes(range_end)
+        cursor = (cursor ? Prolly::uniffi_bytes(cursor) : nil)
+        RustBuffer.check_lower_Optionalbytes(cursor)
+        limit = Prolly::uniffi_in_range(limit, "u64", 0, 2**64)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_range_reverse_page,uniffi_clone_handle(),RustBuffer.allocFromBytes(start),RustBuffer.alloc_from_Optionalbytes(range_end),RustBuffer.alloc_from_Optionalbytes(cursor),limit)
+    return result.consumeIntoTypeIndexPageRecord
+  end
+  def records(term)
+        term = Prolly::uniffi_bytes(term)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_records,uniffi_clone_handle(),RustBuffer.allocFromBytes(term))
+    return result.consumeIntoSequenceTypeIndexedSourceRecord
+  end
+
+end
+
+  class SecondaryIndexExtractorCallback
+
+  # A private helper for initializing instances of the class from a raw handle,
+  # bypassing any initialization logic and ensuring they are GC'd properly.
+  def self.uniffi_allocate(handle)
+    inst = allocate
+    inst.instance_variable_set :@handle, handle
+    ObjectSpace.define_finalizer(inst, uniffi_define_finalizer_by_handle(handle, inst.object_id))
+    return inst
+  end
+
+  # A private helper for registering an object finalizer.
+  # N.B. it's important that this does not capture a reference
+  # to the actual instance, only its underlying handle.
+  def self.uniffi_define_finalizer_by_handle(handle, object_id)
+    Proc.new do |_id|
+      Prolly.rust_call(
+        :uniffi_prolly_bindings_fn_free_secondaryindexextractorcallback,
+        handle
+      )
+    end
+  end
+
+  # A private helper for lowering instances into a raw handle.
+  # This does an explicit typecheck, because accidentally lowering a different type of
+  # object in a place where this type is expected, could lead to memory unsafety.
+  def self.uniffi_check_lower(inst)
+    if not inst.is_a? self
+      raise TypeError.new "Expected a SecondaryIndexExtractorCallback instance, got #{inst}"
+    end
+  end
+
+  def uniffi_clone_handle()
+    return Prolly.rust_call(
+      :uniffi_prolly_bindings_fn_clone_secondaryindexextractorcallback,
+      @handle
+    )
+  end
+
+  def self.uniffi_lower(inst)
+    return inst.uniffi_clone_handle()
+  end
+
+
+
+  def extract(primary_key, source_value)
+        primary_key = Prolly::uniffi_bytes(primary_key)
+
+        source_value = Prolly::uniffi_bytes(source_value)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_secondaryindexextractorcallback_extract,uniffi_clone_handle(),RustBuffer.allocFromBytes(primary_key),RustBuffer.allocFromBytes(source_value))
+    return result.consumeIntoSequenceTypeIndexEntryRecord
+  end
+
+end
+
+  class BindingProximityMap
+
+  # A private helper for initializing instances of the class from a raw handle,
+  # bypassing any initialization logic and ensuring they are GC'd properly.
+  def self.uniffi_allocate(handle)
+    inst = allocate
+    inst.instance_variable_set :@handle, handle
+    ObjectSpace.define_finalizer(inst, uniffi_define_finalizer_by_handle(handle, inst.object_id))
+    return inst
+  end
+
+  # A private helper for registering an object finalizer.
+  # N.B. it's important that this does not capture a reference
+  # to the actual instance, only its underlying handle.
+  def self.uniffi_define_finalizer_by_handle(handle, object_id)
+    Proc.new do |_id|
+      Prolly.rust_call(
+        :uniffi_prolly_bindings_fn_free_bindingproximitymap,
+        handle
+      )
+    end
+  end
+
+  # A private helper for lowering instances into a raw handle.
+  # This does an explicit typecheck, because accidentally lowering a different type of
+  # object in a place where this type is expected, could lead to memory unsafety.
+  def self.uniffi_check_lower(inst)
+    if not inst.is_a? self
+      raise TypeError.new "Expected a BindingProximityMap instance, got #{inst}"
+    end
+  end
+
+  def uniffi_clone_handle()
+    return Prolly.rust_call(
+      :uniffi_prolly_bindings_fn_clone_bindingproximitymap,
+      @handle
+    )
+  end
+
+  def self.uniffi_lower(inst)
+    return inst.uniffi_clone_handle()
+  end
+
+
+
+  def clear_content_cache()
+      Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingproximitymap_clear_content_cache,uniffi_clone_handle(),)
+  end
+
+  def config()
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingproximitymap_config,uniffi_clone_handle(),)
+    return result.consumeIntoTypeProximityConfigRecord
+  end
+  def contains_key(key)
+        key = Prolly::uniffi_bytes(key)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingproximitymap_contains_key,uniffi_clone_handle(),RustBuffer.allocFromBytes(key))
+    return 1 == result
+  end
+  def count()
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingproximitymap_count,uniffi_clone_handle(),)
+    return result.to_i
+  end
+  def descriptor()
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_bindingproximitymap_descriptor,uniffi_clone_handle(),)
+    return result.consumeIntoBytes
+  end
+  def fast_handle()
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_bindingproximitymap_fast_handle,uniffi_clone_handle(),)
+    return result.to_i
+  end
+  def get(key)
+        key = Prolly::uniffi_bytes(key)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingproximitymap_get,uniffi_clone_handle(),RustBuffer.allocFromBytes(key))
+    return result.consumeIntoOptionalTypeExactProximityRecordRecord
+  end
+  def mutate(mutations)
+        mutations = mutations
+        RustBuffer.check_lower_SequenceTypeProximityMutationRecord(mutations)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingproximitymap_mutate,uniffi_clone_handle(),RustBuffer.alloc_from_SequenceTypeProximityMutationRecord(mutations))
+    return result.consumeIntoTypeProximityMutationResultRecord
+  end
+  def prove_membership(key)
+        key = Prolly::uniffi_bytes(key)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingproximitymap_prove_membership,uniffi_clone_handle(),RustBuffer.allocFromBytes(key))
+    return result.consumeIntoTypeProximityMembershipProofRecord
+  end
+  def prove_structure(limits)
+        limits = limits
+        RustBuffer.check_lower_TypeContentGraphLimitsRecord(limits)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingproximitymap_prove_structure,uniffi_clone_handle(),RustBuffer.alloc_from_TypeContentGraphLimitsRecord(limits))
+    return result.consumeIntoTypeProximityStructuralProofRecord
+  end
+  def read_session()
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingproximitymap_read_session,uniffi_clone_handle(),)
+    return BindingProximityReadSession.uniffi_allocate(result)
+  end
+  def rebuild(mutations)
+        mutations = mutations
+        RustBuffer.check_lower_SequenceTypeProximityMutationRecord(mutations)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingproximitymap_rebuild,uniffi_clone_handle(),RustBuffer.alloc_from_SequenceTypeProximityMutationRecord(mutations))
+    return BindingProximityMap.uniffi_allocate(result)
+  end
+  def scan_records(visitor)
+        visitor = visitor
+        (ProximityRecordVisitorCallback.uniffi_check_lower visitor)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingproximitymap_scan_records,uniffi_clone_handle(),(ProximityRecordVisitorCallback.uniffi_lower visitor))
+    return result.to_i
+  end
+  def search(request)
+        request = request
+        RustBuffer.check_lower_TypeProximitySearchRequestRecord(request)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingproximitymap_search,uniffi_clone_handle(),RustBuffer.alloc_from_TypeProximitySearchRequestRecord(request))
+    return result.consumeIntoTypeProximitySearchResultRecord
+  end
+  def verify()
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingproximitymap_verify,uniffi_clone_handle(),)
+    return result.consumeIntoTypeProximityVerificationRecord
+  end
+
+end
+
+  class BindingProximityReadSession
+
+  # A private helper for initializing instances of the class from a raw handle,
+  # bypassing any initialization logic and ensuring they are GC'd properly.
+  def self.uniffi_allocate(handle)
+    inst = allocate
+    inst.instance_variable_set :@handle, handle
+    ObjectSpace.define_finalizer(inst, uniffi_define_finalizer_by_handle(handle, inst.object_id))
+    return inst
+  end
+
+  # A private helper for registering an object finalizer.
+  # N.B. it's important that this does not capture a reference
+  # to the actual instance, only its underlying handle.
+  def self.uniffi_define_finalizer_by_handle(handle, object_id)
+    Proc.new do |_id|
+      Prolly.rust_call(
+        :uniffi_prolly_bindings_fn_free_bindingproximityreadsession,
+        handle
+      )
+    end
+  end
+
+  # A private helper for lowering instances into a raw handle.
+  # This does an explicit typecheck, because accidentally lowering a different type of
+  # object in a place where this type is expected, could lead to memory unsafety.
+  def self.uniffi_check_lower(inst)
+    if not inst.is_a? self
+      raise TypeError.new "Expected a BindingProximityReadSession instance, got #{inst}"
+    end
+  end
+
+  def uniffi_clone_handle()
+    return Prolly.rust_call(
+      :uniffi_prolly_bindings_fn_clone_bindingproximityreadsession,
+      @handle
+    )
+  end
+
+  def self.uniffi_lower(inst)
+    return inst.uniffi_clone_handle()
+  end
+
+
+
+  def contains_key(key)
+        key = Prolly::uniffi_bytes(key)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingproximityreadsession_contains_key,uniffi_clone_handle(),RustBuffer.allocFromBytes(key))
+    return 1 == result
+  end
+  def get(key)
+        key = Prolly::uniffi_bytes(key)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingproximityreadsession_get,uniffi_clone_handle(),RustBuffer.allocFromBytes(key))
+    return result.consumeIntoOptionalTypeExactProximityRecordRecord
+  end
+  def scan_records(visitor)
+        visitor = visitor
+        (ProximityRecordVisitorCallback.uniffi_check_lower visitor)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingproximityreadsession_scan_records,uniffi_clone_handle(),(ProximityRecordVisitorCallback.uniffi_lower visitor))
+    return result.to_i
+  end
+
+end
+
+  class ProximityRecordVisitorCallback
+
+  # A private helper for initializing instances of the class from a raw handle,
+  # bypassing any initialization logic and ensuring they are GC'd properly.
+  def self.uniffi_allocate(handle)
+    inst = allocate
+    inst.instance_variable_set :@handle, handle
+    ObjectSpace.define_finalizer(inst, uniffi_define_finalizer_by_handle(handle, inst.object_id))
+    return inst
+  end
+
+  # A private helper for registering an object finalizer.
+  # N.B. it's important that this does not capture a reference
+  # to the actual instance, only its underlying handle.
+  def self.uniffi_define_finalizer_by_handle(handle, object_id)
+    Proc.new do |_id|
+      Prolly.rust_call(
+        :uniffi_prolly_bindings_fn_free_proximityrecordvisitorcallback,
+        handle
+      )
+    end
+  end
+
+  # A private helper for lowering instances into a raw handle.
+  # This does an explicit typecheck, because accidentally lowering a different type of
+  # object in a place where this type is expected, could lead to memory unsafety.
+  def self.uniffi_check_lower(inst)
+    if not inst.is_a? self
+      raise TypeError.new "Expected a ProximityRecordVisitorCallback instance, got #{inst}"
+    end
+  end
+
+  def uniffi_clone_handle()
+    return Prolly.rust_call(
+      :uniffi_prolly_bindings_fn_clone_proximityrecordvisitorcallback,
+      @handle
+    )
+  end
+
+  def self.uniffi_lower(inst)
+    return inst.uniffi_clone_handle()
+  end
+
+
+
+  def visit(record)
+        record = record
+        RustBuffer.check_lower_TypeProximityRecordRecord(record)
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_proximityrecordvisitorcallback_visit,uniffi_clone_handle(),RustBuffer.alloc_from_TypeProximityRecordRecord(record))
+    return 1 == result
+  end
+
+end
+
+  class BindingMapComparison
+
+  # A private helper for initializing instances of the class from a raw handle,
+  # bypassing any initialization logic and ensuring they are GC'd properly.
+  def self.uniffi_allocate(handle)
+    inst = allocate
+    inst.instance_variable_set :@handle, handle
+    ObjectSpace.define_finalizer(inst, uniffi_define_finalizer_by_handle(handle, inst.object_id))
+    return inst
+  end
+
+  # A private helper for registering an object finalizer.
+  # N.B. it's important that this does not capture a reference
+  # to the actual instance, only its underlying handle.
+  def self.uniffi_define_finalizer_by_handle(handle, object_id)
+    Proc.new do |_id|
+      Prolly.rust_call(
+        :uniffi_prolly_bindings_fn_free_bindingmapcomparison,
+        handle
+      )
+    end
+  end
+
+  # A private helper for lowering instances into a raw handle.
+  # This does an explicit typecheck, because accidentally lowering a different type of
+  # object in a place where this type is expected, could lead to memory unsafety.
+  def self.uniffi_check_lower(inst)
+    if not inst.is_a? self
+      raise TypeError.new "Expected a BindingMapComparison instance, got #{inst}"
+    end
+  end
+
+  def uniffi_clone_handle()
+    return Prolly.rust_call(
+      :uniffi_prolly_bindings_fn_clone_bindingmapcomparison,
+      @handle
+    )
+  end
+
+  def self.uniffi_lower(inst)
+    return inst.uniffi_clone_handle()
+  end
+
+
+
+  def base()
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_bindingmapcomparison_base,uniffi_clone_handle(),)
+    return result.consumeIntoTypeMapVersionRecord
+  end
+  def changed_spans()
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingmapcomparison_changed_spans,uniffi_clone_handle(),)
+    return result.consumeIntoOptionalTypeChangedSpanHintRecord
+  end
+  def debug_view()
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingmapcomparison_debug_view,uniffi_clone_handle(),)
+    return result.consumeIntoTypeTreeDebugComparisonRecord
+  end
+  def diff()
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingmapcomparison_diff,uniffi_clone_handle(),)
+    return result.consumeIntoSequenceTypeDiffRecord
+  end
+  def diff_page(cursor, range_end, limit)
+        cursor = (cursor ? cursor : nil)
+        RustBuffer.check_lower_OptionalTypeRangeCursorRecord(cursor)
+        range_end = (range_end ? Prolly::uniffi_bytes(range_end) : nil)
+        RustBuffer.check_lower_Optionalbytes(range_end)
+        limit = Prolly::uniffi_in_range(limit, "u64", 0, 2**64)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingmapcomparison_diff_page,uniffi_clone_handle(),RustBuffer.alloc_from_OptionalTypeRangeCursorRecord(cursor),RustBuffer.alloc_from_Optionalbytes(range_end),limit)
+    return result.consumeIntoTypeDiffPageRecord
+  end
+  def prove_diff_page(cursor, range_end, limit)
+        cursor = (cursor ? cursor : nil)
+        RustBuffer.check_lower_OptionalTypeRangeCursorRecord(cursor)
+        range_end = (range_end ? Prolly::uniffi_bytes(range_end) : nil)
+        RustBuffer.check_lower_Optionalbytes(range_end)
+        limit = Prolly::uniffi_in_range(limit, "u64", 0, 2**64)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingmapcomparison_prove_diff_page,uniffi_clone_handle(),RustBuffer.alloc_from_OptionalTypeRangeCursorRecord(cursor),RustBuffer.alloc_from_Optionalbytes(range_end),limit)
+    return result.consumeIntoTypeProvedDiffPageRecord
+  end
+  def publish_changed_spans(spans)
+        spans = spans
+        RustBuffer.check_lower_SequenceTypeChangedSpanRecord(spans)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingmapcomparison_publish_changed_spans,uniffi_clone_handle(),RustBuffer.alloc_from_SequenceTypeChangedSpanRecord(spans))
+    return 1 == result
+  end
+  def scan_diff(visitor)
+        visitor = visitor
+        (DiffVisitorCallback.uniffi_check_lower visitor)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingmapcomparison_scan_diff,uniffi_clone_handle(),(DiffVisitorCallback.uniffi_lower visitor))
+    return result.consumeIntoTypeScanOutcomeRecord
+  end
+  def stats()
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingmapcomparison_stats,uniffi_clone_handle(),)
+    return result.consumeIntoTypeStatsComparisonRecord
+  end
+  def structural_diff_page(cursor, limit)
+        cursor = (cursor ? cursor : nil)
+        RustBuffer.check_lower_OptionalTypeStructuralDiffCursorRecord(cursor)
+        limit = Prolly::uniffi_in_range(limit, "u64", 0, 2**64)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingmapcomparison_structural_diff_page,uniffi_clone_handle(),RustBuffer.alloc_from_OptionalTypeStructuralDiffCursorRecord(cursor),limit)
+    return result.consumeIntoTypeStructuralDiffPageRecord
+  end
+  def target()
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_bindingmapcomparison_target,uniffi_clone_handle(),)
+    return result.consumeIntoTypeMapVersionRecord
+  end
+
+end
+
+  class BindingMapMerge
+
+  # A private helper for initializing instances of the class from a raw handle,
+  # bypassing any initialization logic and ensuring they are GC'd properly.
+  def self.uniffi_allocate(handle)
+    inst = allocate
+    inst.instance_variable_set :@handle, handle
+    ObjectSpace.define_finalizer(inst, uniffi_define_finalizer_by_handle(handle, inst.object_id))
+    return inst
+  end
+
+  # A private helper for registering an object finalizer.
+  # N.B. it's important that this does not capture a reference
+  # to the actual instance, only its underlying handle.
+  def self.uniffi_define_finalizer_by_handle(handle, object_id)
+    Proc.new do |_id|
+      Prolly.rust_call(
+        :uniffi_prolly_bindings_fn_free_bindingmapmerge,
+        handle
+      )
+    end
+  end
+
+  # A private helper for lowering instances into a raw handle.
+  # This does an explicit typecheck, because accidentally lowering a different type of
+  # object in a place where this type is expected, could lead to memory unsafety.
+  def self.uniffi_check_lower(inst)
+    if not inst.is_a? self
+      raise TypeError.new "Expected a BindingMapMerge instance, got #{inst}"
+    end
+  end
+
+  def uniffi_clone_handle()
+    return Prolly.rust_call(
+      :uniffi_prolly_bindings_fn_clone_bindingmapmerge,
+      @handle
+    )
+  end
+
+  def self.uniffi_lower(inst)
+    return inst.uniffi_clone_handle()
+  end
+
+
+
+  def base()
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_bindingmapmerge_base,uniffi_clone_handle(),)
+    return result.consumeIntoTypeMapVersionRecord
+  end
+  def candidate()
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_bindingmapmerge_candidate,uniffi_clone_handle(),)
+    return result.consumeIntoTypeMapVersionRecord
+  end
+  def conflict_page(cursor, limit)
+        cursor = (cursor ? cursor : nil)
+        RustBuffer.check_lower_OptionalTypeRangeCursorRecord(cursor)
+        limit = Prolly::uniffi_in_range(limit, "u64", 0, 2**64)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingmapmerge_conflict_page,uniffi_clone_handle(),RustBuffer.alloc_from_OptionalTypeRangeCursorRecord(cursor),limit)
+    return result.consumeIntoTypeConflictPageRecord
+  end
+  def crdt_merge(config)
+        config = config
+        RustBuffer.check_lower_TypeCrdtConfigRecord(config)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingmapmerge_crdt_merge,uniffi_clone_handle(),RustBuffer.alloc_from_TypeCrdtConfigRecord(config))
+    return result.consumeIntoTypeTreeRecord
+  end
+  def crdt_merge_explain(config)
+        config = config
+        RustBuffer.check_lower_TypeCrdtConfigRecord(config)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingmapmerge_crdt_merge_explain,uniffi_clone_handle(),RustBuffer.alloc_from_TypeCrdtConfigRecord(config))
+    return result.consumeIntoTypeMergeExplanationRecord
+  end
+  def head()
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_bindingmapmerge_head,uniffi_clone_handle(),)
+    return result.consumeIntoTypeMapVersionRecord
+  end
+  def merge(resolver)
+        resolver = (resolver ? Prolly::uniffi_utf8(resolver) : nil)
+        RustBuffer.check_lower_Optionalstring(resolver)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingmapmerge_merge,uniffi_clone_handle(),RustBuffer.alloc_from_Optionalstring(resolver))
+    return result.consumeIntoTypeTreeRecord
+  end
+  def merge_with_policy(policy)
+        policy = policy
+        (MergePolicyRegistry.uniffi_check_lower policy)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingmapmerge_merge_with_policy,uniffi_clone_handle(),(MergePolicyRegistry.uniffi_lower policy))
+    return result.consumeIntoTypeTreeRecord
+  end
+  def publish(resolver)
+        resolver = (resolver ? Prolly::uniffi_utf8(resolver) : nil)
+        RustBuffer.check_lower_Optionalstring(resolver)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingmapmerge_publish,uniffi_clone_handle(),RustBuffer.alloc_from_Optionalstring(resolver))
+    return result.consumeIntoTypeMapUpdateRecord
+  end
+  def publish_crdt(config)
+        config = config
+        RustBuffer.check_lower_TypeCrdtConfigRecord(config)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingmapmerge_publish_crdt,uniffi_clone_handle(),RustBuffer.alloc_from_TypeCrdtConfigRecord(config))
+    return result.consumeIntoTypeMapUpdateRecord
+  end
+  def publish_with_policy(policy)
+        policy = policy
+        (MergePolicyRegistry.uniffi_check_lower policy)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingmapmerge_publish_with_policy,uniffi_clone_handle(),(MergePolicyRegistry.uniffi_lower policy))
+    return result.consumeIntoTypeMapUpdateRecord
+  end
+  def scan_conflicts(visitor)
+        visitor = visitor
+        (ConflictVisitorCallback.uniffi_check_lower visitor)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingmapmerge_scan_conflicts,uniffi_clone_handle(),(ConflictVisitorCallback.uniffi_lower visitor))
+    return result.consumeIntoTypeScanOutcomeRecord
+  end
+
+end
+
+  class BindingMapSnapshot
+
+  # A private helper for initializing instances of the class from a raw handle,
+  # bypassing any initialization logic and ensuring they are GC'd properly.
+  def self.uniffi_allocate(handle)
+    inst = allocate
+    inst.instance_variable_set :@handle, handle
+    ObjectSpace.define_finalizer(inst, uniffi_define_finalizer_by_handle(handle, inst.object_id))
+    return inst
+  end
+
+  # A private helper for registering an object finalizer.
+  # N.B. it's important that this does not capture a reference
+  # to the actual instance, only its underlying handle.
+  def self.uniffi_define_finalizer_by_handle(handle, object_id)
+    Proc.new do |_id|
+      Prolly.rust_call(
+        :uniffi_prolly_bindings_fn_free_bindingmapsnapshot,
+        handle
+      )
+    end
+  end
+
+  # A private helper for lowering instances into a raw handle.
+  # This does an explicit typecheck, because accidentally lowering a different type of
+  # object in a place where this type is expected, could lead to memory unsafety.
+  def self.uniffi_check_lower(inst)
+    if not inst.is_a? self
+      raise TypeError.new "Expected a BindingMapSnapshot instance, got #{inst}"
+    end
+  end
+
+  def uniffi_clone_handle()
+    return Prolly.rust_call(
+      :uniffi_prolly_bindings_fn_clone_bindingmapsnapshot,
+      @handle
+    )
+  end
+
+  def self.uniffi_lower(inst)
+    return inst.uniffi_clone_handle()
+  end
+
+
+
+  def contains_key(key)
+        key = Prolly::uniffi_bytes(key)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingmapsnapshot_contains_key,uniffi_clone_handle(),RustBuffer.allocFromBytes(key))
+    return 1 == result
+  end
+  def copy_missing_nodes(destination)
+        destination = destination
+        (ProllyEngine.uniffi_check_lower destination)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingmapsnapshot_copy_missing_nodes,uniffi_clone_handle(),(ProllyEngine.uniffi_lower destination))
+    return result.consumeIntoTypeMissingNodeCopyRecord
+  end
+  def cursor_window(key, range_end, limit)
+        key = Prolly::uniffi_bytes(key)
+
+        range_end = (range_end ? Prolly::uniffi_bytes(range_end) : nil)
+        RustBuffer.check_lower_Optionalbytes(range_end)
+        limit = Prolly::uniffi_in_range(limit, "u64", 0, 2**64)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingmapsnapshot_cursor_window,uniffi_clone_handle(),RustBuffer.allocFromBytes(key),RustBuffer.alloc_from_Optionalbytes(range_end),limit)
+    return result.consumeIntoTypeCursorWindowRecord
+  end
+  def debug_view()
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingmapsnapshot_debug_view,uniffi_clone_handle(),)
+    return result.consumeIntoTypeTreeDebugViewRecord
+  end
+  def export()
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingmapsnapshot_export,uniffi_clone_handle(),)
+    return result.consumeIntoTypeSnapshotBundleRecord
+  end
+  def first_entry()
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingmapsnapshot_first_entry,uniffi_clone_handle(),)
+    return result.consumeIntoOptionalTypeEntryRecord
+  end
+  def get(key)
+        key = Prolly::uniffi_bytes(key)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingmapsnapshot_get,uniffi_clone_handle(),RustBuffer.allocFromBytes(key))
+    return result.consumeIntoOptionalbytes
+  end
+  def get_many(keys)
+        keys = keys.map { |v| Prolly::uniffi_bytes(v) }
+        RustBuffer.check_lower_Sequencebytes(keys)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingmapsnapshot_get_many,uniffi_clone_handle(),RustBuffer.alloc_from_Sequencebytes(keys))
+    return result.consumeIntoSequenceOptionalbytes
+  end
+  def get_value_ref(key)
+        key = Prolly::uniffi_bytes(key)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingmapsnapshot_get_value_ref,uniffi_clone_handle(),RustBuffer.allocFromBytes(key))
+    return result.consumeIntoOptionalTypeValueRefRecord
+  end
+  def hydrate_prefix_hint(prefix)
+        prefix = Prolly::uniffi_bytes(prefix)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingmapsnapshot_hydrate_prefix_hint,uniffi_clone_handle(),RustBuffer.allocFromBytes(prefix))
+    return 1 == result
+  end
+  def id()
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_bindingmapsnapshot_id,uniffi_clone_handle(),)
+    return result.consumeIntoBytes
+  end
+  def last_entry()
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingmapsnapshot_last_entry,uniffi_clone_handle(),)
+    return result.consumeIntoOptionalTypeEntryRecord
+  end
+  def lower_bound(key)
+        key = Prolly::uniffi_bytes(key)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingmapsnapshot_lower_bound,uniffi_clone_handle(),RustBuffer.allocFromBytes(key))
+    return result.consumeIntoOptionalTypeEntryRecord
+  end
+  def pin_path(key)
+        key = Prolly::uniffi_bytes(key)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingmapsnapshot_pin_path,uniffi_clone_handle(),RustBuffer.allocFromBytes(key))
+    return result.to_i
+  end
+  def pin_root()
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingmapsnapshot_pin_root,uniffi_clone_handle(),)
+    return result.to_i
+  end
+  def plan_missing_nodes(destination)
+        destination = destination
+        (ProllyEngine.uniffi_check_lower destination)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingmapsnapshot_plan_missing_nodes,uniffi_clone_handle(),(ProllyEngine.uniffi_lower destination))
+    return result.consumeIntoTypeMissingNodePlanRecord
+  end
+  def prefix(prefix)
+        prefix = Prolly::uniffi_bytes(prefix)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prefix,uniffi_clone_handle(),RustBuffer.allocFromBytes(prefix))
+    return result.consumeIntoSequenceTypeEntryRecord
+  end
+  def prefix_page(prefix, cursor, limit)
+        prefix = Prolly::uniffi_bytes(prefix)
+
+        cursor = (cursor ? cursor : nil)
+        RustBuffer.check_lower_OptionalTypeRangeCursorRecord(cursor)
+        limit = Prolly::uniffi_in_range(limit, "u64", 0, 2**64)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prefix_page,uniffi_clone_handle(),RustBuffer.allocFromBytes(prefix),RustBuffer.alloc_from_OptionalTypeRangeCursorRecord(cursor),limit)
+    return result.consumeIntoTypeRangePageRecord
+  end
+  def prefix_reverse_page(prefix, cursor, limit)
+        prefix = Prolly::uniffi_bytes(prefix)
+
+        cursor = (cursor ? cursor : nil)
+        RustBuffer.check_lower_OptionalTypeReverseCursorRecord(cursor)
+        limit = Prolly::uniffi_in_range(limit, "u64", 0, 2**64)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prefix_reverse_page,uniffi_clone_handle(),RustBuffer.allocFromBytes(prefix),RustBuffer.alloc_from_OptionalTypeReverseCursorRecord(cursor),limit)
+    return result.consumeIntoTypeReversePageRecord
+  end
+  def prove_key(key)
+        key = Prolly::uniffi_bytes(key)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prove_key,uniffi_clone_handle(),RustBuffer.allocFromBytes(key))
+    return result.consumeIntoTypeKeyProofRecord
+  end
+  def prove_keys(keys)
+        keys = keys.map { |v| Prolly::uniffi_bytes(v) }
+        RustBuffer.check_lower_Sequencebytes(keys)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prove_keys,uniffi_clone_handle(),RustBuffer.alloc_from_Sequencebytes(keys))
+    return result.consumeIntoTypeMultiKeyProofRecord
+  end
+  def prove_prefix(prefix)
+        prefix = Prolly::uniffi_bytes(prefix)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prove_prefix,uniffi_clone_handle(),RustBuffer.allocFromBytes(prefix))
+    return result.consumeIntoTypeRangeProofRecord
+  end
+  def prove_range(start, range_end)
+        start = Prolly::uniffi_bytes(start)
+
+        range_end = (range_end ? Prolly::uniffi_bytes(range_end) : nil)
+        RustBuffer.check_lower_Optionalbytes(range_end)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prove_range,uniffi_clone_handle(),RustBuffer.allocFromBytes(start),RustBuffer.alloc_from_Optionalbytes(range_end))
+    return result.consumeIntoTypeRangeProofRecord
+  end
+  def prove_range_page(cursor, range_end, limit)
+        cursor = (cursor ? cursor : nil)
+        RustBuffer.check_lower_OptionalTypeRangeCursorRecord(cursor)
+        range_end = (range_end ? Prolly::uniffi_bytes(range_end) : nil)
+        RustBuffer.check_lower_Optionalbytes(range_end)
+        limit = Prolly::uniffi_in_range(limit, "u64", 0, 2**64)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prove_range_page,uniffi_clone_handle(),RustBuffer.alloc_from_OptionalTypeRangeCursorRecord(cursor),RustBuffer.alloc_from_Optionalbytes(range_end),limit)
+    return result.consumeIntoTypeProvedRangePageRecord
+  end
+  def publish_prefix_hint(prefix)
+        prefix = Prolly::uniffi_bytes(prefix)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingmapsnapshot_publish_prefix_hint,uniffi_clone_handle(),RustBuffer.allocFromBytes(prefix))
+    return 1 == result
+  end
+  def push_to(destination)
+        destination = destination
+        (BindingVersionedMap.uniffi_check_lower destination)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingmapsnapshot_push_to,uniffi_clone_handle(),(BindingVersionedMap.uniffi_lower destination))
+    return result.consumeIntoTypeMapVersionRecord
+  end
+  def range(start, range_end)
+        start = Prolly::uniffi_bytes(start)
+
+        range_end = (range_end ? Prolly::uniffi_bytes(range_end) : nil)
+        RustBuffer.check_lower_Optionalbytes(range_end)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingmapsnapshot_range,uniffi_clone_handle(),RustBuffer.allocFromBytes(start),RustBuffer.alloc_from_Optionalbytes(range_end))
+    return result.consumeIntoSequenceTypeEntryRecord
+  end
+  def range_page(cursor, range_end, limit)
+        cursor = (cursor ? cursor : nil)
+        RustBuffer.check_lower_OptionalTypeRangeCursorRecord(cursor)
+        range_end = (range_end ? Prolly::uniffi_bytes(range_end) : nil)
+        RustBuffer.check_lower_Optionalbytes(range_end)
+        limit = Prolly::uniffi_in_range(limit, "u64", 0, 2**64)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingmapsnapshot_range_page,uniffi_clone_handle(),RustBuffer.alloc_from_OptionalTypeRangeCursorRecord(cursor),RustBuffer.alloc_from_Optionalbytes(range_end),limit)
+    return result.consumeIntoTypeRangePageRecord
+  end
+  def read_session()
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingmapsnapshot_read_session,uniffi_clone_handle(),)
+    return ProllyReadSession.uniffi_allocate(result)
+  end
+  def reverse_page(cursor, start, limit)
+        cursor = (cursor ? cursor : nil)
+        RustBuffer.check_lower_OptionalTypeReverseCursorRecord(cursor)
+        start = Prolly::uniffi_bytes(start)
+
+        limit = Prolly::uniffi_in_range(limit, "u64", 0, 2**64)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingmapsnapshot_reverse_page,uniffi_clone_handle(),RustBuffer.alloc_from_OptionalTypeReverseCursorRecord(cursor),RustBuffer.allocFromBytes(start),limit)
+    return result.consumeIntoTypeReversePageRecord
+  end
+  def scan_prefix(prefix, visitor)
+        prefix = Prolly::uniffi_bytes(prefix)
+
+        visitor = visitor
+        (EntryVisitorCallback.uniffi_check_lower visitor)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingmapsnapshot_scan_prefix,uniffi_clone_handle(),RustBuffer.allocFromBytes(prefix),(EntryVisitorCallback.uniffi_lower visitor))
+    return result.consumeIntoTypeScanOutcomeRecord
+  end
+  def scan_range(start, range_end, visitor)
+        start = Prolly::uniffi_bytes(start)
+
+        range_end = (range_end ? Prolly::uniffi_bytes(range_end) : nil)
+        RustBuffer.check_lower_Optionalbytes(range_end)
+        visitor = visitor
+        (EntryVisitorCallback.uniffi_check_lower visitor)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingmapsnapshot_scan_range,uniffi_clone_handle(),RustBuffer.allocFromBytes(start),RustBuffer.alloc_from_Optionalbytes(range_end),(EntryVisitorCallback.uniffi_lower visitor))
+    return result.consumeIntoTypeScanOutcomeRecord
+  end
+  def stats()
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingmapsnapshot_stats,uniffi_clone_handle(),)
+    return result.consumeIntoTypeTreeStatsRecord
+  end
+  def tree()
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_bindingmapsnapshot_tree,uniffi_clone_handle(),)
+    return result.consumeIntoTypeTreeRecord
+  end
+  def upper_bound(key)
+        key = Prolly::uniffi_bytes(key)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingmapsnapshot_upper_bound,uniffi_clone_handle(),RustBuffer.allocFromBytes(key))
+    return result.consumeIntoOptionalTypeEntryRecord
+  end
+  def version()
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_bindingmapsnapshot_version,uniffi_clone_handle(),)
+    return result.consumeIntoTypeMapVersionRecord
+  end
+
+end
+
+  class BindingMapSubscription
+
+  # A private helper for initializing instances of the class from a raw handle,
+  # bypassing any initialization logic and ensuring they are GC'd properly.
+  def self.uniffi_allocate(handle)
+    inst = allocate
+    inst.instance_variable_set :@handle, handle
+    ObjectSpace.define_finalizer(inst, uniffi_define_finalizer_by_handle(handle, inst.object_id))
+    return inst
+  end
+
+  # A private helper for registering an object finalizer.
+  # N.B. it's important that this does not capture a reference
+  # to the actual instance, only its underlying handle.
+  def self.uniffi_define_finalizer_by_handle(handle, object_id)
+    Proc.new do |_id|
+      Prolly.rust_call(
+        :uniffi_prolly_bindings_fn_free_bindingmapsubscription,
+        handle
+      )
+    end
+  end
+
+  # A private helper for lowering instances into a raw handle.
+  # This does an explicit typecheck, because accidentally lowering a different type of
+  # object in a place where this type is expected, could lead to memory unsafety.
+  def self.uniffi_check_lower(inst)
+    if not inst.is_a? self
+      raise TypeError.new "Expected a BindingMapSubscription instance, got #{inst}"
+    end
+  end
+
+  def uniffi_clone_handle()
+    return Prolly.rust_call(
+      :uniffi_prolly_bindings_fn_clone_bindingmapsubscription,
+      @handle
+    )
+  end
+
+  def self.uniffi_lower(inst)
+    return inst.uniffi_clone_handle()
+  end
+
+
+
+  def last_seen()
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingmapsubscription_last_seen,uniffi_clone_handle(),)
+    return result.consumeIntoOptionalbytes
+  end
+  def poll()
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingmapsubscription_poll,uniffi_clone_handle(),)
+    return result.consumeIntoOptionalTypeMapChangeEventRecord
+  end
+
+end
+
+  class BindingVersionedMap
+
+  # A private helper for initializing instances of the class from a raw handle,
+  # bypassing any initialization logic and ensuring they are GC'd properly.
+  def self.uniffi_allocate(handle)
+    inst = allocate
+    inst.instance_variable_set :@handle, handle
+    ObjectSpace.define_finalizer(inst, uniffi_define_finalizer_by_handle(handle, inst.object_id))
+    return inst
+  end
+
+  # A private helper for registering an object finalizer.
+  # N.B. it's important that this does not capture a reference
+  # to the actual instance, only its underlying handle.
+  def self.uniffi_define_finalizer_by_handle(handle, object_id)
+    Proc.new do |_id|
+      Prolly.rust_call(
+        :uniffi_prolly_bindings_fn_free_bindingversionedmap,
+        handle
+      )
+    end
+  end
+
+  # A private helper for lowering instances into a raw handle.
+  # This does an explicit typecheck, because accidentally lowering a different type of
+  # object in a place where this type is expected, could lead to memory unsafety.
+  def self.uniffi_check_lower(inst)
+    if not inst.is_a? self
+      raise TypeError.new "Expected a BindingVersionedMap instance, got #{inst}"
+    end
+  end
+
+  def uniffi_clone_handle()
+    return Prolly.rust_call(
+      :uniffi_prolly_bindings_fn_clone_bindingversionedmap,
+      @handle
+    )
+  end
+
+  def self.uniffi_lower(inst)
+    return inst.uniffi_clone_handle()
+  end
+  def initialize(engine, id)
+        engine = engine
+        (ProllyEngine.uniffi_check_lower engine)
+        id = Prolly::uniffi_bytes(id)
+
+    handle = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_constructor_bindingversionedmap_new,(ProllyEngine.uniffi_lower engine),RustBuffer.allocFromBytes(id))
+    @handle = handle
+    ObjectSpace.define_finalizer(self, self.class.uniffi_define_finalizer_by_handle(handle, self.object_id))
+  end
+
+
+
+  def append(mutations)
+        mutations = mutations
+        RustBuffer.check_lower_SequenceTypeMutationRecord(mutations)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_append,uniffi_clone_handle(),RustBuffer.alloc_from_SequenceTypeMutationRecord(mutations))
+    return result.consumeIntoTypeMapVersionRecord
+  end
+  def apply(mutations)
+        mutations = mutations
+        RustBuffer.check_lower_SequenceTypeMutationRecord(mutations)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_apply,uniffi_clone_handle(),RustBuffer.alloc_from_SequenceTypeMutationRecord(mutations))
+    return result.consumeIntoTypeMapVersionRecord
+  end
+  def apply_at_millis(mutations, timestamp_millis)
+        mutations = mutations
+        RustBuffer.check_lower_SequenceTypeMutationRecord(mutations)
+        timestamp_millis = Prolly::uniffi_in_range(timestamp_millis, "u64", 0, 2**64)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_apply_at_millis,uniffi_clone_handle(),RustBuffer.alloc_from_SequenceTypeMutationRecord(mutations),timestamp_millis)
+    return result.consumeIntoTypeMapVersionRecord
+  end
+  def apply_if(expected, mutations)
+        expected = (expected ? Prolly::uniffi_bytes(expected) : nil)
+        RustBuffer.check_lower_Optionalbytes(expected)
+        mutations = mutations
+        RustBuffer.check_lower_SequenceTypeMutationRecord(mutations)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_apply_if,uniffi_clone_handle(),RustBuffer.alloc_from_Optionalbytes(expected),RustBuffer.alloc_from_SequenceTypeMutationRecord(mutations))
+    return result.consumeIntoTypeMapUpdateRecord
+  end
+  def apply_if_at_millis(expected, mutations, timestamp_millis)
+        expected = (expected ? Prolly::uniffi_bytes(expected) : nil)
+        RustBuffer.check_lower_Optionalbytes(expected)
+        mutations = mutations
+        RustBuffer.check_lower_SequenceTypeMutationRecord(mutations)
+        timestamp_millis = Prolly::uniffi_in_range(timestamp_millis, "u64", 0, 2**64)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_apply_if_at_millis,uniffi_clone_handle(),RustBuffer.alloc_from_Optionalbytes(expected),RustBuffer.alloc_from_SequenceTypeMutationRecord(mutations),timestamp_millis)
+    return result.consumeIntoTypeMapUpdateRecord
+  end
+  def backup()
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_backup,uniffi_clone_handle(),)
+    return result.consumeIntoBytes
+  end
+  def changes_since(base)
+        base = Prolly::uniffi_bytes(base)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_changes_since,uniffi_clone_handle(),RustBuffer.allocFromBytes(base))
+    return result.consumeIntoSequenceTypeDiffRecord
+  end
+  def compare(base, target)
+        base = Prolly::uniffi_bytes(base)
+
+        target = Prolly::uniffi_bytes(target)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_compare,uniffi_clone_handle(),RustBuffer.allocFromBytes(base),RustBuffer.allocFromBytes(target))
+    return BindingMapComparison.uniffi_allocate(result)
+  end
+  def compare_to_head(base)
+        base = Prolly::uniffi_bytes(base)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_compare_to_head,uniffi_clone_handle(),RustBuffer.allocFromBytes(base))
+    return BindingMapComparison.uniffi_allocate(result)
+  end
+  def contains_key(key)
+        key = Prolly::uniffi_bytes(key)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_contains_key,uniffi_clone_handle(),RustBuffer.allocFromBytes(key))
+    return 1 == result
+  end
+  def delete(key)
+        key = Prolly::uniffi_bytes(key)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_delete,uniffi_clone_handle(),RustBuffer.allocFromBytes(key))
+    return result.consumeIntoTypeMapVersionRecord
+  end
+  def delete_if(expected, key)
+        expected = (expected ? Prolly::uniffi_bytes(expected) : nil)
+        RustBuffer.check_lower_Optionalbytes(expected)
+        key = Prolly::uniffi_bytes(key)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_delete_if,uniffi_clone_handle(),RustBuffer.alloc_from_Optionalbytes(expected),RustBuffer.allocFromBytes(key))
+    return result.consumeIntoTypeMapUpdateRecord
+  end
+  def diff(base, target)
+        base = Prolly::uniffi_bytes(base)
+
+        target = Prolly::uniffi_bytes(target)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_diff,uniffi_clone_handle(),RustBuffer.allocFromBytes(base),RustBuffer.allocFromBytes(target))
+    return result.consumeIntoSequenceTypeDiffRecord
+  end
+  def edit(mutations)
+        mutations = mutations
+        RustBuffer.check_lower_SequenceTypeMutationRecord(mutations)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_edit,uniffi_clone_handle(),RustBuffer.alloc_from_SequenceTypeMutationRecord(mutations))
+    return result.consumeIntoTypeMapVersionRecord
+  end
+  def edit_if(expected, mutations)
+        expected = (expected ? Prolly::uniffi_bytes(expected) : nil)
+        RustBuffer.check_lower_Optionalbytes(expected)
+        mutations = mutations
+        RustBuffer.check_lower_SequenceTypeMutationRecord(mutations)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_edit_if,uniffi_clone_handle(),RustBuffer.alloc_from_Optionalbytes(expected),RustBuffer.alloc_from_SequenceTypeMutationRecord(mutations))
+    return result.consumeIntoTypeMapUpdateRecord
+  end
+  def get(key)
+        key = Prolly::uniffi_bytes(key)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_get,uniffi_clone_handle(),RustBuffer.allocFromBytes(key))
+    return result.consumeIntoOptionalbytes
+  end
+  def get_at(id, key)
+        id = Prolly::uniffi_bytes(id)
+
+        key = Prolly::uniffi_bytes(key)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_get_at,uniffi_clone_handle(),RustBuffer.allocFromBytes(id),RustBuffer.allocFromBytes(key))
+    return result.consumeIntoOptionalbytes
+  end
+  def get_large_value(blob_store, key)
+        blob_store = blob_store
+        (ProllyBlobStore.uniffi_check_lower blob_store)
+        key = Prolly::uniffi_bytes(key)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_get_large_value,uniffi_clone_handle(),(ProllyBlobStore.uniffi_lower blob_store),RustBuffer.allocFromBytes(key))
+    return result.consumeIntoOptionalbytes
+  end
+  def get_many(keys)
+        keys = keys.map { |v| Prolly::uniffi_bytes(v) }
+        RustBuffer.check_lower_Sequencebytes(keys)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_get_many,uniffi_clone_handle(),RustBuffer.alloc_from_Sequencebytes(keys))
+    return result.consumeIntoSequenceOptionalbytes
+  end
+  def get_many_at(id, keys)
+        id = Prolly::uniffi_bytes(id)
+
+        keys = keys.map { |v| Prolly::uniffi_bytes(v) }
+        RustBuffer.check_lower_Sequencebytes(keys)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_get_many_at,uniffi_clone_handle(),RustBuffer.allocFromBytes(id),RustBuffer.alloc_from_Sequencebytes(keys))
+    return result.consumeIntoSequenceOptionalbytes
+  end
+  def get_value_ref(key)
+        key = Prolly::uniffi_bytes(key)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_get_value_ref,uniffi_clone_handle(),RustBuffer.allocFromBytes(key))
+    return result.consumeIntoOptionalTypeValueRefRecord
+  end
+  def get_value_ref_at(id, key)
+        id = Prolly::uniffi_bytes(id)
+
+        key = Prolly::uniffi_bytes(key)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_get_value_ref_at,uniffi_clone_handle(),RustBuffer.allocFromBytes(id),RustBuffer.allocFromBytes(key))
+    return result.consumeIntoOptionalTypeValueRefRecord
+  end
+  def head()
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_head,uniffi_clone_handle(),)
+    return result.consumeIntoOptionalTypeMapVersionRecord
+  end
+  def head_id()
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_head_id,uniffi_clone_handle(),)
+    return result.consumeIntoOptionalbytes
+  end
+  def head_name()
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_bindingversionedmap_head_name,uniffi_clone_handle(),)
+    return result.consumeIntoBytes
+  end
+  def id()
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_bindingversionedmap_id,uniffi_clone_handle(),)
+    return result.consumeIntoBytes
+  end
+  def import_as_head(bundle)
+        bundle = bundle
+        RustBuffer.check_lower_TypeSnapshotBundleRecord(bundle)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_import_as_head,uniffi_clone_handle(),RustBuffer.alloc_from_TypeSnapshotBundleRecord(bundle))
+    return result.consumeIntoTypeMapVersionRecord
+  end
+  def import_as_head_at_millis(bundle, timestamp_millis)
+        bundle = bundle
+        RustBuffer.check_lower_TypeSnapshotBundleRecord(bundle)
+        timestamp_millis = Prolly::uniffi_in_range(timestamp_millis, "u64", 0, 2**64)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_import_as_head_at_millis,uniffi_clone_handle(),RustBuffer.alloc_from_TypeSnapshotBundleRecord(bundle),timestamp_millis)
+    return result.consumeIntoTypeMapVersionRecord
+  end
+  def initialize()
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_initialize,uniffi_clone_handle(),)
+    return result.consumeIntoTypeMapVersionRecord
+  end
+  def initialize_sorted(entries)
+        entries = entries
+        RustBuffer.check_lower_SequenceTypeEntryRecord(entries)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_initialize_sorted,uniffi_clone_handle(),RustBuffer.alloc_from_SequenceTypeEntryRecord(entries))
+    return result.consumeIntoTypeMapUpdateRecord
+  end
+  def is_initialized()
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_is_initialized,uniffi_clone_handle(),)
+    return 1 == result
+  end
+  def keep_for(max_age_millis)
+        max_age_millis = Prolly::uniffi_in_range(max_age_millis, "u64", 0, 2**64)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_keep_for,uniffi_clone_handle(),max_age_millis)
+    return result.consumeIntoTypeVersionPruneRecord
+  end
+  def keep_for_at(now_millis, max_age_millis)
+        now_millis = Prolly::uniffi_in_range(now_millis, "u64", 0, 2**64)
+
+        max_age_millis = Prolly::uniffi_in_range(max_age_millis, "u64", 0, 2**64)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_keep_for_at,uniffi_clone_handle(),now_millis,max_age_millis)
+    return result.consumeIntoTypeVersionPruneRecord
+  end
+  def keep_last(count)
+        count = Prolly::uniffi_in_range(count, "u64", 0, 2**64)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_keep_last,uniffi_clone_handle(),count)
+    return result.consumeIntoTypeVersionPruneRecord
+  end
+  def keep_versions(ids)
+        ids = ids.map { |v| Prolly::uniffi_bytes(v) }
+        RustBuffer.check_lower_Sequencebytes(ids)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_keep_versions,uniffi_clone_handle(),RustBuffer.alloc_from_Sequencebytes(ids))
+    return result.consumeIntoTypeVersionPruneRecord
+  end
+  def parallel_apply(mutations, config)
+        mutations = mutations
+        RustBuffer.check_lower_SequenceTypeMutationRecord(mutations)
+        config = config
+        RustBuffer.check_lower_TypeParallelConfigRecord(config)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_parallel_apply,uniffi_clone_handle(),RustBuffer.alloc_from_SequenceTypeMutationRecord(mutations),RustBuffer.alloc_from_TypeParallelConfigRecord(config))
+    return result.consumeIntoTypeVersionedMapBatchResultRecord
+  end
+  def plan_blob_gc(blob_store)
+        blob_store = blob_store
+        (ProllyBlobStore.uniffi_check_lower blob_store)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_plan_blob_gc,uniffi_clone_handle(),(ProllyBlobStore.uniffi_lower blob_store))
+    return result.consumeIntoTypeBlobGcPlanRecord
+  end
+  def plan_gc()
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_plan_gc,uniffi_clone_handle(),)
+    return result.consumeIntoTypeGcPlanRecord
+  end
+  def prefix(prefix)
+        prefix = Prolly::uniffi_bytes(prefix)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_prefix,uniffi_clone_handle(),RustBuffer.allocFromBytes(prefix))
+    return result.consumeIntoSequenceTypeEntryRecord
+  end
+  def prefix_at(id, prefix)
+        id = Prolly::uniffi_bytes(id)
+
+        prefix = Prolly::uniffi_bytes(prefix)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_prefix_at,uniffi_clone_handle(),RustBuffer.allocFromBytes(id),RustBuffer.allocFromBytes(prefix))
+    return result.consumeIntoSequenceTypeEntryRecord
+  end
+  def prefix_page(prefix, cursor, limit)
+        prefix = Prolly::uniffi_bytes(prefix)
+
+        cursor = (cursor ? cursor : nil)
+        RustBuffer.check_lower_OptionalTypeRangeCursorRecord(cursor)
+        limit = Prolly::uniffi_in_range(limit, "u64", 0, 2**64)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_prefix_page,uniffi_clone_handle(),RustBuffer.allocFromBytes(prefix),RustBuffer.alloc_from_OptionalTypeRangeCursorRecord(cursor),limit)
+    return result.consumeIntoTypeRangePageRecord
+  end
+  def prefix_page_at(id, prefix, cursor, limit)
+        id = Prolly::uniffi_bytes(id)
+
+        prefix = Prolly::uniffi_bytes(prefix)
+
+        cursor = (cursor ? cursor : nil)
+        RustBuffer.check_lower_OptionalTypeRangeCursorRecord(cursor)
+        limit = Prolly::uniffi_in_range(limit, "u64", 0, 2**64)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_prefix_page_at,uniffi_clone_handle(),RustBuffer.allocFromBytes(id),RustBuffer.allocFromBytes(prefix),RustBuffer.alloc_from_OptionalTypeRangeCursorRecord(cursor),limit)
+    return result.consumeIntoTypeRangePageRecord
+  end
+  def prepare_merge(base, candidate)
+        base = Prolly::uniffi_bytes(base)
+
+        candidate = Prolly::uniffi_bytes(candidate)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_prepare_merge,uniffi_clone_handle(),RustBuffer.allocFromBytes(base),RustBuffer.allocFromBytes(candidate))
+    return BindingMapMerge.uniffi_allocate(result)
+  end
+  def prune_versions(keep_latest)
+        keep_latest = Prolly::uniffi_in_range(keep_latest, "u64", 0, 2**64)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_prune_versions,uniffi_clone_handle(),keep_latest)
+    return result.consumeIntoTypeVersionPruneRecord
+  end
+  def put(key, value)
+        key = Prolly::uniffi_bytes(key)
+
+        value = Prolly::uniffi_bytes(value)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_put,uniffi_clone_handle(),RustBuffer.allocFromBytes(key),RustBuffer.allocFromBytes(value))
+    return result.consumeIntoTypeMapVersionRecord
+  end
+  def put_if(expected, key, value)
+        expected = (expected ? Prolly::uniffi_bytes(expected) : nil)
+        RustBuffer.check_lower_Optionalbytes(expected)
+        key = Prolly::uniffi_bytes(key)
+
+        value = Prolly::uniffi_bytes(value)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_put_if,uniffi_clone_handle(),RustBuffer.alloc_from_Optionalbytes(expected),RustBuffer.allocFromBytes(key),RustBuffer.allocFromBytes(value))
+    return result.consumeIntoTypeMapUpdateRecord
+  end
+  def put_large_value(blob_store, key, value, config)
+        blob_store = blob_store
+        (ProllyBlobStore.uniffi_check_lower blob_store)
+        key = Prolly::uniffi_bytes(key)
+
+        value = Prolly::uniffi_bytes(value)
+
+        config = config
+        RustBuffer.check_lower_TypeLargeValueConfigRecord(config)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_put_large_value,uniffi_clone_handle(),(ProllyBlobStore.uniffi_lower blob_store),RustBuffer.allocFromBytes(key),RustBuffer.allocFromBytes(value),RustBuffer.alloc_from_TypeLargeValueConfigRecord(config))
+    return result.consumeIntoTypeMapVersionRecord
+  end
+  def put_large_value_if(blob_store, expected, key, value, config)
+        blob_store = blob_store
+        (ProllyBlobStore.uniffi_check_lower blob_store)
+        expected = (expected ? Prolly::uniffi_bytes(expected) : nil)
+        RustBuffer.check_lower_Optionalbytes(expected)
+        key = Prolly::uniffi_bytes(key)
+
+        value = Prolly::uniffi_bytes(value)
+
+        config = config
+        RustBuffer.check_lower_TypeLargeValueConfigRecord(config)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_put_large_value_if,uniffi_clone_handle(),(ProllyBlobStore.uniffi_lower blob_store),RustBuffer.alloc_from_Optionalbytes(expected),RustBuffer.allocFromBytes(key),RustBuffer.allocFromBytes(value),RustBuffer.alloc_from_TypeLargeValueConfigRecord(config))
+    return result.consumeIntoTypeMapUpdateRecord
+  end
+  def range(start, range_end)
+        start = Prolly::uniffi_bytes(start)
+
+        range_end = (range_end ? Prolly::uniffi_bytes(range_end) : nil)
+        RustBuffer.check_lower_Optionalbytes(range_end)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_range,uniffi_clone_handle(),RustBuffer.allocFromBytes(start),RustBuffer.alloc_from_Optionalbytes(range_end))
+    return result.consumeIntoSequenceTypeEntryRecord
+  end
+  def range_at(id, start, range_end)
+        id = Prolly::uniffi_bytes(id)
+
+        start = Prolly::uniffi_bytes(start)
+
+        range_end = (range_end ? Prolly::uniffi_bytes(range_end) : nil)
+        RustBuffer.check_lower_Optionalbytes(range_end)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_range_at,uniffi_clone_handle(),RustBuffer.allocFromBytes(id),RustBuffer.allocFromBytes(start),RustBuffer.alloc_from_Optionalbytes(range_end))
+    return result.consumeIntoSequenceTypeEntryRecord
+  end
+  def range_page(cursor, range_end, limit)
+        cursor = (cursor ? cursor : nil)
+        RustBuffer.check_lower_OptionalTypeRangeCursorRecord(cursor)
+        range_end = (range_end ? Prolly::uniffi_bytes(range_end) : nil)
+        RustBuffer.check_lower_Optionalbytes(range_end)
+        limit = Prolly::uniffi_in_range(limit, "u64", 0, 2**64)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_range_page,uniffi_clone_handle(),RustBuffer.alloc_from_OptionalTypeRangeCursorRecord(cursor),RustBuffer.alloc_from_Optionalbytes(range_end),limit)
+    return result.consumeIntoTypeRangePageRecord
+  end
+  def range_page_at(id, cursor, range_end, limit)
+        id = Prolly::uniffi_bytes(id)
+
+        cursor = (cursor ? cursor : nil)
+        RustBuffer.check_lower_OptionalTypeRangeCursorRecord(cursor)
+        range_end = (range_end ? Prolly::uniffi_bytes(range_end) : nil)
+        RustBuffer.check_lower_Optionalbytes(range_end)
+        limit = Prolly::uniffi_in_range(limit, "u64", 0, 2**64)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_range_page_at,uniffi_clone_handle(),RustBuffer.allocFromBytes(id),RustBuffer.alloc_from_OptionalTypeRangeCursorRecord(cursor),RustBuffer.alloc_from_Optionalbytes(range_end),limit)
+    return result.consumeIntoTypeRangePageRecord
+  end
+  def read_session()
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_read_session,uniffi_clone_handle(),)
+    return result.consumeIntoOptionalTypeProllyReadSession
+  end
+  def rebuild_from_entries_if(expected, entries)
+        expected = (expected ? Prolly::uniffi_bytes(expected) : nil)
+        RustBuffer.check_lower_Optionalbytes(expected)
+        entries = entries
+        RustBuffer.check_lower_SequenceTypeEntryRecord(entries)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_rebuild_from_entries_if,uniffi_clone_handle(),RustBuffer.alloc_from_Optionalbytes(expected),RustBuffer.alloc_from_SequenceTypeEntryRecord(entries))
+    return result.consumeIntoTypeMapUpdateRecord
+  end
+  def rebuild_from_iter_if(expected, entries)
+        expected = (expected ? Prolly::uniffi_bytes(expected) : nil)
+        RustBuffer.check_lower_Optionalbytes(expected)
+        entries = entries
+        RustBuffer.check_lower_SequenceTypeEntryRecord(entries)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_rebuild_from_iter_if,uniffi_clone_handle(),RustBuffer.alloc_from_Optionalbytes(expected),RustBuffer.alloc_from_SequenceTypeEntryRecord(entries))
+    return result.consumeIntoTypeMapUpdateRecord
+  end
+  def rebuild_sorted_if(expected, entries)
+        expected = (expected ? Prolly::uniffi_bytes(expected) : nil)
+        RustBuffer.check_lower_Optionalbytes(expected)
+        entries = entries
+        RustBuffer.check_lower_SequenceTypeEntryRecord(entries)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_rebuild_sorted_if,uniffi_clone_handle(),RustBuffer.alloc_from_Optionalbytes(expected),RustBuffer.alloc_from_SequenceTypeEntryRecord(entries))
+    return result.consumeIntoTypeMapUpdateRecord
+  end
+  def restore_backup(bytes)
+        bytes = Prolly::uniffi_bytes(bytes)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_restore_backup,uniffi_clone_handle(),RustBuffer.allocFromBytes(bytes))
+    return result.consumeIntoTypeMapVersionRecord
+  end
+  def retention_policy()
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_bindingversionedmap_retention_policy,uniffi_clone_handle(),)
+    return result.consumeIntoTypeNamedRootRetentionRecord
+  end
+  def rollback_to(id)
+        id = Prolly::uniffi_bytes(id)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_rollback_to,uniffi_clone_handle(),RustBuffer.allocFromBytes(id))
+    return result.consumeIntoTypeMapVersionRecord
+  end
+  def scan_prefix(prefix, visitor)
+        prefix = Prolly::uniffi_bytes(prefix)
+
+        visitor = visitor
+        (EntryVisitorCallback.uniffi_check_lower visitor)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_scan_prefix,uniffi_clone_handle(),RustBuffer.allocFromBytes(prefix),(EntryVisitorCallback.uniffi_lower visitor))
+    return result.consumeIntoTypeScanOutcomeRecord
+  end
+  def scan_prefix_at(id, prefix, visitor)
+        id = Prolly::uniffi_bytes(id)
+
+        prefix = Prolly::uniffi_bytes(prefix)
+
+        visitor = visitor
+        (EntryVisitorCallback.uniffi_check_lower visitor)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_scan_prefix_at,uniffi_clone_handle(),RustBuffer.allocFromBytes(id),RustBuffer.allocFromBytes(prefix),(EntryVisitorCallback.uniffi_lower visitor))
+    return result.consumeIntoTypeScanOutcomeRecord
+  end
+  def scan_range(start, range_end, visitor)
+        start = Prolly::uniffi_bytes(start)
+
+        range_end = (range_end ? Prolly::uniffi_bytes(range_end) : nil)
+        RustBuffer.check_lower_Optionalbytes(range_end)
+        visitor = visitor
+        (EntryVisitorCallback.uniffi_check_lower visitor)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_scan_range,uniffi_clone_handle(),RustBuffer.allocFromBytes(start),RustBuffer.alloc_from_Optionalbytes(range_end),(EntryVisitorCallback.uniffi_lower visitor))
+    return result.consumeIntoTypeScanOutcomeRecord
+  end
+  def scan_range_at(id, start, range_end, visitor)
+        id = Prolly::uniffi_bytes(id)
+
+        start = Prolly::uniffi_bytes(start)
+
+        range_end = (range_end ? Prolly::uniffi_bytes(range_end) : nil)
+        RustBuffer.check_lower_Optionalbytes(range_end)
+        visitor = visitor
+        (EntryVisitorCallback.uniffi_check_lower visitor)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_scan_range_at,uniffi_clone_handle(),RustBuffer.allocFromBytes(id),RustBuffer.allocFromBytes(start),RustBuffer.alloc_from_Optionalbytes(range_end),(EntryVisitorCallback.uniffi_lower visitor))
+    return result.consumeIntoTypeScanOutcomeRecord
+  end
+  def snapshot()
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_snapshot,uniffi_clone_handle(),)
+    return result.consumeIntoOptionalTypeBindingMapSnapshot
+  end
+  def snapshot_at(id)
+        id = Prolly::uniffi_bytes(id)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_snapshot_at,uniffi_clone_handle(),RustBuffer.allocFromBytes(id))
+    return result.consumeIntoOptionalTypeBindingMapSnapshot
+  end
+  def subscribe()
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_subscribe,uniffi_clone_handle(),)
+    return BindingMapSubscription.uniffi_allocate(result)
+  end
+  def subscribe_from(last_seen)
+        last_seen = (last_seen ? Prolly::uniffi_bytes(last_seen) : nil)
+        RustBuffer.check_lower_Optionalbytes(last_seen)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_subscribe_from,uniffi_clone_handle(),RustBuffer.alloc_from_Optionalbytes(last_seen))
+    return BindingMapSubscription.uniffi_allocate(result)
+  end
+  def sweep_blob_gc(blob_store)
+        blob_store = blob_store
+        (ProllyBlobStore.uniffi_check_lower blob_store)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_sweep_blob_gc,uniffi_clone_handle(),(ProllyBlobStore.uniffi_lower blob_store))
+    return result.consumeIntoTypeBlobGcSweepRecord
+  end
+  def sweep_gc()
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_sweep_gc,uniffi_clone_handle(),)
+    return result.consumeIntoTypeGcSweepRecord
+  end
+  def verify_catalog()
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_verify_catalog,uniffi_clone_handle(),)
+    return result.consumeIntoTypeMapCatalogVerificationRecord
+  end
+  def version(id)
+        id = Prolly::uniffi_bytes(id)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_version,uniffi_clone_handle(),RustBuffer.allocFromBytes(id))
+    return result.consumeIntoOptionalTypeMapVersionRecord
+  end
+  def versions()
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedmap_versions,uniffi_clone_handle(),)
+    return result.consumeIntoSequenceTypeMapVersionRecord
+  end
+  def versions_prefix()
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_bindingversionedmap_versions_prefix,uniffi_clone_handle(),)
+    return result.consumeIntoBytes
+  end
+
+end
+
+  class BindingVersionedTransaction
+
+  # A private helper for initializing instances of the class from a raw handle,
+  # bypassing any initialization logic and ensuring they are GC'd properly.
+  def self.uniffi_allocate(handle)
+    inst = allocate
+    inst.instance_variable_set :@handle, handle
+    ObjectSpace.define_finalizer(inst, uniffi_define_finalizer_by_handle(handle, inst.object_id))
+    return inst
+  end
+
+  # A private helper for registering an object finalizer.
+  # N.B. it's important that this does not capture a reference
+  # to the actual instance, only its underlying handle.
+  def self.uniffi_define_finalizer_by_handle(handle, object_id)
+    Proc.new do |_id|
+      Prolly.rust_call(
+        :uniffi_prolly_bindings_fn_free_bindingversionedtransaction,
+        handle
+      )
+    end
+  end
+
+  # A private helper for lowering instances into a raw handle.
+  # This does an explicit typecheck, because accidentally lowering a different type of
+  # object in a place where this type is expected, could lead to memory unsafety.
+  def self.uniffi_check_lower(inst)
+    if not inst.is_a? self
+      raise TypeError.new "Expected a BindingVersionedTransaction instance, got #{inst}"
+    end
+  end
+
+  def uniffi_clone_handle()
+    return Prolly.rust_call(
+      :uniffi_prolly_bindings_fn_clone_bindingversionedtransaction,
+      @handle
+    )
+  end
+
+  def self.uniffi_lower(inst)
+    return inst.uniffi_clone_handle()
+  end
+
+
+
+  def apply(map_id, mutations)
+        map_id = Prolly::uniffi_bytes(map_id)
+
+        mutations = mutations
+        RustBuffer.check_lower_SequenceTypeMutationRecord(mutations)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedtransaction_apply,uniffi_clone_handle(),RustBuffer.allocFromBytes(map_id),RustBuffer.alloc_from_SequenceTypeMutationRecord(mutations))
+    return result.consumeIntoTypeMapVersionRecord
+  end
+  def apply_if(map_id, expected, mutations)
+        map_id = Prolly::uniffi_bytes(map_id)
+
+        expected = (expected ? Prolly::uniffi_bytes(expected) : nil)
+        RustBuffer.check_lower_Optionalbytes(expected)
+        mutations = mutations
+        RustBuffer.check_lower_SequenceTypeMutationRecord(mutations)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedtransaction_apply_if,uniffi_clone_handle(),RustBuffer.allocFromBytes(map_id),RustBuffer.alloc_from_Optionalbytes(expected),RustBuffer.alloc_from_SequenceTypeMutationRecord(mutations))
+    return result.consumeIntoTypeMapUpdateRecord
+  end
+  def commit()
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedtransaction_commit,uniffi_clone_handle(),)
+    return result.consumeIntoTypeVersionedTransactionCommitRecord
+  end
+  def delete(map_id, key)
+        map_id = Prolly::uniffi_bytes(map_id)
+
+        key = Prolly::uniffi_bytes(key)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedtransaction_delete,uniffi_clone_handle(),RustBuffer.allocFromBytes(map_id),RustBuffer.allocFromBytes(key))
+    return result.consumeIntoTypeMapVersionRecord
+  end
+  def get(map_id, key)
+        map_id = Prolly::uniffi_bytes(map_id)
+
+        key = Prolly::uniffi_bytes(key)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedtransaction_get,uniffi_clone_handle(),RustBuffer.allocFromBytes(map_id),RustBuffer.allocFromBytes(key))
+    return result.consumeIntoOptionalbytes
+  end
+  def head(map_id)
+        map_id = Prolly::uniffi_bytes(map_id)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedtransaction_head,uniffi_clone_handle(),RustBuffer.allocFromBytes(map_id))
+    return result.consumeIntoOptionalTypeMapVersionRecord
+  end
+  def put(map_id, key, value)
+        map_id = Prolly::uniffi_bytes(map_id)
+
+        key = Prolly::uniffi_bytes(key)
+
+        value = Prolly::uniffi_bytes(value)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedtransaction_put,uniffi_clone_handle(),RustBuffer.allocFromBytes(map_id),RustBuffer.allocFromBytes(key),RustBuffer.allocFromBytes(value))
+    return result.consumeIntoTypeMapVersionRecord
+  end
+  def rollback()
+      Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingversionedtransaction_rollback,uniffi_clone_handle(),)
   end
 
 

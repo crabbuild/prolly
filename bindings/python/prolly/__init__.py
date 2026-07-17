@@ -18,5 +18,7 @@ except (ImportError, OSError):
     from src import __all__ as __all__  # type: ignore  # noqa: F401
 else:
     from .uniffi import *  # type: ignore  # noqa: F401,F403,E402
+    from .api import *  # type: ignore  # noqa: F401,F403,E402
+    from .api import __all__ as _api_all
 
-    __all__ = _generated.__all__
+    __all__ = [*_generated.__all__, *_api_all]
