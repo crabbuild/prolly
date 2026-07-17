@@ -223,6 +223,25 @@ PROLLY_MYSQL_URL=mysql://prolly:prolly@127.0.0.1:53306/prolly \
   swift run --package-path bindings/swift prolly-store-mysql-check
 ```
 
+Provider-first Redis checks:
+
+```sh
+PROLLY_REDIS_URL=redis://127.0.0.1:56379 \
+  PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" \
+  PYTHONPATH=bindings/python:bindings/python/stores/redis \
+  python3 -m unittest discover -s bindings/python/stores/redis/tests -v
+PROLLY_REDIS_URL=redis://127.0.0.1:56379 \
+  PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" \
+  BUNDLE_GEMFILE=bindings/ruby/stores/redis/Gemfile \
+  BUNDLE_PATH=/tmp/prolly-ruby-redis-bundle \
+  bundle exec ruby -Ibindings/ruby/stores/redis/lib \
+  bindings/ruby/stores/redis/test/redis_store_test.rb
+PROLLY_REDIS_URL=redis://127.0.0.1:56379 \
+  PROLLY_BINDINGS_LIBRARY_DIR="$PWD/target/debug" \
+  DYLD_LIBRARY_PATH="$PWD/target/debug" \
+  swift run --package-path bindings/swift prolly-store-redis-check
+```
+
 Before publishing a binding release:
 
 1. Build the Rust facade with `cargo build --manifest-path bindings/uniffi/Cargo.toml --target-dir target`.

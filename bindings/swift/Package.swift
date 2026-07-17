@@ -17,9 +17,11 @@ let package = Package(
         .library(name: "ProllyStoreSQLite", targets: ["ProllyStoreSQLite"]),
         .library(name: "ProllyStorePostgres", targets: ["ProllyStorePostgres"]),
         .library(name: "ProllyStoreMySQL", targets: ["ProllyStoreMySQL"]),
+        .library(name: "ProllyStoreRedis", targets: ["ProllyStoreRedis"]),
         .executable(name: "prolly-store-sqlite-check", targets: ["StoreSQLiteCheck"]),
         .executable(name: "prolly-store-postgres-check", targets: ["StorePostgresCheck"]),
         .executable(name: "prolly-store-mysql-check", targets: ["StoreMySQLCheck"]),
+        .executable(name: "prolly-store-redis-check", targets: ["StoreRedisCheck"]),
         .executable(name: "prolly-agent-event-log", targets: ["AgentEventLog"]),
         .executable(name: "prolly-background-compaction", targets: ["BackgroundCompaction"]),
         .executable(name: "prolly-basic-map", targets: ["BasicMap"]),
@@ -49,6 +51,8 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-log.git", exact: "1.6.4"),
         .package(url: "https://github.com/apple/swift-nio.git", exact: "2.86.2"),
         .package(url: "https://github.com/vapor/mysql-nio.git", exact: "1.8.0"),
+        // 1.6.2 is the newest release whose package manifest supports Swift 5.10.
+        .package(url: "https://github.com/swift-server/RediStack.git", exact: "1.6.2"),
     ],
     targets: [
         .systemLibrary(name: "CSQLite", pkgConfig: "sqlite3"),
@@ -95,6 +99,11 @@ let package = Package(
             ],
             exclude: ["README.md"]
         ),
+        .target(
+            name: "ProllyStoreRedis",
+            dependencies: ["Prolly", .product(name: "RediStack", package: "RediStack")],
+            exclude: ["README.md"]
+        ),
         .executableTarget(
             name: "StoreSQLiteCheck",
             dependencies: ["Prolly", "ProllyStoreSQLite", "CSQLite"],
@@ -113,6 +122,15 @@ let package = Package(
                 .product(name: "NIOPosix", package: "swift-nio"),
             ],
             path: "Examples/StoreMySQLCheck"
+        ),
+        .executableTarget(
+            name: "StoreRedisCheck",
+            dependencies: [
+                "Prolly", "ProllyStoreRedis",
+                .product(name: "RediStack", package: "RediStack"),
+                .product(name: "NIOPosix", package: "swift-nio"),
+            ],
+            path: "Examples/StoreRedisCheck"
         ),
         .testTarget(
             name: "ProllyTests",
