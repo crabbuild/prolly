@@ -23,6 +23,11 @@ type VersionedMap struct {
 	mu     sync.RWMutex
 }
 
+type CatalogVerification struct {
+	Head                                         []byte
+	VersionCount, ReachableNodes, ReachableBytes uint64
+}
+
 func (e *Engine) VersionedMap(id []byte) (*VersionedMap, error) {
 	handle, err := ffiEngineVersionedMap(e, append([]byte(nil), id...))
 	if err != nil {
@@ -113,6 +118,141 @@ func (m *VersionedMap) Delete(key []byte) (MapVersion, error) {
 		return MapVersion{}, err
 	}
 	return decodePortableMapVersion(raw)
+}
+
+func (m *VersionedMap) Snapshot() (*MapSnapshot, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	snapshot, err := ffiVersionedSnapshot(handle)
+	if err != nil {
+		return nil, err
+	}
+	if snapshot == 0 {
+		return nil, nil
+	}
+	result := &MapSnapshot{handle: snapshot}
+	runtime.SetFinalizer(result, (*MapSnapshot).Close)
+	return result, nil
+}
+func (m *VersionedMap) Backup() ([]byte, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	raw, err := ffiVersionedBackup(handle)
+	if err != nil {
+		return nil, err
+	}
+	d := byteDecoder{data: raw}
+	value, err := d.readByteArray()
+	if err != nil {
+		return nil, err
+	}
+	return value, d.done()
+}
+func (m *VersionedMap) VerifyCatalog() (CatalogVerification, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return CatalogVerification{}, err
+	}
+	defer unlock()
+	raw, err := ffiVersionedVerifyCatalog(handle)
+	if err != nil {
+		return CatalogVerification{}, err
+	}
+	d := byteDecoder{data: raw}
+	head, err := d.readByteArray()
+	if err != nil {
+		return CatalogVerification{}, err
+	}
+	count, err := d.readUint64()
+	if err != nil {
+		return CatalogVerification{}, err
+	}
+	nodes, err := d.readUint64()
+	if err != nil {
+		return CatalogVerification{}, err
+	}
+	size, err := d.readUint64()
+	if err != nil {
+		return CatalogVerification{}, err
+	}
+	return CatalogVerification{head, count, nodes, size}, d.done()
+}
+
+type MapSnapshot struct {
+	handle uint64
+	closed atomic.Bool
+	mu     sync.RWMutex
+}
+
+func (s *MapSnapshot) Close() {
+	if s == nil || s.closed.Swap(true) {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	runtime.SetFinalizer(s, nil)
+	if s.handle != 0 {
+		ffiFreeMapSnapshot(s.handle)
+		s.handle = 0
+	}
+}
+func (s *MapSnapshot) withHandle() (uint64, func(), error) {
+	if s == nil || s.closed.Load() {
+		return 0, nil, errors.New("map snapshot is closed")
+	}
+	s.mu.RLock()
+	if s.closed.Load() || s.handle == 0 {
+		s.mu.RUnlock()
+		return 0, nil, errors.New("map snapshot is closed")
+	}
+	return s.handle, s.mu.RUnlock, nil
+}
+func (s *MapSnapshot) Get(key []byte) ([]byte, bool, error) {
+	handle, unlock, err := s.withHandle()
+	if err != nil {
+		return nil, false, err
+	}
+	defer unlock()
+	raw, err := ffiMapSnapshotGet(handle, append([]byte(nil), key...))
+	if err != nil {
+		return nil, false, err
+	}
+	d := byteDecoder{data: raw}
+	value, ok, err := d.readOptionalByteArray()
+	if err != nil {
+		return nil, false, err
+	}
+	return value, ok, d.done()
+}
+func (s *MapSnapshot) ProveKey(key []byte) (KeyProof, error) {
+	handle, unlock, err := s.withHandle()
+	if err != nil {
+		return KeyProof{}, err
+	}
+	defer unlock()
+	raw, err := ffiMapSnapshotProveKey(handle, append([]byte(nil), key...))
+	if err != nil {
+		return KeyProof{}, err
+	}
+	return decodeKeyProof(raw)
+}
+func (s *MapSnapshot) Read() (*ReadSession, error) {
+	handle, unlock, err := s.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	native, err := ffiMapSnapshotRead(handle)
+	if err != nil {
+		return nil, err
+	}
+	return ffiAdoptReadSession(native)
 }
 
 func decodePortableMapVersion(raw []byte) (MapVersion, error) {

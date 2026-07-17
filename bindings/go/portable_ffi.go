@@ -73,6 +73,19 @@ extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_initializ
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_get(uint64_t ptr, RustBuffer key, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_put(uint64_t ptr, RustBuffer key, RustBuffer value, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_delete(uint64_t ptr, RustBuffer key, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_snapshot(uint64_t ptr, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_backup(uint64_t ptr, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_verify_catalog(uint64_t ptr, RustCallStatus *out_err);
+extern uint64_t uniffi_prolly_bindings_fn_clone_bindingmapsnapshot(uint64_t ptr, RustCallStatus *out_err);
+extern void uniffi_prolly_bindings_fn_free_bindingmapsnapshot(uint64_t ptr, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingmapsnapshot_get(uint64_t ptr, RustBuffer key, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prove_key(uint64_t ptr, RustBuffer key, RustCallStatus *out_err);
+extern uint64_t uniffi_prolly_bindings_fn_method_bindingmapsnapshot_read_session(uint64_t ptr, RustCallStatus *out_err);
+extern uint64_t uniffi_prolly_bindings_fn_clone_prollyreadsession(uint64_t ptr, RustCallStatus *out_err);
+extern void uniffi_prolly_bindings_fn_free_prollyreadsession(uint64_t ptr, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_prollyreadsession_get(uint64_t ptr, RustBuffer key, RustCallStatus *out_err);
+extern uint64_t uniffi_prolly_bindings_fn_method_prollyreadsession_fast_handle(uint64_t ptr, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_func_verify_key_proof(RustBuffer proof, RustCallStatus *out_err);
 
 extern uint64_t uniffi_prolly_bindings_fn_constructor_bindingindexregistry_new(RustCallStatus *out_err);
 extern uint64_t uniffi_prolly_bindings_fn_clone_bindingindexregistry(uint64_t ptr, RustCallStatus *out_err);
@@ -179,6 +192,18 @@ func portableCloneEngine(handle C.uint64_t) (C.uint64_t, error) {
 func portableCloneVersioned(handle uint64) (C.uint64_t, error) {
 	var status C.RustCallStatus
 	clone := C.uniffi_prolly_bindings_fn_clone_bindingversionedmap(C.uint64_t(handle), &status)
+	return clone, portableStatusError(&status)
+}
+
+func portableCloneMapSnapshot(handle uint64) (C.uint64_t, error) {
+	var status C.RustCallStatus
+	clone := C.uniffi_prolly_bindings_fn_clone_bindingmapsnapshot(C.uint64_t(handle), &status)
+	return clone, portableStatusError(&status)
+}
+
+func portableCloneReadSession(handle uint64) (C.uint64_t, error) {
+	var status C.RustCallStatus
+	clone := C.uniffi_prolly_bindings_fn_clone_prollyreadsession(C.uint64_t(handle), &status)
 	return clone, portableStatusError(&status)
 }
 
@@ -350,6 +375,156 @@ func ffiVersionedDelete(handle uint64, key []byte) ([]byte, error) {
 		return nil, err
 	}
 	return portableTakeBuffer(buf), nil
+}
+
+func ffiVersionedSnapshot(handle uint64) (uint64, error) {
+	clone, err := portableCloneVersioned(handle)
+	if err != nil {
+		return 0, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingversionedmap_snapshot(clone, &status)
+	if err := portableStatusError(&status); err != nil {
+		return 0, err
+	}
+	d := byteDecoder{data: portableTakeBuffer(buf)}
+	value, err := d.readOptionalUint64()
+	if err != nil {
+		return 0, err
+	}
+	if value == nil {
+		return 0, d.done()
+	}
+	return *value, d.done()
+}
+
+func ffiVersionedBackup(handle uint64) ([]byte, error) {
+	clone, err := portableCloneVersioned(handle)
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingversionedmap_backup(clone, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiVersionedVerifyCatalog(handle uint64) ([]byte, error) {
+	clone, err := portableCloneVersioned(handle)
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingversionedmap_verify_catalog(clone, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiMapSnapshotGet(handle uint64, key []byte) ([]byte, error) {
+	clone, err := portableCloneMapSnapshot(handle)
+	if err != nil {
+		return nil, err
+	}
+	keyBuf, err := portableInput(encodeByteArray(key))
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingmapsnapshot_get(clone, keyBuf, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiMapSnapshotProveKey(handle uint64, key []byte) ([]byte, error) {
+	clone, err := portableCloneMapSnapshot(handle)
+	if err != nil {
+		return nil, err
+	}
+	keyBuf, err := portableInput(encodeByteArray(key))
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prove_key(clone, keyBuf, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiVerifyKeyProof(proof []byte) ([]byte, error) {
+	proofBuf, err := portableInput(proof)
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_func_verify_key_proof(proofBuf, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiMapSnapshotRead(handle uint64) (uint64, error) {
+	clone, err := portableCloneMapSnapshot(handle)
+	if err != nil {
+		return 0, err
+	}
+	var status C.RustCallStatus
+	result := C.uniffi_prolly_bindings_fn_method_bindingmapsnapshot_read_session(clone, &status)
+	return uint64(result), portableStatusError(&status)
+}
+
+func ffiReadSessionGet(handle uint64, key []byte) ([]byte, error) {
+	clone, err := portableCloneReadSession(handle)
+	if err != nil {
+		return nil, err
+	}
+	keyBuf, err := portableInput(encodeByteArray(key))
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_prollyreadsession_get(clone, keyBuf, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiReadSessionFastHandle(handle uint64) (uint64, error) {
+	clone, err := portableCloneReadSession(handle)
+	if err != nil {
+		return 0, err
+	}
+	var status C.RustCallStatus
+	fast := C.uniffi_prolly_bindings_fn_method_prollyreadsession_fast_handle(clone, &status)
+	return uint64(fast), portableStatusError(&status)
+}
+func ffiAdoptReadSession(handle uint64) (*ReadSession, error) {
+	fast, err := ffiReadSessionFastHandle(handle)
+	if err != nil {
+		ffiFreeReadSession(handle)
+		return nil, err
+	}
+	result := &ReadSession{handle: C.uint64_t(handle), fast: C.uint64_t(fast)}
+	runtime.SetFinalizer(result, (*ReadSession).Close)
+	return result, nil
+}
+
+func ffiFreeMapSnapshot(handle uint64) {
+	var status C.RustCallStatus
+	C.uniffi_prolly_bindings_fn_free_bindingmapsnapshot(C.uint64_t(handle), &status)
+}
+func ffiFreeReadSession(handle uint64) {
+	var status C.RustCallStatus
+	C.uniffi_prolly_bindings_fn_free_prollyreadsession(C.uint64_t(handle), &status)
 }
 
 func ffiFreeVersioned(handle uint64) {

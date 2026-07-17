@@ -172,3 +172,52 @@ func TestPortableAsyncWrappersCopyInputsBeforeHandoff(t *testing.T) {
 		t.Fatalf("cancelled async get error = %v", err)
 	}
 }
+
+func TestPortableProofSessionAndMaintenance(t *testing.T) {
+	engine, err := OpenMemory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer engine.Close()
+	versioned, err := engine.VersionedMap([]byte("proofs"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer versioned.Close()
+	if _, err = versioned.Initialize(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = versioned.Put([]byte("k"), []byte("v")); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := versioned.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer snapshot.Close()
+	proof, err := snapshot.ProveKey([]byte("k"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	verified, err := VerifyKeyProof(proof)
+	if err != nil || !verified.Valid || string(verified.Value) != "v" {
+		t.Fatalf("proof = %+v, %v", verified, err)
+	}
+	session, err := snapshot.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+	value, ok, err := session.Get([]byte("k"))
+	if err != nil || !ok || string(value) != "v" {
+		t.Fatalf("read = %q, %v, %v", value, ok, err)
+	}
+	backup, err := versioned.Backup()
+	if err != nil || len(backup) == 0 {
+		t.Fatalf("backup = %d, %v", len(backup), err)
+	}
+	catalog, err := versioned.VerifyCatalog()
+	if err != nil || catalog.VersionCount < 2 {
+		t.Fatalf("catalog = %+v, %v", catalog, err)
+	}
+}
