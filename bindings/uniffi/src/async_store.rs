@@ -3,8 +3,15 @@ use std::fmt;
 use std::sync::Arc;
 
 use prolly::{
-    RemoteBatchOp, RemoteManifestUpdate, RemoteNamedRoot, RemoteRootCondition, RemoteRootWrite,
-    RemoteStoreBackend, RemoteTransactionUpdate,
+    AsyncProlly, Mutation, OwnedAsyncProllyTransaction, RemoteBatchOp, RemoteManifestUpdate,
+    RemoteNamedRoot, RemoteProllyStore, RemoteRootCondition, RemoteRootWrite, RemoteStoreBackend,
+    RemoteTransactionUpdate, Tree,
+};
+
+use crate::{
+    resolver_from_name, to_usize, ConfigRecord, DiffRecord, EntryRecord, MutationRecord,
+    NamedRootRecord, NamedRootUpdateRecord, ProllyBindingError, RangeCursorRecord, RangePageRecord,
+    TransactionUpdateRecord, TreeRecord, TreeStatsRecord,
 };
 
 const STORE_PROTOCOL_MAJOR: u32 = 1;
@@ -680,6 +687,477 @@ fn check_limit(name: &str, actual: u64, maximum: Option<u64>) -> Result<(), Fore
     Ok(())
 }
 
+impl From<ForeignStoreError> for ProllyBindingError {
+    fn from(error: ForeignStoreError) -> Self {
+        Self::Store {
+            reason: error.to_string(),
+        }
+    }
+}
+
+type ForeignStore = RemoteProllyStore<ForeignRemoteBackend>;
+type ForeignEngine = AsyncProlly<ForeignStore>;
+type ForeignTransaction = OwnedAsyncProllyTransaction<ForeignStore>;
+
+#[derive(uniffi::Object)]
+pub struct AsyncProllyEngine {
+    inner: Arc<ForeignEngine>,
+}
+
+#[uniffi::export]
+impl AsyncProllyEngine {
+    #[uniffi::constructor]
+    pub async fn new(
+        store: Arc<dyn ForeignRemoteStore>,
+        config: ConfigRecord,
+    ) -> Result<Self, ProllyBindingError> {
+        let config = config.try_into()?;
+        let backend = ForeignRemoteBackend::new(store).await?;
+        let adapter = RemoteProllyStore::new(backend);
+        Ok(Self {
+            inner: Arc::new(AsyncProlly::new(adapter, config)),
+        })
+    }
+
+    pub fn create(&self) -> TreeRecord {
+        self.inner.create().into()
+    }
+
+    pub async fn get(
+        &self,
+        tree: TreeRecord,
+        key: Vec<u8>,
+    ) -> Result<Option<Vec<u8>>, ProllyBindingError> {
+        let tree = Tree::try_from(tree)?;
+        self.inner.get(&tree, &key).await.map_err(Into::into)
+    }
+
+    pub async fn get_many(
+        &self,
+        tree: TreeRecord,
+        keys: Vec<Vec<u8>>,
+    ) -> Result<Vec<Option<Vec<u8>>>, ProllyBindingError> {
+        let tree = Tree::try_from(tree)?;
+        self.inner
+            .get_many(&tree, &keys)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn put(
+        &self,
+        tree: TreeRecord,
+        key: Vec<u8>,
+        value: Vec<u8>,
+    ) -> Result<TreeRecord, ProllyBindingError> {
+        let tree = Tree::try_from(tree)?;
+        self.inner
+            .put(&tree, key, value)
+            .await
+            .map(TreeRecord::from)
+            .map_err(Into::into)
+    }
+
+    pub async fn delete(
+        &self,
+        tree: TreeRecord,
+        key: Vec<u8>,
+    ) -> Result<TreeRecord, ProllyBindingError> {
+        let tree = Tree::try_from(tree)?;
+        self.inner
+            .delete(&tree, &key)
+            .await
+            .map(TreeRecord::from)
+            .map_err(Into::into)
+    }
+
+    pub async fn batch(
+        &self,
+        tree: TreeRecord,
+        mutations: Vec<MutationRecord>,
+    ) -> Result<TreeRecord, ProllyBindingError> {
+        let tree = Tree::try_from(tree)?;
+        let mutations = mutations
+            .into_iter()
+            .map(Mutation::try_from)
+            .collect::<Result<Vec<_>, _>>()?;
+        self.inner
+            .batch(&tree, mutations)
+            .await
+            .map(TreeRecord::from)
+            .map_err(Into::into)
+    }
+
+    pub async fn range(
+        &self,
+        tree: TreeRecord,
+        start: Vec<u8>,
+        end: Option<Vec<u8>>,
+    ) -> Result<Vec<EntryRecord>, ProllyBindingError> {
+        let tree = Tree::try_from(tree)?;
+        self.inner
+            .range(&tree, &start, end.as_deref())
+            .await?
+            .collect()
+            .await
+            .map(|entries| {
+                entries
+                    .into_iter()
+                    .map(|(key, value)| EntryRecord { key, value })
+                    .collect()
+            })
+            .map_err(Into::into)
+    }
+
+    pub async fn prefix(
+        &self,
+        tree: TreeRecord,
+        prefix: Vec<u8>,
+    ) -> Result<Vec<EntryRecord>, ProllyBindingError> {
+        let tree = Tree::try_from(tree)?;
+        self.inner
+            .prefix(&tree, &prefix)
+            .await?
+            .collect()
+            .await
+            .map(|entries| {
+                entries
+                    .into_iter()
+                    .map(|(key, value)| EntryRecord { key, value })
+                    .collect()
+            })
+            .map_err(Into::into)
+    }
+
+    pub async fn range_page(
+        &self,
+        tree: TreeRecord,
+        cursor: Option<RangeCursorRecord>,
+        end: Option<Vec<u8>>,
+        limit: u64,
+    ) -> Result<RangePageRecord, ProllyBindingError> {
+        let tree = Tree::try_from(tree)?;
+        let cursor = cursor
+            .map(prolly::RangeCursor::from)
+            .unwrap_or_else(prolly::RangeCursor::start);
+        let page = self
+            .inner
+            .range_page(
+                &tree,
+                &cursor,
+                end.as_deref(),
+                to_usize(limit, "limit")?,
+            )
+            .await?;
+        Ok(RangePageRecord {
+            entries: page
+                .entries
+                .into_iter()
+                .map(|(key, value)| EntryRecord { key, value })
+                .collect(),
+            next_cursor: page.next_cursor.map(RangeCursorRecord::from),
+        })
+    }
+
+    pub async fn diff(
+        &self,
+        base: TreeRecord,
+        other: TreeRecord,
+    ) -> Result<Vec<DiffRecord>, ProllyBindingError> {
+        let base = Tree::try_from(base)?;
+        let other = Tree::try_from(other)?;
+        self.inner
+            .diff(&base, &other)
+            .await?
+            .into_iter()
+            .map(DiffRecord::try_from)
+            .collect()
+    }
+
+    pub async fn merge(
+        &self,
+        base: TreeRecord,
+        left: TreeRecord,
+        right: TreeRecord,
+        resolver: Option<String>,
+    ) -> Result<TreeRecord, ProllyBindingError> {
+        let base = Tree::try_from(base)?;
+        let left = Tree::try_from(left)?;
+        let right = Tree::try_from(right)?;
+        let resolver = resolver_from_name(resolver)?;
+        self.inner
+            .merge(&base, &left, &right, resolver)
+            .await
+            .map(TreeRecord::from)
+            .map_err(Into::into)
+    }
+
+    pub async fn collect_stats(
+        &self,
+        tree: TreeRecord,
+    ) -> Result<TreeStatsRecord, ProllyBindingError> {
+        let tree = Tree::try_from(tree)?;
+        self.inner
+            .collect_stats(&tree)
+            .await
+            .map(TreeStatsRecord::from)
+            .map_err(Into::into)
+    }
+
+    pub async fn load_named_root(
+        &self,
+        name: Vec<u8>,
+    ) -> Result<Option<TreeRecord>, ProllyBindingError> {
+        self.inner
+            .load_named_root(&name)
+            .await
+            .map(|tree| tree.map(TreeRecord::from))
+            .map_err(Into::into)
+    }
+
+    pub async fn list_named_roots(
+        &self,
+    ) -> Result<Vec<NamedRootRecord>, ProllyBindingError> {
+        self.inner
+            .list_named_roots()
+            .await
+            .map(|roots| roots.into_iter().map(NamedRootRecord::from).collect())
+            .map_err(Into::into)
+    }
+
+    pub async fn publish_named_root(
+        &self,
+        name: Vec<u8>,
+        tree: TreeRecord,
+    ) -> Result<(), ProllyBindingError> {
+        let tree = Tree::try_from(tree)?;
+        self.inner
+            .publish_named_root(&name, &tree)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn publish_named_root_at_millis(
+        &self,
+        name: Vec<u8>,
+        tree: TreeRecord,
+        timestamp_millis: u64,
+    ) -> Result<(), ProllyBindingError> {
+        let tree = Tree::try_from(tree)?;
+        self.inner
+            .publish_named_root_at_millis(&name, &tree, timestamp_millis)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn delete_named_root(&self, name: Vec<u8>) -> Result<(), ProllyBindingError> {
+        self.inner
+            .delete_named_root(&name)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn compare_and_swap_named_root(
+        &self,
+        name: Vec<u8>,
+        expected: Option<TreeRecord>,
+        replacement: Option<TreeRecord>,
+    ) -> Result<NamedRootUpdateRecord, ProllyBindingError> {
+        let expected = expected.map(Tree::try_from).transpose()?;
+        let replacement = replacement.map(Tree::try_from).transpose()?;
+        self.inner
+            .compare_and_swap_named_root(&name, expected.as_ref(), replacement.as_ref())
+            .await
+            .map(NamedRootUpdateRecord::from)
+            .map_err(Into::into)
+    }
+
+    pub async fn begin_transaction(
+        &self,
+    ) -> Result<Arc<AsyncProllyTransaction>, ProllyBindingError> {
+        let transaction = self.inner.begin_owned_transaction()?;
+        Ok(Arc::new(AsyncProllyTransaction {
+            inner: futures_util::lock::Mutex::new(Some(transaction)),
+        }))
+    }
+}
+
+#[derive(uniffi::Object)]
+pub struct AsyncProllyTransaction {
+    inner: futures_util::lock::Mutex<Option<ForeignTransaction>>,
+}
+
+impl AsyncProllyTransaction {
+    fn completed_error() -> ProllyBindingError {
+        ProllyBindingError::InvalidArgument {
+            reason: "transaction is already committed or rolled back".to_string(),
+        }
+    }
+}
+
+#[uniffi::export]
+impl AsyncProllyTransaction {
+    pub async fn create(&self) -> Result<TreeRecord, ProllyBindingError> {
+        let guard = self.inner.lock().await;
+        let transaction = guard.as_ref().ok_or_else(Self::completed_error)?;
+        Ok(transaction.create().into())
+    }
+
+    pub async fn get(
+        &self,
+        tree: TreeRecord,
+        key: Vec<u8>,
+    ) -> Result<Option<Vec<u8>>, ProllyBindingError> {
+        let tree = Tree::try_from(tree)?;
+        let guard = self.inner.lock().await;
+        let transaction = guard.as_ref().ok_or_else(Self::completed_error)?;
+        transaction.get(&tree, &key).await.map_err(Into::into)
+    }
+
+    pub async fn put(
+        &self,
+        tree: TreeRecord,
+        key: Vec<u8>,
+        value: Vec<u8>,
+    ) -> Result<TreeRecord, ProllyBindingError> {
+        let tree = Tree::try_from(tree)?;
+        let guard = self.inner.lock().await;
+        let transaction = guard.as_ref().ok_or_else(Self::completed_error)?;
+        transaction
+            .put(&tree, key, value)
+            .await
+            .map(TreeRecord::from)
+            .map_err(Into::into)
+    }
+
+    pub async fn delete(
+        &self,
+        tree: TreeRecord,
+        key: Vec<u8>,
+    ) -> Result<TreeRecord, ProllyBindingError> {
+        let tree = Tree::try_from(tree)?;
+        let guard = self.inner.lock().await;
+        let transaction = guard.as_ref().ok_or_else(Self::completed_error)?;
+        transaction
+            .delete(&tree, &key)
+            .await
+            .map(TreeRecord::from)
+            .map_err(Into::into)
+    }
+
+    pub async fn batch(
+        &self,
+        tree: TreeRecord,
+        mutations: Vec<MutationRecord>,
+    ) -> Result<TreeRecord, ProllyBindingError> {
+        let tree = Tree::try_from(tree)?;
+        let mutations = mutations
+            .into_iter()
+            .map(Mutation::try_from)
+            .collect::<Result<Vec<_>, _>>()?;
+        let guard = self.inner.lock().await;
+        let transaction = guard.as_ref().ok_or_else(Self::completed_error)?;
+        transaction
+            .batch(&tree, mutations)
+            .await
+            .map(TreeRecord::from)
+            .map_err(Into::into)
+    }
+
+    pub async fn load_named_root(
+        &self,
+        name: Vec<u8>,
+    ) -> Result<Option<TreeRecord>, ProllyBindingError> {
+        let guard = self.inner.lock().await;
+        let transaction = guard.as_ref().ok_or_else(Self::completed_error)?;
+        transaction
+            .load_named_root(&name)
+            .await
+            .map(|tree| tree.map(TreeRecord::from))
+            .map_err(Into::into)
+    }
+
+    pub async fn publish_named_root(
+        &self,
+        name: Vec<u8>,
+        tree: TreeRecord,
+    ) -> Result<(), ProllyBindingError> {
+        let tree = Tree::try_from(tree)?;
+        let guard = self.inner.lock().await;
+        let transaction = guard.as_ref().ok_or_else(Self::completed_error)?;
+        transaction
+            .publish_named_root(&name, &tree)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn publish_named_root_at_millis(
+        &self,
+        name: Vec<u8>,
+        tree: TreeRecord,
+        timestamp_millis: u64,
+    ) -> Result<(), ProllyBindingError> {
+        let tree = Tree::try_from(tree)?;
+        let guard = self.inner.lock().await;
+        let transaction = guard.as_ref().ok_or_else(Self::completed_error)?;
+        transaction
+            .publish_named_root_at_millis(&name, &tree, timestamp_millis)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn delete_named_root(&self, name: Vec<u8>) -> Result<(), ProllyBindingError> {
+        let guard = self.inner.lock().await;
+        let transaction = guard.as_ref().ok_or_else(Self::completed_error)?;
+        transaction
+            .delete_named_root(&name)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn compare_and_swap_named_root(
+        &self,
+        name: Vec<u8>,
+        expected: Option<TreeRecord>,
+        replacement: Option<TreeRecord>,
+    ) -> Result<NamedRootUpdateRecord, ProllyBindingError> {
+        let expected = expected.map(Tree::try_from).transpose()?;
+        let replacement = replacement.map(Tree::try_from).transpose()?;
+        let guard = self.inner.lock().await;
+        let transaction = guard.as_ref().ok_or_else(Self::completed_error)?;
+        transaction
+            .compare_and_swap_named_root(&name, expected.as_ref(), replacement.as_ref())
+            .await
+            .map(NamedRootUpdateRecord::from)
+            .map_err(Into::into)
+    }
+
+    pub async fn commit(&self) -> Result<TransactionUpdateRecord, ProllyBindingError> {
+        let transaction = self
+            .inner
+            .lock()
+            .await
+            .take()
+            .ok_or_else(Self::completed_error)?;
+        transaction
+            .commit()
+            .await
+            .map(TransactionUpdateRecord::from)
+            .map_err(Into::into)
+    }
+
+    pub async fn rollback(&self) -> Result<(), ProllyBindingError> {
+        let transaction = self
+            .inner
+            .lock()
+            .await
+            .take()
+            .ok_or_else(Self::completed_error)?;
+        transaction.rollback();
+        Ok(())
+    }
+}
+
 fn validate_descriptor(
     descriptor: StoreDescriptorRecord,
 ) -> Result<StoreDescriptorRecord, StoreErrorRecord> {
@@ -746,8 +1224,9 @@ fn validate_optional_limit(name: &str, value: Option<u64>) -> Result<(), StoreEr
 mod tests {
     use super::*;
     use prolly::RemoteStoreBackend;
+    use std::collections::BTreeMap;
     use std::future::Future;
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex};
     use std::task::{Context, Poll, Wake, Waker};
 
     struct NoopWake;
@@ -1051,6 +1530,324 @@ mod tests {
             assert_eq!(error.0.code, "throttled");
             assert!(error.0.retryable);
             assert_eq!(error.0.provider_code.as_deref(), Some("429"));
+        });
+    }
+
+    #[derive(Default)]
+    struct MemoryForeignState {
+        nodes: BTreeMap<Vec<u8>, Vec<u8>>,
+        hints: BTreeMap<(Vec<u8>, Vec<u8>), Vec<u8>>,
+        roots: BTreeMap<Vec<u8>, Vec<u8>>,
+    }
+
+    #[derive(Default)]
+    struct MemoryForeignStore {
+        state: Mutex<MemoryForeignState>,
+    }
+
+    #[async_trait::async_trait]
+    impl ForeignRemoteStore for MemoryForeignStore {
+        async fn descriptor(&self) -> StoreDescriptorResultRecord {
+            StoreDescriptorResultRecord {
+                value: Some(descriptor(1, 4)),
+                error: None,
+            }
+        }
+
+        async fn get_node(&self, cid: Vec<u8>) -> OptionalBytesResultRecord {
+            let value = self.state.lock().unwrap().nodes.get(&cid).cloned();
+            OptionalBytesResultRecord {
+                value: OptionalBytesRecord::from_option(value),
+                error: None,
+            }
+        }
+
+        async fn put_node(&self, cid: Vec<u8>, value: Vec<u8>) -> UnitResultRecord {
+            self.state.lock().unwrap().nodes.insert(cid, value);
+            UnitResultRecord { error: None }
+        }
+
+        async fn delete_node(&self, cid: Vec<u8>) -> UnitResultRecord {
+            self.state.lock().unwrap().nodes.remove(&cid);
+            UnitResultRecord { error: None }
+        }
+
+        async fn batch_nodes(&self, ops: Vec<NodeMutationRecord>) -> UnitResultRecord {
+            let mut state = self.state.lock().unwrap();
+            apply_node_mutations(&mut state, ops);
+            UnitResultRecord { error: None }
+        }
+
+        async fn batch_get_nodes_ordered(
+            &self,
+            cids: Vec<Vec<u8>>,
+        ) -> OptionalBytesListResultRecord {
+            let state = self.state.lock().unwrap();
+            OptionalBytesListResultRecord {
+                values: cids
+                    .into_iter()
+                    .map(|cid| OptionalBytesRecord::from_option(state.nodes.get(&cid).cloned()))
+                    .collect(),
+                error: None,
+            }
+        }
+
+        async fn list_node_cids(&self) -> BytesListResultRecord {
+            BytesListResultRecord {
+                values: self.state.lock().unwrap().nodes.keys().cloned().collect(),
+                error: None,
+            }
+        }
+
+        async fn get_hint(
+            &self,
+            namespace: Vec<u8>,
+            key: Vec<u8>,
+        ) -> OptionalBytesResultRecord {
+            let value = self
+                .state
+                .lock()
+                .unwrap()
+                .hints
+                .get(&(namespace, key))
+                .cloned();
+            OptionalBytesResultRecord {
+                value: OptionalBytesRecord::from_option(value),
+                error: None,
+            }
+        }
+
+        async fn put_hint(
+            &self,
+            namespace: Vec<u8>,
+            key: Vec<u8>,
+            value: Vec<u8>,
+        ) -> UnitResultRecord {
+            self.state
+                .lock()
+                .unwrap()
+                .hints
+                .insert((namespace, key), value);
+            UnitResultRecord { error: None }
+        }
+
+        async fn batch_put_nodes_with_hint(
+            &self,
+            nodes: Vec<NodeEntryRecord>,
+            namespace: Vec<u8>,
+            key: Vec<u8>,
+            value: Vec<u8>,
+        ) -> UnitResultRecord {
+            let mut state = self.state.lock().unwrap();
+            for node in nodes {
+                state.nodes.insert(node.key, node.value);
+            }
+            state.hints.insert((namespace, key), value);
+            UnitResultRecord { error: None }
+        }
+
+        async fn get_root_manifest(&self, name: Vec<u8>) -> OptionalBytesResultRecord {
+            let value = self.state.lock().unwrap().roots.get(&name).cloned();
+            OptionalBytesResultRecord {
+                value: OptionalBytesRecord::from_option(value),
+                error: None,
+            }
+        }
+
+        async fn put_root_manifest(
+            &self,
+            name: Vec<u8>,
+            manifest: Vec<u8>,
+        ) -> UnitResultRecord {
+            self.state.lock().unwrap().roots.insert(name, manifest);
+            UnitResultRecord { error: None }
+        }
+
+        async fn delete_root_manifest(&self, name: Vec<u8>) -> UnitResultRecord {
+            self.state.lock().unwrap().roots.remove(&name);
+            UnitResultRecord { error: None }
+        }
+
+        async fn compare_and_swap_root_manifest(
+            &self,
+            name: Vec<u8>,
+            expected: OptionalBytesRecord,
+            new: OptionalBytesRecord,
+        ) -> RootCasResultRecord {
+            let expected = expected.into_option().unwrap();
+            let new = new.into_option().unwrap();
+            let mut state = self.state.lock().unwrap();
+            let current = state.roots.get(&name).cloned();
+            if current != expected {
+                return RootCasResultRecord {
+                    applied: false,
+                    current: OptionalBytesRecord::from_option(current),
+                    error: None,
+                };
+            }
+            match new {
+                Some(manifest) => {
+                    state.roots.insert(name, manifest);
+                }
+                None => {
+                    state.roots.remove(&name);
+                }
+            }
+            RootCasResultRecord {
+                applied: true,
+                current: OptionalBytesRecord::from_option(None),
+                error: None,
+            }
+        }
+
+        async fn list_root_manifests(&self) -> NamedBytesListResultRecord {
+            NamedBytesListResultRecord {
+                values: self
+                    .state
+                    .lock()
+                    .unwrap()
+                    .roots
+                    .iter()
+                    .map(|(name, value)| NamedBytesRecord {
+                        name: name.clone(),
+                        value: value.clone(),
+                    })
+                    .collect(),
+                error: None,
+            }
+        }
+
+        async fn commit_transaction(
+            &self,
+            nodes: Vec<NodeMutationRecord>,
+            conditions: Vec<RootConditionRecord>,
+            roots: Vec<RootWriteRecord>,
+        ) -> TransactionResultRecord {
+            let mut state = self.state.lock().unwrap();
+            for condition in conditions {
+                let expected = condition.expected.into_option().unwrap();
+                let current = state.roots.get(&condition.name).cloned();
+                if current != expected {
+                    return TransactionResultRecord {
+                        applied: false,
+                        conflict: Some(StoreTransactionConflictRecord {
+                            name: condition.name,
+                            expected: OptionalBytesRecord::from_option(expected),
+                            current: OptionalBytesRecord::from_option(current),
+                        }),
+                        error: None,
+                    };
+                }
+            }
+            apply_node_mutations(&mut state, nodes);
+            for root in roots {
+                match root.replacement.into_option().unwrap() {
+                    Some(manifest) => {
+                        state.roots.insert(root.name, manifest);
+                    }
+                    None => {
+                        state.roots.remove(&root.name);
+                    }
+                }
+            }
+            TransactionResultRecord {
+                applied: true,
+                conflict: None,
+                error: None,
+            }
+        }
+    }
+
+    fn apply_node_mutations(state: &mut MemoryForeignState, ops: Vec<NodeMutationRecord>) {
+        for op in ops {
+            match op.value.into_option().unwrap() {
+                Some(value) => {
+                    state.nodes.insert(op.key, value);
+                }
+                None => {
+                    state.nodes.remove(&op.key);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn async_engine_uses_foreign_store_for_tree_root_and_transaction() {
+        block_on(async {
+            let store = Arc::new(MemoryForeignStore::default());
+            let engine = AsyncProllyEngine::new(store, crate::default_config())
+                .await
+                .unwrap();
+            let tree = engine.create();
+            let tree = engine
+                .put(tree, b"a".to_vec(), b"1".to_vec())
+                .await
+                .unwrap();
+            engine
+                .publish_named_root(b"main".to_vec(), tree.clone())
+                .await
+                .unwrap();
+            assert_eq!(
+                engine.get(tree.clone(), b"a".to_vec()).await.unwrap(),
+                Some(b"1".to_vec())
+            );
+
+            let transaction = engine.begin_transaction().await.unwrap();
+            let updated = transaction
+                .put(tree, b"b".to_vec(), b"2".to_vec())
+                .await
+                .unwrap();
+            transaction
+                .publish_named_root(b"main".to_vec(), updated.clone())
+                .await
+                .unwrap();
+            assert!(transaction.commit().await.unwrap().applied);
+            assert_eq!(
+                engine.load_named_root(b"main".to_vec()).await.unwrap(),
+                Some(updated)
+            );
+        });
+    }
+
+    #[test]
+    fn async_engine_supports_pages_diff_merge_and_stats() {
+        block_on(async {
+            let engine = AsyncProllyEngine::new(
+                Arc::new(MemoryForeignStore::default()),
+                crate::default_config(),
+            )
+            .await
+            .unwrap();
+            let base = engine.create();
+            let left = engine
+                .put(base.clone(), b"a".to_vec(), b"1".to_vec())
+                .await
+                .unwrap();
+            let right = engine
+                .put(base.clone(), b"b".to_vec(), b"2".to_vec())
+                .await
+                .unwrap();
+
+            let page = engine
+                .range_page(left.clone(), None, None, 1)
+                .await
+                .unwrap();
+            assert_eq!(page.entries.len(), 1);
+            let diffs = engine.diff(base.clone(), left.clone()).await.unwrap();
+            assert_eq!(diffs.len(), 1);
+            let merged = engine
+                .merge(base, left, right, None)
+                .await
+                .unwrap();
+            assert_eq!(engine.range(merged.clone(), Vec::new(), None).await.unwrap().len(), 2);
+            assert_eq!(
+                engine
+                    .collect_stats(merged)
+                    .await
+                    .unwrap()
+                    .total_key_value_pairs,
+                2
+            );
         });
     }
 }

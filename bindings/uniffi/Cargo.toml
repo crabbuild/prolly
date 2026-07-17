@@ -21,6 +21,7 @@ sqlite = ["dep:prolly-store-sqlite"]
 
 [dependencies]
 async-trait = "0.1"
+futures-util = "0.3"
 prolly-map = { path = "../..", features = ["async-store"] }
 prolly-store-sqlite = { path = "../../stores/prolly-store-sqlite", optional = true }
 serde = "1.0"

@@ -433,6 +433,7 @@ pub use prolly::tombstone::{
 #[cfg(feature = "async-store")]
 pub use prolly::transaction::{
     AsyncProllyTransaction, AsyncTransactionOverlayStore, AsyncTransactionalStore,
+    OwnedAsyncProllyTransaction, OwnedAsyncTransactionOverlayStore,
 };
 pub use prolly::transaction::{
     OwnedProllyTransaction, OwnedTransactionOverlayStore, ProllyTransaction, RootCondition,

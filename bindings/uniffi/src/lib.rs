@@ -1574,7 +1574,7 @@ impl MergePolicyRegistry {
 
     pub fn set_default_host_resolver<F>(&self, resolver: F) -> Result<(), ProllyBindingError>
     where
-        F: Fn(ConflictRecord) -> ResolutionRecord + 'static,
+        F: Fn(ConflictRecord) -> ResolutionRecord + Send + Sync + 'static,
     {
         let policy = policy_fn_from_host_callback(resolver);
         self.lock()?
@@ -1588,7 +1588,7 @@ impl MergePolicyRegistry {
         resolver: F,
     ) -> Result<(), ProllyBindingError>
     where
-        F: Fn(ConflictRecord) -> ResolutionRecord + 'static,
+        F: Fn(ConflictRecord) -> ResolutionRecord + Send + Sync + 'static,
     {
         let policy = policy_fn_from_host_callback(resolver);
         self.lock()?
@@ -1602,7 +1602,7 @@ impl MergePolicyRegistry {
         resolver: F,
     ) -> Result<(), ProllyBindingError>
     where
-        F: Fn(ConflictRecord) -> ResolutionRecord + 'static,
+        F: Fn(ConflictRecord) -> ResolutionRecord + Send + Sync + 'static,
     {
         let policy = policy_fn_from_host_callback(resolver);
         self.lock()?
@@ -4475,7 +4475,7 @@ impl ProllyEngine {
         resolver: F,
     ) -> Result<TreeRecord, ProllyBindingError>
     where
-        F: Fn(ConflictRecord) -> ResolutionRecord + 'static,
+        F: Fn(ConflictRecord) -> ResolutionRecord + Send + Sync + 'static,
     {
         let base = base.try_into()?;
         let left = left.try_into()?;
@@ -4497,7 +4497,7 @@ impl ProllyEngine {
         resolver: F,
     ) -> Result<MergeExplanationRecord, ProllyBindingError>
     where
-        F: Fn(ConflictRecord) -> ResolutionRecord + 'static,
+        F: Fn(ConflictRecord) -> ResolutionRecord + Send + Sync + 'static,
     {
         let base = base.try_into()?;
         let left = left.try_into()?;
@@ -4519,7 +4519,7 @@ impl ProllyEngine {
         resolver: F,
     ) -> Result<TreeRecord, ProllyBindingError>
     where
-        F: Fn(ConflictRecord) -> ResolutionRecord + 'static,
+        F: Fn(ConflictRecord) -> ResolutionRecord + Send + Sync + 'static,
     {
         let base = base.try_into()?;
         let left = left.try_into()?;
@@ -4549,7 +4549,7 @@ impl ProllyEngine {
         resolver: F,
     ) -> Result<TreeRecord, ProllyBindingError>
     where
-        F: Fn(ConflictRecord) -> ResolutionRecord + 'static,
+        F: Fn(ConflictRecord) -> ResolutionRecord + Send + Sync + 'static,
     {
         let base = base.try_into()?;
         let left = left.try_into()?;
@@ -7778,7 +7778,7 @@ fn resolver_from_callback(callback: Arc<dyn MergeResolverCallback>) -> Resolver 
 
 fn resolver_from_host_callback<F>(callback: F) -> Resolver
 where
-    F: Fn(ConflictRecord) -> ResolutionRecord + 'static,
+    F: Fn(ConflictRecord) -> ResolutionRecord + Send + Sync + 'static,
 {
     Box::new(move |conflict| callback(ConflictRecord::from(conflict)).into())
 }

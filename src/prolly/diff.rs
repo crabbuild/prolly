@@ -454,7 +454,7 @@ impl<'a> MergeTraceRecorder<'a> {
 
 #[derive(Clone, Copy)]
 enum MergeResolverRef<'a> {
-    Legacy(&'a dyn Fn(&Conflict) -> Resolution),
+    Legacy(&'a (dyn Fn(&Conflict) -> Resolution + Send + Sync)),
     Borrowed(&'a dyn BorrowedMergeResolver),
 }
 
@@ -5120,7 +5120,7 @@ fn try_structural_merge<S: Store>(
     base: &Tree,
     left: &Tree,
     right: &Tree,
-    resolver: Option<&dyn Fn(&Conflict) -> Resolution>,
+    resolver: Option<&(dyn Fn(&Conflict) -> Resolution + Send + Sync)>,
 ) -> Result<Option<Tree>, Error> {
     let mut recorder = MergeTraceRecorder::disabled();
     try_structural_merge_traced(
