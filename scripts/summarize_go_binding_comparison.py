@@ -70,6 +70,20 @@ def main() -> None:
             if binding[field] != native[field]:
                 fail(f"{field} mismatch for {key}: binding={binding[field]} native={native[field]}")
 
+    paired_run_wins: dict[str, int] = defaultdict(int)
+    paired_run_wins_by_size: dict[str, dict[str, int]] = defaultdict(
+        lambda: defaultdict(int)
+    )
+    cell_run_ratios: dict[tuple[str, ...], list[float]] = defaultdict(list)
+    for key, pair in by_run.items():
+        ratio = float(pair[BINDING]["ns_per_op"]) / float(
+            pair[NATIVE]["ns_per_op"]
+        )
+        winner = BINDING if ratio < 1.0 else NATIVE if ratio > 1.0 else "tie"
+        paired_run_wins[winner] += 1
+        paired_run_wins_by_size[key[0]][winner] += 1
+        cell_run_ratios[key[:-1]].append(ratio)
+
     groups: dict[tuple[str, ...], dict[str, list[float]]] = defaultdict(
         lambda: defaultdict(list)
     )
@@ -128,6 +142,10 @@ def main() -> None:
     operation_wins: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
     binding_native_ratios: dict[str, list[float]] = defaultdict(list)
     ten_million_ratios: dict[str, list[float]] = defaultdict(list)
+    scale_operation_ratios: dict[tuple[str, str], list[float]] = defaultdict(list)
+    scale_operation_wins: dict[tuple[str, str], dict[str, int]] = defaultdict(
+        lambda: defaultdict(int)
+    )
     for row in summary_rows:
         wins[row["winner"]] += 1
         operation_wins[row["operation"]][row["winner"]] += 1
@@ -135,6 +153,8 @@ def main() -> None:
             row["native_go_median_ns_per_op"]
         )
         binding_native_ratios[row["operation"]].append(ratio)
+        scale_operation_ratios[(row["records"], row["operation"])].append(ratio)
+        scale_operation_wins[(row["records"], row["operation"])][row["winner"]] += 1
         if int(row["records"]) == 10_000_000:
             ten_million_ratios[row["operation"]].append(ratio)
     run_counts = [int(row["runs"]) for row in summary_rows]
@@ -143,13 +163,42 @@ def main() -> None:
         peak_rss[row["implementation"]] = max(
             peak_rss[row["implementation"]], float(row["median_peak_rss_bytes"])
         )
+    changed_winner_cells = [
+        (key, ratios)
+        for key, ratios in cell_run_ratios.items()
+        if any(ratio < 1.0 for ratio in ratios)
+        and any(ratio > 1.0 for ratio in ratios)
+    ]
+    largest_ratio_span_key, largest_ratio_span_values = max(
+        cell_run_ratios.items(), key=lambda item: max(item[1]) - min(item[1])
+    )
+    if max(largest_ratio_span_values) < 1.0:
+        largest_span_winner = "the Rust binding won all repetitions"
+    elif min(largest_ratio_span_values) > 1.0:
+        largest_span_winner = "native Go won all repetitions"
+    else:
+        largest_span_winner = "the per-run winner changed"
+    swap_before = machine.get("host_swap_before")
+    swap_after = machine.get("host_swap_after")
+    if swap_before and swap_after:
+        swap_note = (
+            f"Host swap before the run: {swap_before}. Host swap after the run: {swap_after}."
+        )
+        if swap_before != swap_after:
+            swap_note += (
+                " Machine-wide swap changed during the measured tiers, so exact medians may "
+                "include memory-pressure noise and should be repeated on an idle dedicated "
+                "host before publication."
+            )
+    else:
+        swap_note = "Host swap before/after the run was not recorded."
 
     report = [
         "# Rust Prolly Go Binding vs Native Go Prolly Performance",
         "",
         "This comparison measures the API seen by a Go application, not direct Rust calls. "
         "The Rust implementation runs as an optimized native library behind cgo/UniFFI; "
-        "the native implementation is the Go prolly tree used by Dolt. All scenarios are "
+        "the native implementation is the Go prolly tree implementation. All scenarios are "
         "process-isolated, single-worker, and in-memory. Lower nanoseconds per operation is better.",
         "",
         f"Rust-through-Go-binding wins: {wins[BINDING]}; native Go wins: {wins[NATIVE]}; ties: {wins['tie']}.",
@@ -185,6 +234,62 @@ def main() -> None:
     report.extend(
         [
             "",
+            "## Scale-by-scale result",
+            "",
+            "Binding/native-Go ratios below 1.0 favor the Rust binding. Each row contains six median workload cells.",
+            "",
+            "| Records | Operation | Binding median wins | Binding/native ratio range |",
+            "|---:|---|---:|---:|",
+        ]
+    )
+    for records in sorted({row["records"] for row in summary_rows}, key=int):
+        for operation in ("write", "point_read", "range_scan"):
+            ratios = scale_operation_ratios[(records, operation)]
+            counts = scale_operation_wins[(records, operation)]
+            report.append(
+                f"| {int(records):,} | {operation} | {counts[BINDING]}/6 | "
+                f"{min(ratios):.3f}–{max(ratios):.3f}x |"
+            )
+    ten_million_point = scale_operation_ratios.get(("10000000", "point_read"), [])
+    ten_million_point_target = sum(ratio <= (1.0 / 1.5) for ratio in ten_million_point)
+    if ten_million_point:
+        report.extend(
+            [
+                "",
+                f"At 10M, {ten_million_point_target}/6 point-read cells meet or exceed a 1.5x binding advantage. "
+                "The universal 1.5–2x point-read goal is therefore not yet met. Full-scan gains are smaller still and do not meet that target.",
+            ]
+        )
+    report.extend(
+        [
+            "",
+            "## Repetition stability",
+            "",
+            f"Across all paired repetitions, the Rust binding won {paired_run_wins[BINDING]}/"
+            f"{len(by_run)} operation runs; native Go won {paired_run_wins[NATIVE]}/"
+            f"{len(by_run)}.",
+            "",
+        ]
+    )
+    for records in sorted(paired_run_wins_by_size, key=int):
+        counts = paired_run_wins_by_size[records]
+        total = sum(counts.values())
+        report.append(
+            f"- {int(records):,}: binding {counts[BINDING]}/{total}; native Go {counts[NATIVE]}/{total}."
+        )
+    report.extend(
+        [
+            f"- {len(changed_winner_cells)}/{len(cell_run_ratios)} scenario cells changed per-run winner.",
+            "- Largest paired-ratio span: "
+            f"{int(largest_ratio_span_key[0]):,} {largest_ratio_span_key[1]} "
+            f"{largest_ratio_span_key[2]} {largest_ratio_span_key[3]}, "
+            f"{min(largest_ratio_span_values):.3f}–{max(largest_ratio_span_values):.3f}x; "
+            f"{largest_span_winner}.",
+        ]
+    )
+    report.extend(
+        [
+            "",
             "## What is included at the binding boundary",
             "",
             "- Write timing includes encoding the complete Go mutation slice into UniFFI bytes, one cgo call, Rust tree work, and decoding the returned tree handle.",
@@ -192,6 +297,29 @@ def main() -> None:
             f"- Binding scan path: {machine.get('binding_scan_api', 'not recorded')}.",
             "- Fixture/key/value construction is outside write timing; one untimed point-read warm pass precedes measurement.",
             f"- Highest scenario median peak RSS: Rust Go binding {peak_rss[BINDING] / 2**30:.2f} GiB; native Go {peak_rss[NATIVE] / 2**30:.2f} GiB.",
+            "",
+            "### Peak RSS by workload",
+            "",
+            "| Records | Phase | Workload | Rust Go binding | Native Go | Binding delta |",
+            "|---:|---|---|---:|---:|---:|",
+        ]
+    )
+    memory_by_scenario: dict[tuple[str, str, str], dict[str, float]] = defaultdict(dict)
+    for row in memory_rows:
+        memory_by_scenario[(row["records"], row["phase"], row["workload"])][
+            row["implementation"]
+        ] = float(row["median_peak_rss_bytes"])
+    for key in sorted(memory_by_scenario, key=lambda item: (int(item[0]), item[1], item[2])):
+        values = memory_by_scenario[key]
+        binding_rss = values[BINDING]
+        native_rss = values[NATIVE]
+        report.append(
+            f"| {int(key[0]):,} | {key[1]} | {key[2]} | "
+            f"{binding_rss / 2**30:.2f} GiB | {native_rss / 2**30:.2f} GiB | "
+            f"{(binding_rss / native_rss - 1.0) * 100:+.1f}% |"
+        )
+    report.extend(
+        [
             "",
             "| Records | Phase | Workload | Operation | Runs | Rust Go binding ns/op | Native Go ns/op | Winner | Speedup |",
             "|---:|---|---|---|---:|---:|---:|---|---:|",
@@ -221,6 +349,8 @@ def main() -> None:
             "The result isolates neither cgo nor UniFFI serialization. Those costs are intentionally included because they are paid by a Go caller. "
             "It does not cover disk I/O, cold cache, multiple workers, deployment packaging, partial/selective range scans, or concurrent readers. "
             "Medians describe these measured runs; they are not confidence intervals.",
+            "",
+            swap_note,
             "",
             "## Implemented mechanisms and remaining work",
             "",
