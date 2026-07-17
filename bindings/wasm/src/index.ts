@@ -789,14 +789,95 @@ export interface PortableProximityRecord {
 export interface PortableSearchRequest {
   vector: Float32Array;
   topK: number;
-  policy: "exact";
+  policy: "exact" | "fixed_budget" | "adaptive";
+  adaptiveQuality?: "fast" | "balanced" | "high_recall";
+  budget?: PortableSearchBudget;
+  filter?: PortableSearchFilter;
+  kernel?: "scalar_deterministic" | "simd_deterministic" | "auto_deterministic";
+  backend?: "native" | "product_quantized" | "hnsw" | "composite" | "auto";
+  hnswEfSearch?: number;
+  pqRerankMultiplier?: number;
   signal?: AbortSignal;
 }
 
+export interface PortableSearchBudget {
+  maxNodes?: bigint;
+  maxCommittedBytes?: bigint;
+  maxDistanceEvaluations?: bigint;
+  maxFrontierEntries?: bigint;
+}
+
+export type PortableSearchFilter =
+  | { kind: "all" }
+  | { kind: "key_range"; start?: Uint8Array; rangeEnd?: Uint8Array }
+  | { kind: "prefix"; prefix: Uint8Array }
+  | { kind: "eligible_keys"; eligibleKeys: Uint8Array[] };
+
 export interface PortableSearchResult {
   neighbors: Array<{ key: Uint8Array; value: Uint8Array; distance: number }>;
+  stats: {
+    levelsVisited: bigint;
+    nodesRead: bigint;
+    bytesRead: bigint;
+    physicalBytesRead: bigint;
+    committedBytes: bigint;
+    distanceEvaluations: bigint;
+    quantizedDistanceEvaluations: bigint;
+    rerankedCandidates: bigint;
+    frontierPeak: bigint;
+    candidateHandlesPeak: bigint;
+    candidateRetainedBytesPeak: bigint;
+  };
   completion: string;
   backend: string;
+  planFormatVersion: number;
+}
+
+function ownPortableSearchRequest(request: PortableSearchRequest): object {
+  if (!Number.isSafeInteger(request.topK) || request.topK <= 0) {
+    throw new RangeError("topK must be a positive safe integer");
+  }
+  if (request.policy === "adaptive" && request.adaptiveQuality == null) {
+    throw new TypeError("adaptive search requires adaptiveQuality");
+  }
+  const filter = request.filter ?? { kind: "all" as const };
+  let ownedFilter: object;
+  switch (filter.kind) {
+    case "all":
+      ownedFilter = { kind: "all" };
+      break;
+    case "key_range":
+      ownedFilter = {
+        kind: "key_range",
+        start: filter.start == null ? undefined : ownedPortableBytes(filter.start),
+        rangeEnd: filter.rangeEnd == null ? undefined : ownedPortableBytes(filter.rangeEnd),
+      };
+      break;
+    case "prefix":
+      ownedFilter = { kind: "prefix", prefix: ownedPortableBytes(filter.prefix) };
+      break;
+    case "eligible_keys":
+      ownedFilter = { kind: "eligible_keys", eligibleKeys: filter.eligibleKeys.map(ownedPortableBytes) };
+      break;
+  }
+  const budget = request.budget ?? {};
+  return {
+    query: new Float32Array(request.vector),
+    k: request.topK,
+    policy: request.policy,
+    adaptiveQuality: request.adaptiveQuality,
+    budget: {
+      maxNodes: budget.maxNodes?.toString(),
+      maxCommittedBytes: budget.maxCommittedBytes?.toString(),
+      maxDistanceEvaluations: budget.maxDistanceEvaluations?.toString(),
+      maxFrontierEntries: budget.maxFrontierEntries?.toString(),
+    },
+    filter: ownedFilter,
+    kernel: request.kernel ?? "auto_deterministic",
+    backend: request.backend ?? "native",
+    hnswEfSearch: request.hnswEfSearch,
+    pqRerankMultiplier: request.pqRerankMultiplier,
+  };
 }
 
 export interface PortableProximityConfig {
@@ -2039,9 +2120,9 @@ export class WasmProximityMap implements Disposable {
   proveMembership(key: Uint8Array): WasmProximityProof {
     return new WasmProximityProof(this.nativeHandle().proveMembership(ownedPortableBytes(key)));
   }
-  proveSearch(vector: Float32Array, topK: number): WasmProximitySearchProof {
+  proveSearch(request: PortableSearchRequest): WasmProximitySearchProof {
     return new WasmProximitySearchProof(
-      this.nativeHandle().proveSearch(new Float32Array(vector), topK),
+      this.nativeHandle().proveSearch(ownPortableSearchRequest(request)),
     );
   }
   proveStructure(): WasmProximityStructuralProof {
@@ -2113,8 +2194,8 @@ export class WasmProximityReadSession implements Disposable {
   search(request: PortableSearchRequest): Promise<PortableSearchResult> {
     if (this.#native == null) return Promise.reject(new Error("WASM proximity session is closed"));
     const native = this.#native;
-    const vector = new Float32Array(request.vector);
-    return portablePromise(request.signal, () => native.search(vector, request.topK));
+    const owned = ownPortableSearchRequest(request);
+    return portablePromise(request.signal, () => native.search(owned));
   }
   close(): void { this.#native?.free?.(); this.#native = undefined; }
   [Symbol.dispose](): void { this.close(); }

@@ -2,10 +2,11 @@ use super::{js_error, WasmProllyEngine};
 use crate::page::set_bytes;
 use js_sys::{Array, BigInt, Float32Array, Object, Reflect, Uint8Array};
 use prolly::{
-    Cid, ContentGraphLimits, DistanceMetric, ProximityConfig, ProximityMap,
-    ProximityMembershipProof, ProximityMutation, ProximityRecord, ProximitySearchClaim,
-    ProximitySearchProof, ProximityStructuralProof, ProximityVerification, SearchBackend,
-    SearchCompletion, SearchRequest,
+    AdaptiveQuality, Cid, ContentGraphLimits, DistanceMetric, HnswSearchOptions, PlannerPolicy,
+    PqSearchOptions, ProximityConfig, ProximityFilter, ProximityMap, ProximityMembershipProof,
+    ProximityMutation, ProximityRecord, ProximitySearchClaim, ProximitySearchProof,
+    ProximityStructuralProof, ProximityVerification, QueryKernel, SearchBackend, SearchBudget,
+    SearchCompletion, SearchOptions, SearchPolicy, SearchRequest,
 };
 use std::sync::Arc;
 use wasm_bindgen::prelude::*;
@@ -23,10 +24,236 @@ impl WasmProximityMap {
     }
 }
 
+enum OwnedProximityFilter {
+    All,
+    KeyRange {
+        start: Option<Vec<u8>>,
+        end: Option<Vec<u8>>,
+    },
+    Prefix(Vec<u8>),
+    EligibleKeys(Vec<Vec<u8>>),
+}
+
+struct OwnedSearchRequest {
+    query: Vec<f32>,
+    k: usize,
+    policy: SearchPolicy,
+    budget: SearchBudget,
+    filter: OwnedProximityFilter,
+    kernel: QueryKernel,
+    options: SearchOptions,
+}
+
+impl OwnedSearchRequest {
+    fn as_request(&self) -> SearchRequest<'_> {
+        let filter = match &self.filter {
+            OwnedProximityFilter::All => ProximityFilter::All,
+            OwnedProximityFilter::KeyRange { start, end } => ProximityFilter::KeyRange {
+                start: start.as_deref(),
+                end: end.as_deref(),
+            },
+            OwnedProximityFilter::Prefix(prefix) => ProximityFilter::Prefix(prefix),
+            OwnedProximityFilter::EligibleKeys(keys) => ProximityFilter::EligibleKeys(keys),
+        };
+        SearchRequest {
+            query: &self.query,
+            k: self.k,
+            policy: self.policy,
+            budget: self.budget.clone(),
+            filter,
+            kernel: self.kernel,
+            options: self.options.clone(),
+        }
+    }
+}
+
+fn js_field(value: &JsValue, name: &str) -> Result<JsValue, JsValue> {
+    Reflect::get(value, &JsValue::from_str(name))
+}
+
+fn required_string(value: &JsValue, name: &str) -> Result<String, JsValue> {
+    js_field(value, name)?
+        .as_string()
+        .ok_or_else(|| JsValue::from_str(&format!("{name} must be a string")))
+}
+
+fn optional_field(value: &JsValue, name: &str) -> Result<Option<JsValue>, JsValue> {
+    let field = js_field(value, name)?;
+    Ok((!field.is_undefined() && !field.is_null()).then_some(field))
+}
+
+fn optional_string_usize(value: &JsValue, name: &str) -> Result<Option<usize>, JsValue> {
+    optional_field(value, name)?
+        .map(|value| {
+            value
+                .as_string()
+                .ok_or_else(|| {
+                    JsValue::from_str(&format!("{name} must be an unsigned integer string"))
+                })?
+                .parse::<usize>()
+                .map_err(|error| JsValue::from_str(&format!("invalid {name}: {error}")))
+        })
+        .transpose()
+}
+
+fn optional_u32(value: &JsValue, name: &str) -> Result<Option<u32>, JsValue> {
+    optional_field(value, name)?
+        .map(|value| {
+            let number = value
+                .as_f64()
+                .ok_or_else(|| JsValue::from_str(&format!("{name} must be a number")))?;
+            if !number.is_finite()
+                || number.fract() != 0.0
+                || number < 0.0
+                || number > u32::MAX as f64
+            {
+                return Err(JsValue::from_str(&format!("{name} must fit u32")));
+            }
+            Ok(number as u32)
+        })
+        .transpose()
+}
+
+fn optional_u16(value: &JsValue, name: &str) -> Result<Option<u16>, JsValue> {
+    optional_u32(value, name)?
+        .map(|value| {
+            u16::try_from(value).map_err(|_| JsValue::from_str(&format!("{name} must fit u16")))
+        })
+        .transpose()
+}
+
+fn optional_bytes(value: &JsValue, name: &str) -> Result<Option<Vec<u8>>, JsValue> {
+    optional_field(value, name)?
+        .map(|value| {
+            value
+                .dyn_into::<Uint8Array>()
+                .map(|value| value.to_vec())
+                .map_err(|_| JsValue::from_str(&format!("{name} must be Uint8Array")))
+        })
+        .transpose()
+}
+
+fn owned_search_request(value: JsValue) -> Result<OwnedSearchRequest, JsValue> {
+    let query = js_field(&value, "query")?
+        .dyn_into::<Float32Array>()
+        .map_err(|_| JsValue::from_str("query must be Float32Array"))?
+        .to_vec();
+    let k_value = js_field(&value, "k")?
+        .as_f64()
+        .ok_or_else(|| JsValue::from_str("k must be a number"))?;
+    if !k_value.is_finite()
+        || k_value.fract() != 0.0
+        || k_value <= 0.0
+        || k_value > usize::MAX as f64
+    {
+        return Err(JsValue::from_str(
+            "k must be a positive platform-sized integer",
+        ));
+    }
+    let policy = match required_string(&value, "policy")?.as_str() {
+        "exact" => SearchPolicy::Exact,
+        "fixed_budget" => SearchPolicy::FixedBudget,
+        "adaptive" => {
+            let quality = match required_string(&value, "adaptiveQuality")?.as_str() {
+                "fast" => AdaptiveQuality::Fast,
+                "balanced" => AdaptiveQuality::Balanced,
+                "high_recall" => AdaptiveQuality::HighRecall,
+                other => {
+                    return Err(JsValue::from_str(&format!(
+                        "unknown adaptive quality: {other}"
+                    )))
+                }
+            };
+            SearchPolicy::Adaptive(quality)
+        }
+        other => {
+            return Err(JsValue::from_str(&format!(
+                "unknown search policy: {other}"
+            )))
+        }
+    };
+    let budget_value = js_field(&value, "budget")?;
+    let budget = SearchBudget {
+        max_nodes: optional_string_usize(&budget_value, "maxNodes")?,
+        max_committed_bytes: optional_string_usize(&budget_value, "maxCommittedBytes")?,
+        max_distance_evaluations: optional_string_usize(&budget_value, "maxDistanceEvaluations")?,
+        max_frontier_entries: optional_string_usize(&budget_value, "maxFrontierEntries")?,
+    };
+    let filter_value = js_field(&value, "filter")?;
+    let filter = match required_string(&filter_value, "kind")?.as_str() {
+        "all" => OwnedProximityFilter::All,
+        "key_range" => OwnedProximityFilter::KeyRange {
+            start: optional_bytes(&filter_value, "start")?,
+            end: optional_bytes(&filter_value, "rangeEnd")?,
+        },
+        "prefix" => OwnedProximityFilter::Prefix(
+            optional_bytes(&filter_value, "prefix")?
+                .ok_or_else(|| JsValue::from_str("prefix filter requires prefix"))?,
+        ),
+        "eligible_keys" => {
+            let array = js_field(&filter_value, "eligibleKeys")?
+                .dyn_into::<Array>()
+                .map_err(|_| JsValue::from_str("eligibleKeys must be an array"))?;
+            let keys = array
+                .iter()
+                .map(|value| {
+                    value
+                        .dyn_into::<Uint8Array>()
+                        .map(|value| value.to_vec())
+                        .map_err(|_| JsValue::from_str("eligible key must be Uint8Array"))
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            OwnedProximityFilter::EligibleKeys(keys)
+        }
+        other => {
+            return Err(JsValue::from_str(&format!(
+                "unknown proximity filter: {other}"
+            )))
+        }
+    };
+    let kernel = match required_string(&value, "kernel")?.as_str() {
+        "scalar_deterministic" => QueryKernel::ScalarDeterministic,
+        "simd_deterministic" => QueryKernel::SimdDeterministic,
+        "auto_deterministic" => QueryKernel::AutoDeterministic,
+        other => return Err(JsValue::from_str(&format!("unknown query kernel: {other}"))),
+    };
+    let backend = match required_string(&value, "backend")?.as_str() {
+        "native" => SearchBackend::Native,
+        "product_quantized" => SearchBackend::ProductQuantized,
+        "hnsw" => SearchBackend::Hnsw,
+        "composite" => SearchBackend::Composite,
+        "auto" => SearchBackend::Auto,
+        other => {
+            return Err(JsValue::from_str(&format!(
+                "unknown search backend: {other}"
+            )))
+        }
+    };
+    Ok(OwnedSearchRequest {
+        query,
+        k: k_value as usize,
+        policy,
+        budget,
+        filter,
+        kernel,
+        options: SearchOptions {
+            backend,
+            planner: PlannerPolicy::default(),
+            hnsw: HnswSearchOptions {
+                ef_search: optional_u32(&value, "hnswEfSearch")?,
+            },
+            pq: PqSearchOptions {
+                rerank_multiplier: optional_u16(&value, "pqRerankMultiplier")?,
+            },
+        },
+    })
+}
+
 #[wasm_bindgen(js_class = WasmProximityMap)]
 impl WasmProximityMap {
-    pub fn search(&self, query: Float32Array, k: u32) -> Result<Object, JsValue> {
-        search_map(&self.load()?, query.to_vec(), k)
+    pub fn search(&self, request: JsValue) -> Result<Object, JsValue> {
+        let request = owned_search_request(request)?;
+        search_map(&self.load()?, &request)
     }
 
     pub fn read(&self) -> Result<WasmProximityReadSession, JsValue> {
@@ -151,17 +378,10 @@ impl WasmProximityMap {
             .map_err(js_error)
     }
     #[wasm_bindgen(js_name = proveSearch)]
-    pub fn prove_search(
-        &self,
-        query: Float32Array,
-        k: u32,
-    ) -> Result<WasmProximitySearchProof, JsValue> {
-        let query = query.to_vec();
+    pub fn prove_search(&self, request: JsValue) -> Result<WasmProximitySearchProof, JsValue> {
+        let request = owned_search_request(request)?;
         self.load()?
-            .prove_search(
-                SearchRequest::exact(&query, k as usize),
-                &ContentGraphLimits::default(),
-            )
+            .prove_search(request.as_request(), &ContentGraphLimits::default())
             .map(|inner| WasmProximitySearchProof { inner })
             .map_err(js_error)
     }
@@ -312,8 +532,9 @@ impl WasmProximityReadSession {
         self.map.contains_key(&key.to_vec()).map_err(js_error)
     }
 
-    pub fn search(&self, query: Float32Array, k: u32) -> Result<Object, JsValue> {
-        search_map(&self.map, query.to_vec(), k)
+    pub fn search(&self, request: JsValue) -> Result<Object, JsValue> {
+        let request = owned_search_request(request)?;
+        search_map(&self.map, &request)
     }
 }
 
@@ -520,12 +741,9 @@ fn proximity_verification_object(value: ProximityVerification) -> Result<Object,
 
 fn search_map(
     map: &ProximityMap<Arc<prolly::MemStore>>,
-    query: Vec<f32>,
-    k: u32,
+    request: &OwnedSearchRequest,
 ) -> Result<Object, JsValue> {
-    let result = map
-        .search(SearchRequest::exact(&query, k as usize))
-        .map_err(js_error)?;
+    let result = map.search(request.as_request()).map_err(js_error)?;
     search_result_object(result)
 }
 
@@ -544,6 +762,63 @@ fn search_result_object(result: prolly::SearchResult) -> Result<Object, JsValue>
     }
     let object = Object::new();
     Reflect::set(&object, &"neighbors".into(), &neighbors.into())?;
+    let stats = Object::new();
+    Reflect::set(
+        &stats,
+        &"levelsVisited".into(),
+        &BigInt::from(result.stats.levels_visited as u64),
+    )?;
+    Reflect::set(
+        &stats,
+        &"nodesRead".into(),
+        &BigInt::from(result.stats.nodes_read as u64),
+    )?;
+    Reflect::set(
+        &stats,
+        &"bytesRead".into(),
+        &BigInt::from(result.stats.bytes_read as u64),
+    )?;
+    Reflect::set(
+        &stats,
+        &"physicalBytesRead".into(),
+        &BigInt::from(result.stats.physical_bytes_read as u64),
+    )?;
+    Reflect::set(
+        &stats,
+        &"committedBytes".into(),
+        &BigInt::from(result.stats.committed_bytes as u64),
+    )?;
+    Reflect::set(
+        &stats,
+        &"distanceEvaluations".into(),
+        &BigInt::from(result.stats.distance_evaluations as u64),
+    )?;
+    Reflect::set(
+        &stats,
+        &"quantizedDistanceEvaluations".into(),
+        &BigInt::from(result.stats.quantized_distance_evaluations as u64),
+    )?;
+    Reflect::set(
+        &stats,
+        &"rerankedCandidates".into(),
+        &BigInt::from(result.stats.reranked_candidates as u64),
+    )?;
+    Reflect::set(
+        &stats,
+        &"frontierPeak".into(),
+        &BigInt::from(result.stats.frontier_peak as u64),
+    )?;
+    Reflect::set(
+        &stats,
+        &"candidateHandlesPeak".into(),
+        &BigInt::from(result.stats.candidate_handles_peak as u64),
+    )?;
+    Reflect::set(
+        &stats,
+        &"candidateRetainedBytesPeak".into(),
+        &BigInt::from(result.stats.candidate_retained_bytes_peak as u64),
+    )?;
+    Reflect::set(&object, &"stats".into(), &stats.into())?;
     let completion = match result.completion {
         SearchCompletion::Exact => "exact",
         SearchCompletion::ApproximatePolicySatisfied => "approximate_policy_satisfied",
@@ -560,5 +835,10 @@ fn search_result_object(result: prolly::SearchResult) -> Result<Object, JsValue>
     };
     Reflect::set(&object, &"completion".into(), &completion.into())?;
     Reflect::set(&object, &"backend".into(), &backend.into())?;
+    Reflect::set(
+        &object,
+        &"planFormatVersion".into(),
+        &JsValue::from_f64(result.plan.format_version as f64),
+    )?;
     Ok(object)
 }
