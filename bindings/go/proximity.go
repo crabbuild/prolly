@@ -354,16 +354,16 @@ func (m *ProximityMap) Read() (*ProximitySession, error) {
 		return nil, err
 	}
 	defer unlock()
-	clone, err := ffiCloneProximity(handle)
+	sessionHandle, err := ffiProximityReadSession(handle)
 	if err != nil {
 		return nil, err
 	}
-	fast, err := ffiProximityFastHandle(clone)
+	fast, err := ffiProximityReadSessionFastHandle(sessionHandle)
 	if err != nil {
-		ffiFreeProximity(clone)
+		ffiFreeProximityReadSession(sessionHandle)
 		return nil, err
 	}
-	session := &ProximitySession{handle: clone, fast: fast}
+	session := &ProximitySession{handle: sessionHandle, fast: fast}
 	runtime.SetFinalizer(session, (*ProximitySession).Close)
 	return session, nil
 }
@@ -375,10 +375,52 @@ func (s *ProximitySession) Close() {
 	defer s.mu.Unlock()
 	runtime.SetFinalizer(s, nil)
 	if s.handle != 0 {
-		ffiFreeProximity(s.handle)
+		ffiFreeProximityReadSession(s.handle)
 		s.handle = 0
 		s.fast = 0
 	}
+}
+
+func (s *ProximitySession) withHandle() (uint64, func(), error) {
+	if s == nil || s.closed.Load() {
+		return 0, nil, errors.New("proximity session is closed")
+	}
+	s.mu.RLock()
+	if s.closed.Load() || s.handle == 0 {
+		s.mu.RUnlock()
+		return 0, nil, errors.New("proximity session is closed")
+	}
+	return s.handle, s.mu.RUnlock, nil
+}
+
+func (s *ProximitySession) Contains(key []byte) (bool, error) {
+	handle, unlock, err := s.withHandle()
+	if err != nil {
+		return false, err
+	}
+	defer unlock()
+	return ffiProximityReadSessionContains(handle, append([]byte(nil), key...))
+}
+
+func (s *ProximitySession) Get(key []byte) (ExactProximityRecord, bool, error) {
+	handle, unlock, err := s.withHandle()
+	if err != nil {
+		return ExactProximityRecord{}, false, err
+	}
+	defer unlock()
+	raw, err := ffiProximityReadSessionGet(handle, append([]byte(nil), key...))
+	if err != nil {
+		return ExactProximityRecord{}, false, err
+	}
+	d := byteDecoder{data: raw}
+	record, ok, err := decodeOptionalExactProximityRecord(&d)
+	if err != nil {
+		return ExactProximityRecord{}, false, err
+	}
+	if err := d.done(); err != nil {
+		return ExactProximityRecord{}, false, err
+	}
+	return record, ok, nil
 }
 func (s *ProximitySession) withFast() (uint64, func(), error) {
 	if s == nil || s.closed.Load() {

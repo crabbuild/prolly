@@ -368,16 +368,12 @@ class ProximityMap(_Scoped):
         return self._inner.get(bytes(key))
 
     def search(self, request: _native.ProximitySearchRequestRecord):
-        self._open()
-        return self._inner.search(request)
+        with self.read() as session:
+            return session.search(request)
 
     def search_exact(self, query: Sequence[float], k: int):
-        self._open()
-        return self._inner.search(
-            _native.exact_proximity_search_request(
-                [float(value) for value in query], k
-            )
-        )
+        with self.read() as session:
+            return session.search_exact(query, k)
 
     def read(self) -> "ProximityReadSession":
         self._open()
@@ -389,8 +385,8 @@ class ProximityMap(_Scoped):
         k: int,
         visit: Callable[[tuple[NeighborView, ...]], Any],
     ):
-        self._open()
-        return proximity_search_view(self._inner.fast_handle(), query, k, visit)
+        with self.read() as session:
+            return session.search_view(query, k, visit)
 
     def mutate(self, mutations):
         self._open()
@@ -446,6 +442,26 @@ class ProximityReadSession(_Scoped):
     def contains(self, key: bytes) -> bool:
         self._open()
         return self._inner.contains_key(bytes(key))
+
+    def search(self, request: _native.ProximitySearchRequestRecord):
+        self._open()
+        return self._inner.search(request)
+
+    def search_exact(self, query: Sequence[float], k: int):
+        return self.search(
+            _native.exact_proximity_search_request(
+                [float(value) for value in query], k
+            )
+        )
+
+    def search_view(
+        self,
+        query: Sequence[float],
+        k: int,
+        visit: Callable[[tuple[NeighborView, ...]], Any],
+    ):
+        self._open()
+        return proximity_search_view(self._inner.fast_handle(), query, k, visit)
 
 
 class ProximitySearchProof(_Scoped):

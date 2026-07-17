@@ -51,6 +51,10 @@ export interface NodePortableProximityRecord {
   vector: Float32Array
   value: Buffer
 }
+export interface NodePortableExactProximityRecord {
+  vector: Array<number>
+  value: Buffer
+}
 export interface NodePortableNeighbor {
   key: Buffer
   value: Buffer
@@ -817,11 +821,18 @@ export declare class NativePortableSecondaryIndex {
   exactPage(term: Buffer, cursor: Buffer | undefined | null, limit: string): NodePortableIndexPage
 }
 export declare class NativePortableProximityMap {
+  read(): NativePortableProximityReadSession
   search(query: Float32Array, k: string): NodePortableSearchResult
   descriptor(): Buffer
   verify(): string
   proveMembership(key: Buffer): NativePortableProximityProof
   proveSearch(query: Float32Array, k: string): NativePortableProximitySearchProof
+}
+export declare class NativePortableProximityReadSession {
+  search(query: Float32Array, k: string): NodePortableSearchResult
+  get(key: Buffer): NodePortableExactProximityRecord | null
+  contains(key: Buffer): boolean
+  fastHandle(): string
 }
 export declare class NativePortableProximityProof {
   verify(expectedDescriptor?: Buffer | undefined | null): Buffer | null

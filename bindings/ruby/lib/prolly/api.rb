@@ -346,13 +346,11 @@ module Prolly
     def read = open! { ProximityReadSession.new(@native.read_session) }
 
     def search_exact(query, k)
-      open! { @native.search(Prolly.exact_proximity_search_request(query, k)) }
+      read.use { |session| session.search_exact(query, k) }
     end
 
     def search_view(query, k, &block)
-      open! do
-        PackedPage.proximity_search_view(@native.fast_handle, query, k, &block)
-      end
+      read.use { |session| session.search_view(query, k, &block) }
     end
 
     def close = @closed = true
@@ -373,7 +371,22 @@ module Prolly
 
     def get(key) = open! { @native.get(key.b) }
     def contains?(key) = open! { @native.contains_key(key.b) }
+    def search_exact(query, k) = open! { @native.search(Prolly.exact_proximity_search_request(query, k)) }
+    def search_view(query, k, &block)
+      open! { PackedPage.proximity_search_view(@native.fast_handle, query, k, &block) }
+    end
     def close = @closed = true
+
+    def use
+      raise 'proximity read session is closed' if @closed
+      return self unless block_given?
+
+      begin
+        yield self
+      ensure
+        close
+      end
+    end
 
     private
 

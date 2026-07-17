@@ -42,6 +42,13 @@ object JavaPortableBridge {
     ): ProximitySearchResultRecord = map.searchExact(query, k.toULong())
 
     @JvmStatic
+    fun searchExact(
+        session: ProximityReadSession,
+        query: List<Float>,
+        k: Long,
+    ): ProximitySearchResultRecord = session.searchExact(query, k.toULong())
+
+    @JvmStatic
     fun proveSearch(
         map: ProximityMap,
         query: List<Float>,

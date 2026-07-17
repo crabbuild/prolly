@@ -4,10 +4,11 @@ use napi_derive::napi;
 use prolly_bindings::{
     default_content_graph_limits, default_proximity_config, exact_proximity_search_request,
     verify_key_proof, verify_proximity_membership_proof, BindingIndexRegistry, BindingIndexedMap,
-    BindingIndexedSnapshot, BindingMapSnapshot, BindingProximityMap, BindingProximitySearchProof,
-    BindingSecondaryIndexSnapshot, BindingVersionedMap, IndexBuildResultRecord, IndexEntryRecord,
-    IndexMatchRecord, IndexPageRecord, IndexProjectionRecord, IndexedSourceRecord,
-    IndexedVersionRecord, KeyProofRecord, MapVersionRecord, ProllyBindingError, ProllyReadSession,
+    BindingIndexedSnapshot, BindingMapSnapshot, BindingProximityMap, BindingProximityReadSession,
+    BindingProximitySearchProof, BindingSecondaryIndexSnapshot, BindingVersionedMap,
+    ExactProximityRecordRecord, IndexBuildResultRecord, IndexEntryRecord, IndexMatchRecord,
+    IndexPageRecord, IndexProjectionRecord, IndexedSourceRecord, IndexedVersionRecord,
+    KeyProofRecord, MapVersionRecord, ProllyBindingError, ProllyReadSession,
     ProximityMembershipProofRecord, ProximityNeighborRecord, ProximityRecordRecord,
     ProximitySearchClaimKindRecord, ProximitySearchResultRecord, SearchBackendRecord,
     SearchCompletionRecord, SecondaryIndexExtractorCallback,
@@ -143,6 +144,21 @@ pub struct NodePortableProximityRecord {
     pub key: Buffer,
     pub vector: Float32Array,
     pub value: Buffer,
+}
+
+#[napi(object)]
+pub struct NodePortableExactProximityRecord {
+    pub vector: Vec<f64>,
+    pub value: Buffer,
+}
+
+impl From<ExactProximityRecordRecord> for NodePortableExactProximityRecord {
+    fn from(value: ExactProximityRecordRecord) -> Self {
+        Self {
+            vector: value.vector.into_iter().map(f64::from).collect(),
+            value: Buffer::from(value.value),
+        }
+    }
 }
 
 #[napi(object)]
@@ -654,6 +670,14 @@ pub struct NativePortableProximityMap {
 #[napi]
 impl NativePortableProximityMap {
     #[napi]
+    pub fn read(&self) -> Result<NativePortableProximityReadSession> {
+        self.inner
+            .read_session()
+            .map(|inner| NativePortableProximityReadSession { inner })
+            .map_err(to_napi_error)
+    }
+
+    #[napi]
     pub fn search(&self, query: Float32Array, k: String) -> Result<NodePortableSearchResult> {
         let k = k.parse::<u64>().map_err(|error| {
             Error::new(Status::InvalidArg, format!("invalid top-k value: {error}"))
@@ -701,6 +725,43 @@ impl NativePortableProximityMap {
             )
             .map(|inner| NativePortableProximitySearchProof { inner })
             .map_err(to_napi_error)
+    }
+}
+
+#[napi]
+pub struct NativePortableProximityReadSession {
+    inner: Arc<BindingProximityReadSession>,
+}
+
+#[napi]
+impl NativePortableProximityReadSession {
+    #[napi]
+    pub fn search(&self, query: Float32Array, k: String) -> Result<NodePortableSearchResult> {
+        let k = k.parse::<u64>().map_err(|error| {
+            Error::new(Status::InvalidArg, format!("invalid top-k value: {error}"))
+        })?;
+        self.inner
+            .search(exact_proximity_search_request(query.to_vec(), k))
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi]
+    pub fn get(&self, key: Buffer) -> Result<Option<NodePortableExactProximityRecord>> {
+        self.inner
+            .get(key.to_vec())
+            .map(|record| record.map(Into::into))
+            .map_err(to_napi_error)
+    }
+
+    #[napi]
+    pub fn contains(&self, key: Buffer) -> Result<bool> {
+        self.inner.contains_key(key.to_vec()).map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "fastHandle")]
+    pub fn fast_handle(&self) -> String {
+        self.inner.fast_handle().to_string()
     }
 }
 

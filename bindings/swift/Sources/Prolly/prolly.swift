@@ -2640,9 +2640,13 @@ public protocol BindingProximityReadSessionProtocol: AnyObject, Sendable {
 
     func containsKey(key: Data) throws  -> Bool
 
+    func fastHandle()  -> UInt64
+
     func get(key: Data) throws  -> ExactProximityRecordRecord?
 
     func scanRecords(visitor: ProximityRecordVisitorCallback) throws  -> UInt64
+
+    func search(request: ProximitySearchRequestRecord) throws  -> ProximitySearchResultRecord
 
 }
 open class BindingProximityReadSession: BindingProximityReadSessionProtocol, @unchecked Sendable {
@@ -2707,6 +2711,14 @@ open func containsKey(key: Data)throws  -> Bool  {
 })
 }
 
+open func fastHandle() -> UInt64  {
+    return try!  FfiConverterUInt64.lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_method_bindingproximityreadsession_fast_handle(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
 open func get(key: Data)throws  -> ExactProximityRecordRecord?  {
     return try  FfiConverterOptionTypeExactProximityRecordRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingproximityreadsession_get(
@@ -2721,6 +2733,15 @@ open func scanRecords(visitor: ProximityRecordVisitorCallback)throws  -> UInt64 
     uniffi_prolly_bindings_fn_method_bindingproximityreadsession_scan_records(
             self.uniffiCloneHandle(),
         FfiConverterTypeProximityRecordVisitorCallback_lower(visitor),$0
+    )
+})
+}
+
+open func search(request: ProximitySearchRequestRecord)throws  -> ProximitySearchResultRecord  {
+    return try  FfiConverterTypeProximitySearchResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingproximityreadsession_search(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeProximitySearchRequestRecord_lower(request),$0
     )
 })
 }
@@ -24946,10 +24967,16 @@ private let initializationResult: InitializationResult = {
     if (uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_contains_key() != 45374) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_fast_handle() != 49067) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_get() != 6612) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_scan_records() != 20861) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_search() != 12060) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_bindingproximitysearchproof_source_descriptor() != 57653) {

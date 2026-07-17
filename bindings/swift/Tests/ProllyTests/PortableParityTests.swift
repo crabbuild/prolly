@@ -76,6 +76,16 @@ final class PortableParityTests: XCTestCase {
             )
             XCTAssertEqual(membership.record?.value, Data("payload".utf8))
             XCTAssertEqual(try proximity.verify().recordCount, 1)
+            let retained = try proximity.read()
+            XCTAssertEqual(
+                try retained.searchExact([0, 0], k: 1).neighbors.first?.key,
+                Data("p".utf8)
+            )
+            XCTAssertEqual(
+                try retained.withSearchView(query: [0, 0], k: 1) { rows in Data(rows[0].key) },
+                Data("p".utf8)
+            )
+            retained.close()
             let searchProof = try proximity.proveSearchExact([0, 0], k: 1)
             let verifiedSearch = try searchProof.verify(expectedDescriptor: proximity.descriptor)
             XCTAssertEqual(verifiedSearch.result.neighbors.first?.key, Data("p".utf8))

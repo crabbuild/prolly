@@ -149,6 +149,24 @@ pub struct WasmProximityReadSession {
 
 #[wasm_bindgen(js_class = WasmProximityReadSession)]
 impl WasmProximityReadSession {
+    pub fn get(&self, key: Uint8Array) -> Result<JsValue, JsValue> {
+        let Some((vector, value)) = self.map.get(&key.to_vec()).map_err(js_error)? else {
+            return Ok(JsValue::UNDEFINED);
+        };
+        let object = Object::new();
+        Reflect::set(
+            &object,
+            &"vector".into(),
+            &Float32Array::from(vector.as_slice()).into(),
+        )?;
+        set_bytes(&object, "value", &value)?;
+        Ok(object.into())
+    }
+
+    pub fn contains(&self, key: Uint8Array) -> Result<bool, JsValue> {
+        self.map.contains_key(&key.to_vec()).map_err(js_error)
+    }
+
     pub fn search(&self, query: Float32Array, k: u32) -> Result<Object, JsValue> {
         search_map(&self.map, query.to_vec(), k)
     }

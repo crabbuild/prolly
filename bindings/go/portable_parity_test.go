@@ -104,6 +104,13 @@ func TestPortableVersionedIndexedAndProximityMaps(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(session.Close)
+	if ok, err := session.Contains([]byte("a")); err != nil || !ok {
+		t.Fatalf("session contains = %v, %v", ok, err)
+	}
+	if record, ok, err := session.Get([]byte("a")); err != nil || !ok || !bytes.Equal(record.Value, []byte("alpha")) {
+		t.Fatalf("session record = %+v, %v, %v", record, ok, err)
+	}
+	proximity.Close()
 	result, err := session.Search(context.Background(), ExactSearch([]float32{0.1, 0.1}, 1))
 	if err != nil {
 		t.Fatal(err)

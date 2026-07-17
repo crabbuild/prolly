@@ -944,9 +944,13 @@ def _uniffi_check_api_checksums(lib):
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_contains_key() != 45374:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_fast_handle() != 49067:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_get() != 6612:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_scan_records() != 20861:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_search() != 12060:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_bindingproximitysearchproof_source_descriptor() != 57653:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
@@ -3527,6 +3531,11 @@ _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximityreadsession_contains
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximityreadsession_contains_key.restype = ctypes.c_int8
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximityreadsession_fast_handle.argtypes = (
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximityreadsession_fast_handle.restype = ctypes.c_uint64
 _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximityreadsession_get.argtypes = (
     ctypes.c_uint64,
     _UniffiRustBuffer,
@@ -3539,6 +3548,12 @@ _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximityreadsession_scan_rec
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximityreadsession_scan_records.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximityreadsession_search.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximityreadsession_search.restype = _UniffiRustBuffer
 _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitysearchproof_source_descriptor.argtypes = (
     ctypes.c_uint64,
     ctypes.POINTER(_UniffiRustCallStatus),
@@ -6193,12 +6208,18 @@ _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_verify.res
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_contains_key.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_contains_key.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_fast_handle.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_fast_handle.restype = ctypes.c_uint16
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_get.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_get.restype = ctypes.c_uint16
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_scan_records.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_scan_records.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_search.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_search.restype = ctypes.c_uint16
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximitysearchproof_source_descriptor.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximitysearchproof_source_descriptor.restype = ctypes.c_uint16
@@ -15063,9 +15084,13 @@ class BindingProximityReadSessionProtocol(typing.Protocol):
 
     def contains_key(self, key: bytes) -> bool:
         raise NotImplementedError
+    def fast_handle(self, ) -> int:
+        raise NotImplementedError
     def get(self, key: bytes) -> typing.Optional[ExactProximityRecordRecord]:
         raise NotImplementedError
     def scan_records(self, visitor: ProximityRecordVisitorCallback) -> int:
+        raise NotImplementedError
+    def search(self, request: ProximitySearchRequestRecord) -> ProximitySearchResultRecord:
         raise NotImplementedError
 
 class BindingProximityReadSession(BindingProximityReadSessionProtocol):
@@ -15107,6 +15132,18 @@ class BindingProximityReadSession(BindingProximityReadSessionProtocol):
             *_uniffi_lowered_args,
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
+    def fast_handle(self, ) -> int:
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterUInt64.lift
+        _uniffi_error_converter = None
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximityreadsession_fast_handle,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
     def get(self, key: bytes) -> typing.Optional[ExactProximityRecordRecord]:
 
         _UniffiFfiConverterBytes.check_lower(key)
@@ -15134,6 +15171,21 @@ class BindingProximityReadSession(BindingProximityReadSessionProtocol):
         _uniffi_ffi_result = _uniffi_rust_call_with_error(
             _uniffi_error_converter,
             _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximityreadsession_scan_records,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def search(self, request: ProximitySearchRequestRecord) -> ProximitySearchResultRecord:
+
+        _UniffiFfiConverterTypeProximitySearchRequestRecord.check_lower(request)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeProximitySearchRequestRecord.lower(request),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeProximitySearchResultRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximityreadsession_search,
             *_uniffi_lowered_args,
         )
         return _uniffi_lift_return(_uniffi_ffi_result)

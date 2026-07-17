@@ -55,6 +55,8 @@ class PortableParityTest {
                  var session = proximity.read()) {
                 var result = session.search(SearchRequest.exact(new float[] {0.1f, 0.1f}, 1));
                 assertArrayEquals(bytes("a"), result.neighbors().get(0).key());
+                assertTrue(session.contains(bytes("a")));
+                assertArrayEquals(bytes("alpha"), session.get(bytes("a")).getValue());
             }
         }
     }

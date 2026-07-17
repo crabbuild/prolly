@@ -305,7 +305,9 @@ public final class ProximityMap: @unchecked Sendable {
     public var descriptor: Data { native.descriptor() }
     public func get(_ key: Data) throws -> ExactProximityRecordRecord? { try native.get(key: Data(key)) }
     public func searchExact(_ query: [Float], k: UInt64) throws -> ProximitySearchResultRecord {
-        try native.search(request: exactProximitySearchRequest(query: query, k: k))
+        let session = try read()
+        defer { session.close() }
+        return try session.searchExact(query, k: k)
     }
     public func read() throws -> ProximityReadSession { ProximityReadSession(native: try native.readSession()) }
     public func verify() throws -> ProximityVerificationRecord { try native.verify() }
@@ -337,9 +339,21 @@ public final class ProximityMap: @unchecked Sendable {
         k: UInt32,
         _ body: ([NeighborView]) throws -> R
     ) throws -> R {
+        let session = try read()
+        defer { session.close() }
+        return try session.withSearchView(query: query, k: k, body)
+    }
+}
+
+private func withProximitySearchView<R>(
+        handle: UInt64,
+        query: [Float],
+        k: UInt32,
+        _ body: ([NeighborView]) throws -> R
+    ) throws -> R {
         guard !query.isEmpty, k > 0 else { throw PortableAPIError.packedPage("query and k must be non-empty") }
         let result = query.withUnsafeBufferPointer { values in
-            prolly_fast_proximity_search(native.fastHandle(), values.baseAddress, values.count, k, 64 * 1024 * 1024)
+            prolly_fast_proximity_search(handle, values.baseAddress, values.count, k, 64 * 1024 * 1024)
         }
         guard result.status == 0, let pointer = result.data_ptr else {
             throw PortableAPIError.packedPage("native search failed with status \(result.status)")
@@ -387,14 +401,27 @@ public final class ProximityMap: @unchecked Sendable {
             ))
         }
         return try body(neighbors)
-    }
 }
 
 public final class ProximityReadSession: @unchecked Sendable {
     let native: BindingProximityReadSession
+    private var closed = false
     init(native: BindingProximityReadSession) { self.native = native }
     public func get(_ key: Data) throws -> ExactProximityRecordRecord? { try native.get(key: Data(key)) }
     public func contains(_ key: Data) throws -> Bool { try native.containsKey(key: Data(key)) }
+    public func searchExact(_ query: [Float], k: UInt64) throws -> ProximitySearchResultRecord {
+        guard !closed else { throw PortableAPIError.closed("proximity read session") }
+        return try native.search(request: exactProximitySearchRequest(query: query, k: k))
+    }
+    public func withSearchView<R>(
+        query: [Float],
+        k: UInt32,
+        _ body: ([NeighborView]) throws -> R
+    ) throws -> R {
+        guard !closed else { throw PortableAPIError.closed("proximity read session") }
+        return try withProximitySearchView(handle: native.fastHandle(), query: query, k: k, body)
+    }
+    public func close() { closed = true }
 }
 
 public final class ProximitySearchProof: @unchecked Sendable {

@@ -1040,6 +1040,14 @@ export class WasmProximitySearchProof implements Disposable {
 export class WasmProximityReadSession implements Disposable {
   #native?: any;
   constructor(native: any) { this.#native = native; }
+  get(key: Uint8Array): { vector: Float32Array; value: Uint8Array } | undefined {
+    if (this.#native == null) throw new Error("WASM proximity session is closed");
+    return this.#native.get(ownedPortableBytes(key)) ?? undefined;
+  }
+  contains(key: Uint8Array): boolean {
+    if (this.#native == null) throw new Error("WASM proximity session is closed");
+    return this.#native.contains(ownedPortableBytes(key));
+  }
   search(request: PortableSearchRequest): Promise<PortableSearchResult> {
     if (this.#native == null) return Promise.reject(new Error("WASM proximity session is closed"));
     const native = this.#native;

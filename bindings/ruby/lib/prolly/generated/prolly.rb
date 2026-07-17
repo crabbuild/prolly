@@ -13316,12 +13316,18 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_fn_method_bindingproximityreadsession_contains_key,
     [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
     :int8
+  attach_function :uniffi_prolly_bindings_fn_method_bindingproximityreadsession_fast_handle,
+    [:uint64, RustCallStatus.by_ref],
+    :uint64
   attach_function :uniffi_prolly_bindings_fn_method_bindingproximityreadsession_get,
     [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_method_bindingproximityreadsession_scan_records,
     [:uint64, :uint64, RustCallStatus.by_ref],
     :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_bindingproximityreadsession_search,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_clone_bindingproximitysearchproof,
     [:uint64, RustCallStatus.by_ref],
     :uint64
@@ -15287,10 +15293,16 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_contains_key,
     [RustCallStatus.by_ref],
     :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_fast_handle,
+    [RustCallStatus.by_ref],
+    :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_get,
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_scan_records,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_search,
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_bindingproximitysearchproof_source_descriptor,
@@ -25282,6 +25294,10 @@ end
     result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingproximityreadsession_contains_key,uniffi_clone_handle(),RustBuffer.allocFromBytes(key))
     return 1 == result
   end
+  def fast_handle()
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_bindingproximityreadsession_fast_handle,uniffi_clone_handle(),)
+    return result.to_i
+  end
   def get(key)
         key = Prolly::uniffi_bytes(key)
 
@@ -25293,6 +25309,12 @@ end
         (ProximityRecordVisitorCallback.uniffi_check_lower visitor)
     result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingproximityreadsession_scan_records,uniffi_clone_handle(),(ProximityRecordVisitorCallback.uniffi_lower visitor))
     return result.to_i
+  end
+  def search(request)
+        request = request
+        RustBuffer.check_lower_TypeProximitySearchRequestRecord(request)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingproximityreadsession_search,uniffi_clone_handle(),RustBuffer.alloc_from_TypeProximitySearchRequestRecord(request))
+    return result.consumeIntoTypeProximitySearchResultRecord
   end
 
 end

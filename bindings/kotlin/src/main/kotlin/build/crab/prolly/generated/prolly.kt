@@ -1616,9 +1616,13 @@ external fun uniffi_prolly_bindings_checksum_method_bindingproximitymap_verify(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_contains_key(
 ): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_fast_handle(
+): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_get(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_scan_records(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_search(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingproximitysearchproof_source_descriptor(
 ): Short
@@ -2528,10 +2532,14 @@ external fun uniffi_prolly_bindings_fn_free_bindingproximityreadsession(`handle`
 ): Unit
 external fun uniffi_prolly_bindings_fn_method_bindingproximityreadsession_contains_key(`ptr`: Long,`key`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): Byte
+external fun uniffi_prolly_bindings_fn_method_bindingproximityreadsession_fast_handle(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+): Long
 external fun uniffi_prolly_bindings_fn_method_bindingproximityreadsession_get(`ptr`: Long,`key`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_bindingproximityreadsession_scan_records(`ptr`: Long,`visitor`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): Long
+external fun uniffi_prolly_bindings_fn_method_bindingproximityreadsession_search(`ptr`: Long,`request`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_clone_bindingproximitysearchproof(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): Long
 external fun uniffi_prolly_bindings_fn_free_bindingproximitysearchproof(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -4313,10 +4321,16 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_contains_key() != 45374.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_fast_handle() != 49067.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_get() != 6612.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_scan_records() != 20861.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_search() != 12060.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_method_bindingproximitysearchproof_source_descriptor() != 57653.toShort()) {
@@ -8878,9 +8892,13 @@ public interface BindingProximityReadSessionInterface {
 
     fun `containsKey`(`key`: kotlin.ByteArray): kotlin.Boolean
 
+    fun `fastHandle`(): kotlin.ULong
+
     fun `get`(`key`: kotlin.ByteArray): ExactProximityRecordRecord?
 
     fun `scanRecords`(`visitor`: ProximityRecordVisitorCallback): kotlin.ULong
+
+    fun `search`(`request`: ProximitySearchRequestRecord): ProximitySearchResultRecord
 
     companion object
 }
@@ -8995,6 +9013,19 @@ open class BindingProximityReadSession: Disposable, AutoCloseable, BindingProxim
     }
 
 
+    override fun `fastHandle`(): kotlin.ULong {
+            return FfiConverterULong.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximityreadsession_fast_handle(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
 
     @Throws(ProllyBindingException::class)override fun `get`(`key`: kotlin.ByteArray): ExactProximityRecordRecord? {
             return FfiConverterOptionalTypeExactProximityRecordRecord.lift(
@@ -9017,6 +9048,20 @@ open class BindingProximityReadSession: Disposable, AutoCloseable, BindingProxim
     UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximityreadsession_scan_records(
         it,
         FfiConverterTypeProximityRecordVisitorCallback.lower(`visitor`),_status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `search`(`request`: ProximitySearchRequestRecord): ProximitySearchResultRecord {
+            return FfiConverterTypeProximitySearchResultRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximityreadsession_search(
+        it,
+        FfiConverterTypeProximitySearchRequestRecord.lower(`request`),_status)
 }
     }
     )

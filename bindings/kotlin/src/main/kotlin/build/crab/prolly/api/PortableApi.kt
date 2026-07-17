@@ -165,13 +165,13 @@ class ProximityMap(internal val native: BindingProximityMap) : AutoCloseable {
     val descriptor: ByteArray get() = native.descriptor()
     fun get(key: ByteArray) = native.get(key.copyOf())
     fun searchExact(query: List<Float>, k: ULong): ProximitySearchResultRecord =
-        native.search(exactProximitySearchRequest(query.toList(), k))
+        read().use { it.searchExact(query, k) }
     fun read() = ProximityReadSession(native.readSession())
     fun <R> withSearchView(
         query: List<Float>,
         k: UInt,
         block: (List<NeighborView>) -> R,
-    ): R = PackedPages.withProximitySearch(native.fastHandle(), query, k, block)
+    ): R = read().use { it.withSearchView(query, k, block) }
     fun verify() = native.verify()
     fun proveMembership(key: ByteArray) = native.proveMembership(key.copyOf())
     fun proveSearch(
@@ -192,6 +192,13 @@ class ProximityMap(internal val native: BindingProximityMap) : AutoCloseable {
 class ProximityReadSession(internal val native: BindingProximityReadSession) : AutoCloseable {
     fun get(key: ByteArray) = native.get(key.copyOf())
     fun containsKey(key: ByteArray) = native.containsKey(key.copyOf())
+    fun searchExact(query: List<Float>, k: ULong): ProximitySearchResultRecord =
+        native.search(exactProximitySearchRequest(query.toList(), k))
+    fun <R> withSearchView(
+        query: List<Float>,
+        k: UInt,
+        block: (List<NeighborView>) -> R,
+    ): R = PackedPages.withProximitySearch(native.fastHandle(), query, k, block)
     override fun close() = native.close()
 }
 

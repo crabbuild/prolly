@@ -106,6 +106,16 @@ class PortableParityTests(unittest.TestCase):
             )
             self.assertEqual(verified_membership.record.value, b"payload")
             self.assertEqual(proximity.verify().record_count, 1)
+            with proximity.read() as retained:
+                self.assertEqual(
+                    retained.search_exact([0.0, 0.0], 1).neighbors[0].key, b"p"
+                )
+                self.assertEqual(
+                    retained.search_view(
+                        [0.0, 0.0], 1, lambda rows: bytes(rows[0].key)
+                    ),
+                    b"p",
+                )
             with proximity.prove_search_exact([0.0, 0.0], 1) as search_proof:
                 verified_search = search_proof.verify(proximity.descriptor)
                 self.assertEqual(verified_search.result.neighbors[0].key, b"p")

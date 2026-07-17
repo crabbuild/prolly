@@ -30,11 +30,18 @@ export interface SearchResult {
 }
 
 interface NativeProximityMap {
+  read(): NativeProximityReadSession;
   search(vector: Float32Array, topK: string): SearchResult;
   descriptor(): Uint8Array;
   verify(): string;
   proveMembership(key: Uint8Array): NativeProximityProof;
   proveSearch(vector: Float32Array, topK: string): NativeProximitySearchProof;
+}
+interface NativeProximityReadSession {
+  search(vector: Float32Array, topK: string): SearchResult;
+  get(key: Uint8Array): { vector: number[]; value: Uint8Array } | null;
+  contains(key: Uint8Array): boolean;
+  fastHandle(): string;
 }
 interface NativeProximityProof { verify(expectedDescriptor?: Uint8Array): Uint8Array | null; }
 interface NativeProximitySearchProof {
@@ -53,7 +60,7 @@ export class ProximityMap implements Disposable {
     if (this.#native == null) throw new Error("proximity map is closed");
     return this.#native;
   }
-  read(): ProximityReadSession { return new ProximityReadSession(this.nativeHandle()); }
+  read(): ProximityReadSession { return new ProximityReadSession(this.nativeHandle().read()); }
   search(request: SearchRequest): Promise<SearchResult> { return this.read().search(request); }
   descriptor(): Uint8Array { return this.nativeHandle().descriptor(); }
   verify(): { recordCount: bigint } { return { recordCount: BigInt(this.nativeHandle().verify()) }; }
@@ -106,13 +113,29 @@ export class ProximitySearchProof implements Disposable {
 }
 
 export class ProximityReadSession implements Disposable {
-  #native?: NativeProximityMap;
-  constructor(native: NativeProximityMap) { this.#native = native; }
+  #native?: NativeProximityReadSession;
+  constructor(native: NativeProximityReadSession) { this.#native = native; }
+  get(key: Uint8Array): { vector: Float32Array; value: Uint8Array } | undefined {
+    if (this.#native == null) throw new Error("proximity session is closed");
+    const record = this.#native.get(ownedBytes(key));
+    return record == null ? undefined : {
+      vector: new Float32Array(record.vector),
+      value: record.value,
+    };
+  }
+  contains(key: Uint8Array): boolean {
+    if (this.#native == null) throw new Error("proximity session is closed");
+    return this.#native.contains(ownedBytes(key));
+  }
   search(request: SearchRequest): Promise<SearchResult> {
     if (this.#native == null) return Promise.reject(new Error("proximity session is closed"));
     const native = this.#native;
     const vector = new Float32Array(request.vector);
     return nativePromise(request.signal, () => native.search(vector, request.topK.toString()));
+  }
+  fastHandle(): bigint {
+    if (this.#native == null) throw new Error("proximity session is closed");
+    return BigInt(this.#native.fastHandle());
   }
   close(): void { this.#native = undefined; }
   [Symbol.dispose](): void { this.close(); }

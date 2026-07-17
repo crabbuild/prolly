@@ -13,8 +13,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, Weak};
 
 use super::{
-    BindingProximityMap, BindingRangeScanSession, BindingSecondaryIndexSnapshot, ProllyReadSession,
-    ProximitySearchRequestRecord,
+    BindingProximityMap, BindingProximityReadSession, BindingRangeScanSession,
+    BindingSecondaryIndexSnapshot, ProllyReadSession, ProximitySearchRequestRecord,
+    ProximitySearchResultRecord,
 };
 use crate::domain::handle::{HandleKind, HandleRegistry, ResourceHandle};
 use crate::domain::page::{PackedPage, PackedPageBuilder, PackedPageKind, PageLimits};
@@ -117,8 +118,29 @@ static INDEX_SNAPSHOT_HANDLES: OnceLock<Mutex<HashMap<u64, Weak<BindingSecondary
     OnceLock::new();
 static INDEX_CURSOR_HANDLES: OnceLock<Mutex<HashMap<u64, Arc<FastIndexCursorHandle>>>> =
     OnceLock::new();
-static PROXIMITY_HANDLES: OnceLock<Mutex<HashMap<u64, Weak<BindingProximityMap>>>> =
-    OnceLock::new();
+enum FastProximityTarget {
+    Map(Weak<BindingProximityMap>),
+    Session(Weak<BindingProximityReadSession>),
+}
+
+enum LiveProximityTarget {
+    Map(Arc<BindingProximityMap>),
+    Session(Arc<BindingProximityReadSession>),
+}
+
+impl LiveProximityTarget {
+    fn search(
+        &self,
+        request: ProximitySearchRequestRecord,
+    ) -> Result<ProximitySearchResultRecord, crate::ProllyBindingError> {
+        match self {
+            Self::Map(map) => map.search(request),
+            Self::Session(session) => session.search(request),
+        }
+    }
+}
+
+static PROXIMITY_HANDLES: OnceLock<Mutex<HashMap<u64, FastProximityTarget>>> = OnceLock::new();
 static RESOURCE_HANDLES: OnceLock<HandleRegistry> = OnceLock::new();
 
 fn session_handles() -> &'static Mutex<HashMap<u64, Weak<ProllyReadSession>>> {
@@ -204,7 +226,7 @@ fn index_cursor_from_handle(handle: u64) -> Option<Arc<FastIndexCursorHandle>> {
         .cloned()
 }
 
-fn proximity_handles() -> &'static Mutex<HashMap<u64, Weak<BindingProximityMap>>> {
+fn proximity_handles() -> &'static Mutex<HashMap<u64, FastProximityTarget>> {
     PROXIMITY_HANDLES.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
@@ -215,7 +237,20 @@ pub(crate) fn register_proximity_map(map: &Arc<BindingProximityMap>) -> u64 {
     loop {
         let handle = next_nonzero_handle(&NEXT_PROXIMITY_HANDLE);
         if let std::collections::hash_map::Entry::Vacant(entry) = handles.entry(handle) {
-            entry.insert(Arc::downgrade(map));
+            entry.insert(FastProximityTarget::Map(Arc::downgrade(map)));
+            return handle;
+        }
+    }
+}
+
+pub(crate) fn register_proximity_session(session: &Arc<BindingProximityReadSession>) -> u64 {
+    let mut handles = proximity_handles()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    loop {
+        let handle = next_nonzero_handle(&NEXT_PROXIMITY_HANDLE);
+        if let std::collections::hash_map::Entry::Vacant(entry) = handles.entry(handle) {
+            entry.insert(FastProximityTarget::Session(Arc::downgrade(session)));
             return handle;
         }
     }
@@ -230,15 +265,20 @@ pub(crate) fn unregister_proximity_map(handle: u64) {
     }
 }
 
-fn proximity_from_handle(handle: u64) -> Option<Arc<BindingProximityMap>> {
+fn proximity_from_handle(handle: u64) -> Option<LiveProximityTarget> {
     let mut handles = proximity_handles()
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let map = handles.get(&handle).and_then(Weak::upgrade);
-    if map.is_none() {
+    let target = handles.get(&handle).and_then(|target| match target {
+        FastProximityTarget::Map(map) => map.upgrade().map(LiveProximityTarget::Map),
+        FastProximityTarget::Session(session) => {
+            session.upgrade().map(LiveProximityTarget::Session)
+        }
+    });
+    if target.is_none() {
         handles.remove(&handle);
     }
-    map
+    target
 }
 
 fn next_nonzero_handle(counter: &AtomicU64) -> u64 {
@@ -1702,10 +1742,12 @@ mod tests {
                 None,
             )
             .unwrap();
+        let session = map.read_session().unwrap();
+        let handle = session.fast_handle();
+        drop(map);
         let query = [0.25f32, 0.25];
-        let page = unsafe {
-            prolly_fast_proximity_search(map.fast_handle(), query.as_ptr(), query.len(), 1, 4096)
-        };
+        let page =
+            unsafe { prolly_fast_proximity_search(handle, query.as_ptr(), query.len(), 1, 4096) };
         assert_eq!(page.status, FAST_STATUS_OK);
         assert_eq!(page.record_count, 1);
         let packed = PackedPage::parse(

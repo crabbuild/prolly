@@ -18,6 +18,9 @@ public final class ProximityMap implements AutoCloseable {
         List<Float> query = new ArrayList<>(request.vector().length);
         for (float value : request.vector()) query.add(value);
         var result = JavaPortableBridge.searchExact(open(), query, request.topK());
+        return fromNative(result);
+    }
+    static SearchResult fromNative(build.crab.prolly.ProximitySearchResultRecord result) {
         return new SearchResult(result.getNeighbors().stream().map(neighbor ->
                 new SearchResult.Neighbor(
                         neighbor.getKey().clone(), neighbor.getValue().clone(), neighbor.getDistance()))

@@ -31,6 +31,15 @@ mod tests {
         let session = map.read_session().unwrap();
         assert!(session.contains_key(b"b".to_vec()).unwrap());
         assert_eq!(session.get(b"b".to_vec()).unwrap().unwrap().value, b"beta");
+        assert_ne!(session.fast_handle(), 0);
+        assert_eq!(
+            session
+                .search(ProximitySearchRequestRecord::exact(vec![0.1, 0.1], 1))
+                .unwrap()
+                .neighbors[0]
+                .key,
+            b"a"
+        );
         let result = map
             .search(ProximitySearchRequestRecord::exact(vec![0.1, 0.1], 1))
             .unwrap();
@@ -956,10 +965,15 @@ macro_rules! with_proximity_session {
 #[derive(uniffi::Object)]
 pub struct BindingProximityReadSession {
     inner: BindingProximitySessionMap,
+    fast_handle: AtomicU64,
 }
 
 #[uniffi::export]
 impl BindingProximityReadSession {
+    pub fn fast_handle(&self) -> u64 {
+        self.fast_handle.load(Ordering::Acquire)
+    }
+
     pub fn get(
         &self,
         key: Vec<u8>,
@@ -973,6 +987,16 @@ impl BindingProximityReadSession {
 
     pub fn contains_key(&self, key: Vec<u8>) -> Result<bool, ProllyBindingError> {
         with_proximity_session!(self, map, { map.contains_key(&key).map_err(Into::into) })
+    }
+
+    pub fn search(
+        &self,
+        request: ProximitySearchRequestRecord,
+    ) -> Result<ProximitySearchResultRecord, ProllyBindingError> {
+        let request = proximity_search_request(&request)?;
+        with_proximity_session!(self, map, {
+            map.search(request).map(Into::into).map_err(Into::into)
+        })
     }
 
     pub fn scan_records(
@@ -993,6 +1017,12 @@ impl BindingProximityReadSession {
             })?;
             Ok(outcome.visited)
         })
+    }
+}
+
+impl Drop for BindingProximityReadSession {
+    fn drop(&mut self) {
+        crate::fast_abi::unregister_proximity_map(self.fast_handle.load(Ordering::Relaxed));
     }
 }
 
@@ -1050,7 +1080,13 @@ impl BindingProximityMap {
                     ProximityMap::load(engine.store().clone(), descriptor)?,
                 ),
             };
-        Ok(Arc::new(BindingProximityReadSession { inner }))
+        let session = Arc::new(BindingProximityReadSession {
+            inner,
+            fast_handle: AtomicU64::new(0),
+        });
+        let handle = crate::fast_abi::register_proximity_session(&session);
+        session.fast_handle.store(handle, Ordering::Release);
+        Ok(session)
     }
 
     pub fn count(&self) -> Result<u64, ProllyBindingError> {

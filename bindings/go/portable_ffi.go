@@ -124,7 +124,13 @@ extern uint64_t uniffi_prolly_bindings_fn_method_bindingproximitymap_fast_handle
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximitymap_get(uint64_t ptr, RustBuffer key, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximitymap_prove_membership(uint64_t ptr, RustBuffer key, RustCallStatus *out_err);
 extern uint64_t uniffi_prolly_bindings_fn_method_bindingproximitymap_prove_search(uint64_t ptr, RustBuffer request, RustBuffer limits, RustCallStatus *out_err);
+extern uint64_t uniffi_prolly_bindings_fn_method_bindingproximitymap_read_session(uint64_t ptr, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximitymap_verify(uint64_t ptr, RustCallStatus *out_err);
+extern uint64_t uniffi_prolly_bindings_fn_clone_bindingproximityreadsession(uint64_t ptr, RustCallStatus *out_err);
+extern void uniffi_prolly_bindings_fn_free_bindingproximityreadsession(uint64_t ptr, RustCallStatus *out_err);
+extern int8_t uniffi_prolly_bindings_fn_method_bindingproximityreadsession_contains_key(uint64_t ptr, RustBuffer key, RustCallStatus *out_err);
+extern uint64_t uniffi_prolly_bindings_fn_method_bindingproximityreadsession_fast_handle(uint64_t ptr, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximityreadsession_get(uint64_t ptr, RustBuffer key, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_func_verify_proximity_membership_proof(RustBuffer proof, RustBuffer expected_descriptor, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_func_default_content_graph_limits(RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_func_exact_proximity_search_request(RustBuffer query, uint64_t k, RustCallStatus *out_err);
@@ -813,6 +819,68 @@ func ffiProximityFastHandle(handle uint64) (uint64, error) {
 	var status C.RustCallStatus
 	fast := C.uniffi_prolly_bindings_fn_method_bindingproximitymap_fast_handle(C.uint64_t(clone), &status)
 	return uint64(fast), portableStatusError(&status)
+}
+
+func ffiProximityReadSession(handle uint64) (uint64, error) {
+	clone, err := ffiCloneProximity(handle)
+	if err != nil {
+		return 0, err
+	}
+	var status C.RustCallStatus
+	session := C.uniffi_prolly_bindings_fn_method_bindingproximitymap_read_session(C.uint64_t(clone), &status)
+	return uint64(session), portableStatusError(&status)
+}
+
+func ffiCloneProximityReadSession(handle uint64) (uint64, error) {
+	var status C.RustCallStatus
+	clone := C.uniffi_prolly_bindings_fn_clone_bindingproximityreadsession(C.uint64_t(handle), &status)
+	return uint64(clone), portableStatusError(&status)
+}
+
+func ffiFreeProximityReadSession(handle uint64) {
+	var status C.RustCallStatus
+	C.uniffi_prolly_bindings_fn_free_bindingproximityreadsession(C.uint64_t(handle), &status)
+}
+
+func ffiProximityReadSessionFastHandle(handle uint64) (uint64, error) {
+	clone, err := ffiCloneProximityReadSession(handle)
+	if err != nil {
+		return 0, err
+	}
+	var status C.RustCallStatus
+	fast := C.uniffi_prolly_bindings_fn_method_bindingproximityreadsession_fast_handle(C.uint64_t(clone), &status)
+	return uint64(fast), portableStatusError(&status)
+}
+
+func ffiProximityReadSessionContains(handle uint64, key []byte) (bool, error) {
+	clone, err := ffiCloneProximityReadSession(handle)
+	if err != nil {
+		return false, err
+	}
+	keyBuf, err := portableInput(encodeByteArray(key))
+	if err != nil {
+		return false, err
+	}
+	var status C.RustCallStatus
+	found := C.uniffi_prolly_bindings_fn_method_bindingproximityreadsession_contains_key(C.uint64_t(clone), keyBuf, &status)
+	return found != 0, portableStatusError(&status)
+}
+
+func ffiProximityReadSessionGet(handle uint64, key []byte) ([]byte, error) {
+	clone, err := ffiCloneProximityReadSession(handle)
+	if err != nil {
+		return nil, err
+	}
+	keyBuf, err := portableInput(encodeByteArray(key))
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingproximityreadsession_get(C.uint64_t(clone), keyBuf, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
 }
 
 func ffiProximityDescriptor(handle uint64) ([]byte, error) {
