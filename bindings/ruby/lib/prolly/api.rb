@@ -199,22 +199,25 @@ module Prolly
       @closed = false
     end
 
+    def id = open! { @native.id }
     def ensure_index(name) = open! { @native.ensure_index(name.b) }
     def get(key) = open! { @native.get(key.b) }
-    def contains?(key) = open! { @native.contains_key(key.b) }
-    def count = open! { @native.count }
-    def config = open! { @native.config }
     def put(key, value) = open! { @native.put(key.b, value.b) }
+    def apply(mutations) = open! { @native.apply(mutations) }
+    def apply_if(expected_source, mutations) = open! { @native.apply_if(expected_source&.b, mutations) }
     def delete(key) = open! { @native.delete(key.b) }
     def health = open! { @native.health }
     def metrics = open! { @native.metrics }
     def verify_index(name, source_version) = open! { @native.verify_index(name.b, source_version.b) }
     def verify_all(source_version) = open! { @native.verify_all(source_version.b) }
     def repair_index(name, source_version) = open! { @native.repair_index(name.b, source_version.b) }
+    def deactivate_index(name) = open! { @native.deactivate_index(name.b) }
     def export_current = open! { @native.export_current }
     def import_current(bundle, expected_source = nil) = open! { @native.import_current(bundle.b, expected_source&.b) }
     def keep_last(count) = open! { @native.keep_last(count) }
     def snapshot = open! { IndexedSnapshot.new(@native.snapshot) }
+    def snapshot_at(source_version) = open! { IndexedSnapshot.new(@native.snapshot_at(source_version.b)) }
+    def snapshot_by_id(id) = open! { IndexedSnapshot.new(@native.snapshot_by_id(id)) }
     def close = @closed = true
 
     private
@@ -233,10 +236,17 @@ module Prolly
 
   class SecondaryIndex
     def initialize(native) = @native = native
+    def name = @native.name
     def exact(term) = @native.exact(term.b)
     def prefix(prefix) = @native.prefix(prefix.b)
     def range(start, range_end = nil) = @native.range(start.b, range_end&.b)
     def records(term) = @native.records(term.b)
+    def exact_page(term, cursor = nil, limit = 256) = @native.exact_page(term.b, cursor, limit)
+    def exact_reverse_page(term, cursor = nil, limit = 256) = @native.exact_reverse_page(term.b, cursor, limit)
+    def prefix_page(prefix, cursor = nil, limit = 256) = @native.prefix_page(prefix.b, cursor, limit)
+    def prefix_reverse_page(prefix, cursor = nil, limit = 256) = @native.prefix_reverse_page(prefix.b, cursor, limit)
+    def range_page(start, range_end = nil, cursor = nil, limit = 256) = @native.range_page(start.b, range_end&.b, cursor, limit)
+    def range_reverse_page(start, range_end = nil, cursor = nil, limit = 256) = @native.range_reverse_page(start.b, range_end&.b, cursor, limit)
   end
 
   class VersionedMap
@@ -335,6 +345,9 @@ module Prolly
     end
 
     def get(key) = open! { @native.get(key.b) }
+    def contains?(key) = open! { @native.contains_key(key.b) }
+    def count = open! { @native.count }
+    def config = open! { @native.config }
     def descriptor = open! { @native.descriptor }
     def verify = open! { @native.verify }
     def prove_membership(key) = open! { @native.prove_membership(key.b) }

@@ -3,6 +3,8 @@ import unittest
 from prolly import (
     Engine,
     IndexProjection,
+    MutationKind,
+    MutationRecord,
     ProximityRecord,
     ProximityMutationRecord,
     verify_key_proof,
@@ -32,6 +34,21 @@ class PortableParityTests(unittest.TestCase):
             indexed.ensure_index(b"by_team")
             records = indexed.snapshot().index(b"by_team").records(b"red")
             self.assertEqual([record.primary_key for record in records], [b"u1"])
+            self.assertEqual(indexed.id, b"members")
+            applied = indexed.apply([
+                MutationRecord(kind=MutationKind.UPSERT, key=b"u2", value=b"red")
+            ])
+            conditional = indexed.apply_if(applied.source_version, [
+                MutationRecord(kind=MutationKind.UPSERT, key=b"u3", value=b"blue")
+            ])
+            self.assertIsNotNone(conditional.current)
+            historical = indexed.snapshot_at(applied.source_version)
+            self.assertEqual(len(historical.index(b"by_team").exact_page(b"red").matches), 2)
+            current = indexed.snapshot()
+            self.assertEqual(indexed.snapshot_by_id(current.id).id, current.id)
+            secondary = current.index(b"by_team")
+            self.assertEqual(secondary.name, b"by_team")
+            self.assertEqual(len(secondary.prefix_reverse_page(b"r").matches), 2)
 
             proximity = engine.build_proximity(
                 dimensions=2,

@@ -270,6 +270,11 @@ class IndexedMap(_Scoped):
         super().__init__()
         self._inner = inner
 
+    @property
+    def id(self) -> bytes:
+        self._open()
+        return self._inner.id()
+
     def ensure_index(self, name: bytes):
         self._open()
         return self._inner.ensure_index(bytes(name))
@@ -277,6 +282,16 @@ class IndexedMap(_Scoped):
     def put(self, key: bytes, value: bytes):
         self._open()
         return self._inner.put(bytes(key), bytes(value))
+
+    def apply(self, mutations):
+        self._open()
+        return self._inner.apply(mutations)
+
+    def apply_if(self, expected_source: bytes | None, mutations):
+        self._open()
+        return self._inner.apply_if(
+            None if expected_source is None else bytes(expected_source), mutations
+        )
 
     def delete(self, key: bytes):
         self._open()
@@ -289,6 +304,14 @@ class IndexedMap(_Scoped):
     def snapshot(self) -> "IndexedSnapshot":
         self._open()
         return IndexedSnapshot(self._inner.snapshot())
+
+    def snapshot_at(self, source_version: bytes) -> "IndexedSnapshot":
+        self._open()
+        return IndexedSnapshot(self._inner.snapshot_at(bytes(source_version)))
+
+    def snapshot_by_id(self, snapshot_id) -> "IndexedSnapshot":
+        self._open()
+        return IndexedSnapshot(self._inner.snapshot_by_id(snapshot_id))
 
     def health(self):
         self._open()
@@ -305,6 +328,10 @@ class IndexedMap(_Scoped):
     def repair_index(self, name: bytes, source_version: bytes):
         self._open()
         return self._inner.repair_index(bytes(name), bytes(source_version))
+
+    def deactivate_index(self, name: bytes):
+        self._open()
+        return self._inner.deactivate_index(bytes(name))
 
     def metrics(self):
         self._open()
@@ -330,6 +357,11 @@ class IndexedSnapshot(_Scoped):
         super().__init__()
         self._inner = inner
 
+    @property
+    def id(self):
+        self._open()
+        return self._inner.id()
+
     def index(self, name: bytes) -> "SecondaryIndex":
         self._open()
         return SecondaryIndex(self._inner.index(bytes(name)))
@@ -339,6 +371,11 @@ class SecondaryIndex(_Scoped):
     def __init__(self, inner: _native.BindingSecondaryIndexSnapshot):
         super().__init__()
         self._inner = inner
+
+    @property
+    def name(self) -> bytes:
+        self._open()
+        return self._inner.name()
 
     def exact(self, term: bytes):
         self._open()
@@ -355,6 +392,30 @@ class SecondaryIndex(_Scoped):
     def records(self, term: bytes):
         self._open()
         return self._inner.records(bytes(term))
+
+    def exact_page(self, term: bytes, cursor: bytes | None = None, limit: int = 256):
+        self._open()
+        return self._inner.exact_page(bytes(term), cursor, limit)
+
+    def exact_reverse_page(self, term: bytes, cursor: bytes | None = None, limit: int = 256):
+        self._open()
+        return self._inner.exact_reverse_page(bytes(term), cursor, limit)
+
+    def prefix_page(self, prefix: bytes, cursor: bytes | None = None, limit: int = 256):
+        self._open()
+        return self._inner.prefix_page(bytes(prefix), cursor, limit)
+
+    def prefix_reverse_page(self, prefix: bytes, cursor: bytes | None = None, limit: int = 256):
+        self._open()
+        return self._inner.prefix_reverse_page(bytes(prefix), cursor, limit)
+
+    def range_page(self, start: bytes, end: bytes | None = None, cursor: bytes | None = None, limit: int = 256):
+        self._open()
+        return self._inner.range_page(bytes(start), None if end is None else bytes(end), cursor, limit)
+
+    def range_reverse_page(self, start: bytes, end: bytes | None = None, cursor: bytes | None = None, limit: int = 256):
+        self._open()
+        return self._inner.range_reverse_page(bytes(start), None if end is None else bytes(end), cursor, limit)
 
 
 class ProximityMap(_Scoped):

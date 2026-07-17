@@ -49,6 +49,28 @@ class PortableParityTest {
                             }
                             assertArrayEquals("u1".bytes(), key)
                             assertThrows<IllegalStateException> { escaped!!.bytes() }
+                            assertArrayEquals("by_team".bytes(), index.name)
+                            assertEquals(1, index.prefixReversePage("r".bytes()).matches.size)
+                        }
+                    }
+                    assertArrayEquals("members".bytes(), indexed.id)
+                    val applied = indexed.apply(
+                        listOf(MutationRecord(MutationKind.UPSERT, "u2".bytes(), "red".bytes())),
+                    )
+                    val conditional = indexed.applyIf(
+                        applied.sourceVersion,
+                        listOf(MutationRecord(MutationKind.UPSERT, "u3".bytes(), "blue".bytes())),
+                    )
+                    assertEquals(true, conditional.current != null)
+                    indexed.snapshotAt(applied.sourceVersion).use { historical ->
+                        assertEquals(2, historical.index("by_team".bytes()).use {
+                            it.exactPage("red".bytes()).matches.size
+                        })
+                    }
+                    indexed.snapshot().use { current ->
+                        indexed.snapshotById(current.id).use { reopened ->
+                            assertArrayEquals(current.id.sourceVersion, reopened.id.sourceVersion)
+                            assertArrayEquals(current.id.catalogVersion, reopened.id.catalogVersion)
                         }
                     }
                 }

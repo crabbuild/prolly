@@ -61,6 +61,18 @@ final class PortableParityTests: XCTestCase {
             let indexed = try engine.indexedMap(Data("indexed-maintenance".utf8), registry: registry)
             let version = try indexed.put(Data("k".utf8), value: Data("term".utf8))
             _ = try indexed.ensureIndex(Data("by_value".utf8))
+            XCTAssertEqual(indexed.id, Data("indexed-maintenance".utf8))
+            let applied = try indexed.apply([
+                MutationRecord(kind: .upsert, key: Data("k2".utf8), value: Data("term".utf8))
+            ])
+            let conditional = try indexed.applyIf(
+                expectedSource: applied.sourceVersion,
+                mutations: [MutationRecord(kind: .upsert, key: Data("k3".utf8), value: Data("other".utf8))]
+            )
+            XCTAssertNotNil(conditional.current)
+            let historicalIndex = try indexed.snapshot(at: applied.sourceVersion).index(Data("by_value".utf8))
+            XCTAssertEqual(try historicalIndex.exactPage(Data("term".utf8)).matches.count, 2)
+            XCTAssertEqual(historicalIndex.name, Data("by_value".utf8))
             XCTAssertTrue(try indexed.verifyIndex(Data("by_value".utf8), sourceVersion: version.sourceVersion).valid)
             XCTAssertGreaterThanOrEqual(try indexed.metrics().buildAttempts, 1)
             XCTAssertFalse(try indexed.exportCurrent().isEmpty)

@@ -21,6 +21,18 @@ class PortableParityTest < Minitest::Test
       indexed.ensure_index('by_team'.b)
       rows = indexed.snapshot.index('by_team'.b).records('red'.b)
       assert_equal ['u1'.b], rows.map(&:primary_key)
+      assert_equal 'members'.b, indexed.id
+      applied = indexed.apply([
+        Prolly::MutationRecord.new(kind: Prolly::MutationKind::UPSERT, key: 'u2'.b, value: 'red'.b)
+      ])
+      conditional = indexed.apply_if(applied.source_version, [
+        Prolly::MutationRecord.new(kind: Prolly::MutationKind::UPSERT, key: 'u3'.b, value: 'blue'.b)
+      ])
+      refute_nil conditional.current
+      assert_equal 2, indexed.snapshot_at(applied.source_version).index('by_team'.b).exact_page('red'.b).matches.size
+      current_indexed = indexed.snapshot
+      assert_equal current_indexed.id, indexed.snapshot_by_id(current_indexed.id).id
+      assert_equal 'by_team'.b, current_indexed.index('by_team'.b).name
 
       proximity = engine.build_proximity(
         dimensions: 2,

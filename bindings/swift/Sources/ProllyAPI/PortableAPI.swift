@@ -218,13 +218,26 @@ public final class IndexRegistry: @unchecked Sendable {
 public final class IndexedMap: @unchecked Sendable {
     let native: BindingIndexedMap
     init(native: BindingIndexedMap) { self.native = native }
+    public var id: Data { native.id() }
     public func ensureIndex(_ name: Data) throws -> IndexBuildResultRecord { try native.ensureIndex(name: Data(name)) }
     public func get(_ key: Data) throws -> Data? { try native.get(key: Data(key)) }
     public func put(_ key: Data, value: Data) throws -> IndexedVersionRecord {
         try native.put(key: Data(key), value: Data(value))
     }
+    public func apply(_ mutations: [MutationRecord]) throws -> IndexedVersionRecord {
+        try native.apply(mutations: mutations)
+    }
+    public func applyIf(expectedSource: Data?, mutations: [MutationRecord]) throws -> IndexedUpdateRecord {
+        try native.applyIf(expectedSource: expectedSource.map { Data($0) }, mutations: mutations)
+    }
     public func delete(_ key: Data) throws -> IndexedVersionRecord { try native.delete(key: Data(key)) }
     public func snapshot() throws -> IndexedSnapshot { IndexedSnapshot(native: try native.snapshot()) }
+    public func snapshot(at sourceVersion: Data) throws -> IndexedSnapshot {
+        IndexedSnapshot(native: try native.snapshotAt(sourceVersion: Data(sourceVersion)))
+    }
+    public func snapshot(id: IndexedSnapshotIdRecord) throws -> IndexedSnapshot {
+        IndexedSnapshot(native: try native.snapshotById(snapshotId: id))
+    }
     public func health() throws -> IndexedMapHealthRecord { try native.health() }
     public func metrics() throws -> IndexedMapMetricsRecord { try native.metrics() }
     public func verifyIndex(_ name: Data, sourceVersion: Data) throws -> IndexVerificationRecord {
@@ -235,6 +248,9 @@ public final class IndexedMap: @unchecked Sendable {
     }
     public func repairIndex(_ name: Data, sourceVersion: Data) throws -> IndexVerificationRecord {
         try native.repairIndex(name: Data(name), sourceVersion: Data(sourceVersion))
+    }
+    public func deactivateIndex(_ name: Data) throws -> IndexedVersionRecord {
+        try native.deactivateIndex(name: Data(name))
     }
     public func exportCurrent() throws -> Data { try native.exportCurrent() }
     public func importCurrent(_ bundle: Data, expectedSource: Data? = nil) throws -> IndexedVersionRecord {
@@ -257,8 +273,31 @@ public final class IndexedSnapshot: @unchecked Sendable {
 public final class SecondaryIndex: @unchecked Sendable {
     let native: BindingSecondaryIndexSnapshot
     init(native: BindingSecondaryIndexSnapshot) { self.native = native }
+    public var name: Data { native.name() }
     public func exact(_ term: Data) throws -> [IndexMatchRecord] { try native.exact(term: Data(term)) }
+    public func prefix(_ prefix: Data) throws -> [IndexMatchRecord] { try native.prefix(prefix: Data(prefix)) }
+    public func range(from start: Data, to end: Data? = nil) throws -> [IndexMatchRecord] {
+        try native.range(start: Data(start), rangeEnd: end.map { Data($0) })
+    }
     public func records(_ term: Data) throws -> [IndexedSourceRecord] { try native.records(term: Data(term)) }
+    public func exactPage(_ term: Data, cursor: Data? = nil, limit: UInt64 = 256) throws -> IndexPageRecord {
+        try native.exactPage(term: Data(term), cursor: cursor.map { Data($0) }, limit: limit)
+    }
+    public func exactReversePage(_ term: Data, cursor: Data? = nil, limit: UInt64 = 256) throws -> IndexPageRecord {
+        try native.exactReversePage(term: Data(term), cursor: cursor.map { Data($0) }, limit: limit)
+    }
+    public func prefixPage(_ prefix: Data, cursor: Data? = nil, limit: UInt64 = 256) throws -> IndexPageRecord {
+        try native.prefixPage(prefix: Data(prefix), cursor: cursor.map { Data($0) }, limit: limit)
+    }
+    public func prefixReversePage(_ prefix: Data, cursor: Data? = nil, limit: UInt64 = 256) throws -> IndexPageRecord {
+        try native.prefixReversePage(prefix: Data(prefix), cursor: cursor.map { Data($0) }, limit: limit)
+    }
+    public func rangePage(from start: Data, to end: Data? = nil, cursor: Data? = nil, limit: UInt64 = 256) throws -> IndexPageRecord {
+        try native.rangePage(start: Data(start), rangeEnd: end.map { Data($0) }, cursor: cursor.map { Data($0) }, limit: limit)
+    }
+    public func rangeReversePage(from start: Data, to end: Data? = nil, cursor: Data? = nil, limit: UInt64 = 256) throws -> IndexPageRecord {
+        try native.rangeReversePage(start: Data(start), rangeEnd: end.map { Data($0) }, cursor: cursor.map { Data($0) }, limit: limit)
+    }
 }
 
 private final class PageScope {

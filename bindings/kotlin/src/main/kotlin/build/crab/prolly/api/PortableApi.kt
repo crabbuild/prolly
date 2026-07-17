@@ -12,7 +12,9 @@ import build.crab.prolly.BindingMapSnapshot
 import build.crab.prolly.ConfigRecord
 import build.crab.prolly.ContentGraphLimitsRecord
 import build.crab.prolly.IndexProjectionRecord
+import build.crab.prolly.IndexedSnapshotIdRecord
 import build.crab.prolly.KeyProofRecord
+import build.crab.prolly.MutationRecord
 import build.crab.prolly.ProllyEngine
 import build.crab.prolly.ProllyReadSession
 import build.crab.prolly.ProximityMembershipProofRecord
@@ -126,11 +128,17 @@ class IndexRegistry(internal val native: BindingIndexRegistry) : AutoCloseable {
 }
 
 class IndexedMap(internal val native: BindingIndexedMap) : AutoCloseable {
+    val id: ByteArray get() = native.id()
     fun ensureIndex(name: ByteArray) = native.ensureIndex(name.copyOf())
     fun get(key: ByteArray) = native.get(key.copyOf())
     fun put(key: ByteArray, value: ByteArray) = native.put(key.copyOf(), value.copyOf())
+    fun apply(mutations: List<MutationRecord>) = native.apply(mutations)
+    fun applyIf(expectedSource: ByteArray?, mutations: List<MutationRecord>) =
+        native.applyIf(expectedSource?.copyOf(), mutations)
     fun delete(key: ByteArray) = native.delete(key.copyOf())
     fun snapshot() = IndexedSnapshot(native.snapshot())
+    fun snapshotAt(sourceVersion: ByteArray) = IndexedSnapshot(native.snapshotAt(sourceVersion.copyOf()))
+    fun snapshotById(id: IndexedSnapshotIdRecord) = IndexedSnapshot(native.snapshotById(id))
     fun health() = native.health()
     fun metrics() = native.metrics()
     fun verifyIndex(name: ByteArray, sourceVersion: ByteArray) =
@@ -138,6 +146,7 @@ class IndexedMap(internal val native: BindingIndexedMap) : AutoCloseable {
     fun verifyAll(sourceVersion: ByteArray) = native.verifyAll(sourceVersion.copyOf())
     fun repairIndex(name: ByteArray, sourceVersion: ByteArray) =
         native.repairIndex(name.copyOf(), sourceVersion.copyOf())
+    fun deactivateIndex(name: ByteArray) = native.deactivateIndex(name.copyOf())
     fun exportCurrent() = native.exportCurrent()
     fun importCurrent(bundle: ByteArray, expectedSource: ByteArray? = null) =
         native.importCurrent(bundle.copyOf(), expectedSource?.copyOf())
@@ -152,11 +161,24 @@ class IndexedSnapshot(internal val native: BindingIndexedSnapshot) : AutoCloseab
 }
 
 class SecondaryIndex(internal val native: BindingSecondaryIndexSnapshot) : AutoCloseable {
+    val name: ByteArray get() = native.name()
     fun exact(term: ByteArray) = native.exact(term.copyOf())
     fun prefix(prefix: ByteArray) = native.prefix(prefix.copyOf())
     fun range(start: ByteArray, end: ByteArray? = null) =
         native.range(start.copyOf(), end?.copyOf())
     fun records(term: ByteArray) = native.records(term.copyOf())
+    fun exactPage(term: ByteArray, cursor: ByteArray? = null, limit: ULong = 256uL) =
+        native.exactPage(term.copyOf(), cursor?.copyOf(), limit)
+    fun exactReversePage(term: ByteArray, cursor: ByteArray? = null, limit: ULong = 256uL) =
+        native.exactReversePage(term.copyOf(), cursor?.copyOf(), limit)
+    fun prefixPage(prefix: ByteArray, cursor: ByteArray? = null, limit: ULong = 256uL) =
+        native.prefixPage(prefix.copyOf(), cursor?.copyOf(), limit)
+    fun prefixReversePage(prefix: ByteArray, cursor: ByteArray? = null, limit: ULong = 256uL) =
+        native.prefixReversePage(prefix.copyOf(), cursor?.copyOf(), limit)
+    fun rangePage(start: ByteArray, end: ByteArray? = null, cursor: ByteArray? = null, limit: ULong = 256uL) =
+        native.rangePage(start.copyOf(), end?.copyOf(), cursor?.copyOf(), limit)
+    fun rangeReversePage(start: ByteArray, end: ByteArray? = null, cursor: ByteArray? = null, limit: ULong = 256uL) =
+        native.rangeReversePage(start.copyOf(), end?.copyOf(), cursor?.copyOf(), limit)
     fun <R> withExactPage(
         term: ByteArray,
         limit: UInt = 256u,
