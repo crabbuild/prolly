@@ -32,5 +32,9 @@ tokio = { version = "1.45", features = ["rt-multi-thread", "time"] }
 name = "redis_basic_usage"
 path = "examples/basic_usage.rs"
 
+[[example]]
+name = "language_interop"
+path = "examples/language_interop.rs"
+
 [lints.rust]
 unsafe_code = "allow"

@@ -37,6 +37,18 @@
         "capabilities": {"native_batch_reads":true,"atomic_batch_writes":true,"node_scan":true,"hints":true,"atomic_nodes_and_hint":true,"root_scan":true,"root_compare_and_swap":true,"transactions":true,"read_parallelism":16},
         "limits": {"max_batch_read_items":null,"max_batch_write_items":null,"max_transaction_operations":null,"max_node_bytes":null},
         "evidence": ["PROLLY_MYSQL_URL=mysql://prolly:prolly@127.0.0.1:53306/prolly npm --prefix bindings/node/stores/mysql test", "npm --prefix bindings/node/stores/mysql run check"]
+      },
+      "redis": {
+        "status": "supported",
+        "module": "@trail/prolly-store-redis",
+        "sdk_module": "redis",
+        "sdk_version": "6.1.0",
+        "minimum_node": "20.0.0",
+        "protocol_major": 1,
+        "schema_version": 1,
+        "capabilities": {"native_batch_reads":true,"atomic_batch_writes":true,"node_scan":true,"hints":true,"atomic_nodes_and_hint":true,"root_scan":true,"root_compare_and_swap":true,"transactions":true,"read_parallelism":16},
+        "limits": {"max_batch_read_items":null,"max_batch_write_items":null,"max_transaction_operations":null,"max_node_bytes":null},
+        "evidence": ["PROLLY_REDIS_URL=redis://127.0.0.1:56379 npm --prefix bindings/node/stores/redis test", "npm --prefix bindings/node/stores/redis run check"]
       }
     },
     "kotlin": {
@@ -75,6 +87,18 @@
         "capabilities": {"native_batch_reads":true,"atomic_batch_writes":true,"node_scan":true,"hints":true,"atomic_nodes_and_hint":true,"root_scan":true,"root_compare_and_swap":true,"transactions":true,"read_parallelism":16},
         "limits": {"max_batch_read_items":null,"max_batch_write_items":null,"max_transaction_operations":null,"max_node_bytes":null},
         "evidence": ["PROLLY_MYSQL_URL=mysql://prolly:prolly@127.0.0.1:53306/prolly mvn -f bindings/pom.xml -pl kotlin/stores/mysql -am test"]
+      },
+      "redis": {
+        "status": "supported",
+        "module": "build.crab:prolly-kotlin-store-redis",
+        "sdk_module": "io.lettuce:lettuce-core",
+        "sdk_version": "7.6.0.RELEASE",
+        "minimum_java": "17",
+        "protocol_major": 1,
+        "schema_version": 1,
+        "capabilities": {"native_batch_reads":true,"atomic_batch_writes":true,"node_scan":true,"hints":true,"atomic_nodes_and_hint":true,"root_scan":true,"root_compare_and_swap":true,"transactions":true,"read_parallelism":16},
+        "limits": {"max_batch_read_items":null,"max_batch_write_items":null,"max_transaction_operations":null,"max_node_bytes":null},
+        "evidence": ["PROLLY_REDIS_URL=redis://127.0.0.1:56379 mvn -f bindings/pom.xml -pl kotlin/stores/redis -am test"]
       }
     },
     "java": {
@@ -113,6 +137,18 @@
         "capabilities": {"native_batch_reads":true,"atomic_batch_writes":true,"node_scan":true,"hints":true,"atomic_nodes_and_hint":true,"root_scan":true,"root_compare_and_swap":true,"transactions":true,"read_parallelism":16},
         "limits": {"max_batch_read_items":null,"max_batch_write_items":null,"max_transaction_operations":null,"max_node_bytes":null},
         "evidence": ["PROLLY_MYSQL_URL=mysql://prolly:prolly@127.0.0.1:53306/prolly mvn -f bindings/pom.xml -pl java/stores/mysql -am test"]
+      },
+      "redis": {
+        "status": "supported",
+        "module": "build.crab:prolly-java-store-redis",
+        "sdk_module": "io.lettuce:lettuce-core",
+        "sdk_version": "7.6.0.RELEASE",
+        "minimum_java": "17",
+        "protocol_major": 1,
+        "schema_version": 1,
+        "capabilities": {"native_batch_reads":true,"atomic_batch_writes":true,"node_scan":true,"hints":true,"atomic_nodes_and_hint":true,"root_scan":true,"root_compare_and_swap":true,"transactions":true,"read_parallelism":16},
+        "limits": {"max_batch_read_items":null,"max_batch_write_items":null,"max_transaction_operations":null,"max_node_bytes":null},
+        "evidence": ["PROLLY_REDIS_URL=redis://127.0.0.1:56379 mvn -f bindings/pom.xml -pl java/stores/redis -am test"]
       }
     },
     "go": {

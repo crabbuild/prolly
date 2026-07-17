@@ -14,10 +14,12 @@
     <module>kotlin/stores/sqlite</module>
     <module>kotlin/stores/postgres</module>
     <module>kotlin/stores/mysql</module>
+    <module>kotlin/stores/redis</module>
     <module>java</module>
     <module>java/stores/sqlite</module>
     <module>java/stores/postgres</module>
     <module>java/stores/mysql</module>
+    <module>java/stores/redis</module>
   </modules>
 
   <properties>
