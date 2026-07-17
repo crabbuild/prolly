@@ -4,6 +4,29 @@ require 'minitest/autorun'
 require 'prolly'
 
 class PortableParityTest < Minitest::Test
+  def test_typed_versioned_map_is_application_facing
+    Prolly::Engine.memory.use do |engine|
+      raw = engine.versioned_map('typed-users'.b)
+      raw.initialize_map
+      typed = raw.typed(Prolly::StringKeyCodec.new, Prolly::JsonValueCodec.new)
+      first = typed.put('alice', { 'score' => 1 })
+      assert_equal({ 'score' => 1 }, typed.get('alice'))
+      assert_equal({ 'score' => 1 }, typed.get_at(first.id, 'alice'))
+      assert_equal [Prolly::TypedEntry.new(key: 'alice', value: { 'score' => 1 })], typed.entries
+      updated = typed.put_if(first.id, 'alice', { 'score' => 2 })
+      assert_equal Prolly::MapUpdateKind::APPLIED, updated.kind
+      migrated = typed.migrate_from(updated.current.id, Prolly::JsonValueCodec.new) do |value|
+        value.merge('active' => true)
+      end
+      assert_equal Prolly::MapUpdateKind::APPLIED, migrated.update.kind
+      assert_equal [1, 1], [migrated.scanned_values, migrated.rewritten_values]
+      assert_equal({ 'score' => 2, 'active' => true }, typed.get('alice'))
+      assert_same raw, typed.raw
+      typed.delete('alice')
+      assert_nil typed.get('alice')
+    end
+  end
+
   def test_versioned_large_values_and_blob_gc_are_application_facing
     Prolly::Engine.memory.use do |engine|
       Prolly::BlobStore.memory.use do |blobs|
@@ -18,6 +41,17 @@ class PortableParityTest < Minitest::Test
           blobs, first.id, 'document'.b, 'new-large-value'.b, config
         )
         assert_equal Prolly::MapUpdateKind::APPLIED, updated.kind
+        snapshot = versioned.snapshot
+        begin
+          snapshot.read.use do |session|
+            blob = nil
+            assert session.get_value_ref_view('document'.b) { |value| blob = value if value.kind == :blob }
+            assert_equal 32, blob.cid.bytesize
+            assert_equal 'new-large-value'.b.bytesize, blob.length
+          end
+        ensure
+          snapshot.close
+        end
         assert_operator versioned.plan_blob_gc(blobs).reachability.live_blob_count, :>=, 1
         sweep = versioned.sweep_blob_gc_async(blobs)
         blobs.close
@@ -540,6 +574,16 @@ class PortableParityTest < Minitest::Test
       refute_empty snapshot.export.nodes
       snapshot.read.use do |session|
         assert_equal 'v'.b, session.get('k'.b)
+        found, copied = session.get_view('k'.b, &:bytes)
+        assert found
+        assert_equal 'v'.b, copied
+        escaped_value = nil
+        session.get_view('k'.b) { |value| escaped_value = value }
+        assert_raises(RuntimeError) { escaped_value.bytes }
+        assert_equal [false, nil], session.get_view('missing'.b, &:bytes)
+        value_ref = nil
+        session.get_value_ref_view('k'.b) { |value| value_ref = value.inline.bytes }
+        assert_equal 'v'.b, value_ref
         escaped = nil
         seen = []
         outcome = session.scan_range_view('k'.b, 'l'.b) do |entry|

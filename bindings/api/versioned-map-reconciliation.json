@@ -67,7 +67,11 @@
         "prolly::VersionedMap::edit",
         "prolly::VersionedMap::edit_if",
         "prolly::VersionedMap::get_at",
+        "prolly::VersionedMap::get_at_with",
         "prolly::VersionedMap::get_many_at",
+        "prolly::VersionedMap::get_with",
+        "prolly::VersionedMap::get_value_ref_at_with",
+        "prolly::VersionedMap::get_value_ref_with",
         "prolly::VersionedMap::id",
         "prolly::VersionedMap::is_initialized",
         "prolly::VersionedMap::new",
@@ -81,7 +85,8 @@
         "prolly::VersionedMap::scan_range",
         "prolly::VersionedMap::scan_range_at",
         "prolly::VersionedMap::snapshot_at",
-        "prolly::VersionedMap::subscribe_from"
+        "prolly::VersionedMap::subscribe_from",
+        "prolly::VersionedMap::typed"
       ],
       "evidence": [
         "bindings/python/prolly/api.py",
@@ -93,46 +98,7 @@
         "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
         "bindings/wasm/src/index.ts"
       ],
-      "rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, versioned transactions, snapshots, retained sessions, and bounded scan/page APIs."
-    },
-    {
-      "state": "confirmed-performance-gap",
-      "rust": [
-        "prolly::VersionedMap::get_at_with",
-        "prolly::VersionedMap::get_value_ref_at_with",
-        "prolly::VersionedMap::get_value_ref_with",
-        "prolly::VersionedMap::get_with"
-      ],
-      "evidence": [
-        "src/prolly/versioned_map.rs",
-        "bindings/go/prolly.go#ReadSession.GetView",
-        "bindings/python/prolly/api.py#ReadSession",
-        "bindings/node/src/versioned.ts#ReadSession",
-        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#ReadSession",
-        "bindings/java/src/main/java/build/crab/prolly/javaapi/ReadSession.java",
-        "bindings/ruby/lib/prolly/api.rb#ReadSession",
-        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#ReadSession",
-        "bindings/wasm/src/index.ts#WasmReadSession"
-      ],
-      "rationale": "Rust exposes callback-scoped point and ValueRef views. Go exposes point GetView, but the other application wrappers expose owned point reads only; all eight have scoped scan views, so point-read zero-copy parity remains incomplete."
-    },
-    {
-      "state": "confirmed-api-gap",
-      "rust": [
-        "prolly::VersionedMap::typed"
-      ],
-      "evidence": [
-        "src/prolly/versioned_map.rs",
-        "bindings/python",
-        "bindings/go",
-        "bindings/node",
-        "bindings/kotlin",
-        "bindings/java",
-        "bindings/ruby",
-        "bindings/swift",
-        "bindings/wasm"
-      ],
-      "rationale": "No binding exposes TypedVersionedMap or host key/value codec wrappers; portable typed-codec construction is a confirmed missing application API."
+      "rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, typed codec facades, versioned transactions, snapshots, retained sessions, bounded scan/page APIs, and callback-scoped inline/blob value-reference views backed by native leaf leases."
     }
   ]
 }

@@ -5281,12 +5281,23 @@
     {
       "rust": "prolly::BytesKeyCodec",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "core",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "prolly.api.BytesKeyCodec",
+        "go": "prolly.BytesKeyCodec",
+        "node": "@trail/prolly-node.BytesKeyCodec",
+        "kotlin": "build.crab.prolly.api.BytesKeyCodec",
+        "java": "build.crab.prolly.javaapi.BytesKeyCodec",
+        "ruby": "Prolly::BytesKeyCodec",
+        "swift": "ProllyAPI.BytesKeyCodec",
+        "wasm": "@trail/prolly-wasm.BytesKeyCodec"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::typed-versioned-map"
+      ],
       "docs": []
     },
     {
@@ -12608,17 +12619,29 @@
     {
       "rust": "prolly::KeyCodec",
       "classification": "idiomatic",
-      "status": "planned",
+      "status": "implemented",
       "family": "core",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "prolly.api.KeyCodec",
+        "go": "prolly.KeyCodec",
+        "node": "@trail/prolly-node.KeyCodec",
+        "kotlin": "build.crab.prolly.api.KeyCodec",
+        "java": "build.crab.prolly.javaapi.KeyCodec",
+        "ruby": "Prolly key codec protocol",
+        "swift": "ProllyAPI.KeyCodec",
+        "wasm": "@trail/prolly-wasm.KeyCodec"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::typed-versioned-map",
+        "portable-parity::typed-codec-round-trip"
+      ],
       "docs": [
         "bindings/api/idiomatic-equivalents.json#generic-codec"
       ],
       "equivalence": "generic-codec",
-      "rationale": "prolly::KeyCodec is represented by the reviewed generic-codec host-language contract instead of a literal Rust declaration.",
+      "rationale": "prolly::KeyCodec is exposed through the reviewed typed host codec facade with the same ordered encoding, decode failure, CAS, and ownership semantics.",
       "reviewed": true,
       "audience": "rust-extension",
       "audience_rationale": "prolly::KeyCodec supports the portable application API through the generic-codec contract and is not a separately invoked application operation."
@@ -12626,17 +12649,29 @@
     {
       "rust": "prolly::KeyCodec::decode_key",
       "classification": "idiomatic",
-      "status": "planned",
+      "status": "implemented",
       "family": "core",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "KeyCodec.decode_key",
+        "go": "KeyCodec.DecodeKey",
+        "node": "KeyCodec.decodeKey",
+        "kotlin": "KeyCodec.decodeKey",
+        "java": "KeyCodec.decodeKey",
+        "ruby": "key_codec#decode_key",
+        "swift": "KeyCodec.decodeKey",
+        "wasm": "KeyCodec.decodeKey"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::typed-versioned-map",
+        "portable-parity::typed-codec-round-trip"
+      ],
       "docs": [
         "bindings/api/idiomatic-equivalents.json#generic-codec"
       ],
       "equivalence": "generic-codec",
-      "rationale": "prolly::KeyCodec::decode_key is represented by the reviewed generic-codec host-language contract instead of a literal Rust declaration.",
+      "rationale": "prolly::KeyCodec::decode_key is exposed through the reviewed typed host codec facade with the same ordered encoding, decode failure, CAS, and ownership semantics.",
       "reviewed": true,
       "audience": "rust-extension",
       "audience_rationale": "prolly::KeyCodec::decode_key supports the portable application API through the generic-codec contract and is not a separately invoked application operation."
@@ -12644,17 +12679,29 @@
     {
       "rust": "prolly::KeyCodec::encode_key",
       "classification": "idiomatic",
-      "status": "planned",
+      "status": "implemented",
       "family": "core",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "KeyCodec.encode_key",
+        "go": "KeyCodec.EncodeKey",
+        "node": "KeyCodec.encodeKey",
+        "kotlin": "KeyCodec.encodeKey",
+        "java": "KeyCodec.encodeKey",
+        "ruby": "key_codec#encode_key",
+        "swift": "KeyCodec.encodeKey",
+        "wasm": "KeyCodec.encodeKey"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::typed-versioned-map",
+        "portable-parity::typed-codec-round-trip"
+      ],
       "docs": [
         "bindings/api/idiomatic-equivalents.json#generic-codec"
       ],
       "equivalence": "generic-codec",
-      "rationale": "prolly::KeyCodec::encode_key is represented by the reviewed generic-codec host-language contract instead of a literal Rust declaration.",
+      "rationale": "prolly::KeyCodec::encode_key is exposed through the reviewed typed host codec facade with the same ordered encoding, decode failure, CAS, and ownership semantics.",
       "reviewed": true,
       "audience": "rust-extension",
       "audience_rationale": "prolly::KeyCodec::encode_key supports the portable application API through the generic-codec contract and is not a separately invoked application operation."
@@ -29124,12 +29171,23 @@
     {
       "rust": "prolly::StringKeyCodec",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "core",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "prolly.api.StringKeyCodec",
+        "go": "prolly.StringKeyCodec",
+        "node": "@trail/prolly-node.StringKeyCodec",
+        "kotlin": "build.crab.prolly.api.StringKeyCodec",
+        "java": "build.crab.prolly.javaapi.StringKeyCodec",
+        "ruby": "Prolly::StringKeyCodec",
+        "swift": "ProllyAPI.StringKeyCodec",
+        "wasm": "@trail/prolly-wasm.StringKeyCodec"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::typed-versioned-map"
+      ],
       "docs": []
     },
     {
@@ -31120,205 +31178,372 @@
     {
       "rust": "prolly::TypedMigrationResult",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "core",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "prolly.api.TypedMigrationResult",
+        "go": "prolly.TypedMigrationResult",
+        "node": "@trail/prolly-node.TypedMigrationResult",
+        "kotlin": "build.crab.prolly.api.TypedMigrationResult",
+        "java": "build.crab.prolly.javaapi.TypedMigrationResult",
+        "ruby": "Prolly::TypedMigrationResult",
+        "swift": "ProllyAPI.TypedMigrationResult",
+        "wasm": "@trail/prolly-wasm.TypedMigrationResult"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::typed-versioned-map",
+        "portable-parity::typed-schema-migration"
+      ],
       "docs": []
     },
     {
       "rust": "prolly::TypedMigrationResult::rewritten_values",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "core",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "TypedMigrationResult.rewritten_values",
+        "go": "TypedMigrationResult.RewrittenValues",
+        "node": "TypedMigrationResult.rewrittenValues",
+        "kotlin": "TypedMigrationResult.rewrittenValues",
+        "java": "TypedMigrationResult.rewrittenValues",
+        "ruby": "TypedMigrationResult#rewritten_values",
+        "swift": "TypedMigrationResult.rewrittenValues",
+        "wasm": "TypedMigrationResult.rewrittenValues"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::typed-versioned-map",
+        "portable-parity::typed-schema-migration"
+      ],
       "docs": []
     },
     {
       "rust": "prolly::TypedMigrationResult::scanned_values",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "core",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "TypedMigrationResult.scanned_values",
+        "go": "TypedMigrationResult.ScannedValues",
+        "node": "TypedMigrationResult.scannedValues",
+        "kotlin": "TypedMigrationResult.scannedValues",
+        "java": "TypedMigrationResult.scannedValues",
+        "ruby": "TypedMigrationResult#scanned_values",
+        "swift": "TypedMigrationResult.scannedValues",
+        "wasm": "TypedMigrationResult.scannedValues"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::typed-versioned-map",
+        "portable-parity::typed-schema-migration"
+      ],
       "docs": []
     },
     {
       "rust": "prolly::TypedMigrationResult::update",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "core",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "TypedMigrationResult.update",
+        "go": "TypedMigrationResult.Update",
+        "node": "TypedMigrationResult.update",
+        "kotlin": "TypedMigrationResult.update",
+        "java": "TypedMigrationResult.update",
+        "ruby": "TypedMigrationResult#update",
+        "swift": "TypedMigrationResult.update",
+        "wasm": "TypedMigrationResult.update"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::typed-versioned-map",
+        "portable-parity::typed-schema-migration"
+      ],
       "docs": []
     },
     {
       "rust": "prolly::TypedVersionedMap",
       "classification": "idiomatic",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "prolly.api.TypedVersionedMap",
+        "go": "prolly.TypedVersionedMap",
+        "node": "@trail/prolly-node.TypedVersionedMap",
+        "kotlin": "build.crab.prolly.api.TypedVersionedMap",
+        "java": "build.crab.prolly.javaapi.TypedVersionedMap",
+        "ruby": "Prolly::TypedVersionedMap",
+        "swift": "ProllyAPI.TypedVersionedMap",
+        "wasm": "@trail/prolly-wasm.TypedVersionedMap"
+      },
       "exclusions": {},
       "tests": [
-        "prolly-bindings::domain::versioned"
+        "portable-parity::typed-versioned-map",
+        "portable-parity::typed-codec-round-trip"
       ],
       "docs": [
-        "conformance/binding-versioned-fixtures.v1.json"
-      ]
+        "conformance/binding-versioned-fixtures.v1.json",
+        "bindings/api/idiomatic-equivalents.json#generic-codec"
+      ],
+      "equivalence": "generic-codec",
+      "rationale": "prolly::TypedVersionedMap is exposed through the reviewed typed host codec facade with the same ordered encoding, decode failure, CAS, and ownership semantics.",
+      "reviewed": true
     },
     {
       "rust": "prolly::TypedVersionedMap::delete",
       "classification": "idiomatic",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "TypedVersionedMap.delete",
+        "go": "TypedVersionedMap.Delete",
+        "node": "TypedVersionedMap.delete",
+        "kotlin": "TypedVersionedMap.delete",
+        "java": "TypedVersionedMap.delete",
+        "ruby": "TypedVersionedMap#delete",
+        "swift": "TypedVersionedMap.delete",
+        "wasm": "TypedVersionedMap.delete"
+      },
       "exclusions": {},
       "tests": [
-        "prolly-bindings::domain::versioned"
+        "portable-parity::typed-versioned-map",
+        "portable-parity::typed-codec-round-trip"
       ],
       "docs": [
-        "conformance/binding-versioned-fixtures.v1.json"
+        "conformance/binding-versioned-fixtures.v1.json",
+        "bindings/api/idiomatic-equivalents.json#generic-codec"
       ],
       "audience": "application",
       "audience_rationale": "prolly::TypedVersionedMap::delete has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "equivalence": "generic-codec",
+      "rationale": "prolly::TypedVersionedMap::delete is exposed through the reviewed typed host codec facade with the same ordered encoding, decode failure, CAS, and ownership semantics."
     },
     {
       "rust": "prolly::TypedVersionedMap::entries",
       "classification": "idiomatic",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "TypedVersionedMap.entries",
+        "go": "TypedVersionedMap.Entries",
+        "node": "TypedVersionedMap.entries",
+        "kotlin": "TypedVersionedMap.entries",
+        "java": "TypedVersionedMap.entries",
+        "ruby": "TypedVersionedMap#entries",
+        "swift": "TypedVersionedMap.entries",
+        "wasm": "TypedVersionedMap.entries"
+      },
       "exclusions": {},
       "tests": [
-        "prolly-bindings::domain::versioned"
+        "portable-parity::typed-versioned-map",
+        "portable-parity::typed-codec-round-trip"
       ],
       "docs": [
-        "conformance/binding-versioned-fixtures.v1.json"
+        "conformance/binding-versioned-fixtures.v1.json",
+        "bindings/api/idiomatic-equivalents.json#generic-codec"
       ],
       "audience": "application",
       "audience_rationale": "prolly::TypedVersionedMap::entries has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "equivalence": "generic-codec",
+      "rationale": "prolly::TypedVersionedMap::entries is exposed through the reviewed typed host codec facade with the same ordered encoding, decode failure, CAS, and ownership semantics."
     },
     {
       "rust": "prolly::TypedVersionedMap::get",
       "classification": "idiomatic",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "TypedVersionedMap.get",
+        "go": "TypedVersionedMap.Get",
+        "node": "TypedVersionedMap.get",
+        "kotlin": "TypedVersionedMap.get",
+        "java": "TypedVersionedMap.get",
+        "ruby": "TypedVersionedMap#get",
+        "swift": "TypedVersionedMap.get",
+        "wasm": "TypedVersionedMap.get"
+      },
       "exclusions": {},
       "tests": [
-        "prolly-bindings::domain::versioned"
+        "portable-parity::typed-versioned-map",
+        "portable-parity::typed-codec-round-trip"
       ],
       "docs": [
-        "conformance/binding-versioned-fixtures.v1.json"
+        "conformance/binding-versioned-fixtures.v1.json",
+        "bindings/api/idiomatic-equivalents.json#generic-codec"
       ],
       "audience": "application",
       "audience_rationale": "prolly::TypedVersionedMap::get has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "equivalence": "generic-codec",
+      "rationale": "prolly::TypedVersionedMap::get is exposed through the reviewed typed host codec facade with the same ordered encoding, decode failure, CAS, and ownership semantics."
     },
     {
       "rust": "prolly::TypedVersionedMap::get_at",
       "classification": "idiomatic",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "TypedVersionedMap.get_at",
+        "go": "TypedVersionedMap.GetAt",
+        "node": "TypedVersionedMap.getAt",
+        "kotlin": "TypedVersionedMap.getAt",
+        "java": "TypedVersionedMap.getAt",
+        "ruby": "TypedVersionedMap#get_at",
+        "swift": "TypedVersionedMap.get(at:key:)",
+        "wasm": "TypedVersionedMap.getAt"
+      },
       "exclusions": {},
       "tests": [
-        "prolly-bindings::domain::versioned"
+        "portable-parity::typed-versioned-map",
+        "portable-parity::typed-codec-round-trip"
       ],
       "docs": [
-        "conformance/binding-versioned-fixtures.v1.json"
+        "conformance/binding-versioned-fixtures.v1.json",
+        "bindings/api/idiomatic-equivalents.json#generic-codec"
       ],
       "audience": "application",
       "audience_rationale": "prolly::TypedVersionedMap::get_at has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "equivalence": "generic-codec",
+      "rationale": "prolly::TypedVersionedMap::get_at is exposed through the reviewed typed host codec facade with the same ordered encoding, decode failure, CAS, and ownership semantics."
     },
     {
       "rust": "prolly::TypedVersionedMap::migrate_from",
       "classification": "idiomatic",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "TypedVersionedMap.migrate_from",
+        "go": "prolly.MigrateTypedVersionedMap",
+        "node": "TypedVersionedMap.migrateFrom",
+        "kotlin": "TypedVersionedMap.migrateFrom",
+        "java": "TypedVersionedMap.migrateFrom",
+        "ruby": "TypedVersionedMap#migrate_from",
+        "swift": "TypedVersionedMap.migrateFrom",
+        "wasm": "TypedVersionedMap.migrateFrom"
+      },
       "exclusions": {},
       "tests": [
-        "prolly-bindings::domain::versioned"
+        "portable-parity::typed-versioned-map",
+        "portable-parity::typed-schema-migration",
+        "portable-parity::typed-codec-round-trip"
       ],
       "docs": [
-        "conformance/binding-versioned-fixtures.v1.json"
+        "conformance/binding-versioned-fixtures.v1.json",
+        "bindings/api/idiomatic-equivalents.json#generic-codec"
       ],
       "audience": "application",
       "audience_rationale": "prolly::TypedVersionedMap::migrate_from has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "equivalence": "generic-codec",
+      "rationale": "prolly::TypedVersionedMap::migrate_from is exposed through the reviewed typed host codec facade with the same ordered encoding, decode failure, CAS, and ownership semantics."
     },
     {
       "rust": "prolly::TypedVersionedMap::put",
       "classification": "idiomatic",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "TypedVersionedMap.put",
+        "go": "TypedVersionedMap.Put",
+        "node": "TypedVersionedMap.put",
+        "kotlin": "TypedVersionedMap.put",
+        "java": "TypedVersionedMap.put",
+        "ruby": "TypedVersionedMap#put",
+        "swift": "TypedVersionedMap.put",
+        "wasm": "TypedVersionedMap.put"
+      },
       "exclusions": {},
       "tests": [
-        "prolly-bindings::domain::versioned"
+        "portable-parity::typed-versioned-map",
+        "portable-parity::typed-codec-round-trip"
       ],
       "docs": [
-        "conformance/binding-versioned-fixtures.v1.json"
+        "conformance/binding-versioned-fixtures.v1.json",
+        "bindings/api/idiomatic-equivalents.json#generic-codec"
       ],
       "audience": "application",
       "audience_rationale": "prolly::TypedVersionedMap::put has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "equivalence": "generic-codec",
+      "rationale": "prolly::TypedVersionedMap::put is exposed through the reviewed typed host codec facade with the same ordered encoding, decode failure, CAS, and ownership semantics."
     },
     {
       "rust": "prolly::TypedVersionedMap::put_if",
       "classification": "idiomatic",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "TypedVersionedMap.put_if",
+        "go": "TypedVersionedMap.PutIf",
+        "node": "TypedVersionedMap.putIf",
+        "kotlin": "TypedVersionedMap.putIf",
+        "java": "TypedVersionedMap.putIf",
+        "ruby": "TypedVersionedMap#put_if",
+        "swift": "TypedVersionedMap.putIf",
+        "wasm": "TypedVersionedMap.putIf"
+      },
       "exclusions": {},
       "tests": [
-        "prolly-bindings::domain::versioned"
+        "portable-parity::typed-versioned-map",
+        "portable-parity::typed-codec-round-trip"
       ],
       "docs": [
-        "conformance/binding-versioned-fixtures.v1.json"
+        "conformance/binding-versioned-fixtures.v1.json",
+        "bindings/api/idiomatic-equivalents.json#generic-codec"
       ],
       "audience": "application",
       "audience_rationale": "prolly::TypedVersionedMap::put_if has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "equivalence": "generic-codec",
+      "rationale": "prolly::TypedVersionedMap::put_if is exposed through the reviewed typed host codec facade with the same ordered encoding, decode failure, CAS, and ownership semantics."
     },
     {
       "rust": "prolly::TypedVersionedMap::raw",
       "classification": "idiomatic",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "TypedVersionedMap.raw",
+        "go": "TypedVersionedMap.Raw",
+        "node": "TypedVersionedMap.raw",
+        "kotlin": "TypedVersionedMap.raw",
+        "java": "TypedVersionedMap.raw",
+        "ruby": "TypedVersionedMap#raw",
+        "swift": "TypedVersionedMap.raw",
+        "wasm": "TypedVersionedMap.raw"
+      },
       "exclusions": {},
       "tests": [
-        "prolly-bindings::domain::versioned"
+        "portable-parity::typed-versioned-map",
+        "portable-parity::typed-codec-round-trip"
       ],
       "docs": [
-        "conformance/binding-versioned-fixtures.v1.json"
+        "conformance/binding-versioned-fixtures.v1.json",
+        "bindings/api/idiomatic-equivalents.json#generic-codec"
       ],
       "audience": "application",
       "audience_rationale": "prolly::TypedVersionedMap::raw has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "equivalence": "generic-codec",
+      "rationale": "prolly::TypedVersionedMap::raw is exposed through the reviewed typed host codec facade with the same ordered encoding, decode failure, CAS, and ownership semantics."
     },
     {
       "rust": "prolly::VERSIONED_MAP_ROOT_PREFIX",
@@ -31334,17 +31559,29 @@
     {
       "rust": "prolly::ValueCodec",
       "classification": "idiomatic",
-      "status": "planned",
+      "status": "implemented",
       "family": "core",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "prolly.api.ValueCodec",
+        "go": "prolly.ValueCodec",
+        "node": "@trail/prolly-node.ValueCodec",
+        "kotlin": "build.crab.prolly.api.ValueCodec",
+        "java": "build.crab.prolly.javaapi.ValueCodec",
+        "ruby": "Prolly value codec protocol",
+        "swift": "ProllyAPI.ValueCodec",
+        "wasm": "@trail/prolly-wasm.ValueCodec"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::typed-versioned-map",
+        "portable-parity::typed-codec-round-trip"
+      ],
       "docs": [
         "bindings/api/idiomatic-equivalents.json#generic-codec"
       ],
       "equivalence": "generic-codec",
-      "rationale": "prolly::ValueCodec is represented by the reviewed generic-codec host-language contract instead of a literal Rust declaration.",
+      "rationale": "prolly::ValueCodec is exposed through the reviewed typed host codec facade with the same ordered encoding, decode failure, CAS, and ownership semantics.",
       "reviewed": true,
       "audience": "rust-extension",
       "audience_rationale": "prolly::ValueCodec supports the portable application API through the generic-codec contract and is not a separately invoked application operation."
@@ -31352,17 +31589,29 @@
     {
       "rust": "prolly::ValueCodec::decode",
       "classification": "idiomatic",
-      "status": "planned",
+      "status": "implemented",
       "family": "core",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "ValueCodec.decode",
+        "go": "ValueCodec.Decode",
+        "node": "ValueCodec.decode",
+        "kotlin": "ValueCodec.decode",
+        "java": "ValueCodec.decode",
+        "ruby": "value_codec#decode",
+        "swift": "ValueCodec.decode",
+        "wasm": "ValueCodec.decode"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::typed-versioned-map",
+        "portable-parity::typed-codec-round-trip"
+      ],
       "docs": [
         "bindings/api/idiomatic-equivalents.json#generic-codec"
       ],
       "equivalence": "generic-codec",
-      "rationale": "prolly::ValueCodec::decode is represented by the reviewed generic-codec host-language contract instead of a literal Rust declaration.",
+      "rationale": "prolly::ValueCodec::decode is exposed through the reviewed typed host codec facade with the same ordered encoding, decode failure, CAS, and ownership semantics.",
       "reviewed": true,
       "audience": "rust-extension",
       "audience_rationale": "prolly::ValueCodec::decode supports the portable application API through the generic-codec contract and is not a separately invoked application operation."
@@ -31370,17 +31619,29 @@
     {
       "rust": "prolly::ValueCodec::encode",
       "classification": "idiomatic",
-      "status": "planned",
+      "status": "implemented",
       "family": "core",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "ValueCodec.encode",
+        "go": "ValueCodec.Encode",
+        "node": "ValueCodec.encode",
+        "kotlin": "ValueCodec.encode",
+        "java": "ValueCodec.encode",
+        "ruby": "value_codec#encode",
+        "swift": "ValueCodec.encode",
+        "wasm": "ValueCodec.encode"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::typed-versioned-map",
+        "portable-parity::typed-codec-round-trip"
+      ],
       "docs": [
         "bindings/api/idiomatic-equivalents.json#generic-codec"
       ],
       "equivalence": "generic-codec",
-      "rationale": "prolly::ValueCodec::encode is represented by the reviewed generic-codec host-language contract instead of a literal Rust declaration.",
+      "rationale": "prolly::ValueCodec::encode is exposed through the reviewed typed host codec facade with the same ordered encoding, decode failure, CAS, and ownership semantics.",
       "reviewed": true,
       "audience": "rust-extension",
       "audience_rationale": "prolly::ValueCodec::encode supports the portable application API through the generic-codec contract and is not a separately invoked application operation."
@@ -31689,10 +31950,19 @@
     {
       "rust": "prolly::VersionedMap::append",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.append",
+        "go": "prolly.(*VersionedMap).Append",
+        "node": "VersionedMap.append",
+        "kotlin": "VersionedMap.append",
+        "java": "VersionedMap.append",
+        "ruby": "VersionedMap#append",
+        "swift": "VersionedMap.append",
+        "wasm": "WasmVersionedMap.append"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -31719,10 +31989,19 @@
     {
       "rust": "prolly::VersionedMap::apply",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.apply",
+        "go": "prolly.(*VersionedMap).Apply",
+        "node": "VersionedMap.apply",
+        "kotlin": "VersionedMap.apply",
+        "java": "VersionedMap.apply",
+        "ruby": "VersionedMap#apply",
+        "swift": "VersionedMap.apply",
+        "wasm": "WasmVersionedMap.apply"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -31749,10 +32028,19 @@
     {
       "rust": "prolly::VersionedMap::apply_at_millis",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.apply_at_millis",
+        "go": "prolly.(*VersionedMap).ApplyAtMillis",
+        "node": "VersionedMap.applyAtMillis",
+        "kotlin": "VersionedMap.applyAtMillis",
+        "java": "VersionedMap.applyAtMillis",
+        "ruby": "VersionedMap#apply_at_millis",
+        "swift": "VersionedMap.applyAtMillis",
+        "wasm": "WasmVersionedMap.applyAtMillis"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -31779,10 +32067,19 @@
     {
       "rust": "prolly::VersionedMap::apply_if",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.apply_if",
+        "go": "prolly.(*VersionedMap).ApplyIf",
+        "node": "VersionedMap.applyIf",
+        "kotlin": "VersionedMap.applyIf",
+        "java": "VersionedMap.applyIf",
+        "ruby": "VersionedMap#apply_if",
+        "swift": "VersionedMap.applyIf",
+        "wasm": "WasmVersionedMap.applyIf"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -31809,10 +32106,19 @@
     {
       "rust": "prolly::VersionedMap::apply_if_at_millis",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.apply_if_at_millis",
+        "go": "prolly.(*VersionedMap).ApplyIfAtMillis",
+        "node": "VersionedMap.applyIfAtMillis",
+        "kotlin": "VersionedMap.applyIfAtMillis",
+        "java": "VersionedMap.applyIfAtMillis",
+        "ruby": "VersionedMap#apply_if_at_millis",
+        "swift": "VersionedMap.applyIfAtMillis",
+        "wasm": "WasmVersionedMap.applyIfAtMillis"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -31839,10 +32145,19 @@
     {
       "rust": "prolly::VersionedMap::backup",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.backup",
+        "go": "prolly.(*VersionedMap).Backup",
+        "node": "VersionedMap.backup",
+        "kotlin": "VersionedMap.backup",
+        "java": "VersionedMap.backup",
+        "ruby": "VersionedMap#backup",
+        "swift": "VersionedMap.backup",
+        "wasm": "WasmVersionedMap.backup"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -31869,10 +32184,19 @@
     {
       "rust": "prolly::VersionedMap::changes_since",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.changes_since",
+        "go": "prolly.(*VersionedMap).ChangesSince",
+        "node": "VersionedMap.changesSince",
+        "kotlin": "VersionedMap.changesSince",
+        "java": "VersionedMap.changesSince",
+        "ruby": "VersionedMap#changes_since",
+        "swift": "VersionedMap.changes(since:)",
+        "wasm": "WasmVersionedMap.changesSince"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -31894,15 +32218,25 @@
         "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
         "bindings/wasm/src/index.ts"
       ],
-      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, versioned transactions, snapshots, retained sessions, and bounded scan/page APIs."
+      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, typed codec facades, versioned transactions, snapshots, retained sessions, bounded scan/page APIs, and callback-scoped inline/blob value-reference views backed by native leaf leases.",
+      "rationale": "prolly::VersionedMap::changes_since is exposed through the reviewed host-language operation pattern recorded in the per-language mappings."
     },
     {
       "rust": "prolly::VersionedMap::compare",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.compare",
+        "go": "prolly.(*VersionedMap).Compare",
+        "node": "VersionedMap.compare",
+        "kotlin": "VersionedMap.compare",
+        "java": "VersionedMap.compare",
+        "ruby": "VersionedMap#compare",
+        "swift": "VersionedMap.compare",
+        "wasm": "WasmVersionedMap.compare"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -31929,10 +32263,19 @@
     {
       "rust": "prolly::VersionedMap::compare_to_head",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.compare_to_head",
+        "go": "prolly.(*VersionedMap).CompareToHead",
+        "node": "VersionedMap.compareToHead",
+        "kotlin": "VersionedMap.compareToHead",
+        "java": "VersionedMap.compareToHead",
+        "ruby": "VersionedMap#compare_to_head",
+        "swift": "VersionedMap.compareToHead",
+        "wasm": "WasmVersionedMap.compareToHead"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -31959,10 +32302,19 @@
     {
       "rust": "prolly::VersionedMap::contains_key",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.contains",
+        "go": "prolly.(*VersionedMap).ContainsKey",
+        "node": "VersionedMap.containsKey",
+        "kotlin": "VersionedMap.containsKey",
+        "java": "VersionedMap.containsKey",
+        "ruby": "VersionedMap#contains?",
+        "swift": "VersionedMap.contains",
+        "wasm": "WasmVersionedMap.containsKey"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -31984,15 +32336,25 @@
         "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
         "bindings/wasm/src/index.ts"
       ],
-      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, versioned transactions, snapshots, retained sessions, and bounded scan/page APIs."
+      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, typed codec facades, versioned transactions, snapshots, retained sessions, bounded scan/page APIs, and callback-scoped inline/blob value-reference views backed by native leaf leases.",
+      "rationale": "prolly::VersionedMap::contains_key is exposed through the reviewed host-language operation pattern recorded in the per-language mappings."
     },
     {
       "rust": "prolly::VersionedMap::delete",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.delete",
+        "go": "prolly.(*VersionedMap).Delete",
+        "node": "VersionedMap.delete",
+        "kotlin": "VersionedMap.delete",
+        "java": "VersionedMap.delete",
+        "ruby": "VersionedMap#delete",
+        "swift": "VersionedMap.delete",
+        "wasm": "WasmVersionedMap.delete"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -32019,10 +32381,19 @@
     {
       "rust": "prolly::VersionedMap::delete_if",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.delete_if",
+        "go": "prolly.(*VersionedMap).DeleteIf",
+        "node": "VersionedMap.deleteIf",
+        "kotlin": "VersionedMap.deleteIf",
+        "java": "VersionedMap.deleteIf",
+        "ruby": "VersionedMap#delete_if",
+        "swift": "VersionedMap.deleteIf",
+        "wasm": "WasmVersionedMap.deleteIf"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -32049,10 +32420,19 @@
     {
       "rust": "prolly::VersionedMap::diff",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.diff",
+        "go": "prolly.(*VersionedMap).Diff",
+        "node": "VersionedMap.diff",
+        "kotlin": "VersionedMap.diff",
+        "java": "VersionedMap.diff",
+        "ruby": "VersionedMap#diff",
+        "swift": "VersionedMap.diff",
+        "wasm": "WasmVersionedMap.diff"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -32079,10 +32459,19 @@
     {
       "rust": "prolly::VersionedMap::edit",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.apply",
+        "go": "prolly.(*VersionedMap).Apply",
+        "node": "VersionedMap.apply",
+        "kotlin": "VersionedMap.apply",
+        "java": "VersionedMap.apply",
+        "ruby": "VersionedMap#apply",
+        "swift": "VersionedMap.apply",
+        "wasm": "WasmVersionedMap.apply"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -32104,15 +32493,25 @@
         "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
         "bindings/wasm/src/index.ts"
       ],
-      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, versioned transactions, snapshots, retained sessions, and bounded scan/page APIs."
+      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, typed codec facades, versioned transactions, snapshots, retained sessions, bounded scan/page APIs, and callback-scoped inline/blob value-reference views backed by native leaf leases.",
+      "rationale": "prolly::VersionedMap::edit is exposed through the reviewed host-language operation pattern recorded in the per-language mappings."
     },
     {
       "rust": "prolly::VersionedMap::edit_if",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.apply_if",
+        "go": "prolly.(*VersionedMap).ApplyIf",
+        "node": "VersionedMap.applyIf",
+        "kotlin": "VersionedMap.applyIf",
+        "java": "VersionedMap.applyIf",
+        "ruby": "VersionedMap#apply_if",
+        "swift": "VersionedMap.applyIf",
+        "wasm": "WasmVersionedMap.applyIf"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -32134,15 +32533,25 @@
         "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
         "bindings/wasm/src/index.ts"
       ],
-      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, versioned transactions, snapshots, retained sessions, and bounded scan/page APIs."
+      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, typed codec facades, versioned transactions, snapshots, retained sessions, bounded scan/page APIs, and callback-scoped inline/blob value-reference views backed by native leaf leases.",
+      "rationale": "prolly::VersionedMap::edit_if is exposed through the reviewed host-language operation pattern recorded in the per-language mappings."
     },
     {
       "rust": "prolly::VersionedMap::get",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.get",
+        "go": "prolly.(*VersionedMap).Get",
+        "node": "VersionedMap.get",
+        "kotlin": "VersionedMap.get",
+        "java": "VersionedMap.get",
+        "ruby": "VersionedMap#get",
+        "swift": "VersionedMap.get",
+        "wasm": "WasmVersionedMap.get"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -32169,10 +32578,19 @@
     {
       "rust": "prolly::VersionedMap::get_at",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.get_at",
+        "go": "prolly.(*VersionedMap).GetAt",
+        "node": "VersionedMap.getAt",
+        "kotlin": "VersionedMap.getAt",
+        "java": "VersionedMap.getAt",
+        "ruby": "VersionedMap#get_at",
+        "swift": "VersionedMap.get(at:key:)",
+        "wasm": "WasmVersionedMap.getAt"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -32194,38 +32612,51 @@
         "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
         "bindings/wasm/src/index.ts"
       ],
-      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, versioned transactions, snapshots, retained sessions, and bounded scan/page APIs."
+      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, typed codec facades, versioned transactions, snapshots, retained sessions, bounded scan/page APIs, and callback-scoped inline/blob value-reference views backed by native leaf leases.",
+      "rationale": "prolly::VersionedMap::get_at is exposed through the reviewed host-language operation pattern recorded in the per-language mappings."
     },
     {
       "rust": "prolly::VersionedMap::get_at_with",
       "classification": "idiomatic",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "MapSnapshot.read().get_view",
+        "go": "prolly.(*MapSnapshot).Read().GetView",
+        "node": "MapSnapshot.read().withValueView",
+        "kotlin": "MapSnapshot.read().getView",
+        "java": "MapSnapshot.read().getView",
+        "ruby": "MapSnapshot#read.get_view",
+        "swift": "MapSnapshot.read().withValueView",
+        "wasm": "WasmMapSnapshot.read().withValueView"
+      },
       "exclusions": {},
       "tests": [
-        "prolly-bindings::domain::versioned"
+        "portable-parity::scoped-point-view",
+        "portable-parity::scoped-view-lifetime"
       ],
       "docs": [
-        "conformance/binding-versioned-fixtures.v1.json"
+        "conformance/binding-versioned-fixtures.v1.json",
+        "bindings/api/idiomatic-equivalents.json#borrowed-view"
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::get_at_with has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
       "reviewed": true,
-      "reconciliation": "confirmed-performance-gap",
+      "reconciliation": "bound-idiomatic",
       "reconciliation_evidence": [
-        "src/prolly/versioned_map.rs",
-        "bindings/go/prolly.go#ReadSession.GetView",
-        "bindings/python/prolly/api.py#ReadSession",
-        "bindings/node/src/versioned.ts#ReadSession",
-        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#ReadSession",
-        "bindings/java/src/main/java/build/crab/prolly/javaapi/ReadSession.java",
-        "bindings/ruby/lib/prolly/api.rb#ReadSession",
-        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#ReadSession",
-        "bindings/wasm/src/index.ts#WasmReadSession"
+        "bindings/python/prolly/api.py",
+        "bindings/go/versioned.go",
+        "bindings/node/src/versioned.ts",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi",
+        "bindings/ruby/lib/prolly/api.rb",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
+        "bindings/wasm/src/index.ts"
       ],
-      "reconciliation_rationale": "Rust exposes callback-scoped point and ValueRef views. Go exposes point GetView, but the other application wrappers expose owned point reads only; all eight have scoped scan views, so point-read zero-copy parity remains incomplete."
+      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, typed codec facades, versioned transactions, snapshots, retained sessions, bounded scan/page APIs, and callback-scoped inline/blob value-reference views backed by native leaf leases.",
+      "equivalence": "borrowed-view",
+      "rationale": "prolly::VersionedMap::get_at_with is exposed through a snapshot-pinned read session callback whose scoped bytes expire synchronously and whose native leaf lease is released on return."
     },
     {
       "rust": "prolly::VersionedMap::get_large_value",
@@ -32259,10 +32690,19 @@
     {
       "rust": "prolly::VersionedMap::get_many",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.get_many",
+        "go": "prolly.(*VersionedMap).GetMany",
+        "node": "VersionedMap.getMany",
+        "kotlin": "VersionedMap.getMany",
+        "java": "VersionedMap.getMany",
+        "ruby": "VersionedMap#get_many",
+        "swift": "VersionedMap.getMany",
+        "wasm": "WasmVersionedMap.getMany"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -32289,10 +32729,19 @@
     {
       "rust": "prolly::VersionedMap::get_many_at",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.get_many_at",
+        "go": "prolly.(*VersionedMap).GetManyAt",
+        "node": "VersionedMap.getManyAt",
+        "kotlin": "VersionedMap.getManyAt",
+        "java": "VersionedMap.getManyAt",
+        "ruby": "VersionedMap#get_many_at",
+        "swift": "VersionedMap.getMany(at:keys:)",
+        "wasm": "WasmVersionedMap.getManyAt"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -32314,108 +32763,154 @@
         "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
         "bindings/wasm/src/index.ts"
       ],
-      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, versioned transactions, snapshots, retained sessions, and bounded scan/page APIs."
+      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, typed codec facades, versioned transactions, snapshots, retained sessions, bounded scan/page APIs, and callback-scoped inline/blob value-reference views backed by native leaf leases.",
+      "rationale": "prolly::VersionedMap::get_many_at is exposed through the reviewed host-language operation pattern recorded in the per-language mappings."
     },
     {
       "rust": "prolly::VersionedMap::get_value_ref_at_with",
       "classification": "idiomatic",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "MapSnapshot.read().get_value_ref_view",
+        "go": "prolly.(*MapSnapshot).Read().GetValueRefView",
+        "node": "MapSnapshot.read().withValueRefView",
+        "kotlin": "MapSnapshot.read().getValueRefView",
+        "java": "MapSnapshot.read().getValueRefView",
+        "ruby": "MapSnapshot#read.get_value_ref_view",
+        "swift": "MapSnapshot.read().withValueRefView",
+        "wasm": "WasmMapSnapshot.read().withValueRefView"
+      },
       "exclusions": {},
       "tests": [
-        "prolly-bindings::domain::versioned"
+        "portable-parity::scoped-value-ref-view",
+        "portable-parity::scoped-view-lifetime"
       ],
       "docs": [
-        "conformance/binding-versioned-fixtures.v1.json"
+        "conformance/binding-versioned-fixtures.v1.json",
+        "bindings/api/idiomatic-equivalents.json#borrowed-view"
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::get_value_ref_at_with has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
       "reviewed": true,
-      "reconciliation": "confirmed-performance-gap",
+      "reconciliation": "bound-idiomatic",
       "reconciliation_evidence": [
-        "src/prolly/versioned_map.rs",
-        "bindings/go/prolly.go#ReadSession.GetView",
-        "bindings/python/prolly/api.py#ReadSession",
-        "bindings/node/src/versioned.ts#ReadSession",
-        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#ReadSession",
-        "bindings/java/src/main/java/build/crab/prolly/javaapi/ReadSession.java",
-        "bindings/ruby/lib/prolly/api.rb#ReadSession",
-        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#ReadSession",
-        "bindings/wasm/src/index.ts#WasmReadSession"
+        "bindings/python/prolly/api.py",
+        "bindings/go/versioned.go",
+        "bindings/node/src/versioned.ts",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi",
+        "bindings/ruby/lib/prolly/api.rb",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
+        "bindings/wasm/src/index.ts"
       ],
-      "reconciliation_rationale": "Rust exposes callback-scoped point and ValueRef views. Go exposes point GetView, but the other application wrappers expose owned point reads only; all eight have scoped scan views, so point-read zero-copy parity remains incomplete."
+      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, typed codec facades, versioned transactions, snapshots, retained sessions, bounded scan/page APIs, and callback-scoped inline/blob value-reference views backed by native leaf leases.",
+      "equivalence": "borrowed-view",
+      "rationale": "prolly::VersionedMap::get_value_ref_at_with is exposed through a snapshot-pinned read session that parses the canonical PLVB envelope without copying inline payload bytes."
     },
     {
       "rust": "prolly::VersionedMap::get_value_ref_with",
       "classification": "idiomatic",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "MapSnapshot.read().get_value_ref_view",
+        "go": "prolly.(*MapSnapshot).Read().GetValueRefView",
+        "node": "MapSnapshot.read().withValueRefView",
+        "kotlin": "MapSnapshot.read().getValueRefView",
+        "java": "MapSnapshot.read().getValueRefView",
+        "ruby": "MapSnapshot#read.get_value_ref_view",
+        "swift": "MapSnapshot.read().withValueRefView",
+        "wasm": "WasmMapSnapshot.read().withValueRefView"
+      },
       "exclusions": {},
       "tests": [
-        "prolly-bindings::domain::versioned"
+        "portable-parity::scoped-value-ref-view",
+        "portable-parity::scoped-view-lifetime"
       ],
       "docs": [
-        "conformance/binding-versioned-fixtures.v1.json"
+        "conformance/binding-versioned-fixtures.v1.json",
+        "bindings/api/idiomatic-equivalents.json#borrowed-view"
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::get_value_ref_with has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
       "reviewed": true,
-      "reconciliation": "confirmed-performance-gap",
+      "reconciliation": "bound-idiomatic",
       "reconciliation_evidence": [
-        "src/prolly/versioned_map.rs",
-        "bindings/go/prolly.go#ReadSession.GetView",
-        "bindings/python/prolly/api.py#ReadSession",
-        "bindings/node/src/versioned.ts#ReadSession",
-        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#ReadSession",
-        "bindings/java/src/main/java/build/crab/prolly/javaapi/ReadSession.java",
-        "bindings/ruby/lib/prolly/api.rb#ReadSession",
-        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#ReadSession",
-        "bindings/wasm/src/index.ts#WasmReadSession"
+        "bindings/python/prolly/api.py",
+        "bindings/go/versioned.go",
+        "bindings/node/src/versioned.ts",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi",
+        "bindings/ruby/lib/prolly/api.rb",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
+        "bindings/wasm/src/index.ts"
       ],
-      "reconciliation_rationale": "Rust exposes callback-scoped point and ValueRef views. Go exposes point GetView, but the other application wrappers expose owned point reads only; all eight have scoped scan views, so point-read zero-copy parity remains incomplete."
+      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, typed codec facades, versioned transactions, snapshots, retained sessions, bounded scan/page APIs, and callback-scoped inline/blob value-reference views backed by native leaf leases.",
+      "equivalence": "borrowed-view",
+      "rationale": "prolly::VersionedMap::get_value_ref_with is exposed through a head snapshot read session that parses the canonical PLVB envelope without copying inline payload bytes."
     },
     {
       "rust": "prolly::VersionedMap::get_with",
       "classification": "idiomatic",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "MapSnapshot.read().get_view",
+        "go": "prolly.(*MapSnapshot).Read().GetView",
+        "node": "MapSnapshot.read().withValueView",
+        "kotlin": "MapSnapshot.read().getView",
+        "java": "MapSnapshot.read().getView",
+        "ruby": "MapSnapshot#read.get_view",
+        "swift": "MapSnapshot.read().withValueView",
+        "wasm": "WasmMapSnapshot.read().withValueView"
+      },
       "exclusions": {},
       "tests": [
-        "prolly-bindings::domain::versioned"
+        "portable-parity::scoped-point-view",
+        "portable-parity::scoped-view-lifetime"
       ],
       "docs": [
-        "conformance/binding-versioned-fixtures.v1.json"
+        "conformance/binding-versioned-fixtures.v1.json",
+        "bindings/api/idiomatic-equivalents.json#borrowed-view"
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::get_with has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
       "reviewed": true,
-      "reconciliation": "confirmed-performance-gap",
+      "reconciliation": "bound-idiomatic",
       "reconciliation_evidence": [
-        "src/prolly/versioned_map.rs",
-        "bindings/go/prolly.go#ReadSession.GetView",
-        "bindings/python/prolly/api.py#ReadSession",
-        "bindings/node/src/versioned.ts#ReadSession",
-        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#ReadSession",
-        "bindings/java/src/main/java/build/crab/prolly/javaapi/ReadSession.java",
-        "bindings/ruby/lib/prolly/api.rb#ReadSession",
-        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#ReadSession",
-        "bindings/wasm/src/index.ts#WasmReadSession"
+        "bindings/python/prolly/api.py",
+        "bindings/go/versioned.go",
+        "bindings/node/src/versioned.ts",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi",
+        "bindings/ruby/lib/prolly/api.rb",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
+        "bindings/wasm/src/index.ts"
       ],
-      "reconciliation_rationale": "Rust exposes callback-scoped point and ValueRef views. Go exposes point GetView, but the other application wrappers expose owned point reads only; all eight have scoped scan views, so point-read zero-copy parity remains incomplete."
+      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, typed codec facades, versioned transactions, snapshots, retained sessions, bounded scan/page APIs, and callback-scoped inline/blob value-reference views backed by native leaf leases.",
+      "equivalence": "borrowed-view",
+      "rationale": "prolly::VersionedMap::get_with is exposed through a snapshot-pinned read session callback whose scoped bytes expire synchronously and whose native leaf lease is released on return."
     },
     {
       "rust": "prolly::VersionedMap::head",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.head",
+        "go": "prolly.(*VersionedMap).Head",
+        "node": "VersionedMap.head",
+        "kotlin": "VersionedMap.head",
+        "java": "VersionedMap.head",
+        "ruby": "VersionedMap#head",
+        "swift": "VersionedMap.head",
+        "wasm": "WasmVersionedMap.head"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -32442,10 +32937,19 @@
     {
       "rust": "prolly::VersionedMap::head_id",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.head_id",
+        "go": "prolly.(*VersionedMap).HeadID",
+        "node": "VersionedMap.headId",
+        "kotlin": "VersionedMap.headId",
+        "java": "VersionedMap.headId",
+        "ruby": "VersionedMap#head_id",
+        "swift": "VersionedMap.headID",
+        "wasm": "WasmVersionedMap.headId"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -32500,10 +33004,19 @@
     {
       "rust": "prolly::VersionedMap::id",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.id",
+        "go": "prolly.(*VersionedMap).ID",
+        "node": "VersionedMap.id",
+        "kotlin": "VersionedMap.id",
+        "java": "VersionedMap.id",
+        "ruby": "VersionedMap#id",
+        "swift": "VersionedMap.id",
+        "wasm": "WasmVersionedMap.id"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -32525,7 +33038,8 @@
         "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
         "bindings/wasm/src/index.ts"
       ],
-      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, versioned transactions, snapshots, retained sessions, and bounded scan/page APIs."
+      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, typed codec facades, versioned transactions, snapshots, retained sessions, bounded scan/page APIs, and callback-scoped inline/blob value-reference views backed by native leaf leases.",
+      "rationale": "prolly::VersionedMap::id is exposed through the reviewed host-language operation pattern recorded in the per-language mappings."
     },
     {
       "rust": "prolly::VersionedMap::import_as_head",
@@ -32587,10 +33101,19 @@
     {
       "rust": "prolly::VersionedMap::initialize",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.initialize",
+        "go": "prolly.(*VersionedMap).Initialize",
+        "node": "VersionedMap.initialize",
+        "kotlin": "VersionedMap.initialize",
+        "java": "VersionedMap.initialize",
+        "ruby": "VersionedMap#initialize_map",
+        "swift": "VersionedMap.initialize",
+        "wasm": "WasmVersionedMap.initialize"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -32617,10 +33140,19 @@
     {
       "rust": "prolly::VersionedMap::initialize_sorted",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.initialize_sorted",
+        "go": "prolly.(*VersionedMap).InitializeSorted",
+        "node": "VersionedMap.initializeSorted",
+        "kotlin": "VersionedMap.initializeSorted",
+        "java": "VersionedMap.initializeSorted",
+        "ruby": "VersionedMap#initialize_sorted",
+        "swift": "VersionedMap.initializeSorted",
+        "wasm": "WasmVersionedMap.initializeSorted"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -32647,10 +33179,19 @@
     {
       "rust": "prolly::VersionedMap::is_initialized",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.is_initialized",
+        "go": "prolly.(*VersionedMap).IsInitialized",
+        "node": "VersionedMap.isInitialized",
+        "kotlin": "VersionedMap.isInitialized",
+        "java": "VersionedMap.isInitialized",
+        "ruby": "VersionedMap#initialized?",
+        "swift": "VersionedMap.isInitialized",
+        "wasm": "WasmVersionedMap.isInitialized"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -32672,15 +33213,25 @@
         "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
         "bindings/wasm/src/index.ts"
       ],
-      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, versioned transactions, snapshots, retained sessions, and bounded scan/page APIs."
+      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, typed codec facades, versioned transactions, snapshots, retained sessions, bounded scan/page APIs, and callback-scoped inline/blob value-reference views backed by native leaf leases.",
+      "rationale": "prolly::VersionedMap::is_initialized is exposed through the reviewed host-language operation pattern recorded in the per-language mappings."
     },
     {
       "rust": "prolly::VersionedMap::keep_for",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.keep_for",
+        "go": "prolly.(*VersionedMap).KeepFor",
+        "node": "VersionedMap.keepFor",
+        "kotlin": "VersionedMap.keepFor",
+        "java": "VersionedMap.keepFor",
+        "ruby": "VersionedMap#keep_for",
+        "swift": "VersionedMap.keepFor",
+        "wasm": "WasmVersionedMap.keepFor"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -32707,10 +33258,19 @@
     {
       "rust": "prolly::VersionedMap::keep_for_at",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.keep_for_at",
+        "go": "prolly.(*VersionedMap).KeepForAt",
+        "node": "VersionedMap.keepForAt",
+        "kotlin": "VersionedMap.keepForAt",
+        "java": "VersionedMap.keepForAt",
+        "ruby": "VersionedMap#keep_for_at",
+        "swift": "VersionedMap.keepForAt",
+        "wasm": "WasmVersionedMap.keepForAt"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -32737,10 +33297,19 @@
     {
       "rust": "prolly::VersionedMap::keep_last",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.keep_last",
+        "go": "prolly.(*VersionedMap).KeepLast",
+        "node": "VersionedMap.keepLast",
+        "kotlin": "VersionedMap.keepLast",
+        "java": "VersionedMap.keepLast",
+        "ruby": "VersionedMap#keep_last",
+        "swift": "VersionedMap.keepLast",
+        "wasm": "WasmVersionedMap.keepLast"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -32767,10 +33336,19 @@
     {
       "rust": "prolly::VersionedMap::keep_versions",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.keep_versions",
+        "go": "prolly.(*VersionedMap).KeepVersions",
+        "node": "VersionedMap.keepVersions",
+        "kotlin": "VersionedMap.keepVersions",
+        "java": "VersionedMap.keepVersions",
+        "ruby": "VersionedMap#keep_versions",
+        "swift": "VersionedMap.keepVersions",
+        "wasm": "WasmVersionedMap.keepVersions"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -32797,10 +33375,19 @@
     {
       "rust": "prolly::VersionedMap::new",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "Engine.versioned_map",
+        "go": "prolly.(*Engine).VersionedMap",
+        "node": "Engine.versionedMap",
+        "kotlin": "Engine.versionedMap",
+        "java": "Engine.versionedMap",
+        "ruby": "Engine#versioned_map",
+        "swift": "Engine.versionedMap",
+        "wasm": "Engine.versionedMap"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -32822,15 +33409,25 @@
         "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
         "bindings/wasm/src/index.ts"
       ],
-      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, versioned transactions, snapshots, retained sessions, and bounded scan/page APIs."
+      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, typed codec facades, versioned transactions, snapshots, retained sessions, bounded scan/page APIs, and callback-scoped inline/blob value-reference views backed by native leaf leases.",
+      "rationale": "prolly::VersionedMap::new is exposed through the reviewed host-language operation pattern recorded in the per-language mappings."
     },
     {
       "rust": "prolly::VersionedMap::parallel_apply",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.parallel_apply",
+        "go": "prolly.(*VersionedMap).ParallelApply",
+        "node": "VersionedMap.parallelApply",
+        "kotlin": "VersionedMap.parallelApply",
+        "java": "VersionedMap.parallelApply",
+        "ruby": "VersionedMap#parallel_apply",
+        "swift": "VersionedMap.parallelApply",
+        "wasm": "WasmVersionedMap.parallelApply"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -32886,10 +33483,19 @@
     {
       "rust": "prolly::VersionedMap::plan_gc",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.plan_gc",
+        "go": "prolly.(*VersionedMap).PlanGC",
+        "node": "VersionedMap.planGc",
+        "kotlin": "VersionedMap.planGc",
+        "java": "VersionedMap.planGc",
+        "ruby": "VersionedMap#plan_gc",
+        "swift": "VersionedMap.planGC",
+        "wasm": "WasmVersionedMap.planGc"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -32916,10 +33522,19 @@
     {
       "rust": "prolly::VersionedMap::prefix",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.prefix",
+        "go": "prolly.(*VersionedMap).Prefix",
+        "node": "VersionedMap.prefix",
+        "kotlin": "VersionedMap.prefix",
+        "java": "VersionedMap.prefix",
+        "ruby": "VersionedMap#prefix",
+        "swift": "VersionedMap.prefix",
+        "wasm": "WasmVersionedMap.prefix"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -32946,10 +33561,19 @@
     {
       "rust": "prolly::VersionedMap::prefix_at",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.prefix_at",
+        "go": "prolly.(*VersionedMap).PrefixAt",
+        "node": "VersionedMap.prefixAt",
+        "kotlin": "VersionedMap.prefixAt",
+        "java": "VersionedMap.prefixAt",
+        "ruby": "VersionedMap#prefix_at",
+        "swift": "VersionedMap.prefix(at:_:)",
+        "wasm": "WasmVersionedMap.prefixAt"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -32971,15 +33595,25 @@
         "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
         "bindings/wasm/src/index.ts"
       ],
-      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, versioned transactions, snapshots, retained sessions, and bounded scan/page APIs."
+      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, typed codec facades, versioned transactions, snapshots, retained sessions, bounded scan/page APIs, and callback-scoped inline/blob value-reference views backed by native leaf leases.",
+      "rationale": "prolly::VersionedMap::prefix_at is exposed through the reviewed host-language operation pattern recorded in the per-language mappings."
     },
     {
       "rust": "prolly::VersionedMap::prefix_page",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.prefix_page",
+        "go": "prolly.(*VersionedMap).PrefixPage",
+        "node": "VersionedMap.prefixPage",
+        "kotlin": "VersionedMap.prefixPage",
+        "java": "VersionedMap.prefixPage",
+        "ruby": "VersionedMap#prefix_page",
+        "swift": "VersionedMap.prefixPage",
+        "wasm": "WasmVersionedMap.prefixPage"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -33006,10 +33640,19 @@
     {
       "rust": "prolly::VersionedMap::prefix_page_at",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.prefix_page_at",
+        "go": "prolly.(*VersionedMap).PrefixPageAt",
+        "node": "VersionedMap.prefixPageAt",
+        "kotlin": "VersionedMap.prefixPageAt",
+        "java": "VersionedMap.prefixPageAt",
+        "ruby": "VersionedMap#prefix_page_at",
+        "swift": "VersionedMap.prefixPage(at:prefix:cursor:limit:)",
+        "wasm": "WasmVersionedMap.prefixPageAt"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -33031,15 +33674,25 @@
         "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
         "bindings/wasm/src/index.ts"
       ],
-      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, versioned transactions, snapshots, retained sessions, and bounded scan/page APIs."
+      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, typed codec facades, versioned transactions, snapshots, retained sessions, bounded scan/page APIs, and callback-scoped inline/blob value-reference views backed by native leaf leases.",
+      "rationale": "prolly::VersionedMap::prefix_page_at is exposed through the reviewed host-language operation pattern recorded in the per-language mappings."
     },
     {
       "rust": "prolly::VersionedMap::prepare_merge",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.prepare_merge",
+        "go": "prolly.(*VersionedMap).PrepareMerge",
+        "node": "VersionedMap.prepareMerge",
+        "kotlin": "VersionedMap.prepareMerge",
+        "java": "VersionedMap.prepareMerge",
+        "ruby": "VersionedMap#prepare_merge",
+        "swift": "VersionedMap.prepareMerge",
+        "wasm": "WasmVersionedMap.prepareMerge"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -33066,10 +33719,19 @@
     {
       "rust": "prolly::VersionedMap::prune_versions",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.prune_versions",
+        "go": "prolly.(*VersionedMap).PruneVersions",
+        "node": "VersionedMap.pruneVersions",
+        "kotlin": "VersionedMap.pruneVersions",
+        "java": "VersionedMap.pruneVersions",
+        "ruby": "VersionedMap#prune_versions",
+        "swift": "VersionedMap.pruneVersions",
+        "wasm": "WasmVersionedMap.pruneVersions"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -33096,10 +33758,19 @@
     {
       "rust": "prolly::VersionedMap::put",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.put",
+        "go": "prolly.(*VersionedMap).Put",
+        "node": "VersionedMap.put",
+        "kotlin": "VersionedMap.put",
+        "java": "VersionedMap.put",
+        "ruby": "VersionedMap#put",
+        "swift": "VersionedMap.put",
+        "wasm": "WasmVersionedMap.put"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -33126,10 +33797,19 @@
     {
       "rust": "prolly::VersionedMap::put_if",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.put_if",
+        "go": "prolly.(*VersionedMap).PutIf",
+        "node": "VersionedMap.putIf",
+        "kotlin": "VersionedMap.putIf",
+        "java": "VersionedMap.putIf",
+        "ruby": "VersionedMap#put_if",
+        "swift": "VersionedMap.putIf",
+        "wasm": "WasmVersionedMap.putIf"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -33214,10 +33894,19 @@
     {
       "rust": "prolly::VersionedMap::range",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.range",
+        "go": "prolly.(*VersionedMap).Range",
+        "node": "VersionedMap.range",
+        "kotlin": "VersionedMap.range",
+        "java": "VersionedMap.range",
+        "ruby": "VersionedMap#range",
+        "swift": "VersionedMap.range",
+        "wasm": "WasmVersionedMap.range"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -33244,10 +33933,19 @@
     {
       "rust": "prolly::VersionedMap::range_at",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.range_at",
+        "go": "prolly.(*VersionedMap).RangeAt",
+        "node": "VersionedMap.rangeAt",
+        "kotlin": "VersionedMap.rangeAt",
+        "java": "VersionedMap.rangeAt",
+        "ruby": "VersionedMap#range_at",
+        "swift": "VersionedMap.range(at:from:to:)",
+        "wasm": "WasmVersionedMap.rangeAt"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -33269,15 +33967,25 @@
         "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
         "bindings/wasm/src/index.ts"
       ],
-      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, versioned transactions, snapshots, retained sessions, and bounded scan/page APIs."
+      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, typed codec facades, versioned transactions, snapshots, retained sessions, bounded scan/page APIs, and callback-scoped inline/blob value-reference views backed by native leaf leases.",
+      "rationale": "prolly::VersionedMap::range_at is exposed through the reviewed host-language operation pattern recorded in the per-language mappings."
     },
     {
       "rust": "prolly::VersionedMap::range_page",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.range_page",
+        "go": "prolly.(*VersionedMap).RangePage",
+        "node": "VersionedMap.rangePage",
+        "kotlin": "VersionedMap.rangePage",
+        "java": "VersionedMap.rangePage",
+        "ruby": "VersionedMap#range_page",
+        "swift": "VersionedMap.rangePage",
+        "wasm": "WasmVersionedMap.rangePage"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -33304,10 +34012,19 @@
     {
       "rust": "prolly::VersionedMap::range_page_at",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.range_page_at",
+        "go": "prolly.(*VersionedMap).RangePageAt",
+        "node": "VersionedMap.rangePageAt",
+        "kotlin": "VersionedMap.rangePageAt",
+        "java": "VersionedMap.rangePageAt",
+        "ruby": "VersionedMap#range_page_at",
+        "swift": "VersionedMap.rangePage(at:cursor:end:limit:)",
+        "wasm": "WasmVersionedMap.rangePageAt"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -33329,15 +34046,25 @@
         "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
         "bindings/wasm/src/index.ts"
       ],
-      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, versioned transactions, snapshots, retained sessions, and bounded scan/page APIs."
+      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, typed codec facades, versioned transactions, snapshots, retained sessions, bounded scan/page APIs, and callback-scoped inline/blob value-reference views backed by native leaf leases.",
+      "rationale": "prolly::VersionedMap::range_page_at is exposed through the reviewed host-language operation pattern recorded in the per-language mappings."
     },
     {
       "rust": "prolly::VersionedMap::rebuild_from_iter_if",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.rebuild_from_iter_if",
+        "go": "prolly.(*VersionedMap).RebuildFromIterIf",
+        "node": "VersionedMap.rebuildFromIterIf",
+        "kotlin": "VersionedMap.rebuildFromIterIf",
+        "java": "VersionedMap.rebuildFromIterIf",
+        "ruby": "VersionedMap#rebuild_from_iter_if",
+        "swift": "VersionedMap.rebuildFromIterIf",
+        "wasm": "WasmVersionedMap.rebuildFromIterIf"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -33364,10 +34091,19 @@
     {
       "rust": "prolly::VersionedMap::rebuild_sorted_if",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.rebuild_sorted_if",
+        "go": "prolly.(*VersionedMap).RebuildSortedIf",
+        "node": "VersionedMap.rebuildSortedIf",
+        "kotlin": "VersionedMap.rebuildSortedIf",
+        "java": "VersionedMap.rebuildSortedIf",
+        "ruby": "VersionedMap#rebuild_sorted_if",
+        "swift": "VersionedMap.rebuildSortedIf",
+        "wasm": "WasmVersionedMap.rebuildSortedIf"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -33394,10 +34130,19 @@
     {
       "rust": "prolly::VersionedMap::restore_backup",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.restore_backup",
+        "go": "prolly.(*VersionedMap).RestoreBackup",
+        "node": "VersionedMap.restoreBackup",
+        "kotlin": "VersionedMap.restoreBackup",
+        "java": "VersionedMap.restoreBackup",
+        "ruby": "VersionedMap#restore_backup",
+        "swift": "VersionedMap.restoreBackup",
+        "wasm": "WasmVersionedMap.restoreBackup"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -33424,10 +34169,19 @@
     {
       "rust": "prolly::VersionedMap::retention_policy",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.retention_policy",
+        "go": "prolly.(*VersionedMap).RetentionPolicy",
+        "node": "VersionedMap.retentionPolicy",
+        "kotlin": "VersionedMap.retentionPolicy",
+        "java": "VersionedMap.retentionPolicy",
+        "ruby": "VersionedMap#retention_policy",
+        "swift": "VersionedMap.retentionPolicy",
+        "wasm": "WasmVersionedMap.retentionPolicy"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -33454,10 +34208,19 @@
     {
       "rust": "prolly::VersionedMap::rollback_to",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.rollback_to",
+        "go": "prolly.(*VersionedMap).RollbackTo",
+        "node": "VersionedMap.rollbackTo",
+        "kotlin": "VersionedMap.rollbackTo",
+        "java": "VersionedMap.rollbackTo",
+        "ruby": "VersionedMap#rollback_to",
+        "swift": "VersionedMap.rollback(to:)",
+        "wasm": "WasmVersionedMap.rollbackTo"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -33479,15 +34242,25 @@
         "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
         "bindings/wasm/src/index.ts"
       ],
-      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, versioned transactions, snapshots, retained sessions, and bounded scan/page APIs."
+      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, typed codec facades, versioned transactions, snapshots, retained sessions, bounded scan/page APIs, and callback-scoped inline/blob value-reference views backed by native leaf leases.",
+      "rationale": "prolly::VersionedMap::rollback_to is exposed through the reviewed host-language operation pattern recorded in the per-language mappings."
     },
     {
       "rust": "prolly::VersionedMap::scan_prefix",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.prefix",
+        "go": "prolly.(*VersionedMap).Prefix",
+        "node": "VersionedMap.prefix",
+        "kotlin": "VersionedMap.prefix",
+        "java": "VersionedMap.prefix",
+        "ruby": "VersionedMap#prefix",
+        "swift": "VersionedMap.prefix",
+        "wasm": "WasmVersionedMap.prefix"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -33509,15 +34282,25 @@
         "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
         "bindings/wasm/src/index.ts"
       ],
-      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, versioned transactions, snapshots, retained sessions, and bounded scan/page APIs."
+      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, typed codec facades, versioned transactions, snapshots, retained sessions, bounded scan/page APIs, and callback-scoped inline/blob value-reference views backed by native leaf leases.",
+      "rationale": "prolly::VersionedMap::scan_prefix is exposed through the reviewed host-language operation pattern recorded in the per-language mappings."
     },
     {
       "rust": "prolly::VersionedMap::scan_prefix_at",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.prefix_at",
+        "go": "prolly.(*VersionedMap).PrefixAt",
+        "node": "VersionedMap.prefixAt",
+        "kotlin": "VersionedMap.prefixAt",
+        "java": "VersionedMap.prefixAt",
+        "ruby": "VersionedMap#prefix_at",
+        "swift": "VersionedMap.prefix(at:_:)",
+        "wasm": "WasmVersionedMap.prefixAt"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -33539,15 +34322,25 @@
         "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
         "bindings/wasm/src/index.ts"
       ],
-      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, versioned transactions, snapshots, retained sessions, and bounded scan/page APIs."
+      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, typed codec facades, versioned transactions, snapshots, retained sessions, bounded scan/page APIs, and callback-scoped inline/blob value-reference views backed by native leaf leases.",
+      "rationale": "prolly::VersionedMap::scan_prefix_at is exposed through the reviewed host-language operation pattern recorded in the per-language mappings."
     },
     {
       "rust": "prolly::VersionedMap::scan_range",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.range",
+        "go": "prolly.(*VersionedMap).Range",
+        "node": "VersionedMap.range",
+        "kotlin": "VersionedMap.range",
+        "java": "VersionedMap.range",
+        "ruby": "VersionedMap#range",
+        "swift": "VersionedMap.range",
+        "wasm": "WasmVersionedMap.range"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -33569,15 +34362,25 @@
         "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
         "bindings/wasm/src/index.ts"
       ],
-      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, versioned transactions, snapshots, retained sessions, and bounded scan/page APIs."
+      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, typed codec facades, versioned transactions, snapshots, retained sessions, bounded scan/page APIs, and callback-scoped inline/blob value-reference views backed by native leaf leases.",
+      "rationale": "prolly::VersionedMap::scan_range is exposed through the reviewed host-language operation pattern recorded in the per-language mappings."
     },
     {
       "rust": "prolly::VersionedMap::scan_range_at",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.range_at",
+        "go": "prolly.(*VersionedMap).RangeAt",
+        "node": "VersionedMap.rangeAt",
+        "kotlin": "VersionedMap.rangeAt",
+        "java": "VersionedMap.rangeAt",
+        "ruby": "VersionedMap#range_at",
+        "swift": "VersionedMap.range(at:from:to:)",
+        "wasm": "WasmVersionedMap.rangeAt"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -33599,15 +34402,25 @@
         "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
         "bindings/wasm/src/index.ts"
       ],
-      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, versioned transactions, snapshots, retained sessions, and bounded scan/page APIs."
+      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, typed codec facades, versioned transactions, snapshots, retained sessions, bounded scan/page APIs, and callback-scoped inline/blob value-reference views backed by native leaf leases.",
+      "rationale": "prolly::VersionedMap::scan_range_at is exposed through the reviewed host-language operation pattern recorded in the per-language mappings."
     },
     {
       "rust": "prolly::VersionedMap::snapshot",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.snapshot",
+        "go": "prolly.(*VersionedMap).Snapshot",
+        "node": "VersionedMap.snapshot",
+        "kotlin": "VersionedMap.snapshot",
+        "java": "VersionedMap.snapshot",
+        "ruby": "VersionedMap#snapshot",
+        "swift": "VersionedMap.snapshot",
+        "wasm": "WasmVersionedMap.snapshot"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -33634,10 +34447,19 @@
     {
       "rust": "prolly::VersionedMap::snapshot_at",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.snapshot_at",
+        "go": "prolly.(*VersionedMap).SnapshotAt",
+        "node": "VersionedMap.snapshotAt",
+        "kotlin": "VersionedMap.snapshotAt",
+        "java": "VersionedMap.snapshotAt",
+        "ruby": "VersionedMap#snapshot_at",
+        "swift": "VersionedMap.snapshot(at:)",
+        "wasm": "WasmVersionedMap.snapshotAt"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -33659,15 +34481,25 @@
         "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
         "bindings/wasm/src/index.ts"
       ],
-      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, versioned transactions, snapshots, retained sessions, and bounded scan/page APIs."
+      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, typed codec facades, versioned transactions, snapshots, retained sessions, bounded scan/page APIs, and callback-scoped inline/blob value-reference views backed by native leaf leases.",
+      "rationale": "prolly::VersionedMap::snapshot_at is exposed through the reviewed host-language operation pattern recorded in the per-language mappings."
     },
     {
       "rust": "prolly::VersionedMap::subscribe",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.subscribe",
+        "go": "prolly.(*VersionedMap).Subscribe",
+        "node": "VersionedMap.subscribe",
+        "kotlin": "VersionedMap.subscribe",
+        "java": "VersionedMap.subscribe",
+        "ruby": "VersionedMap#subscribe",
+        "swift": "VersionedMap.subscribe",
+        "wasm": "WasmVersionedMap.subscribe"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -33694,10 +34526,19 @@
     {
       "rust": "prolly::VersionedMap::subscribe_from",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.subscribe_from",
+        "go": "prolly.(*VersionedMap).SubscribeFrom",
+        "node": "VersionedMap.subscribeFrom",
+        "kotlin": "VersionedMap.subscribeFrom",
+        "java": "VersionedMap.subscribeFrom",
+        "ruby": "VersionedMap#subscribe_from",
+        "swift": "VersionedMap.subscribe(from:)",
+        "wasm": "WasmVersionedMap.subscribeFrom"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -33719,7 +34560,8 @@
         "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
         "bindings/wasm/src/index.ts"
       ],
-      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, versioned transactions, snapshots, retained sessions, and bounded scan/page APIs."
+      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, typed codec facades, versioned transactions, snapshots, retained sessions, bounded scan/page APIs, and callback-scoped inline/blob value-reference views backed by native leaf leases.",
+      "rationale": "prolly::VersionedMap::subscribe_from is exposed through the reviewed host-language operation pattern recorded in the per-language mappings."
     },
     {
       "rust": "prolly::VersionedMap::sweep_blob_gc",
@@ -33753,10 +34595,19 @@
     {
       "rust": "prolly::VersionedMap::sweep_gc",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.sweep_gc",
+        "go": "prolly.(*VersionedMap).SweepGC",
+        "node": "VersionedMap.sweepGc",
+        "kotlin": "VersionedMap.sweepGc",
+        "java": "VersionedMap.sweepGc",
+        "ruby": "VersionedMap#sweep_gc",
+        "swift": "VersionedMap.sweepGC",
+        "wasm": "WasmVersionedMap.sweepGc"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -33783,41 +34634,62 @@
     {
       "rust": "prolly::VersionedMap::typed",
       "classification": "idiomatic",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.typed",
+        "go": "prolly.NewTypedVersionedMap",
+        "node": "VersionedMap.typed",
+        "kotlin": "VersionedMap.typed",
+        "java": "VersionedMap.typed",
+        "ruby": "VersionedMap#typed",
+        "swift": "VersionedMap.typed",
+        "wasm": "WasmVersionedMap.typed"
+      },
       "exclusions": {},
       "tests": [
-        "prolly-bindings::domain::versioned"
+        "portable-parity::typed-versioned-map",
+        "portable-parity::typed-codec-round-trip"
       ],
       "docs": [
-        "conformance/binding-versioned-fixtures.v1.json"
+        "conformance/binding-versioned-fixtures.v1.json",
+        "bindings/api/idiomatic-equivalents.json#generic-codec"
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::typed has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
       "reviewed": true,
-      "reconciliation": "confirmed-api-gap",
+      "equivalence": "generic-codec",
+      "rationale": "prolly::VersionedMap::typed is exposed through the reviewed typed host codec facade with the same ordered encoding, decode failure, CAS, and ownership semantics.",
+      "reconciliation": "bound-idiomatic",
       "reconciliation_evidence": [
-        "src/prolly/versioned_map.rs",
-        "bindings/python",
-        "bindings/go",
-        "bindings/node",
-        "bindings/kotlin",
-        "bindings/java",
-        "bindings/ruby",
-        "bindings/swift",
-        "bindings/wasm"
+        "bindings/python/prolly/api.py",
+        "bindings/go/versioned.go",
+        "bindings/node/src/versioned.ts",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi",
+        "bindings/ruby/lib/prolly/api.rb",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
+        "bindings/wasm/src/index.ts"
       ],
-      "reconciliation_rationale": "No binding exposes TypedVersionedMap or host key/value codec wrappers; portable typed-codec construction is a confirmed missing application API."
+      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, typed codec facades, versioned transactions, snapshots, retained sessions, bounded scan/page APIs, and callback-scoped inline/blob value-reference views backed by native leaf leases."
     },
     {
       "rust": "prolly::VersionedMap::verify_catalog",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.verify_catalog",
+        "go": "prolly.(*VersionedMap).VerifyCatalog",
+        "node": "VersionedMap.verifyCatalog",
+        "kotlin": "VersionedMap.verifyCatalog",
+        "java": "VersionedMap.verifyCatalog",
+        "ruby": "VersionedMap#verify_catalog",
+        "swift": "VersionedMap.verifyCatalog",
+        "wasm": "WasmVersionedMap.verifyCatalog"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -33844,10 +34716,19 @@
     {
       "rust": "prolly::VersionedMap::version",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.version",
+        "go": "prolly.(*VersionedMap).Version",
+        "node": "VersionedMap.version",
+        "kotlin": "VersionedMap.version",
+        "java": "VersionedMap.version",
+        "ruby": "VersionedMap#version",
+        "swift": "VersionedMap.version",
+        "wasm": "WasmVersionedMap.version"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"
@@ -33874,10 +34755,19 @@
     {
       "rust": "prolly::VersionedMap::versions",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "VersionedMap.versions",
+        "go": "prolly.(*VersionedMap).Versions",
+        "node": "VersionedMap.versions",
+        "kotlin": "VersionedMap.versions",
+        "java": "VersionedMap.versions",
+        "ruby": "VersionedMap#versions",
+        "swift": "VersionedMap.versions",
+        "wasm": "WasmVersionedMap.versions"
+      },
       "exclusions": {},
       "tests": [
         "prolly-bindings::domain::versioned"

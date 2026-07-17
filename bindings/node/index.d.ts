@@ -1200,6 +1200,7 @@ export declare class NativePortableMapSnapshot {
 }
 export declare class NativePortableReadSession {
   get(key: Buffer): Buffer | null
+  withValueView(key: Buffer, visit: (arg: object) => void): boolean
   scanRangePages(start: Buffer, end: Buffer | undefined | null, visit: (arg: object) => number): NodePortableReadScanOutcome
 }
 export declare class NativePortableKeyProof {

@@ -20,6 +20,15 @@ typedef struct ProllyFastScanOpenResult {
     uint64_t scan_handle;
 } ProllyFastScanOpenResult;
 
+typedef struct ProllyFastValueLeaseResult {
+    int32_t status;
+    uint8_t found;
+    uint8_t reserved[3];
+    uint64_t lease_handle;
+    const uint8_t *data_ptr;
+    uint64_t data_len;
+} ProllyFastValueLeaseResult;
+
 ProllyFastPageResult prolly_fast_proximity_search(
     uint64_t map_handle,
     const float *query_ptr,
@@ -47,5 +56,13 @@ ProllyFastPageResult prolly_fast_read_session_scan_next(
 void prolly_fast_scan_close(uint64_t scan_handle);
 
 void prolly_fast_page_release(uint64_t lease_handle);
+
+ProllyFastValueLeaseResult prolly_fast_read_session_get_lease(
+    uint64_t session_handle,
+    const uint8_t *key_ptr,
+    size_t key_len
+);
+
+void prolly_fast_value_release(uint64_t lease_handle);
 
 #endif

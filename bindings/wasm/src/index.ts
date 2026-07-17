@@ -3,6 +3,10 @@ export interface WasmEntryRecord {
   value: Uint8Array;
 }
 
+export type ValueRefView =
+  | { kind: "inline"; value: Uint8Array }
+  | { kind: "blob"; cid: Uint8Array; length: bigint };
+
 export interface WasmScanOutcomeRecord {
   visited: string;
   stopped: boolean;
@@ -1704,6 +1708,107 @@ export class BlobStore implements Disposable {
   [Symbol.dispose](): void { this.close(); }
 }
 
+export interface KeyCodec<K> {
+  encodeKey(key: K): Uint8Array;
+  decodeKey(value: Uint8Array): K;
+}
+
+export interface ValueCodec<V> {
+  encode(value: V): Uint8Array;
+  decode(value: Uint8Array): V;
+}
+
+const typedUtf8Encoder = new TextEncoder();
+const typedUtf8Decoder = new TextDecoder("utf-8", { fatal: true });
+
+export class StringKeyCodec implements KeyCodec<string> {
+  encodeKey(key: string): Uint8Array { return typedUtf8Encoder.encode(key); }
+  decodeKey(value: Uint8Array): string { return typedUtf8Decoder.decode(value); }
+}
+
+export class BytesKeyCodec implements KeyCodec<Uint8Array> {
+  encodeKey(key: Uint8Array): Uint8Array { return ownedPortableBytes(key); }
+  decodeKey(value: Uint8Array): Uint8Array { return ownedPortableBytes(value); }
+}
+
+export class BytesValueCodec implements ValueCodec<Uint8Array> {
+  encode(value: Uint8Array): Uint8Array { return ownedPortableBytes(value); }
+  decode(value: Uint8Array): Uint8Array { return ownedPortableBytes(value); }
+}
+
+export class JsonValueCodec<V> implements ValueCodec<V> {
+  encode(value: V): Uint8Array { return typedUtf8Encoder.encode(JSON.stringify(value)); }
+  decode(value: Uint8Array): V { return JSON.parse(typedUtf8Decoder.decode(value)) as V; }
+}
+
+export interface TypedMigrationResult {
+  update: WasmMapUpdate;
+  scannedValues: number;
+  rewrittenValues: number;
+}
+
+export class TypedVersionedMap<K, V> {
+  readonly raw: WasmVersionedMap;
+  readonly #keyCodec: KeyCodec<K>;
+  readonly #valueCodec: ValueCodec<V>;
+
+  constructor(raw: WasmVersionedMap, keyCodec: KeyCodec<K>, valueCodec: ValueCodec<V>) {
+    this.raw = raw;
+    this.#keyCodec = keyCodec;
+    this.#valueCodec = valueCodec;
+  }
+
+  async get(key: K, signal?: AbortSignal): Promise<V | undefined> {
+    const value = await this.raw.get(this.#keyCodec.encodeKey(key), signal);
+    return value == null ? undefined : this.#valueCodec.decode(value);
+  }
+
+  async getAt(id: Uint8Array, key: K, signal?: AbortSignal): Promise<V | undefined> {
+    const value = await this.raw.getAt(id, this.#keyCodec.encodeKey(key), signal);
+    return value == null ? undefined : this.#valueCodec.decode(value);
+  }
+
+  async entries(signal?: AbortSignal): Promise<Array<readonly [K, V]>> {
+    return (await this.raw.range(new Uint8Array(), undefined, signal)).map((entry) => [
+      this.#keyCodec.decodeKey(entry.key), this.#valueCodec.decode(entry.value),
+    ] as const);
+  }
+
+  put(key: K, value: V, signal?: AbortSignal): Promise<WasmMapVersion> {
+    return this.raw.put(this.#keyCodec.encodeKey(key), this.#valueCodec.encode(value), signal);
+  }
+
+  putIf(expected: Uint8Array | undefined, key: K, value: V, signal?: AbortSignal): Promise<WasmMapUpdate> {
+    return this.raw.putIf(
+      expected, this.#keyCodec.encodeKey(key), this.#valueCodec.encode(value), signal,
+    );
+  }
+
+  delete(key: K, signal?: AbortSignal): Promise<WasmMapVersion> {
+    return this.raw.delete(this.#keyCodec.encodeKey(key), signal);
+  }
+
+  async migrateFrom<Old>(
+    expected: Uint8Array,
+    sourceCodec: ValueCodec<Old>,
+    migrate: (value: Old) => V,
+    signal?: AbortSignal,
+  ): Promise<TypedMigrationResult> {
+    const entries = await this.raw.rangeAt(expected, new Uint8Array(), undefined, signal);
+    const mutations: WasmMapMutation[] = entries.map((entry) => ({
+      kind: "upsert",
+      key: entry.key,
+      value: this.#valueCodec.encode(migrate(sourceCodec.decode(entry.value))),
+    }));
+    const update = await this.raw.applyIf(expected, mutations, signal);
+    return {
+      update,
+      scannedValues: entries.length,
+      rewrittenValues: entries.length,
+    };
+  }
+}
+
 export class WasmVersionedMap implements Disposable {
   #native?: any;
   #memory?: WebAssembly.Memory;
@@ -1711,6 +1816,9 @@ export class WasmVersionedMap implements Disposable {
   #open(): any {
     if (this.#native == null) throw new Error("WASM versioned map is closed");
     return this.#native;
+  }
+  typed<K, V>(keyCodec: KeyCodec<K>, valueCodec: ValueCodec<V>): TypedVersionedMap<K, V> {
+    return new TypedVersionedMap(this, keyCodec, valueCodec);
   }
   id(): Uint8Array { return this.#open().id(); }
   headName(): Uint8Array { return this.#open().headName(); }
@@ -2217,6 +2325,27 @@ export class WasmReadSession implements Disposable {
     const native = this.#native; const owned = ownedPortableBytes(key);
     return portablePromise(signal, () => native.get(owned) ?? undefined);
   }
+  withValueView(key: Uint8Array, visit: (value: Uint8Array) => void): boolean {
+    if (this.#native == null) throw new Error("WASM read session is closed");
+    if (this.#scanActive) throw new Error("WASM read session cannot be re-entered during a zero-copy callback");
+    if (typeof visit !== "function") throw new TypeError("point-read visitor must be a function");
+    this.#scanActive = true;
+    try {
+      return this.#native.withValueView(ownedPortableBytes(key), (value: Uint8Array) => {
+        const scope = { alive: true };
+        try {
+          visit(scopedPortableBytes(value, scope, this.#memory));
+        } finally {
+          scope.alive = false;
+        }
+      });
+    } finally {
+      this.#scanActive = false;
+    }
+  }
+  withValueRefView(key: Uint8Array, visit: (value: ValueRefView) => void): boolean {
+    return this.withValueView(key, (value) => visit(decodeWasmValueRefView(value)));
+  }
   scanRangeView(
     start: Uint8Array,
     end: Uint8Array | undefined,
@@ -2248,6 +2377,32 @@ export class WasmReadSession implements Disposable {
   }
   close(): void { this.#native?.free?.(); this.#native = undefined; }
   [Symbol.dispose](): void { this.close(); }
+}
+
+function decodeWasmValueRefView(value: Uint8Array): ValueRefView {
+  if (value.byteLength < 4 || value[0] !== 0x50 || value[1] !== 0x4c || value[2] !== 0x56 || value[3] !== 0x42) {
+    return { kind: "inline", value };
+  }
+  if (value.byteLength < 6 || value[4] !== 1) throw new Error("invalid or unsupported value reference header");
+  if (value[5] === 0) {
+    if (value.byteLength < 14) throw new Error("inline value reference is truncated");
+    const length = readWasmScopedU64(value, 6);
+    if (length > BigInt(Number.MAX_SAFE_INTEGER) || BigInt(value.byteLength) !== 14n + length) {
+      throw new Error("inline value reference length does not match payload");
+    }
+    return { kind: "inline", value: value.subarray(14) };
+  }
+  if (value[5] === 1) {
+    if (value.byteLength !== 46) throw new Error("blob value reference length is invalid");
+    return { kind: "blob", cid: new Uint8Array(value.subarray(6, 38)), length: readWasmScopedU64(value, 38) };
+  }
+  throw new Error(`unknown value reference tag ${value[5]}`);
+}
+
+function readWasmScopedU64(value: Uint8Array, start: number): bigint {
+  let result = 0n;
+  for (let index = 0; index < 8; index += 1) result = (result << 8n) | BigInt(value[start + index]);
+  return result;
 }
 
 export class WasmKeyProof implements Disposable {

@@ -1484,6 +1484,14 @@ type ValueRef struct {
 	Blob  *BlobRef
 }
 
+// ValueRefView is valid only during a GetValueRefView callback. Inline bytes
+// borrow the retained immutable leaf; blob metadata is owned.
+type ValueRefView struct {
+	Kind   string
+	Inline []byte
+	Blob   *BlobRef
+}
+
 type BlobGcReachability struct {
 	LiveBlobs     []BlobRef
 	LiveBlobCount uint64
@@ -2163,6 +2171,59 @@ func (s *ReadSession) GetView(key []byte, visitor func([]byte)) (bool, error) {
 	visitor(value)
 	runtime.KeepAlive(value)
 	return true, nil
+}
+
+// GetValueRefView parses a stored inline/blob envelope without copying inline
+// payload bytes. The callback must not retain Inline after returning.
+func (s *ReadSession) GetValueRefView(
+	key []byte, visitor func(ValueRefView),
+) (bool, error) {
+	if visitor == nil {
+		return false, errors.New("nil value reference view visitor")
+	}
+	var parseErr error
+	found, err := s.GetView(key, func(value []byte) {
+		view, err := parseValueRefView(value)
+		if err != nil {
+			parseErr = err
+			return
+		}
+		visitor(view)
+	})
+	if err != nil {
+		return false, err
+	}
+	return found, parseErr
+}
+
+func parseValueRefView(value []byte) (ValueRefView, error) {
+	if len(value) < 4 || !bytes.Equal(value[:4], []byte("PLVB")) {
+		return ValueRefView{Kind: "inline", Inline: value}, nil
+	}
+	if len(value) < 6 || value[4] != 1 {
+		return ValueRefView{}, errors.New("invalid or unsupported value reference header")
+	}
+	switch value[5] {
+	case 0:
+		if len(value) < 14 {
+			return ValueRefView{}, errors.New("inline value reference is truncated")
+		}
+		length := binary.BigEndian.Uint64(value[6:14])
+		if length > uint64(len(value)-14) || uint64(len(value)) != 14+length {
+			return ValueRefView{}, errors.New("inline value reference length does not match payload")
+		}
+		return ValueRefView{Kind: "inline", Inline: value[14:]}, nil
+	case 1:
+		if len(value) != 46 {
+			return ValueRefView{}, errors.New("blob value reference length is invalid")
+		}
+		return ValueRefView{
+			Kind: "blob",
+			Blob: &BlobRef{Cid: bytes.Clone(value[6:38]), Len: binary.BigEndian.Uint64(value[38:46])},
+		}, nil
+	default:
+		return ValueRefView{}, fmt.Errorf("unknown value reference tag %d", value[5])
+	}
 }
 
 // GetMany returns point-read results in input order while crossing the native

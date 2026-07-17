@@ -32,7 +32,19 @@ export {
   ProximityReadSession,
   ProximitySearchRuntime,
 } from "./proximity.ts";
-export { BlobStore, MapComparison, MapMerge, MapSubscription, VersionedMap, VersionedTransaction } from "./versioned.ts";
+export {
+  BlobStore,
+  BytesKeyCodec,
+  BytesValueCodec,
+  JsonValueCodec,
+  MapComparison,
+  MapMerge,
+  MapSubscription,
+  StringKeyCodec,
+  TypedVersionedMap,
+  VersionedMap,
+  VersionedTransaction,
+} from "./versioned.ts";
 export type * from "./indexed.ts";
 export type * from "./proximity.ts";
 export type * from "./versioned.ts";

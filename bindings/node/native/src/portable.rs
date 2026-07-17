@@ -70,6 +70,17 @@ struct NodeFastScanOpenResult {
     scan_handle: u64,
 }
 
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct NodeFastValueLeaseResult {
+    status: i32,
+    found: u8,
+    reserved: [u8; 3],
+    lease_handle: u64,
+    data_ptr: *const u8,
+    data_len: u64,
+}
+
 extern "C" {
     fn prolly_fast_read_session_scan_open(
         session_handle: u64,
@@ -94,6 +105,12 @@ extern "C" {
     ) -> NodeFastPageResult;
     fn prolly_fast_scan_close(scan_handle: u64);
     fn prolly_fast_page_release(lease_handle: u64);
+    fn prolly_fast_read_session_get_lease(
+        session_handle: u64,
+        key_ptr: *const u8,
+        key_len: usize,
+    ) -> NodeFastValueLeaseResult;
+    fn prolly_fast_value_release(lease_handle: u64);
 }
 
 struct NodeFastScanGuard(u64);
@@ -109,6 +126,14 @@ struct NodeFastPageGuard(u64);
 impl Drop for NodeFastPageGuard {
     fn drop(&mut self) {
         unsafe { prolly_fast_page_release(self.0) };
+    }
+}
+
+struct NodeFastValueGuard(u64);
+
+impl Drop for NodeFastValueGuard {
+    fn drop(&mut self) {
+        unsafe { prolly_fast_value_release(self.0) };
     }
 }
 
@@ -2721,6 +2746,75 @@ impl NativePortableReadSession {
             .get(key.to_vec())
             .map(|value| value.map(Buffer::from))
             .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "withValueView")]
+    pub fn with_value_view(
+        &self,
+        env: Env,
+        key: Buffer,
+        visit: FunctionRef<JsObject, ()>,
+    ) -> Result<bool> {
+        let session_handle = self.inner.fast_handle();
+        if session_handle == 0 {
+            return Err(Error::new(
+                Status::GenericFailure,
+                "native retained read session is closed",
+            ));
+        }
+        let result =
+            unsafe { prolly_fast_read_session_get_lease(session_handle, key.as_ptr(), key.len()) };
+        if result.status != 0 {
+            return Err(Error::new(
+                Status::GenericFailure,
+                format!(
+                    "native retained point read failed with status {}",
+                    result.status
+                ),
+            ));
+        }
+        if result.found == 0 {
+            if result.lease_handle != 0 {
+                unsafe { prolly_fast_value_release(result.lease_handle) };
+                return Err(Error::new(
+                    Status::GenericFailure,
+                    "missing point read returned a value lease",
+                ));
+            }
+            return Ok(false);
+        }
+        let length = usize::try_from(result.data_len).map_err(|_| {
+            Error::new(
+                Status::GenericFailure,
+                "native point read exceeds the host address space",
+            )
+        })?;
+        if result.lease_handle == 0 || (length != 0 && result.data_ptr.is_null()) {
+            if result.lease_handle != 0 {
+                unsafe { prolly_fast_value_release(result.lease_handle) };
+            }
+            return Err(Error::new(
+                Status::GenericFailure,
+                "native point read returned an invalid value lease",
+            ));
+        }
+        let _lease = NodeFastValueGuard(result.lease_handle);
+        let argument = if length == 0 {
+            env.create_buffer(0)?.into_unknown().coerce_to_object()?
+        } else {
+            unsafe {
+                env.create_buffer_with_borrowed_data(
+                    result.data_ptr.cast_mut(),
+                    length,
+                    (),
+                    |(), _env| {},
+                )?
+            }
+            .into_unknown()
+            .coerce_to_object()?
+        };
+        visit.borrow_back(&env)?.call(argument)?;
+        Ok(true)
     }
 
     #[napi(js_name = "scanRangePages")]

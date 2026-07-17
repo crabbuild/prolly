@@ -18,6 +18,16 @@ module Prolly
              :scan_handle, :uint64
     end
 
+
+    class FastValueLeaseResult < FFI::Struct
+      layout :status, :int32,
+             :found, :uint8,
+             :reserved, [:uint8, 3],
+             :lease_handle, :uint64,
+             :data_ptr, :pointer,
+             :data_len, :uint64
+    end
+
     UniFFILib.attach_function :prolly_fast_proximity_search,
                               [:uint64, :pointer, :size_t, :uint32, :uint64],
                               FastPageResult.by_value
@@ -32,6 +42,10 @@ module Prolly
                               [:uint64, :uint64, :uint32, :uint64],
                               FastPageResult.by_value
     UniFFILib.attach_function :prolly_fast_scan_close, [:uint64], :void
+    UniFFILib.attach_function :prolly_fast_read_session_get_lease,
+                              [:uint64, :pointer, :size_t],
+                              FastValueLeaseResult.by_value
+    UniFFILib.attach_function :prolly_fast_value_release, [:uint64], :void
 
     class Scope
       def initialize = @alive = true
@@ -58,6 +72,13 @@ module Prolly
       end
 
       alias to_s bytes
+
+      def subview(start, length = @length - start)
+        @scope.check!
+        raise RangeError, 'scoped subview is out of bounds' if start.negative? || length.negative? ||
+                                                             start > @length || length > @length - start
+        FieldView.new(@pointer, @offset + start, length, @scope)
+      end
 
       def compare(other)
         @scope.check!
@@ -88,6 +109,7 @@ module Prolly
     ProximityRecordView = Struct.new(:key, :vector, :value, keyword_init: true)
     EntryView = Struct.new(:key, :value, keyword_init: true)
     ScanOutcome = Struct.new(:visited, :stopped, keyword_init: true)
+    ValueRefView = Struct.new(:kind, :inline, :cid, :length, keyword_init: true)
 
     class VectorView
       attr_reader :length
@@ -115,6 +137,62 @@ module Prolly
     end
 
     module_function
+
+    def point_read_view(session_handle, key)
+      raise ArgumentError, 'point-read visitor block is required' unless block_given?
+
+      key = key.b
+      result = UniFFILib.prolly_fast_read_session_get_lease(
+        session_handle, memory_for(key), key.bytesize
+      )
+      raise "native retained point read failed with status #{result[:status]}" unless result[:status].zero?
+      unless result[:found].zero?
+        lease = result[:lease_handle]
+        raise 'native point read returned an invalid value lease' if lease.zero? ||
+                                                                  (result[:data_len].positive? && result[:data_ptr].null?)
+        scope = Scope.new
+        begin
+          return [true, yield(FieldView.new(result[:data_ptr], 0, result[:data_len], scope))]
+        ensure
+          scope.close
+          UniFFILib.prolly_fast_value_release(lease)
+        end
+      end
+      unless result[:lease_handle].zero?
+        UniFFILib.prolly_fast_value_release(result[:lease_handle])
+        raise 'missing point read returned a value lease'
+      end
+      [false, nil]
+    end
+
+    def value_ref_view(session_handle, key)
+      raise ArgumentError, 'value reference visitor block is required' unless block_given?
+
+      point_read_view(session_handle, key) do |value|
+        yield decode_value_ref_view(value)
+      end
+    end
+
+    def decode_value_ref_view(value)
+      return ValueRefView.new(kind: :inline, inline: value) if value.length < 4 || value.subview(0, 4).bytes != 'PLVB'.b
+      raise 'invalid or unsupported value reference header' if value.length < 6 || value.subview(4, 1).bytes.getbyte(0) != 1
+
+      case value.subview(5, 1).bytes.getbyte(0)
+      when 0
+        raise 'inline value reference is truncated' if value.length < 14
+        length = value.subview(6, 8).bytes.unpack1('Q>')
+        raise 'inline value reference length does not match payload' unless value.length == 14 + length
+        ValueRefView.new(kind: :inline, inline: value.subview(14, length))
+      when 1
+        raise 'blob value reference length is invalid' unless value.length == 46
+        ValueRefView.new(
+          kind: :blob, cid: value.subview(6, 32).bytes,
+          length: value.subview(38, 8).bytes.unpack1('Q>')
+        )
+      else
+        raise 'unknown value reference tag'
+      end
+    end
 
     def proximity_search_view(map_handle, query, k, max_arena_bytes: 64 * 1024 * 1024)
       query_bytes = query.map(&:to_f).pack('e*')

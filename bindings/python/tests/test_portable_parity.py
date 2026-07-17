@@ -24,6 +24,8 @@ from prolly import (
     SearchBudgetRecord,
     SearchCompletionRecord,
     SearchPolicyKind,
+    JsonValueCodec,
+    StringKeyCodec,
     exact_proximity_search_request,
     verify_key_proof,
     verify_multi_key_proof,
@@ -37,6 +39,30 @@ from prolly import (
 
 
 class PortableParityTests(unittest.TestCase):
+    def test_typed_versioned_map_is_application_facing(self):
+        with Engine.memory() as engine:
+            raw = engine.versioned_map(b"typed-users")
+            raw.initialize()
+            typed = raw.typed(StringKeyCodec(), JsonValueCodec())
+
+            first = typed.put("alice", {"score": 1})
+            self.assertEqual(typed.get("alice"), {"score": 1})
+            self.assertEqual(typed.get_at(first.id, "alice"), {"score": 1})
+            self.assertEqual(typed.entries(), [("alice", {"score": 1})])
+            updated = typed.put_if(first.id, "alice", {"score": 2})
+            self.assertEqual(updated.kind.name, "APPLIED")
+            migrated = typed.migrate_from(
+                updated.current.id,
+                JsonValueCodec(),
+                lambda value: {**value, "active": True},
+            )
+            self.assertEqual((migrated.scanned_values, migrated.rewritten_values), (1, 1))
+            self.assertEqual(migrated.update.kind.name, "APPLIED")
+            self.assertEqual(typed.get("alice"), {"score": 2, "active": True})
+            self.assertIs(typed.raw, raw)
+            self.assertEqual(typed.delete("alice").is_head, True)
+            self.assertIsNone(typed.get("alice"))
+
     def test_versioned_large_values_and_blob_gc_are_application_facing(self):
         with Engine.memory() as engine, BlobStore.memory() as blobs:
             versioned = engine.versioned_map(b"large-values")
@@ -52,6 +78,14 @@ class PortableParityTests(unittest.TestCase):
                 LargeValueConfigRecord(inline_threshold=1),
             )
             self.assertEqual(updated.kind.name, "APPLIED")
+            snapshot = versioned.snapshot()
+            self.assertIsNotNone(snapshot)
+            with snapshot, snapshot.read() as session:
+                captured = []
+                self.assertTrue(session.get_value_ref_view(b"document", captured.append)[0])
+                self.assertEqual(captured[0].kind, "blob")
+                self.assertEqual(len(captured[0].cid), 32)
+                self.assertEqual(captured[0].length, len(b"new-large-value"))
             self.assertGreaterEqual(versioned.plan_blob_gc(blobs).reachability.live_blob_count, 1)
             self.assertGreaterEqual(versioned.sweep_blob_gc(blobs).plan.reachability.live_blob_count, 1)
 
@@ -647,6 +681,19 @@ class PortableParityTests(unittest.TestCase):
                 self.assertGreater(len(snapshot.export().nodes), 0)
                 with snapshot.read() as session:
                     self.assertEqual(session.get(b"k"), b"v")
+                    found, copied = session.get_view(b"k", bytes)
+                    self.assertTrue(found)
+                    self.assertEqual(copied, b"v")
+                    escaped_value = []
+                    session.get_view(b"k", lambda value: escaped_value.append(value))
+                    with self.assertRaises(RuntimeError):
+                        bytes(escaped_value[0])
+                    self.assertEqual(session.get_view(b"missing", bytes), (False, None))
+                    value_ref_seen = []
+                    self.assertTrue(session.get_value_ref_view(
+                        b"k", lambda value: value_ref_seen.append(bytes(value.inline))
+                    )[0])
+                    self.assertEqual(value_ref_seen, [b"v"])
                     escaped = []
                     seen = []
 
