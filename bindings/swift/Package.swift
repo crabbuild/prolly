@@ -18,10 +18,12 @@ let package = Package(
         .library(name: "ProllyStorePostgres", targets: ["ProllyStorePostgres"]),
         .library(name: "ProllyStoreMySQL", targets: ["ProllyStoreMySQL"]),
         .library(name: "ProllyStoreRedis", targets: ["ProllyStoreRedis"]),
+        .library(name: "ProllyStoreDynamoDB", targets: ["ProllyStoreDynamoDB"]),
         .executable(name: "prolly-store-sqlite-check", targets: ["StoreSQLiteCheck"]),
         .executable(name: "prolly-store-postgres-check", targets: ["StorePostgresCheck"]),
         .executable(name: "prolly-store-mysql-check", targets: ["StoreMySQLCheck"]),
         .executable(name: "prolly-store-redis-check", targets: ["StoreRedisCheck"]),
+        .executable(name: "prolly-store-dynamodb-check", targets: ["StoreDynamoDBCheck"]),
         .executable(name: "prolly-agent-event-log", targets: ["AgentEventLog"]),
         .executable(name: "prolly-background-compaction", targets: ["BackgroundCompaction"]),
         .executable(name: "prolly-basic-map", targets: ["BasicMap"]),
@@ -53,6 +55,10 @@ let package = Package(
         .package(url: "https://github.com/vapor/mysql-nio.git", exact: "1.8.0"),
         // 1.6.2 is the newest release whose package manifest supports Swift 5.10.
         .package(url: "https://github.com/swift-server/RediStack.git", exact: "1.6.2"),
+        // Soto 7.9 requires SotoCore 7.9, whose manifest requires Swift 6.1.
+        // 7.8.0 is the newest matched pair supporting this package's Swift 5.10 tools version.
+        .package(url: "https://github.com/soto-project/soto.git", exact: "7.8.0"),
+        .package(url: "https://github.com/soto-project/soto-core.git", exact: "7.8.0"),
     ],
     targets: [
         .systemLibrary(name: "CSQLite", pkgConfig: "sqlite3"),
@@ -104,6 +110,14 @@ let package = Package(
             dependencies: ["Prolly", .product(name: "RediStack", package: "RediStack")],
             exclude: ["README.md"]
         ),
+        .target(
+            name: "ProllyStoreDynamoDB",
+            dependencies: [
+                "Prolly", .product(name: "SotoCore", package: "soto-core"),
+                .product(name: "SotoDynamoDB", package: "soto"),
+            ],
+            exclude: ["README.md"]
+        ),
         .executableTarget(
             name: "StoreSQLiteCheck",
             dependencies: ["Prolly", "ProllyStoreSQLite", "CSQLite"],
@@ -131,6 +145,15 @@ let package = Package(
                 .product(name: "NIOPosix", package: "swift-nio"),
             ],
             path: "Examples/StoreRedisCheck"
+        ),
+        .executableTarget(
+            name: "StoreDynamoDBCheck",
+            dependencies: [
+                "Prolly", "ProllyStoreDynamoDB",
+                .product(name: "SotoCore", package: "soto-core"),
+                .product(name: "SotoDynamoDB", package: "soto"),
+            ],
+            path: "Examples/StoreDynamoDBCheck"
         ),
         .testTarget(
             name: "ProllyTests",

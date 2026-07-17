@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "trail-prolly-store-dynamodb"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = ["trail-prolly-binding==0.1.0", "aioboto3==15.5.0"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["prolly_store_dynamodb*"]

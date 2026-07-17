@@ -242,6 +242,25 @@ PROLLY_REDIS_URL=redis://127.0.0.1:56379 \
   swift run --package-path bindings/swift prolly-store-redis-check
 ```
 
+Provider-first DynamoDB checks:
+
+```sh
+PROLLY_DYNAMODB_ENDPOINT=http://127.0.0.1:8000 \
+  PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" \
+  PYTHONPATH=bindings/python:bindings/python/stores/dynamodb \
+  python3 -m unittest discover -s bindings/python/stores/dynamodb/tests -v
+PROLLY_DYNAMODB_ENDPOINT=http://127.0.0.1:8000 \
+  PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" \
+  BUNDLE_GEMFILE=bindings/ruby/stores/dynamodb/Gemfile \
+  BUNDLE_PATH=/tmp/prolly-ruby-dynamodb-bundle \
+  bundle exec ruby -Ibindings/ruby/stores/dynamodb/lib \
+  bindings/ruby/stores/dynamodb/test/dynamodb_store_test.rb
+PROLLY_DYNAMODB_ENDPOINT=http://127.0.0.1:8000 \
+  PROLLY_BINDINGS_LIBRARY_DIR="$PWD/target/debug" \
+  DYLD_LIBRARY_PATH="$PWD/target/debug" \
+  swift run --package-path bindings/swift prolly-store-dynamodb-check
+```
+
 Before publishing a binding release:
 
 1. Build the Rust facade with `cargo build --manifest-path bindings/uniffi/Cargo.toml --target-dir target`.

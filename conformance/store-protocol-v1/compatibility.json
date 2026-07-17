@@ -405,6 +405,18 @@
         "capabilities": {"native_batch_reads":true,"atomic_batch_writes":true,"node_scan":true,"hints":true,"atomic_nodes_and_hint":true,"root_scan":true,"root_compare_and_swap":true,"transactions":true,"read_parallelism":16},
         "limits": {"max_batch_read_items":null,"max_batch_write_items":null,"max_transaction_operations":null,"max_node_bytes":null},
         "evidence": ["PROLLY_REDIS_URL=redis://127.0.0.1:56379 PROLLY_BINDINGS_LIBRARY=target/debug/libprolly_bindings.dylib PYTHONPATH=bindings/python:bindings/python/stores/redis python3 -m unittest discover -s bindings/python/stores/redis/tests"]
+      },
+      "dynamodb": {
+        "status": "supported",
+        "module": "trail-prolly-store-dynamodb",
+        "sdk_module": "aioboto3",
+        "sdk_version": "15.5.0",
+        "minimum_python": "3.10",
+        "protocol_major": 1,
+        "schema_version": 1,
+        "capabilities": {"native_batch_reads":true,"atomic_batch_writes":false,"node_scan":true,"hints":true,"atomic_nodes_and_hint":false,"root_scan":true,"root_compare_and_swap":true,"transactions":true,"read_parallelism":16},
+        "limits": {"max_batch_read_items":100,"max_batch_write_items":25,"max_transaction_operations":100,"max_node_bytes":null},
+        "evidence": ["PROLLY_DYNAMODB_ENDPOINT=http://127.0.0.1:8000 PROLLY_BINDINGS_LIBRARY=target/debug/libprolly_bindings.dylib PYTHONPATH=bindings/python:bindings/python/stores/dynamodb python3 -m unittest discover -s bindings/python/stores/dynamodb/tests"]
       }
     },
     "ruby": {
@@ -456,6 +468,18 @@
         "limits": {"max_batch_read_items":null,"max_batch_write_items":null,"max_transaction_operations":null,"max_node_bytes":null},
         "evidence": ["PROLLY_REDIS_URL=redis://127.0.0.1:56379 PROLLY_BINDINGS_LIBRARY=target/debug/libprolly_bindings.dylib BUNDLE_GEMFILE=bindings/ruby/stores/redis/Gemfile bundle exec ruby -Ibindings/ruby/stores/redis/lib bindings/ruby/stores/redis/test/redis_store_test.rb"]
       },
+      "dynamodb": {
+        "status": "supported",
+        "module": "trail-prolly-store-dynamodb",
+        "sdk_module": "aws-sdk-dynamodb",
+        "sdk_version": "1.169.0",
+        "minimum_ruby": "3.2",
+        "protocol_major": 1,
+        "schema_version": 1,
+        "capabilities": {"native_batch_reads":true,"atomic_batch_writes":false,"node_scan":true,"hints":true,"atomic_nodes_and_hint":false,"root_scan":true,"root_compare_and_swap":true,"transactions":true,"read_parallelism":1},
+        "limits": {"max_batch_read_items":100,"max_batch_write_items":25,"max_transaction_operations":100,"max_node_bytes":null},
+        "evidence": ["PROLLY_DYNAMODB_ENDPOINT=http://127.0.0.1:8000 PROLLY_BINDINGS_LIBRARY=target/debug/libprolly_bindings.dylib BUNDLE_GEMFILE=bindings/ruby/stores/dynamodb/Gemfile bundle exec ruby -Ibindings/ruby/stores/dynamodb/lib bindings/ruby/stores/dynamodb/test/dynamodb_store_test.rb"]
+      },
       "cosmosdb": {"status":"unsupported","reason":"Microsoft does not publish a supported Cosmos DB Ruby client SDK"}
     },
     "swift": {
@@ -506,6 +530,18 @@
         "capabilities": {"native_batch_reads":true,"atomic_batch_writes":true,"node_scan":true,"hints":true,"atomic_nodes_and_hint":true,"root_scan":true,"root_compare_and_swap":true,"transactions":true,"read_parallelism":1},
         "limits": {"max_batch_read_items":null,"max_batch_write_items":null,"max_transaction_operations":null,"max_node_bytes":null},
         "evidence": ["PROLLY_REDIS_URL=redis://127.0.0.1:56379 PROLLY_BINDINGS_LIBRARY_DIR=target/debug DYLD_LIBRARY_PATH=target/debug swift run --package-path bindings/swift prolly-store-redis-check"]
+      },
+      "dynamodb": {
+        "status": "supported",
+        "module": "ProllyStoreDynamoDB",
+        "sdk_module": "SotoDynamoDB",
+        "sdk_version": "7.8.0",
+        "minimum_swift": "5.10",
+        "protocol_major": 1,
+        "schema_version": 1,
+        "capabilities": {"native_batch_reads":true,"atomic_batch_writes":false,"node_scan":true,"hints":true,"atomic_nodes_and_hint":false,"root_scan":true,"root_compare_and_swap":true,"transactions":true,"read_parallelism":1},
+        "limits": {"max_batch_read_items":100,"max_batch_write_items":25,"max_transaction_operations":100,"max_node_bytes":null},
+        "evidence": ["PROLLY_DYNAMODB_ENDPOINT=http://127.0.0.1:8000 PROLLY_BINDINGS_LIBRARY_DIR=target/debug DYLD_LIBRARY_PATH=target/debug swift run --package-path bindings/swift prolly-store-dynamodb-check"]
       },
       "cosmosdb": {"status":"unsupported","reason":"Microsoft does not publish a supported Cosmos DB Swift client SDK"},
       "spanner": {"status":"unsupported","reason":"Google does not publish a supported Cloud Spanner Swift client SDK"}
