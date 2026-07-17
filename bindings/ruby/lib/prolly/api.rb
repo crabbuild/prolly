@@ -252,6 +252,37 @@ module Prolly
     end
   end
 
+  class ProximityCancellationToken
+    def initialize
+      @native = BindingProximityCancellationToken.new
+      @closed = false
+    end
+
+    def cancel = open! { @native.cancel }
+    def cancelled? = open! { @native.is_cancelled }
+    def close = @closed = true
+
+    def use
+      raise 'proximity cancellation token is closed' if @closed
+      return self unless block_given?
+
+      begin
+        yield self
+      ensure
+        close
+      end
+    end
+
+    private
+
+    def native_for_search = open! { @native }
+
+    def open!
+      raise 'proximity cancellation token is closed' if @closed
+      yield
+    end
+  end
+
   class IndexRegistry
     attr_reader :native
 
@@ -736,6 +767,24 @@ module Prolly
       end
     end
 
+    def search_cancellable(request, cancellation:, runtime: nil)
+      open! do
+        @native.search_cancellable(
+          Prolly.owned_proximity_search_request(request),
+          runtime&.send(:native_for_search),
+          cancellation.send(:native_for_search)
+        )
+      end
+    end
+
+    def search_async(request, runtime: nil, cancellation: nil)
+      owned = Prolly.owned_proximity_search_request(request)
+      token = cancellation || ProximityCancellationToken.new
+      Future.new(cancel: -> { token.cancel }) do
+        search_cancellable(owned, runtime: runtime, cancellation: token)
+      end
+    end
+
     def search_exact(query, k)
       read.use { |session| session.search_exact(query, k) }
     end
@@ -788,6 +837,21 @@ module Prolly
           map.send(:native_for_accelerator), Prolly.owned_proximity_search_request(request),
           runtime.send(:native_for_search)
         )
+      end
+    end
+    def search_cancellable(map, request, cancellation:, runtime: nil)
+      open! do
+        @native.search_cancellable(
+          map.send(:native_for_accelerator), Prolly.owned_proximity_search_request(request),
+          runtime&.send(:native_for_search), cancellation.send(:native_for_search)
+        )
+      end
+    end
+    def search_async(map, request, runtime: nil, cancellation: nil)
+      owned = Prolly.owned_proximity_search_request(request)
+      token = cancellation || ProximityCancellationToken.new
+      Future.new(cancel: -> { token.cancel }) do
+        search_cancellable(map, owned, runtime: runtime, cancellation: token)
       end
     end
     def prove_search(map, request, limits = Prolly.default_content_graph_limits)
@@ -848,6 +912,21 @@ module Prolly
           map.send(:native_for_accelerator), Prolly.owned_proximity_search_request(request),
           runtime.send(:native_for_search)
         )
+      end
+    end
+    def search_cancellable(map, request, cancellation:, runtime: nil)
+      open! do
+        @native.search_cancellable(
+          map.send(:native_for_accelerator), Prolly.owned_proximity_search_request(request),
+          runtime&.send(:native_for_search), cancellation.send(:native_for_search)
+        )
+      end
+    end
+    def search_async(map, request, runtime: nil, cancellation: nil)
+      owned = Prolly.owned_proximity_search_request(request)
+      token = cancellation || ProximityCancellationToken.new
+      Future.new(cancel: -> { token.cancel }) do
+        search_cancellable(map, owned, runtime: runtime, cancellation: token)
       end
     end
     def prove_search(map, request, limits = Prolly.default_content_graph_limits)
@@ -913,6 +992,21 @@ module Prolly
         )
       end
     end
+    def search_cancellable(map, request, cancellation:, runtime: nil)
+      open! do
+        @native.search_cancellable(
+          map.send(:native_for_accelerator), Prolly.owned_proximity_search_request(request),
+          runtime&.send(:native_for_search), cancellation.send(:native_for_search)
+        )
+      end
+    end
+    def search_async(map, request, runtime: nil, cancellation: nil)
+      owned = Prolly.owned_proximity_search_request(request)
+      token = cancellation || ProximityCancellationToken.new
+      Future.new(cancel: -> { token.cancel }) do
+        search_cancellable(map, owned, runtime: runtime, cancellation: token)
+      end
+    end
     def prove_search(map, request, limits = Prolly.default_content_graph_limits)
       open! do
         ProximitySearchProof.new(
@@ -967,6 +1061,21 @@ module Prolly
         )
       end
     end
+    def search_cancellable(map, request, cancellation:, runtime: nil)
+      open! do
+        @native.search_cancellable(
+          map.send(:native_for_accelerator), Prolly.owned_proximity_search_request(request),
+          runtime&.send(:native_for_search), cancellation.send(:native_for_search)
+        )
+      end
+    end
+    def search_async(map, request, runtime: nil, cancellation: nil)
+      owned = Prolly.owned_proximity_search_request(request)
+      token = cancellation || ProximityCancellationToken.new
+      Future.new(cancel: -> { token.cancel }) do
+        search_cancellable(map, owned, runtime: runtime, cancellation: token)
+      end
+    end
     def prove_search(map, request, limits = Prolly.default_content_graph_limits)
       open! do
         ProximitySearchProof.new(
@@ -1010,6 +1119,21 @@ module Prolly
         @native.search_with_runtime(
           Prolly.owned_proximity_search_request(request), runtime.send(:native_for_search)
         )
+      end
+    end
+    def search_cancellable(request, cancellation:, runtime: nil)
+      open! do
+        @native.search_cancellable(
+          Prolly.owned_proximity_search_request(request), runtime&.send(:native_for_search),
+          cancellation.send(:native_for_search)
+        )
+      end
+    end
+    def search_async(request, runtime: nil, cancellation: nil)
+      owned = Prolly.owned_proximity_search_request(request)
+      token = cancellation || ProximityCancellationToken.new
+      Future.new(cancel: -> { token.cancel }) do
+        search_cancellable(owned, runtime: runtime, cancellation: token)
       end
     end
     def search_exact(query, k) = search(Prolly.exact_proximity_search_request(query, k))

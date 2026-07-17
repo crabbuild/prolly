@@ -6,7 +6,9 @@ use super::{
     NodeRangePageRecord, NodeRangeProofVerificationRecord, NodeReverseCursorRecord,
     NodeReversePageRecord, NodeTreeRecord,
 };
-use napi::bindgen_prelude::{Buffer, Env, Error, Float32Array, FunctionRef, Result, Status};
+use napi::bindgen_prelude::{
+    AsyncTask, Buffer, Env, Error, Float32Array, FunctionRef, Result, Status, Task,
+};
 use napi::JsObject;
 use napi_derive::napi;
 use prolly_bindings::{
@@ -19,16 +21,17 @@ use prolly_bindings::{
     AdaptiveQualityRecord, BindingAcceleratorCatalog, BindingCompositeAccelerator,
     BindingHnswIndex, BindingIndexRegistry, BindingIndexedMap, BindingIndexedSnapshot,
     BindingMapComparison, BindingMapMerge, BindingMapSnapshot, BindingMapSubscription,
-    BindingProductQuantizer, BindingProximityMap, BindingProximityReadSession,
-    BindingProximitySearchProof, BindingProximitySearchRuntime, BindingSecondaryIndexSnapshot,
-    BindingVersionedMap, BindingVersionedTransaction, CatalogAcceleratorKindRecord,
-    CompositeAcceleratorConfigRecord, CompositeBaseKindRecord, CompositeBuildLimitsRecord,
-    CompositeBuildOrRebuildKindRecord, CompositeBuildOrRebuildOutcomeRecord,
-    CompositeBuildOutcomeRecord, CompositeBuildStatsRecord, CompositeRebuildOptionsRecord,
-    DistanceMetricRecord, ExactProximityRecordRecord, FullRebuildReasonKindRecord,
-    FullRebuildReasonRecord, HnswBuildLimitsRecord, HnswBuildStatsRecord, HnswConfigRecord,
-    HnswRoutingVectorEncodingRecord, IndexBuildResultRecord, IndexEntryRecord, IndexMatchRecord,
-    IndexPageRecord, IndexProjectionRecord, IndexVerificationRecord, IndexedMapHealthRecord,
+    BindingProductQuantizer, BindingProximityCancellationToken, BindingProximityMap,
+    BindingProximityReadSession, BindingProximitySearchProof, BindingProximitySearchRuntime,
+    BindingSecondaryIndexSnapshot, BindingVersionedMap, BindingVersionedTransaction,
+    CatalogAcceleratorKindRecord, CompositeAcceleratorConfigRecord, CompositeBaseKindRecord,
+    CompositeBuildLimitsRecord, CompositeBuildOrRebuildKindRecord,
+    CompositeBuildOrRebuildOutcomeRecord, CompositeBuildOutcomeRecord, CompositeBuildStatsRecord,
+    CompositeRebuildOptionsRecord, DistanceMetricRecord, ExactProximityRecordRecord,
+    FullRebuildReasonKindRecord, FullRebuildReasonRecord, HnswBuildLimitsRecord,
+    HnswBuildStatsRecord, HnswConfigRecord, HnswRoutingVectorEncodingRecord,
+    IndexBuildResultRecord, IndexEntryRecord, IndexMatchRecord, IndexPageRecord,
+    IndexProjectionRecord, IndexVerificationRecord, IndexedMapHealthRecord,
     IndexedMapMetricsRecord, IndexedRetentionRecord, IndexedSnapshotIdRecord, IndexedSourceRecord,
     IndexedUpdateKind, IndexedUpdateRecord, IndexedVersionRecord, KeyProofRecord, MapUpdateKind,
     MapUpdateRecord, MapVersionRecord, MultiKeyProofRecord, ProductQuantizationBuildLimitsRecord,
@@ -3169,6 +3172,97 @@ pub struct NativePortableProximitySearchRuntime {
 }
 
 #[napi]
+pub struct NativePortableProximityCancellationToken {
+    inner: Arc<BindingProximityCancellationToken>,
+}
+
+#[napi]
+impl NativePortableProximityCancellationToken {
+    #[napi(constructor)]
+    pub fn new() -> Self {
+        Self {
+            inner: Arc::new(BindingProximityCancellationToken::new()),
+        }
+    }
+
+    #[napi]
+    pub fn cancel(&self) {
+        self.inner.cancel();
+    }
+
+    #[napi(js_name = "isCancelled")]
+    pub fn is_cancelled(&self) -> bool {
+        self.inner.is_cancelled()
+    }
+}
+
+pub struct NodePortableProximitySearchTask {
+    target: NodePortableProximitySearchTarget,
+    request: ProximitySearchRequestRecord,
+    runtime: Option<Arc<BindingProximitySearchRuntime>>,
+    cancellation: Arc<BindingProximityCancellationToken>,
+}
+
+enum NodePortableProximitySearchTarget {
+    Map(Arc<BindingProximityMap>),
+    Session(Arc<BindingProximityReadSession>),
+    Hnsw(Arc<BindingHnswIndex>, Arc<BindingProximityMap>),
+    ProductQuantized(Arc<BindingProductQuantizer>, Arc<BindingProximityMap>),
+    Composite(Arc<BindingCompositeAccelerator>, Arc<BindingProximityMap>),
+    Catalog(Arc<BindingAcceleratorCatalog>, Arc<BindingProximityMap>),
+}
+
+impl Task for NodePortableProximitySearchTask {
+    type Output = ProximitySearchResultRecord;
+    type JsValue = NodePortableSearchResult;
+
+    fn compute(&mut self) -> Result<Self::Output> {
+        let result = match &self.target {
+            NodePortableProximitySearchTarget::Map(map) => map.search_cancellable(
+                self.request.clone(),
+                self.runtime.clone(),
+                Arc::clone(&self.cancellation),
+            ),
+            NodePortableProximitySearchTarget::Session(session) => session.search_cancellable(
+                self.request.clone(),
+                self.runtime.clone(),
+                Arc::clone(&self.cancellation),
+            ),
+            NodePortableProximitySearchTarget::Hnsw(index, map) => index.search_cancellable(
+                Arc::clone(map),
+                self.request.clone(),
+                self.runtime.clone(),
+                Arc::clone(&self.cancellation),
+            ),
+            NodePortableProximitySearchTarget::ProductQuantized(index, map) => index
+                .search_cancellable(
+                    Arc::clone(map),
+                    self.request.clone(),
+                    self.runtime.clone(),
+                    Arc::clone(&self.cancellation),
+                ),
+            NodePortableProximitySearchTarget::Composite(index, map) => index.search_cancellable(
+                Arc::clone(map),
+                self.request.clone(),
+                self.runtime.clone(),
+                Arc::clone(&self.cancellation),
+            ),
+            NodePortableProximitySearchTarget::Catalog(catalog, map) => catalog.search_cancellable(
+                Arc::clone(map),
+                self.request.clone(),
+                self.runtime.clone(),
+                Arc::clone(&self.cancellation),
+            ),
+        };
+        result.map_err(to_napi_error)
+    }
+
+    fn resolve(&mut self, _env: Env, output: Self::Output) -> Result<Self::JsValue> {
+        Ok(output.into())
+    }
+}
+
+#[napi]
 impl NativePortableProximitySearchRuntime {
     #[napi]
     pub fn policy(&self) -> NodePortableProximitySearchRuntimePolicy {
@@ -3263,6 +3357,25 @@ impl NativePortableHnswIndex {
             .map_err(to_napi_error)
     }
 
+    #[napi(js_name = "searchCancellable")]
+    pub fn search_cancellable(
+        &self,
+        map: &NativePortableProximityMap,
+        request: NodePortableSearchRequest,
+        runtime: Option<&NativePortableProximitySearchRuntime>,
+        cancellation: &NativePortableProximityCancellationToken,
+    ) -> Result<AsyncTask<NodePortableProximitySearchTask>> {
+        Ok(AsyncTask::new(NodePortableProximitySearchTask {
+            target: NodePortableProximitySearchTarget::Hnsw(
+                Arc::clone(&self.inner),
+                Arc::clone(&map.inner),
+            ),
+            request: request.try_into()?,
+            runtime: runtime.map(|value| Arc::clone(&value.inner)),
+            cancellation: Arc::clone(&cancellation.inner),
+        }))
+    }
+
     #[napi(js_name = "proveSearch")]
     pub fn prove_search(
         &self,
@@ -3355,6 +3468,25 @@ impl NativePortableProductQuantizer {
             )
             .map(Into::into)
             .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "searchCancellable")]
+    pub fn search_cancellable(
+        &self,
+        map: &NativePortableProximityMap,
+        request: NodePortableSearchRequest,
+        runtime: Option<&NativePortableProximitySearchRuntime>,
+        cancellation: &NativePortableProximityCancellationToken,
+    ) -> Result<AsyncTask<NodePortableProximitySearchTask>> {
+        Ok(AsyncTask::new(NodePortableProximitySearchTask {
+            target: NodePortableProximitySearchTarget::ProductQuantized(
+                Arc::clone(&self.inner),
+                Arc::clone(&map.inner),
+            ),
+            request: request.try_into()?,
+            runtime: runtime.map(|value| Arc::clone(&value.inner)),
+            cancellation: Arc::clone(&cancellation.inner),
+        }))
     }
 
     #[napi(js_name = "proveSearch")]
@@ -3569,6 +3701,25 @@ impl NativePortableCompositeAccelerator {
             .map_err(to_napi_error)
     }
 
+    #[napi(js_name = "searchCancellable")]
+    pub fn search_cancellable(
+        &self,
+        map: &NativePortableProximityMap,
+        request: NodePortableSearchRequest,
+        runtime: Option<&NativePortableProximitySearchRuntime>,
+        cancellation: &NativePortableProximityCancellationToken,
+    ) -> Result<AsyncTask<NodePortableProximitySearchTask>> {
+        Ok(AsyncTask::new(NodePortableProximitySearchTask {
+            target: NodePortableProximitySearchTarget::Composite(
+                Arc::clone(&self.inner),
+                Arc::clone(&map.inner),
+            ),
+            request: request.try_into()?,
+            runtime: runtime.map(|value| Arc::clone(&value.inner)),
+            cancellation: Arc::clone(&cancellation.inner),
+        }))
+    }
+
     #[napi(js_name = "proveSearch")]
     pub fn prove_search(
         &self,
@@ -3635,6 +3786,25 @@ impl NativePortableAcceleratorCatalog {
             )
             .map(Into::into)
             .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "searchCancellable")]
+    pub fn search_cancellable(
+        &self,
+        map: &NativePortableProximityMap,
+        request: NodePortableSearchRequest,
+        runtime: Option<&NativePortableProximitySearchRuntime>,
+        cancellation: &NativePortableProximityCancellationToken,
+    ) -> Result<AsyncTask<NodePortableProximitySearchTask>> {
+        Ok(AsyncTask::new(NodePortableProximitySearchTask {
+            target: NodePortableProximitySearchTarget::Catalog(
+                Arc::clone(&self.inner),
+                Arc::clone(&map.inner),
+            ),
+            request: request.try_into()?,
+            runtime: runtime.map(|value| Arc::clone(&value.inner)),
+            cancellation: Arc::clone(&cancellation.inner),
+        }))
     }
 
     #[napi(js_name = "proveSearch")]
@@ -3949,6 +4119,26 @@ impl NativePortableProximityMap {
             .map_err(to_napi_error)
     }
 
+    #[napi(js_name = "cancellationToken")]
+    pub fn cancellation_token(&self) -> NativePortableProximityCancellationToken {
+        NativePortableProximityCancellationToken::new()
+    }
+
+    #[napi(js_name = "searchCancellable")]
+    pub fn search_cancellable(
+        &self,
+        request: NodePortableSearchRequest,
+        runtime: Option<&NativePortableProximitySearchRuntime>,
+        cancellation: &NativePortableProximityCancellationToken,
+    ) -> Result<AsyncTask<NodePortableProximitySearchTask>> {
+        Ok(AsyncTask::new(NodePortableProximitySearchTask {
+            target: NodePortableProximitySearchTarget::Map(Arc::clone(&self.inner)),
+            request: request.try_into()?,
+            runtime: runtime.map(|runtime| Arc::clone(&runtime.inner)),
+            cancellation: Arc::clone(&cancellation.inner),
+        }))
+    }
+
     #[napi(js_name = "searchWithRuntime")]
     pub fn search_with_runtime(
         &self,
@@ -4093,6 +4283,26 @@ impl NativePortableProximityReadSession {
             .search_with_runtime(request.try_into()?, Arc::clone(&runtime.inner))
             .map(Into::into)
             .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "cancellationToken")]
+    pub fn cancellation_token(&self) -> NativePortableProximityCancellationToken {
+        NativePortableProximityCancellationToken::new()
+    }
+
+    #[napi(js_name = "searchCancellable")]
+    pub fn search_cancellable(
+        &self,
+        request: NodePortableSearchRequest,
+        runtime: Option<&NativePortableProximitySearchRuntime>,
+        cancellation: &NativePortableProximityCancellationToken,
+    ) -> Result<AsyncTask<NodePortableProximitySearchTask>> {
+        Ok(AsyncTask::new(NodePortableProximitySearchTask {
+            target: NodePortableProximitySearchTarget::Session(Arc::clone(&self.inner)),
+            request: request.try_into()?,
+            runtime: runtime.map(|value| Arc::clone(&value.inner)),
+            cancellation: Arc::clone(&cancellation.inner),
+        }))
     }
 
     #[napi]

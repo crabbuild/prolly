@@ -27,6 +27,7 @@ export {
   AcceleratorCatalog,
   CompositeAccelerator,
   ProductQuantizer,
+  ProximityCancellationToken,
   ProximityMap,
   ProximityReadSession,
   ProximitySearchRuntime,

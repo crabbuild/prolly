@@ -452,7 +452,6 @@ def _uniffi_load_indirect():
     override = os.environ.get("PROLLY_BINDINGS_LIBRARY")
     if override:
         return ctypes.cdll.LoadLibrary(override)
-
     if sys.platform == "darwin":
         libname = "lib{}.dylib"
     elif sys.platform.startswith("win"):
@@ -762,6 +761,8 @@ def _uniffi_check_api_checksums(lib):
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_search() != 55802:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_search_cancellable() != 34098:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_search_with_runtime() != 53678:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_source_descriptor() != 29366:
@@ -784,6 +785,8 @@ def _uniffi_check_api_checksums(lib):
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_search() != 7681:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_search_cancellable() != 48784:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_search_with_runtime() != 35233:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_shadow_count() != 49297:
@@ -797,6 +800,8 @@ def _uniffi_check_api_checksums(lib):
     if lib.uniffi_prolly_bindings_checksum_method_bindinghnswindex_prove_search() != 59719:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_bindinghnswindex_search() != 59229:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_bindinghnswindex_search_cancellable() != 3123:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_bindinghnswindex_search_with_runtime() != 42474:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
@@ -984,9 +989,17 @@ def _uniffi_check_api_checksums(lib):
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_bindingproductquantizer_search() != 14867:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_bindingproductquantizer_search_cancellable() != 36527:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_bindingproductquantizer_search_with_runtime() != 59197:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_bindingproductquantizer_source_descriptor() != 61276:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_constructor_bindingproximitycancellationtoken_new() != 17518:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_bindingproximitycancellationtoken_cancel() != 22166:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_bindingproximitycancellationtoken_is_cancelled() != 33821:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_accelerator_catalog() != 27841:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
@@ -1040,6 +1053,8 @@ def _uniffi_check_api_checksums(lib):
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_search() != 3285:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_search_cancellable() != 6128:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_search_with_runtime() != 38486:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_verify() != 62601:
@@ -1053,6 +1068,8 @@ def _uniffi_check_api_checksums(lib):
     if lib.uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_scan_records() != 20861:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_search() != 12060:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_search_cancellable() != 7278:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_search_with_runtime() != 989:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
@@ -2007,6 +2024,16 @@ _UniffiLib.uniffi_prolly_bindings_fn_free_bindingproductquantizer.argtypes = (
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UniffiLib.uniffi_prolly_bindings_fn_free_bindingproductquantizer.restype = None
+_UniffiLib.uniffi_prolly_bindings_fn_clone_bindingproximitycancellationtoken.argtypes = (
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_clone_bindingproximitycancellationtoken.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_free_bindingproximitycancellationtoken.argtypes = (
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_free_bindingproximitycancellationtoken.restype = None
 _UniffiLib.uniffi_prolly_bindings_fn_clone_bindingproximitymap.argtypes = (
     ctypes.c_uint64,
     ctypes.POINTER(_UniffiRustCallStatus),
@@ -3134,6 +3161,15 @@ _UniffiLib.uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_search.arg
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UniffiLib.uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_search.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_search_cancellable.argtypes = (
+    ctypes.c_uint64,
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_search_cancellable.restype = _UniffiRustBuffer
 _UniffiLib.uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_search_with_runtime.argtypes = (
     ctypes.c_uint64,
     ctypes.c_uint64,
@@ -3197,6 +3233,15 @@ _UniffiLib.uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_search.a
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UniffiLib.uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_search.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_search_cancellable.argtypes = (
+    ctypes.c_uint64,
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_search_cancellable.restype = _UniffiRustBuffer
 _UniffiLib.uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_search_with_runtime.argtypes = (
     ctypes.c_uint64,
     ctypes.c_uint64,
@@ -3240,6 +3285,15 @@ _UniffiLib.uniffi_prolly_bindings_fn_method_bindinghnswindex_search.argtypes = (
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UniffiLib.uniffi_prolly_bindings_fn_method_bindinghnswindex_search.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindinghnswindex_search_cancellable.argtypes = (
+    ctypes.c_uint64,
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindinghnswindex_search_cancellable.restype = _UniffiRustBuffer
 _UniffiLib.uniffi_prolly_bindings_fn_method_bindinghnswindex_search_with_runtime.argtypes = (
     ctypes.c_uint64,
     ctypes.c_uint64,
@@ -3803,6 +3857,15 @@ _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproductquantizer_search.argty
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproductquantizer_search.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindingproductquantizer_search_cancellable.argtypes = (
+    ctypes.c_uint64,
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindingproductquantizer_search_cancellable.restype = _UniffiRustBuffer
 _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproductquantizer_search_with_runtime.argtypes = (
     ctypes.c_uint64,
     ctypes.c_uint64,
@@ -3816,6 +3879,20 @@ _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproductquantizer_source_descr
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproductquantizer_source_descriptor.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_constructor_bindingproximitycancellationtoken_new.argtypes = (
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_constructor_bindingproximitycancellationtoken_new.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitycancellationtoken_cancel.argtypes = (
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitycancellationtoken_cancel.restype = None
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitycancellationtoken_is_cancelled.argtypes = (
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitycancellationtoken_is_cancelled.restype = ctypes.c_int8
 _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_build_accelerator_catalog.argtypes = (
     ctypes.c_uint64,
     _UniffiRustBuffer,
@@ -3986,6 +4063,14 @@ _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_search.argtypes 
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_search.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_search_cancellable.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_search_cancellable.restype = _UniffiRustBuffer
 _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_search_with_runtime.argtypes = (
     ctypes.c_uint64,
     _UniffiRustBuffer,
@@ -4027,6 +4112,14 @@ _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximityreadsession_search.a
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximityreadsession_search.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximityreadsession_search_cancellable.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximityreadsession_search_cancellable.restype = _UniffiRustBuffer
 _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximityreadsession_search_with_runtime.argtypes = (
     ctypes.c_uint64,
     _UniffiRustBuffer,
@@ -6436,6 +6529,9 @@ _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_prov
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_search.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_search.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_search_cancellable.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_search_cancellable.restype = ctypes.c_uint16
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_search_with_runtime.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_search_with_runtime.restype = ctypes.c_uint16
@@ -6469,6 +6565,9 @@ _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_pr
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_search.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_search.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_search_cancellable.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_search_cancellable.restype = ctypes.c_uint16
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_search_with_runtime.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_search_with_runtime.restype = ctypes.c_uint16
@@ -6490,6 +6589,9 @@ _UniffiLib.uniffi_prolly_bindings_checksum_method_bindinghnswindex_prove_search.
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindinghnswindex_search.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindinghnswindex_search.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindinghnswindex_search_cancellable.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindinghnswindex_search_cancellable.restype = ctypes.c_uint16
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindinghnswindex_search_with_runtime.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindinghnswindex_search_with_runtime.restype = ctypes.c_uint16
@@ -6769,12 +6871,24 @@ _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproductquantizer_qualit
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproductquantizer_search.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproductquantizer_search.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproductquantizer_search_cancellable.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproductquantizer_search_cancellable.restype = ctypes.c_uint16
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproductquantizer_search_with_runtime.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproductquantizer_search_with_runtime.restype = ctypes.c_uint16
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproductquantizer_source_descriptor.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproductquantizer_source_descriptor.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_constructor_bindingproximitycancellationtoken_new.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_constructor_bindingproximitycancellationtoken_new.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximitycancellationtoken_cancel.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximitycancellationtoken_cancel.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximitycancellationtoken_is_cancelled.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximitycancellationtoken_is_cancelled.restype = ctypes.c_uint16
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_accelerator_catalog.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_accelerator_catalog.restype = ctypes.c_uint16
@@ -6853,6 +6967,9 @@ _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_scan_recor
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_search.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_search.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_search_cancellable.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_search_cancellable.restype = ctypes.c_uint16
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_search_with_runtime.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_search_with_runtime.restype = ctypes.c_uint16
@@ -6874,6 +6991,9 @@ _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_sc
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_search.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_search.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_search_cancellable.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_search_cancellable.restype = ctypes.c_uint16
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_search_with_runtime.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_search_with_runtime.restype = ctypes.c_uint16
@@ -11232,6 +11352,125 @@ class _UniffiFfiConverterTypeBindingProximitySearchRuntime:
     def write(cls, value: BindingProximitySearchRuntime, buf: _UniffiRustBuffer):
         buf.write_u64(cls.lower(value))
 
+class _UniffiFfiConverterOptionalTypeBindingProximitySearchRuntime(_UniffiConverterRustBuffer):
+    @classmethod
+    def check_lower(cls, value):
+        if value is not None:
+            _UniffiFfiConverterTypeBindingProximitySearchRuntime.check_lower(value)
+
+    @classmethod
+    def write(cls, value, buf):
+        if value is None:
+            buf.write_u8(0)
+            return
+
+        buf.write_u8(1)
+        _UniffiFfiConverterTypeBindingProximitySearchRuntime.write(value, buf)
+
+    @classmethod
+    def read(cls, buf):
+        flag = buf.read_u8()
+        if flag == 0:
+            return None
+        elif flag == 1:
+            return _UniffiFfiConverterTypeBindingProximitySearchRuntime.read(buf)
+        else:
+            raise InternalError("Unexpected flag byte for optional type")
+
+
+class BindingProximityCancellationTokenProtocol(typing.Protocol):
+
+    def cancel(self, ) -> None:
+        raise NotImplementedError
+    def is_cancelled(self, ) -> bool:
+        raise NotImplementedError
+
+class BindingProximityCancellationToken(BindingProximityCancellationTokenProtocol):
+
+    _handle: ctypes.c_uint64
+    def __init__(self, ):
+        _uniffi_lowered_args = (
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeBindingProximityCancellationToken.lift
+        _uniffi_error_converter = None
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_constructor_bindingproximitycancellationtoken_new,
+            *_uniffi_lowered_args,
+        )
+        self._handle = _uniffi_ffi_result
+
+    def __del__(self):
+        # In case of partial initialization of instances.
+        handle = getattr(self, "_handle", None)
+        if handle is not None:
+            _uniffi_rust_call(_UniffiLib.uniffi_prolly_bindings_fn_free_bindingproximitycancellationtoken, handle)
+
+    def _uniffi_clone_handle(self):
+        return _uniffi_rust_call(_UniffiLib.uniffi_prolly_bindings_fn_clone_bindingproximitycancellationtoken, self._handle)
+
+    # Used by alternative constructors or any methods which return this type.
+    @classmethod
+    def _uniffi_make_instance(cls, handle):
+        # Lightly yucky way to bypass the usual __init__ logic
+        # and just create a new instance with the required handle.
+        inst = cls.__new__(cls)
+        inst._handle = handle
+        return inst
+    def cancel(self, ) -> None:
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+        )
+        _uniffi_lift_return = lambda val: None
+        _uniffi_error_converter = None
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitycancellationtoken_cancel,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def is_cancelled(self, ) -> bool:
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterBoolean.lift
+        _uniffi_error_converter = None
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitycancellationtoken_is_cancelled,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+
+
+
+
+
+class _UniffiFfiConverterTypeBindingProximityCancellationToken:
+    @staticmethod
+    def lift(value: int) -> BindingProximityCancellationToken:
+        return BindingProximityCancellationToken._uniffi_make_instance(value)
+
+    @staticmethod
+    def check_lower(value: BindingProximityCancellationToken):
+        if not isinstance(value, BindingProximityCancellationToken):
+            raise TypeError("Expected BindingProximityCancellationToken instance, {} found".format(type(value).__name__))
+
+    @staticmethod
+    def lower(value: BindingProximityCancellationToken) -> ctypes.c_uint64:
+        return value._uniffi_clone_handle()
+
+    @classmethod
+    def read(cls, buf: _UniffiRustBuffer) -> BindingProximityCancellationToken:
+        ptr = buf.read_u64()
+        if ptr == 0:
+            raise InternalError("Raw handle value was null")
+        return cls.lift(ptr)
+
+    @classmethod
+    def write(cls, value: BindingProximityCancellationToken, buf: _UniffiRustBuffer):
+        buf.write_u64(cls.lower(value))
+
 
 class BindingHnswIndexProtocol(typing.Protocol):
 
@@ -11244,6 +11483,8 @@ class BindingHnswIndexProtocol(typing.Protocol):
     def prove_search(self, map: BindingProximityMap,request: ProximitySearchRequestRecord,limits: ContentGraphLimitsRecord) -> BindingProximitySearchProof:
         raise NotImplementedError
     def search(self, map: BindingProximityMap,request: ProximitySearchRequestRecord) -> ProximitySearchResultRecord:
+        raise NotImplementedError
+    def search_cancellable(self, map: BindingProximityMap,request: ProximitySearchRequestRecord,runtime: typing.Optional[BindingProximitySearchRuntime],cancellation: BindingProximityCancellationToken) -> ProximitySearchResultRecord:
         raise NotImplementedError
     def search_with_runtime(self, map: BindingProximityMap,request: ProximitySearchRequestRecord,runtime: BindingProximitySearchRuntime) -> ProximitySearchResultRecord:
         raise NotImplementedError
@@ -11346,6 +11587,30 @@ class BindingHnswIndex(BindingHnswIndexProtocol):
         _uniffi_ffi_result = _uniffi_rust_call_with_error(
             _uniffi_error_converter,
             _UniffiLib.uniffi_prolly_bindings_fn_method_bindinghnswindex_search,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def search_cancellable(self, map: BindingProximityMap,request: ProximitySearchRequestRecord,runtime: typing.Optional[BindingProximitySearchRuntime],cancellation: BindingProximityCancellationToken) -> ProximitySearchResultRecord:
+
+        _UniffiFfiConverterTypeBindingProximityMap.check_lower(map)
+
+        _UniffiFfiConverterTypeProximitySearchRequestRecord.check_lower(request)
+
+        _UniffiFfiConverterOptionalTypeBindingProximitySearchRuntime.check_lower(runtime)
+
+        _UniffiFfiConverterTypeBindingProximityCancellationToken.check_lower(cancellation)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeBindingProximityMap.lower(map),
+            _UniffiFfiConverterTypeProximitySearchRequestRecord.lower(request),
+            _UniffiFfiConverterOptionalTypeBindingProximitySearchRuntime.lower(runtime),
+            _UniffiFfiConverterTypeBindingProximityCancellationToken.lower(cancellation),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeProximitySearchResultRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_bindinghnswindex_search_cancellable,
             *_uniffi_lowered_args,
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
@@ -11546,6 +11811,8 @@ class BindingProductQuantizerProtocol(typing.Protocol):
         raise NotImplementedError
     def search(self, map: BindingProximityMap,request: ProximitySearchRequestRecord) -> ProximitySearchResultRecord:
         raise NotImplementedError
+    def search_cancellable(self, map: BindingProximityMap,request: ProximitySearchRequestRecord,runtime: typing.Optional[BindingProximitySearchRuntime],cancellation: BindingProximityCancellationToken) -> ProximitySearchResultRecord:
+        raise NotImplementedError
     def search_with_runtime(self, map: BindingProximityMap,request: ProximitySearchRequestRecord,runtime: BindingProximitySearchRuntime) -> ProximitySearchResultRecord:
         raise NotImplementedError
     def source_descriptor(self, ) -> bytes:
@@ -11647,6 +11914,30 @@ class BindingProductQuantizer(BindingProductQuantizerProtocol):
         _uniffi_ffi_result = _uniffi_rust_call_with_error(
             _uniffi_error_converter,
             _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproductquantizer_search,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def search_cancellable(self, map: BindingProximityMap,request: ProximitySearchRequestRecord,runtime: typing.Optional[BindingProximitySearchRuntime],cancellation: BindingProximityCancellationToken) -> ProximitySearchResultRecord:
+
+        _UniffiFfiConverterTypeBindingProximityMap.check_lower(map)
+
+        _UniffiFfiConverterTypeProximitySearchRequestRecord.check_lower(request)
+
+        _UniffiFfiConverterOptionalTypeBindingProximitySearchRuntime.check_lower(runtime)
+
+        _UniffiFfiConverterTypeBindingProximityCancellationToken.check_lower(cancellation)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeBindingProximityMap.lower(map),
+            _UniffiFfiConverterTypeProximitySearchRequestRecord.lower(request),
+            _UniffiFfiConverterOptionalTypeBindingProximitySearchRuntime.lower(runtime),
+            _UniffiFfiConverterTypeBindingProximityCancellationToken.lower(cancellation),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeProximitySearchResultRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproductquantizer_search_cancellable,
             *_uniffi_lowered_args,
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
@@ -11772,6 +12063,8 @@ class BindingAcceleratorCatalogProtocol(typing.Protocol):
         raise NotImplementedError
     def search(self, map: BindingProximityMap,request: ProximitySearchRequestRecord) -> ProximitySearchResultRecord:
         raise NotImplementedError
+    def search_cancellable(self, map: BindingProximityMap,request: ProximitySearchRequestRecord,runtime: typing.Optional[BindingProximitySearchRuntime],cancellation: BindingProximityCancellationToken) -> ProximitySearchResultRecord:
+        raise NotImplementedError
     def search_with_runtime(self, map: BindingProximityMap,request: ProximitySearchRequestRecord,runtime: BindingProximitySearchRuntime) -> ProximitySearchResultRecord:
         raise NotImplementedError
     def source_descriptor(self, ) -> bytes:
@@ -11861,6 +12154,30 @@ class BindingAcceleratorCatalog(BindingAcceleratorCatalogProtocol):
         _uniffi_ffi_result = _uniffi_rust_call_with_error(
             _uniffi_error_converter,
             _UniffiLib.uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_search,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def search_cancellable(self, map: BindingProximityMap,request: ProximitySearchRequestRecord,runtime: typing.Optional[BindingProximitySearchRuntime],cancellation: BindingProximityCancellationToken) -> ProximitySearchResultRecord:
+
+        _UniffiFfiConverterTypeBindingProximityMap.check_lower(map)
+
+        _UniffiFfiConverterTypeProximitySearchRequestRecord.check_lower(request)
+
+        _UniffiFfiConverterOptionalTypeBindingProximitySearchRuntime.check_lower(runtime)
+
+        _UniffiFfiConverterTypeBindingProximityCancellationToken.check_lower(cancellation)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeBindingProximityMap.lower(map),
+            _UniffiFfiConverterTypeProximitySearchRequestRecord.lower(request),
+            _UniffiFfiConverterOptionalTypeBindingProximitySearchRuntime.lower(runtime),
+            _UniffiFfiConverterTypeBindingProximityCancellationToken.lower(cancellation),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeProximitySearchResultRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_search_cancellable,
             *_uniffi_lowered_args,
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
@@ -13502,6 +13819,8 @@ class BindingProximityReadSessionProtocol(typing.Protocol):
         raise NotImplementedError
     def search(self, request: ProximitySearchRequestRecord) -> ProximitySearchResultRecord:
         raise NotImplementedError
+    def search_cancellable(self, request: ProximitySearchRequestRecord,runtime: typing.Optional[BindingProximitySearchRuntime],cancellation: BindingProximityCancellationToken) -> ProximitySearchResultRecord:
+        raise NotImplementedError
     def search_with_runtime(self, request: ProximitySearchRequestRecord,runtime: BindingProximitySearchRuntime) -> ProximitySearchResultRecord:
         raise NotImplementedError
 
@@ -13598,6 +13917,27 @@ class BindingProximityReadSession(BindingProximityReadSessionProtocol):
         _uniffi_ffi_result = _uniffi_rust_call_with_error(
             _uniffi_error_converter,
             _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximityreadsession_search,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def search_cancellable(self, request: ProximitySearchRequestRecord,runtime: typing.Optional[BindingProximitySearchRuntime],cancellation: BindingProximityCancellationToken) -> ProximitySearchResultRecord:
+
+        _UniffiFfiConverterTypeProximitySearchRequestRecord.check_lower(request)
+
+        _UniffiFfiConverterOptionalTypeBindingProximitySearchRuntime.check_lower(runtime)
+
+        _UniffiFfiConverterTypeBindingProximityCancellationToken.check_lower(cancellation)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeProximitySearchRequestRecord.lower(request),
+            _UniffiFfiConverterOptionalTypeBindingProximitySearchRuntime.lower(runtime),
+            _UniffiFfiConverterTypeBindingProximityCancellationToken.lower(cancellation),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeProximitySearchResultRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximityreadsession_search_cancellable,
             *_uniffi_lowered_args,
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
@@ -13787,6 +14127,8 @@ class BindingProximityMapProtocol(typing.Protocol):
     def scan_records(self, visitor: ProximityRecordVisitorCallback) -> int:
         raise NotImplementedError
     def search(self, request: ProximitySearchRequestRecord) -> ProximitySearchResultRecord:
+        raise NotImplementedError
+    def search_cancellable(self, request: ProximitySearchRequestRecord,runtime: typing.Optional[BindingProximitySearchRuntime],cancellation: BindingProximityCancellationToken) -> ProximitySearchResultRecord:
         raise NotImplementedError
     def search_with_runtime(self, request: ProximitySearchRequestRecord,runtime: BindingProximitySearchRuntime) -> ProximitySearchResultRecord:
         raise NotImplementedError
@@ -14249,6 +14591,27 @@ class BindingProximityMap(BindingProximityMapProtocol):
             *_uniffi_lowered_args,
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
+    def search_cancellable(self, request: ProximitySearchRequestRecord,runtime: typing.Optional[BindingProximitySearchRuntime],cancellation: BindingProximityCancellationToken) -> ProximitySearchResultRecord:
+
+        _UniffiFfiConverterTypeProximitySearchRequestRecord.check_lower(request)
+
+        _UniffiFfiConverterOptionalTypeBindingProximitySearchRuntime.check_lower(runtime)
+
+        _UniffiFfiConverterTypeBindingProximityCancellationToken.check_lower(cancellation)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeProximitySearchRequestRecord.lower(request),
+            _UniffiFfiConverterOptionalTypeBindingProximitySearchRuntime.lower(runtime),
+            _UniffiFfiConverterTypeBindingProximityCancellationToken.lower(cancellation),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeProximitySearchResultRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_search_cancellable,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
     def search_with_runtime(self, request: ProximitySearchRequestRecord,runtime: BindingProximitySearchRuntime) -> ProximitySearchResultRecord:
 
         _UniffiFfiConverterTypeProximitySearchRequestRecord.check_lower(request)
@@ -14329,6 +14692,8 @@ class BindingCompositeAcceleratorProtocol(typing.Protocol):
     def prove_search(self, map: BindingProximityMap,request: ProximitySearchRequestRecord,limits: ContentGraphLimitsRecord) -> BindingProximitySearchProof:
         raise NotImplementedError
     def search(self, map: BindingProximityMap,request: ProximitySearchRequestRecord) -> ProximitySearchResultRecord:
+        raise NotImplementedError
+    def search_cancellable(self, map: BindingProximityMap,request: ProximitySearchRequestRecord,runtime: typing.Optional[BindingProximitySearchRuntime],cancellation: BindingProximityCancellationToken) -> ProximitySearchResultRecord:
         raise NotImplementedError
     def search_with_runtime(self, map: BindingProximityMap,request: ProximitySearchRequestRecord,runtime: BindingProximitySearchRuntime) -> ProximitySearchResultRecord:
         raise NotImplementedError
@@ -14479,6 +14844,30 @@ class BindingCompositeAccelerator(BindingCompositeAcceleratorProtocol):
         _uniffi_ffi_result = _uniffi_rust_call_with_error(
             _uniffi_error_converter,
             _UniffiLib.uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_search,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def search_cancellable(self, map: BindingProximityMap,request: ProximitySearchRequestRecord,runtime: typing.Optional[BindingProximitySearchRuntime],cancellation: BindingProximityCancellationToken) -> ProximitySearchResultRecord:
+
+        _UniffiFfiConverterTypeBindingProximityMap.check_lower(map)
+
+        _UniffiFfiConverterTypeProximitySearchRequestRecord.check_lower(request)
+
+        _UniffiFfiConverterOptionalTypeBindingProximitySearchRuntime.check_lower(runtime)
+
+        _UniffiFfiConverterTypeBindingProximityCancellationToken.check_lower(cancellation)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeBindingProximityMap.lower(map),
+            _UniffiFfiConverterTypeProximitySearchRequestRecord.lower(request),
+            _UniffiFfiConverterOptionalTypeBindingProximitySearchRuntime.lower(runtime),
+            _UniffiFfiConverterTypeBindingProximityCancellationToken.lower(cancellation),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeProximitySearchResultRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_search_cancellable,
             *_uniffi_lowered_args,
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
@@ -33995,6 +34384,8 @@ __all__ = [
     "BindingProximitySearchProofProtocol",
     "BindingProximitySearchRuntime",
     "BindingProximitySearchRuntimeProtocol",
+    "BindingProximityCancellationToken",
+    "BindingProximityCancellationTokenProtocol",
     "BindingHnswIndex",
     "BindingHnswIndexProtocol",
     "BindingProductQuantizer",

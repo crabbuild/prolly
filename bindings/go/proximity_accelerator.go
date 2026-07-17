@@ -719,6 +719,33 @@ func (a *CompositeAccelerator) SearchWithRuntime(
 	}
 	return decodeProximitySearchResultBytes(raw)
 }
+
+func (a *CompositeAccelerator) SearchCancellable(
+	ctx context.Context,
+	proximity *ProximityMap,
+	request SearchRequest,
+	searchRuntime *ProximitySearchRuntime,
+	cancellation *ProximityCancellationToken,
+) (SearchResult, error) {
+	index, indexUnlock, err := a.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer indexUnlock()
+	mapHandle, _, mapUnlock, err := proximity.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer mapUnlock()
+	return runPortableCancellableSearch(
+		ctx, request, searchRuntime, cancellation,
+		func(encoded []byte, runtimeHandle *uint64, cancellationHandle uint64) ([]byte, error) {
+			return ffiCompositeSearchCancellable(
+				index, mapHandle, encoded, runtimeHandle, cancellationHandle,
+			)
+		},
+	)
+}
 func (a *CompositeAccelerator) ProveSearch(proximity *ProximityMap, request SearchRequest) (*ProximitySearchProof, error) {
 	encoded, err := encodeProximitySearchRequest(cloneSearchRequest(request))
 	if err != nil {
@@ -960,6 +987,33 @@ func (a *AcceleratorCatalog) SearchWithRuntime(
 		return SearchResult{}, err
 	}
 	return decodeProximitySearchResultBytes(raw)
+}
+
+func (a *AcceleratorCatalog) SearchCancellable(
+	ctx context.Context,
+	proximity *ProximityMap,
+	request SearchRequest,
+	searchRuntime *ProximitySearchRuntime,
+	cancellation *ProximityCancellationToken,
+) (SearchResult, error) {
+	index, indexUnlock, err := a.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer indexUnlock()
+	mapHandle, _, mapUnlock, err := proximity.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer mapUnlock()
+	return runPortableCancellableSearch(
+		ctx, request, searchRuntime, cancellation,
+		func(encoded []byte, runtimeHandle *uint64, cancellationHandle uint64) ([]byte, error) {
+			return ffiCatalogSearchCancellable(
+				index, mapHandle, encoded, runtimeHandle, cancellationHandle,
+			)
+		},
+	)
 }
 func (a *AcceleratorCatalog) ProveSearch(proximity *ProximityMap, request SearchRequest) (*ProximitySearchProof, error) {
 	encoded, err := encodeProximitySearchRequest(cloneSearchRequest(request))

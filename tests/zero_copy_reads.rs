@@ -10,7 +10,7 @@ use std::{
 use prolly::{AsyncProlly, SyncStoreAsAsync};
 use prolly::{
     BlobRef, BorrowedMergeResolver, Config, ConflictRef, Error, MemStore, MergeDecision, Mutation,
-    NodeLayoutSpec, Prolly, ValueRef, ValueRefView,
+    NodeLayoutSpec, Prolly, Store, ValueRef, ValueRefView,
 };
 
 struct Select(MergeDecision);
@@ -578,6 +578,24 @@ fn borrowed_range_and_prefix_merge_do_not_modify_outside_selection() {
         prolly.get(&prefixed, b"key/000150").unwrap(),
         Some(b"left-150".to_vec())
     );
+}
+
+#[cfg(feature = "async-store")]
+#[test]
+fn sync_to_async_adapter_preserves_native_shared_reads() {
+    block_on(async {
+        let store = Arc::new(MemStore::new());
+        Store::put(&store, b"shared", b"retained").unwrap();
+        let adapter = SyncStoreAsAsync::new(store.clone());
+
+        assert!(prolly::AsyncStore::has_native_shared_reads(&adapter));
+        let direct = Store::get_shared(&store, b"shared").unwrap().unwrap();
+        let adapted = prolly::AsyncStore::get_shared(&adapter, b"shared")
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(Arc::ptr_eq(&direct, &adapted));
+    });
 }
 
 #[cfg(feature = "async-store")]

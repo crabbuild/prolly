@@ -56,6 +56,10 @@ pub(crate) fn query_kernel_calls() -> usize {
     QUERY_KERNEL_CALLS.with(std::cell::Cell::get)
 }
 
+#[cfg_attr(
+    not(any(target_arch = "x86", target_arch = "x86_64", target_arch = "aarch64")),
+    allow(unused_variables)
+)]
 fn fill_products(metric: DistanceMetric, left: &[f32], right: &[f32], output: &mut [f64]) -> bool {
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     if std::arch::is_x86_feature_detected!("sse2") {
@@ -136,6 +140,7 @@ unsafe fn fill_aarch64_neon(
     fill_tail(metric, left, right, output, index);
 }
 
+#[cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "aarch64"))]
 fn fill_tail(
     metric: DistanceMetric,
     left: &[f32],

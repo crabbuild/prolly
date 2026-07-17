@@ -136,6 +136,20 @@ may safely be retained after the callback returns.
 
 - Async and context wrapper smoke coverage for Go, Node/TypeScript, Java,
   Kotlin, and Ruby
+- Application-facing proximity maps, retained read sessions, HNSW indexes,
+  product quantizers, composite accelerators, and accelerator catalogs expose
+  cooperative cancellation plus each language's idiomatic async form
+  (`async`/`await`, Promise, coroutine, `CompletableFuture`, Ruby `Future`,
+  Swift `Task`, and Go `context.Context`/`Future`). Cancellation is checked by
+  the native Rust traversal rather than only by the host wrapper.
+- Retained proximity runtimes preserve cache namespaces, typed validation,
+  physical-read accounting, and backend-owned shared byte allocations when a
+  synchronous binding store enters the Rust async traversal.
+- Browser WASM uses the same native cancellation token and traversal checks.
+  Because a single-threaded browser cannot deliver a new abort event while
+  synchronous WebAssembly is executing, mid-search `AbortSignal` delivery
+  requires a worker or a browser yield; pre-cancelled and explicitly cancelled
+  tokens remain deterministic.
 - Create, read, write, range, diff, merge, named-root, stats, cache, hint, GC,
   sync, large-value, and blob-store flows
 - File-store reopen, SQLite reopen, and SQLite-in-memory smoke coverage for Go,

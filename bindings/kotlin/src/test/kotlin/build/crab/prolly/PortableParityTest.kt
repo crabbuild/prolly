@@ -2,6 +2,7 @@ package build.crab.prolly
 
 import build.crab.prolly.api.Engine
 import build.crab.prolly.api.ProximityRecord
+import build.crab.prolly.api.ProximityCancellationToken
 import build.crab.prolly.api.verifyKeyProof
 import build.crab.prolly.api.verifyMultiKeyProof
 import build.crab.prolly.api.verifyRangePageProof
@@ -208,6 +209,14 @@ class PortableParityTest {
                     val result = index.search(proximity, request)
                     assertEquals(SearchBackendRecord.HNSW, result.backend)
                     assertArrayEquals("vector-00".bytes(), result.neighbors.first().key)
+                    ProximityCancellationToken().use { cancellation ->
+                        cancellation.cancel()
+                        val cancelled = index.searchCancellable(
+                            proximity, request, cancellation = cancellation,
+                        )
+                        assertEquals(SearchCompletionRecord.CANCELLED, cancelled.completion)
+                        assertEquals(emptyList<Any>(), cancelled.neighbors)
+                    }
                     val manifest = index.manifest
                     index.proveSearch(proximity, request).use { proof ->
                         assertEquals(
@@ -438,6 +447,45 @@ class PortableParityTest {
                 versioned.putAsync(key, "v".bytes())
                 key[0] = 'x'.code.toByte()
                 assertArrayEquals("v".bytes(), versioned.get("k".bytes()))
+            }
+        }
+    }
+
+    @Test
+    fun proximitySuspendSearchUsesNativeCooperativeCancellation() = runBlocking {
+        ProllyNative.useLocalDebugLibrary()
+        Engine.memory().use { engine ->
+            engine.buildProximity(
+                2u,
+                (0 until 256).map { index ->
+                    ProximityRecord(
+                        "vector-%04d".format(index).bytes(),
+                        listOf(index.toFloat(), (index % 7).toFloat()),
+                        index.toString().bytes(),
+                    )
+                },
+            ).use { proximity ->
+                engine.proximitySearchRuntime().use { runtime ->
+                    ProximityCancellationToken().use { cancellation ->
+                        cancellation.cancel()
+                        val result = proximity.searchAsync(
+                            exactProximitySearchRequest(listOf(0f, 0f), 10uL),
+                            runtime,
+                            cancellation,
+                        )
+                        assertEquals(SearchCompletionRecord.CANCELLED, result.completion)
+                        assertEquals(emptyList<Any>(), result.neighbors)
+                        proximity.read().use { session ->
+                            val sessionResult = session.searchAsync(
+                                exactProximitySearchRequest(listOf(0f, 0f), 10uL),
+                                runtime,
+                                cancellation,
+                            )
+                            assertEquals(SearchCompletionRecord.CANCELLED, sessionResult.completion)
+                            assertEquals(emptyList<Any>(), sessionResult.neighbors)
+                        }
+                    }
+                }
             }
         }
     }

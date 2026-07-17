@@ -646,8 +646,16 @@ module Prolly
   end
 
   class Future
-    def initialize(&block)
+    def initialize(cancel: nil, &block)
+      @cancel = cancel
       @thread = Thread.new { block.call }
+    end
+
+    def cancel
+      return false unless @cancel
+
+      @cancel.call
+      true
     end
 
     def value

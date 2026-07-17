@@ -164,6 +164,14 @@ final class PortableParityTests: XCTestCase {
             let result = try index.search(proximity, request: request)
             XCTAssertEqual(result.backend, .hnsw)
             XCTAssertEqual(result.neighbors.first?.key, Data("vector-00".utf8))
+            let cancellation = ProximityCancellationToken()
+            cancellation.cancel()
+            let cancelled = try index.searchCancellable(
+                proximity, request: request, cancellation: cancellation
+            )
+            XCTAssertEqual(cancelled.completion, .cancelled)
+            XCTAssertTrue(cancelled.neighbors.isEmpty)
+            cancellation.close()
             let manifest = index.manifest
             let proof = try index.proveSearch(proximity, request: request)
             XCTAssertEqual(try proof.verify(expectedDescriptor: proximity.descriptor).result.backend, .hnsw)
@@ -299,6 +307,43 @@ final class PortableParityTests: XCTestCase {
             key[0] = Character("x").asciiValue!
             _ = try await task.value
             XCTAssertEqual(try versioned.get(Data("k".utf8)), Data("v".utf8))
+        }
+    }
+
+    func testProximityTaskUsesNativeCooperativeCancellation() async throws {
+        try await Engine.withMemory { engine in
+            let proximity = try engine.buildProximity(
+                dimensions: 2,
+                records: (0..<256).map { index in
+                    ProximityRecord(
+                        key: Data(String(format: "vector-%04d", index).utf8),
+                        vector: [Float(index), Float(index % 7)],
+                        value: Data(String(index).utf8)
+                    )
+                }
+            )
+            let runtime = try engine.proximitySearchRuntime()
+            defer { runtime.close() }
+            let cancellation = ProximityCancellationToken()
+            defer { cancellation.close() }
+            cancellation.cancel()
+
+            let result = try await proximity.searchAsync(
+                exactProximitySearchRequest(query: [0, 0], k: 10),
+                runtime: runtime,
+                cancellation: cancellation
+            ).value
+            XCTAssertEqual(result.completion, .cancelled)
+            XCTAssertTrue(result.neighbors.isEmpty)
+            let session = try proximity.read()
+            defer { session.close() }
+            let sessionResult = try await session.searchAsync(
+                exactProximitySearchRequest(query: [0, 0], k: 10),
+                runtime: runtime,
+                cancellation: cancellation
+            ).value
+            XCTAssertEqual(sessionResult.completion, .cancelled)
+            XCTAssertTrue(sessionResult.neighbors.isEmpty)
         }
     }
 

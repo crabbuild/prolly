@@ -1,6 +1,7 @@
 package build.crab.prolly.javaapi;
 
 import build.crab.prolly.api.JavaPortableBridge;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Predicate;
 
 public final class ProximityReadSession implements AutoCloseable {
@@ -18,6 +19,26 @@ public final class ProximityReadSession implements AutoCloseable {
         if (nativeSession == null) throw new IllegalStateException("proximity session is closed");
         return ProximityMap.fromNative(JavaPortableBridge.searchWithRuntime(
                 nativeSession, request.toNative(), runtime.open()));
+    }
+    public SearchResult searchCancellable(
+            SearchRequest request,
+            ProximitySearchRuntime runtime,
+            ProximityCancellationToken cancellation) {
+        if (nativeSession == null) throw new IllegalStateException("proximity session is closed");
+        return ProximityMap.fromNative(JavaPortableBridge.searchCancellable(
+                nativeSession, request.toNative(), runtime == null ? null : runtime.open(),
+                cancellation.open()));
+    }
+    public CompletableFuture<SearchResult> searchAsync(SearchRequest request) {
+        return searchAsync(request, null, null);
+    }
+    public CompletableFuture<SearchResult> searchAsync(
+            SearchRequest request,
+            ProximitySearchRuntime runtime,
+            ProximityCancellationToken cancellation) {
+        var owned = request.ownedCopy();
+        return ProximityMap.cancellableFuture(
+                cancellation, token -> searchCancellable(owned, runtime, token));
     }
     public build.crab.prolly.ExactProximityRecordRecord get(byte[] key) {
         if (nativeSession == null) throw new IllegalStateException("proximity session is closed");

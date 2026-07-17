@@ -79,6 +79,21 @@ ProximitySearchRuntimePolicy = _native.ProximitySearchRuntimePolicyRecord
 ProximitySearchRuntimeStats = _native.ProximitySearchRuntimeStatsRecord
 
 
+class ProximityCancellationToken(_Scoped):
+    def __init__(self):
+        super().__init__()
+        self._inner = _native.BindingProximityCancellationToken()
+
+    def cancel(self) -> None:
+        self._open()
+        self._inner.cancel()
+
+    @property
+    def is_cancelled(self) -> bool:
+        self._open()
+        return self._inner.is_cancelled()
+
+
 class Engine(_Scoped):
     def __init__(self, inner: _native.ProllyEngine):
         super().__init__()
@@ -1101,6 +1116,43 @@ class ProximityMap(_Scoped):
             _owned_proximity_search_request(request), runtime._inner
         )
 
+    def search_cancellable(
+        self,
+        request: _native.ProximitySearchRequestRecord,
+        *,
+        runtime: "ProximitySearchRuntime | None" = None,
+        cancellation: ProximityCancellationToken,
+    ):
+        self._open()
+        cancellation._open()
+        if runtime is not None:
+            runtime._open()
+        return self._inner.search_cancellable(
+            _owned_proximity_search_request(request),
+            None if runtime is None else runtime._inner,
+            cancellation._inner,
+        )
+
+    async def search_async(
+        self,
+        request: _native.ProximitySearchRequestRecord,
+        *,
+        runtime: "ProximitySearchRuntime | None" = None,
+        cancellation: "ProximityCancellationToken | None" = None,
+    ):
+        owned_request = _owned_proximity_search_request(request)
+        token = cancellation or ProximityCancellationToken()
+        try:
+            return await asyncio.to_thread(
+                self.search_cancellable,
+                owned_request,
+                runtime=runtime,
+                cancellation=token,
+            )
+        except asyncio.CancelledError:
+            token.cancel()
+            raise
+
     def search_exact(self, query: Sequence[float], k: int):
         with self.read() as session:
             return session.search_exact(query, k)
@@ -1243,6 +1295,47 @@ class HnswIndex(_Scoped):
             runtime._inner,
         )
 
+    def search_cancellable(
+        self,
+        map: ProximityMap,
+        request: _native.ProximitySearchRequestRecord,
+        *,
+        runtime: ProximitySearchRuntime | None = None,
+        cancellation: ProximityCancellationToken,
+    ) -> _native.ProximitySearchResultRecord:
+        self._open()
+        map._open()
+        cancellation._open()
+        if runtime is not None:
+            runtime._open()
+        return self._inner.search_cancellable(
+            map._inner,
+            _owned_proximity_search_request(request),
+            None if runtime is None else runtime._inner,
+            cancellation._inner,
+        )
+
+    async def search_async(
+        self,
+        map: ProximityMap,
+        request: _native.ProximitySearchRequestRecord,
+        *,
+        runtime: ProximitySearchRuntime | None = None,
+        cancellation: ProximityCancellationToken | None = None,
+    ) -> _native.ProximitySearchResultRecord:
+        token = cancellation or ProximityCancellationToken()
+        try:
+            return await asyncio.to_thread(
+                self.search_cancellable,
+                map,
+                _owned_proximity_search_request(request),
+                runtime=runtime,
+                cancellation=token,
+            )
+        except asyncio.CancelledError:
+            token.cancel()
+            raise
+
     def prove_search(
         self,
         map: ProximityMap,
@@ -1311,6 +1404,47 @@ class ProductQuantizer(_Scoped):
             _owned_proximity_search_request(request),
             runtime._inner,
         )
+
+    def search_cancellable(
+        self,
+        map: ProximityMap,
+        request: _native.ProximitySearchRequestRecord,
+        *,
+        runtime: ProximitySearchRuntime | None = None,
+        cancellation: ProximityCancellationToken,
+    ) -> _native.ProximitySearchResultRecord:
+        self._open()
+        map._open()
+        cancellation._open()
+        if runtime is not None:
+            runtime._open()
+        return self._inner.search_cancellable(
+            map._inner,
+            _owned_proximity_search_request(request),
+            None if runtime is None else runtime._inner,
+            cancellation._inner,
+        )
+
+    async def search_async(
+        self,
+        map: ProximityMap,
+        request: _native.ProximitySearchRequestRecord,
+        *,
+        runtime: ProximitySearchRuntime | None = None,
+        cancellation: ProximityCancellationToken | None = None,
+    ) -> _native.ProximitySearchResultRecord:
+        token = cancellation or ProximityCancellationToken()
+        try:
+            return await asyncio.to_thread(
+                self.search_cancellable,
+                map,
+                _owned_proximity_search_request(request),
+                runtime=runtime,
+                cancellation=token,
+            )
+        except asyncio.CancelledError:
+            token.cancel()
+            raise
 
     def prove_search(
         self,
@@ -1394,6 +1528,47 @@ class CompositeAccelerator(_Scoped):
             runtime._inner,
         )
 
+    def search_cancellable(
+        self,
+        map: ProximityMap,
+        request,
+        *,
+        runtime: ProximitySearchRuntime | None = None,
+        cancellation: ProximityCancellationToken,
+    ):
+        self._open()
+        map._open()
+        cancellation._open()
+        if runtime is not None:
+            runtime._open()
+        return self._inner.search_cancellable(
+            map._inner,
+            _owned_proximity_search_request(request),
+            None if runtime is None else runtime._inner,
+            cancellation._inner,
+        )
+
+    async def search_async(
+        self,
+        map: ProximityMap,
+        request,
+        *,
+        runtime: ProximitySearchRuntime | None = None,
+        cancellation: ProximityCancellationToken | None = None,
+    ):
+        token = cancellation or ProximityCancellationToken()
+        try:
+            return await asyncio.to_thread(
+                self.search_cancellable,
+                map,
+                _owned_proximity_search_request(request),
+                runtime=runtime,
+                cancellation=token,
+            )
+        except asyncio.CancelledError:
+            token.cancel()
+            raise
+
     def prove_search(self, map: ProximityMap, request, limits=None) -> "ProximitySearchProof":
         self._open()
         map._open()
@@ -1446,6 +1621,47 @@ class AcceleratorCatalog(_Scoped):
             runtime._inner,
         )
 
+    def search_cancellable(
+        self,
+        map: ProximityMap,
+        request,
+        *,
+        runtime: ProximitySearchRuntime | None = None,
+        cancellation: ProximityCancellationToken,
+    ):
+        self._open()
+        map._open()
+        cancellation._open()
+        if runtime is not None:
+            runtime._open()
+        return self._inner.search_cancellable(
+            map._inner,
+            _owned_proximity_search_request(request),
+            None if runtime is None else runtime._inner,
+            cancellation._inner,
+        )
+
+    async def search_async(
+        self,
+        map: ProximityMap,
+        request,
+        *,
+        runtime: ProximitySearchRuntime | None = None,
+        cancellation: ProximityCancellationToken | None = None,
+    ):
+        token = cancellation or ProximityCancellationToken()
+        try:
+            return await asyncio.to_thread(
+                self.search_cancellable,
+                map,
+                _owned_proximity_search_request(request),
+                runtime=runtime,
+                cancellation=token,
+            )
+        except asyncio.CancelledError:
+            token.cancel()
+            raise
+
     def prove_search(self, map: ProximityMap, request, limits=None) -> "ProximitySearchProof":
         self._open()
         map._open()
@@ -1485,6 +1701,42 @@ class ProximityReadSession(_Scoped):
         return self._inner.search_with_runtime(
             _owned_proximity_search_request(request), runtime._inner
         )
+
+    def search_cancellable(
+        self,
+        request: _native.ProximitySearchRequestRecord,
+        *,
+        runtime: ProximitySearchRuntime | None = None,
+        cancellation: ProximityCancellationToken,
+    ):
+        self._open()
+        cancellation._open()
+        if runtime is not None:
+            runtime._open()
+        return self._inner.search_cancellable(
+            _owned_proximity_search_request(request),
+            None if runtime is None else runtime._inner,
+            cancellation._inner,
+        )
+
+    async def search_async(
+        self,
+        request: _native.ProximitySearchRequestRecord,
+        *,
+        runtime: ProximitySearchRuntime | None = None,
+        cancellation: ProximityCancellationToken | None = None,
+    ):
+        token = cancellation or ProximityCancellationToken()
+        try:
+            return await asyncio.to_thread(
+                self.search_cancellable,
+                _owned_proximity_search_request(request),
+                runtime=runtime,
+                cancellation=token,
+            )
+        except asyncio.CancelledError:
+            token.cancel()
+            raise
 
     def search_exact(self, query: Sequence[float], k: int):
         return self.search(
@@ -1577,6 +1829,7 @@ __all__ = [
     "MapSnapshot",
     "NeighborView",
     "ProximityMap",
+    "ProximityCancellationToken",
     "ProximityReadSession",
     "ProximityRecord",
     "ProximitySearchRuntime",

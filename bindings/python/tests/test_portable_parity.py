@@ -15,10 +15,12 @@ from prolly import (
     ProximityRecord,
     ProductQuantizationConfigRecord,
     ProximityMutationRecord,
+    ProximityCancellationToken,
     ProximitySearchRequestRecord,
     QueryKernelRecord,
     SearchBackendRecord,
     SearchBudgetRecord,
+    SearchCompletionRecord,
     SearchPolicyKind,
     exact_proximity_search_request,
     verify_key_proof,
@@ -227,6 +229,15 @@ class PortableParityTests(unittest.TestCase):
                 result = index.search(proximity, request)
                 self.assertEqual(result.backend, SearchBackendRecord.HNSW)
                 self.assertEqual(result.neighbors[0].key, b"vector-00")
+                with ProximityCancellationToken() as cancellation:
+                    cancellation.cancel()
+                    cancelled = index.search_cancellable(
+                        proximity, request, cancellation=cancellation
+                    )
+                    self.assertEqual(
+                        cancelled.completion, SearchCompletionRecord.CANCELLED
+                    )
+                    self.assertEqual(cancelled.neighbors, [])
                 manifest = index.manifest
                 with index.prove_search(proximity, request) as proof:
                     self.assertEqual(
@@ -418,6 +429,46 @@ class PortableParityTests(unittest.TestCase):
                 key[:] = b"x"
                 await pending
                 self.assertEqual(versioned.get(b"k"), b"v")
+
+        import asyncio
+
+        asyncio.run(run())
+
+    def test_proximity_async_wrapper_uses_native_cooperative_cancellation(self):
+        async def run():
+            with Engine.memory() as engine:
+                proximity = engine.build_proximity(
+                    dimensions=2,
+                    records=[
+                        ProximityRecord(
+                            f"vector-{index:04}".encode(),
+                            [float(index), float(index % 7)],
+                            index.to_bytes(8, "little"),
+                        )
+                        for index in range(256)
+                    ],
+                )
+                request = exact_proximity_search_request([0.0, 0.0], 10)
+                with engine.proximity_search_runtime() as runtime:
+                    with ProximityCancellationToken() as cancellation:
+                        cancellation.cancel()
+                        result = await proximity.search_async(
+                            request,
+                            runtime=runtime,
+                            cancellation=cancellation,
+                        )
+                        with proximity.read() as session:
+                            session_result = await session.search_async(
+                                request,
+                                runtime=runtime,
+                                cancellation=cancellation,
+                            )
+                self.assertEqual(result.completion, SearchCompletionRecord.CANCELLED)
+                self.assertEqual(result.neighbors, [])
+                self.assertEqual(
+                    session_result.completion, SearchCompletionRecord.CANCELLED
+                )
+                self.assertEqual(session_result.neighbors, [])
 
         import asyncio
 

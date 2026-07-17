@@ -62,6 +62,67 @@ func TestRetainedSearchRuntimeReusesValidatedContent(t *testing.T) {
 	}
 }
 
+func TestProximityFutureUsesNativeCooperativeCancellation(t *testing.T) {
+	config, err := DefaultConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine, err := NewMemoryEngine(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(engine.Close)
+	records := make([]ProximityRecord, 256)
+	for index := range records {
+		records[index] = ProximityRecord{
+			Key:    []byte(fmt.Sprintf("vector-%04d", index)),
+			Vector: []float32{float32(index), float32(index % 7)},
+			Value:  []byte(fmt.Sprint(index)),
+		}
+	}
+	proximity, err := engine.BuildProximity(2, records)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(proximity.Close)
+	runtime, err := engine.NewProximitySearchRuntime()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(runtime.Close)
+	cancellation, err := NewProximityCancellationToken()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(cancellation.Close)
+	if err := cancellation.Cancel(); err != nil {
+		t.Fatal(err)
+	}
+	result, err := proximity.SearchCancellable(
+		context.Background(), ExactSearch([]float32{0, 0}, 10), runtime, cancellation,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Completion != "cancelled" || len(result.Neighbors) != 0 {
+		t.Fatalf("cancelled result = %#v", result)
+	}
+	session, err := proximity.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(session.Close)
+	sessionResult, err := session.SearchCancellable(
+		context.Background(), ExactSearch([]float32{0, 0}, 10), runtime, cancellation,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sessionResult.Completion != "cancelled" || len(sessionResult.Neighbors) != 0 {
+		t.Fatalf("cancelled session result = %#v", sessionResult)
+	}
+}
+
 func TestRichProximitySearchPreservesPolicyFilterStatsSessionAndProof(t *testing.T) {
 	config, err := DefaultConfig()
 	if err != nil {
@@ -220,6 +281,20 @@ func TestHNSWAcceleratorLifecycleIsPortable(t *testing.T) {
 	result, err := index.Search(context.Background(), proximity, request)
 	if err != nil || result.Backend != "hnsw" || !bytes.Equal(result.Neighbors[0].Key, []byte("vector-00")) {
 		t.Fatalf("HNSW search = %#v, %v", result, err)
+	}
+	cancellation, err := NewProximityCancellationToken()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(cancellation.Close)
+	if err := cancellation.Cancel(); err != nil {
+		t.Fatal(err)
+	}
+	cancelled, err := index.SearchCancellable(
+		context.Background(), proximity, request, nil, cancellation,
+	)
+	if err != nil || cancelled.Completion != "cancelled" || len(cancelled.Neighbors) != 0 {
+		t.Fatalf("cancelled HNSW search = %#v, %v", cancelled, err)
 	}
 	proof, err := index.ProveSearch(proximity, request)
 	if err != nil {
