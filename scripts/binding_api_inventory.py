@@ -51,6 +51,16 @@ class CheckResult:
         return not (self.missing or self.stale or self.incomplete)
 
 
+@dataclass(frozen=True, order=True)
+class ApiItem:
+    """A stable public Rust path plus the rustdoc shape needed for review."""
+
+    rust: str
+    kind: str
+    owner: str | None
+    member_kind: str | None
+
+
 def _inner(item: dict[str, Any]) -> tuple[str, dict[str, Any]]:
     values = item.get("inner", {})
     if len(values) != 1:
@@ -70,8 +80,8 @@ def _item(index: dict[str, Any], item_id: Any) -> dict[str, Any] | None:
     return index.get(str(item_id))
 
 
-def extract_public_api(rustdoc: dict[str, Any]) -> set[str]:
-    """Extract the crate-root public API and reachable associated items."""
+def extract_public_api_items(rustdoc: dict[str, Any]) -> dict[str, ApiItem]:
+    """Extract public Rust paths with enough shape data for classification."""
 
     index = rustdoc["index"]
     root = _item(index, rustdoc["root"])
@@ -82,8 +92,16 @@ def extract_public_api(rustdoc: dict[str, Any]) -> set[str]:
         raise ValueError("rustdoc root item is not a module")
 
     crate_name = root.get("name") or "crate"
-    public_api: set[str] = set()
+    public_api: dict[str, ApiItem] = {}
     expanded_modules: set[tuple[str, str]] = set()
+
+    def record(
+        rust: str,
+        kind: str,
+        owner: str | None = None,
+        member_kind: str | None = None,
+    ) -> None:
+        public_api[rust] = ApiItem(rust, kind, owner, member_kind)
 
     def add_named_item(item_id: Any, public_path: str) -> None:
         item = _item(index, item_id)
@@ -99,7 +117,7 @@ def extract_public_api(rustdoc: dict[str, Any]) -> set[str]:
                 add_named_item(target_id, f"{parent}::{public_name}")
             return
 
-        public_api.add(public_path)
+        record(public_path, item_kind)
 
         if item_kind == "module":
             module_key = (str(item_id), public_path)
@@ -141,11 +159,21 @@ def extract_public_api(rustdoc: dict[str, Any]) -> set[str]:
 
         for child_id in child_ids:
             child = _item(index, child_id)
-            if child is None or not _is_public(child):
+            if child is None or child.get("crate_id") != 0:
                 continue
+            if item_kind not in {"enum", "trait"} and not _is_public(child):
+                continue
+            child_kind, _ = _inner(child)
             child_name = child.get("name")
             if child_name:
-                public_api.add(f"{public_path}::{child_name}")
+                if item_kind == "struct":
+                    member_kind = "field"
+                elif item_kind == "enum":
+                    member_kind = "variant"
+                else:
+                    member_kind = "trait-item"
+                child_path = f"{public_path}::{child_name}"
+                record(child_path, child_kind, public_path, member_kind)
 
         for impl_id in impl_ids:
             impl_item = _item(index, impl_id)
@@ -165,7 +193,13 @@ def extract_public_api(rustdoc: dict[str, Any]) -> set[str]:
                     "assoc_const",
                     "assoc_type",
                 }:
-                    public_api.add(f"{public_path}::{associated_name}")
+                    associated_path = f"{public_path}::{associated_name}"
+                    record(
+                        associated_path,
+                        associated_kind,
+                        public_path,
+                        "inherent-item",
+                    )
 
     for root_item_id in module.get("items", []):
         root_item = _item(index, root_item_id)
@@ -181,6 +215,12 @@ def extract_public_api(rustdoc: dict[str, Any]) -> set[str]:
             add_named_item(root_item_id, f"{crate_name}::{root_name}")
 
     return public_api
+
+
+def extract_public_api(rustdoc: dict[str, Any]) -> set[str]:
+    """Extract the crate-root public API and reachable associated items."""
+
+    return set(extract_public_api_items(rustdoc))
 
 
 def _nonempty_strings(values: Any) -> bool:
@@ -219,6 +259,91 @@ def _complete_release_entry(entry: dict[str, Any]) -> bool:
     if classification == "platform-excluded":
         return bool(exclusions)
     return False
+
+
+_DATA_MODEL_KINDS = {
+    "struct",
+    "enum",
+    "union",
+    "struct_field",
+    "variant",
+    "constant",
+    "static",
+}
+_RUST_ABSTRACTION_KINDS = {
+    "trait",
+    "type_alias",
+    "primitive",
+    "assoc_const",
+    "assoc_type",
+}
+
+
+def _audit_bucket(item: ApiItem, entry: dict[str, Any]) -> str:
+    if _complete_release_entry(entry):
+        return "release_complete"
+    if entry.get("reviewed") is True:
+        return "reviewed_incomplete"
+    if item.kind in _DATA_MODEL_KINDS:
+        return "unreviewed_data_model"
+    if (
+        item.kind in _RUST_ABSTRACTION_KINDS
+        or item.member_kind == "trait-item"
+        or item.kind != "function"
+    ):
+        return "unreviewed_rust_abstraction"
+    return "unreviewed_runtime_candidate"
+
+
+def build_classification_audit(
+    items: dict[str, ApiItem], manifest: dict[str, Any]
+) -> dict[str, Any]:
+    """Build deterministic triage data without inferring parity completion."""
+
+    entries = {
+        entry["rust"]: entry
+        for entry in manifest.get("operations", [])
+        if isinstance(entry, dict) and isinstance(entry.get("rust"), str)
+    }
+    summary = {
+        "release_complete": 0,
+        "reviewed_incomplete": 0,
+        "unreviewed_runtime_candidate": 0,
+        "unreviewed_data_model": 0,
+        "unreviewed_rust_abstraction": 0,
+    }
+    family_counts: dict[str, int] = {}
+    owner_counts: dict[str, int] = {}
+    rows: list[dict[str, Any]] = []
+    for rust in sorted(items):
+        item = items[rust]
+        entry = entries.get(rust, {})
+        bucket = _audit_bucket(item, entry)
+        summary[bucket] += 1
+        family = entry.get("family") or _family(rust)
+        family_counts[family] = family_counts.get(family, 0) + 1
+        owner = item.owner or rust
+        owner_counts[owner] = owner_counts.get(owner, 0) + 1
+        rows.append(
+            {
+                "rust": rust,
+                "kind": item.kind,
+                "owner": item.owner,
+                "member_kind": item.member_kind,
+                "family": family,
+                "classification": entry.get("classification"),
+                "status": entry.get("status"),
+                "bucket": bucket,
+            }
+        )
+    return {
+        "summary": summary,
+        "family_counts": dict(sorted(family_counts.items())),
+        "owner_counts": dict(
+            sorted(owner_counts.items(), key=lambda pair: (-pair[1], pair[0]))
+        ),
+        "rows": rows,
+    }
 
 
 def check_manifest(
@@ -407,10 +532,11 @@ def missing_feature_sentinels(
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("generate", "check"))
+    parser.add_argument("command", choices=("generate", "check", "audit"))
     parser.add_argument("--release", action="store_true")
     parser.add_argument("--rustdoc", type=Path)
     parser.add_argument("--manifest", type=Path)
+    parser.add_argument("--output", type=Path)
     return parser
 
 
@@ -429,7 +555,8 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     rustdoc = _load_json(rustdoc_path)
-    rust_items = extract_public_api(rustdoc)
+    api_items = extract_public_api_items(rustdoc)
+    rust_items = set(api_items)
     missing_sentinels = missing_feature_sentinels(rust_items, REQUIRED_RUST_FEATURES)
     if missing_sentinels:
         for sentinel in missing_sentinels:
@@ -455,9 +582,29 @@ def main(argv: list[str] | None = None) -> int:
     if not manifest_path.exists():
         print(f"manifest is missing: {manifest_path}", file=sys.stderr)
         return 2
+    manifest = _load_json(manifest_path)
+    if args.command == "audit":
+        audit = build_classification_audit(api_items, manifest)
+        audit = {
+            "schema_version": 1,
+            "rustdoc_format_version": rustdoc.get("format_version"),
+            "rust_features": list(REQUIRED_RUST_FEATURES),
+            **audit,
+        }
+        output_path = (
+            args.output
+            or root / "bindings" / "api" / "classification-audit.json"
+        )
+        _write_json(output_path, audit)
+        print(
+            f"wrote classification audit for {len(api_items)} operations "
+            f"to {output_path}"
+        )
+        return 0
+
     result = check_manifest(
         rust_items,
-        _load_json(manifest_path),
+        manifest,
         args.release,
         REQUIRED_RUST_FEATURES,
     )

@@ -61,3 +61,34 @@ a test of the corresponding runtime ownership or behavior.
 The generated manifest begins with planned mappings. Inventory check success
 must not be described as feature parity; only the strict release check plus the
 per-language test matrix is parity evidence.
+
+## Classification audit
+
+Run:
+
+~~~sh
+python3 scripts/binding_api_inventory.py audit
+~~~
+
+This writes `classification-audit.json`, a deterministic review queue with the
+rustdoc item kind, owning type or trait, domain family, manifest state, and one
+mutually exclusive audit bucket for every public Rust path. The buckets mean:
+
+- `release_complete`: the existing strict release predicate passes;
+- `reviewed_incomplete`: a human reviewed the mapping, but required release
+  evidence is still missing;
+- `unreviewed_runtime_candidate`: a public free or inherent function that may
+  represent application behavior;
+- `unreviewed_data_model`: a struct, enum, field, variant, constant, or static;
+- `unreviewed_rust_abstraction`: a trait item, type alias, module, primitive,
+  or another Rust language surface requiring an idiomatic-equivalence review.
+
+Audit counts are triage information, not parity evidence. In particular, data
+model and Rust-abstraction rows are not automatically missing application APIs,
+and runtime candidates are not automatically application-facing. No audit
+bucket changes a manifest row to implemented or satisfies the strict release
+gate.
+
+Public enum variants and public trait items inherit reachability from their
+public owner even though rustdoc commonly records their visibility as
+`default`. The inventory includes them explicitly.

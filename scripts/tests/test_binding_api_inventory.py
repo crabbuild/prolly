@@ -3,15 +3,98 @@ from __future__ import annotations
 import unittest
 
 from scripts.binding_api_inventory import (
+    ApiItem,
     CheckResult,
+    build_classification_audit,
     check_manifest,
     extract_public_api,
+    extract_public_api_items,
     generate_manifest,
     missing_feature_sentinels,
 )
 
 
 class ManifestCheckTests(unittest.TestCase):
+    def test_audit_separates_release_evidence_from_unreviewed_item_kinds(self) -> None:
+        items = {
+            "prolly::VersionedMap::head": ApiItem(
+                rust="prolly::VersionedMap::head",
+                kind="function",
+                owner="prolly::VersionedMap",
+                member_kind="inherent-item",
+            ),
+            "prolly::VersionedMap::get": ApiItem(
+                rust="prolly::VersionedMap::get",
+                kind="function",
+                owner="prolly::VersionedMap",
+                member_kind="inherent-item",
+            ),
+            "prolly::VersionedValue::version": ApiItem(
+                rust="prolly::VersionedValue::version",
+                kind="struct_field",
+                owner="prolly::VersionedValue",
+                member_kind="field",
+            ),
+            "prolly::KeyCodec": ApiItem(
+                rust="prolly::KeyCodec",
+                kind="trait",
+                owner=None,
+                member_kind=None,
+            ),
+            "prolly::KeyCodec::Encoded": ApiItem(
+                rust="prolly::KeyCodec::Encoded",
+                kind="assoc_type",
+                owner="prolly::KeyCodec",
+                member_kind="trait-item",
+            ),
+        }
+        languages = {
+            language: f"{language}.VersionedMap.head"
+            for language in (
+                "python",
+                "go",
+                "node",
+                "kotlin",
+                "java",
+                "ruby",
+                "swift",
+                "wasm",
+            )
+        }
+        manifest = {
+            "operations": [
+                {
+                    "rust": name,
+                    "classification": "portable",
+                    "status": "planned",
+                    "family": "core",
+                    "languages": {},
+                    "exclusions": {},
+                    "tests": [],
+                }
+                for name in items
+            ]
+        }
+        manifest["operations"][0].update(
+            status="implemented",
+            languages=languages,
+            tests=["binding.versioned.head"],
+        )
+
+        audit = build_classification_audit(items, manifest)
+
+        self.assertEqual(
+            audit["summary"],
+            {
+                "release_complete": 1,
+                "reviewed_incomplete": 0,
+                "unreviewed_runtime_candidate": 1,
+                "unreviewed_data_model": 1,
+                "unreviewed_rust_abstraction": 2,
+            },
+        )
+        self.assertEqual(len(audit["rows"]), len(items))
+
     def test_inventory_requires_async_store_feature_provenance(self) -> None:
         result = check_manifest(
             rust_items=set(),
@@ -280,6 +363,102 @@ class RustdocExtractionTests(unittest.TestCase):
                 "prolly::VersionedMap::head",
             },
         )
+        self.assertEqual(
+            extract_public_api_items(rustdoc),
+            {
+                "prolly::VersionedMap": ApiItem(
+                    rust="prolly::VersionedMap",
+                    kind="struct",
+                    owner=None,
+                    member_kind=None,
+                ),
+                "prolly::VersionedMap::head": ApiItem(
+                    rust="prolly::VersionedMap::head",
+                    kind="function",
+                    owner="prolly::VersionedMap",
+                    member_kind="inherent-item",
+                ),
+            },
+        )
+
+    def test_extracts_field_variant_and_trait_item_metadata(self) -> None:
+        rustdoc = {
+            "root": 1,
+            "index": {
+                "1": {
+                    "id": 1,
+                    "crate_id": 0,
+                    "name": "prolly",
+                    "visibility": "public",
+                    "inner": {"module": {"items": [2, 4, 6]}},
+                },
+                "2": {
+                    "id": 2,
+                    "crate_id": 0,
+                    "name": "VersionedValue",
+                    "visibility": "public",
+                    "inner": {
+                        "struct": {
+                            "kind": {"plain": {"fields": [3]}},
+                            "impls": [],
+                        }
+                    },
+                },
+                "3": {
+                    "id": 3,
+                    "crate_id": 0,
+                    "name": "version",
+                    "visibility": "public",
+                    "inner": {"struct_field": {"primitive": "u64"}},
+                },
+                "4": {
+                    "id": 4,
+                    "crate_id": 0,
+                    "name": "MergeChoice",
+                    "visibility": "public",
+                    "inner": {"enum": {"variants": [5], "impls": []}},
+                },
+                "5": {
+                    "id": 5,
+                    "crate_id": 0,
+                    "name": "Left",
+                    "visibility": "default",
+                    "inner": {"variant": {"kind": "plain"}},
+                },
+                "6": {
+                    "id": 6,
+                    "crate_id": 0,
+                    "name": "KeyCodec",
+                    "visibility": "public",
+                    "inner": {"trait": {"items": [7, 8]}},
+                },
+                "7": {
+                    "id": 7,
+                    "crate_id": 0,
+                    "name": "Encoded",
+                    "visibility": "default",
+                    "inner": {"assoc_type": {"bounds": []}},
+                },
+                "8": {
+                    "id": 8,
+                    "crate_id": 0,
+                    "name": "encode",
+                    "visibility": "default",
+                    "inner": {"function": {"sig": {}}},
+                },
+            },
+        }
+
+        items = extract_public_api_items(rustdoc)
+
+        self.assertEqual(items["prolly::VersionedValue::version"].kind, "struct_field")
+        self.assertEqual(items["prolly::VersionedValue::version"].member_kind, "field")
+        self.assertEqual(items["prolly::MergeChoice::Left"].kind, "variant")
+        self.assertEqual(items["prolly::MergeChoice::Left"].member_kind, "variant")
+        self.assertEqual(items["prolly::KeyCodec::Encoded"].kind, "assoc_type")
+        self.assertEqual(items["prolly::KeyCodec::Encoded"].member_kind, "trait-item")
+        self.assertEqual(items["prolly::KeyCodec::encode"].kind, "function")
+        self.assertEqual(items["prolly::KeyCodec::encode"].member_kind, "trait-item")
 
     def test_generation_is_idempotent_when_inventory_is_unchanged(self) -> None:
         previous = {
