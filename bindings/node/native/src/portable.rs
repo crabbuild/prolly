@@ -16,7 +16,7 @@ use prolly_bindings::{
     ProximityMutationRecord, ProximityMutationStatsRecord, ProximityNeighborRecord,
     ProximityRecordRecord, ProximitySearchClaimKindRecord, ProximitySearchResultRecord,
     ProximityStructuralProofRecord, ProximityVerificationRecord, SearchBackendRecord,
-    SearchCompletionRecord, SecondaryIndexExtractorCallback,
+    SearchCompletionRecord, SecondaryIndexExtractorCallback, VersionPruneRecord,
 };
 use std::sync::Arc;
 
@@ -57,6 +57,21 @@ impl From<MapUpdateRecord> for NodePortableMapUpdate {
             kind: kind.to_string(),
             previous: value.previous.map(Buffer::from),
             current: value.current.map(Into::into),
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NodePortableVersionPrune {
+    pub retained: Vec<Buffer>,
+    pub removed: Vec<Buffer>,
+}
+
+impl From<VersionPruneRecord> for NodePortableVersionPrune {
+    fn from(value: VersionPruneRecord) -> Self {
+        Self {
+            retained: value.retained.into_iter().map(Buffer::from).collect(),
+            removed: value.removed.into_iter().map(Buffer::from).collect(),
         }
     }
 }
@@ -835,6 +850,22 @@ impl NativePortableVersionedMap {
     #[napi]
     pub fn backup(&self) -> Result<Buffer> {
         self.inner.backup().map(Buffer::from).map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "restoreBackup")]
+    pub fn restore_backup(&self, bytes: Buffer) -> Result<NodePortableMapVersion> {
+        self.inner
+            .restore_backup(bytes.to_vec())
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "keepLast")]
+    pub fn keep_last(&self, count: u32) -> Result<NodePortableVersionPrune> {
+        self.inner
+            .keep_last(u64::from(count))
+            .map(Into::into)
+            .map_err(to_napi_error)
     }
 
     #[napi(js_name = "verifyCatalog")]

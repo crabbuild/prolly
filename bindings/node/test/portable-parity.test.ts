@@ -128,6 +128,28 @@ test("versioned maps expose owned batch CAS and version-pinned point reads", asy
   }
 });
 
+test("versioned backups restore and retention returns complete version sets", async () => {
+  const sourceEngine = await Engine.memory();
+  const targetEngine = await Engine.memory();
+  try {
+    const source = sourceEngine.versionedMap(bytes("versioned-backup"));
+    await source.initialize();
+    await source.put(bytes("k"), bytes("v1"));
+    await source.put(bytes("k"), bytes("v2"));
+    const backup = await source.backup();
+    const target = targetEngine.versionedMap(bytes("versioned-backup"));
+    const restored = await target.restoreBackup(backup);
+    assert.deepEqual(restored.id, await source.headId());
+    assert.equal(Buffer.from(await target.get(bytes("k")) ?? []).toString(), "v2");
+    const pruned = await source.keepLast(1);
+    assert.ok(pruned.retained.length >= 1);
+    assert.ok(pruned.removed.length >= 1);
+  } finally {
+    sourceEngine.close();
+    targetEngine.close();
+  }
+});
+
 test("proofs, retained sessions, and maintenance stay native", async () => {
   const engine = await Engine.memory();
   try {

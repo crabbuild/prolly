@@ -19,6 +19,11 @@ export interface MapUpdate {
   current?: MapVersion;
 }
 
+export interface VersionPrune {
+  retained: Uint8Array[];
+  removed: Uint8Array[];
+}
+
 interface NativeMapVersion {
   id: Uint8Array;
   tree: unknown;
@@ -48,6 +53,8 @@ interface NativeVersionedMap {
   snapshot(): NativeMapSnapshot | null;
   snapshotAt(id: Uint8Array): NativeMapSnapshot | null;
   backup(): Uint8Array;
+  restoreBackup(bytes: Uint8Array): NativeMapVersion;
+  keepLast(count: number): { retained: Uint8Array[]; removed: Uint8Array[] };
   verifyCatalog(): NativeMaintenanceSummary;
   planGc(): NativeMaintenanceSummary;
 }
@@ -237,6 +244,19 @@ export class VersionedMap implements Disposable {
   backup(signal?: AbortSignal): Promise<Uint8Array> {
     const native = this.#open();
     return nativePromise(signal, () => native.backup());
+  }
+
+  restoreBackup(bytes: Uint8Array, signal?: AbortSignal): Promise<MapVersion> {
+    const native = this.#open(); bytes = ownedBytes(bytes);
+    return nativePromise(signal, () => mapVersion(native.restoreBackup(bytes)));
+  }
+
+  keepLast(count: number, signal?: AbortSignal): Promise<VersionPrune> {
+    if (!Number.isSafeInteger(count) || count < 0 || count > 0xffff_ffff) {
+      return Promise.reject(new RangeError("keepLast count must be a non-negative uint32"));
+    }
+    const native = this.#open();
+    return nativePromise(signal, () => native.keepLast(count));
   }
 
   verifyCatalog(signal?: AbortSignal): Promise<MaintenanceSummary> {

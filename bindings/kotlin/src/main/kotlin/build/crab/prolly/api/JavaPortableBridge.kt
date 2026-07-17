@@ -49,6 +49,11 @@ data class JavaMapUpdate(
     val current: MapVersionRecord?,
 )
 
+data class JavaVersionPrune(
+    val retained: List<ByteArray>,
+    val removed: List<ByteArray>,
+)
+
 data class JavaIndexedVersion(
     val sourceVersion: ByteArray,
     val catalogVersion: ByteArray?,
@@ -493,7 +498,8 @@ object JavaPortableBridge {
     ).toJava()
 
     @JvmStatic
-    fun keepLast(map: VersionedMap, count: Long) = map.keepLast(count.toULong())
+    fun keepLast(map: VersionedMap, count: Long): JavaVersionPrune =
+        map.keepLast(count.toULong()).let { JavaVersionPrune(it.retained, it.removed) }
 
     @JvmStatic
     fun keepLast(map: IndexedMap, count: Long): JavaIndexedRetention =

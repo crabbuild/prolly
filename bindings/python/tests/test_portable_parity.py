@@ -123,6 +123,20 @@ class PortableParityTests(unittest.TestCase):
             ])
             self.assertEqual(result.kind.name, "APPLIED")
 
+    def test_versioned_backup_restore_and_retention(self):
+        with Engine.memory() as source_engine, Engine.memory() as target_engine:
+            source = source_engine.versioned_map(b"versioned-backup")
+            source.initialize()
+            source.put(b"k", b"v1")
+            source.put(b"k", b"v2")
+            target = target_engine.versioned_map(b"versioned-backup")
+            restored = target.restore_backup(source.backup())
+            self.assertEqual(restored.id, source.head_id())
+            self.assertEqual(target.get(b"k"), b"v2")
+            pruned = source.keep_last(1)
+            self.assertTrue(pruned.retained)
+            self.assertTrue(pruned.removed)
+
     def test_proofs_sessions_and_maintenance_are_application_facing(self):
         with Engine.memory() as engine:
             versioned = engine.versioned_map(b"proofs")

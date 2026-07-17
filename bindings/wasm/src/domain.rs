@@ -1,7 +1,7 @@
 use super::{js_error, optional_bytes, WasmProllyEngine};
 use crate::page::set_bytes;
 use js_sys::{Array, Object, Reflect, Uint8Array};
-use prolly::{KeyProof, MapVersionId, OwnedReadSession, VersionedMapUpdate};
+use prolly::{KeyProof, MapVersionId, OwnedReadSession, VersionedMapBackup, VersionedMapUpdate};
 use std::sync::Arc;
 use wasm_bindgen::prelude::*;
 
@@ -249,6 +249,29 @@ impl WasmVersionedMap {
             .map_err(js_error)
     }
 
+    #[wasm_bindgen(js_name = restoreBackup)]
+    pub fn restore_backup(&self, bytes: Uint8Array) -> Result<Object, JsValue> {
+        let backup = VersionedMapBackup::from_bytes(&bytes.to_vec()).map_err(js_error)?;
+        self.engine
+            .versioned_map(&self.id)
+            .restore_backup(&backup)
+            .map_err(js_error)
+            .and_then(map_version_object)
+    }
+
+    #[wasm_bindgen(js_name = keepLast)]
+    pub fn keep_last(&self, count: u32) -> Result<Object, JsValue> {
+        let result = self
+            .engine
+            .versioned_map(&self.id)
+            .keep_last(count as usize)
+            .map_err(js_error)?;
+        let object = Object::new();
+        set_version_ids(&object, "retained", result.retained)?;
+        set_version_ids(&object, "removed", result.removed)?;
+        Ok(object)
+    }
+
     #[wasm_bindgen(js_name = verifyCatalog)]
     pub fn verify_catalog(&self) -> Result<Object, JsValue> {
         let value = self
@@ -378,6 +401,15 @@ fn maintenance_summary(item_count: u64, byte_count: u64) -> Result<Object, JsVal
     Reflect::set(&object, &"itemCount".into(), &item_count.to_string().into())?;
     Reflect::set(&object, &"byteCount".into(), &byte_count.to_string().into())?;
     Ok(object)
+}
+
+fn set_version_ids(object: &Object, name: &str, values: Vec<MapVersionId>) -> Result<(), JsValue> {
+    let array = Array::new();
+    for value in values {
+        array.push(&Uint8Array::from(value.as_cid().as_bytes()).into());
+    }
+    Reflect::set(object, &name.into(), &array.into())?;
+    Ok(())
 }
 
 #[wasm_bindgen(js_class = WasmProllyEngine)]

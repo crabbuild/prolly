@@ -31,6 +31,11 @@ type MapUpdate struct {
 	Current  *MapVersion
 }
 
+type VersionPrune struct {
+	Retained [][]byte
+	Removed  [][]byte
+}
+
 type VersionedMap struct {
 	handle uint64
 	closed atomic.Bool
@@ -382,6 +387,41 @@ func (m *VersionedMap) Backup() ([]byte, error) {
 		return nil, err
 	}
 	return value, d.done()
+}
+
+func (m *VersionedMap) RestoreBackup(bytes []byte) (MapVersion, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return MapVersion{}, err
+	}
+	defer unlock()
+	raw, err := ffiVersionedRestoreBackup(handle, append([]byte(nil), bytes...))
+	if err != nil {
+		return MapVersion{}, err
+	}
+	return decodePortableMapVersion(raw)
+}
+
+func (m *VersionedMap) KeepLast(count uint64) (VersionPrune, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return VersionPrune{}, err
+	}
+	defer unlock()
+	raw, err := ffiVersionedKeepLast(handle, count)
+	if err != nil {
+		return VersionPrune{}, err
+	}
+	d := byteDecoder{data: raw}
+	retained, err := d.readByteArraySequence()
+	if err != nil {
+		return VersionPrune{}, err
+	}
+	removed, err := d.readByteArraySequence()
+	if err != nil {
+		return VersionPrune{}, err
+	}
+	return VersionPrune{Retained: retained, Removed: removed}, d.done()
 }
 func (m *VersionedMap) VerifyCatalog() (CatalogVerification, error) {
 	handle, unlock, err := m.withHandle()

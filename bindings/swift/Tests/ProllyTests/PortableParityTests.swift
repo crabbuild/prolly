@@ -88,6 +88,24 @@ final class PortableParityTests: XCTestCase {
         }
     }
 
+    func testVersionedBackupRestoreAndRetention() throws {
+        try Engine.withMemory { sourceEngine in
+            try Engine.withMemory { targetEngine in
+                let source = try sourceEngine.versionedMap(Data("versioned-backup".utf8))
+                _ = try source.initialize()
+                _ = try source.put(Data("k".utf8), value: Data("v1".utf8))
+                _ = try source.put(Data("k".utf8), value: Data("v2".utf8))
+                let target = try targetEngine.versionedMap(Data("versioned-backup".utf8))
+                let restored = try target.restoreBackup(source.backup())
+                XCTAssertEqual(restored.id, try source.headID())
+                XCTAssertEqual(try target.get(Data("k".utf8)), Data("v2".utf8))
+                let pruned = try source.keepLast(1)
+                XCTAssertFalse(pruned.retained.isEmpty)
+                XCTAssertFalse(pruned.removed.isEmpty)
+            }
+        }
+    }
+
     func testProofsSessionsAndMaintenanceAreApplicationFacing() throws {
         try Engine.withMemory { engine in
             let versioned = try engine.versionedMap(Data("proofs".utf8))

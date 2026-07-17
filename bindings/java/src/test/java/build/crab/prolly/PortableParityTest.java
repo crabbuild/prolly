@@ -273,6 +273,24 @@ class PortableParityTest {
         }
     }
 
+    @Test
+    void versionedBackupRestoresAndRetentionReturnsCompleteVersionSets() {
+        Prolly.useLocalDebugLibrary();
+        try (Engine sourceEngine = Engine.memory(); Engine targetEngine = Engine.memory();
+                var source = sourceEngine.versionedMap(bytes("versioned-backup"));
+                var target = targetEngine.versionedMap(bytes("versioned-backup"))) {
+            source.initialize();
+            source.put(bytes("k"), bytes("v1"));
+            source.put(bytes("k"), bytes("v2"));
+            var restored = target.restoreBackup(source.backup());
+            assertArrayEquals(source.headId().orElseThrow(), restored.id());
+            assertArrayEquals(bytes("v2"), target.get(bytes("k")).orElseThrow());
+            var pruned = source.keepLast(1);
+            assertFalse(pruned.retained().isEmpty());
+            assertFalse(pruned.removed().isEmpty());
+        }
+    }
+
     private static byte[] bytes(String value) {
         return value.getBytes(StandardCharsets.UTF_8);
     }

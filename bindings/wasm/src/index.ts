@@ -923,6 +923,11 @@ export interface WasmMapUpdate {
   current?: WasmMapVersion;
 }
 
+export interface WasmVersionPrune {
+  retained: Uint8Array[];
+  removed: Uint8Array[];
+}
+
 function wasmMapVersion(value: any): WasmMapVersion {
   return {
     id: value.id,
@@ -1051,6 +1056,17 @@ export class WasmVersionedMap implements Disposable {
   backup(signal?: AbortSignal): Promise<Uint8Array> {
     const native = this.#open();
     return portablePromise(signal, () => native.backup());
+  }
+  restoreBackup(bytes: Uint8Array, signal?: AbortSignal): Promise<WasmMapVersion> {
+    const native = this.#open(); bytes = ownedPortableBytes(bytes);
+    return portablePromise(signal, () => wasmMapVersion(native.restoreBackup(bytes)));
+  }
+  keepLast(count: number, signal?: AbortSignal): Promise<WasmVersionPrune> {
+    if (!Number.isSafeInteger(count) || count < 0 || count > 0xffff_ffff) {
+      return Promise.reject(new RangeError("keepLast count must be a non-negative uint32"));
+    }
+    const native = this.#open();
+    return portablePromise(signal, () => native.keepLast(count));
   }
   verifyCatalog(): { itemCount: bigint; byteCount: bigint } {
     const value = this.#open().verifyCatalog();

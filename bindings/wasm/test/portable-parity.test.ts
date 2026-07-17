@@ -145,6 +145,25 @@ test("WASM versioned maps expose owned batch CAS and version-pinned point reads"
   engine.close();
 });
 
+test("WASM versioned backups restore and retention returns complete version sets", { skip: !generatedPresent }, async () => {
+  const sourceEngine = api.Engine.memory(wasm);
+  const targetEngine = api.Engine.memory(wasm);
+  const source = sourceEngine.versionedMap(bytes("versioned-backup"));
+  await source.initialize();
+  await source.put(bytes("k"), bytes("v1"));
+  await source.put(bytes("k"), bytes("v2"));
+  const backup = await source.backup();
+  const target = targetEngine.versionedMap(bytes("versioned-backup"));
+  const restored = await target.restoreBackup(backup);
+  assert.deepEqual(restored.id, await source.headId());
+  assert.equal(Buffer.from(await target.get(bytes("k")) ?? []).toString(), "v2");
+  const pruned = await source.keepLast(1);
+  assert.ok(pruned.retained.length >= 1);
+  assert.ok(pruned.removed.length >= 1);
+  sourceEngine.close();
+  targetEngine.close();
+});
+
 test("WASM proofs, retained sessions, and maintenance stay in Rust", { skip: !generatedPresent }, async () => {
   const engine = api.Engine.memory(wasm);
   const versioned = engine.versionedMap(bytes("proofs"));

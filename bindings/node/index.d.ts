@@ -14,6 +14,10 @@ export interface NodePortableMapUpdate {
   previous?: Buffer
   current?: NodePortableMapVersion
 }
+export interface NodePortableVersionPrune {
+  retained: Array<Buffer>
+  removed: Array<Buffer>
+}
 export interface NodePortableIndexEntry {
   term: Buffer
   projection?: Buffer
@@ -912,6 +916,8 @@ export declare class NativePortableVersionedMap {
   snapshot(): NativePortableMapSnapshot | null
   snapshotAt(id: Buffer): NativePortableMapSnapshot | null
   backup(): Buffer
+  restoreBackup(bytes: Buffer): NodePortableMapVersion
+  keepLast(count: number): NodePortableVersionPrune
   verifyCatalog(): NodePortableMaintenanceSummary
   planGc(): NodePortableMaintenanceSummary
 }

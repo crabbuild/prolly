@@ -107,6 +107,9 @@ public final class VersionedMap implements AutoCloseable {
     }
 
     public byte[] backup() { return open().backup().clone(); }
+    public MapVersion restoreBackup(byte[] bytes) {
+        return MapVersion.fromNative(open().restoreBackup(bytes.clone()));
+    }
     public build.crab.prolly.MapCatalogVerificationRecord verifyCatalog() {
         return open().verifyCatalog();
     }
@@ -115,8 +118,8 @@ public final class VersionedMap implements AutoCloseable {
     }
     public build.crab.prolly.GcPlanRecord planGc() { return open().planGc(); }
     public build.crab.prolly.GcSweepRecord sweepGc() { return open().sweepGc(); }
-    public build.crab.prolly.VersionPruneRecord keepLast(long count) {
-        return build.crab.prolly.api.JavaPortableBridge.keepLast(open(), count);
+    public VersionPrune keepLast(long count) {
+        return VersionPrune.fromBridge(build.crab.prolly.api.JavaPortableBridge.keepLast(open(), count));
     }
 
     public CompletableFuture<MapVersion> initializeAsync() {

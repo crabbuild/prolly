@@ -298,6 +298,58 @@ func TestPortableVersionedBatchCASAndPinnedPointReads(t *testing.T) {
 	}
 }
 
+func TestPortableVersionedBackupRestoreAndRetention(t *testing.T) {
+	sourceEngine, err := OpenMemory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sourceEngine.Close()
+	targetEngine, err := OpenMemory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer targetEngine.Close()
+	source, err := sourceEngine.VersionedMap([]byte("versioned-backup"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer source.Close()
+	if _, err := source.Initialize(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := source.Put([]byte("k"), []byte("v1")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := source.Put([]byte("k"), []byte("v2")); err != nil {
+		t.Fatal(err)
+	}
+	backup, err := source.Backup()
+	if err != nil {
+		t.Fatal(err)
+	}
+	target, err := targetEngine.VersionedMap([]byte("versioned-backup"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer target.Close()
+	restored, err := target.RestoreBackup(backup)
+	if err != nil {
+		t.Fatal(err)
+	}
+	headID, ok, err := source.HeadID()
+	if err != nil || !ok || !bytes.Equal(restored.ID, headID) {
+		t.Fatalf("restored head = %x, source = %x, %v", restored.ID, headID, err)
+	}
+	value, ok, err := target.Get([]byte("k"))
+	if err != nil || !ok || !bytes.Equal(value, []byte("v2")) {
+		t.Fatalf("restored get = %q, %v, %v", value, ok, err)
+	}
+	pruned, err := source.KeepLast(1)
+	if err != nil || len(pruned.Retained) == 0 || len(pruned.Removed) == 0 {
+		t.Fatalf("pruned = %#v, %v", pruned, err)
+	}
+}
+
 func TestPortableProofSessionAndMaintenance(t *testing.T) {
 	engine, err := OpenMemory()
 	if err != nil {

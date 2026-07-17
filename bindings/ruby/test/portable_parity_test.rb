@@ -98,6 +98,24 @@ class PortableParityTest < Minitest::Test
     end
   end
 
+  def test_versioned_backup_restore_and_retention
+    Prolly::Engine.memory.use do |source_engine|
+      Prolly::Engine.memory.use do |target_engine|
+        source = source_engine.versioned_map('versioned-backup'.b)
+        source.initialize_map
+        source.put('k'.b, 'v1'.b)
+        source.put('k'.b, 'v2'.b)
+        target = target_engine.versioned_map('versioned-backup'.b)
+        restored = target.restore_backup(source.backup)
+        assert_equal source.head_id, restored.id
+        assert_equal 'v2'.b, target.get('k'.b)
+        pruned = source.keep_last(1)
+        refute_empty pruned.retained
+        refute_empty pruned.removed
+      end
+    end
+  end
+
   def test_proofs_sessions_and_maintenance_are_application_facing
     Prolly::Engine.memory.use do |engine|
       versioned = engine.versioned_map('proofs'.b)
