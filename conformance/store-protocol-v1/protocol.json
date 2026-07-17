@@ -1,0 +1,15 @@
+{
+  "protocol_major": 1,
+  "schema_version": 1,
+  "optional_bytes": {
+    "presence_field": "present",
+    "value_encoding": "hex",
+    "absent_value_must_be_empty": true
+  },
+  "ordering": {
+    "batch_reads": "input-order",
+    "node_scan": "unsigned-byte-lexicographic",
+    "root_scan": "unsigned-byte-lexicographic"
+  }
+}
+
