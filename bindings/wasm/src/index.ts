@@ -804,6 +804,64 @@ export class WasmVersionedMap implements Disposable {
     const native = this.#open(); key = ownedPortableBytes(key);
     return portablePromise(signal, () => native.delete(key));
   }
+  snapshot(signal?: AbortSignal): Promise<WasmMapSnapshot | undefined> {
+    const native = this.#open();
+    return portablePromise(signal, () => {
+      const value = native.snapshot();
+      return value == null ? undefined : new WasmMapSnapshot(value);
+    });
+  }
+  backup(signal?: AbortSignal): Promise<Uint8Array> {
+    const native = this.#open();
+    return portablePromise(signal, () => native.backup());
+  }
+  verifyCatalog(): { itemCount: bigint; byteCount: bigint } {
+    const value = this.#open().verifyCatalog();
+    return { itemCount: BigInt(value.itemCount), byteCount: BigInt(value.byteCount) };
+  }
+  planGc(): { itemCount: bigint; byteCount: bigint } {
+    const value = this.#open().planGc();
+    return { itemCount: BigInt(value.itemCount), byteCount: BigInt(value.byteCount) };
+  }
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class WasmMapSnapshot implements Disposable {
+  #native?: any;
+  constructor(native: any) { this.#native = native; }
+  #open(): any { if (this.#native == null) throw new Error("WASM map snapshot is closed"); return this.#native; }
+  get(key: Uint8Array): Uint8Array | undefined { return this.#open().get(ownedPortableBytes(key)) ?? undefined; }
+  proveKey(key: Uint8Array): WasmKeyProof { return new WasmKeyProof(this.#open().proveKey(ownedPortableBytes(key))); }
+  stats(): { itemCount: bigint; byteCount: bigint } {
+    const value = this.#open().stats(); return { itemCount: BigInt(value.itemCount), byteCount: BigInt(value.byteCount) };
+  }
+  exportSummary(): { itemCount: bigint; byteCount: bigint } {
+    const value = this.#open().export(); return { itemCount: BigInt(value.itemCount), byteCount: BigInt(value.byteCount) };
+  }
+  read(): WasmReadSession { return new WasmReadSession(this.#open().read()); }
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class WasmReadSession implements Disposable {
+  #native?: any;
+  constructor(native: any) { this.#native = native; }
+  get(key: Uint8Array): Uint8Array | undefined {
+    if (this.#native == null) throw new Error("WASM read session is closed");
+    return this.#native.get(ownedPortableBytes(key)) ?? undefined;
+  }
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class WasmKeyProof implements Disposable {
+  #native?: any;
+  constructor(native: any) { this.#native = native; }
+  verify(): { valid: boolean; exists: boolean; value?: Uint8Array } {
+    if (this.#native == null) throw new Error("WASM key proof is closed");
+    return this.#native.verify();
+  }
   close(): void { this.#native?.free?.(); this.#native = undefined; }
   [Symbol.dispose](): void { this.close(); }
 }
@@ -856,6 +914,14 @@ export class WasmIndexedMap implements Disposable {
     const native = this.#open();
     return portablePromise(signal, () => new WasmIndexedSnapshot(native.snapshot()));
   }
+  metrics(): { buildAttempts: bigint; projectedBytes: bigint } {
+    const value = this.#open().metrics();
+    return { buildAttempts: BigInt(value.buildAttempts), projectedBytes: BigInt(value.projectedBytes) };
+  }
+  verifyIndex(name: Uint8Array, sourceVersion: Uint8Array): boolean {
+    return this.#open().verifyIndex(ownedPortableBytes(name), ownedPortableBytes(sourceVersion));
+  }
+  exportCurrent(): Uint8Array { return this.#open().exportCurrent(); }
   close(): void { this.#native?.free?.(); this.#native = undefined; }
   [Symbol.dispose](): void { this.close(); }
 }
@@ -921,6 +987,22 @@ export class WasmProximityMap implements Disposable {
   }
   search(request: PortableSearchRequest): Promise<PortableSearchResult> {
     return this.read().search(request);
+  }
+  descriptor(): Uint8Array { return this.nativeHandle().descriptor(); }
+  verify(): { recordCount: bigint } { return { recordCount: BigInt(this.nativeHandle().verify()) }; }
+  proveMembership(key: Uint8Array): WasmProximityProof {
+    return new WasmProximityProof(this.nativeHandle().proveMembership(ownedPortableBytes(key)));
+  }
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class WasmProximityProof implements Disposable {
+  #native?: any;
+  constructor(native: any) { this.#native = native; }
+  verify(expected?: Uint8Array): { value?: Uint8Array } {
+    if (this.#native == null) throw new Error("WASM proximity proof is closed");
+    return { value: this.#native.verify(expected == null ? undefined : ownedPortableBytes(expected)) ?? undefined };
   }
   close(): void { this.#native?.free?.(); this.#native = undefined; }
   [Symbol.dispose](): void { this.close(); }

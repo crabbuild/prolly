@@ -2,8 +2,8 @@ use super::{js_error, WasmProllyEngine};
 use crate::page::set_bytes;
 use js_sys::{Array, Float32Array, Object, Reflect, Uint8Array};
 use prolly::{
-    Cid, ProximityConfig, ProximityMap, ProximityRecord, SearchBackend, SearchCompletion,
-    SearchRequest,
+    Cid, ProximityConfig, ProximityMap, ProximityMembershipProof, ProximityRecord, SearchBackend,
+    SearchCompletion, SearchRequest,
 };
 use std::sync::Arc;
 use wasm_bindgen::prelude::*;
@@ -33,6 +33,45 @@ impl WasmProximityMap {
 
     pub fn descriptor(&self) -> Vec<u8> {
         self.descriptor.as_bytes().to_vec()
+    }
+    pub fn verify(&self) -> Result<String, JsValue> {
+        self.load()?
+            .verify()
+            .map(|value| value.record_count.to_string())
+            .map_err(js_error)
+    }
+    #[wasm_bindgen(js_name = proveMembership)]
+    pub fn prove_membership(&self, key: Uint8Array) -> Result<WasmProximityProof, JsValue> {
+        self.load()?
+            .prove_membership(&key.to_vec())
+            .map(|inner| WasmProximityProof { inner })
+            .map_err(js_error)
+    }
+}
+
+#[wasm_bindgen(js_name = WasmProximityProof)]
+pub struct WasmProximityProof {
+    inner: ProximityMembershipProof,
+}
+
+#[wasm_bindgen(js_class = WasmProximityProof)]
+impl WasmProximityProof {
+    pub fn verify(&self, expected: Option<Uint8Array>) -> Result<JsValue, JsValue> {
+        let value = match expected {
+            Some(expected) => {
+                let bytes = expected.to_vec();
+                let raw: [u8; 32] = bytes
+                    .try_into()
+                    .map_err(|_| JsValue::from_str("descriptor CID must be 32 bytes"))?;
+                self.inner.verify_for(&Cid(raw))
+            }
+            None => self.inner.verify(),
+        }
+        .map_err(js_error)?;
+        Ok(match value.record {
+            Some(record) => Uint8Array::from(record.1.as_slice()).into(),
+            None => JsValue::UNDEFINED,
+        })
     }
 }
 

@@ -90,3 +90,37 @@ test("WASM promise wrappers own inputs and honor AbortSignal", { skip: !generate
   map.close();
   engine.close();
 });
+
+test("WASM proofs, retained sessions, and maintenance stay in Rust", { skip: !generatedPresent }, async () => {
+  const engine = api.Engine.memory(wasm);
+  const versioned = engine.versionedMap(bytes("proofs"));
+  await versioned.initialize();
+  await versioned.put(bytes("k"), bytes("v"));
+  const snapshot = await versioned.snapshot();
+  assert.ok(snapshot);
+  assert.equal(Buffer.from(snapshot.proveKey(bytes("k")).verify().value ?? []).toString(), "v");
+  assert.equal(snapshot.stats().itemCount, 1n);
+  assert.ok(snapshot.exportSummary().itemCount > 0n);
+  const session = snapshot.read();
+  assert.equal(Buffer.from(session.get(bytes("k")) ?? []).toString(), "v");
+  assert.ok(versioned.verifyCatalog().itemCount >= 2n);
+  assert.ok((await versioned.backup()).byteLength > 0);
+  assert.ok(versioned.planGc().itemCount > 0n);
+
+  const registry = engine.indexRegistry();
+  registry.register({ name: bytes("by_value"), generation: 1n, extractorId: "value-v1", projection: "all",
+    extract: (_key: Uint8Array, value: Uint8Array) => [{ term: Uint8Array.from(value) }] });
+  const indexed = engine.indexedMap(bytes("indexed-maintenance"), registry);
+  const version: any = await indexed.put(bytes("k"), bytes("term"));
+  await indexed.ensureIndex(bytes("by_value"));
+  assert.equal(indexed.verifyIndex(bytes("by_value"), version.sourceVersion), true);
+  assert.ok(indexed.metrics().buildAttempts >= 1n);
+  assert.ok(indexed.exportCurrent().byteLength > 0);
+
+  const proximity = await engine.buildProximity(2, [
+    { key: bytes("p"), vector: new Float32Array([0, 0]), value: bytes("payload") },
+  ]);
+  assert.equal(Buffer.from(proximity.proveMembership(bytes("p")).verify(proximity.descriptor()).value ?? []).toString(), "payload");
+  assert.equal(proximity.verify().recordCount, 1n);
+  engine.close();
+});

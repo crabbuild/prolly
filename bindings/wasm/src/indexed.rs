@@ -5,6 +5,7 @@ use prolly::{
     IndexProjection, IndexedSnapshotId, SecondaryIndex, SecondaryIndexEntry, SecondaryIndexError,
     SecondaryIndexRegistry,
 };
+use std::cell::Cell;
 use std::sync::Arc;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
@@ -122,6 +123,7 @@ pub struct WasmIndexedMap {
     engine: Arc<super::WasmEngine>,
     id: Vec<u8>,
     registry: SecondaryIndexRegistry,
+    build_attempts: Cell<u64>,
 }
 
 #[wasm_bindgen(js_class = WasmIndexedMap)]
@@ -163,6 +165,11 @@ impl WasmIndexedMap {
             .map_err(js_error)?
             .ensure_index(name.to_vec())
             .map_err(js_error)?;
+        self.build_attempts.set(
+            self.build_attempts
+                .get()
+                .saturating_add(result.attempts as u64),
+        );
         let object = Object::new();
         set_bytes(
             &object,
@@ -199,6 +206,50 @@ impl WasmIndexedMap {
             registry: self.registry.clone(),
             snapshot_id,
         })
+    }
+
+    pub fn metrics(&self) -> Result<Object, JsValue> {
+        let map = self
+            .engine
+            .indexed_map(&self.id, self.registry.clone())
+            .map_err(js_error)?;
+        let value = map.metrics();
+        let object = Object::new();
+        Reflect::set(
+            &object,
+            &"buildAttempts".into(),
+            &self.build_attempts.get().to_string().into(),
+        )?;
+        Reflect::set(
+            &object,
+            &"projectedBytes".into(),
+            &value.projected_bytes.to_string().into(),
+        )?;
+        Ok(object)
+    }
+    #[wasm_bindgen(js_name = verifyIndex)]
+    pub fn verify_index(
+        &self,
+        name: Uint8Array,
+        source_version: Uint8Array,
+    ) -> Result<bool, JsValue> {
+        let version =
+            prolly::MapVersionId::from_bytes(&source_version.to_vec()).map_err(js_error)?;
+        self.engine
+            .indexed_map(&self.id, self.registry.clone())
+            .map_err(js_error)?
+            .verify_index(name.to_vec(), &version)
+            .map(|value| value.is_valid())
+            .map_err(js_error)
+    }
+    #[wasm_bindgen(js_name = exportCurrent)]
+    pub fn export_current(&self) -> Result<Vec<u8>, JsValue> {
+        self.engine
+            .indexed_map(&self.id, self.registry.clone())
+            .map_err(js_error)?
+            .export_current()
+            .and_then(|value| value.to_bytes())
+            .map_err(js_error)
     }
 }
 
@@ -297,6 +348,7 @@ impl WasmProllyEngine {
             engine: Arc::clone(&self.inner),
             id,
             registry: registry.registry.clone(),
+            build_attempts: Cell::new(0),
         })
     }
 }
