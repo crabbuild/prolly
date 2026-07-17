@@ -1123,6 +1123,36 @@ func (m *VersionedMap) RestoreBackup(bytes []byte) (MapVersion, error) {
 	return decodePortableMapVersion(raw)
 }
 
+// ImportAsHead imports a portable snapshot bundle and publishes its tree as
+// this map's new head. The bundle is encoded before crossing the FFI boundary,
+// so callers retain ownership of all input slices.
+func (m *VersionedMap) ImportAsHead(bundle SnapshotBundle) (MapVersion, error) {
+	return m.importAsHeadEncoded(encodeSnapshotBundle(bundle), nil)
+}
+
+// ImportAsHeadAtMillis is the deterministic-timestamp variant of ImportAsHead.
+func (m *VersionedMap) ImportAsHeadAtMillis(bundle SnapshotBundle, timestampMillis uint64) (MapVersion, error) {
+	return m.importAsHeadEncoded(encodeSnapshotBundle(bundle), &timestampMillis)
+}
+
+func (m *VersionedMap) importAsHeadEncoded(encodedBundle []byte, timestampMillis *uint64) (MapVersion, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return MapVersion{}, err
+	}
+	defer unlock()
+	var raw []byte
+	if timestampMillis == nil {
+		raw, err = ffiVersionedImportAsHead(handle, encodedBundle)
+	} else {
+		raw, err = ffiVersionedImportAsHeadAtMillis(handle, encodedBundle, *timestampMillis)
+	}
+	if err != nil {
+		return MapVersion{}, err
+	}
+	return decodePortableMapVersion(raw)
+}
+
 func (m *VersionedMap) KeepLast(count uint64) (VersionPrune, error) {
 	handle, unlock, err := m.withHandle()
 	if err != nil {
@@ -1603,6 +1633,21 @@ func (s *MapSnapshot) Read() (*ReadSession, error) {
 		return nil, err
 	}
 	return ffiAdoptReadSession(native)
+}
+
+// Export returns the lossless portable snapshot bundle for this pinned map
+// version, including every reachable encoded node.
+func (s *MapSnapshot) Export() (SnapshotBundle, error) {
+	handle, unlock, err := s.withHandle()
+	if err != nil {
+		return SnapshotBundle{}, err
+	}
+	defer unlock()
+	raw, err := ffiMapSnapshotExport(handle)
+	if err != nil {
+		return SnapshotBundle{}, err
+	}
+	return decodeSnapshotBundle(raw)
 }
 
 func decodePortableMapVersion(raw []byte) (MapVersion, error) {

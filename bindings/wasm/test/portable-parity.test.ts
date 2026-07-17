@@ -383,6 +383,15 @@ test("WASM promise wrappers own inputs and honor AbortSignal", { skip: !generate
   await pending;
   assert.equal(Buffer.from(await map.get(bytes("original-key")) ?? []).toString(), "original-value");
 
+  const snapshot = await map.snapshot();
+  assert.ok(snapshot);
+  const bundle = await snapshot.export();
+  const imported = engine.versionedMap(bytes("async-import"));
+  const pendingImport = imported.importAsHead(bundle);
+  bundle.free();
+  await pendingImport;
+  assert.equal(Buffer.from(await imported.get(bytes("original-key")) ?? []).toString(), "original-value");
+
   const controller = new AbortController();
   controller.abort();
   await assert.rejects(map.get(bytes("original-key"), controller.signal), /abort/i);
@@ -483,6 +492,16 @@ test("WASM versioned backups restore and retention returns complete version sets
   const restored = await target.restoreBackup(backup);
   assert.deepEqual(restored.id, await source.headId());
   assert.equal(Buffer.from(await target.get(bytes("k")) ?? []).toString(), "v2");
+  const snapshot = await source.snapshot();
+  assert.ok(snapshot);
+  const bundle = await snapshot.export();
+  const importedMap = targetEngine.versionedMap(bytes("versioned-import"));
+  assert.equal((await importedMap.importAsHead(bundle)).isHead, true);
+  assert.equal(Buffer.from(await importedMap.get(bytes("k")) ?? []).toString(), "v2");
+  const timestampedMap = targetEngine.versionedMap(bytes("versioned-import-at"));
+  const timestamped = await timestampedMap.importAsHeadAtMillis(bundle, 12_345n);
+  assert.equal(timestamped.createdAtMillis, 12_345n);
+  assert.equal(Buffer.from(await timestampedMap.get(bytes("k")) ?? []).toString(), "v2");
   const pruned = await source.keepLast(1);
   assert.ok(pruned.retained.length >= 1);
   assert.ok(pruned.removed.length >= 1);
@@ -508,7 +527,7 @@ test("WASM proofs, retained sessions, and maintenance stay in Rust", { skip: !ge
   assert.equal(provedPage.verify().valid, true);
   assert.deepEqual(provedPage.page().entries.map((entry: any) => Buffer.from(entry.key).toString()), ["k"]);
   assert.equal(snapshot.stats().itemCount, 2n);
-  assert.ok(snapshot.exportSummary().itemCount > 0n);
+  assert.ok((await snapshot.export()).nodeCount > 0);
   const session = snapshot.read();
   assert.equal(Buffer.from(await session.getAsync(bytes("k")) ?? []).toString(), "v");
   assert.equal(Buffer.from(session.get(bytes("k")) ?? []).toString(), "v");

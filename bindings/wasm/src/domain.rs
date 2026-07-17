@@ -5,13 +5,13 @@ use super::{
     range_page_proof_verification_to_object, range_page_to_object,
     range_proof_verification_to_object, resolver_from_name, reverse_page_to_object,
     scan_callback_flow, scan_outcome_to_object, WasmProllyEngine, WasmRangeCursor,
-    WasmReverseCursor,
+    WasmReverseCursor, WasmSnapshotBundle,
 };
 use crate::page::set_bytes;
 use js_sys::{Array, Function, Object, Reflect, Uint8Array};
 use prolly::{
     KeyProof, MapVersionId, MultiKeyProof, OwnedReadSession, ProvedRangePage, RangeProof,
-    VersionedMapBackup, VersionedMapUpdate,
+    SnapshotBundle, VersionedMapBackup, VersionedMapUpdate,
 };
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -652,6 +652,30 @@ impl WasmVersionedMap {
         self.engine
             .versioned_map(&self.id)
             .restore_backup(&backup)
+            .map_err(js_error)
+            .and_then(map_version_object)
+    }
+
+    #[wasm_bindgen(js_name = importAsHead)]
+    pub fn import_as_head(&self, bytes: Uint8Array) -> Result<Object, JsValue> {
+        let bundle = SnapshotBundle::from_bytes(&bytes.to_vec()).map_err(js_error)?;
+        self.engine
+            .versioned_map(&self.id)
+            .import_as_head(&bundle)
+            .map_err(js_error)
+            .and_then(map_version_object)
+    }
+
+    #[wasm_bindgen(js_name = importAsHeadAtMillis)]
+    pub fn import_as_head_at_millis(
+        &self,
+        bytes: Uint8Array,
+        timestamp_millis: u64,
+    ) -> Result<Object, JsValue> {
+        let bundle = SnapshotBundle::from_bytes(&bytes.to_vec()).map_err(js_error)?;
+        self.engine
+            .versioned_map(&self.id)
+            .import_as_head_at_millis(&bundle, timestamp_millis)
             .map_err(js_error)
             .and_then(map_version_object)
     }
@@ -1406,12 +1430,10 @@ impl WasmMapSnapshot {
             value.total_tree_size_bytes as u64,
         )
     }
-    pub fn export(&self) -> Result<Object, JsValue> {
-        let value = self.load()?.export().map_err(js_error)?;
-        maintenance_summary(
-            value.nodes.len() as u64,
-            value.nodes.iter().map(|node| node.bytes.len() as u64).sum(),
-        )
+    pub fn export(&self) -> Result<WasmSnapshotBundle, JsValue> {
+        self.load()
+            .and_then(|snapshot| snapshot.export().map_err(js_error))
+            .map(|inner| WasmSnapshotBundle { inner })
     }
     pub fn read(&self) -> Result<WasmReadSession, JsValue> {
         let tree = self.load()?.tree().clone();

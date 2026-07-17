@@ -101,6 +101,18 @@ func (m *VersionedMap) SnapshotAtAsync(ctx context.Context, id []byte) *Future[*
 	return startFuture(ctx, func() (*MapSnapshot, error) { return m.SnapshotAt(id) })
 }
 
+func (m *VersionedMap) ImportAsHeadAsync(ctx context.Context, bundle SnapshotBundle) *Future[MapVersion] {
+	encoded := encodeSnapshotBundle(bundle)
+	return startFuture(ctx, func() (MapVersion, error) { return m.importAsHeadEncoded(encoded, nil) })
+}
+
+func (m *VersionedMap) ImportAsHeadAtMillisAsync(ctx context.Context, bundle SnapshotBundle, timestampMillis uint64) *Future[MapVersion] {
+	encoded := encodeSnapshotBundle(bundle)
+	return startFuture(ctx, func() (MapVersion, error) {
+		return m.importAsHeadEncoded(encoded, &timestampMillis)
+	})
+}
+
 func (m *VersionedMap) SubscribeAsync(ctx context.Context) *Future[*MapSubscription] {
 	return startFuture(ctx, m.Subscribe)
 }
@@ -165,6 +177,10 @@ func (s *MapSnapshot) ProveRangeAsync(ctx context.Context, start, end []byte) *F
 func (s *MapSnapshot) ProvePrefixAsync(ctx context.Context, prefix []byte) *Future[RangeProof] {
 	prefix = append([]byte(nil), prefix...)
 	return startFuture(ctx, func() (RangeProof, error) { return s.ProvePrefix(prefix) })
+}
+
+func (s *MapSnapshot) ExportAsync(ctx context.Context) *Future[SnapshotBundle] {
+	return startFuture(ctx, s.Export)
 }
 
 func (s *ReadSession) GetAsync(ctx context.Context, key []byte) *Future[VersionedGetResult] {

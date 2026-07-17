@@ -430,6 +430,13 @@ class PortableParityTests(unittest.TestCase):
                 key[:] = b"x"
                 await pending
                 self.assertEqual(versioned.get(b"k"), b"v")
+                with versioned.snapshot() as snapshot:
+                    bundle = await snapshot.export_async()
+                imported = engine.versioned_map(b"async-import")
+                pending_import = imported.import_as_head_async(bundle)
+                bundle.nodes[0].bytes = b"mutated-after-handoff"
+                await pending_import
+                self.assertEqual(imported.get(b"k"), b"v")
 
         import asyncio
 
@@ -581,6 +588,16 @@ class PortableParityTests(unittest.TestCase):
             restored = target.restore_backup(source.backup())
             self.assertEqual(restored.id, source.head_id())
             self.assertEqual(target.get(b"k"), b"v2")
+            with source.snapshot() as snapshot:
+                bundle = snapshot.export()
+            imported_map = target_engine.versioned_map(b"versioned-import")
+            imported = imported_map.import_as_head(bundle)
+            self.assertTrue(imported.is_head)
+            self.assertEqual(imported_map.get(b"k"), b"v2")
+            timestamped_map = target_engine.versioned_map(b"versioned-import-at")
+            timestamped = timestamped_map.import_as_head_at_millis(bundle, 12_345)
+            self.assertEqual(timestamped.created_at_millis, 12_345)
+            self.assertEqual(timestamped_map.get(b"k"), b"v2")
             pruned = source.keep_last(1)
             self.assertTrue(pruned.retained)
             self.assertTrue(pruned.removed)

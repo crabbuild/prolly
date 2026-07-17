@@ -10623,12 +10623,24 @@
     {
       "rust": "prolly::MapSnapshot::export",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "maintenance",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "prolly.api.MapSnapshot.export",
+        "go": "prolly.(*MapSnapshot).Export",
+        "node": "@trail/prolly-node.MapSnapshot.export",
+        "kotlin": "build.crab.prolly.api.MapSnapshot.export",
+        "java": "build.crab.prolly.javaapi.MapSnapshot.export",
+        "ruby": "Prolly::MapSnapshot#export",
+        "swift": "ProllyAPI.MapSnapshot.export",
+        "wasm": "@trail/prolly-wasm.WasmMapSnapshot.export"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::snapshot-export-import",
+        "portable-parity::async-bundle-ownership"
+      ],
       "docs": []
     },
     {
@@ -25588,13 +25600,24 @@
     {
       "rust": "prolly::VersionedMap::import_as_head",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "prolly.api.VersionedMap.import_as_head",
+        "go": "prolly.(*VersionedMap).ImportAsHead",
+        "node": "@trail/prolly-node.VersionedMap.importAsHead",
+        "kotlin": "build.crab.prolly.api.VersionedMap.importAsHead",
+        "java": "build.crab.prolly.javaapi.VersionedMap.importAsHead",
+        "ruby": "Prolly::VersionedMap#import_as_head",
+        "swift": "ProllyAPI.VersionedMap.importAsHead",
+        "wasm": "@trail/prolly-wasm.WasmVersionedMap.importAsHead"
+      },
       "exclusions": {},
       "tests": [
-        "prolly-bindings::domain::versioned"
+        "prolly-bindings::domain::versioned",
+        "portable-parity::snapshot-export-import",
+        "portable-parity::async-bundle-ownership"
       ],
       "docs": [
         "conformance/binding-versioned-fixtures.v1.json"
@@ -25603,13 +25626,23 @@
     {
       "rust": "prolly::VersionedMap::import_as_head_at_millis",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "prolly.api.VersionedMap.import_as_head_at_millis",
+        "go": "prolly.(*VersionedMap).ImportAsHeadAtMillis",
+        "node": "@trail/prolly-node.VersionedMap.importAsHeadAtMillis",
+        "kotlin": "build.crab.prolly.api.VersionedMap.importAsHead(bundle,timestampMillis)",
+        "java": "build.crab.prolly.javaapi.VersionedMap.importAsHead(bundle,timestampMillis)",
+        "ruby": "Prolly::VersionedMap#import_as_head_at_millis",
+        "swift": "ProllyAPI.VersionedMap.importAsHead(_:timestampMillis:)",
+        "wasm": "@trail/prolly-wasm.WasmVersionedMap.importAsHeadAtMillis"
+      },
       "exclusions": {},
       "tests": [
-        "prolly-bindings::domain::versioned"
+        "prolly-bindings::domain::versioned",
+        "portable-parity::timestamped-snapshot-import"
       ],
       "docs": [
         "conformance/binding-versioned-fixtures.v1.json"

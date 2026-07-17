@@ -1168,6 +1168,24 @@ func TestPortableAsyncWrappersCopyInputsBeforeHandoff(t *testing.T) {
 	if err != nil || !read.Found || !bytes.Equal(read.Value, []byte("original-value")) {
 		t.Fatalf("async snapshot get = %#v, %v", read, err)
 	}
+	bundle, err := snapshot.ExportAsync(context.Background()).Await(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	imported, err := engine.VersionedMap([]byte("async-import"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer imported.Close()
+	pendingImport := imported.ImportAsHeadAsync(context.Background(), bundle)
+	bundle.Nodes[0].Bytes[0] = 0
+	if _, err := pendingImport.Await(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	got, ok, err = imported.Get([]byte("original-key"))
+	if err != nil || !ok || !bytes.Equal(got, []byte("original-value")) {
+		t.Fatalf("async imported get = %q, %v, %v", got, ok, err)
+	}
 	session, err := snapshot.Read()
 	if err != nil {
 		t.Fatal(err)
@@ -1431,6 +1449,37 @@ func TestPortableVersionedBackupRestoreAndRetention(t *testing.T) {
 	value, ok, err := target.Get([]byte("k"))
 	if err != nil || !ok || !bytes.Equal(value, []byte("v2")) {
 		t.Fatalf("restored get = %q, %v, %v", value, ok, err)
+	}
+	snapshot, err := source.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	bundle, err := snapshot.Export()
+	snapshot.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	importedMap, err := targetEngine.VersionedMap([]byte("versioned-import"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer importedMap.Close()
+	imported, err := importedMap.ImportAsHead(bundle)
+	if err != nil || !imported.IsHead {
+		t.Fatalf("imported head = %#v, %v", imported, err)
+	}
+	value, ok, err = importedMap.Get([]byte("k"))
+	if err != nil || !ok || !bytes.Equal(value, []byte("v2")) {
+		t.Fatalf("imported get = %q, %v, %v", value, ok, err)
+	}
+	timestampedMap, err := targetEngine.VersionedMap([]byte("versioned-import-at"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer timestampedMap.Close()
+	timestamped, err := timestampedMap.ImportAsHeadAtMillis(bundle, 12_345)
+	if err != nil || timestamped.CreatedAtMillis == nil || *timestamped.CreatedAtMillis != 12_345 {
+		t.Fatalf("timestamped import = %#v, %v", timestamped, err)
 	}
 	pruned, err := source.KeepLast(1)
 	if err != nil || len(pruned.Retained) == 0 || len(pruned.Removed) == 0 {

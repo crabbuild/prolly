@@ -10,6 +10,8 @@ import build.crab.prolly.api.verifyRangeProof
 import build.crab.prolly.api.verifyProximityMembershipProof
 import build.crab.prolly.api.verifyProximityStructureProof
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.async
+import kotlinx.coroutines.CoroutineStart
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
@@ -451,6 +453,15 @@ class PortableParityTest {
                 assertArrayEquals(updated.id, versioned.headAsync()!!.id)
                 versioned.snapshotAtAsync(updated.id)!!.use { snapshot ->
                     assertArrayEquals("v".bytes(), snapshot.getAsync("k".bytes()))
+                    val bundle = snapshot.exportAsync()
+                    engine.versionedMap("async-import".bytes()).use { imported ->
+                        val pending = async(start = CoroutineStart.UNDISPATCHED) {
+                            imported.importAsHeadAsync(bundle)
+                        }
+                        bundle.nodes.first().bytes[0] = 0
+                        pending.await()
+                        assertArrayEquals("v".bytes(), imported.get("k".bytes()))
+                    }
                     snapshot.read().use { session ->
                         assertArrayEquals("v".bytes(), session.getAsync("k".bytes()))
                     }
@@ -629,6 +640,29 @@ class PortableParityTest {
                     val verifiedSearch = proof.verify(proximity.descriptor)
                     assertArrayEquals("p".bytes(), verifiedSearch.result.neighbors.single().key)
                     assertEquals(true, verifiedSearch.replayedEvents > 0uL)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun versionedSnapshotBundlesImportAsHeadWithExplicitTimestamps() {
+        ProllyNative.useLocalDebugLibrary()
+        Engine.memory().use { sourceEngine ->
+            Engine.memory().use { targetEngine ->
+                sourceEngine.versionedMap("versioned-import-source".bytes()).use { source ->
+                    source.initialize()
+                    source.put("k".bytes(), "v".bytes())
+                    val bundle = source.snapshot()!!.use { it.export() }
+                    targetEngine.versionedMap("versioned-import".bytes()).use { target ->
+                        assertEquals(true, target.importAsHead(bundle).isHead)
+                        assertArrayEquals("v".bytes(), target.get("k".bytes()))
+                    }
+                    targetEngine.versionedMap("versioned-import-at".bytes()).use { target ->
+                        val imported = target.importAsHead(bundle, 12_345uL)
+                        assertEquals(12_345uL, imported.createdAtMillis)
+                        assertArrayEquals("v".bytes(), target.get("k".bytes()))
+                    }
                 }
             }
         }

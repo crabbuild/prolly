@@ -1,4 +1,7 @@
 import { nativePromise, ownedBytes, scopedBytes, type ViewScope } from "./packed.ts";
+import type { NativeSnapshotBundleRecord } from "./native.ts";
+
+export type SnapshotBundle = NativeSnapshotBundleRecord;
 
 export interface MapVersion {
   id: Uint8Array;
@@ -177,6 +180,8 @@ interface NativeVersionedMap {
   prepareMerge(base: Uint8Array, candidate: Uint8Array): NativeMapMerge;
   backup(): Uint8Array;
   restoreBackup(bytes: Uint8Array): NativeMapVersion;
+  importAsHead(bundle: SnapshotBundle): NativeMapVersion;
+  importAsHeadAtMillis(bundle: SnapshotBundle, timestampMillis: string): NativeMapVersion;
   keepLast(count: number): { retained: Uint8Array[]; removed: Uint8Array[] };
   pruneVersions(keepLatest: string): { retained: Uint8Array[]; removed: Uint8Array[] };
   keepForAt(nowMillis: string, maxAgeMillis: string): { retained: Uint8Array[]; removed: Uint8Array[] };
@@ -268,7 +273,7 @@ interface NativeMapSnapshot {
   provePrefix(prefix: Uint8Array): NativeRangeProof;
   proveRangePage(cursor: RangeCursor | null, end: Uint8Array | null, limit: string): NativeProvedRangePage;
   stats(): NativeMaintenanceSummary;
-  export(): NativeMaintenanceSummary;
+  export(): SnapshotBundle;
   read(): NativeReadSession;
 }
 interface NativeReadSession {
@@ -282,6 +287,25 @@ interface NativeReadSession {
 interface NativePackedReadPage { bytes: Uint8Array; recordCount: number; terminal: boolean; }
 interface NativeKeyProof {
   verify(): KeyProofVerification;
+}
+
+function ownedSnapshotBundle(bundle: SnapshotBundle): SnapshotBundle {
+  const config = bundle.tree.config;
+  return {
+    formatVersion: bundle.formatVersion,
+    tree: {
+      root: bundle.tree.root == null ? bundle.tree.root : ownedBytes(bundle.tree.root),
+      config: config == null ? config : {
+        ...config,
+        encoding: { ...config.encoding },
+        formatBytes: config.formatBytes == null ? config.formatBytes : ownedBytes(config.formatBytes),
+      },
+    },
+    nodes: bundle.nodes.map((node) => ({
+      cid: ownedBytes(node.cid),
+      bytes: ownedBytes(node.bytes),
+    })),
+  };
 }
 interface NativeMultiKeyProof { verify(): MultiKeyProofVerification; }
 interface NativeRangeProof { verify(): RangeProofVerification; }
@@ -672,6 +696,21 @@ export class VersionedMap implements Disposable {
     return nativePromise(signal, () => mapVersion(native.restoreBackup(bytes)));
   }
 
+  importAsHead(bundle: SnapshotBundle, signal?: AbortSignal): Promise<MapVersion> {
+    const native = this.#open(); const owned = ownedSnapshotBundle(bundle);
+    return nativePromise(signal, () => mapVersion(native.importAsHead(owned)));
+  }
+
+  importAsHeadAtMillis(
+    bundle: SnapshotBundle,
+    timestampMillis: bigint,
+    signal?: AbortSignal,
+  ): Promise<MapVersion> {
+    const native = this.#open(); const owned = ownedSnapshotBundle(bundle);
+    const timestamp = checkedU64(timestampMillis, "timestampMillis");
+    return nativePromise(signal, () => mapVersion(native.importAsHeadAtMillis(owned, timestamp)));
+  }
+
   keepLast(count: number, signal?: AbortSignal): Promise<VersionPrune> {
     if (!Number.isSafeInteger(count) || count < 0 || count > 0xffff_ffff) {
       return Promise.reject(new RangeError("keepLast count must be a non-negative uint32"));
@@ -932,7 +971,10 @@ export class MapSnapshot implements Disposable {
     return new ProvedRangePage(native.proveRangePage(ownedCursor, ownedEnd, checkedPageLimit(limit)));
   }
   stats(): MaintenanceSummary { return maintenance(this.#open().stats()); }
-  exportSummary(): MaintenanceSummary { return maintenance(this.#open().export()); }
+  export(signal?: AbortSignal): Promise<SnapshotBundle> {
+    const native = this.#open();
+    return nativePromise(signal, () => native.export());
+  }
   read(): ReadSession { return new ReadSession(this.#open().read()); }
   close(): void { this.#native = undefined; }
   [Symbol.dispose](): void { this.close(); }

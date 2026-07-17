@@ -125,6 +125,8 @@ extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_snapshot(
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_snapshot_at(uint64_t ptr, RustBuffer id, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_backup(uint64_t ptr, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_restore_backup(uint64_t ptr, RustBuffer bytes, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_import_as_head(uint64_t ptr, RustBuffer bundle, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_import_as_head_at_millis(uint64_t ptr, RustBuffer bundle, uint64_t timestamp_millis, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_rollback_to(uint64_t ptr, RustBuffer id, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_keep_last(uint64_t ptr, uint64_t count, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_prune_versions(uint64_t ptr, uint64_t keep_latest, RustCallStatus *out_err);
@@ -176,6 +178,7 @@ extern RustBuffer uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prove_keys
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prove_range(uint64_t ptr, RustBuffer start, RustBuffer range_end, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prove_prefix(uint64_t ptr, RustBuffer prefix, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prove_range_page(uint64_t ptr, RustBuffer cursor, RustBuffer range_end, uint64_t limit, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingmapsnapshot_export(uint64_t ptr, RustCallStatus *out_err);
 extern uint64_t uniffi_prolly_bindings_fn_method_bindingmapsnapshot_read_session(uint64_t ptr, RustCallStatus *out_err);
 extern uint64_t uniffi_prolly_bindings_fn_clone_prollyreadsession(uint64_t ptr, RustCallStatus *out_err);
 extern void uniffi_prolly_bindings_fn_free_prollyreadsession(uint64_t ptr, RustCallStatus *out_err);
@@ -1189,6 +1192,42 @@ func ffiVersionedRestoreBackup(handle uint64, bytes []byte) ([]byte, error) {
 	return portableTakeBuffer(buf), nil
 }
 
+func ffiVersionedImportAsHead(handle uint64, encodedBundle []byte) ([]byte, error) {
+	clone, err := portableCloneVersioned(handle)
+	if err != nil {
+		return nil, err
+	}
+	bundleBuf, err := portableInput(encodedBundle)
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingversionedmap_import_as_head(clone, bundleBuf, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiVersionedImportAsHeadAtMillis(handle uint64, encodedBundle []byte, timestampMillis uint64) ([]byte, error) {
+	clone, err := portableCloneVersioned(handle)
+	if err != nil {
+		return nil, err
+	}
+	bundleBuf, err := portableInput(encodedBundle)
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingversionedmap_import_as_head_at_millis(
+		clone, bundleBuf, C.uint64_t(timestampMillis), &status,
+	)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
 func ffiVersionedRollbackTo(handle uint64, id []byte) ([]byte, error) {
 	clone, err := portableCloneVersioned(handle)
 	if err != nil {
@@ -1653,6 +1692,19 @@ func ffiMapSnapshotProveRangePage(handle uint64, cursor *RangeCursor, end []byte
 	}
 	var status C.RustCallStatus
 	buf := C.uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prove_range_page(clone, cursorBuf, endBuf, C.uint64_t(limit), &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiMapSnapshotExport(handle uint64) ([]byte, error) {
+	clone, err := portableCloneMapSnapshot(handle)
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingmapsnapshot_export(clone, &status)
 	if err := portableStatusError(&status); err != nil {
 		return nil, err
 	}

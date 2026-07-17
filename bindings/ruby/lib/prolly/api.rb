@@ -449,6 +449,9 @@ module Prolly
     def prepare_merge(base, candidate) = open! { MapMerge.new(@native.prepare_merge(base.b, candidate.b)) }
     def backup = open! { @native.backup }
     def restore_backup(bundle) = open! { @native.restore_backup(bundle.b) }
+    def import_as_head(bundle) = open! { @native.import_as_head(bundle) }
+    def import_as_head_at_millis(bundle, timestamp_millis) =
+      open! { @native.import_as_head_at_millis(bundle, timestamp_millis) }
     def keep_last(count) = open! { @native.keep_last(count) }
     def prune_versions(keep_latest) = open! { @native.prune_versions(keep_latest) }
     def keep_for_at(now_millis, max_age_millis) = open! { @native.keep_for_at(now_millis, max_age_millis) }
@@ -476,6 +479,16 @@ module Prolly
     def delete_async(key) = Future.new { delete(key.b.dup) }
     def snapshot_async = Future.new { snapshot }
     def snapshot_at_async(id) = Future.new { snapshot_at(id.b.dup) }
+    def import_as_head_async(bundle)
+      owned = Prolly.snapshot_bundle_to_bytes(bundle)
+      Future.new { import_as_head(Prolly.snapshot_bundle_from_bytes(owned)) }
+    end
+    def import_as_head_at_millis_async(bundle, timestamp_millis)
+      owned = Prolly.snapshot_bundle_to_bytes(bundle)
+      Future.new do
+        import_as_head_at_millis(Prolly.snapshot_bundle_from_bytes(owned), timestamp_millis)
+      end
+    end
     def subscribe_async = Future.new { subscribe }
     def subscribe_from_async(last_seen = nil)
       owned = last_seen&.b&.dup
@@ -642,6 +655,7 @@ module Prolly
     end
     def prove_prefix_async(prefix) = Future.new { prove_prefix(prefix.b.dup) }
     def stats_async = Future.new { stats }
+    def export_async = Future.new { export }
     def close = @closed = true
 
     private

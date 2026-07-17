@@ -1214,6 +1214,8 @@ export declare class NativePortableVersionedMap {
   prepareMerge(base: Buffer, candidate: Buffer): NativePortableMapMerge
   backup(): Buffer
   restoreBackup(bytes: Buffer): NodePortableMapVersion
+  importAsHead(bundle: NodeSnapshotBundleRecord): NodePortableMapVersion
+  importAsHeadAtMillis(bundle: NodeSnapshotBundleRecord, timestampMillis: string): NodePortableMapVersion
   keepLast(count: number): NodePortableVersionPrune
   pruneVersions(keepLatest: string): NodePortableVersionPrune
   keepForAt(nowMillis: string, maxAgeMillis: string): NodePortableVersionPrune
@@ -1274,7 +1276,7 @@ export declare class NativePortableMapSnapshot {
   provePrefix(prefix: Buffer): NativePortableRangeProof
   proveRangePage(cursor: NodeRangeCursorRecord | undefined | null, end: Buffer | undefined | null, limit: string): NativePortableProvedRangePage
   stats(): NodePortableMaintenanceSummary
-  export(): NodePortableMaintenanceSummary
+  export(): NodeSnapshotBundleRecord
   read(): NativePortableReadSession
 }
 export declare class NativePortableReadSession {

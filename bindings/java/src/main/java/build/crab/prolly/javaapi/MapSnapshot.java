@@ -84,6 +84,9 @@ public final class MapSnapshot implements AutoCloseable {
         return build.crab.prolly.api.JavaPortableBridge.totalKeyValuePairs(stats());
     }
     public build.crab.prolly.SnapshotBundleRecord export() { return open().export(); }
+    public CompletableFuture<build.crab.prolly.SnapshotBundleRecord> exportAsync() {
+        return CompletableFuture.supplyAsync(this::export);
+    }
     public ReadSession read() { return new ReadSession(open().read()); }
 
     public CompletableFuture<Optional<byte[]>> getAsync(byte[] key) {
