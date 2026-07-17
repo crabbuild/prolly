@@ -312,6 +312,20 @@ class PortableParityTests(unittest.TestCase):
             rolled_back.rollback()
             self.assertIsNone(engine.versioned_map(b"a").get(b"discard"))
 
+    def test_pinned_merge_pages_conflicts_and_cas_publishes(self):
+        with Engine.memory() as engine:
+            versioned = engine.versioned_map(b"merge")
+            base = versioned.initialize()
+            candidate = versioned.put(b"k", b"candidate")
+            versioned.put(b"k", b"head")
+            with versioned.prepare_merge(base.id, candidate.id) as merge:
+                self.assertEqual(merge.base.id, base.id)
+                self.assertEqual(merge.candidate.id, candidate.id)
+                self.assertEqual([row.key for row in merge.conflict_page(limit=1).conflicts], [b"k"])
+                published = merge.publish("prefer_right")
+                self.assertEqual(published.current.id, candidate.id)
+            self.assertEqual(versioned.get(b"k"), b"candidate")
+
 
 if __name__ == "__main__":
     unittest.main()

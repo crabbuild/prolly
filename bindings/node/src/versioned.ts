@@ -37,6 +37,8 @@ export interface MapDiff {
   newValue?: Uint8Array;
 }
 export interface DiffPage { diffs: MapDiff[]; nextCursor?: RangeCursor; }
+export interface MapConflict { key: Uint8Array; base?: Uint8Array; left?: Uint8Array; right?: Uint8Array; }
+export interface ConflictPage { conflicts: MapConflict[]; nextCursor?: RangeCursor; }
 export interface MapChangeEvent { previous?: Uint8Array; current: MapVersion; diffs: MapDiff[]; }
 export interface VersionedTransactionCommit {
   applied: boolean;
@@ -107,6 +109,7 @@ interface NativeVersionedMap {
   compareToHead(base: Uint8Array): NativeMapComparison;
   subscribe(): NativeMapSubscription;
   subscribeFrom(lastSeen: Uint8Array | null): NativeMapSubscription;
+  prepareMerge(base: Uint8Array, candidate: Uint8Array): NativeMapMerge;
   backup(): Uint8Array;
   restoreBackup(bytes: Uint8Array): NativeMapVersion;
   keepLast(count: number): { retained: Uint8Array[]; removed: Uint8Array[] };
@@ -124,6 +127,14 @@ interface NativeMapChangeEvent { previous?: Uint8Array; current: NativeMapVersio
 interface NativeMapSubscription {
   lastSeen(): Uint8Array | null;
   poll(): NativeMapChangeEvent | null;
+}
+interface NativeMapMerge {
+  base(): NativeMapVersion;
+  head(): NativeMapVersion;
+  candidate(): NativeMapVersion;
+  merge(resolver: string | null): unknown;
+  conflictPage(cursor: RangeCursor | null, limit: string): ConflictPage;
+  publish(resolver: string | null): NativeMapUpdate;
 }
 interface NativeVersionedTransactionCommit {
   applied: boolean;
@@ -390,6 +401,10 @@ export class VersionedMap implements Disposable {
     ));
   }
 
+  prepareMerge(base: Uint8Array, candidate: Uint8Array): MapMerge {
+    return new MapMerge(this.#open().prepareMerge(ownedBytes(base), ownedBytes(candidate)));
+  }
+
   backup(signal?: AbortSignal): Promise<Uint8Array> {
     const native = this.#open();
     return nativePromise(signal, () => native.backup());
@@ -523,6 +538,27 @@ export class MapSubscription implements Disposable {
         diffs: event.diffs,
       };
     });
+  }
+  close(): void { this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class MapMerge implements Disposable {
+  #native?: NativeMapMerge;
+  constructor(native: NativeMapMerge) { this.#native = native; }
+  #open(): NativeMapMerge { if (this.#native == null) throw new Error("map merge is closed"); return this.#native; }
+  base(): MapVersion { return mapVersion(this.#open().base()); }
+  head(): MapVersion { return mapVersion(this.#open().head()); }
+  candidate(): MapVersion { return mapVersion(this.#open().candidate()); }
+  merge(resolver?: string, signal?: AbortSignal): Promise<unknown> {
+    const native = this.#open(); return nativePromise(signal, () => native.merge(resolver ?? null));
+  }
+  conflictPage(cursor?: RangeCursor, limit: bigint = 256n, signal?: AbortSignal): Promise<ConflictPage> {
+    const native = this.#open(); const ownedCursor = ownedRangeCursor(cursor);
+    return nativePromise(signal, () => native.conflictPage(ownedCursor, checkedPageLimit(limit)));
+  }
+  publish(resolver?: string, signal?: AbortSignal): Promise<MapUpdate> {
+    const native = this.#open(); return nativePromise(signal, () => mapUpdate(native.publish(resolver ?? null)));
   }
   close(): void { this.#native = undefined; }
   [Symbol.dispose](): void { this.close(); }

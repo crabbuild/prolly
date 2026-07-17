@@ -168,6 +168,9 @@ public final class VersionedMap: @unchecked Sendable {
     public func subscribe(from lastSeen: Data? = nil) throws -> MapSubscription {
         try open { MapSubscription(native: try native.subscribeFrom(lastSeen: lastSeen.map { Data($0) })) }
     }
+    public func prepareMerge(base: Data, candidate: Data) throws -> MapMerge {
+        try open { MapMerge(native: try native.prepareMerge(base: Data(base), candidate: Data(candidate))) }
+    }
     public func backup() throws -> Data { try open { try native.backup() } }
     public func restoreBackup(_ bundle: Data) throws -> MapVersionRecord {
         try open { try native.restoreBackup(bytes: Data(bundle)) }
@@ -258,6 +261,29 @@ public final class MapSubscription: @unchecked Sendable {
     public func poll() throws -> MapChangeEventRecord? { try open { try native.poll() } }
     private func open<R>(_ body: () throws -> R) throws -> R {
         if closed { throw PortableAPIError.closed("MapSubscription") }
+        return try body()
+    }
+}
+
+public final class MapMerge: @unchecked Sendable {
+    let native: BindingMapMerge
+    private var closed = false
+    init(native: BindingMapMerge) { self.native = native }
+    public func close() { closed = true }
+    public var base: MapVersionRecord { native.base() }
+    public var head: MapVersionRecord { native.head() }
+    public var candidate: MapVersionRecord { native.candidate() }
+    public func merge(resolver: String? = nil) throws -> TreeRecord {
+        try open { try native.merge(resolver: resolver) }
+    }
+    public func conflictPage(cursor: RangeCursorRecord? = nil, limit: UInt64 = 256) throws -> ConflictPageRecord {
+        try open { try native.conflictPage(cursor: cursor, limit: limit) }
+    }
+    public func publish(resolver: String? = nil) throws -> MapUpdateRecord {
+        try open { try native.publish(resolver: resolver) }
+    }
+    private func open<R>(_ body: () throws -> R) throws -> R {
+        if closed { throw PortableAPIError.closed("MapMerge") }
         return try body()
     }
 }

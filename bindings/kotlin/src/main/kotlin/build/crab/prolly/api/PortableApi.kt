@@ -4,6 +4,7 @@ import build.crab.prolly.BindingIndexedMap
 import build.crab.prolly.BindingIndexedSnapshot
 import build.crab.prolly.BindingIndexRegistry
 import build.crab.prolly.BindingMapComparison
+import build.crab.prolly.BindingMapMerge
 import build.crab.prolly.BindingMapSubscription
 import build.crab.prolly.BindingProximityMap
 import build.crab.prolly.BindingProximityReadSession
@@ -111,6 +112,8 @@ class VersionedMap(internal val native: BindingVersionedMap) : AutoCloseable {
     fun subscribe() = MapSubscription(native.subscribe())
     fun subscribeFrom(lastSeen: ByteArray? = null) =
         MapSubscription(native.subscribeFrom(lastSeen?.copyOf()))
+    fun prepareMerge(base: ByteArray, candidate: ByteArray) =
+        MapMerge(native.prepareMerge(base.copyOf(), candidate.copyOf()))
     fun versions() = native.versions()
     fun backup() = native.backup()
     fun restoreBackup(bundle: ByteArray) = native.restoreBackup(bundle.copyOf())
@@ -156,6 +159,17 @@ class MapComparison(internal val native: BindingMapComparison) : AutoCloseable {
 class MapSubscription(internal val native: BindingMapSubscription) : AutoCloseable {
     fun lastSeen() = native.lastSeen()?.copyOf()
     fun poll() = native.poll()
+    override fun close() = native.close()
+}
+
+class MapMerge(internal val native: BindingMapMerge) : AutoCloseable {
+    fun base() = native.base()
+    fun head() = native.head()
+    fun candidate() = native.candidate()
+    fun merge(resolver: String? = null) = native.merge(resolver)
+    fun conflictPage(cursor: RangeCursorRecord? = null, limit: ULong = 256uL) =
+        native.conflictPage(cursor, limit)
+    fun publish(resolver: String? = null) = native.publish(resolver)
     override fun close() = native.close()
 }
 

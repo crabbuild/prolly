@@ -292,6 +292,7 @@ module Prolly
     def compare_to_head(base) = open! { MapComparison.new(@native.compare_to_head(base.b)) }
     def subscribe = open! { MapSubscription.new(@native.subscribe) }
     def subscribe_from(last_seen = nil) = open! { MapSubscription.new(@native.subscribe_from(last_seen&.b)) }
+    def prepare_merge(base, candidate) = open! { MapMerge.new(@native.prepare_merge(base.b, candidate.b)) }
     def backup = open! { @native.backup }
     def restore_backup(bundle) = open! { @native.restore_backup(bundle.b) }
     def keep_last(count) = open! { @native.keep_last(count) }
@@ -369,6 +370,25 @@ module Prolly
 
     def open!
       raise IOError, 'map subscription is closed' if @closed
+      yield
+    end
+  end
+
+  class MapMerge
+    def initialize(native)
+      @native = native
+      @closed = false
+    end
+    def base = open! { @native.base }
+    def head = open! { @native.head }
+    def candidate = open! { @native.candidate }
+    def merge(resolver = nil) = open! { @native.merge(resolver) }
+    def conflict_page(cursor = nil, limit = 256) = open! { @native.conflict_page(cursor, limit) }
+    def publish(resolver = nil) = open! { @native.publish(resolver) }
+    def close = @closed = true
+    private
+    def open!
+      raise IOError, 'map merge is closed' if @closed
       yield
     end
   end

@@ -291,4 +291,19 @@ final class PortableParityTests: XCTestCase {
             XCTAssertNil(try engine.versionedMap(Data("a".utf8)).get(Data("discard".utf8)))
         }
     }
+    func testPinnedMergesPageConflictsAndCASPublish() throws {
+        try Engine.withMemory { engine in
+            let map = try engine.versionedMap(Data("merge".utf8))
+            let base = try map.initialize()
+            let candidate = try map.put(Data("k".utf8), value: Data("candidate".utf8))
+            _ = try map.put(Data("k".utf8), value: Data("head".utf8))
+            let merge = try map.prepareMerge(base: base.id, candidate: candidate.id)
+            XCTAssertEqual(merge.base.id, base.id)
+            XCTAssertEqual(merge.candidate.id, candidate.id)
+            XCTAssertEqual(try merge.conflictPage(limit: 1).conflicts.map(\.key), [Data("k".utf8)])
+            XCTAssertEqual(try merge.publish(resolver: "prefer_right").current?.id, candidate.id)
+            XCTAssertEqual(try map.get(Data("k".utf8)), Data("candidate".utf8))
+            merge.close()
+        }
+    }
 }

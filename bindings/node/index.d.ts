@@ -934,6 +934,7 @@ export declare class NativePortableVersionedMap {
   compareToHead(base: Buffer): NativePortableMapComparison
   subscribe(): NativePortableMapSubscription
   subscribeFrom(lastSeen?: Buffer | undefined | null): NativePortableMapSubscription
+  prepareMerge(base: Buffer, candidate: Buffer): NativePortableMapMerge
   backup(): Buffer
   restoreBackup(bytes: Buffer): NodePortableMapVersion
   keepLast(count: number): NodePortableVersionPrune
@@ -949,6 +950,14 @@ export declare class NativePortableMapComparison {
 export declare class NativePortableMapSubscription {
   lastSeen(): Buffer | null
   poll(): NodePortableMapChangeEvent | null
+}
+export declare class NativePortableMapMerge {
+  base(): NodePortableMapVersion
+  head(): NodePortableMapVersion
+  candidate(): NodePortableMapVersion
+  merge(resolver?: string | undefined | null): NodeTreeRecord
+  conflictPage(cursor: NodeRangeCursorRecord | undefined | null, limit: string): NodeConflictPageRecord
+  publish(resolver?: string | undefined | null): NodePortableMapUpdate
 }
 export declare class NativePortableVersionedTransaction {
   head(mapId: Buffer): NodePortableMapVersion | null

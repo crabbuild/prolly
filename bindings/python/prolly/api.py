@@ -228,6 +228,10 @@ class VersionedMap(_Scoped):
             self._inner.subscribe_from(None if last_seen is None else bytes(last_seen))
         )
 
+    def prepare_merge(self, base: bytes, candidate: bytes) -> "MapMerge":
+        self._open()
+        return MapMerge(self._inner.prepare_merge(bytes(base), bytes(candidate)))
+
     def keep_last(self, count: int):
         self._open()
         return self._inner.keep_last(count)
@@ -347,6 +351,39 @@ class MapSubscription(_Scoped):
     def poll(self):
         self._open()
         return self._inner.poll()
+
+
+class MapMerge(_Scoped):
+    def __init__(self, inner: _native.BindingMapMerge):
+        super().__init__()
+        self._inner = inner
+
+    @property
+    def base(self):
+        self._open()
+        return self._inner.base()
+
+    @property
+    def head(self):
+        self._open()
+        return self._inner.head()
+
+    @property
+    def candidate(self):
+        self._open()
+        return self._inner.candidate()
+
+    def merge(self, resolver: str | None = None):
+        self._open()
+        return self._inner.merge(resolver)
+
+    def conflict_page(self, cursor=None, limit: int = 256):
+        self._open()
+        return self._inner.conflict_page(cursor, limit)
+
+    def publish(self, resolver: str | None = None):
+        self._open()
+        return self._inner.publish(resolver)
 
 
 class MapSnapshot(_Scoped):
@@ -832,6 +869,7 @@ __all__ = [
     "IndexedMap",
     "IndexedSnapshot",
     "MapComparison",
+    "MapMerge",
     "MapSubscription",
     "MapSnapshot",
     "NeighborView",

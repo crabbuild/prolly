@@ -1,8 +1,9 @@
 use super::{
-    to_napi_error, NativeProllyEngine, NodeDiffPageRecord, NodeDiffRecord, NodeEntryRecord,
-    NodeMultiKeyProofVerificationRecord, NodeMutationRecord, NodeRangeCursorRecord,
-    NodeRangePageProofVerificationRecord, NodeRangePageRecord, NodeRangeProofVerificationRecord,
-    NodeReverseCursorRecord, NodeReversePageRecord, NodeTreeRecord,
+    to_napi_error, NativeProllyEngine, NodeConflictPageRecord, NodeDiffPageRecord, NodeDiffRecord,
+    NodeEntryRecord, NodeMultiKeyProofVerificationRecord, NodeMutationRecord,
+    NodeRangeCursorRecord, NodeRangePageProofVerificationRecord, NodeRangePageRecord,
+    NodeRangeProofVerificationRecord, NodeReverseCursorRecord, NodeReversePageRecord,
+    NodeTreeRecord,
 };
 use napi::bindgen_prelude::{Buffer, Env, Error, Float32Array, FunctionRef, Result, Status};
 use napi::JsObject;
@@ -12,20 +13,20 @@ use prolly_bindings::{
     verify_key_proof, verify_multi_key_proof, verify_proximity_membership_proof,
     verify_proximity_structure_proof, verify_range_page_proof, verify_range_proof,
     ActiveIndexHealthRecord, BindingIndexRegistry, BindingIndexedMap, BindingIndexedSnapshot,
-    BindingMapComparison, BindingMapSnapshot, BindingMapSubscription, BindingProximityMap,
-    BindingProximityReadSession, BindingProximitySearchProof, BindingSecondaryIndexSnapshot,
-    BindingVersionedMap, BindingVersionedTransaction, DistanceMetricRecord,
-    ExactProximityRecordRecord, IndexBuildResultRecord, IndexEntryRecord, IndexMatchRecord,
-    IndexPageRecord, IndexProjectionRecord, IndexVerificationRecord, IndexedMapHealthRecord,
-    IndexedMapMetricsRecord, IndexedRetentionRecord, IndexedSnapshotIdRecord, IndexedSourceRecord,
-    IndexedUpdateKind, IndexedUpdateRecord, IndexedVersionRecord, KeyProofRecord, MapUpdateKind,
-    MapUpdateRecord, MapVersionRecord, MultiKeyProofRecord, ProllyBindingError, ProllyReadSession,
-    ProvedRangePageRecord, ProximityConfigRecord, ProximityMembershipProofRecord,
-    ProximityMutationRecord, ProximityMutationStatsRecord, ProximityNeighborRecord,
-    ProximityRecordRecord, ProximitySearchClaimKindRecord, ProximitySearchResultRecord,
-    ProximityStructuralProofRecord, ProximityVerificationRecord, RangeProofRecord,
-    SearchBackendRecord, SearchCompletionRecord, SecondaryIndexExtractorCallback,
-    VersionPruneRecord,
+    BindingMapComparison, BindingMapMerge, BindingMapSnapshot, BindingMapSubscription,
+    BindingProximityMap, BindingProximityReadSession, BindingProximitySearchProof,
+    BindingSecondaryIndexSnapshot, BindingVersionedMap, BindingVersionedTransaction,
+    DistanceMetricRecord, ExactProximityRecordRecord, IndexBuildResultRecord, IndexEntryRecord,
+    IndexMatchRecord, IndexPageRecord, IndexProjectionRecord, IndexVerificationRecord,
+    IndexedMapHealthRecord, IndexedMapMetricsRecord, IndexedRetentionRecord,
+    IndexedSnapshotIdRecord, IndexedSourceRecord, IndexedUpdateKind, IndexedUpdateRecord,
+    IndexedVersionRecord, KeyProofRecord, MapUpdateKind, MapUpdateRecord, MapVersionRecord,
+    MultiKeyProofRecord, ProllyBindingError, ProllyReadSession, ProvedRangePageRecord,
+    ProximityConfigRecord, ProximityMembershipProofRecord, ProximityMutationRecord,
+    ProximityMutationStatsRecord, ProximityNeighborRecord, ProximityRecordRecord,
+    ProximitySearchClaimKindRecord, ProximitySearchResultRecord, ProximityStructuralProofRecord,
+    ProximityVerificationRecord, RangeProofRecord, SearchBackendRecord, SearchCompletionRecord,
+    SecondaryIndexExtractorCallback, VersionPruneRecord,
 };
 use std::sync::Arc;
 
@@ -967,6 +968,14 @@ impl NativePortableVersionedMap {
             .map_err(to_napi_error)
     }
 
+    #[napi(js_name = "prepareMerge")]
+    pub fn prepare_merge(&self, base: Buffer, candidate: Buffer) -> Result<NativePortableMapMerge> {
+        self.inner
+            .prepare_merge(base.to_vec(), candidate.to_vec())
+            .map(|inner| NativePortableMapMerge { inner })
+            .map_err(to_napi_error)
+    }
+
     #[napi]
     pub fn backup(&self) -> Result<Buffer> {
         self.inner.backup().map(Buffer::from).map_err(to_napi_error)
@@ -1086,6 +1095,63 @@ impl NativePortableMapSubscription {
                     diffs: event.diffs.into_iter().map(Into::into).collect(),
                 })
             })
+            .map_err(to_napi_error)
+    }
+}
+
+#[napi]
+pub struct NativePortableMapMerge {
+    inner: Arc<BindingMapMerge>,
+}
+
+#[napi]
+impl NativePortableMapMerge {
+    #[napi]
+    pub fn base(&self) -> NodePortableMapVersion {
+        self.inner.base().into()
+    }
+
+    #[napi]
+    pub fn head(&self) -> NodePortableMapVersion {
+        self.inner.head().into()
+    }
+
+    #[napi]
+    pub fn candidate(&self) -> NodePortableMapVersion {
+        self.inner.candidate().into()
+    }
+
+    #[napi]
+    pub fn merge(&self, resolver: Option<String>) -> Result<NodeTreeRecord> {
+        self.inner
+            .merge(resolver)
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "conflictPage")]
+    pub fn conflict_page(
+        &self,
+        cursor: Option<NodeRangeCursorRecord>,
+        limit: String,
+    ) -> Result<NodeConflictPageRecord> {
+        let limit = limit.parse::<u64>().map_err(|_| {
+            Error::new(
+                Status::InvalidArg,
+                "conflict page limit must be an unsigned 64-bit integer",
+            )
+        })?;
+        self.inner
+            .conflict_page(cursor.map(Into::into), limit)
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi]
+    pub fn publish(&self, resolver: Option<String>) -> Result<NodePortableMapUpdate> {
+        self.inner
+            .publish(resolver)
+            .map(Into::into)
             .map_err(to_napi_error)
     }
 }

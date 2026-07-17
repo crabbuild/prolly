@@ -8,7 +8,7 @@ import { VersionedMap, VersionedTransaction } from "./versioned.ts";
 export { IndexRegistry, IndexedMap } from "./indexed.ts";
 export { ViewExpiredError } from "./packed.ts";
 export { exactSearch, ProximityMap, ProximityReadSession } from "./proximity.ts";
-export { MapComparison, MapSubscription, VersionedMap, VersionedTransaction } from "./versioned.ts";
+export { MapComparison, MapMerge, MapSubscription, VersionedMap, VersionedTransaction } from "./versioned.ts";
 export type * from "./indexed.ts";
 export type * from "./proximity.ts";
 export type * from "./versioned.ts";

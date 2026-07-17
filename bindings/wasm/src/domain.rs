@@ -1,9 +1,10 @@
 use super::{
-    borrowed_entry_view_object, call_scan_visitor, diffs_to_array, entries_to_array, entry_object,
-    js_error, multi_key_proof_verification_to_object, optional_bytes, range_cursor_value,
-    range_page_proof_verification_to_object, range_page_to_object,
-    range_proof_verification_to_object, reverse_page_to_object, scan_callback_flow,
-    scan_outcome_to_object, WasmProllyEngine, WasmRangeCursor, WasmReverseCursor,
+    borrowed_entry_view_object, call_scan_visitor, conflict_to_object, diffs_to_array,
+    entries_to_array, entry_object, js_error, multi_key_proof_verification_to_object,
+    optional_bytes, range_cursor_value, range_page_proof_verification_to_object,
+    range_page_to_object, range_proof_verification_to_object, resolver_from_name,
+    reverse_page_to_object, scan_callback_flow, scan_outcome_to_object, WasmProllyEngine,
+    WasmRangeCursor, WasmReverseCursor,
 };
 use crate::page::set_bytes;
 use js_sys::{Array, Function, Object, Reflect, Uint8Array};
@@ -326,6 +327,27 @@ impl WasmVersionedMap {
         })
     }
 
+    #[wasm_bindgen(js_name = prepareMerge)]
+    pub fn prepare_merge(
+        &self,
+        base: Uint8Array,
+        candidate: Uint8Array,
+    ) -> Result<WasmMapMerge, JsValue> {
+        let base_id = MapVersionId::from_bytes(&base.to_vec()).map_err(js_error)?;
+        let candidate_id = MapVersionId::from_bytes(&candidate.to_vec()).map_err(js_error)?;
+        let map = self.engine.versioned_map(&self.id);
+        let merge = map
+            .prepare_merge(&base_id, &candidate_id)
+            .map_err(js_error)?;
+        Ok(WasmMapMerge {
+            engine: Arc::clone(&self.engine),
+            id: self.id.clone(),
+            base: merge.base().clone(),
+            head: merge.head().clone(),
+            candidate: merge.candidate().clone(),
+        })
+    }
+
     pub fn backup(&self) -> Result<Vec<u8>, JsValue> {
         self.engine
             .versioned_map(&self.id)
@@ -493,6 +515,102 @@ impl WasmMapSubscription {
         )?;
         Reflect::set(&object, &"diffs".into(), &diffs_to_array(diffs)?.into())?;
         Ok(object.into())
+    }
+}
+
+#[wasm_bindgen(js_name = WasmMapMerge)]
+pub struct WasmMapMerge {
+    engine: Arc<super::WasmEngine>,
+    id: Vec<u8>,
+    base: prolly::MapVersion,
+    head: prolly::MapVersion,
+    candidate: prolly::MapVersion,
+}
+
+#[wasm_bindgen(js_class = WasmMapMerge)]
+impl WasmMapMerge {
+    pub fn base(&self) -> Result<Object, JsValue> {
+        map_version_object(self.base.clone())
+    }
+
+    pub fn head(&self) -> Result<Object, JsValue> {
+        map_version_object(self.head.clone())
+    }
+
+    pub fn candidate(&self) -> Result<Object, JsValue> {
+        map_version_object(self.candidate.clone())
+    }
+
+    pub fn merge(&self, resolver: Option<String>) -> Result<super::WasmTree, JsValue> {
+        self.engine
+            .merge(
+                &self.base.tree,
+                &self.head.tree,
+                &self.candidate.tree,
+                resolver_from_name(resolver)?,
+            )
+            .map(|inner| super::WasmTree { inner })
+            .map_err(js_error)
+    }
+
+    #[wasm_bindgen(js_name = conflictPage)]
+    pub fn conflict_page(
+        &self,
+        cursor: Option<WasmRangeCursor>,
+        limit: u32,
+    ) -> Result<Object, JsValue> {
+        let after = cursor.and_then(|value| value.inner.after().map(Vec::from));
+        let conflicts = Array::new();
+        let mut last_key = None;
+        let mut has_more = false;
+        if limit > 0 {
+            for conflict in self
+                .engine
+                .stream_conflicts(&self.base.tree, &self.head.tree, &self.candidate.tree)
+                .map_err(js_error)?
+            {
+                let conflict = conflict.map_err(js_error)?;
+                if after
+                    .as_ref()
+                    .is_some_and(|value| conflict.key.as_slice() <= value.as_slice())
+                {
+                    continue;
+                }
+                if conflicts.length() == limit {
+                    has_more = true;
+                    break;
+                }
+                last_key = Some(conflict.key.clone());
+                conflicts.push(&conflict_to_object(conflict)?.into());
+            }
+        }
+        let object = Object::new();
+        Reflect::set(&object, &"conflicts".into(), &conflicts.into())?;
+        let next = if has_more {
+            last_key
+                .map(|key| {
+                    WasmRangeCursor {
+                        inner: prolly::RangeCursor::after_key(key),
+                    }
+                    .into()
+                })
+                .unwrap_or(JsValue::NULL)
+        } else {
+            JsValue::NULL
+        };
+        Reflect::set(&object, &"nextCursor".into(), &next)?;
+        Ok(object)
+    }
+
+    pub fn publish(&self, resolver: Option<String>) -> Result<Object, JsValue> {
+        let map = self.engine.versioned_map(&self.id);
+        let merge = map
+            .prepare_merge(&self.base.id, &self.candidate.id)
+            .map_err(js_error)?;
+        merge
+            .publish(resolver_from_name(resolver)?)
+            .map_err(js_error)
+            .and_then(map_update_object)
     }
 }
 

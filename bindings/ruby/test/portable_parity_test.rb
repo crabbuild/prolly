@@ -285,4 +285,21 @@ class PortableParityTest < Minitest::Test
       assert_nil engine.versioned_map('a'.b).get('discard'.b)
     end
   end
+
+
+  def test_pinned_merges_page_conflicts_and_cas_publish
+    Prolly::Engine.memory.use do |engine|
+      map = engine.versioned_map('merge'.b)
+      base = map.initialize_map
+      candidate = map.put('k'.b, 'candidate'.b)
+      map.put('k'.b, 'head'.b)
+      merge = map.prepare_merge(base.id, candidate.id)
+      assert_equal base.id, merge.base.id
+      assert_equal candidate.id, merge.candidate.id
+      assert_equal ['k'.b], merge.conflict_page(nil, 1).conflicts.map(&:key)
+      assert_equal candidate.id, merge.publish('prefer_right').current.id
+      assert_equal 'candidate'.b, map.get('k'.b)
+      merge.close
+    end
+  end
 end

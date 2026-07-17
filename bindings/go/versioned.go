@@ -68,6 +68,108 @@ type MapComparison struct {
 	closed atomic.Bool
 }
 
+type MapMerge struct {
+	handle uint64
+	closed atomic.Bool
+	mu     sync.RWMutex
+}
+
+func (m *VersionedMap) PrepareMerge(base, candidate []byte) (*MapMerge, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	mergeHandle, err := ffiVersionedPrepareMerge(handle, bytes.Clone(base), bytes.Clone(candidate))
+	if err != nil {
+		return nil, err
+	}
+	result := &MapMerge{handle: mergeHandle}
+	runtime.SetFinalizer(result, (*MapMerge).Close)
+	return result, nil
+}
+
+func (m *MapMerge) Close() {
+	if m == nil || m.closed.Swap(true) {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	runtime.SetFinalizer(m, nil)
+	if m.handle != 0 {
+		ffiFreeMapMerge(m.handle)
+		m.handle = 0
+	}
+}
+
+func (m *MapMerge) withHandle() (uint64, func(), error) {
+	if m == nil || m.closed.Load() {
+		return 0, nil, errors.New("map merge is closed")
+	}
+	m.mu.RLock()
+	if m.closed.Load() || m.handle == 0 {
+		m.mu.RUnlock()
+		return 0, nil, errors.New("map merge is closed")
+	}
+	return m.handle, m.mu.RUnlock, nil
+}
+
+func (m *MapMerge) version(which string) (MapVersion, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return MapVersion{}, err
+	}
+	defer unlock()
+	raw, err := ffiMapMergeVersion(handle, which)
+	if err != nil {
+		return MapVersion{}, err
+	}
+	return decodePortableMapVersion(raw)
+}
+
+func (m *MapMerge) Base() (MapVersion, error)      { return m.version("base") }
+func (m *MapMerge) Head() (MapVersion, error)      { return m.version("head") }
+func (m *MapMerge) Candidate() (MapVersion, error) { return m.version("candidate") }
+
+func (m *MapMerge) Merge(resolver string) (Tree, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return Tree{}, err
+	}
+	defer unlock()
+	raw, err := ffiMapMergeMerge(handle, resolver)
+	if err != nil {
+		return Tree{}, err
+	}
+	return decodeTree(raw)
+}
+
+func (m *MapMerge) ConflictPage(cursor *RangeCursor, limit uint64) (ConflictPage, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return ConflictPage{}, err
+	}
+	defer unlock()
+	raw, err := ffiMapMergeConflictPage(handle, cloneRangeCursor(cursor), limit)
+	if err != nil {
+		return ConflictPage{}, err
+	}
+	return decodeConflictPage(raw)
+}
+
+func (m *MapMerge) Publish(resolver string) (MapUpdate, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return MapUpdate{}, err
+	}
+	defer unlock()
+	raw, err := ffiMapMergePublish(handle, resolver)
+	if err != nil {
+		return MapUpdate{}, err
+	}
+	return decodePortableMapUpdate(raw)
+}
+
 type MapChangeEvent struct {
 	Previous []byte
 	Current  MapVersion

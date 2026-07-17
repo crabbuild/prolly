@@ -94,6 +94,15 @@ extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_backup(ui
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_restore_backup(uint64_t ptr, RustBuffer bytes, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_keep_last(uint64_t ptr, uint64_t count, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_verify_catalog(uint64_t ptr, RustCallStatus *out_err);
+extern uint64_t uniffi_prolly_bindings_fn_method_bindingversionedmap_prepare_merge(uint64_t ptr, RustBuffer base, RustBuffer candidate, RustCallStatus *out_err);
+extern uint64_t uniffi_prolly_bindings_fn_clone_bindingmapmerge(uint64_t ptr, RustCallStatus *out_err);
+extern void uniffi_prolly_bindings_fn_free_bindingmapmerge(uint64_t ptr, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingmapmerge_base(uint64_t ptr, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingmapmerge_head(uint64_t ptr, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingmapmerge_candidate(uint64_t ptr, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingmapmerge_merge(uint64_t ptr, RustBuffer resolver, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingmapmerge_conflict_page(uint64_t ptr, RustBuffer cursor, uint64_t limit, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingmapmerge_publish(uint64_t ptr, RustBuffer resolver, RustCallStatus *out_err);
 extern uint64_t uniffi_prolly_bindings_fn_clone_bindingversionedtransaction(uint64_t ptr, RustCallStatus *out_err);
 extern void uniffi_prolly_bindings_fn_free_bindingversionedtransaction(uint64_t ptr, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedtransaction_head(uint64_t ptr, RustBuffer map_id, RustCallStatus *out_err);
@@ -218,6 +227,7 @@ extern void prolly_fast_page_release(uint64_t lease_handle);
 import "C"
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"runtime"
@@ -297,6 +307,12 @@ func portableCloneVersionedTransaction(handle uint64) (C.uint64_t, error) {
 	return clone, portableStatusError(&status)
 }
 
+func portableCloneMapMerge(handle uint64) (C.uint64_t, error) {
+	var status C.RustCallStatus
+	clone := C.uniffi_prolly_bindings_fn_clone_bindingmapmerge(C.uint64_t(handle), &status)
+	return clone, portableStatusError(&status)
+}
+
 func portableCloneMapSnapshot(handle uint64) (C.uint64_t, error) {
 	var status C.RustCallStatus
 	clone := C.uniffi_prolly_bindings_fn_clone_bindingmapsnapshot(C.uint64_t(handle), &status)
@@ -364,6 +380,24 @@ func ffiEngineBeginVersionedTransaction(engine *Engine) (uint64, error) {
 	}
 	var status C.RustCallStatus
 	result := C.uniffi_prolly_bindings_fn_method_prollyengine_begin_versioned_transaction(clone, &status)
+	return uint64(result), portableStatusError(&status)
+}
+
+func ffiVersionedPrepareMerge(handle uint64, base, candidate []byte) (uint64, error) {
+	clone, err := portableCloneVersioned(handle)
+	if err != nil {
+		return 0, err
+	}
+	baseBuf, err := portableInput(encodeByteArray(base))
+	if err != nil {
+		return 0, err
+	}
+	candidateBuf, err := portableInput(encodeByteArray(candidate))
+	if err != nil {
+		return 0, err
+	}
+	var status C.RustCallStatus
+	result := C.uniffi_prolly_bindings_fn_method_bindingversionedmap_prepare_merge(clone, baseBuf, candidateBuf, &status)
 	return uint64(result), portableStatusError(&status)
 }
 
@@ -1236,6 +1270,91 @@ func ffiFreeVersioned(handle uint64) {
 func ffiFreeVersionedTransaction(handle uint64) {
 	var status C.RustCallStatus
 	C.uniffi_prolly_bindings_fn_free_bindingversionedtransaction(C.uint64_t(handle), &status)
+}
+
+func ffiFreeMapMerge(handle uint64) {
+	var status C.RustCallStatus
+	C.uniffi_prolly_bindings_fn_free_bindingmapmerge(C.uint64_t(handle), &status)
+}
+
+func ffiMapMergeVersion(handle uint64, which string) ([]byte, error) {
+	clone, err := portableCloneMapMerge(handle)
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	var buf C.RustBuffer
+	switch which {
+	case "base":
+		buf = C.uniffi_prolly_bindings_fn_method_bindingmapmerge_base(clone, &status)
+	case "head":
+		buf = C.uniffi_prolly_bindings_fn_method_bindingmapmerge_head(clone, &status)
+	case "candidate":
+		buf = C.uniffi_prolly_bindings_fn_method_bindingmapmerge_candidate(clone, &status)
+	default:
+		return nil, errors.New("unknown merge version selector")
+	}
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func portableResolverInput(resolver string) (C.RustBuffer, error) {
+	var encoded bytes.Buffer
+	encodeOptionalString(&encoded, optionalString(resolver))
+	return portableInput(encoded.Bytes())
+}
+
+func ffiMapMergeMerge(handle uint64, resolver string) ([]byte, error) {
+	clone, err := portableCloneMapMerge(handle)
+	if err != nil {
+		return nil, err
+	}
+	resolverBuf, err := portableResolverInput(resolver)
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingmapmerge_merge(clone, resolverBuf, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiMapMergeConflictPage(handle uint64, cursor *RangeCursor, limit uint64) ([]byte, error) {
+	clone, err := portableCloneMapMerge(handle)
+	if err != nil {
+		return nil, err
+	}
+	cursorBuf, err := portableInput(encodeOptionalRangeCursor(cursor))
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingmapmerge_conflict_page(clone, cursorBuf, C.uint64_t(limit), &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiMapMergePublish(handle uint64, resolver string) ([]byte, error) {
+	clone, err := portableCloneMapMerge(handle)
+	if err != nil {
+		return nil, err
+	}
+	resolverBuf, err := portableResolverInput(resolver)
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingmapmerge_publish(clone, resolverBuf, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
 }
 
 func ffiVersionedTransactionHead(handle uint64, mapID []byte) ([]byte, error) {
