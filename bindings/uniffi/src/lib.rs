@@ -33,6 +33,7 @@ use prolly_store_sqlite::SqliteStore;
 use serde::Serialize;
 use thiserror::Error;
 
+mod domain;
 mod fast_abi;
 
 type MemoryEngine = Prolly<Arc<MemStore>>;

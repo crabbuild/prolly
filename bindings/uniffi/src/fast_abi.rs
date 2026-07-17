@@ -13,6 +13,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, Weak};
 
 use super::{BindingRangeScanSession, ProllyReadSession};
+use crate::domain::handle::{HandleKind, HandleRegistry, ResourceHandle};
+use crate::domain::page::{PackedPage, PageLimits};
 
 pub const FAST_ABI_VERSION: u32 = 1;
 pub const FAST_CAP_GET_INTO: u64 = 1 << 0;
@@ -81,12 +83,11 @@ struct FastPageLease {
 
 static NEXT_SESSION_HANDLE: AtomicU64 = AtomicU64::new(1);
 static NEXT_SCAN_HANDLE: AtomicU64 = AtomicU64::new(1);
-static NEXT_PAGE_HANDLE: AtomicU64 = AtomicU64::new(1);
 static NEXT_VALUE_HANDLE: AtomicU64 = AtomicU64::new(1);
 static SESSION_HANDLES: OnceLock<Mutex<HashMap<u64, Weak<ProllyReadSession>>>> = OnceLock::new();
 static SCAN_HANDLES: OnceLock<Mutex<HashMap<u64, Arc<FastScanHandle>>>> = OnceLock::new();
-static PAGE_HANDLES: OnceLock<Mutex<HashMap<u64, Arc<FastPageLease>>>> = OnceLock::new();
 static VALUE_HANDLES: OnceLock<Mutex<HashMap<u64, Arc<prolly::OwnedValueLease>>>> = OnceLock::new();
+static RESOURCE_HANDLES: OnceLock<HandleRegistry> = OnceLock::new();
 
 fn session_handles() -> &'static Mutex<HashMap<u64, Weak<ProllyReadSession>>> {
     SESSION_HANDLES.get_or_init(|| Mutex::new(HashMap::new()))
@@ -96,8 +97,8 @@ fn scan_handles() -> &'static Mutex<HashMap<u64, Arc<FastScanHandle>>> {
     SCAN_HANDLES.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-fn page_handles() -> &'static Mutex<HashMap<u64, Arc<FastPageLease>>> {
-    PAGE_HANDLES.get_or_init(|| Mutex::new(HashMap::new()))
+fn resource_handles() -> &'static HandleRegistry {
+    RESOURCE_HANDLES.get_or_init(HandleRegistry::new)
 }
 
 fn value_handles() -> &'static Mutex<HashMap<u64, Arc<prolly::OwnedValueLease>>> {
@@ -176,19 +177,19 @@ fn scan_from_handle(handle: u64) -> Option<Arc<FastScanHandle>> {
 }
 
 fn register_page(bytes: Box<[u8]>) -> (u64, *const u8, u64) {
-    let lease = Arc::new(FastPageLease { bytes });
+    let page = PackedPage::parse(&bytes, PageLimits::default())
+        .expect("internal packed page encoder produced an invalid page");
+    let _validated_header = (
+        page.version(),
+        page.kind(),
+        page.record_count(),
+        page.terminal(),
+    );
+    let lease = FastPageLease { bytes };
     let data_ptr = lease.bytes.as_ptr();
     let data_len = lease.bytes.len() as u64;
-    let mut handles = page_handles()
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    loop {
-        let handle = next_nonzero_handle(&NEXT_PAGE_HANDLE);
-        if let std::collections::hash_map::Entry::Vacant(entry) = handles.entry(handle) {
-            entry.insert(lease);
-            return (handle, data_ptr, data_len);
-        }
-    }
+    let handle = resource_handles().insert(HandleKind::Page, lease);
+    (handle.raw(), data_ptr, data_len)
 }
 
 fn register_value(lease: prolly::OwnedValueLease) -> Result<(u64, *const u8, u64), prolly::Error> {
@@ -1122,10 +1123,13 @@ pub unsafe extern "C" fn prolly_fast_page_release(lease_handle: u64) {
     if lease_handle == 0 {
         return;
     }
-    page_handles()
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-        .remove(&lease_handle);
+    let Ok(handle) = ResourceHandle::from_raw(lease_handle) else {
+        return;
+    };
+    if handle.kind() != HandleKind::Page {
+        return;
+    }
+    let _ = resource_handles().close(handle);
 }
 
 #[no_mangle]
