@@ -1,4 +1,17 @@
 import { createHash } from "node:crypto";
+import { loadNative } from "./native.ts";
+import { IndexRegistry, IndexedMap } from "./indexed.ts";
+import { nativePromise, ownedBytes } from "./packed.ts";
+import { ownProximityRecords, ProximityMap, type ProximityRecord } from "./proximity.ts";
+import { VersionedMap } from "./versioned.ts";
+
+export { IndexRegistry, IndexedMap } from "./indexed.ts";
+export { ViewExpiredError } from "./packed.ts";
+export { exactSearch, ProximityMap, ProximityReadSession } from "./proximity.ts";
+export { VersionedMap } from "./versioned.ts";
+export type * from "./indexed.ts";
+export type * from "./proximity.ts";
+export type * from "./versioned.ts";
 
 const MASK64 = (1n << 64n) - 1n;
 const PRIME64_1 = 11400714785074694791n;
@@ -6,6 +19,58 @@ const PRIME64_2 = 14029467366897019727n;
 const PRIME64_3 = 1609587929392839161n;
 const PRIME64_4 = 9650029242287828579n;
 const PRIME64_5 = 2870177450012600261n;
+
+export class Engine implements Disposable {
+  #module?: any;
+  #native?: any;
+
+  private constructor(module: any, native: any) {
+    this.#module = module;
+    this.#native = native;
+  }
+
+  static async memory(): Promise<Engine> {
+    const module = await loadNative();
+    return new Engine(module, module.NativeProllyEngine.memory());
+  }
+
+  #open(): any {
+    if (this.#native == null) throw new Error("prolly engine is closed");
+    return this.#native;
+  }
+
+  versionedMap(id: Uint8Array): VersionedMap {
+    return new VersionedMap(this.#open().versionedMap(ownedBytes(id)));
+  }
+
+  indexRegistry(): IndexRegistry {
+    if (this.#module == null) throw new Error("prolly engine is closed");
+    return new IndexRegistry(new this.#module.NativePortableIndexRegistry());
+  }
+
+  indexedMap(id: Uint8Array, registry: IndexRegistry): IndexedMap {
+    return new IndexedMap(this.#open().indexedMap(ownedBytes(id), registry.nativeHandle()));
+  }
+
+  buildProximity(
+    dimensions: number,
+    records: ProximityRecord[],
+    signal?: AbortSignal,
+  ): Promise<ProximityMap> {
+    const native = this.#open();
+    const owned = ownProximityRecords(records);
+    return nativePromise(signal, () => new ProximityMap(native.buildProximity(dimensions, owned)));
+  }
+
+  close(): void {
+    this.#native = undefined;
+    this.#module = undefined;
+  }
+
+  [Symbol.dispose](): void {
+    this.close();
+  }
+}
 
 export type EncodingKind = "raw" | "cbor" | "json" | "custom";
 

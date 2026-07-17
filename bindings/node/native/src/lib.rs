@@ -125,6 +125,8 @@ use prolly_bindings::{
 use serde::Deserialize;
 use std::sync::{Arc, Mutex};
 
+mod portable;
+
 #[napi(object)]
 pub struct NodeTreeRecord {
     pub root: Option<Buffer>,
