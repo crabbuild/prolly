@@ -37,6 +37,7 @@ export interface MapDiff {
   newValue?: Uint8Array;
 }
 export interface DiffPage { diffs: MapDiff[]; nextCursor?: RangeCursor; }
+export interface MapChangeEvent { previous?: Uint8Array; current: MapVersion; diffs: MapDiff[]; }
 /** Read-only page views that expire when the scan callback returns. */
 export interface MapEntryView { key: Uint8Array; value: Uint8Array; }
 export interface ReadScanOutcome { visited: bigint; stopped: boolean; }
@@ -98,6 +99,8 @@ interface NativeVersionedMap {
   snapshotAt(id: Uint8Array): NativeMapSnapshot | null;
   compare(base: Uint8Array, target: Uint8Array): NativeMapComparison;
   compareToHead(base: Uint8Array): NativeMapComparison;
+  subscribe(): NativeMapSubscription;
+  subscribeFrom(lastSeen: Uint8Array | null): NativeMapSubscription;
   backup(): Uint8Array;
   restoreBackup(bytes: Uint8Array): NativeMapVersion;
   keepLast(count: number): { retained: Uint8Array[]; removed: Uint8Array[] };
@@ -110,6 +113,11 @@ interface NativeMapComparison {
   target(): NativeMapVersion;
   diff(): MapDiff[];
   diffPage(cursor: RangeCursor | null, end: Uint8Array | null, limit: string): DiffPage;
+}
+interface NativeMapChangeEvent { previous?: Uint8Array; current: NativeMapVersion; diffs: MapDiff[]; }
+interface NativeMapSubscription {
+  lastSeen(): Uint8Array | null;
+  poll(): NativeMapChangeEvent | null;
 }
 
 interface NativeMapUpdate {
@@ -352,6 +360,14 @@ export class VersionedMap implements Disposable {
     return new MapComparison(this.#open().compareToHead(ownedBytes(base)));
   }
 
+  subscribe(): MapSubscription { return new MapSubscription(this.#open().subscribe()); }
+
+  subscribeFrom(lastSeen?: Uint8Array): MapSubscription {
+    return new MapSubscription(this.#open().subscribeFrom(
+      lastSeen == null ? null : ownedBytes(lastSeen),
+    ));
+  }
+
   backup(signal?: AbortSignal): Promise<Uint8Array> {
     const native = this.#open();
     return nativePromise(signal, () => native.backup());
@@ -407,6 +423,29 @@ export class MapComparison implements Disposable {
     const ownedCursor = ownedRangeCursor(cursor);
     const ownedEnd = end == null ? null : ownedBytes(end);
     return nativePromise(signal, () => native.diffPage(ownedCursor, ownedEnd, checkedPageLimit(limit)));
+  }
+  close(): void { this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class MapSubscription implements Disposable {
+  #native?: NativeMapSubscription;
+  constructor(native: NativeMapSubscription) { this.#native = native; }
+  #open(): NativeMapSubscription {
+    if (this.#native == null) throw new Error("map subscription is closed");
+    return this.#native;
+  }
+  lastSeen(): Uint8Array | undefined { return this.#open().lastSeen() ?? undefined; }
+  poll(signal?: AbortSignal): Promise<MapChangeEvent | undefined> {
+    const native = this.#open();
+    return nativePromise(signal, () => {
+      const event = native.poll();
+      return event == null ? undefined : {
+        previous: event.previous,
+        current: mapVersion(event.current),
+        diffs: event.diffs,
+      };
+    });
   }
   close(): void { this.#native = undefined; }
   [Symbol.dispose](): void { this.close(); }

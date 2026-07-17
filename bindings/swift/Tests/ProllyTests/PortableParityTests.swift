@@ -258,4 +258,20 @@ final class PortableParityTests: XCTestCase {
             comparison.close()
         }
     }
+    func testVersionedSubscriptionResumesAndPollsOwnedDiffs() throws {
+        try Engine.withMemory { engine in
+            let map = try engine.versionedMap(Data("subscription".utf8))
+            let initial = try map.initialize()
+            let subscription = try map.subscribe()
+            XCTAssertEqual(try subscription.lastSeen, initial.id)
+            XCTAssertNil(try subscription.poll())
+            let current = try map.put(Data("k".utf8), value: Data("v".utf8))
+            let event = try XCTUnwrap(subscription.poll())
+            XCTAssertEqual(event.previous, initial.id)
+            XCTAssertEqual(event.current.id, current.id)
+            XCTAssertEqual(event.diffs.map(\.key), [Data("k".utf8)])
+            XCTAssertEqual(try subscription.lastSeen, current.id)
+            subscription.close()
+        }
+    }
 }

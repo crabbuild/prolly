@@ -114,6 +114,12 @@ public final class VersionedMap implements AutoCloseable {
         return new MapComparison(open().compareToHead(base.clone()));
     }
 
+    public MapSubscription subscribe() { return new MapSubscription(open().subscribe()); }
+
+    public MapSubscription subscribeFrom(byte[] lastSeen) {
+        return new MapSubscription(open().subscribeFrom(lastSeen == null ? null : lastSeen.clone()));
+    }
+
     public byte[] backup() { return open().backup().clone(); }
     public MapVersion restoreBackup(byte[] bytes) {
         return MapVersion.fromNative(open().restoreBackup(bytes.clone()));

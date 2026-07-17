@@ -202,6 +202,11 @@ export interface NodePortableReadScanOutcome {
   visited: string
   stopped: boolean
 }
+export interface NodePortableMapChangeEvent {
+  previous?: Buffer
+  current: NodePortableMapVersion
+  diffs: Array<NodeDiffRecord>
+}
 export interface NodeTreeRecord {
   root?: Buffer
   config?: NodeConfigRecord
@@ -921,6 +926,8 @@ export declare class NativePortableVersionedMap {
   snapshotAt(id: Buffer): NativePortableMapSnapshot | null
   compare(base: Buffer, target: Buffer): NativePortableMapComparison
   compareToHead(base: Buffer): NativePortableMapComparison
+  subscribe(): NativePortableMapSubscription
+  subscribeFrom(lastSeen?: Buffer | undefined | null): NativePortableMapSubscription
   backup(): Buffer
   restoreBackup(bytes: Buffer): NodePortableMapVersion
   keepLast(count: number): NodePortableVersionPrune
@@ -932,6 +939,10 @@ export declare class NativePortableMapComparison {
   target(): NodePortableMapVersion
   diff(): Array<NodeDiffRecord>
   diffPage(cursor: NodeRangeCursorRecord | undefined | null, end: Buffer | undefined | null, limit: string): NodeDiffPageRecord
+}
+export declare class NativePortableMapSubscription {
+  lastSeen(): Buffer | null
+  poll(): NodePortableMapChangeEvent | null
 }
 export declare class NativePortableMapSnapshot {
   id(): Buffer

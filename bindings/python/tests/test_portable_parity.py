@@ -282,6 +282,20 @@ class PortableParityTests(unittest.TestCase):
                 self.assertEqual([diff.key for diff in comparison.diff()], [b"k"])
                 self.assertEqual([diff.key for diff in comparison.diff_page(limit=1).diffs], [b"k"])
 
+    def test_versioned_subscription_resumes_and_polls_owned_diffs(self):
+        with Engine.memory() as engine:
+            versioned = engine.versioned_map(b"subscription")
+            initial = versioned.initialize()
+            with versioned.subscribe() as subscription:
+                self.assertEqual(subscription.last_seen, initial.id)
+                self.assertIsNone(subscription.poll())
+                current = versioned.put(b"k", b"v")
+                event = subscription.poll()
+                self.assertEqual(event.previous, initial.id)
+                self.assertEqual(event.current.id, current.id)
+                self.assertEqual([diff.key for diff in event.diffs], [b"k"])
+                self.assertEqual(subscription.last_seen, current.id)
+
 
 if __name__ == "__main__":
     unittest.main()

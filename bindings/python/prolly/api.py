@@ -214,6 +214,16 @@ class VersionedMap(_Scoped):
         self._open()
         return MapComparison(self._inner.compare_to_head(bytes(base)))
 
+    def subscribe(self) -> "MapSubscription":
+        self._open()
+        return MapSubscription(self._inner.subscribe())
+
+    def subscribe_from(self, last_seen: bytes | None = None) -> "MapSubscription":
+        self._open()
+        return MapSubscription(
+            self._inner.subscribe_from(None if last_seen is None else bytes(last_seen))
+        )
+
     def keep_last(self, count: int):
         self._open()
         return self._inner.keep_last(count)
@@ -274,6 +284,21 @@ class MapComparison(_Scoped):
     def diff_page(self, cursor=None, end: bytes | None = None, limit: int = 256):
         self._open()
         return self._inner.diff_page(cursor, None if end is None else bytes(end), limit)
+
+
+class MapSubscription(_Scoped):
+    def __init__(self, inner: _native.BindingMapSubscription):
+        super().__init__()
+        self._inner = inner
+
+    @property
+    def last_seen(self) -> bytes | None:
+        self._open()
+        return self._inner.last_seen()
+
+    def poll(self):
+        self._open()
+        return self._inner.poll()
 
 
 class MapSnapshot(_Scoped):
@@ -759,6 +784,7 @@ __all__ = [
     "IndexedMap",
     "IndexedSnapshot",
     "MapComparison",
+    "MapSubscription",
     "MapSnapshot",
     "NeighborView",
     "ProximityMap",

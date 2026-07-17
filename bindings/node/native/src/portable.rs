@@ -12,19 +12,20 @@ use prolly_bindings::{
     verify_key_proof, verify_multi_key_proof, verify_proximity_membership_proof,
     verify_proximity_structure_proof, verify_range_page_proof, verify_range_proof,
     ActiveIndexHealthRecord, BindingIndexRegistry, BindingIndexedMap, BindingIndexedSnapshot,
-    BindingMapComparison, BindingMapSnapshot, BindingProximityMap, BindingProximityReadSession,
-    BindingProximitySearchProof, BindingSecondaryIndexSnapshot, BindingVersionedMap,
-    DistanceMetricRecord, ExactProximityRecordRecord, IndexBuildResultRecord, IndexEntryRecord,
-    IndexMatchRecord, IndexPageRecord, IndexProjectionRecord, IndexVerificationRecord,
-    IndexedMapHealthRecord, IndexedMapMetricsRecord, IndexedRetentionRecord,
-    IndexedSnapshotIdRecord, IndexedSourceRecord, IndexedUpdateKind, IndexedUpdateRecord,
-    IndexedVersionRecord, KeyProofRecord, MapUpdateKind, MapUpdateRecord, MapVersionRecord,
-    MultiKeyProofRecord, ProllyBindingError, ProllyReadSession, ProvedRangePageRecord,
-    ProximityConfigRecord, ProximityMembershipProofRecord, ProximityMutationRecord,
-    ProximityMutationStatsRecord, ProximityNeighborRecord, ProximityRecordRecord,
-    ProximitySearchClaimKindRecord, ProximitySearchResultRecord, ProximityStructuralProofRecord,
-    ProximityVerificationRecord, RangeProofRecord, SearchBackendRecord, SearchCompletionRecord,
-    SecondaryIndexExtractorCallback, VersionPruneRecord,
+    BindingMapComparison, BindingMapSnapshot, BindingMapSubscription, BindingProximityMap,
+    BindingProximityReadSession, BindingProximitySearchProof, BindingSecondaryIndexSnapshot,
+    BindingVersionedMap, DistanceMetricRecord, ExactProximityRecordRecord, IndexBuildResultRecord,
+    IndexEntryRecord, IndexMatchRecord, IndexPageRecord, IndexProjectionRecord,
+    IndexVerificationRecord, IndexedMapHealthRecord, IndexedMapMetricsRecord,
+    IndexedRetentionRecord, IndexedSnapshotIdRecord, IndexedSourceRecord, IndexedUpdateKind,
+    IndexedUpdateRecord, IndexedVersionRecord, KeyProofRecord, MapUpdateKind, MapUpdateRecord,
+    MapVersionRecord, MultiKeyProofRecord, ProllyBindingError, ProllyReadSession,
+    ProvedRangePageRecord, ProximityConfigRecord, ProximityMembershipProofRecord,
+    ProximityMutationRecord, ProximityMutationStatsRecord, ProximityNeighborRecord,
+    ProximityRecordRecord, ProximitySearchClaimKindRecord, ProximitySearchResultRecord,
+    ProximityStructuralProofRecord, ProximityVerificationRecord, RangeProofRecord,
+    SearchBackendRecord, SearchCompletionRecord, SecondaryIndexExtractorCallback,
+    VersionPruneRecord,
 };
 use std::sync::Arc;
 
@@ -649,6 +650,13 @@ pub struct NodePortableReadScanOutcome {
     pub stopped: bool,
 }
 
+#[napi(object)]
+pub struct NodePortableMapChangeEvent {
+    pub previous: Option<Buffer>,
+    pub current: NodePortableMapVersion,
+    pub diffs: Vec<NodeDiffRecord>,
+}
+
 impl From<ProximitySearchResultRecord> for NodePortableSearchResult {
     fn from(value: ProximitySearchResultRecord) -> Self {
         let completion = match value.completion {
@@ -933,6 +941,25 @@ impl NativePortableVersionedMap {
     }
 
     #[napi]
+    pub fn subscribe(&self) -> Result<NativePortableMapSubscription> {
+        self.inner
+            .subscribe()
+            .map(|inner| NativePortableMapSubscription { inner })
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "subscribeFrom")]
+    pub fn subscribe_from(
+        &self,
+        last_seen: Option<Buffer>,
+    ) -> Result<NativePortableMapSubscription> {
+        self.inner
+            .subscribe_from(last_seen.map(|value| value.to_vec()))
+            .map(|inner| NativePortableMapSubscription { inner })
+            .map_err(to_napi_error)
+    }
+
+    #[napi]
     pub fn backup(&self) -> Result<Buffer> {
         self.inner.backup().map(Buffer::from).map_err(to_napi_error)
     }
@@ -1021,6 +1048,36 @@ impl NativePortableMapComparison {
                 limit,
             )
             .map(Into::into)
+            .map_err(to_napi_error)
+    }
+}
+
+#[napi]
+pub struct NativePortableMapSubscription {
+    inner: Arc<BindingMapSubscription>,
+}
+
+#[napi]
+impl NativePortableMapSubscription {
+    #[napi(js_name = "lastSeen")]
+    pub fn last_seen(&self) -> Result<Option<Buffer>> {
+        self.inner
+            .last_seen()
+            .map(|value| value.map(Buffer::from))
+            .map_err(to_napi_error)
+    }
+
+    #[napi]
+    pub fn poll(&self) -> Result<Option<NodePortableMapChangeEvent>> {
+        self.inner
+            .poll()
+            .map(|event| {
+                event.map(|event| NodePortableMapChangeEvent {
+                    previous: event.previous.map(Buffer::from),
+                    current: event.current.into(),
+                    diffs: event.diffs.into_iter().map(Into::into).collect(),
+                })
+            })
             .map_err(to_napi_error)
     }
 }

@@ -11,6 +11,7 @@ use prolly::{
     KeyProof, MapVersionId, MultiKeyProof, OwnedReadSession, ProvedRangePage, RangeProof,
     VersionedMapBackup, VersionedMapUpdate,
 };
+use std::cell::RefCell;
 use std::sync::Arc;
 use wasm_bindgen::prelude::*;
 
@@ -295,6 +296,35 @@ impl WasmVersionedMap {
         })
     }
 
+    pub fn subscribe(&self) -> Result<WasmMapSubscription, JsValue> {
+        let last_seen = self
+            .engine
+            .versioned_map(&self.id)
+            .head_id()
+            .map_err(js_error)?;
+        Ok(WasmMapSubscription {
+            engine: Arc::clone(&self.engine),
+            id: self.id.clone(),
+            last_seen: RefCell::new(last_seen),
+        })
+    }
+
+    #[wasm_bindgen(js_name = subscribeFrom)]
+    pub fn subscribe_from(
+        &self,
+        last_seen: Option<Uint8Array>,
+    ) -> Result<WasmMapSubscription, JsValue> {
+        let last_seen = last_seen
+            .map(|value| MapVersionId::from_bytes(&value.to_vec()))
+            .transpose()
+            .map_err(js_error)?;
+        Ok(WasmMapSubscription {
+            engine: Arc::clone(&self.engine),
+            id: self.id.clone(),
+            last_seen: RefCell::new(last_seen),
+        })
+    }
+
     pub fn backup(&self) -> Result<Vec<u8>, JsValue> {
         self.engine
             .versioned_map(&self.id)
@@ -404,6 +434,64 @@ impl WasmMapComparison {
             &range_cursor_value(page.next_cursor),
         )?;
         Ok(object)
+    }
+}
+
+#[wasm_bindgen(js_name = WasmMapSubscription)]
+pub struct WasmMapSubscription {
+    engine: Arc<super::WasmEngine>,
+    id: Vec<u8>,
+    last_seen: RefCell<Option<MapVersionId>>,
+}
+
+#[wasm_bindgen(js_class = WasmMapSubscription)]
+impl WasmMapSubscription {
+    #[wasm_bindgen(js_name = lastSeen)]
+    pub fn last_seen(&self) -> JsValue {
+        optional_bytes(
+            self.last_seen
+                .borrow()
+                .as_ref()
+                .map(|value| value.as_cid().as_bytes().to_vec()),
+        )
+    }
+
+    pub fn poll(&self) -> Result<JsValue, JsValue> {
+        let map = self.engine.versioned_map(&self.id);
+        let Some(current) = map.head().map_err(js_error)? else {
+            return Ok(JsValue::NULL);
+        };
+        let mut last_seen = self.last_seen.borrow_mut();
+        if last_seen.as_ref() == Some(&current.id) {
+            return Ok(JsValue::NULL);
+        }
+        let previous_tree = match last_seen.as_ref() {
+            Some(id) => {
+                map.version(id)
+                    .map_err(js_error)?
+                    .ok_or_else(|| JsValue::from_str("subscription resume version was pruned"))?
+                    .tree
+            }
+            None => self.engine.create(),
+        };
+        let diffs = self
+            .engine
+            .diff(&previous_tree, &current.tree)
+            .map_err(js_error)?;
+        let previous = last_seen.replace(current.id.clone());
+        let object = Object::new();
+        Reflect::set(
+            &object,
+            &"previous".into(),
+            &optional_bytes(previous.map(|value| value.as_cid().as_bytes().to_vec())),
+        )?;
+        Reflect::set(
+            &object,
+            &"current".into(),
+            &map_version_object(current)?.into(),
+        )?;
+        Reflect::set(&object, &"diffs".into(), &diffs_to_array(diffs)?.into())?;
+        Ok(object.into())
     }
 }
 

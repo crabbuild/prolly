@@ -266,5 +266,25 @@ class PortableParityTest {
         }
     }
 
+    @Test
+    fun versionedSubscriptionsResumeAndPollOwnedDiffs() {
+        ProllyNative.useLocalDebugLibrary()
+        Engine.memory().use { engine ->
+            engine.versionedMap("subscription".bytes()).use { map ->
+                val initial = map.initialize()
+                map.subscribe().use { subscription ->
+                    assertArrayEquals(initial.id, subscription.lastSeen())
+                    assertEquals(null, subscription.poll())
+                    val current = map.put("k".bytes(), "v".bytes())
+                    val event = subscription.poll()!!
+                    assertArrayEquals(initial.id, event.previous)
+                    assertArrayEquals(current.id, event.current.id)
+                    assertEquals(listOf("k"), event.diffs.map { String(it.key) })
+                    assertArrayEquals(current.id, subscription.lastSeen())
+                }
+            }
+        }
+    }
+
     private fun String.bytes() = encodeToByteArray()
 }

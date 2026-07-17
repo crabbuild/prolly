@@ -158,6 +158,12 @@ public final class VersionedMap: @unchecked Sendable {
     public func compareToHead(base: Data) throws -> MapComparison {
         try open { MapComparison(native: try native.compareToHead(base: Data(base))) }
     }
+    public func subscribe() throws -> MapSubscription {
+        try open { MapSubscription(native: try native.subscribe()) }
+    }
+    public func subscribe(from lastSeen: Data? = nil) throws -> MapSubscription {
+        try open { MapSubscription(native: try native.subscribeFrom(lastSeen: lastSeen.map { Data($0) })) }
+    }
     public func backup() throws -> Data { try open { try native.backup() } }
     public func restoreBackup(_ bundle: Data) throws -> MapVersionRecord {
         try open { try native.restoreBackup(bytes: Data(bundle)) }
@@ -203,6 +209,19 @@ public final class MapComparison: @unchecked Sendable {
     }
     private func open<R>(_ body: () throws -> R) throws -> R {
         if closed { throw PortableAPIError.closed("MapComparison") }
+        return try body()
+    }
+}
+
+public final class MapSubscription: @unchecked Sendable {
+    let native: BindingMapSubscription
+    private var closed = false
+    init(native: BindingMapSubscription) { self.native = native }
+    public func close() { closed = true }
+    public var lastSeen: Data? { get throws { try open { try native.lastSeen() } } }
+    public func poll() throws -> MapChangeEventRecord? { try open { try native.poll() } }
+    private func open<R>(_ body: () throws -> R) throws -> R {
+        if closed { throw PortableAPIError.closed("MapSubscription") }
         return try body()
     }
 }

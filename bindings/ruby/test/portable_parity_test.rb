@@ -248,4 +248,22 @@ class PortableParityTest < Minitest::Test
       comparison.close
     end
   end
+
+
+  def test_versioned_subscription_resumes_and_polls_owned_diffs
+    Prolly::Engine.memory.use do |engine|
+      map = engine.versioned_map('subscription'.b)
+      initial = map.initialize_map
+      subscription = map.subscribe
+      assert_equal initial.id, subscription.last_seen
+      assert_nil subscription.poll
+      current = map.put('k'.b, 'v'.b)
+      event = subscription.poll
+      assert_equal initial.id, event.previous
+      assert_equal current.id, event.current.id
+      assert_equal ['k'.b], event.diffs.map(&:key)
+      assert_equal current.id, subscription.last_seen
+      subscription.close
+    end
+  end
 end
