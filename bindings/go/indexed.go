@@ -149,6 +149,45 @@ type IndexBuildResult struct {
 	Activated      bool
 }
 
+type IndexVerification struct {
+	Name                 []byte
+	SourceVersion        []byte
+	ExpectedIndexVersion []byte
+	ActualIndexVersion   []byte
+	ExpectedEntries      uint64
+	ActualEntries        uint64
+	SemanticDifferences  uint64
+	Valid                bool
+	Canonical            bool
+}
+
+type IndexedMapMetrics struct {
+	NormalizedSourceMutations uint64
+	RecordsExtracted          uint64
+	TermsEmitted              uint64
+	ProjectedBytes            uint64
+	PhysicalUpserts           uint64
+	PhysicalDeletes           uint64
+	UnchangedEmissionsSkipped uint64
+	SourceNodesWritten        uint64
+	IndexNodesWritten         uint64
+	CatalogNodesWritten       uint64
+	Retries                   uint64
+	BuildAttempts             uint64
+	VerificationOutcomes      uint64
+	RetainedRoots             uint64
+}
+
+type IndexedRetention struct {
+	RetainedSourceVersions   [][]byte
+	RemovedSourceVersions    [][]byte
+	RetainedIndexVersions    [][]byte
+	RemovedIndexVersions     [][]byte
+	RemovedCatalogVersions   [][]byte
+	RemovedCheckpointRecords uint64
+	RemovedNamedRoots        [][]byte
+}
+
 type IndexedMap struct {
 	handle uint64
 	closed atomic.Bool
@@ -246,6 +285,76 @@ func (m *IndexedMap) EnsureIndex(name []byte) (IndexBuildResult, error) {
 		return IndexBuildResult{}, err
 	}
 	return decodeIndexBuildResult(raw)
+}
+
+func (m *IndexedMap) VerifyIndex(name, sourceVersion []byte) (IndexVerification, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return IndexVerification{}, err
+	}
+	defer unlock()
+	raw, err := ffiIndexedMapVerifyIndex(handle, append([]byte(nil), name...), append([]byte(nil), sourceVersion...))
+	if err != nil {
+		return IndexVerification{}, err
+	}
+	return decodeIndexVerification(raw)
+}
+
+func (m *IndexedMap) VerifyAll(sourceVersion []byte) ([]IndexVerification, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	raw, err := ffiIndexedMapVerifyAll(handle, append([]byte(nil), sourceVersion...))
+	if err != nil {
+		return nil, err
+	}
+	return decodeIndexVerifications(raw)
+}
+
+func (m *IndexedMap) Metrics() (IndexedMapMetrics, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return IndexedMapMetrics{}, err
+	}
+	defer unlock()
+	raw, err := ffiIndexedMapMetrics(handle)
+	if err != nil {
+		return IndexedMapMetrics{}, err
+	}
+	return decodeIndexedMapMetrics(raw)
+}
+
+func (m *IndexedMap) ExportCurrent() ([]byte, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	raw, err := ffiIndexedMapExportCurrent(handle)
+	if err != nil {
+		return nil, err
+	}
+	d := byteDecoder{data: raw}
+	bundle, err := d.readByteArray()
+	if err != nil {
+		return nil, err
+	}
+	return bundle, d.done()
+}
+
+func (m *IndexedMap) KeepLast(count uint64) (IndexedRetention, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return IndexedRetention{}, err
+	}
+	defer unlock()
+	raw, err := ffiIndexedMapKeepLast(handle, count)
+	if err != nil {
+		return IndexedRetention{}, err
+	}
+	return decodeIndexedRetention(raw)
 }
 func (m *IndexedMap) Snapshot() (*IndexedSnapshot, error) {
 	handle, unlock, err := m.withHandle()
@@ -410,6 +519,117 @@ func decodeIndexBuildResult(raw []byte) (IndexBuildResult, error) {
 		return IndexBuildResult{}, err
 	}
 	return IndexBuildResult{source, index, catalog, generation, entries, attempts, activated}, d.done()
+}
+
+func decodeIndexVerificationFrom(d *byteDecoder) (IndexVerification, error) {
+	var value IndexVerification
+	var err error
+	if value.Name, err = d.readByteArray(); err != nil {
+		return value, err
+	}
+	if value.SourceVersion, err = d.readByteArray(); err != nil {
+		return value, err
+	}
+	if value.ExpectedIndexVersion, err = d.readByteArray(); err != nil {
+		return value, err
+	}
+	if value.ActualIndexVersion, err = d.readByteArray(); err != nil {
+		return value, err
+	}
+	if value.ExpectedEntries, err = d.readUint64(); err != nil {
+		return value, err
+	}
+	if value.ActualEntries, err = d.readUint64(); err != nil {
+		return value, err
+	}
+	if value.SemanticDifferences, err = d.readUint64(); err != nil {
+		return value, err
+	}
+	if value.Valid, err = d.readBool(); err != nil {
+		return value, err
+	}
+	value.Canonical, err = d.readBool()
+	return value, err
+}
+
+func decodeIndexVerification(raw []byte) (IndexVerification, error) {
+	d := byteDecoder{data: raw}
+	value, err := decodeIndexVerificationFrom(&d)
+	if err != nil {
+		return IndexVerification{}, err
+	}
+	return value, d.done()
+}
+
+func decodeIndexVerifications(raw []byte) ([]IndexVerification, error) {
+	d := byteDecoder{data: raw}
+	count, err := d.readInt32()
+	if err != nil || count < 0 {
+		if err == nil {
+			err = errors.New("negative index verification count")
+		}
+		return nil, err
+	}
+	values := make([]IndexVerification, 0, count)
+	for range count {
+		value, err := decodeIndexVerificationFrom(&d)
+		if err != nil {
+			return nil, err
+		}
+		values = append(values, value)
+	}
+	return values, d.done()
+}
+
+func decodeIndexedMapMetrics(raw []byte) (IndexedMapMetrics, error) {
+	d := byteDecoder{data: raw}
+	fields := []*uint64{
+		new(uint64), new(uint64), new(uint64), new(uint64), new(uint64), new(uint64), new(uint64),
+		new(uint64), new(uint64), new(uint64), new(uint64), new(uint64), new(uint64), new(uint64),
+	}
+	for _, field := range fields {
+		value, err := d.readUint64()
+		if err != nil {
+			return IndexedMapMetrics{}, err
+		}
+		*field = value
+	}
+	result := IndexedMapMetrics{
+		NormalizedSourceMutations: *fields[0], RecordsExtracted: *fields[1], TermsEmitted: *fields[2],
+		ProjectedBytes: *fields[3], PhysicalUpserts: *fields[4], PhysicalDeletes: *fields[5],
+		UnchangedEmissionsSkipped: *fields[6], SourceNodesWritten: *fields[7], IndexNodesWritten: *fields[8],
+		CatalogNodesWritten: *fields[9], Retries: *fields[10], BuildAttempts: *fields[11],
+		VerificationOutcomes: *fields[12], RetainedRoots: *fields[13],
+	}
+	return result, d.done()
+}
+
+func decodeIndexedRetention(raw []byte) (IndexedRetention, error) {
+	d := byteDecoder{data: raw}
+	var result IndexedRetention
+	var err error
+	if result.RetainedSourceVersions, err = d.readByteArraySequence(); err != nil {
+		return result, err
+	}
+	if result.RemovedSourceVersions, err = d.readByteArraySequence(); err != nil {
+		return result, err
+	}
+	if result.RetainedIndexVersions, err = d.readByteArraySequence(); err != nil {
+		return result, err
+	}
+	if result.RemovedIndexVersions, err = d.readByteArraySequence(); err != nil {
+		return result, err
+	}
+	if result.RemovedCatalogVersions, err = d.readByteArraySequence(); err != nil {
+		return result, err
+	}
+	if result.RemovedCheckpointRecords, err = d.readUint64(); err != nil {
+		return result, err
+	}
+	if result.RemovedNamedRoots, err = d.readByteArraySequence(); err != nil {
+		return result, err
+	}
+	return result, d.done()
 }
 func decodeIndexedSourceRecords(raw []byte) ([]IndexedSourceRecord, error) {
 	d := byteDecoder{data: raw}

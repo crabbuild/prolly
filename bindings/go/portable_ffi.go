@@ -98,6 +98,11 @@ extern RustBuffer uniffi_prolly_bindings_fn_method_bindingindexedmap_put(uint64_
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingindexedmap_delete(uint64_t ptr, RustBuffer key, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingindexedmap_get(uint64_t ptr, RustBuffer key, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingindexedmap_ensure_index(uint64_t ptr, RustBuffer name, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingindexedmap_export_current(uint64_t ptr, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingindexedmap_keep_last(uint64_t ptr, uint64_t count, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingindexedmap_metrics(uint64_t ptr, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingindexedmap_verify_all(uint64_t ptr, RustBuffer source_version, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingindexedmap_verify_index(uint64_t ptr, RustBuffer name, RustBuffer source_version, RustCallStatus *out_err);
 extern uint64_t uniffi_prolly_bindings_fn_method_bindingindexedmap_snapshot(uint64_t ptr, RustCallStatus *out_err);
 
 extern uint64_t uniffi_prolly_bindings_fn_clone_bindingindexedsnapshot(uint64_t ptr, RustCallStatus *out_err);
@@ -111,7 +116,15 @@ extern uint64_t uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_f
 
 extern uint64_t uniffi_prolly_bindings_fn_clone_bindingproximitymap(uint64_t ptr, RustCallStatus *out_err);
 extern void uniffi_prolly_bindings_fn_free_bindingproximitymap(uint64_t ptr, RustCallStatus *out_err);
+extern void uniffi_prolly_bindings_fn_method_bindingproximitymap_clear_content_cache(uint64_t ptr, RustCallStatus *out_err);
+extern int8_t uniffi_prolly_bindings_fn_method_bindingproximitymap_contains_key(uint64_t ptr, RustBuffer key, RustCallStatus *out_err);
+extern uint64_t uniffi_prolly_bindings_fn_method_bindingproximitymap_count(uint64_t ptr, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximitymap_descriptor(uint64_t ptr, RustCallStatus *out_err);
 extern uint64_t uniffi_prolly_bindings_fn_method_bindingproximitymap_fast_handle(uint64_t ptr, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximitymap_get(uint64_t ptr, RustBuffer key, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximitymap_prove_membership(uint64_t ptr, RustBuffer key, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximitymap_verify(uint64_t ptr, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_func_verify_proximity_membership_proof(RustBuffer proof, RustBuffer expected_descriptor, RustCallStatus *out_err);
 
 extern ProllyFastScanOpenResult prolly_fast_index_cursor_open(uint64_t snapshot_handle, uint32_t query_kind, const uint8_t *start_ptr, size_t start_len, const uint8_t *end_ptr, size_t end_len, uint8_t has_end, uint8_t reverse);
 extern ProllyFastPageResult prolly_fast_index_cursor_next(uint64_t snapshot_handle, uint64_t cursor_handle, uint32_t max_records, uint64_t max_arena_bytes);
@@ -655,6 +668,83 @@ func ffiIndexedMapSnapshot(handle uint64) (uint64, error) {
 	return uint64(result), portableStatusError(&status)
 }
 
+func ffiIndexedMapExportCurrent(handle uint64) ([]byte, error) {
+	clone, err := portableCloneIndexedMap(handle)
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingindexedmap_export_current(clone, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiIndexedMapKeepLast(handle, count uint64) ([]byte, error) {
+	clone, err := portableCloneIndexedMap(handle)
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingindexedmap_keep_last(clone, C.uint64_t(count), &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiIndexedMapMetrics(handle uint64) ([]byte, error) {
+	clone, err := portableCloneIndexedMap(handle)
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingindexedmap_metrics(clone, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiIndexedMapVerifyIndex(handle uint64, name, sourceVersion []byte) ([]byte, error) {
+	clone, err := portableCloneIndexedMap(handle)
+	if err != nil {
+		return nil, err
+	}
+	nameBuf, err := portableInput(encodeByteArray(name))
+	if err != nil {
+		return nil, err
+	}
+	versionBuf, err := portableInput(encodeByteArray(sourceVersion))
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingindexedmap_verify_index(clone, nameBuf, versionBuf, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiIndexedMapVerifyAll(handle uint64, sourceVersion []byte) ([]byte, error) {
+	clone, err := portableCloneIndexedMap(handle)
+	if err != nil {
+		return nil, err
+	}
+	versionBuf, err := portableInput(encodeByteArray(sourceVersion))
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingindexedmap_verify_all(clone, versionBuf, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
 func ffiFreeIndexedMap(handle uint64) {
 	var status C.RustCallStatus
 	C.uniffi_prolly_bindings_fn_free_bindingindexedmap(C.uint64_t(handle), &status)
@@ -717,6 +807,112 @@ func ffiProximityFastHandle(handle uint64) (uint64, error) {
 	var status C.RustCallStatus
 	fast := C.uniffi_prolly_bindings_fn_method_bindingproximitymap_fast_handle(C.uint64_t(clone), &status)
 	return uint64(fast), portableStatusError(&status)
+}
+
+func ffiProximityDescriptor(handle uint64) ([]byte, error) {
+	clone, err := ffiCloneProximity(handle)
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingproximitymap_descriptor(C.uint64_t(clone), &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiProximityCount(handle uint64) (uint64, error) {
+	clone, err := ffiCloneProximity(handle)
+	if err != nil {
+		return 0, err
+	}
+	var status C.RustCallStatus
+	count := C.uniffi_prolly_bindings_fn_method_bindingproximitymap_count(C.uint64_t(clone), &status)
+	return uint64(count), portableStatusError(&status)
+}
+
+func ffiProximityContains(handle uint64, key []byte) (bool, error) {
+	clone, err := ffiCloneProximity(handle)
+	if err != nil {
+		return false, err
+	}
+	keyBuf, err := portableInput(encodeByteArray(key))
+	if err != nil {
+		return false, err
+	}
+	var status C.RustCallStatus
+	found := C.uniffi_prolly_bindings_fn_method_bindingproximitymap_contains_key(C.uint64_t(clone), keyBuf, &status)
+	return found != 0, portableStatusError(&status)
+}
+
+func ffiProximityBufferCall(handle uint64, key []byte, call func(C.uint64_t, C.RustBuffer, *C.RustCallStatus) C.RustBuffer) ([]byte, error) {
+	clone, err := ffiCloneProximity(handle)
+	if err != nil {
+		return nil, err
+	}
+	keyBuf, err := portableInput(encodeByteArray(key))
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := call(C.uint64_t(clone), keyBuf, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiProximityGet(handle uint64, key []byte) ([]byte, error) {
+	return ffiProximityBufferCall(handle, key, func(clone C.uint64_t, key C.RustBuffer, status *C.RustCallStatus) C.RustBuffer {
+		return C.uniffi_prolly_bindings_fn_method_bindingproximitymap_get(clone, key, status)
+	})
+}
+
+func ffiProximityProveMembership(handle uint64, key []byte) ([]byte, error) {
+	return ffiProximityBufferCall(handle, key, func(clone C.uint64_t, key C.RustBuffer, status *C.RustCallStatus) C.RustBuffer {
+		return C.uniffi_prolly_bindings_fn_method_bindingproximitymap_prove_membership(clone, key, status)
+	})
+}
+
+func ffiProximityVerify(handle uint64) ([]byte, error) {
+	clone, err := ffiCloneProximity(handle)
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingproximitymap_verify(C.uint64_t(clone), &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiProximityClearContentCache(handle uint64) error {
+	clone, err := ffiCloneProximity(handle)
+	if err != nil {
+		return err
+	}
+	var status C.RustCallStatus
+	C.uniffi_prolly_bindings_fn_method_bindingproximitymap_clear_content_cache(C.uint64_t(clone), &status)
+	return portableStatusError(&status)
+}
+
+func ffiVerifyProximityMembershipProof(proof, expectedDescriptor []byte) ([]byte, error) {
+	proofBuf, err := portableInput(proof)
+	if err != nil {
+		return nil, err
+	}
+	expectedBuf, err := portableInput(encodeOptionalByteArray(expectedDescriptor))
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_func_verify_proximity_membership_proof(proofBuf, expectedBuf, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
 }
 
 func ffiCloneProximity(handle uint64) (uint64, error) {

@@ -221,3 +221,101 @@ func TestPortableProofSessionAndMaintenance(t *testing.T) {
 		t.Fatalf("catalog = %+v, %v", catalog, err)
 	}
 }
+
+func TestPortableIndexedProofAndMaintenance(t *testing.T) {
+	engine, err := OpenMemory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer engine.Close()
+	registry, err := NewIndexRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer registry.Close()
+	if err := registry.Register(
+		[]byte("by_team"), 1, "team-v1", IndexProjectionAll, nil,
+		IndexExtractorFunc(func(_ []byte, source []byte) ([]IndexEntry, error) {
+			return []IndexEntry{{Term: bytes.Clone(source)}}, nil
+		}),
+	); err != nil {
+		t.Fatal(err)
+	}
+	indexed, err := engine.IndexedMap([]byte("indexed-maintenance"), registry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer indexed.Close()
+	version, err := indexed.Put([]byte("u1"), []byte("red"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := indexed.EnsureIndex([]byte("by_team")); err != nil {
+		t.Fatal(err)
+	}
+	verification, err := indexed.VerifyIndex([]byte("by_team"), version.SourceVersion)
+	if err != nil || !verification.Valid || !verification.Canonical {
+		t.Fatalf("verification = %+v, %v", verification, err)
+	}
+	all, err := indexed.VerifyAll(version.SourceVersion)
+	if err != nil || len(all) != 1 || !all[0].Valid {
+		t.Fatalf("verify all = %+v, %v", all, err)
+	}
+	metrics, err := indexed.Metrics()
+	if err != nil || metrics.VerificationOutcomes < 2 {
+		t.Fatalf("metrics = %+v, %v", metrics, err)
+	}
+	bundle, err := indexed.ExportCurrent()
+	if err != nil || len(bundle) == 0 {
+		t.Fatalf("export = %d, %v", len(bundle), err)
+	}
+	retention, err := indexed.KeepLast(1)
+	if err != nil || len(retention.RetainedSourceVersions) != 1 {
+		t.Fatalf("retention = %+v, %v", retention, err)
+	}
+}
+
+func TestPortableProximityProofAndMaintenance(t *testing.T) {
+	engine, err := OpenMemory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer engine.Close()
+	proximity, err := engine.BuildProximity(
+		2,
+		[]ProximityRecord{{Key: []byte("a"), Vector: []float32{0, 0}, Value: []byte("alpha")}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer proximity.Close()
+	if count, err := proximity.Count(); err != nil || count != 1 {
+		t.Fatalf("count = %d, %v", count, err)
+	}
+	if ok, err := proximity.Contains([]byte("a")); err != nil || !ok {
+		t.Fatalf("contains = %v, %v", ok, err)
+	}
+	record, ok, err := proximity.Get([]byte("a"))
+	if err != nil || !ok || !bytes.Equal(record.Value, []byte("alpha")) {
+		t.Fatalf("record = %+v, %v, %v", record, ok, err)
+	}
+	descriptor, err := proximity.Descriptor()
+	if err != nil || len(descriptor) == 0 {
+		t.Fatalf("descriptor = %x, %v", descriptor, err)
+	}
+	proof, err := proximity.ProveMembership([]byte("a"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	verified, err := VerifyProximityMembershipProof(proof, descriptor)
+	if err != nil || !bytes.Equal(verified.Key, []byte("a")) || verified.Record == nil {
+		t.Fatalf("verified = %+v, %v", verified, err)
+	}
+	health, err := proximity.Verify()
+	if err != nil || health.RecordCount != 1 {
+		t.Fatalf("health = %+v, %v", health, err)
+	}
+	if err := proximity.ClearContentCache(); err != nil {
+		t.Fatal(err)
+	}
+}
