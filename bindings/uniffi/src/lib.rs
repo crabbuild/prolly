@@ -38,8 +38,9 @@ mod fast_abi;
 
 pub use domain::versioned::{
     BindingMapComparison, BindingMapMerge, BindingMapSnapshot, BindingMapSubscription,
-    BindingVersionedMap, MapCatalogVerificationRecord, MapChangeEventRecord, MapUpdateKind,
-    MapUpdateRecord, MapVersionRecord, VersionPruneRecord,
+    BindingVersionedMap, BindingVersionedTransaction, MapCatalogVerificationRecord,
+    MapChangeEventRecord, MapUpdateKind, MapUpdateRecord, MapVersionRecord, VersionPruneRecord,
+    VersionedTransactionCommitRecord,
 };
 
 type MemoryEngine = Prolly<Arc<MemStore>>;
@@ -2346,6 +2347,19 @@ impl ProllyEngine {
             id,
         )
         .map(Arc::new)
+    }
+
+    pub fn begin_versioned_transaction(
+        &self,
+    ) -> Result<Arc<BindingVersionedTransaction>, ProllyBindingError> {
+        if matches!(&self.inner, BindingEngine::Host(_)) {
+            return Err(ProllyBindingError::Internal {
+                reason: "custom host stores do not expose versioned-map transactions".to_string(),
+            });
+        }
+        Ok(Arc::new(BindingVersionedTransaction::new(Arc::new(Self {
+            inner: self.inner.clone(),
+        }))))
     }
 
     /// Bind one immutable tree to a reusable read object. Foreign callers that
