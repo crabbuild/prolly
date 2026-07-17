@@ -1627,7 +1627,7 @@ fn gc_reachability_object(value: prolly::GcReachability) -> Result<Object, JsVal
     Ok(object)
 }
 
-fn gc_plan_object(value: prolly::GcPlan) -> Result<Object, JsValue> {
+pub(crate) fn gc_plan_object(value: prolly::GcPlan) -> Result<Object, JsValue> {
     let object = Object::new();
     Reflect::set(
         &object,

@@ -101,6 +101,10 @@ public final class IndexedMap implements AutoCloseable {
         return IndexedRetention.fromNative(JavaPortableBridge.keepLast(open(), count));
     }
 
+    public GcPlan planGc() {
+        return GcPlan.fromBridge(JavaPortableBridge.indexedPlanGc(open()));
+    }
+
     public CompletableFuture<Optional<byte[]>> getAsync(byte[] key) {
         var nativeHandle = open(); byte[] ownedKey = key.clone();
         return CompletableFuture.supplyAsync(() -> {

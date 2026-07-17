@@ -937,6 +937,10 @@ class IndexedMap(_Scoped):
         self._open()
         return self._inner.keep_last(count)
 
+    def plan_gc(self):
+        self._open()
+        return self._inner.plan_gc()
+
     def get_async(self, key: bytes):
         owned_key = bytes(key)
         return _background(lambda: self.get(owned_key))

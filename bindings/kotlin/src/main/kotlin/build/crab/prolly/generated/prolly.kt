@@ -1556,6 +1556,8 @@ external fun uniffi_prolly_bindings_checksum_method_bindingindexedmap_keep_last(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingindexedmap_metrics(
 ): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingindexedmap_plan_gc(
+): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingindexedmap_put(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingindexedmap_repair_index(
@@ -2563,6 +2565,8 @@ external fun uniffi_prolly_bindings_fn_method_bindingindexedmap_import_current(`
 external fun uniffi_prolly_bindings_fn_method_bindingindexedmap_keep_last(`ptr`: Long,`count`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_bindingindexedmap_metrics(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindingindexedmap_plan_gc(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_bindingindexedmap_put(`ptr`: Long,`key`: RustBuffer.ByValue,`value`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
@@ -4513,6 +4517,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_method_bindingindexedmap_metrics() != 61793.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingindexedmap_plan_gc() != 48857.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_method_bindingindexedmap_put() != 8190.toShort()) {
@@ -7269,6 +7276,8 @@ public interface BindingIndexedMapInterface {
 
     fun `metrics`(): IndexedMapMetricsRecord
 
+    fun `planGc`(): GcPlanRecord
+
     fun `put`(`key`: kotlin.ByteArray, `value`: kotlin.ByteArray): IndexedVersionRecord
 
     fun `repairIndex`(`name`: kotlin.ByteArray, `sourceVersion`: kotlin.ByteArray): IndexVerificationRecord
@@ -7549,6 +7558,20 @@ open class BindingIndexedMap: Disposable, AutoCloseable, BindingIndexedMapInterf
     callWithHandle {
     uniffiRustCallWithError(ProllyBindingException) { _status ->
     UniffiLib.uniffi_prolly_bindings_fn_method_bindingindexedmap_metrics(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `planGc`(): GcPlanRecord {
+            return FfiConverterTypeGcPlanRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingindexedmap_plan_gc(
         it,
         _status)
 }
