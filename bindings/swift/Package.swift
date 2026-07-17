@@ -15,7 +15,9 @@ let package = Package(
         .library(name: "Prolly", targets: ["Prolly"]),
         .library(name: "ProllyAPI", targets: ["ProllyAPI"]),
         .library(name: "ProllyStoreSQLite", targets: ["ProllyStoreSQLite"]),
+        .library(name: "ProllyStorePostgres", targets: ["ProllyStorePostgres"]),
         .executable(name: "prolly-store-sqlite-check", targets: ["StoreSQLiteCheck"]),
+        .executable(name: "prolly-store-postgres-check", targets: ["StorePostgresCheck"]),
         .executable(name: "prolly-agent-event-log", targets: ["AgentEventLog"]),
         .executable(name: "prolly-background-compaction", targets: ["BackgroundCompaction"]),
         .executable(name: "prolly-basic-map", targets: ["BasicMap"]),
@@ -36,6 +38,13 @@ let package = Package(
         .executable(name: "prolly-secondary-index", targets: ["SecondaryIndex"]),
         .executable(name: "prolly-vector-sidecar", targets: ["VectorSidecar"]),
         .executable(name: "prolly-fixture-check", targets: ["FixtureCheck"]),
+    ],
+    dependencies: [
+        .package(url: "https://github.com/vapor/postgres-nio.git", exact: "1.27.0"),
+        // PostgresNIO 1.27 supports Swift 5.10; constrain this transitive
+        // package because newer releases require the Swift 6 plugin toolchain.
+        .package(url: "https://github.com/apple/swift-async-algorithms.git", exact: "1.0.0"),
+        .package(url: "https://github.com/apple/swift-log.git", exact: "1.6.4"),
     ],
     targets: [
         .systemLibrary(name: "CSQLite", pkgConfig: "sqlite3"),
@@ -61,10 +70,27 @@ let package = Package(
             dependencies: ["Prolly", "CSQLite"],
             exclude: ["README.md"]
         ),
+        .target(
+            name: "ProllyStorePostgres",
+            dependencies: [
+                "Prolly",
+                // This explicit product keeps the Swift 5.10-compatible
+                // transitive version constraint active in clean resolves.
+                .product(name: "AsyncAlgorithms", package: "swift-async-algorithms"),
+                .product(name: "PostgresNIO", package: "postgres-nio"),
+                .product(name: "Logging", package: "swift-log"),
+            ],
+            exclude: ["README.md"]
+        ),
         .executableTarget(
             name: "StoreSQLiteCheck",
             dependencies: ["Prolly", "ProllyStoreSQLite", "CSQLite"],
             path: "Examples/StoreSQLiteCheck"
+        ),
+        .executableTarget(
+            name: "StorePostgresCheck",
+            dependencies: ["Prolly", "ProllyStorePostgres", .product(name: "PostgresNIO", package: "postgres-nio")],
+            path: "Examples/StorePostgresCheck"
         ),
         .testTarget(
             name: "ProllyTests",

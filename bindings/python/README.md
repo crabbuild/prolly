@@ -125,6 +125,10 @@ PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" \
   python3 -m unittest discover -s bindings/python/stores/sqlite/tests -v
 ```
 
+The PostgreSQL package borrows a running Psycopg 3 async pool. Its live-service
+check uses `PROLLY_POSTGRES_URL` and verifies contention, rollback,
+cancellation, and Rust-engine interoperability.
+
 ## Merge, CRDT, And Proof Usage
 
 Use built-in resolver names for simple policies. Use CRDT helpers, timestamped

@@ -185,6 +185,25 @@ PROLLY_BINDINGS_LIBRARY_DIR="$PWD/target/debug" \
   swift run --package-path bindings/swift prolly-store-sqlite-check
 ```
 
+Provider-first PostgreSQL checks:
+
+```sh
+PROLLY_POSTGRES_URL=postgresql://prolly:prolly@127.0.0.1:55432/prolly?sslmode=disable \
+  PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" \
+  PYTHONPATH=bindings/python:bindings/python/stores/postgres \
+  python3 -m unittest discover -s bindings/python/stores/postgres/tests -v
+PROLLY_POSTGRES_URL=postgresql://prolly:prolly@127.0.0.1:55432/prolly?sslmode=disable \
+  PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" \
+  BUNDLE_GEMFILE=bindings/ruby/stores/postgres/Gemfile \
+  BUNDLE_PATH=/tmp/prolly-ruby-postgres-bundle \
+  bundle exec ruby -Ibindings/ruby/stores/postgres/lib \
+  bindings/ruby/stores/postgres/test/postgres_store_test.rb
+PROLLY_POSTGRES_URL=postgresql://prolly:prolly@127.0.0.1:55432/prolly?sslmode=disable \
+  PROLLY_BINDINGS_LIBRARY_DIR="$PWD/target/debug" \
+  DYLD_LIBRARY_PATH="$PWD/target/debug" \
+  swift run --package-path bindings/swift prolly-store-postgres-check
+```
+
 Before publishing a binding release:
 
 1. Build the Rust facade with `cargo build --manifest-path bindings/uniffi/Cargo.toml --target-dir target`.

@@ -101,6 +101,10 @@ PROLLY_BINDINGS_LIBRARY_DIR="$PWD/target/debug" \
   swift run --package-path bindings/swift prolly-store-sqlite-check
 ```
 
+`ProllyStorePostgres` uses a caller-owned running PostgresNIO client. The
+package pins PostgresNIO 1.27 because it is the newest release compatible with
+the binding's Swift 5.10 toolchain.
+
 When adding a scenario, add a new `Examples/<Name>/main.swift`, add an executable
 product and target in `Package.swift`, and update `COOKBOOK.md` with the command
 and application pattern.

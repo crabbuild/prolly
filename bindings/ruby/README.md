@@ -123,6 +123,18 @@ PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" \
   bindings/ruby/stores/sqlite/test/sqlite_store_test.rb
 ```
 
+The PostgreSQL provider similarly borrows a `PG::Connection` and uses
+transaction advisory locks for missing-root CAS safety. Its check is:
+
+```sh
+PROLLY_POSTGRES_URL=postgresql://prolly:prolly@127.0.0.1:55432/prolly?sslmode=disable \
+  PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" \
+  BUNDLE_GEMFILE=bindings/ruby/stores/postgres/Gemfile \
+  BUNDLE_PATH=/tmp/prolly-ruby-postgres-bundle \
+  bundle exec ruby -Ibindings/ruby/stores/postgres/lib \
+  bindings/ruby/stores/postgres/test/postgres_store_test.rb
+```
+
 ## Large Values And GC
 
 Large-value helpers separate small indexable keys from large payloads. Publish
