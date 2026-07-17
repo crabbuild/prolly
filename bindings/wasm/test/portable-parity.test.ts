@@ -15,6 +15,27 @@ if (generatedPresent) {
 
 const bytes = (value: string): Uint8Array => new TextEncoder().encode(value);
 
+test("WASM versioned large values and blob GC are application-facing", { skip: !generatedPresent }, async () => {
+  const engine = api.Engine.memory(wasm);
+  const blobs = api.BlobStore.memory(wasm);
+  try {
+    const map = engine.versionedMap(bytes("large-values"));
+    await map.initialize();
+    assert.ok(map.headName().byteLength > 0);
+    assert.ok(map.versionsPrefix().byteLength > 0);
+    const first = await map.putLargeValue(blobs, bytes("document"), bytes("large-value"), { inlineThreshold: 1n });
+    assert.equal(Buffer.from(await map.getLargeValue(blobs, bytes("document")) ?? []).toString(), "large-value");
+    assert.equal((await map.putLargeValueIf(blobs, first.id, bytes("document"), bytes("new-large-value"), { inlineThreshold: 1n })).kind, "applied");
+    assert.ok((await map.planBlobGc(blobs)).reachability.liveBlobCount >= 1n);
+    const sweep = map.sweepBlobGc(blobs);
+    blobs.close();
+    assert.ok((await sweep).plan.reachability.liveBlobCount >= 1n);
+  } finally {
+    blobs.close();
+    engine.close();
+  }
+});
+
 test("WASM retained search runtime reuses validated content", { skip: !generatedPresent }, async () => {
   const engine = api.Engine.memory(wasm);
   try {

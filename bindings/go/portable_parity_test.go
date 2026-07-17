@@ -1487,6 +1487,58 @@ func TestPortableVersionedBackupRestoreAndRetention(t *testing.T) {
 	}
 }
 
+func TestPortableVersionedLargeValuesAndBlobGC(t *testing.T) {
+	engine, err := OpenMemory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer engine.Close()
+	blobs, err := MemoryBlobStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer blobs.Close()
+	versioned, err := engine.VersionedMap([]byte("large-values"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer versioned.Close()
+	if _, err = versioned.Initialize(); err != nil {
+		t.Fatal(err)
+	}
+	headName, err := versioned.HeadName()
+	if err != nil {
+		t.Fatal(err)
+	}
+	versionsPrefix, err := versioned.VersionsPrefix()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(headName) == 0 || len(versionsPrefix) == 0 {
+		t.Fatal("expected catalog namespace accessors")
+	}
+	first, err := versioned.PutLargeValue(blobs, []byte("document"), []byte("large-value"), LargeValueConfig{InlineThreshold: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	value, ok, err := versioned.GetLargeValue(blobs, []byte("document"))
+	if err != nil || !ok || !bytes.Equal(value, []byte("large-value")) {
+		t.Fatalf("large value = %q, %v, %v", value, ok, err)
+	}
+	updated, err := versioned.PutLargeValueIf(blobs, first.ID, []byte("document"), []byte("new-large-value"), LargeValueConfig{InlineThreshold: 1})
+	if err != nil || updated.Kind != MapUpdateApplied {
+		t.Fatalf("large value CAS = %#v, %v", updated, err)
+	}
+	plan, err := versioned.PlanBlobGC(blobs)
+	if err != nil || plan.Reachability.LiveBlobCount < 1 {
+		t.Fatalf("blob plan = %#v, %v", plan, err)
+	}
+	sweep, err := versioned.SweepBlobGC(blobs)
+	if err != nil || sweep.Plan.Reachability.LiveBlobCount < 1 {
+		t.Fatalf("blob sweep = %#v, %v", sweep, err)
+	}
+}
+
 func TestPortableProofSessionAndMaintenance(t *testing.T) {
 	engine, err := OpenMemory()
 	if err != nil {

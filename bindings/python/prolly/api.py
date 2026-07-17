@@ -177,6 +177,52 @@ class Engine(_Scoped):
         )
 
 
+class BlobStore(_Scoped):
+    def __init__(self, inner: _native.ProllyBlobStore):
+        super().__init__()
+        self._inner: _native.ProllyBlobStore | None = inner
+
+    @classmethod
+    def memory(cls) -> "BlobStore":
+        return cls(_native.ProllyBlobStore.memory())
+
+    @classmethod
+    def file(cls, path: str) -> "BlobStore":
+        return cls(_native.ProllyBlobStore.file(path))
+
+    def _native_handle(self) -> _native.ProllyBlobStore:
+        self._open()
+        assert self._inner is not None
+        return self._inner
+
+    def _owned_clone(self) -> "BlobStore":
+        inner = self._native_handle()
+        return BlobStore(
+            _native.ProllyBlobStore._uniffi_make_instance(inner._uniffi_clone_handle())
+        )
+
+    def close(self) -> None:
+        if not self._closed:
+            self._inner = None
+        super().close()
+
+
+def _native_blob_store(blob_store):
+    return (
+        blob_store._native_handle()
+        if isinstance(blob_store, BlobStore)
+        else blob_store
+    )
+
+
+def _with_blob_store(blob_store, call):
+    try:
+        return call()
+    finally:
+        if isinstance(blob_store, BlobStore):
+            blob_store.close()
+
+
 def _owned_mutations(mutations):
     return [
         _native.MutationRecord(
@@ -255,6 +301,14 @@ class VersionedMap(_Scoped):
         self._open()
         return self._inner.head_id()
 
+    def head_name(self) -> bytes:
+        self._open()
+        return self._inner.head_name()
+
+    def versions_prefix(self) -> bytes:
+        self._open()
+        return self._inner.versions_prefix()
+
     def version(self, version_id: bytes):
         self._open()
         return self._inner.version(bytes(version_id))
@@ -266,6 +320,10 @@ class VersionedMap(_Scoped):
     def get(self, key: bytes):
         self._open()
         return self._inner.get(bytes(key))
+
+    def get_large_value(self, blob_store, key: bytes):
+        self._open()
+        return self._inner.get_large_value(_native_blob_store(blob_store), bytes(key))
 
     def contains(self, key: bytes) -> bool:
         self._open()
@@ -338,6 +396,24 @@ class VersionedMap(_Scoped):
     def put(self, key: bytes, value: bytes):
         self._open()
         return self._inner.put(bytes(key), bytes(value))
+
+    def put_large_value(self, blob_store, key: bytes, value: bytes, config):
+        self._open()
+        return self._inner.put_large_value(
+            _native_blob_store(blob_store), bytes(key), bytes(value), config
+        )
+
+    def put_large_value_if(
+        self, blob_store, expected: bytes | None, key: bytes, value: bytes, config
+    ):
+        self._open()
+        return self._inner.put_large_value_if(
+            _native_blob_store(blob_store),
+            None if expected is None else bytes(expected),
+            bytes(key),
+            bytes(value),
+            config,
+        )
 
     def delete(self, key: bytes):
         self._open()
@@ -488,9 +564,17 @@ class VersionedMap(_Scoped):
         self._open()
         return self._inner.plan_gc()
 
+    def plan_blob_gc(self, blob_store):
+        self._open()
+        return self._inner.plan_blob_gc(_native_blob_store(blob_store))
+
     def sweep_gc(self):
         self._open()
         return self._inner.sweep_gc()
+
+    def sweep_blob_gc(self, blob_store):
+        self._open()
+        return self._inner.sweep_blob_gc(_native_blob_store(blob_store))
 
     def put_async(self, key: bytes, value: bytes):
         copied_key, copied_value = bytes(key), bytes(value)
@@ -510,6 +594,17 @@ class VersionedMap(_Scoped):
         owned_key = bytes(key)
         return _background(lambda: self.get(owned_key))
 
+    def get_large_value_async(self, blob_store, key: bytes):
+        owned_key = bytes(key)
+        owned_blob_store = (
+            blob_store._owned_clone() if isinstance(blob_store, BlobStore) else blob_store
+        )
+        return _background(
+            lambda: _with_blob_store(
+                owned_blob_store, lambda: self.get_large_value(owned_blob_store, owned_key)
+            )
+        )
+
     def apply_async(self, mutations):
         owned = tuple(mutations)
         return _background(lambda: self.apply(owned))
@@ -517,6 +612,59 @@ class VersionedMap(_Scoped):
     def delete_async(self, key: bytes):
         owned_key = bytes(key)
         return _background(lambda: self.delete(owned_key))
+
+    def put_large_value_async(self, blob_store, key: bytes, value: bytes, config):
+        owned_key, owned_value = bytes(key), bytes(value)
+        owned_config = _native.LargeValueConfigRecord(config.inline_threshold)
+        owned_blob_store = (
+            blob_store._owned_clone() if isinstance(blob_store, BlobStore) else blob_store
+        )
+        return _background(
+            lambda: _with_blob_store(
+                owned_blob_store,
+                lambda: self.put_large_value(
+                    owned_blob_store, owned_key, owned_value, owned_config
+                ),
+            )
+        )
+
+    def put_large_value_if_async(
+        self, blob_store, expected: bytes | None, key: bytes, value: bytes, config
+    ):
+        owned_expected = None if expected is None else bytes(expected)
+        owned_key, owned_value = bytes(key), bytes(value)
+        owned_config = _native.LargeValueConfigRecord(config.inline_threshold)
+        owned_blob_store = (
+            blob_store._owned_clone() if isinstance(blob_store, BlobStore) else blob_store
+        )
+        return _background(
+            lambda: _with_blob_store(
+                owned_blob_store,
+                lambda: self.put_large_value_if(
+                    owned_blob_store, owned_expected, owned_key, owned_value, owned_config
+                ),
+            )
+        )
+
+    def plan_blob_gc_async(self, blob_store):
+        owned_blob_store = (
+            blob_store._owned_clone() if isinstance(blob_store, BlobStore) else blob_store
+        )
+        return _background(
+            lambda: _with_blob_store(
+                owned_blob_store, lambda: self.plan_blob_gc(owned_blob_store)
+            )
+        )
+
+    def sweep_blob_gc_async(self, blob_store):
+        owned_blob_store = (
+            blob_store._owned_clone() if isinstance(blob_store, BlobStore) else blob_store
+        )
+        return _background(
+            lambda: _with_blob_store(
+                owned_blob_store, lambda: self.sweep_blob_gc(owned_blob_store)
+            )
+        )
 
     def snapshot_async(self):
         return _background(self.snapshot)
@@ -1985,6 +2133,7 @@ def verify_proximity_structure_proof(
 
 __all__ = [
     "AcceleratorCatalog",
+    "BlobStore",
     "CompositeAccelerator",
     "CompositeBuildOrRebuildOutcome",
     "CompositeBuildOutcome",

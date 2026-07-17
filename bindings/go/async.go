@@ -55,6 +55,14 @@ type VersionedGetResult struct {
 	Found bool
 }
 
+func cloneBlobStoreForAsync(store *BlobStore) (*BlobStore, error) {
+	handle, err := store.cloneHandle()
+	if err != nil {
+		return nil, err
+	}
+	return &BlobStore{handle: handle}, nil
+}
+
 func (m *VersionedMap) InitializeAsync(ctx context.Context) *Future[MapVersion] {
 	return startFuture(ctx, m.Initialize)
 }
@@ -76,10 +84,72 @@ func (m *VersionedMap) GetAsync(ctx context.Context, key []byte) *Future[Version
 	})
 }
 
+func (m *VersionedMap) GetLargeValueAsync(ctx context.Context, blobStore *BlobStore, key []byte) *Future[VersionedGetResult] {
+	key = append([]byte(nil), key...)
+	ownedStore, cloneErr := cloneBlobStoreForAsync(blobStore)
+	return startFuture(ctx, func() (VersionedGetResult, error) {
+		if cloneErr != nil {
+			return VersionedGetResult{}, cloneErr
+		}
+		defer ownedStore.Close()
+		value, found, err := m.GetLargeValue(ownedStore, key)
+		return VersionedGetResult{Value: value, Found: found}, err
+	})
+}
+
 func (m *VersionedMap) PutAsync(ctx context.Context, key, value []byte) *Future[MapVersion] {
 	key = append([]byte(nil), key...)
 	value = append([]byte(nil), value...)
 	return startFuture(ctx, func() (MapVersion, error) { return m.Put(key, value) })
+}
+
+func (m *VersionedMap) PutLargeValueAsync(ctx context.Context, blobStore *BlobStore, key, value []byte, config LargeValueConfig) *Future[MapVersion] {
+	key = append([]byte(nil), key...)
+	value = append([]byte(nil), value...)
+	ownedStore, cloneErr := cloneBlobStoreForAsync(blobStore)
+	return startFuture(ctx, func() (MapVersion, error) {
+		if cloneErr != nil {
+			return MapVersion{}, cloneErr
+		}
+		defer ownedStore.Close()
+		return m.PutLargeValue(ownedStore, key, value, config)
+	})
+}
+
+func (m *VersionedMap) PutLargeValueIfAsync(ctx context.Context, blobStore *BlobStore, expected, key, value []byte, config LargeValueConfig) *Future[MapUpdate] {
+	expected = append([]byte(nil), expected...)
+	key = append([]byte(nil), key...)
+	value = append([]byte(nil), value...)
+	ownedStore, cloneErr := cloneBlobStoreForAsync(blobStore)
+	return startFuture(ctx, func() (MapUpdate, error) {
+		if cloneErr != nil {
+			return MapUpdate{}, cloneErr
+		}
+		defer ownedStore.Close()
+		return m.PutLargeValueIf(ownedStore, expected, key, value, config)
+	})
+}
+
+func (m *VersionedMap) PlanBlobGCAsync(ctx context.Context, blobStore *BlobStore) *Future[BlobGcPlan] {
+	ownedStore, cloneErr := cloneBlobStoreForAsync(blobStore)
+	return startFuture(ctx, func() (BlobGcPlan, error) {
+		if cloneErr != nil {
+			return BlobGcPlan{}, cloneErr
+		}
+		defer ownedStore.Close()
+		return m.PlanBlobGC(ownedStore)
+	})
+}
+
+func (m *VersionedMap) SweepBlobGCAsync(ctx context.Context, blobStore *BlobStore) *Future[BlobGcSweep] {
+	ownedStore, cloneErr := cloneBlobStoreForAsync(blobStore)
+	return startFuture(ctx, func() (BlobGcSweep, error) {
+		if cloneErr != nil {
+			return BlobGcSweep{}, cloneErr
+		}
+		defer ownedStore.Close()
+		return m.SweepBlobGC(ownedStore)
+	})
 }
 
 func (m *VersionedMap) ApplyAsync(ctx context.Context, mutations []Mutation) *Future[MapVersion] {

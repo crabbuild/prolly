@@ -1,10 +1,11 @@
 use super::{
-    to_napi_error, NativeProllyEngine, NodeBatchApplyStatsRecord, NodeConflictPageRecord,
-    NodeDiffPageRecord, NodeDiffRecord, NodeEntryRecord, NodeGcPlanRecord, NodeGcSweepRecord,
-    NodeMultiKeyProofVerificationRecord, NodeMutationRecord, NodeNamedRootRetentionRecord,
-    NodeParallelConfigRecord, NodeRangeCursorRecord, NodeRangePageProofVerificationRecord,
-    NodeRangePageRecord, NodeRangeProofVerificationRecord, NodeReverseCursorRecord,
-    NodeReversePageRecord, NodeSnapshotBundleRecord, NodeTreeRecord,
+    to_napi_error, NativeProllyBlobStore, NativeProllyEngine, NodeBatchApplyStatsRecord,
+    NodeBlobGcPlanRecord, NodeBlobGcSweepRecord, NodeConflictPageRecord, NodeDiffPageRecord,
+    NodeDiffRecord, NodeEntryRecord, NodeGcPlanRecord, NodeGcSweepRecord,
+    NodeLargeValueConfigRecord, NodeMultiKeyProofVerificationRecord, NodeMutationRecord,
+    NodeNamedRootRetentionRecord, NodeParallelConfigRecord, NodeRangeCursorRecord,
+    NodeRangePageProofVerificationRecord, NodeRangePageRecord, NodeRangeProofVerificationRecord,
+    NodeReverseCursorRecord, NodeReversePageRecord, NodeSnapshotBundleRecord, NodeTreeRecord,
 };
 use napi::bindgen_prelude::{
     AsyncTask, Buffer, Env, Error, Float32Array, FunctionRef, Result, Status, Task,
@@ -1542,6 +1543,16 @@ impl NativePortableVersionedMap {
         Buffer::from(self.inner.id())
     }
 
+    #[napi(js_name = "headName")]
+    pub fn head_name(&self) -> Buffer {
+        Buffer::from(self.inner.head_name())
+    }
+
+    #[napi(js_name = "versionsPrefix")]
+    pub fn versions_prefix(&self) -> Buffer {
+        Buffer::from(self.inner.versions_prefix())
+    }
+
     #[napi(js_name = "isInitialized")]
     pub fn is_initialized(&self) -> Result<bool> {
         self.inner.is_initialized().map_err(to_napi_error)
@@ -1602,6 +1613,18 @@ impl NativePortableVersionedMap {
     pub fn get(&self, key: Buffer) -> Result<Option<Buffer>> {
         self.inner
             .get(key.to_vec())
+            .map(|value| value.map(Buffer::from))
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "getLargeValue")]
+    pub fn get_large_value(
+        &self,
+        blob_store: &NativeProllyBlobStore,
+        key: Buffer,
+    ) -> Result<Option<Buffer>> {
+        self.inner
+            .get_large_value(blob_store.inner.clone(), key.to_vec())
             .map(|value| value.map(Buffer::from))
             .map_err(to_napi_error)
     }
@@ -1789,6 +1812,25 @@ impl NativePortableVersionedMap {
             .map_err(to_napi_error)
     }
 
+    #[napi(js_name = "putLargeValue")]
+    pub fn put_large_value(
+        &self,
+        blob_store: &NativeProllyBlobStore,
+        key: Buffer,
+        value: Buffer,
+        config: NodeLargeValueConfigRecord,
+    ) -> Result<NodePortableMapVersion> {
+        self.inner
+            .put_large_value(
+                blob_store.inner.clone(),
+                key.to_vec(),
+                value.to_vec(),
+                config.try_into()?,
+            )
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
     #[napi]
     pub fn apply(&self, mutations: Vec<NodeMutationRecord>) -> Result<NodePortableMapVersion> {
         let mutations = mutations
@@ -1940,6 +1982,27 @@ impl NativePortableVersionedMap {
                 expected.map(|value| value.to_vec()),
                 key.to_vec(),
                 value.to_vec(),
+            )
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "putLargeValueIf")]
+    pub fn put_large_value_if(
+        &self,
+        blob_store: &NativeProllyBlobStore,
+        expected: Option<Buffer>,
+        key: Buffer,
+        value: Buffer,
+        config: NodeLargeValueConfigRecord,
+    ) -> Result<NodePortableMapUpdate> {
+        self.inner
+            .put_large_value_if(
+                blob_store.inner.clone(),
+                expected.map(|value| value.to_vec()),
+                key.to_vec(),
+                value.to_vec(),
+                config.try_into()?,
             )
             .map(Into::into)
             .map_err(to_napi_error)
@@ -2139,6 +2202,25 @@ impl NativePortableVersionedMap {
     #[napi(js_name = "sweepGc")]
     pub fn sweep_gc(&self) -> Result<NodeGcSweepRecord> {
         self.inner.sweep_gc().map(Into::into).map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "planBlobGc")]
+    pub fn plan_blob_gc(&self, blob_store: &NativeProllyBlobStore) -> Result<NodeBlobGcPlanRecord> {
+        self.inner
+            .plan_blob_gc(blob_store.inner.clone())
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "sweepBlobGc")]
+    pub fn sweep_blob_gc(
+        &self,
+        blob_store: &NativeProllyBlobStore,
+    ) -> Result<NodeBlobGcSweepRecord> {
+        self.inner
+            .sweep_blob_gc(blob_store.inner.clone())
+            .map(Into::into)
+            .map_err(to_napi_error)
     }
 }
 

@@ -36,9 +36,12 @@ import build.crab.prolly.HnswConfigRecord
 import build.crab.prolly.IndexProjectionRecord
 import build.crab.prolly.IndexedSnapshotIdRecord
 import build.crab.prolly.KeyProofRecord
+import build.crab.prolly.LargeValueConfigRecord
 import build.crab.prolly.MutationRecord
 import build.crab.prolly.ParallelConfigRecord
 import build.crab.prolly.ProllyEngine
+import build.crab.prolly.ProllyBlobStore
+import build.crab.prolly.UniffiWithHandle
 import build.crab.prolly.ProllyReadSession
 import build.crab.prolly.ProximityMembershipProofRecord
 import build.crab.prolly.ProximityMutationRecord
@@ -84,6 +87,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import java.util.concurrent.CompletableFuture
+
+private fun ProllyBlobStore.ownedClone() = ProllyBlobStore(UniffiWithHandle, uniffiCloneHandle())
 
 data class ProximityRecord(val key: ByteArray, val vector: List<Float>, val value: ByteArray)
 fun defaultSecondaryIndexLimits(): SecondaryIndexLimitsRecord =
@@ -214,8 +219,12 @@ class VersionedMap(internal val native: BindingVersionedMap) : AutoCloseable {
     fun initializeSorted(entries: List<EntryRecord>) = native.initializeSorted(entries.map(::ownedEntry))
     fun head() = native.head()
     fun headId() = native.headId()
+    fun headName() = native.headName()
+    fun versionsPrefix() = native.versionsPrefix()
     fun version(id: ByteArray) = native.version(id.copyOf())
     fun get(key: ByteArray) = native.get(key.copyOf())
+    fun getLargeValue(blobStore: ProllyBlobStore, key: ByteArray) =
+        native.getLargeValue(blobStore, key.copyOf())
     fun containsKey(key: ByteArray) = native.containsKey(key.copyOf())
     fun getMany(keys: List<ByteArray>) = native.getMany(keys.map(ByteArray::copyOf))
     fun getAt(id: ByteArray, key: ByteArray) = native.getAt(id.copyOf(), key.copyOf())
@@ -253,6 +262,25 @@ class VersionedMap(internal val native: BindingVersionedMap) : AutoCloseable {
     fun changesSince(base: ByteArray) = native.changesSince(base.copyOf())
     fun rollbackTo(id: ByteArray) = native.rollbackTo(id.copyOf())
     fun put(key: ByteArray, value: ByteArray) = native.put(key.copyOf(), value.copyOf())
+    fun putLargeValue(
+        blobStore: ProllyBlobStore,
+        key: ByteArray,
+        value: ByteArray,
+        config: LargeValueConfigRecord,
+    ) = native.putLargeValue(
+        blobStore, key.copyOf(), value.copyOf(),
+        LargeValueConfigRecord(config.inlineThreshold),
+    )
+    fun putLargeValueIf(
+        blobStore: ProllyBlobStore,
+        expected: ByteArray?,
+        key: ByteArray,
+        value: ByteArray,
+        config: LargeValueConfigRecord,
+    ) = native.putLargeValueIf(
+        blobStore, expected?.copyOf(), key.copyOf(), value.copyOf(),
+        LargeValueConfigRecord(config.inlineThreshold),
+    )
     fun apply(mutations: List<MutationRecord>) = native.apply(mutations.map(::ownedMutation))
     fun append(mutations: List<MutationRecord>) = native.append(mutations.map(::ownedMutation))
     fun parallelApply(mutations: List<MutationRecord>, config: ParallelConfigRecord) =
@@ -302,6 +330,8 @@ class VersionedMap(internal val native: BindingVersionedMap) : AutoCloseable {
     fun verifyCatalog() = native.verifyCatalog()
     fun planGc() = native.planGc()
     fun sweepGc() = native.sweepGc()
+    fun planBlobGc(blobStore: ProllyBlobStore) = native.planBlobGc(blobStore)
+    fun sweepBlobGc(blobStore: ProllyBlobStore) = native.sweepBlobGc(blobStore)
     suspend fun putAsync(key: ByteArray, value: ByteArray) =
         key.copyOf().let { copiedKey ->
             value.copyOf().let { copiedValue ->
@@ -316,11 +346,53 @@ class VersionedMap(internal val native: BindingVersionedMap) : AutoCloseable {
     suspend fun getAsync(key: ByteArray) = key.copyOf().let { owned ->
         withContext(Dispatchers.IO) { get(owned) }
     }
+    suspend fun getLargeValueAsync(blobStore: ProllyBlobStore, key: ByteArray) = key.copyOf().let { owned ->
+        val ownedBlobStore = blobStore.ownedClone()
+        withContext(Dispatchers.IO) { ownedBlobStore.use { getLargeValue(it, owned) } }
+    }
     suspend fun applyAsync(mutations: List<MutationRecord>) = mutations.map(::ownedMutation).let { owned ->
         withContext(Dispatchers.IO) { apply(owned) }
     }
     suspend fun deleteAsync(key: ByteArray) = key.copyOf().let { owned ->
         withContext(Dispatchers.IO) { delete(owned) }
+    }
+    suspend fun putLargeValueAsync(
+        blobStore: ProllyBlobStore,
+        key: ByteArray,
+        value: ByteArray,
+        config: LargeValueConfigRecord,
+    ) = key.copyOf().let { ownedKey ->
+        val ownedValue = value.copyOf()
+        val ownedConfig = LargeValueConfigRecord(config.inlineThreshold)
+        val ownedBlobStore = blobStore.ownedClone()
+        withContext(Dispatchers.IO) {
+            ownedBlobStore.use { putLargeValue(it, ownedKey, ownedValue, ownedConfig) }
+        }
+    }
+    suspend fun putLargeValueIfAsync(
+        blobStore: ProllyBlobStore,
+        expected: ByteArray?,
+        key: ByteArray,
+        value: ByteArray,
+        config: LargeValueConfigRecord,
+    ) = expected?.copyOf().let { ownedExpected ->
+        val ownedKey = key.copyOf()
+        val ownedValue = value.copyOf()
+        val ownedConfig = LargeValueConfigRecord(config.inlineThreshold)
+        val ownedBlobStore = blobStore.ownedClone()
+        withContext(Dispatchers.IO) {
+            ownedBlobStore.use {
+                putLargeValueIf(it, ownedExpected, ownedKey, ownedValue, ownedConfig)
+            }
+        }
+    }
+    suspend fun planBlobGcAsync(blobStore: ProllyBlobStore): build.crab.prolly.BlobGcPlanRecord {
+        val ownedBlobStore = blobStore.ownedClone()
+        return withContext(Dispatchers.IO) { ownedBlobStore.use(::planBlobGc) }
+    }
+    suspend fun sweepBlobGcAsync(blobStore: ProllyBlobStore): build.crab.prolly.BlobGcSweepRecord {
+        val ownedBlobStore = blobStore.ownedClone()
+        return withContext(Dispatchers.IO) { ownedBlobStore.use(::sweepBlobGc) }
     }
     suspend fun snapshotAsync() = withContext(Dispatchers.IO) { snapshot() }
     suspend fun snapshotAtAsync(id: ByteArray) = id.copyOf().let { owned ->

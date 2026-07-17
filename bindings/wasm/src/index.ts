@@ -1500,6 +1500,29 @@ export interface WasmGcSweep {
   deletedBytes: bigint;
 }
 
+export interface WasmLargeValueConfig { inlineThreshold: bigint; }
+export interface WasmBlobRef { cid: Uint8Array; len: bigint; }
+export interface WasmBlobGcReachability {
+  liveBlobs: WasmBlobRef[];
+  liveBlobCount: bigint;
+  liveBlobBytes: bigint;
+  scannedNodes: bigint;
+  scannedValues: bigint;
+}
+export interface WasmBlobGcPlan {
+  reachability: WasmBlobGcReachability;
+  candidateBlobs: bigint;
+  reclaimableBlobs: WasmBlobRef[];
+  reclaimableBlobCount: bigint;
+  reclaimableBlobBytes: bigint;
+  missingCandidates: bigint;
+}
+export interface WasmBlobGcSweep {
+  plan: WasmBlobGcPlan;
+  deletedBlobs: bigint;
+  deletedBlobBytes: bigint;
+}
+
 export interface WasmNamedRootRetention {
   kind: "all" | "exact" | "prefix" | "newest_by_name" | "updated_since";
   names: Uint8Array[];
@@ -1598,6 +1621,42 @@ function wasmGcPlan(value: any): WasmGcPlan {
   };
 }
 
+function wasmBlobRef(value: any): WasmBlobRef {
+  return { cid: value.cid, len: BigInt(value.len) };
+}
+
+function wasmBlobGcPlan(value: any): WasmBlobGcPlan {
+  return {
+    reachability: {
+      liveBlobs: value.reachability.liveBlobs.map(wasmBlobRef),
+      liveBlobCount: BigInt(value.reachability.liveBlobCount),
+      liveBlobBytes: BigInt(value.reachability.liveBlobBytes),
+      scannedNodes: BigInt(value.reachability.scannedNodes),
+      scannedValues: BigInt(value.reachability.scannedValues),
+    },
+    candidateBlobs: BigInt(value.candidateBlobs),
+    reclaimableBlobs: value.reclaimableBlobs.map(wasmBlobRef),
+    reclaimableBlobCount: BigInt(value.reclaimableBlobCount),
+    reclaimableBlobBytes: BigInt(value.reclaimableBlobBytes),
+    missingCandidates: BigInt(value.missingCandidates),
+  };
+}
+
+function wasmBlobGcSweep(value: any): WasmBlobGcSweep {
+  return {
+    plan: wasmBlobGcPlan(value.plan),
+    deletedBlobs: BigInt(value.deletedBlobs),
+    deletedBlobBytes: BigInt(value.deletedBlobBytes),
+  };
+}
+
+function checkedWasmU64(value: bigint, name: string): bigint {
+  if (value < 0n || value > 0xffff_ffff_ffff_ffffn) {
+    throw new RangeError(`${name} must be an unsigned 64-bit integer`);
+  }
+  return value;
+}
+
 function wasmNamedRootRetention(value: any): WasmNamedRootRetention {
   return {
     kind: value.kind,
@@ -1623,6 +1682,28 @@ function ownedWasmEntries(entries: readonly WasmEntryRecord[]): WasmEntryRecord[
   }));
 }
 
+export class BlobStore implements Disposable {
+  #native?: any;
+
+  private constructor(native: any) { this.#native = native; }
+
+  static memory(module: PortableNative): BlobStore {
+    return new BlobStore(new module.WasmBlobStore());
+  }
+
+  static file(_module: PortableNative, _path: string): never {
+    throw new Error("filesystem blob stores are unsupported in WASM");
+  }
+
+  cloneNativeHandle(): any {
+    if (this.#native == null) throw new Error("WASM blob store is closed");
+    return this.#native.cloneHandle();
+  }
+
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
 export class WasmVersionedMap implements Disposable {
   #native?: any;
   #memory?: WebAssembly.Memory;
@@ -1632,6 +1713,8 @@ export class WasmVersionedMap implements Disposable {
     return this.#native;
   }
   id(): Uint8Array { return this.#open().id(); }
+  headName(): Uint8Array { return this.#open().headName(); }
+  versionsPrefix(): Uint8Array { return this.#open().versionsPrefix(); }
   isInitialized(signal?: AbortSignal): Promise<boolean> {
     const native = this.#open();
     return portablePromise(signal, () => native.isInitialized());
@@ -1669,6 +1752,12 @@ export class WasmVersionedMap implements Disposable {
   get(key: Uint8Array, signal?: AbortSignal): Promise<Uint8Array | undefined> {
     const native = this.#open(); key = ownedPortableBytes(key);
     return portablePromise(signal, () => native.get(key) ?? undefined);
+  }
+  getLargeValue(blobStore: BlobStore, key: Uint8Array, signal?: AbortSignal): Promise<Uint8Array | undefined> {
+    const native = this.#open(); const nativeBlobStore = blobStore.cloneNativeHandle();
+    key = ownedPortableBytes(key);
+    return portablePromise(signal, () => native.getLargeValue(nativeBlobStore, key) ?? undefined)
+      .finally(() => nativeBlobStore.free());
   }
   containsKey(key: Uint8Array, signal?: AbortSignal): Promise<boolean> {
     const native = this.#open(); key = ownedPortableBytes(key);
@@ -1737,6 +1826,14 @@ export class WasmVersionedMap implements Disposable {
     const native = this.#open(); key = ownedPortableBytes(key); value = ownedPortableBytes(value);
     return portablePromise(signal, () => wasmMapVersion(native.put(key, value)));
   }
+  putLargeValue(blobStore: BlobStore, key: Uint8Array, value: Uint8Array, config: WasmLargeValueConfig, signal?: AbortSignal): Promise<WasmMapVersion> {
+    const native = this.#open();
+    key = ownedPortableBytes(key); value = ownedPortableBytes(value);
+    const threshold = checkedWasmU64(config.inlineThreshold, "inlineThreshold");
+    const nativeBlobStore = blobStore.cloneNativeHandle();
+    return portablePromise(signal, () => wasmMapVersion(native.putLargeValue(nativeBlobStore, key, value, threshold)))
+      .finally(() => nativeBlobStore.free());
+  }
   apply(mutations: readonly WasmMapMutation[], signal?: AbortSignal): Promise<WasmMapVersion> {
     const native = this.#open(); const owned = ownedWasmMutations(mutations);
     return portablePromise(signal, () => wasmMapVersion(native.apply(owned)));
@@ -1787,6 +1884,15 @@ export class WasmVersionedMap implements Disposable {
     const ownedExpected = expected == null ? undefined : ownedPortableBytes(expected);
     key = ownedPortableBytes(key); value = ownedPortableBytes(value);
     return portablePromise(signal, () => wasmMapUpdate(native.putIf(ownedExpected, key, value)));
+  }
+  putLargeValueIf(blobStore: BlobStore, expected: Uint8Array | undefined, key: Uint8Array, value: Uint8Array, config: WasmLargeValueConfig, signal?: AbortSignal): Promise<WasmMapUpdate> {
+    const native = this.#open();
+    const ownedExpected = expected == null ? undefined : ownedPortableBytes(expected);
+    key = ownedPortableBytes(key); value = ownedPortableBytes(value);
+    const threshold = checkedWasmU64(config.inlineThreshold, "inlineThreshold");
+    const nativeBlobStore = blobStore.cloneNativeHandle();
+    return portablePromise(signal, () => wasmMapUpdate(native.putLargeValueIf(nativeBlobStore, ownedExpected, key, value, threshold)))
+      .finally(() => nativeBlobStore.free());
   }
   deleteIf(expected: Uint8Array | undefined, key: Uint8Array, signal?: AbortSignal): Promise<WasmMapUpdate> {
     const native = this.#open();
@@ -1887,6 +1993,16 @@ export class WasmVersionedMap implements Disposable {
       deletedNodes: BigInt(value.deletedNodes),
       deletedBytes: BigInt(value.deletedBytes),
     };
+  }
+  planBlobGc(blobStore: BlobStore, signal?: AbortSignal): Promise<WasmBlobGcPlan> {
+    const native = this.#open(); const nativeBlobStore = blobStore.cloneNativeHandle();
+    return portablePromise(signal, () => wasmBlobGcPlan(native.planBlobGc(nativeBlobStore)))
+      .finally(() => nativeBlobStore.free());
+  }
+  sweepBlobGc(blobStore: BlobStore, signal?: AbortSignal): Promise<WasmBlobGcSweep> {
+    const native = this.#open(); const nativeBlobStore = blobStore.cloneNativeHandle();
+    return portablePromise(signal, () => wasmBlobGcSweep(native.sweepBlobGc(nativeBlobStore)))
+      .finally(() => nativeBlobStore.free());
   }
   close(): void { this.#native?.free?.(); this.#native = undefined; this.#memory = undefined; }
   [Symbol.dispose](): void { this.close(); }

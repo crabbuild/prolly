@@ -4,6 +4,28 @@ require 'minitest/autorun'
 require 'prolly'
 
 class PortableParityTest < Minitest::Test
+  def test_versioned_large_values_and_blob_gc_are_application_facing
+    Prolly::Engine.memory.use do |engine|
+      Prolly::BlobStore.memory.use do |blobs|
+        versioned = engine.versioned_map('large-values'.b)
+        versioned.initialize_map
+        refute_empty versioned.head_name
+        refute_empty versioned.versions_prefix
+        config = Prolly::LargeValueConfigRecord.new(inline_threshold: 1)
+        first = versioned.put_large_value(blobs, 'document'.b, 'large-value'.b, config)
+        assert_equal 'large-value'.b, versioned.get_large_value(blobs, 'document'.b)
+        updated = versioned.put_large_value_if(
+          blobs, first.id, 'document'.b, 'new-large-value'.b, config
+        )
+        assert_equal Prolly::MapUpdateKind::APPLIED, updated.kind
+        assert_operator versioned.plan_blob_gc(blobs).reachability.live_blob_count, :>=, 1
+        sweep = versioned.sweep_blob_gc_async(blobs)
+        blobs.close
+        assert_operator sweep.value.plan.reachability.live_blob_count, :>=, 1
+      end
+    end
+  end
+
   def test_retained_search_runtime_reuses_validated_content
     Prolly::Engine.memory.use do |engine|
       proximity = engine.build_proximity(
