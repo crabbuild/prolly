@@ -2,6 +2,7 @@
 
 module Prolly
   ProximityRecord = Data.define(:key, :vector, :value)
+  HnswBuildResult = Data.define(:index, :stats)
 
   def self.owned_proximity_search_request(request)
     budget = request.budget
@@ -313,6 +314,10 @@ module Prolly
     def version(id) = open! { @native.version(id.b) }
     def versions = open! { @native.versions }
     def get(key) = open! { @native.get(key.b) }
+    def contains?(key) = open! { @native.contains_key(key.b) }
+    def get_many(keys) = open! { @native.get_many(keys.map { |key| key.b.dup }) }
+    def get_at(id, key) = open! { @native.get_at(id.b, key.b) }
+    def get_many_at(id, keys) = open! { @native.get_many_at(id.b, keys.map { |key| key.b.dup }) }
     def range(start = ''.b, range_end = nil) = open! { @native.range(start.b, range_end&.b) }
     def prefix(prefix) = open! { @native.prefix(prefix.b) }
     def range_at(id, start = ''.b, range_end = nil) = open! { @native.range_at(id.b, start.b, range_end&.b) }
@@ -557,6 +562,13 @@ module Prolly
     def count = open! { @native.count }
     def config = open! { @native.config }
     def descriptor = open! { @native.descriptor }
+    def build_hnsw(config = Prolly.default_hnsw_config, limits = Prolly.default_hnsw_build_limits)
+      open! do
+        result = @native.build_hnsw(config, limits)
+        HnswBuildResult.new(index: HnswIndex.new(result.index), stats: result.stats)
+      end
+    end
+    def load_hnsw(manifest) = open! { HnswIndex.new(@native.load_hnsw(manifest.b)) }
     def verify = open! { @native.verify }
     def prove_membership(key) = open! { @native.prove_membership(key.b) }
     def prove_search(request, limits = Prolly.default_content_graph_limits)
@@ -593,8 +605,55 @@ module Prolly
 
     private
 
+    def native_for_accelerator = open! { @native }
+
     def open!
       raise 'proximity map is closed' if @closed
+      yield
+    end
+  end
+
+  class HnswIndex
+    def initialize(native)
+      @native = native
+      @closed = false
+    end
+
+    def manifest = open! { @native.manifest }
+    def source_descriptor = open! { @native.source_descriptor }
+    def config = open! { @native.config }
+    def canonical? = open! { @native.is_canonical }
+    def search(map, request)
+      open! { @native.search(map.send(:native_for_accelerator), Prolly.owned_proximity_search_request(request)) }
+    end
+    def prove_search(map, request, limits = Prolly.default_content_graph_limits)
+      open! do
+        ProximitySearchProof.new(
+          @native.prove_search(
+            map.send(:native_for_accelerator),
+            Prolly.owned_proximity_search_request(request),
+            limits
+          )
+        )
+      end
+    end
+    def close = @closed = true
+
+    def use
+      raise 'HNSW index is closed' if @closed
+      return self unless block_given?
+
+      begin
+        yield self
+      ensure
+        close
+      end
+    end
+
+    private
+
+    def open!
+      raise 'HNSW index is closed' if @closed
       yield
     end
   end

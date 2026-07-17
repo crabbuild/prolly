@@ -14,6 +14,11 @@ public struct ProximityRecord: Sendable {
     }
 }
 
+public struct HnswBuildResult {
+    public let index: HnswIndex
+    public let stats: HnswBuildStatsRecord
+}
+
 public final class Engine: @unchecked Sendable {
     let native: ProllyEngine
     private var closed = false
@@ -875,6 +880,16 @@ public final class ProximityMap: @unchecked Sendable {
     public var descriptor: Data { native.descriptor() }
     public var count: UInt64 { get throws { try native.count() } }
     public var config: ProximityConfigRecord { get throws { try native.config() } }
+    public func buildHnsw(
+        config: HnswConfigRecord = defaultHnswConfig(),
+        limits: HnswBuildLimitsRecord = defaultHnswBuildLimits()
+    ) throws -> HnswBuildResult {
+        let result = try native.buildHnsw(config: config, limits: limits)
+        return HnswBuildResult(index: HnswIndex(native: result.index), stats: result.stats)
+    }
+    public func loadHnsw(_ manifest: Data) throws -> HnswIndex {
+        HnswIndex(native: try native.loadHnsw(manifest: Data(manifest)))
+    }
     public func get(_ key: Data) throws -> ExactProximityRecordRecord? { try native.get(key: Data(key)) }
     public func contains(_ key: Data) throws -> Bool { try native.containsKey(key: Data(key)) }
     public func search(_ request: ProximitySearchRequestRecord) throws -> ProximitySearchResultRecord {
@@ -932,6 +947,51 @@ public final class ProximityMap: @unchecked Sendable {
         defer { session.close() }
         return try session.withSearchView(query: query, k: k, body)
     }
+}
+
+public final class HnswIndex: @unchecked Sendable {
+    let native: BindingHnswIndex
+    private var closed = false
+    init(native: BindingHnswIndex) { self.native = native }
+
+    public var manifest: Data {
+        precondition(!closed, "HNSW index is closed")
+        return Data(native.manifest())
+    }
+    public var sourceDescriptor: Data {
+        precondition(!closed, "HNSW index is closed")
+        return Data(native.sourceDescriptor())
+    }
+    public var config: HnswConfigRecord {
+        precondition(!closed, "HNSW index is closed")
+        return native.config()
+    }
+    public var isCanonical: Bool {
+        precondition(!closed, "HNSW index is closed")
+        return native.isCanonical()
+    }
+    public func search(
+        _ map: ProximityMap,
+        request: ProximitySearchRequestRecord
+    ) throws -> ProximitySearchResultRecord {
+        guard !closed else { throw PortableAPIError.closed("HNSW index") }
+        return try native.search(map: map.native, request: ownedSearchRequest(request))
+    }
+    public func proveSearch(
+        _ map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        limits: ContentGraphLimitsRecord = defaultContentGraphLimits()
+    ) throws -> ProximitySearchProof {
+        guard !closed else { throw PortableAPIError.closed("HNSW index") }
+        return ProximitySearchProof(
+            native: try native.proveSearch(
+                map: map.native,
+                request: ownedSearchRequest(request),
+                limits: limits
+            )
+        )
+    }
+    public func close() { closed = true }
 }
 
 private func withProximitySearchView<R>(

@@ -4,6 +4,40 @@ import ProllyAPI
 import XCTest
 
 final class PortableParityTests: XCTestCase {
+    func testHnswAcceleratorLifecycleIsPortable() throws {
+        try Engine.withMemory { engine in
+            let proximity = try engine.buildProximity(
+                dimensions: 2,
+                records: (0..<16).map { index in
+                    ProximityRecord(
+                        key: Data(String(format: "vector-%02d", index).utf8),
+                        vector: [Float(index), 0],
+                        value: Data(String(format: "value-%02d", index).utf8)
+                    )
+                }
+            )
+            let built = try proximity.buildHnsw()
+            XCTAssertEqual(built.stats.records, 16)
+            var request = exactProximitySearchRequest(query: [0, 0], k: 3)
+            request.policy = .fixedBudget
+            request.backend = .hnsw
+            let index = built.index
+            XCTAssertTrue(index.isCanonical)
+            XCTAssertEqual(index.sourceDescriptor, proximity.descriptor)
+            let result = try index.search(proximity, request: request)
+            XCTAssertEqual(result.backend, .hnsw)
+            XCTAssertEqual(result.neighbors.first?.key, Data("vector-00".utf8))
+            let manifest = index.manifest
+            let proof = try index.proveSearch(proximity, request: request)
+            XCTAssertEqual(try proof.verify(expectedDescriptor: proximity.descriptor).result.backend, .hnsw)
+            proof.close()
+            index.close()
+            let loaded = try proximity.loadHnsw(manifest)
+            XCTAssertEqual(loaded.manifest, manifest)
+            loaded.close()
+        }
+    }
+
     func testProximityRichSearchRequestIsSharedByMapSessionAndProof() throws {
         try Engine.withMemory { engine in
             let proximity = try engine.buildProximity(

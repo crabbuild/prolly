@@ -245,140 +245,140 @@ typedef void (*UniffiForeignFutureCompleteVoid)(uint64_t, UniffiForeignFutureRes
 #endif
 #ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_CONFLICT_VISITOR_CALLBACK_METHOD0
 #define UNIFFI_FFIDEF_CALLBACK_INTERFACE_CONFLICT_VISITOR_CALLBACK_METHOD0
-typedef void (*UniffiCallbackInterfaceConflictVisitorCallbackMethod0)(uint64_t, RustBuffer, int8_t* _Nonnull,
+typedef void (*UniffiCallbackInterfaceConflictVisitorCallbackMethod0)(uint64_t, RustBuffer, int8_t* _Nonnull, 
         RustCallStatus *_Nonnull uniffiCallStatus
     );
 
 #endif
 #ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_CRDT_RESOLVER_CALLBACK_METHOD0
 #define UNIFFI_FFIDEF_CALLBACK_INTERFACE_CRDT_RESOLVER_CALLBACK_METHOD0
-typedef void (*UniffiCallbackInterfaceCrdtResolverCallbackMethod0)(uint64_t, RustBuffer, RustBuffer* _Nonnull,
+typedef void (*UniffiCallbackInterfaceCrdtResolverCallbackMethod0)(uint64_t, RustBuffer, RustBuffer* _Nonnull, 
         RustCallStatus *_Nonnull uniffiCallStatus
     );
 
 #endif
 #ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_DIFF_VISITOR_CALLBACK_METHOD0
 #define UNIFFI_FFIDEF_CALLBACK_INTERFACE_DIFF_VISITOR_CALLBACK_METHOD0
-typedef void (*UniffiCallbackInterfaceDiffVisitorCallbackMethod0)(uint64_t, RustBuffer, int8_t* _Nonnull,
+typedef void (*UniffiCallbackInterfaceDiffVisitorCallbackMethod0)(uint64_t, RustBuffer, int8_t* _Nonnull, 
         RustCallStatus *_Nonnull uniffiCallStatus
     );
 
 #endif
 #ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_ENTRY_VISITOR_CALLBACK_METHOD0
 #define UNIFFI_FFIDEF_CALLBACK_INTERFACE_ENTRY_VISITOR_CALLBACK_METHOD0
-typedef void (*UniffiCallbackInterfaceEntryVisitorCallbackMethod0)(uint64_t, RustBuffer, int8_t* _Nonnull,
+typedef void (*UniffiCallbackInterfaceEntryVisitorCallbackMethod0)(uint64_t, RustBuffer, int8_t* _Nonnull, 
         RustCallStatus *_Nonnull uniffiCallStatus
     );
 
 #endif
 #ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_HOST_STORE_CALLBACK_METHOD0
 #define UNIFFI_FFIDEF_CALLBACK_INTERFACE_HOST_STORE_CALLBACK_METHOD0
-typedef void (*UniffiCallbackInterfaceHostStoreCallbackMethod0)(uint64_t, RustBuffer, RustBuffer* _Nonnull,
+typedef void (*UniffiCallbackInterfaceHostStoreCallbackMethod0)(uint64_t, RustBuffer, RustBuffer* _Nonnull, 
         RustCallStatus *_Nonnull uniffiCallStatus
     );
 
 #endif
 #ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_HOST_STORE_CALLBACK_METHOD1
 #define UNIFFI_FFIDEF_CALLBACK_INTERFACE_HOST_STORE_CALLBACK_METHOD1
-typedef void (*UniffiCallbackInterfaceHostStoreCallbackMethod1)(uint64_t, RustBuffer, RustBuffer, RustBuffer* _Nonnull,
+typedef void (*UniffiCallbackInterfaceHostStoreCallbackMethod1)(uint64_t, RustBuffer, RustBuffer, RustBuffer* _Nonnull, 
         RustCallStatus *_Nonnull uniffiCallStatus
     );
 
 #endif
 #ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_HOST_STORE_CALLBACK_METHOD2
 #define UNIFFI_FFIDEF_CALLBACK_INTERFACE_HOST_STORE_CALLBACK_METHOD2
-typedef void (*UniffiCallbackInterfaceHostStoreCallbackMethod2)(uint64_t, RustBuffer, RustBuffer* _Nonnull,
+typedef void (*UniffiCallbackInterfaceHostStoreCallbackMethod2)(uint64_t, RustBuffer, RustBuffer* _Nonnull, 
         RustCallStatus *_Nonnull uniffiCallStatus
     );
 
 #endif
 #ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_HOST_STORE_CALLBACK_METHOD3
 #define UNIFFI_FFIDEF_CALLBACK_INTERFACE_HOST_STORE_CALLBACK_METHOD3
-typedef void (*UniffiCallbackInterfaceHostStoreCallbackMethod3)(uint64_t, RustBuffer, RustBuffer* _Nonnull,
+typedef void (*UniffiCallbackInterfaceHostStoreCallbackMethod3)(uint64_t, RustBuffer, RustBuffer* _Nonnull, 
         RustCallStatus *_Nonnull uniffiCallStatus
     );
 
 #endif
 #ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_HOST_STORE_CALLBACK_METHOD4
 #define UNIFFI_FFIDEF_CALLBACK_INTERFACE_HOST_STORE_CALLBACK_METHOD4
-typedef void (*UniffiCallbackInterfaceHostStoreCallbackMethod4)(uint64_t, RustBuffer, RustBuffer* _Nonnull,
+typedef void (*UniffiCallbackInterfaceHostStoreCallbackMethod4)(uint64_t, RustBuffer, RustBuffer* _Nonnull, 
         RustCallStatus *_Nonnull uniffiCallStatus
     );
 
 #endif
 #ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_HOST_STORE_CALLBACK_METHOD5
 #define UNIFFI_FFIDEF_CALLBACK_INTERFACE_HOST_STORE_CALLBACK_METHOD5
-typedef void (*UniffiCallbackInterfaceHostStoreCallbackMethod5)(uint64_t, RustBuffer* _Nonnull,
+typedef void (*UniffiCallbackInterfaceHostStoreCallbackMethod5)(uint64_t, RustBuffer* _Nonnull, 
         RustCallStatus *_Nonnull uniffiCallStatus
     );
 
 #endif
 #ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_HOST_STORE_CALLBACK_METHOD6
 #define UNIFFI_FFIDEF_CALLBACK_INTERFACE_HOST_STORE_CALLBACK_METHOD6
-typedef void (*UniffiCallbackInterfaceHostStoreCallbackMethod6)(uint64_t, RustBuffer* _Nonnull,
+typedef void (*UniffiCallbackInterfaceHostStoreCallbackMethod6)(uint64_t, RustBuffer* _Nonnull, 
         RustCallStatus *_Nonnull uniffiCallStatus
     );
 
 #endif
 #ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_HOST_STORE_CALLBACK_METHOD7
 #define UNIFFI_FFIDEF_CALLBACK_INTERFACE_HOST_STORE_CALLBACK_METHOD7
-typedef void (*UniffiCallbackInterfaceHostStoreCallbackMethod7)(uint64_t, RustBuffer, RustBuffer, RustBuffer* _Nonnull,
+typedef void (*UniffiCallbackInterfaceHostStoreCallbackMethod7)(uint64_t, RustBuffer, RustBuffer, RustBuffer* _Nonnull, 
         RustCallStatus *_Nonnull uniffiCallStatus
     );
 
 #endif
 #ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_HOST_STORE_CALLBACK_METHOD8
 #define UNIFFI_FFIDEF_CALLBACK_INTERFACE_HOST_STORE_CALLBACK_METHOD8
-typedef void (*UniffiCallbackInterfaceHostStoreCallbackMethod8)(uint64_t, RustBuffer, RustBuffer, RustBuffer, RustBuffer* _Nonnull,
+typedef void (*UniffiCallbackInterfaceHostStoreCallbackMethod8)(uint64_t, RustBuffer, RustBuffer, RustBuffer, RustBuffer* _Nonnull, 
         RustCallStatus *_Nonnull uniffiCallStatus
     );
 
 #endif
 #ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_HOST_STORE_CALLBACK_METHOD9
 #define UNIFFI_FFIDEF_CALLBACK_INTERFACE_HOST_STORE_CALLBACK_METHOD9
-typedef void (*UniffiCallbackInterfaceHostStoreCallbackMethod9)(uint64_t, RustBuffer* _Nonnull,
+typedef void (*UniffiCallbackInterfaceHostStoreCallbackMethod9)(uint64_t, RustBuffer* _Nonnull, 
         RustCallStatus *_Nonnull uniffiCallStatus
     );
 
 #endif
 #ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_HOST_STORE_CALLBACK_METHOD10
 #define UNIFFI_FFIDEF_CALLBACK_INTERFACE_HOST_STORE_CALLBACK_METHOD10
-typedef void (*UniffiCallbackInterfaceHostStoreCallbackMethod10)(uint64_t, RustBuffer, RustBuffer* _Nonnull,
+typedef void (*UniffiCallbackInterfaceHostStoreCallbackMethod10)(uint64_t, RustBuffer, RustBuffer* _Nonnull, 
         RustCallStatus *_Nonnull uniffiCallStatus
     );
 
 #endif
 #ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_HOST_STORE_CALLBACK_METHOD11
 #define UNIFFI_FFIDEF_CALLBACK_INTERFACE_HOST_STORE_CALLBACK_METHOD11
-typedef void (*UniffiCallbackInterfaceHostStoreCallbackMethod11)(uint64_t, RustBuffer, RustBuffer, RustBuffer* _Nonnull,
+typedef void (*UniffiCallbackInterfaceHostStoreCallbackMethod11)(uint64_t, RustBuffer, RustBuffer, RustBuffer* _Nonnull, 
         RustCallStatus *_Nonnull uniffiCallStatus
     );
 
 #endif
 #ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_HOST_STORE_CALLBACK_METHOD12
 #define UNIFFI_FFIDEF_CALLBACK_INTERFACE_HOST_STORE_CALLBACK_METHOD12
-typedef void (*UniffiCallbackInterfaceHostStoreCallbackMethod12)(uint64_t, RustBuffer, RustBuffer* _Nonnull,
+typedef void (*UniffiCallbackInterfaceHostStoreCallbackMethod12)(uint64_t, RustBuffer, RustBuffer* _Nonnull, 
         RustCallStatus *_Nonnull uniffiCallStatus
     );
 
 #endif
 #ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_HOST_STORE_CALLBACK_METHOD13
 #define UNIFFI_FFIDEF_CALLBACK_INTERFACE_HOST_STORE_CALLBACK_METHOD13
-typedef void (*UniffiCallbackInterfaceHostStoreCallbackMethod13)(uint64_t, RustBuffer, RustBuffer, RustBuffer, RustBuffer* _Nonnull,
+typedef void (*UniffiCallbackInterfaceHostStoreCallbackMethod13)(uint64_t, RustBuffer, RustBuffer, RustBuffer, RustBuffer* _Nonnull, 
         RustCallStatus *_Nonnull uniffiCallStatus
     );
 
 #endif
 #ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_HOST_STORE_CALLBACK_METHOD14
 #define UNIFFI_FFIDEF_CALLBACK_INTERFACE_HOST_STORE_CALLBACK_METHOD14
-typedef void (*UniffiCallbackInterfaceHostStoreCallbackMethod14)(uint64_t, RustBuffer* _Nonnull,
+typedef void (*UniffiCallbackInterfaceHostStoreCallbackMethod14)(uint64_t, RustBuffer* _Nonnull, 
         RustCallStatus *_Nonnull uniffiCallStatus
     );
 
 #endif
 #ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_MERGE_RESOLVER_CALLBACK_METHOD0
 #define UNIFFI_FFIDEF_CALLBACK_INTERFACE_MERGE_RESOLVER_CALLBACK_METHOD0
-typedef void (*UniffiCallbackInterfaceMergeResolverCallbackMethod0)(uint64_t, RustBuffer, RustBuffer* _Nonnull,
+typedef void (*UniffiCallbackInterfaceMergeResolverCallbackMethod0)(uint64_t, RustBuffer, RustBuffer* _Nonnull, 
         RustCallStatus *_Nonnull uniffiCallStatus
     );
 
@@ -481,14 +481,14 @@ typedef void (*UniffiCallbackInterfaceForeignRemoteStoreMethod15)(uint64_t, Rust
 #endif
 #ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_SECONDARY_INDEX_EXTRACTOR_CALLBACK_METHOD0
 #define UNIFFI_FFIDEF_CALLBACK_INTERFACE_SECONDARY_INDEX_EXTRACTOR_CALLBACK_METHOD0
-typedef void (*UniffiCallbackInterfaceSecondaryIndexExtractorCallbackMethod0)(uint64_t, RustBuffer, RustBuffer, RustBuffer* _Nonnull,
+typedef void (*UniffiCallbackInterfaceSecondaryIndexExtractorCallbackMethod0)(uint64_t, RustBuffer, RustBuffer, RustBuffer* _Nonnull, 
         RustCallStatus *_Nonnull uniffiCallStatus
     );
 
 #endif
 #ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_PROXIMITY_RECORD_VISITOR_CALLBACK_METHOD0
 #define UNIFFI_FFIDEF_CALLBACK_INTERFACE_PROXIMITY_RECORD_VISITOR_CALLBACK_METHOD0
-typedef void (*UniffiCallbackInterfaceProximityRecordVisitorCallbackMethod0)(uint64_t, RustBuffer, int8_t* _Nonnull,
+typedef void (*UniffiCallbackInterfaceProximityRecordVisitorCallbackMethod0)(uint64_t, RustBuffer, int8_t* _Nonnull, 
         RustCallStatus *_Nonnull uniffiCallStatus
     );
 
@@ -786,7 +786,7 @@ void uniffi_prolly_bindings_fn_free_mergepolicyregistry(uint64_t handle, RustCal
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_CONSTRUCTOR_MERGEPOLICYREGISTRY_NEW
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_CONSTRUCTOR_MERGEPOLICYREGISTRY_NEW
 uint64_t uniffi_prolly_bindings_fn_constructor_mergepolicyregistry_new(RustCallStatus *_Nonnull out_status
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_MERGEPOLICYREGISTRY_HAS_DEFAULT
@@ -872,7 +872,7 @@ uint64_t uniffi_prolly_bindings_fn_constructor_prollyblobstore_file(RustBuffer p
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_CONSTRUCTOR_PROLLYBLOBSTORE_MEMORY
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_CONSTRUCTOR_PROLLYBLOBSTORE_MEMORY
 uint64_t uniffi_prolly_bindings_fn_constructor_prollyblobstore_memory(RustCallStatus *_Nonnull out_status
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_PROLLYBLOBSTORE_BLOB_COUNT
@@ -1968,7 +1968,7 @@ void uniffi_prolly_bindings_fn_free_bindingindexregistry(uint64_t handle, RustCa
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_CONSTRUCTOR_BINDINGINDEXREGISTRY_NEW
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_CONSTRUCTOR_BINDINGINDEXREGISTRY_NEW
 uint64_t uniffi_prolly_bindings_fn_constructor_bindingindexregistry_new(RustCallStatus *_Nonnull out_status
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_BINDINGINDEXREGISTRY_LEN
@@ -2201,6 +2201,46 @@ void uniffi_prolly_bindings_fn_init_callback_vtable_secondaryindexextractorcallb
 RustBuffer uniffi_prolly_bindings_fn_method_secondaryindexextractorcallback_extract(uint64_t ptr, RustBuffer primary_key, RustBuffer source_value, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_CLONE_BINDINGHNSWINDEX
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_CLONE_BINDINGHNSWINDEX
+uint64_t uniffi_prolly_bindings_fn_clone_bindinghnswindex(uint64_t handle, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FREE_BINDINGHNSWINDEX
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FREE_BINDINGHNSWINDEX
+void uniffi_prolly_bindings_fn_free_bindinghnswindex(uint64_t handle, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_BINDINGHNSWINDEX_CONFIG
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_BINDINGHNSWINDEX_CONFIG
+RustBuffer uniffi_prolly_bindings_fn_method_bindinghnswindex_config(uint64_t ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_BINDINGHNSWINDEX_IS_CANONICAL
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_BINDINGHNSWINDEX_IS_CANONICAL
+int8_t uniffi_prolly_bindings_fn_method_bindinghnswindex_is_canonical(uint64_t ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_BINDINGHNSWINDEX_MANIFEST
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_BINDINGHNSWINDEX_MANIFEST
+RustBuffer uniffi_prolly_bindings_fn_method_bindinghnswindex_manifest(uint64_t ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_BINDINGHNSWINDEX_PROVE_SEARCH
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_BINDINGHNSWINDEX_PROVE_SEARCH
+uint64_t uniffi_prolly_bindings_fn_method_bindinghnswindex_prove_search(uint64_t ptr, uint64_t map, RustBuffer request, RustBuffer limits, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_BINDINGHNSWINDEX_SEARCH
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_BINDINGHNSWINDEX_SEARCH
+RustBuffer uniffi_prolly_bindings_fn_method_bindinghnswindex_search(uint64_t ptr, uint64_t map, RustBuffer request, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_BINDINGHNSWINDEX_SOURCE_DESCRIPTOR
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_BINDINGHNSWINDEX_SOURCE_DESCRIPTOR
+RustBuffer uniffi_prolly_bindings_fn_method_bindinghnswindex_source_descriptor(uint64_t ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_CLONE_BINDINGPROXIMITYMAP
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_CLONE_BINDINGPROXIMITYMAP
 uint64_t uniffi_prolly_bindings_fn_clone_bindingproximitymap(uint64_t handle, RustCallStatus *_Nonnull out_status
@@ -2209,6 +2249,11 @@ uint64_t uniffi_prolly_bindings_fn_clone_bindingproximitymap(uint64_t handle, Ru
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FREE_BINDINGPROXIMITYMAP
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FREE_BINDINGPROXIMITYMAP
 void uniffi_prolly_bindings_fn_free_bindingproximitymap(uint64_t handle, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_BINDINGPROXIMITYMAP_BUILD_HNSW
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_BINDINGPROXIMITYMAP_BUILD_HNSW
+RustBuffer uniffi_prolly_bindings_fn_method_bindingproximitymap_build_hnsw(uint64_t ptr, RustBuffer config, RustBuffer limits, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_BINDINGPROXIMITYMAP_CLEAR_CONTENT_CACHE
@@ -2244,6 +2289,11 @@ uint64_t uniffi_prolly_bindings_fn_method_bindingproximitymap_fast_handle(uint64
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_BINDINGPROXIMITYMAP_GET
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_BINDINGPROXIMITYMAP_GET
 RustBuffer uniffi_prolly_bindings_fn_method_bindingproximitymap_get(uint64_t ptr, RustBuffer key, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_BINDINGPROXIMITYMAP_LOAD_HNSW
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_BINDINGPROXIMITYMAP_LOAD_HNSW
+uint64_t uniffi_prolly_bindings_fn_method_bindingproximitymap_load_hnsw(uint64_t ptr, RustBuffer manifest, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_BINDINGPROXIMITYMAP_MUTATE
@@ -3189,7 +3239,7 @@ RustBuffer uniffi_prolly_bindings_fn_func_crdt_config_multi_value(RustBuffer del
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_CRDT_RESOLUTION_DELETE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_CRDT_RESOLUTION_DELETE
 RustBuffer uniffi_prolly_bindings_fn_func_crdt_resolution_delete(RustCallStatus *_Nonnull out_status
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_CRDT_RESOLUTION_VALUE
@@ -3210,19 +3260,19 @@ RustBuffer uniffi_prolly_bindings_fn_func_decode_segments(RustBuffer key, RustCa
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_DEFAULT_CONFIG
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_DEFAULT_CONFIG
 RustBuffer uniffi_prolly_bindings_fn_func_default_config(RustCallStatus *_Nonnull out_status
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_DEFAULT_LARGE_VALUE_CONFIG
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_DEFAULT_LARGE_VALUE_CONFIG
 RustBuffer uniffi_prolly_bindings_fn_func_default_large_value_config(RustCallStatus *_Nonnull out_status
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_DEFAULT_PARALLEL_CONFIG
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_DEFAULT_PARALLEL_CONFIG
 RustBuffer uniffi_prolly_bindings_fn_func_default_parallel_config(RustCallStatus *_Nonnull out_status
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_DELETE_MUTATION
@@ -3248,7 +3298,7 @@ RustBuffer uniffi_prolly_bindings_fn_func_encode_segment(RustBuffer segment, Rus
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_ENCODING_CBOR
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_ENCODING_CBOR
 RustBuffer uniffi_prolly_bindings_fn_func_encoding_cbor(RustCallStatus *_Nonnull out_status
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_ENCODING_CUSTOM
@@ -3259,13 +3309,13 @@ RustBuffer uniffi_prolly_bindings_fn_func_encoding_custom(RustBuffer name, RustC
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_ENCODING_JSON
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_ENCODING_JSON
 RustBuffer uniffi_prolly_bindings_fn_func_encoding_json(RustCallStatus *_Nonnull out_status
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_ENCODING_RAW
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_ENCODING_RAW
 RustBuffer uniffi_prolly_bindings_fn_func_encoding_raw(RustCallStatus *_Nonnull out_status
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_I128_KEY
@@ -3386,7 +3436,7 @@ RustBuffer uniffi_prolly_bindings_fn_func_parallel_config(uint64_t max_threads, 
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_PARALLEL_CONFIG_SEQUENTIAL
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_PARALLEL_CONFIG_SEQUENTIAL
 RustBuffer uniffi_prolly_bindings_fn_func_parallel_config_sequential(RustCallStatus *_Nonnull out_status
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_PREFIX_END
@@ -3407,7 +3457,7 @@ RustBuffer uniffi_prolly_bindings_fn_func_range_cursor_after_key(RustBuffer key,
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_RANGE_CURSOR_START
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_RANGE_CURSOR_START
 RustBuffer uniffi_prolly_bindings_fn_func_range_cursor_start(RustCallStatus *_Nonnull out_status
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_RANGE_PAGE_PROOF_FROM_BYTES
@@ -3453,13 +3503,13 @@ RustBuffer uniffi_prolly_bindings_fn_func_range_proof_to_bytes(RustBuffer proof,
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_RESOLUTION_DELETE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_RESOLUTION_DELETE
 RustBuffer uniffi_prolly_bindings_fn_func_resolution_delete(RustCallStatus *_Nonnull out_status
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_RESOLUTION_UNRESOLVED
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_RESOLUTION_UNRESOLVED
 RustBuffer uniffi_prolly_bindings_fn_func_resolution_unresolved(RustCallStatus *_Nonnull out_status
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_RESOLUTION_VALUE
@@ -3490,7 +3540,7 @@ RustBuffer uniffi_prolly_bindings_fn_func_resolve_update_wins(RustBuffer conflic
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_RETAIN_ALL_NAMED_ROOTS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_RETAIN_ALL_NAMED_ROOTS
 RustBuffer uniffi_prolly_bindings_fn_func_retain_all_named_roots(RustCallStatus *_Nonnull out_status
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_RETAIN_EXACT_NAMED_ROOTS
@@ -3521,7 +3571,7 @@ RustBuffer uniffi_prolly_bindings_fn_func_reverse_cursor_before_key(RustBuffer k
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_REVERSE_CURSOR_END
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_REVERSE_CURSOR_END
 RustBuffer uniffi_prolly_bindings_fn_func_reverse_cursor_end(RustCallStatus *_Nonnull out_status
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_ROOT_MANIFEST_FROM_BYTES
@@ -3577,13 +3627,13 @@ RustBuffer uniffi_prolly_bindings_fn_func_snapshot_id_from_name(RustBuffer names
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_SNAPSHOT_NAMESPACE_BRANCH
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_SNAPSHOT_NAMESPACE_BRANCH
 RustBuffer uniffi_prolly_bindings_fn_func_snapshot_namespace_branch(RustCallStatus *_Nonnull out_status
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_SNAPSHOT_NAMESPACE_CHECKPOINT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_SNAPSHOT_NAMESPACE_CHECKPOINT
 RustBuffer uniffi_prolly_bindings_fn_func_snapshot_namespace_checkpoint(RustCallStatus *_Nonnull out_status
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_SNAPSHOT_NAMESPACE_CUSTOM
@@ -3594,7 +3644,7 @@ RustBuffer uniffi_prolly_bindings_fn_func_snapshot_namespace_custom(RustBuffer p
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_SNAPSHOT_NAMESPACE_TAG
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_SNAPSHOT_NAMESPACE_TAG
 RustBuffer uniffi_prolly_bindings_fn_func_snapshot_namespace_tag(RustCallStatus *_Nonnull out_status
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_SNAPSHOT_ROOT_NAME
@@ -3780,7 +3830,19 @@ uint64_t uniffi_prolly_bindings_fn_func_open_remote_prolly_engine(uint64_t store
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_DEFAULT_CONTENT_GRAPH_LIMITS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_DEFAULT_CONTENT_GRAPH_LIMITS
 RustBuffer uniffi_prolly_bindings_fn_func_default_content_graph_limits(RustCallStatus *_Nonnull out_status
-
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_DEFAULT_HNSW_BUILD_LIMITS
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_DEFAULT_HNSW_BUILD_LIMITS
+RustBuffer uniffi_prolly_bindings_fn_func_default_hnsw_build_limits(RustCallStatus *_Nonnull out_status
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_DEFAULT_HNSW_CONFIG
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_DEFAULT_HNSW_CONFIG
+RustBuffer uniffi_prolly_bindings_fn_func_default_hnsw_config(RustCallStatus *_Nonnull out_status
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_DEFAULT_PROXIMITY_CONFIG
@@ -4066,3421 +4128,3481 @@ void ffi_prolly_bindings_rust_future_complete_void(uint64_t handle, RustCallStat
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_AUTHENTICATED_PROOF_ENVELOPE_FROM_BYTES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_AUTHENTICATED_PROOF_ENVELOPE_FROM_BYTES
 uint16_t uniffi_prolly_bindings_checksum_func_authenticated_proof_envelope_from_bytes(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_AUTHENTICATED_PROOF_ENVELOPE_TO_BYTES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_AUTHENTICATED_PROOF_ENVELOPE_TO_BYTES
 uint16_t uniffi_prolly_bindings_checksum_func_authenticated_proof_envelope_to_bytes(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_BLOB_REF_VALIDATE_BYTES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_BLOB_REF_VALIDATE_BYTES
 uint16_t uniffi_prolly_bindings_checksum_func_blob_ref_validate_bytes(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_CHANGED_SPAN
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_CHANGED_SPAN
 uint16_t uniffi_prolly_bindings_checksum_func_changed_span(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_CHANGED_SPAN_FOR_PREFIX
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_CHANGED_SPAN_FOR_PREFIX
 uint16_t uniffi_prolly_bindings_checksum_func_changed_span_for_prefix(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_CHANGED_SPAN_FROM_KEY
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_CHANGED_SPAN_FROM_KEY
 uint16_t uniffi_prolly_bindings_checksum_func_changed_span_from_key(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_CID_FROM_BYTES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_CID_FROM_BYTES
 uint16_t uniffi_prolly_bindings_checksum_func_cid_from_bytes(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_CRDT_CONFIG_LWW
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_CRDT_CONFIG_LWW
 uint16_t uniffi_prolly_bindings_checksum_func_crdt_config_lww(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_CRDT_CONFIG_MULTI_VALUE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_CRDT_CONFIG_MULTI_VALUE
 uint16_t uniffi_prolly_bindings_checksum_func_crdt_config_multi_value(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_CRDT_RESOLUTION_DELETE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_CRDT_RESOLUTION_DELETE
 uint16_t uniffi_prolly_bindings_checksum_func_crdt_resolution_delete(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_CRDT_RESOLUTION_VALUE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_CRDT_RESOLUTION_VALUE
 uint16_t uniffi_prolly_bindings_checksum_func_crdt_resolution_value(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_DEBUG_KEY
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_DEBUG_KEY
 uint16_t uniffi_prolly_bindings_checksum_func_debug_key(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_DECODE_SEGMENTS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_DECODE_SEGMENTS
 uint16_t uniffi_prolly_bindings_checksum_func_decode_segments(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_DEFAULT_CONFIG
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_DEFAULT_CONFIG
 uint16_t uniffi_prolly_bindings_checksum_func_default_config(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_DEFAULT_LARGE_VALUE_CONFIG
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_DEFAULT_LARGE_VALUE_CONFIG
 uint16_t uniffi_prolly_bindings_checksum_func_default_large_value_config(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_DEFAULT_PARALLEL_CONFIG
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_DEFAULT_PARALLEL_CONFIG
 uint16_t uniffi_prolly_bindings_checksum_func_default_parallel_config(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_DELETE_MUTATION
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_DELETE_MUTATION
 uint16_t uniffi_prolly_bindings_checksum_func_delete_mutation(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_DIFF_PAGE_PROOF_FROM_BYTES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_DIFF_PAGE_PROOF_FROM_BYTES
 uint16_t uniffi_prolly_bindings_checksum_func_diff_page_proof_from_bytes(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_DIFF_PAGE_PROOF_TO_BYTES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_DIFF_PAGE_PROOF_TO_BYTES
 uint16_t uniffi_prolly_bindings_checksum_func_diff_page_proof_to_bytes(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_ENCODE_SEGMENT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_ENCODE_SEGMENT
 uint16_t uniffi_prolly_bindings_checksum_func_encode_segment(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_ENCODING_CBOR
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_ENCODING_CBOR
 uint16_t uniffi_prolly_bindings_checksum_func_encoding_cbor(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_ENCODING_CUSTOM
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_ENCODING_CUSTOM
 uint16_t uniffi_prolly_bindings_checksum_func_encoding_custom(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_ENCODING_JSON
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_ENCODING_JSON
 uint16_t uniffi_prolly_bindings_checksum_func_encoding_json(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_ENCODING_RAW
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_ENCODING_RAW
 uint16_t uniffi_prolly_bindings_checksum_func_encoding_raw(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_I128_KEY
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_I128_KEY
 uint16_t uniffi_prolly_bindings_checksum_func_i128_key(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_I64_KEY
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_I64_KEY
 uint16_t uniffi_prolly_bindings_checksum_func_i64_key(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_INSPECT_PROOF_BUNDLE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_INSPECT_PROOF_BUNDLE
 uint16_t uniffi_prolly_bindings_checksum_func_inspect_proof_bundle(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_IS_BOUNDARY_CONFIG
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_IS_BOUNDARY_CONFIG
 uint16_t uniffi_prolly_bindings_checksum_func_is_boundary_config(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_IS_TOMBSTONE_VALUE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_IS_TOMBSTONE_VALUE
 uint16_t uniffi_prolly_bindings_checksum_func_is_tombstone_value(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_KEY_FROM_PREFIXED_SEGMENTS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_KEY_FROM_PREFIXED_SEGMENTS
 uint16_t uniffi_prolly_bindings_checksum_func_key_from_prefixed_segments(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_KEY_FROM_SEGMENTS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_KEY_FROM_SEGMENTS
 uint16_t uniffi_prolly_bindings_checksum_func_key_from_segments(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_KEY_PROOF_FROM_BYTES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_KEY_PROOF_FROM_BYTES
 uint16_t uniffi_prolly_bindings_checksum_func_key_proof_from_bytes(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_KEY_PROOF_FROM_NODE_BYTES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_KEY_PROOF_FROM_NODE_BYTES
 uint16_t uniffi_prolly_bindings_checksum_func_key_proof_from_node_bytes(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_KEY_PROOF_PATH_NODE_BYTES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_KEY_PROOF_PATH_NODE_BYTES
 uint16_t uniffi_prolly_bindings_checksum_func_key_proof_path_node_bytes(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_KEY_PROOF_TO_BYTES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_KEY_PROOF_TO_BYTES
 uint16_t uniffi_prolly_bindings_checksum_func_key_proof_to_bytes(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_LARGE_VALUE_CONFIG
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_LARGE_VALUE_CONFIG
 uint16_t uniffi_prolly_bindings_checksum_func_large_value_config(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_MULTI_KEY_PROOF_FROM_BYTES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_MULTI_KEY_PROOF_FROM_BYTES
 uint16_t uniffi_prolly_bindings_checksum_func_multi_key_proof_from_bytes(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_MULTI_KEY_PROOF_FROM_NODE_BYTES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_MULTI_KEY_PROOF_FROM_NODE_BYTES
 uint16_t uniffi_prolly_bindings_checksum_func_multi_key_proof_from_node_bytes(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_MULTI_KEY_PROOF_PATH_NODE_BYTES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_MULTI_KEY_PROOF_PATH_NODE_BYTES
 uint16_t uniffi_prolly_bindings_checksum_func_multi_key_proof_path_node_bytes(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_MULTI_KEY_PROOF_TO_BYTES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_MULTI_KEY_PROOF_TO_BYTES
 uint16_t uniffi_prolly_bindings_checksum_func_multi_key_proof_to_bytes(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_MULTI_VALUE_SET_FROM_BYTES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_MULTI_VALUE_SET_FROM_BYTES
 uint16_t uniffi_prolly_bindings_checksum_func_multi_value_set_from_bytes(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_MULTI_VALUE_SET_MERGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_MULTI_VALUE_SET_MERGE
 uint16_t uniffi_prolly_bindings_checksum_func_multi_value_set_merge(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_MULTI_VALUE_SET_TO_BYTES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_MULTI_VALUE_SET_TO_BYTES
 uint16_t uniffi_prolly_bindings_checksum_func_multi_value_set_to_bytes(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_NODE_CID
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_NODE_CID
 uint16_t uniffi_prolly_bindings_checksum_func_node_cid(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_NODE_FROM_BYTES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_NODE_FROM_BYTES
 uint16_t uniffi_prolly_bindings_checksum_func_node_from_bytes(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_NODE_TO_BYTES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_NODE_TO_BYTES
 uint16_t uniffi_prolly_bindings_checksum_func_node_to_bytes(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_PARALLEL_CONFIG
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_PARALLEL_CONFIG
 uint16_t uniffi_prolly_bindings_checksum_func_parallel_config(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_PARALLEL_CONFIG_SEQUENTIAL
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_PARALLEL_CONFIG_SEQUENTIAL
 uint16_t uniffi_prolly_bindings_checksum_func_parallel_config_sequential(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_PREFIX_END
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_PREFIX_END
 uint16_t uniffi_prolly_bindings_checksum_func_prefix_end(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_PREFIX_RANGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_PREFIX_RANGE
 uint16_t uniffi_prolly_bindings_checksum_func_prefix_range(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_RANGE_CURSOR_AFTER_KEY
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_RANGE_CURSOR_AFTER_KEY
 uint16_t uniffi_prolly_bindings_checksum_func_range_cursor_after_key(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_RANGE_CURSOR_START
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_RANGE_CURSOR_START
 uint16_t uniffi_prolly_bindings_checksum_func_range_cursor_start(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_RANGE_PAGE_PROOF_FROM_BYTES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_RANGE_PAGE_PROOF_FROM_BYTES
 uint16_t uniffi_prolly_bindings_checksum_func_range_page_proof_from_bytes(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_RANGE_PAGE_PROOF_FROM_NODE_BYTES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_RANGE_PAGE_PROOF_FROM_NODE_BYTES
 uint16_t uniffi_prolly_bindings_checksum_func_range_page_proof_from_node_bytes(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_RANGE_PAGE_PROOF_PATH_NODE_BYTES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_RANGE_PAGE_PROOF_PATH_NODE_BYTES
 uint16_t uniffi_prolly_bindings_checksum_func_range_page_proof_path_node_bytes(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_RANGE_PAGE_PROOF_TO_BYTES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_RANGE_PAGE_PROOF_TO_BYTES
 uint16_t uniffi_prolly_bindings_checksum_func_range_page_proof_to_bytes(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_RANGE_PROOF_FROM_BYTES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_RANGE_PROOF_FROM_BYTES
 uint16_t uniffi_prolly_bindings_checksum_func_range_proof_from_bytes(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_RANGE_PROOF_FROM_NODE_BYTES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_RANGE_PROOF_FROM_NODE_BYTES
 uint16_t uniffi_prolly_bindings_checksum_func_range_proof_from_node_bytes(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_RANGE_PROOF_PATH_NODE_BYTES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_RANGE_PROOF_PATH_NODE_BYTES
 uint16_t uniffi_prolly_bindings_checksum_func_range_proof_path_node_bytes(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_RANGE_PROOF_TO_BYTES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_RANGE_PROOF_TO_BYTES
 uint16_t uniffi_prolly_bindings_checksum_func_range_proof_to_bytes(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_RESOLUTION_DELETE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_RESOLUTION_DELETE
 uint16_t uniffi_prolly_bindings_checksum_func_resolution_delete(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_RESOLUTION_UNRESOLVED
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_RESOLUTION_UNRESOLVED
 uint16_t uniffi_prolly_bindings_checksum_func_resolution_unresolved(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_RESOLUTION_VALUE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_RESOLUTION_VALUE
 uint16_t uniffi_prolly_bindings_checksum_func_resolution_value(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_RESOLVE_DELETE_WINS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_RESOLVE_DELETE_WINS
 uint16_t uniffi_prolly_bindings_checksum_func_resolve_delete_wins(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_RESOLVE_PREFER_LEFT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_RESOLVE_PREFER_LEFT
 uint16_t uniffi_prolly_bindings_checksum_func_resolve_prefer_left(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_RESOLVE_PREFER_RIGHT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_RESOLVE_PREFER_RIGHT
 uint16_t uniffi_prolly_bindings_checksum_func_resolve_prefer_right(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_RESOLVE_UPDATE_WINS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_RESOLVE_UPDATE_WINS
 uint16_t uniffi_prolly_bindings_checksum_func_resolve_update_wins(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_RETAIN_ALL_NAMED_ROOTS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_RETAIN_ALL_NAMED_ROOTS
 uint16_t uniffi_prolly_bindings_checksum_func_retain_all_named_roots(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_RETAIN_EXACT_NAMED_ROOTS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_RETAIN_EXACT_NAMED_ROOTS
 uint16_t uniffi_prolly_bindings_checksum_func_retain_exact_named_roots(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_RETAIN_NAMED_ROOT_PREFIX
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_RETAIN_NAMED_ROOT_PREFIX
 uint16_t uniffi_prolly_bindings_checksum_func_retain_named_root_prefix(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_RETAIN_NAMED_ROOTS_UPDATED_SINCE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_RETAIN_NAMED_ROOTS_UPDATED_SINCE
 uint16_t uniffi_prolly_bindings_checksum_func_retain_named_roots_updated_since(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_RETAIN_NEWEST_NAMED_ROOTS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_RETAIN_NEWEST_NAMED_ROOTS
 uint16_t uniffi_prolly_bindings_checksum_func_retain_newest_named_roots(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_REVERSE_CURSOR_BEFORE_KEY
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_REVERSE_CURSOR_BEFORE_KEY
 uint16_t uniffi_prolly_bindings_checksum_func_reverse_cursor_before_key(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_REVERSE_CURSOR_END
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_REVERSE_CURSOR_END
 uint16_t uniffi_prolly_bindings_checksum_func_reverse_cursor_end(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_ROOT_MANIFEST_FROM_BYTES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_ROOT_MANIFEST_FROM_BYTES
 uint16_t uniffi_prolly_bindings_checksum_func_root_manifest_from_bytes(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_ROOT_MANIFEST_TO_BYTES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_ROOT_MANIFEST_TO_BYTES
 uint16_t uniffi_prolly_bindings_checksum_func_root_manifest_to_bytes(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_SIGN_PROOF_BUNDLE_HMAC_SHA256
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_SIGN_PROOF_BUNDLE_HMAC_SHA256
 uint16_t uniffi_prolly_bindings_checksum_func_sign_proof_bundle_hmac_sha256(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_SNAPSHOT_BUNDLE_DIGEST
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_SNAPSHOT_BUNDLE_DIGEST
 uint16_t uniffi_prolly_bindings_checksum_func_snapshot_bundle_digest(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_SNAPSHOT_BUNDLE_DIGEST_BYTES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_SNAPSHOT_BUNDLE_DIGEST_BYTES
 uint16_t uniffi_prolly_bindings_checksum_func_snapshot_bundle_digest_bytes(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_SNAPSHOT_BUNDLE_FROM_BYTES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_SNAPSHOT_BUNDLE_FROM_BYTES
 uint16_t uniffi_prolly_bindings_checksum_func_snapshot_bundle_from_bytes(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_SNAPSHOT_BUNDLE_SUMMARY
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_SNAPSHOT_BUNDLE_SUMMARY
 uint16_t uniffi_prolly_bindings_checksum_func_snapshot_bundle_summary(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_SNAPSHOT_BUNDLE_SUMMARY_FROM_BYTES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_SNAPSHOT_BUNDLE_SUMMARY_FROM_BYTES
 uint16_t uniffi_prolly_bindings_checksum_func_snapshot_bundle_summary_from_bytes(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_SNAPSHOT_BUNDLE_TO_BYTES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_SNAPSHOT_BUNDLE_TO_BYTES
 uint16_t uniffi_prolly_bindings_checksum_func_snapshot_bundle_to_bytes(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_SNAPSHOT_ID_FROM_NAME
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_SNAPSHOT_ID_FROM_NAME
 uint16_t uniffi_prolly_bindings_checksum_func_snapshot_id_from_name(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_SNAPSHOT_NAMESPACE_BRANCH
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_SNAPSHOT_NAMESPACE_BRANCH
 uint16_t uniffi_prolly_bindings_checksum_func_snapshot_namespace_branch(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_SNAPSHOT_NAMESPACE_CHECKPOINT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_SNAPSHOT_NAMESPACE_CHECKPOINT
 uint16_t uniffi_prolly_bindings_checksum_func_snapshot_namespace_checkpoint(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_SNAPSHOT_NAMESPACE_CUSTOM
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_SNAPSHOT_NAMESPACE_CUSTOM
 uint16_t uniffi_prolly_bindings_checksum_func_snapshot_namespace_custom(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_SNAPSHOT_NAMESPACE_TAG
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_SNAPSHOT_NAMESPACE_TAG
 uint16_t uniffi_prolly_bindings_checksum_func_snapshot_namespace_tag(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_SNAPSHOT_ROOT_NAME
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_SNAPSHOT_ROOT_NAME
 uint16_t uniffi_prolly_bindings_checksum_func_snapshot_root_name(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_TIMESTAMP_MILLIS_KEY
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_TIMESTAMP_MILLIS_KEY
 uint16_t uniffi_prolly_bindings_checksum_func_timestamp_millis_key(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_TIMESTAMPED_VALUE_FROM_BYTES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_TIMESTAMPED_VALUE_FROM_BYTES
 uint16_t uniffi_prolly_bindings_checksum_func_timestamped_value_from_bytes(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_TIMESTAMPED_VALUE_NOW
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_TIMESTAMPED_VALUE_NOW
 uint16_t uniffi_prolly_bindings_checksum_func_timestamped_value_now(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_TIMESTAMPED_VALUE_TO_BYTES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_TIMESTAMPED_VALUE_TO_BYTES
 uint16_t uniffi_prolly_bindings_checksum_func_timestamped_value_to_bytes(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_TOMBSTONE_COMPACTION_MUTATION
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_TOMBSTONE_COMPACTION_MUTATION
 uint16_t uniffi_prolly_bindings_checksum_func_tombstone_compaction_mutation(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_TOMBSTONE_FROM_BYTES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_TOMBSTONE_FROM_BYTES
 uint16_t uniffi_prolly_bindings_checksum_func_tombstone_from_bytes(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_TOMBSTONE_FROM_STORED_BYTES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_TOMBSTONE_FROM_STORED_BYTES
 uint16_t uniffi_prolly_bindings_checksum_func_tombstone_from_stored_bytes(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_TOMBSTONE_TO_BYTES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_TOMBSTONE_TO_BYTES
 uint16_t uniffi_prolly_bindings_checksum_func_tombstone_to_bytes(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_TOMBSTONE_UPSERT_MUTATION
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_TOMBSTONE_UPSERT_MUTATION
 uint16_t uniffi_prolly_bindings_checksum_func_tombstone_upsert_mutation(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_TREE_CONFIG
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_TREE_CONFIG
 uint16_t uniffi_prolly_bindings_checksum_func_tree_config(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_TREE_CONFIG_FROM_FORMAT_BYTES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_TREE_CONFIG_FROM_FORMAT_BYTES
 uint16_t uniffi_prolly_bindings_checksum_func_tree_config_from_format_bytes(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_U128_KEY
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_U128_KEY
 uint16_t uniffi_prolly_bindings_checksum_func_u128_key(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_U64_KEY
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_U64_KEY
 uint16_t uniffi_prolly_bindings_checksum_func_u64_key(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_UPSERT_MUTATION
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_UPSERT_MUTATION
 uint16_t uniffi_prolly_bindings_checksum_func_upsert_mutation(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_VALUE_REF_FROM_BYTES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_VALUE_REF_FROM_BYTES
 uint16_t uniffi_prolly_bindings_checksum_func_value_ref_from_bytes(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_VALUE_REF_FROM_STORED_BYTES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_VALUE_REF_FROM_STORED_BYTES
 uint16_t uniffi_prolly_bindings_checksum_func_value_ref_from_stored_bytes(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_VALUE_REF_INLINE_REQUIRES_ESCAPE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_VALUE_REF_INLINE_REQUIRES_ESCAPE
 uint16_t uniffi_prolly_bindings_checksum_func_value_ref_inline_requires_escape(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_VALUE_REF_TO_BYTES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_VALUE_REF_TO_BYTES
 uint16_t uniffi_prolly_bindings_checksum_func_value_ref_to_bytes(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_VERIFY_AUTHENTICATED_PROOF_BUNDLE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_VERIFY_AUTHENTICATED_PROOF_BUNDLE
 uint16_t uniffi_prolly_bindings_checksum_func_verify_authenticated_proof_bundle(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_VERIFY_AUTHENTICATED_PROOF_ENVELOPE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_VERIFY_AUTHENTICATED_PROOF_ENVELOPE
 uint16_t uniffi_prolly_bindings_checksum_func_verify_authenticated_proof_envelope(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_VERIFY_DIFF_PAGE_PROOF
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_VERIFY_DIFF_PAGE_PROOF
 uint16_t uniffi_prolly_bindings_checksum_func_verify_diff_page_proof(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_VERIFY_KEY_PROOF
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_VERIFY_KEY_PROOF
 uint16_t uniffi_prolly_bindings_checksum_func_verify_key_proof(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_VERIFY_MULTI_KEY_PROOF
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_VERIFY_MULTI_KEY_PROOF
 uint16_t uniffi_prolly_bindings_checksum_func_verify_multi_key_proof(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_VERIFY_PROOF_BUNDLE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_VERIFY_PROOF_BUNDLE
 uint16_t uniffi_prolly_bindings_checksum_func_verify_proof_bundle(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_VERIFY_RANGE_PAGE_PROOF
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_VERIFY_RANGE_PAGE_PROOF
 uint16_t uniffi_prolly_bindings_checksum_func_verify_range_page_proof(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_VERIFY_RANGE_PROOF
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_VERIFY_RANGE_PROOF
 uint16_t uniffi_prolly_bindings_checksum_func_verify_range_proof(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_VERIFY_SNAPSHOT_BUNDLE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_VERIFY_SNAPSHOT_BUNDLE
 uint16_t uniffi_prolly_bindings_checksum_func_verify_snapshot_bundle(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_VERIFY_SNAPSHOT_BUNDLE_BYTES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_VERIFY_SNAPSHOT_BUNDLE_BYTES
 uint16_t uniffi_prolly_bindings_checksum_func_verify_snapshot_bundle_bytes(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_VERSIONED_VALUE_BYTES_MATCHES_SCHEMA
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_VERSIONED_VALUE_BYTES_MATCHES_SCHEMA
 uint16_t uniffi_prolly_bindings_checksum_func_versioned_value_bytes_matches_schema(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_VERSIONED_VALUE_BYTES_REQUIRE_SCHEMA
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_VERSIONED_VALUE_BYTES_REQUIRE_SCHEMA
 uint16_t uniffi_prolly_bindings_checksum_func_versioned_value_bytes_require_schema(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_VERSIONED_VALUE_FROM_BYTES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_VERSIONED_VALUE_FROM_BYTES
 uint16_t uniffi_prolly_bindings_checksum_func_versioned_value_from_bytes(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_VERSIONED_VALUE_MATCHES_SCHEMA
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_VERSIONED_VALUE_MATCHES_SCHEMA
 uint16_t uniffi_prolly_bindings_checksum_func_versioned_value_matches_schema(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_VERSIONED_VALUE_REQUIRE_SCHEMA
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_VERSIONED_VALUE_REQUIRE_SCHEMA
 uint16_t uniffi_prolly_bindings_checksum_func_versioned_value_require_schema(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_VERSIONED_VALUE_TO_BYTES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_VERSIONED_VALUE_TO_BYTES
 uint16_t uniffi_prolly_bindings_checksum_func_versioned_value_to_bytes(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_OPEN_REMOTE_PROLLY_ENGINE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_OPEN_REMOTE_PROLLY_ENGINE
 uint16_t uniffi_prolly_bindings_checksum_func_open_remote_prolly_engine(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_DEFAULT_CONTENT_GRAPH_LIMITS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_DEFAULT_CONTENT_GRAPH_LIMITS
 uint16_t uniffi_prolly_bindings_checksum_func_default_content_graph_limits(void
-
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_DEFAULT_HNSW_BUILD_LIMITS
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_DEFAULT_HNSW_BUILD_LIMITS
+uint16_t uniffi_prolly_bindings_checksum_func_default_hnsw_build_limits(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_DEFAULT_HNSW_CONFIG
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_DEFAULT_HNSW_CONFIG
+uint16_t uniffi_prolly_bindings_checksum_func_default_hnsw_config(void
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_DEFAULT_PROXIMITY_CONFIG
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_DEFAULT_PROXIMITY_CONFIG
 uint16_t uniffi_prolly_bindings_checksum_func_default_proximity_config(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_EXACT_PROXIMITY_SEARCH_REQUEST
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_EXACT_PROXIMITY_SEARCH_REQUEST
 uint16_t uniffi_prolly_bindings_checksum_func_exact_proximity_search_request(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_VERIFY_PROXIMITY_MEMBERSHIP_PROOF
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_VERIFY_PROXIMITY_MEMBERSHIP_PROOF
 uint16_t uniffi_prolly_bindings_checksum_func_verify_proximity_membership_proof(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_VERIFY_PROXIMITY_STRUCTURE_PROOF
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_VERIFY_PROXIMITY_STRUCTURE_PROOF
 uint16_t uniffi_prolly_bindings_checksum_func_verify_proximity_structure_proof(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_CONFLICTVISITORCALLBACK_VISIT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_CONFLICTVISITORCALLBACK_VISIT
 uint16_t uniffi_prolly_bindings_checksum_method_conflictvisitorcallback_visit(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_CRDTRESOLVERCALLBACK_RESOLVE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_CRDTRESOLVERCALLBACK_RESOLVE
 uint16_t uniffi_prolly_bindings_checksum_method_crdtresolvercallback_resolve(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_DIFFVISITORCALLBACK_VISIT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_DIFFVISITORCALLBACK_VISIT
 uint16_t uniffi_prolly_bindings_checksum_method_diffvisitorcallback_visit(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ENTRYVISITORCALLBACK_VISIT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ENTRYVISITORCALLBACK_VISIT
 uint16_t uniffi_prolly_bindings_checksum_method_entryvisitorcallback_visit(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_HOSTSTORECALLBACK_GET
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_HOSTSTORECALLBACK_GET
 uint16_t uniffi_prolly_bindings_checksum_method_hoststorecallback_get(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_HOSTSTORECALLBACK_PUT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_HOSTSTORECALLBACK_PUT
 uint16_t uniffi_prolly_bindings_checksum_method_hoststorecallback_put(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_HOSTSTORECALLBACK_DELETE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_HOSTSTORECALLBACK_DELETE
 uint16_t uniffi_prolly_bindings_checksum_method_hoststorecallback_delete(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_HOSTSTORECALLBACK_BATCH
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_HOSTSTORECALLBACK_BATCH
 uint16_t uniffi_prolly_bindings_checksum_method_hoststorecallback_batch(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_HOSTSTORECALLBACK_BATCH_GET_ORDERED
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_HOSTSTORECALLBACK_BATCH_GET_ORDERED
 uint16_t uniffi_prolly_bindings_checksum_method_hoststorecallback_batch_get_ordered(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_HOSTSTORECALLBACK_PREFERS_BATCH_READS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_HOSTSTORECALLBACK_PREFERS_BATCH_READS
 uint16_t uniffi_prolly_bindings_checksum_method_hoststorecallback_prefers_batch_reads(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_HOSTSTORECALLBACK_SUPPORTS_HINTS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_HOSTSTORECALLBACK_SUPPORTS_HINTS
 uint16_t uniffi_prolly_bindings_checksum_method_hoststorecallback_supports_hints(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_HOSTSTORECALLBACK_GET_HINT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_HOSTSTORECALLBACK_GET_HINT
 uint16_t uniffi_prolly_bindings_checksum_method_hoststorecallback_get_hint(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_HOSTSTORECALLBACK_PUT_HINT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_HOSTSTORECALLBACK_PUT_HINT
 uint16_t uniffi_prolly_bindings_checksum_method_hoststorecallback_put_hint(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_HOSTSTORECALLBACK_LIST_NODE_CIDS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_HOSTSTORECALLBACK_LIST_NODE_CIDS
 uint16_t uniffi_prolly_bindings_checksum_method_hoststorecallback_list_node_cids(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_HOSTSTORECALLBACK_GET_ROOT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_HOSTSTORECALLBACK_GET_ROOT
 uint16_t uniffi_prolly_bindings_checksum_method_hoststorecallback_get_root(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_HOSTSTORECALLBACK_PUT_ROOT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_HOSTSTORECALLBACK_PUT_ROOT
 uint16_t uniffi_prolly_bindings_checksum_method_hoststorecallback_put_root(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_HOSTSTORECALLBACK_DELETE_ROOT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_HOSTSTORECALLBACK_DELETE_ROOT
 uint16_t uniffi_prolly_bindings_checksum_method_hoststorecallback_delete_root(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_HOSTSTORECALLBACK_COMPARE_AND_SWAP_ROOT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_HOSTSTORECALLBACK_COMPARE_AND_SWAP_ROOT
 uint16_t uniffi_prolly_bindings_checksum_method_hoststorecallback_compare_and_swap_root(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_HOSTSTORECALLBACK_LIST_ROOTS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_HOSTSTORECALLBACK_LIST_ROOTS
 uint16_t uniffi_prolly_bindings_checksum_method_hoststorecallback_list_roots(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_MERGEPOLICYREGISTRY_HAS_DEFAULT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_MERGEPOLICYREGISTRY_HAS_DEFAULT
 uint16_t uniffi_prolly_bindings_checksum_method_mergepolicyregistry_has_default(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_MERGEPOLICYREGISTRY_IS_EMPTY
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_MERGEPOLICYREGISTRY_IS_EMPTY
 uint16_t uniffi_prolly_bindings_checksum_method_mergepolicyregistry_is_empty(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_MERGEPOLICYREGISTRY_LEN
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_MERGEPOLICYREGISTRY_LEN
 uint16_t uniffi_prolly_bindings_checksum_method_mergepolicyregistry_len(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_MERGEPOLICYREGISTRY_PUSH_EXACT_RESOLVER
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_MERGEPOLICYREGISTRY_PUSH_EXACT_RESOLVER
 uint16_t uniffi_prolly_bindings_checksum_method_mergepolicyregistry_push_exact_resolver(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_MERGEPOLICYREGISTRY_PUSH_EXACT_RESOLVER_NAME
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_MERGEPOLICYREGISTRY_PUSH_EXACT_RESOLVER_NAME
 uint16_t uniffi_prolly_bindings_checksum_method_mergepolicyregistry_push_exact_resolver_name(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_MERGEPOLICYREGISTRY_PUSH_PREFIX_RESOLVER
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_MERGEPOLICYREGISTRY_PUSH_PREFIX_RESOLVER
 uint16_t uniffi_prolly_bindings_checksum_method_mergepolicyregistry_push_prefix_resolver(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_MERGEPOLICYREGISTRY_PUSH_PREFIX_RESOLVER_NAME
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_MERGEPOLICYREGISTRY_PUSH_PREFIX_RESOLVER_NAME
 uint16_t uniffi_prolly_bindings_checksum_method_mergepolicyregistry_push_prefix_resolver_name(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_MERGEPOLICYREGISTRY_SET_DEFAULT_RESOLVER
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_MERGEPOLICYREGISTRY_SET_DEFAULT_RESOLVER
 uint16_t uniffi_prolly_bindings_checksum_method_mergepolicyregistry_set_default_resolver(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_MERGEPOLICYREGISTRY_SET_DEFAULT_RESOLVER_NAME
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_MERGEPOLICYREGISTRY_SET_DEFAULT_RESOLVER_NAME
 uint16_t uniffi_prolly_bindings_checksum_method_mergepolicyregistry_set_default_resolver_name(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_MERGERESOLVERCALLBACK_RESOLVE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_MERGERESOLVERCALLBACK_RESOLVE
 uint16_t uniffi_prolly_bindings_checksum_method_mergeresolvercallback_resolve(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYBLOBSTORE_BLOB_COUNT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYBLOBSTORE_BLOB_COUNT
 uint16_t uniffi_prolly_bindings_checksum_method_prollyblobstore_blob_count(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYBLOBSTORE_DELETE_BLOB
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYBLOBSTORE_DELETE_BLOB
 uint16_t uniffi_prolly_bindings_checksum_method_prollyblobstore_delete_blob(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYBLOBSTORE_GET_BLOB
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYBLOBSTORE_GET_BLOB
 uint16_t uniffi_prolly_bindings_checksum_method_prollyblobstore_get_blob(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYBLOBSTORE_LIST_BLOB_REFS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYBLOBSTORE_LIST_BLOB_REFS
 uint16_t uniffi_prolly_bindings_checksum_method_prollyblobstore_list_blob_refs(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYBLOBSTORE_PUT_BLOB
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYBLOBSTORE_PUT_BLOB
 uint16_t uniffi_prolly_bindings_checksum_method_prollyblobstore_put_blob(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_APPEND_BATCH
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_APPEND_BATCH
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_append_batch(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_APPEND_BATCH_WITH_STATS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_APPEND_BATCH_WITH_STATS
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_append_batch_with_stats(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_BATCH
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_BATCH
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_batch(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_BATCH_WITH_STATS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_BATCH_WITH_STATS
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_batch_with_stats(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_BEGIN_TRANSACTION
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_BEGIN_TRANSACTION
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_begin_transaction(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_BEGIN_VERSIONED_TRANSACTION
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_BEGIN_VERSIONED_TRANSACTION
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_begin_versioned_transaction(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_BUILD_FROM_ENTRIES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_BUILD_FROM_ENTRIES
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_build_from_entries(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_BUILD_FROM_SORTED_ENTRIES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_BUILD_FROM_SORTED_ENTRIES
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_build_from_sorted_entries(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_BUILD_PROXIMITY_MAP
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_BUILD_PROXIMITY_MAP
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_build_proximity_map(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_CACHE_STATS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_CACHE_STATS
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_cache_stats(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_CLEAR_CACHE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_CLEAR_CACHE
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_clear_cache(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_COLLECT_STATS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_COLLECT_STATS
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_collect_stats(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_COLLECT_STATS_JSON
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_COLLECT_STATS_JSON
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_collect_stats_json(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_COMPARE_AND_SWAP_NAMED_ROOT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_COMPARE_AND_SWAP_NAMED_ROOT
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_compare_and_swap_named_root(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_COMPARE_AND_SWAP_NAMED_ROOT_AT_MILLIS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_COMPARE_AND_SWAP_NAMED_ROOT_AT_MILLIS
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_compare_and_swap_named_root_at_millis(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_COMPARE_AND_SWAP_SNAPSHOT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_COMPARE_AND_SWAP_SNAPSHOT
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_compare_and_swap_snapshot(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_COMPARE_AND_SWAP_SNAPSHOT_AT_MILLIS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_COMPARE_AND_SWAP_SNAPSHOT_AT_MILLIS
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_compare_and_swap_snapshot_at_millis(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_CONFLICT_PAGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_CONFLICT_PAGE
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_conflict_page(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_COPY_MISSING_NODES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_COPY_MISSING_NODES
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_copy_missing_nodes(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_CRDT_MERGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_CRDT_MERGE
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_crdt_merge(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_CRDT_MERGE_WITH_RESOLVER
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_CRDT_MERGE_WITH_RESOLVER
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_crdt_merge_with_resolver(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_CREATE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_CREATE
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_create(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_CURSOR_WINDOW
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_CURSOR_WINDOW
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_cursor_window(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_DEBUG_COMPARE_TREES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_DEBUG_COMPARE_TREES
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_debug_compare_trees(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_DEBUG_COMPARE_TREES_JSON
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_DEBUG_COMPARE_TREES_JSON
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_debug_compare_trees_json(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_DEBUG_COMPARE_TREES_TEXT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_DEBUG_COMPARE_TREES_TEXT
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_debug_compare_trees_text(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_DEBUG_TREE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_DEBUG_TREE
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_debug_tree(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_DEBUG_TREE_JSON
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_DEBUG_TREE_JSON
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_debug_tree_json(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_DEBUG_TREE_TEXT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_DEBUG_TREE_TEXT
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_debug_tree_text(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_DELETE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_DELETE
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_delete(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_DELETE_NAMED_ROOT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_DELETE_NAMED_ROOT
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_delete_named_root(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_DELETE_RANGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_DELETE_RANGE
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_delete_range(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_DELETE_RANGE_WITH_STATS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_DELETE_RANGE_WITH_STATS
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_delete_range_with_stats(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_DELETE_SNAPSHOT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_DELETE_SNAPSHOT
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_delete_snapshot(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_DIFF
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_DIFF
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_diff(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_DIFF_FROM_CURSOR
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_DIFF_FROM_CURSOR
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_diff_from_cursor(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_DIFF_PAGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_DIFF_PAGE
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_diff_page(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_EXPORT_SNAPSHOT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_EXPORT_SNAPSHOT
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_export_snapshot(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_FIRST_ENTRY
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_FIRST_ENTRY
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_first_entry(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_GET
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_GET
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_get(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_GET_LARGE_VALUE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_GET_LARGE_VALUE
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_get_large_value(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_GET_MANY
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_GET_MANY
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_get_many(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_GET_VALUE_REF
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_GET_VALUE_REF
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_get_value_ref(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_HYDRATE_PREFIX_PATH_HINT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_HYDRATE_PREFIX_PATH_HINT
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_hydrate_prefix_path_hint(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_IMPORT_SNAPSHOT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_IMPORT_SNAPSHOT
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_import_snapshot(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_INDEXED_MAP
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_INDEXED_MAP
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_indexed_map(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_LAST_ENTRY
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_LAST_ENTRY
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_last_entry(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_LIST_NAMED_ROOT_MANIFESTS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_LIST_NAMED_ROOT_MANIFESTS
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_list_named_root_manifests(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_LIST_NAMED_ROOTS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_LIST_NAMED_ROOTS
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_list_named_roots(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_LIST_NODE_CIDS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_LIST_NODE_CIDS
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_list_node_cids(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_LIST_SNAPSHOTS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_LIST_SNAPSHOTS
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_list_snapshots(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_LOAD_CHANGED_SPANS_HINT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_LOAD_CHANGED_SPANS_HINT
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_load_changed_spans_hint(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_LOAD_NAMED_ROOT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_LOAD_NAMED_ROOT
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_load_named_root(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_LOAD_NAMED_ROOTS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_LOAD_NAMED_ROOTS
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_load_named_roots(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_LOAD_PROXIMITY_MAP
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_LOAD_PROXIMITY_MAP
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_load_proximity_map(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_LOAD_RETAINED_NAMED_ROOTS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_LOAD_RETAINED_NAMED_ROOTS
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_load_retained_named_roots(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_LOAD_SNAPSHOT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_LOAD_SNAPSHOT
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_load_snapshot(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_LOAD_SNAPSHOTS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_LOAD_SNAPSHOTS
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_load_snapshots(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_LOWER_BOUND
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_LOWER_BOUND
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_lower_bound(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_MARK_REACHABLE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_MARK_REACHABLE
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_mark_reachable(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_MARK_REACHABLE_BLOBS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_MARK_REACHABLE_BLOBS
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_mark_reachable_blobs(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_MERGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_MERGE
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_merge(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_MERGE_EXPLAIN
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_MERGE_EXPLAIN
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_merge_explain(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_MERGE_EXPLAIN_WITH_POLICY
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_MERGE_EXPLAIN_WITH_POLICY
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_merge_explain_with_policy(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_MERGE_EXPLAIN_WITH_RESOLVER
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_MERGE_EXPLAIN_WITH_RESOLVER
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_merge_explain_with_resolver(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_MERGE_PREFIX
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_MERGE_PREFIX
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_merge_prefix(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_MERGE_PREFIX_WITH_POLICY
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_MERGE_PREFIX_WITH_POLICY
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_merge_prefix_with_policy(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_MERGE_PREFIX_WITH_RESOLVER
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_MERGE_PREFIX_WITH_RESOLVER
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_merge_prefix_with_resolver(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_MERGE_RANGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_MERGE_RANGE
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_merge_range(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_MERGE_RANGE_WITH_POLICY
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_MERGE_RANGE_WITH_POLICY
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_merge_range_with_policy(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_MERGE_RANGE_WITH_RESOLVER
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_MERGE_RANGE_WITH_RESOLVER
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_merge_range_with_resolver(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_MERGE_WITH_POLICY
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_MERGE_WITH_POLICY
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_merge_with_policy(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_MERGE_WITH_RESOLVER
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_MERGE_WITH_RESOLVER
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_merge_with_resolver(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_METRICS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_METRICS
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_metrics(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PARALLEL_BATCH
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PARALLEL_BATCH
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_parallel_batch(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PARALLEL_BATCH_WITH_STATS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PARALLEL_BATCH_WITH_STATS
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_parallel_batch_with_stats(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PIN_TREE_PATH
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PIN_TREE_PATH
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_pin_tree_path(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PIN_TREE_ROOT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PIN_TREE_ROOT
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_pin_tree_root(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PLAN_BLOB_GC
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PLAN_BLOB_GC
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_plan_blob_gc(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PLAN_BLOB_STORE_GC
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PLAN_BLOB_STORE_GC
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_plan_blob_store_gc(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PLAN_GC
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PLAN_GC
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_plan_gc(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PLAN_MISSING_NODES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PLAN_MISSING_NODES
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_plan_missing_nodes(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PLAN_STORE_GC
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PLAN_STORE_GC
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_plan_store_gc(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PLAN_STORE_GC_FOR_RETENTION
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PLAN_STORE_GC_FOR_RETENTION
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_plan_store_gc_for_retention(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PREFIX
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PREFIX
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_prefix(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PREFIX_PAGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PREFIX_PAGE
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_prefix_page(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PREFIX_REVERSE_PAGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PREFIX_REVERSE_PAGE
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_prefix_reverse_page(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PROVE_DIFF_PAGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PROVE_DIFF_PAGE
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_prove_diff_page(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PROVE_KEY
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PROVE_KEY
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_prove_key(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PROVE_KEYS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PROVE_KEYS
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_prove_keys(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PROVE_PREFIX
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PROVE_PREFIX
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_prove_prefix(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PROVE_RANGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PROVE_RANGE
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_prove_range(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PROVE_RANGE_PAGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PROVE_RANGE_PAGE
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_prove_range_page(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PUBLISH_CHANGED_SPANS_HINT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PUBLISH_CHANGED_SPANS_HINT
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_publish_changed_spans_hint(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PUBLISH_NAMED_ROOT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PUBLISH_NAMED_ROOT
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_publish_named_root(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PUBLISH_NAMED_ROOT_AT_MILLIS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PUBLISH_NAMED_ROOT_AT_MILLIS
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_publish_named_root_at_millis(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PUBLISH_PREFIX_PATH_HINT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PUBLISH_PREFIX_PATH_HINT
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_publish_prefix_path_hint(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PUBLISH_SNAPSHOT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PUBLISH_SNAPSHOT
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_publish_snapshot(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PUBLISH_SNAPSHOT_AT_MILLIS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PUBLISH_SNAPSHOT_AT_MILLIS
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_publish_snapshot_at_millis(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PUT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PUT
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_put(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PUT_LARGE_VALUE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_PUT_LARGE_VALUE
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_put_large_value(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_RANGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_RANGE
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_range(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_RANGE_AFTER
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_RANGE_AFTER
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_range_after(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_RANGE_DIFF
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_RANGE_DIFF
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_range_diff(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_RANGE_FROM_CURSOR
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_RANGE_FROM_CURSOR
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_range_from_cursor(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_RANGE_PAGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_RANGE_PAGE
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_range_page(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_READ_SESSION
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_READ_SESSION
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_read_session(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_RESET_METRICS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_RESET_METRICS
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_reset_metrics(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_REVERSE_PAGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_REVERSE_PAGE
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_reverse_page(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_SCAN_CONFLICTS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_SCAN_CONFLICTS
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_scan_conflicts(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_SCAN_DIFF
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_SCAN_DIFF
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_scan_diff(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_SCAN_PREFIX
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_SCAN_PREFIX
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_scan_prefix(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_SCAN_PREFIX_REVERSE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_SCAN_PREFIX_REVERSE
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_scan_prefix_reverse(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_SCAN_RANGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_SCAN_RANGE
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_scan_range(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_SCAN_RANGE_DIFF
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_SCAN_RANGE_DIFF
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_scan_range_diff(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_SCAN_RANGE_REVERSE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_SCAN_RANGE_REVERSE
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_scan_range_reverse(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_STATS_DIFF
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_STATS_DIFF
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_stats_diff(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_STATS_DIFF_JSON
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_STATS_DIFF_JSON
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_stats_diff_json(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_STRUCTURAL_DIFF_PAGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_STRUCTURAL_DIFF_PAGE
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_structural_diff_page(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_STRUCTURAL_DIFF_PAGE_WITH_CURSOR
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_STRUCTURAL_DIFF_PAGE_WITH_CURSOR
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_structural_diff_page_with_cursor(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_SWEEP_BLOB_GC
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_SWEEP_BLOB_GC
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_sweep_blob_gc(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_SWEEP_BLOB_STORE_GC
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_SWEEP_BLOB_STORE_GC
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_sweep_blob_store_gc(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_SWEEP_GC
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_SWEEP_GC
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_sweep_gc(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_SWEEP_STORE_GC
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_SWEEP_STORE_GC
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_sweep_store_gc(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_SWEEP_STORE_GC_FOR_RETENTION
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_SWEEP_STORE_GC_FOR_RETENTION
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_sweep_store_gc_for_retention(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_UNPIN_ALL_CACHE_NODES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_UNPIN_ALL_CACHE_NODES
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_unpin_all_cache_nodes(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_UPPER_BOUND
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_UPPER_BOUND
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_upper_bound(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_VERSIONED_MAP
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYENGINE_VERSIONED_MAP
 uint16_t uniffi_prolly_bindings_checksum_method_prollyengine_versioned_map(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYREADSESSION_FAST_HANDLE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYREADSESSION_FAST_HANDLE
 uint16_t uniffi_prolly_bindings_checksum_method_prollyreadsession_fast_handle(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYREADSESSION_GET
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYREADSESSION_GET
 uint16_t uniffi_prolly_bindings_checksum_method_prollyreadsession_get(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYREADSESSION_GET_MANY
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYREADSESSION_GET_MANY
 uint16_t uniffi_prolly_bindings_checksum_method_prollyreadsession_get_many(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYREADSESSION_SCAN_CONFLICTS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYREADSESSION_SCAN_CONFLICTS
 uint16_t uniffi_prolly_bindings_checksum_method_prollyreadsession_scan_conflicts(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYREADSESSION_SCAN_RANGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYREADSESSION_SCAN_RANGE
 uint16_t uniffi_prolly_bindings_checksum_method_prollyreadsession_scan_range(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYREADSESSION_SCAN_RANGE_DIFF
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYREADSESSION_SCAN_RANGE_DIFF
 uint16_t uniffi_prolly_bindings_checksum_method_prollyreadsession_scan_range_diff(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYTRANSACTION_BATCH
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYTRANSACTION_BATCH
 uint16_t uniffi_prolly_bindings_checksum_method_prollytransaction_batch(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYTRANSACTION_COMMIT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYTRANSACTION_COMMIT
 uint16_t uniffi_prolly_bindings_checksum_method_prollytransaction_commit(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYTRANSACTION_COMPARE_AND_SWAP_NAMED_ROOT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYTRANSACTION_COMPARE_AND_SWAP_NAMED_ROOT
 uint16_t uniffi_prolly_bindings_checksum_method_prollytransaction_compare_and_swap_named_root(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYTRANSACTION_CREATE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYTRANSACTION_CREATE
 uint16_t uniffi_prolly_bindings_checksum_method_prollytransaction_create(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYTRANSACTION_DELETE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYTRANSACTION_DELETE
 uint16_t uniffi_prolly_bindings_checksum_method_prollytransaction_delete(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYTRANSACTION_DELETE_NAMED_ROOT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYTRANSACTION_DELETE_NAMED_ROOT
 uint16_t uniffi_prolly_bindings_checksum_method_prollytransaction_delete_named_root(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYTRANSACTION_GET
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYTRANSACTION_GET
 uint16_t uniffi_prolly_bindings_checksum_method_prollytransaction_get(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYTRANSACTION_LOAD_NAMED_ROOT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYTRANSACTION_LOAD_NAMED_ROOT
 uint16_t uniffi_prolly_bindings_checksum_method_prollytransaction_load_named_root(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYTRANSACTION_PUBLISH_NAMED_ROOT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYTRANSACTION_PUBLISH_NAMED_ROOT
 uint16_t uniffi_prolly_bindings_checksum_method_prollytransaction_publish_named_root(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYTRANSACTION_PUT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYTRANSACTION_PUT
 uint16_t uniffi_prolly_bindings_checksum_method_prollytransaction_put(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYTRANSACTION_ROLLBACK
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROLLYTRANSACTION_ROLLBACK
 uint16_t uniffi_prolly_bindings_checksum_method_prollytransaction_rollback(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYENGINE_BATCH
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYENGINE_BATCH
 uint16_t uniffi_prolly_bindings_checksum_method_asyncprollyengine_batch(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYENGINE_BEGIN_TRANSACTION
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYENGINE_BEGIN_TRANSACTION
 uint16_t uniffi_prolly_bindings_checksum_method_asyncprollyengine_begin_transaction(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYENGINE_COLLECT_STATS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYENGINE_COLLECT_STATS
 uint16_t uniffi_prolly_bindings_checksum_method_asyncprollyengine_collect_stats(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYENGINE_COMPARE_AND_SWAP_NAMED_ROOT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYENGINE_COMPARE_AND_SWAP_NAMED_ROOT
 uint16_t uniffi_prolly_bindings_checksum_method_asyncprollyengine_compare_and_swap_named_root(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYENGINE_CREATE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYENGINE_CREATE
 uint16_t uniffi_prolly_bindings_checksum_method_asyncprollyengine_create(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYENGINE_DELETE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYENGINE_DELETE
 uint16_t uniffi_prolly_bindings_checksum_method_asyncprollyengine_delete(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYENGINE_DELETE_NAMED_ROOT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYENGINE_DELETE_NAMED_ROOT
 uint16_t uniffi_prolly_bindings_checksum_method_asyncprollyengine_delete_named_root(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYENGINE_DIFF
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYENGINE_DIFF
 uint16_t uniffi_prolly_bindings_checksum_method_asyncprollyengine_diff(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYENGINE_GET
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYENGINE_GET
 uint16_t uniffi_prolly_bindings_checksum_method_asyncprollyengine_get(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYENGINE_GET_MANY
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYENGINE_GET_MANY
 uint16_t uniffi_prolly_bindings_checksum_method_asyncprollyengine_get_many(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYENGINE_LIST_NAMED_ROOTS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYENGINE_LIST_NAMED_ROOTS
 uint16_t uniffi_prolly_bindings_checksum_method_asyncprollyengine_list_named_roots(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYENGINE_LOAD_NAMED_ROOT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYENGINE_LOAD_NAMED_ROOT
 uint16_t uniffi_prolly_bindings_checksum_method_asyncprollyengine_load_named_root(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYENGINE_MERGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYENGINE_MERGE
 uint16_t uniffi_prolly_bindings_checksum_method_asyncprollyengine_merge(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYENGINE_PREFIX
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYENGINE_PREFIX
 uint16_t uniffi_prolly_bindings_checksum_method_asyncprollyengine_prefix(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYENGINE_PUBLISH_NAMED_ROOT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYENGINE_PUBLISH_NAMED_ROOT
 uint16_t uniffi_prolly_bindings_checksum_method_asyncprollyengine_publish_named_root(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYENGINE_PUBLISH_NAMED_ROOT_AT_MILLIS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYENGINE_PUBLISH_NAMED_ROOT_AT_MILLIS
 uint16_t uniffi_prolly_bindings_checksum_method_asyncprollyengine_publish_named_root_at_millis(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYENGINE_PUT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYENGINE_PUT
 uint16_t uniffi_prolly_bindings_checksum_method_asyncprollyengine_put(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYENGINE_RANGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYENGINE_RANGE
 uint16_t uniffi_prolly_bindings_checksum_method_asyncprollyengine_range(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYENGINE_RANGE_PAGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYENGINE_RANGE_PAGE
 uint16_t uniffi_prolly_bindings_checksum_method_asyncprollyengine_range_page(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYTRANSACTION_BATCH
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYTRANSACTION_BATCH
 uint16_t uniffi_prolly_bindings_checksum_method_asyncprollytransaction_batch(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYTRANSACTION_COMMIT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYTRANSACTION_COMMIT
 uint16_t uniffi_prolly_bindings_checksum_method_asyncprollytransaction_commit(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYTRANSACTION_COMPARE_AND_SWAP_NAMED_ROOT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYTRANSACTION_COMPARE_AND_SWAP_NAMED_ROOT
 uint16_t uniffi_prolly_bindings_checksum_method_asyncprollytransaction_compare_and_swap_named_root(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYTRANSACTION_CREATE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYTRANSACTION_CREATE
 uint16_t uniffi_prolly_bindings_checksum_method_asyncprollytransaction_create(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYTRANSACTION_DELETE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYTRANSACTION_DELETE
 uint16_t uniffi_prolly_bindings_checksum_method_asyncprollytransaction_delete(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYTRANSACTION_DELETE_NAMED_ROOT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYTRANSACTION_DELETE_NAMED_ROOT
 uint16_t uniffi_prolly_bindings_checksum_method_asyncprollytransaction_delete_named_root(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYTRANSACTION_GET
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYTRANSACTION_GET
 uint16_t uniffi_prolly_bindings_checksum_method_asyncprollytransaction_get(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYTRANSACTION_LOAD_NAMED_ROOT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYTRANSACTION_LOAD_NAMED_ROOT
 uint16_t uniffi_prolly_bindings_checksum_method_asyncprollytransaction_load_named_root(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYTRANSACTION_PUBLISH_NAMED_ROOT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYTRANSACTION_PUBLISH_NAMED_ROOT
 uint16_t uniffi_prolly_bindings_checksum_method_asyncprollytransaction_publish_named_root(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYTRANSACTION_PUBLISH_NAMED_ROOT_AT_MILLIS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYTRANSACTION_PUBLISH_NAMED_ROOT_AT_MILLIS
 uint16_t uniffi_prolly_bindings_checksum_method_asyncprollytransaction_publish_named_root_at_millis(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYTRANSACTION_PUT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYTRANSACTION_PUT
 uint16_t uniffi_prolly_bindings_checksum_method_asyncprollytransaction_put(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYTRANSACTION_ROLLBACK
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_ASYNCPROLLYTRANSACTION_ROLLBACK
 uint16_t uniffi_prolly_bindings_checksum_method_asyncprollytransaction_rollback(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_FOREIGNREMOTESTORE_DESCRIPTOR
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_FOREIGNREMOTESTORE_DESCRIPTOR
 uint16_t uniffi_prolly_bindings_checksum_method_foreignremotestore_descriptor(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_FOREIGNREMOTESTORE_GET_NODE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_FOREIGNREMOTESTORE_GET_NODE
 uint16_t uniffi_prolly_bindings_checksum_method_foreignremotestore_get_node(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_FOREIGNREMOTESTORE_PUT_NODE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_FOREIGNREMOTESTORE_PUT_NODE
 uint16_t uniffi_prolly_bindings_checksum_method_foreignremotestore_put_node(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_FOREIGNREMOTESTORE_DELETE_NODE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_FOREIGNREMOTESTORE_DELETE_NODE
 uint16_t uniffi_prolly_bindings_checksum_method_foreignremotestore_delete_node(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_FOREIGNREMOTESTORE_BATCH_NODES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_FOREIGNREMOTESTORE_BATCH_NODES
 uint16_t uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_nodes(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_FOREIGNREMOTESTORE_BATCH_GET_NODES_ORDERED
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_FOREIGNREMOTESTORE_BATCH_GET_NODES_ORDERED
 uint16_t uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_get_nodes_ordered(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_FOREIGNREMOTESTORE_LIST_NODE_CIDS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_FOREIGNREMOTESTORE_LIST_NODE_CIDS
 uint16_t uniffi_prolly_bindings_checksum_method_foreignremotestore_list_node_cids(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_FOREIGNREMOTESTORE_GET_HINT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_FOREIGNREMOTESTORE_GET_HINT
 uint16_t uniffi_prolly_bindings_checksum_method_foreignremotestore_get_hint(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_FOREIGNREMOTESTORE_PUT_HINT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_FOREIGNREMOTESTORE_PUT_HINT
 uint16_t uniffi_prolly_bindings_checksum_method_foreignremotestore_put_hint(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_FOREIGNREMOTESTORE_BATCH_PUT_NODES_WITH_HINT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_FOREIGNREMOTESTORE_BATCH_PUT_NODES_WITH_HINT
 uint16_t uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_put_nodes_with_hint(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_FOREIGNREMOTESTORE_GET_ROOT_MANIFEST
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_FOREIGNREMOTESTORE_GET_ROOT_MANIFEST
 uint16_t uniffi_prolly_bindings_checksum_method_foreignremotestore_get_root_manifest(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_FOREIGNREMOTESTORE_PUT_ROOT_MANIFEST
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_FOREIGNREMOTESTORE_PUT_ROOT_MANIFEST
 uint16_t uniffi_prolly_bindings_checksum_method_foreignremotestore_put_root_manifest(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_FOREIGNREMOTESTORE_DELETE_ROOT_MANIFEST
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_FOREIGNREMOTESTORE_DELETE_ROOT_MANIFEST
 uint16_t uniffi_prolly_bindings_checksum_method_foreignremotestore_delete_root_manifest(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_FOREIGNREMOTESTORE_COMPARE_AND_SWAP_ROOT_MANIFEST
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_FOREIGNREMOTESTORE_COMPARE_AND_SWAP_ROOT_MANIFEST
 uint16_t uniffi_prolly_bindings_checksum_method_foreignremotestore_compare_and_swap_root_manifest(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_FOREIGNREMOTESTORE_LIST_ROOT_MANIFESTS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_FOREIGNREMOTESTORE_LIST_ROOT_MANIFESTS
 uint16_t uniffi_prolly_bindings_checksum_method_foreignremotestore_list_root_manifests(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_FOREIGNREMOTESTORE_COMMIT_TRANSACTION
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_FOREIGNREMOTESTORE_COMMIT_TRANSACTION
 uint16_t uniffi_prolly_bindings_checksum_method_foreignremotestore_commit_transaction(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGINDEXREGISTRY_LEN
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGINDEXREGISTRY_LEN
 uint16_t uniffi_prolly_bindings_checksum_method_bindingindexregistry_len(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGINDEXREGISTRY_REGISTER
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGINDEXREGISTRY_REGISTER
 uint16_t uniffi_prolly_bindings_checksum_method_bindingindexregistry_register(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGINDEXEDMAP_APPLY
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGINDEXEDMAP_APPLY
 uint16_t uniffi_prolly_bindings_checksum_method_bindingindexedmap_apply(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGINDEXEDMAP_APPLY_IF
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGINDEXEDMAP_APPLY_IF
 uint16_t uniffi_prolly_bindings_checksum_method_bindingindexedmap_apply_if(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGINDEXEDMAP_DEACTIVATE_INDEX
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGINDEXEDMAP_DEACTIVATE_INDEX
 uint16_t uniffi_prolly_bindings_checksum_method_bindingindexedmap_deactivate_index(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGINDEXEDMAP_DELETE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGINDEXEDMAP_DELETE
 uint16_t uniffi_prolly_bindings_checksum_method_bindingindexedmap_delete(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGINDEXEDMAP_ENSURE_INDEX
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGINDEXEDMAP_ENSURE_INDEX
 uint16_t uniffi_prolly_bindings_checksum_method_bindingindexedmap_ensure_index(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGINDEXEDMAP_EXPORT_CURRENT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGINDEXEDMAP_EXPORT_CURRENT
 uint16_t uniffi_prolly_bindings_checksum_method_bindingindexedmap_export_current(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGINDEXEDMAP_GET
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGINDEXEDMAP_GET
 uint16_t uniffi_prolly_bindings_checksum_method_bindingindexedmap_get(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGINDEXEDMAP_HEALTH
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGINDEXEDMAP_HEALTH
 uint16_t uniffi_prolly_bindings_checksum_method_bindingindexedmap_health(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGINDEXEDMAP_ID
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGINDEXEDMAP_ID
 uint16_t uniffi_prolly_bindings_checksum_method_bindingindexedmap_id(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGINDEXEDMAP_IMPORT_CURRENT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGINDEXEDMAP_IMPORT_CURRENT
 uint16_t uniffi_prolly_bindings_checksum_method_bindingindexedmap_import_current(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGINDEXEDMAP_KEEP_LAST
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGINDEXEDMAP_KEEP_LAST
 uint16_t uniffi_prolly_bindings_checksum_method_bindingindexedmap_keep_last(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGINDEXEDMAP_METRICS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGINDEXEDMAP_METRICS
 uint16_t uniffi_prolly_bindings_checksum_method_bindingindexedmap_metrics(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGINDEXEDMAP_PUT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGINDEXEDMAP_PUT
 uint16_t uniffi_prolly_bindings_checksum_method_bindingindexedmap_put(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGINDEXEDMAP_REPAIR_INDEX
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGINDEXEDMAP_REPAIR_INDEX
 uint16_t uniffi_prolly_bindings_checksum_method_bindingindexedmap_repair_index(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGINDEXEDMAP_SNAPSHOT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGINDEXEDMAP_SNAPSHOT
 uint16_t uniffi_prolly_bindings_checksum_method_bindingindexedmap_snapshot(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGINDEXEDMAP_SNAPSHOT_AT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGINDEXEDMAP_SNAPSHOT_AT
 uint16_t uniffi_prolly_bindings_checksum_method_bindingindexedmap_snapshot_at(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGINDEXEDMAP_SNAPSHOT_BY_ID
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGINDEXEDMAP_SNAPSHOT_BY_ID
 uint16_t uniffi_prolly_bindings_checksum_method_bindingindexedmap_snapshot_by_id(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGINDEXEDMAP_VERIFY_ALL
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGINDEXEDMAP_VERIFY_ALL
 uint16_t uniffi_prolly_bindings_checksum_method_bindingindexedmap_verify_all(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGINDEXEDMAP_VERIFY_INDEX
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGINDEXEDMAP_VERIFY_INDEX
 uint16_t uniffi_prolly_bindings_checksum_method_bindingindexedmap_verify_index(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGINDEXEDSNAPSHOT_ID
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGINDEXEDSNAPSHOT_ID
 uint16_t uniffi_prolly_bindings_checksum_method_bindingindexedsnapshot_id(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGINDEXEDSNAPSHOT_INDEX
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGINDEXEDSNAPSHOT_INDEX
 uint16_t uniffi_prolly_bindings_checksum_method_bindingindexedsnapshot_index(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGSECONDARYINDEXSNAPSHOT_EXACT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGSECONDARYINDEXSNAPSHOT_EXACT
 uint16_t uniffi_prolly_bindings_checksum_method_bindingsecondaryindexsnapshot_exact(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGSECONDARYINDEXSNAPSHOT_EXACT_PAGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGSECONDARYINDEXSNAPSHOT_EXACT_PAGE
 uint16_t uniffi_prolly_bindings_checksum_method_bindingsecondaryindexsnapshot_exact_page(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGSECONDARYINDEXSNAPSHOT_EXACT_REVERSE_PAGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGSECONDARYINDEXSNAPSHOT_EXACT_REVERSE_PAGE
 uint16_t uniffi_prolly_bindings_checksum_method_bindingsecondaryindexsnapshot_exact_reverse_page(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGSECONDARYINDEXSNAPSHOT_FAST_HANDLE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGSECONDARYINDEXSNAPSHOT_FAST_HANDLE
 uint16_t uniffi_prolly_bindings_checksum_method_bindingsecondaryindexsnapshot_fast_handle(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGSECONDARYINDEXSNAPSHOT_NAME
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGSECONDARYINDEXSNAPSHOT_NAME
 uint16_t uniffi_prolly_bindings_checksum_method_bindingsecondaryindexsnapshot_name(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGSECONDARYINDEXSNAPSHOT_PREFIX
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGSECONDARYINDEXSNAPSHOT_PREFIX
 uint16_t uniffi_prolly_bindings_checksum_method_bindingsecondaryindexsnapshot_prefix(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGSECONDARYINDEXSNAPSHOT_PREFIX_PAGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGSECONDARYINDEXSNAPSHOT_PREFIX_PAGE
 uint16_t uniffi_prolly_bindings_checksum_method_bindingsecondaryindexsnapshot_prefix_page(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGSECONDARYINDEXSNAPSHOT_PREFIX_REVERSE_PAGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGSECONDARYINDEXSNAPSHOT_PREFIX_REVERSE_PAGE
 uint16_t uniffi_prolly_bindings_checksum_method_bindingsecondaryindexsnapshot_prefix_reverse_page(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGSECONDARYINDEXSNAPSHOT_RANGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGSECONDARYINDEXSNAPSHOT_RANGE
 uint16_t uniffi_prolly_bindings_checksum_method_bindingsecondaryindexsnapshot_range(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGSECONDARYINDEXSNAPSHOT_RANGE_PAGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGSECONDARYINDEXSNAPSHOT_RANGE_PAGE
 uint16_t uniffi_prolly_bindings_checksum_method_bindingsecondaryindexsnapshot_range_page(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGSECONDARYINDEXSNAPSHOT_RANGE_REVERSE_PAGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGSECONDARYINDEXSNAPSHOT_RANGE_REVERSE_PAGE
 uint16_t uniffi_prolly_bindings_checksum_method_bindingsecondaryindexsnapshot_range_reverse_page(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGSECONDARYINDEXSNAPSHOT_RECORDS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGSECONDARYINDEXSNAPSHOT_RECORDS
 uint16_t uniffi_prolly_bindings_checksum_method_bindingsecondaryindexsnapshot_records(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_SECONDARYINDEXEXTRACTORCALLBACK_EXTRACT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_SECONDARYINDEXEXTRACTORCALLBACK_EXTRACT
 uint16_t uniffi_prolly_bindings_checksum_method_secondaryindexextractorcallback_extract(void
-
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGHNSWINDEX_CONFIG
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGHNSWINDEX_CONFIG
+uint16_t uniffi_prolly_bindings_checksum_method_bindinghnswindex_config(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGHNSWINDEX_IS_CANONICAL
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGHNSWINDEX_IS_CANONICAL
+uint16_t uniffi_prolly_bindings_checksum_method_bindinghnswindex_is_canonical(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGHNSWINDEX_MANIFEST
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGHNSWINDEX_MANIFEST
+uint16_t uniffi_prolly_bindings_checksum_method_bindinghnswindex_manifest(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGHNSWINDEX_PROVE_SEARCH
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGHNSWINDEX_PROVE_SEARCH
+uint16_t uniffi_prolly_bindings_checksum_method_bindinghnswindex_prove_search(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGHNSWINDEX_SEARCH
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGHNSWINDEX_SEARCH
+uint16_t uniffi_prolly_bindings_checksum_method_bindinghnswindex_search(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGHNSWINDEX_SOURCE_DESCRIPTOR
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGHNSWINDEX_SOURCE_DESCRIPTOR
+uint16_t uniffi_prolly_bindings_checksum_method_bindinghnswindex_source_descriptor(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGPROXIMITYMAP_BUILD_HNSW
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGPROXIMITYMAP_BUILD_HNSW
+uint16_t uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_hnsw(void
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGPROXIMITYMAP_CLEAR_CONTENT_CACHE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGPROXIMITYMAP_CLEAR_CONTENT_CACHE
 uint16_t uniffi_prolly_bindings_checksum_method_bindingproximitymap_clear_content_cache(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGPROXIMITYMAP_CONFIG
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGPROXIMITYMAP_CONFIG
 uint16_t uniffi_prolly_bindings_checksum_method_bindingproximitymap_config(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGPROXIMITYMAP_CONTAINS_KEY
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGPROXIMITYMAP_CONTAINS_KEY
 uint16_t uniffi_prolly_bindings_checksum_method_bindingproximitymap_contains_key(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGPROXIMITYMAP_COUNT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGPROXIMITYMAP_COUNT
 uint16_t uniffi_prolly_bindings_checksum_method_bindingproximitymap_count(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGPROXIMITYMAP_DESCRIPTOR
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGPROXIMITYMAP_DESCRIPTOR
 uint16_t uniffi_prolly_bindings_checksum_method_bindingproximitymap_descriptor(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGPROXIMITYMAP_FAST_HANDLE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGPROXIMITYMAP_FAST_HANDLE
 uint16_t uniffi_prolly_bindings_checksum_method_bindingproximitymap_fast_handle(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGPROXIMITYMAP_GET
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGPROXIMITYMAP_GET
 uint16_t uniffi_prolly_bindings_checksum_method_bindingproximitymap_get(void
-
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGPROXIMITYMAP_LOAD_HNSW
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGPROXIMITYMAP_LOAD_HNSW
+uint16_t uniffi_prolly_bindings_checksum_method_bindingproximitymap_load_hnsw(void
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGPROXIMITYMAP_MUTATE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGPROXIMITYMAP_MUTATE
 uint16_t uniffi_prolly_bindings_checksum_method_bindingproximitymap_mutate(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGPROXIMITYMAP_PROVE_MEMBERSHIP
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGPROXIMITYMAP_PROVE_MEMBERSHIP
 uint16_t uniffi_prolly_bindings_checksum_method_bindingproximitymap_prove_membership(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGPROXIMITYMAP_PROVE_SEARCH
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGPROXIMITYMAP_PROVE_SEARCH
 uint16_t uniffi_prolly_bindings_checksum_method_bindingproximitymap_prove_search(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGPROXIMITYMAP_PROVE_STRUCTURE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGPROXIMITYMAP_PROVE_STRUCTURE
 uint16_t uniffi_prolly_bindings_checksum_method_bindingproximitymap_prove_structure(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGPROXIMITYMAP_READ_SESSION
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGPROXIMITYMAP_READ_SESSION
 uint16_t uniffi_prolly_bindings_checksum_method_bindingproximitymap_read_session(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGPROXIMITYMAP_REBUILD
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGPROXIMITYMAP_REBUILD
 uint16_t uniffi_prolly_bindings_checksum_method_bindingproximitymap_rebuild(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGPROXIMITYMAP_SCAN_RECORDS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGPROXIMITYMAP_SCAN_RECORDS
 uint16_t uniffi_prolly_bindings_checksum_method_bindingproximitymap_scan_records(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGPROXIMITYMAP_SEARCH
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGPROXIMITYMAP_SEARCH
 uint16_t uniffi_prolly_bindings_checksum_method_bindingproximitymap_search(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGPROXIMITYMAP_VERIFY
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGPROXIMITYMAP_VERIFY
 uint16_t uniffi_prolly_bindings_checksum_method_bindingproximitymap_verify(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGPROXIMITYREADSESSION_CONTAINS_KEY
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGPROXIMITYREADSESSION_CONTAINS_KEY
 uint16_t uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_contains_key(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGPROXIMITYREADSESSION_FAST_HANDLE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGPROXIMITYREADSESSION_FAST_HANDLE
 uint16_t uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_fast_handle(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGPROXIMITYREADSESSION_GET
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGPROXIMITYREADSESSION_GET
 uint16_t uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_get(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGPROXIMITYREADSESSION_SCAN_RECORDS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGPROXIMITYREADSESSION_SCAN_RECORDS
 uint16_t uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_scan_records(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGPROXIMITYREADSESSION_SEARCH
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGPROXIMITYREADSESSION_SEARCH
 uint16_t uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_search(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGPROXIMITYSEARCHPROOF_SOURCE_DESCRIPTOR
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGPROXIMITYSEARCHPROOF_SOURCE_DESCRIPTOR
 uint16_t uniffi_prolly_bindings_checksum_method_bindingproximitysearchproof_source_descriptor(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGPROXIMITYSEARCHPROOF_VERIFY
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGPROXIMITYSEARCHPROOF_VERIFY
 uint16_t uniffi_prolly_bindings_checksum_method_bindingproximitysearchproof_verify(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROXIMITYRECORDVISITORCALLBACK_VISIT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_PROXIMITYRECORDVISITORCALLBACK_VISIT
 uint16_t uniffi_prolly_bindings_checksum_method_proximityrecordvisitorcallback_visit(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPCOMPARISON_BASE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPCOMPARISON_BASE
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapcomparison_base(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPCOMPARISON_CHANGED_SPANS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPCOMPARISON_CHANGED_SPANS
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapcomparison_changed_spans(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPCOMPARISON_DEBUG_VIEW
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPCOMPARISON_DEBUG_VIEW
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapcomparison_debug_view(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPCOMPARISON_DIFF
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPCOMPARISON_DIFF
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapcomparison_diff(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPCOMPARISON_DIFF_PAGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPCOMPARISON_DIFF_PAGE
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapcomparison_diff_page(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPCOMPARISON_PROVE_DIFF_PAGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPCOMPARISON_PROVE_DIFF_PAGE
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapcomparison_prove_diff_page(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPCOMPARISON_PUBLISH_CHANGED_SPANS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPCOMPARISON_PUBLISH_CHANGED_SPANS
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapcomparison_publish_changed_spans(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPCOMPARISON_SCAN_DIFF
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPCOMPARISON_SCAN_DIFF
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapcomparison_scan_diff(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPCOMPARISON_STATS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPCOMPARISON_STATS
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapcomparison_stats(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPCOMPARISON_STRUCTURAL_DIFF_PAGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPCOMPARISON_STRUCTURAL_DIFF_PAGE
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapcomparison_structural_diff_page(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPCOMPARISON_TARGET
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPCOMPARISON_TARGET
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapcomparison_target(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPMERGE_BASE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPMERGE_BASE
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapmerge_base(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPMERGE_CANDIDATE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPMERGE_CANDIDATE
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapmerge_candidate(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPMERGE_CONFLICT_PAGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPMERGE_CONFLICT_PAGE
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapmerge_conflict_page(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPMERGE_CRDT_MERGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPMERGE_CRDT_MERGE
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapmerge_crdt_merge(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPMERGE_CRDT_MERGE_EXPLAIN
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPMERGE_CRDT_MERGE_EXPLAIN
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapmerge_crdt_merge_explain(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPMERGE_HEAD
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPMERGE_HEAD
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapmerge_head(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPMERGE_MERGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPMERGE_MERGE
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapmerge_merge(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPMERGE_MERGE_WITH_POLICY
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPMERGE_MERGE_WITH_POLICY
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapmerge_merge_with_policy(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPMERGE_PUBLISH
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPMERGE_PUBLISH
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapmerge_publish(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPMERGE_PUBLISH_CRDT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPMERGE_PUBLISH_CRDT
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapmerge_publish_crdt(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPMERGE_PUBLISH_WITH_POLICY
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPMERGE_PUBLISH_WITH_POLICY
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapmerge_publish_with_policy(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPMERGE_SCAN_CONFLICTS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPMERGE_SCAN_CONFLICTS
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapmerge_scan_conflicts(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_CONTAINS_KEY
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_CONTAINS_KEY
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_contains_key(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_COPY_MISSING_NODES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_COPY_MISSING_NODES
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_copy_missing_nodes(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_CURSOR_WINDOW
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_CURSOR_WINDOW
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_cursor_window(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_DEBUG_VIEW
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_DEBUG_VIEW
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_debug_view(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_EXPORT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_EXPORT
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_export(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_FIRST_ENTRY
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_FIRST_ENTRY
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_first_entry(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_GET
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_GET
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_get(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_GET_MANY
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_GET_MANY
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_get_many(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_GET_VALUE_REF
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_GET_VALUE_REF
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_get_value_ref(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_HYDRATE_PREFIX_HINT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_HYDRATE_PREFIX_HINT
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_hydrate_prefix_hint(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_ID
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_ID
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_id(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_LAST_ENTRY
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_LAST_ENTRY
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_last_entry(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_LOWER_BOUND
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_LOWER_BOUND
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_lower_bound(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_PIN_PATH
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_PIN_PATH
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_pin_path(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_PIN_ROOT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_PIN_ROOT
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_pin_root(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_PLAN_MISSING_NODES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_PLAN_MISSING_NODES
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_plan_missing_nodes(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_PREFIX
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_PREFIX
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_prefix(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_PREFIX_PAGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_PREFIX_PAGE
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_prefix_page(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_PREFIX_REVERSE_PAGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_PREFIX_REVERSE_PAGE
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_prefix_reverse_page(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_PROVE_KEY
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_PROVE_KEY
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_prove_key(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_PROVE_KEYS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_PROVE_KEYS
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_prove_keys(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_PROVE_PREFIX
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_PROVE_PREFIX
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_prove_prefix(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_PROVE_RANGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_PROVE_RANGE
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_prove_range(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_PROVE_RANGE_PAGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_PROVE_RANGE_PAGE
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_prove_range_page(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_PUBLISH_PREFIX_HINT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_PUBLISH_PREFIX_HINT
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_publish_prefix_hint(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_PUSH_TO
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_PUSH_TO
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_push_to(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_RANGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_RANGE
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_range(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_RANGE_PAGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_RANGE_PAGE
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_range_page(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_READ_SESSION
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_READ_SESSION
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_read_session(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_REVERSE_PAGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_REVERSE_PAGE
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_reverse_page(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_SCAN_PREFIX
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_SCAN_PREFIX
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_scan_prefix(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_SCAN_RANGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_SCAN_RANGE
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_scan_range(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_STATS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_STATS
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_stats(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_TREE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_TREE
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_tree(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_UPPER_BOUND
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_UPPER_BOUND
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_upper_bound(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_VERSION
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSNAPSHOT_VERSION
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapsnapshot_version(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSUBSCRIPTION_LAST_SEEN
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSUBSCRIPTION_LAST_SEEN
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapsubscription_last_seen(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSUBSCRIPTION_POLL
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGMAPSUBSCRIPTION_POLL
 uint16_t uniffi_prolly_bindings_checksum_method_bindingmapsubscription_poll(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_APPEND
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_APPEND
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_append(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_APPLY
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_APPLY
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_apply(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_APPLY_AT_MILLIS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_APPLY_AT_MILLIS
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_apply_at_millis(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_APPLY_IF
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_APPLY_IF
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_apply_if(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_APPLY_IF_AT_MILLIS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_APPLY_IF_AT_MILLIS
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_apply_if_at_millis(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_BACKUP
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_BACKUP
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_backup(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_CHANGES_SINCE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_CHANGES_SINCE
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_changes_since(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_COMPARE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_COMPARE
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_compare(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_COMPARE_TO_HEAD
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_COMPARE_TO_HEAD
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_compare_to_head(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_CONTAINS_KEY
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_CONTAINS_KEY
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_contains_key(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_DELETE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_DELETE
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_delete(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_DELETE_IF
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_DELETE_IF
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_delete_if(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_DIFF
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_DIFF
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_diff(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_EDIT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_EDIT
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_edit(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_EDIT_IF
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_EDIT_IF
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_edit_if(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_GET
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_GET
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_get(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_GET_AT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_GET_AT
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_get_at(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_GET_LARGE_VALUE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_GET_LARGE_VALUE
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_get_large_value(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_GET_MANY
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_GET_MANY
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_get_many(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_GET_MANY_AT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_GET_MANY_AT
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_get_many_at(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_GET_VALUE_REF
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_GET_VALUE_REF
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_get_value_ref(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_GET_VALUE_REF_AT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_GET_VALUE_REF_AT
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_get_value_ref_at(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_HEAD
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_HEAD
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_head(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_HEAD_ID
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_HEAD_ID
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_head_id(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_HEAD_NAME
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_HEAD_NAME
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_head_name(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_ID
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_ID
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_id(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_IMPORT_AS_HEAD
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_IMPORT_AS_HEAD
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_import_as_head(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_IMPORT_AS_HEAD_AT_MILLIS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_IMPORT_AS_HEAD_AT_MILLIS
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_import_as_head_at_millis(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_INITIALIZE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_INITIALIZE
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_initialize(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_INITIALIZE_SORTED
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_INITIALIZE_SORTED
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_initialize_sorted(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_IS_INITIALIZED
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_IS_INITIALIZED
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_is_initialized(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_KEEP_FOR
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_KEEP_FOR
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_keep_for(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_KEEP_FOR_AT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_KEEP_FOR_AT
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_keep_for_at(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_KEEP_LAST
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_KEEP_LAST
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_keep_last(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_KEEP_VERSIONS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_KEEP_VERSIONS
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_keep_versions(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_PARALLEL_APPLY
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_PARALLEL_APPLY
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_parallel_apply(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_PLAN_BLOB_GC
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_PLAN_BLOB_GC
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_plan_blob_gc(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_PLAN_GC
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_PLAN_GC
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_plan_gc(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_PREFIX
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_PREFIX
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_prefix(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_PREFIX_AT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_PREFIX_AT
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_prefix_at(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_PREFIX_PAGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_PREFIX_PAGE
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_prefix_page(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_PREFIX_PAGE_AT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_PREFIX_PAGE_AT
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_prefix_page_at(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_PREPARE_MERGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_PREPARE_MERGE
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_prepare_merge(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_PRUNE_VERSIONS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_PRUNE_VERSIONS
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_prune_versions(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_PUT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_PUT
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_put(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_PUT_IF
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_PUT_IF
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_put_if(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_PUT_LARGE_VALUE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_PUT_LARGE_VALUE
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_put_large_value(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_PUT_LARGE_VALUE_IF
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_PUT_LARGE_VALUE_IF
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_put_large_value_if(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_RANGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_RANGE
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_range(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_RANGE_AT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_RANGE_AT
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_range_at(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_RANGE_PAGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_RANGE_PAGE
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_range_page(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_RANGE_PAGE_AT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_RANGE_PAGE_AT
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_range_page_at(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_READ_SESSION
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_READ_SESSION
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_read_session(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_REBUILD_FROM_ENTRIES_IF
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_REBUILD_FROM_ENTRIES_IF
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_rebuild_from_entries_if(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_REBUILD_FROM_ITER_IF
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_REBUILD_FROM_ITER_IF
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_rebuild_from_iter_if(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_REBUILD_SORTED_IF
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_REBUILD_SORTED_IF
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_rebuild_sorted_if(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_RESTORE_BACKUP
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_RESTORE_BACKUP
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_restore_backup(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_RETENTION_POLICY
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_RETENTION_POLICY
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_retention_policy(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_ROLLBACK_TO
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_ROLLBACK_TO
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_rollback_to(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_SCAN_PREFIX
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_SCAN_PREFIX
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_scan_prefix(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_SCAN_PREFIX_AT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_SCAN_PREFIX_AT
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_scan_prefix_at(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_SCAN_RANGE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_SCAN_RANGE
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_scan_range(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_SCAN_RANGE_AT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_SCAN_RANGE_AT
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_scan_range_at(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_SNAPSHOT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_SNAPSHOT
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_snapshot(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_SNAPSHOT_AT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_SNAPSHOT_AT
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_snapshot_at(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_SUBSCRIBE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_SUBSCRIBE
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_subscribe(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_SUBSCRIBE_FROM
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_SUBSCRIBE_FROM
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_subscribe_from(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_SWEEP_BLOB_GC
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_SWEEP_BLOB_GC
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_sweep_blob_gc(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_SWEEP_GC
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_SWEEP_GC
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_sweep_gc(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_VERIFY_CATALOG
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_VERIFY_CATALOG
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_verify_catalog(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_VERSION
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_VERSION
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_version(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_VERSIONS
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_VERSIONS
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_versions(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_VERSIONS_PREFIX
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDMAP_VERSIONS_PREFIX
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedmap_versions_prefix(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDTRANSACTION_APPLY
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDTRANSACTION_APPLY
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedtransaction_apply(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDTRANSACTION_APPLY_IF
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDTRANSACTION_APPLY_IF
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedtransaction_apply_if(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDTRANSACTION_COMMIT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDTRANSACTION_COMMIT
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedtransaction_commit(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDTRANSACTION_DELETE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDTRANSACTION_DELETE
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedtransaction_delete(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDTRANSACTION_GET
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDTRANSACTION_GET
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedtransaction_get(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDTRANSACTION_HEAD
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDTRANSACTION_HEAD
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedtransaction_head(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDTRANSACTION_PUT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDTRANSACTION_PUT
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedtransaction_put(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDTRANSACTION_ROLLBACK
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_BINDINGVERSIONEDTRANSACTION_ROLLBACK
 uint16_t uniffi_prolly_bindings_checksum_method_bindingversionedtransaction_rollback(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_CONSTRUCTOR_MERGEPOLICYREGISTRY_NEW
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_CONSTRUCTOR_MERGEPOLICYREGISTRY_NEW
 uint16_t uniffi_prolly_bindings_checksum_constructor_mergepolicyregistry_new(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_CONSTRUCTOR_PROLLYBLOBSTORE_FILE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_CONSTRUCTOR_PROLLYBLOBSTORE_FILE
 uint16_t uniffi_prolly_bindings_checksum_constructor_prollyblobstore_file(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_CONSTRUCTOR_PROLLYBLOBSTORE_MEMORY
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_CONSTRUCTOR_PROLLYBLOBSTORE_MEMORY
 uint16_t uniffi_prolly_bindings_checksum_constructor_prollyblobstore_memory(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_CONSTRUCTOR_PROLLYENGINE_CUSTOM_STORE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_CONSTRUCTOR_PROLLYENGINE_CUSTOM_STORE
 uint16_t uniffi_prolly_bindings_checksum_constructor_prollyengine_custom_store(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_CONSTRUCTOR_PROLLYENGINE_FILE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_CONSTRUCTOR_PROLLYENGINE_FILE
 uint16_t uniffi_prolly_bindings_checksum_constructor_prollyengine_file(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_CONSTRUCTOR_PROLLYENGINE_MEMORY
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_CONSTRUCTOR_PROLLYENGINE_MEMORY
 uint16_t uniffi_prolly_bindings_checksum_constructor_prollyengine_memory(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_CONSTRUCTOR_PROLLYENGINE_SQLITE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_CONSTRUCTOR_PROLLYENGINE_SQLITE
 uint16_t uniffi_prolly_bindings_checksum_constructor_prollyengine_sqlite(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_CONSTRUCTOR_PROLLYENGINE_SQLITE_IN_MEMORY
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_CONSTRUCTOR_PROLLYENGINE_SQLITE_IN_MEMORY
 uint16_t uniffi_prolly_bindings_checksum_constructor_prollyengine_sqlite_in_memory(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_CONSTRUCTOR_ASYNCPROLLYENGINE_NEW
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_CONSTRUCTOR_ASYNCPROLLYENGINE_NEW
 uint16_t uniffi_prolly_bindings_checksum_constructor_asyncprollyengine_new(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_CONSTRUCTOR_BINDINGINDEXREGISTRY_NEW
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_CONSTRUCTOR_BINDINGINDEXREGISTRY_NEW
 uint16_t uniffi_prolly_bindings_checksum_constructor_bindingindexregistry_new(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_CONSTRUCTOR_BINDINGINDEXEDMAP_NEW
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_CONSTRUCTOR_BINDINGINDEXEDMAP_NEW
 uint16_t uniffi_prolly_bindings_checksum_constructor_bindingindexedmap_new(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_CONSTRUCTOR_BINDINGVERSIONEDMAP_NEW
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_CONSTRUCTOR_BINDINGVERSIONEDMAP_NEW
 uint16_t uniffi_prolly_bindings_checksum_constructor_bindingversionedmap_new(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_FFI_PROLLY_BINDINGS_UNIFFI_CONTRACT_VERSION
 #define UNIFFI_FFIDEF_FFI_PROLLY_BINDINGS_UNIFFI_CONTRACT_VERSION
 uint32_t ffi_prolly_bindings_uniffi_contract_version(void
-
+    
 );
 #endif
 

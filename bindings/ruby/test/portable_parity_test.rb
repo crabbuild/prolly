@@ -4,6 +4,51 @@ require 'minitest/autorun'
 require 'prolly'
 
 class PortableParityTest < Minitest::Test
+  def test_hnsw_accelerator_lifecycle_is_portable
+    Prolly::Engine.memory.use do |engine|
+      proximity = engine.build_proximity(
+        dimensions: 2,
+        records: 16.times.map do |index|
+          Prolly::ProximityRecord.new(
+            key: format('vector-%02d', index).b,
+            vector: [index.to_f, 0.0],
+            value: format('value-%02d', index).b
+          )
+        end
+      )
+      built = proximity.build_hnsw
+      assert_equal 16, built.stats.records
+      exact = Prolly.exact_proximity_search_request([0.0, 0.0], 3)
+      request = Prolly::ProximitySearchRequestRecord.new(
+        query: exact.query,
+        k: exact.k,
+        policy: Prolly::SearchPolicyKind::FIXED_BUDGET,
+        adaptive_quality: exact.adaptive_quality,
+        budget: exact.budget,
+        filter: exact.filter,
+        kernel: exact.kernel,
+        backend: Prolly::SearchBackendRecord::HNSW,
+        hnsw_ef_search: exact.hnsw_ef_search,
+        pq_rerank_multiplier: exact.pq_rerank_multiplier
+      )
+      built.index.use do |index|
+        assert index.canonical?
+        assert_equal proximity.descriptor, index.source_descriptor
+        result = index.search(proximity, request)
+        assert_equal Prolly::SearchBackendRecord::HNSW, result.backend
+        assert_equal 'vector-00'.b, result.neighbors.first.key
+        manifest = index.manifest
+        index.prove_search(proximity, request).use do |proof|
+          assert_equal Prolly::SearchBackendRecord::HNSW,
+                       proof.verify(proximity.descriptor).result.backend
+        end
+        proximity.load_hnsw(manifest).use do |loaded|
+          assert_equal manifest, loaded.manifest
+        end
+      end
+    end
+  end
+
   def test_proximity_rich_search_request_is_shared_by_map_session_and_proof
     Prolly::Engine.memory.use do |engine|
       proximity = engine.build_proximity(

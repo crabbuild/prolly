@@ -43,6 +43,12 @@ class ProximityRecord:
     value: bytes
 
 
+@dataclass(frozen=True)
+class HnswBuildResult:
+    index: "HnswIndex"
+    stats: _native.HnswBuildStatsRecord
+
+
 IndexProjection = _native.IndexProjectionRecord
 
 
@@ -877,6 +883,22 @@ class ProximityMap(_Scoped):
         self._open()
         return self._inner.config()
 
+    def build_hnsw(
+        self,
+        config: _native.HnswConfigRecord | None = None,
+        limits: _native.HnswBuildLimitsRecord | None = None,
+    ) -> HnswBuildResult:
+        self._open()
+        result = self._inner.build_hnsw(
+            config or _native.default_hnsw_config(),
+            limits or _native.default_hnsw_build_limits(),
+        )
+        return HnswBuildResult(HnswIndex(result.index), result.stats)
+
+    def load_hnsw(self, manifest: bytes) -> "HnswIndex":
+        self._open()
+        return HnswIndex(self._inner.load_hnsw(bytes(manifest)))
+
     def search(self, request: _native.ProximitySearchRequestRecord):
         with self.read() as session:
             return session.search(request)
@@ -943,6 +965,60 @@ class ProximityMap(_Scoped):
     def clear_cache(self) -> None:
         self._open()
         self._inner.clear_content_cache()
+
+
+class HnswIndex(_Scoped):
+    def __init__(self, inner: _native.BindingHnswIndex):
+        super().__init__()
+        self._inner = inner
+
+    @property
+    def manifest(self) -> bytes:
+        self._open()
+        return self._inner.manifest()
+
+    @property
+    def source_descriptor(self) -> bytes:
+        self._open()
+        return self._inner.source_descriptor()
+
+    @property
+    def config(self) -> _native.HnswConfigRecord:
+        self._open()
+        return self._inner.config()
+
+    @property
+    def is_canonical(self) -> bool:
+        self._open()
+        return self._inner.is_canonical()
+
+    def search(
+        self,
+        map: ProximityMap,
+        request: _native.ProximitySearchRequestRecord,
+    ) -> _native.ProximitySearchResultRecord:
+        self._open()
+        map._open()
+        return self._inner.search(
+            map._inner,
+            _owned_proximity_search_request(request),
+        )
+
+    def prove_search(
+        self,
+        map: ProximityMap,
+        request: _native.ProximitySearchRequestRecord,
+        limits: _native.ContentGraphLimitsRecord | None = None,
+    ) -> "ProximitySearchProof":
+        self._open()
+        map._open()
+        return ProximitySearchProof(
+            self._inner.prove_search(
+                map._inner,
+                _owned_proximity_search_request(request),
+                limits or _native.default_content_graph_limits(),
+            )
+        )
 
 
 class ProximityReadSession(_Scoped):
@@ -1021,6 +1097,8 @@ def verify_proximity_structure_proof(
 __all__ = [
     "Engine",
     "EntryView",
+    "HnswBuildResult",
+    "HnswIndex",
     "IndexProjection",
     "IndexRegistry",
     "IndexedMap",

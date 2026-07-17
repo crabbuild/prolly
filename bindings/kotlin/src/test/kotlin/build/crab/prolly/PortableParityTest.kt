@@ -16,6 +16,47 @@ import org.junit.jupiter.api.assertThrows
 
 class PortableParityTest {
     @Test
+    fun hnswAcceleratorLifecycleIsPortable() {
+        ProllyNative.useLocalDebugLibrary()
+        Engine.memory().use { engine ->
+            engine.buildProximity(
+                2u,
+                (0 until 16).map { index ->
+                    ProximityRecord(
+                        "vector-%02d".format(index).bytes(),
+                        listOf(index.toFloat(), 0f),
+                        "value-%02d".format(index).bytes(),
+                    )
+                },
+            ).use { proximity ->
+                val built = proximity.buildHnsw()
+                assertEquals(16uL, built.stats.records)
+                val request = exactProximitySearchRequest(listOf(0f, 0f), 3uL).copy(
+                    policy = SearchPolicyKind.FIXED_BUDGET,
+                    backend = SearchBackendRecord.HNSW,
+                )
+                built.index.use { index ->
+                    assertEquals(true, index.isCanonical)
+                    assertArrayEquals(proximity.descriptor, index.sourceDescriptor)
+                    val result = index.search(proximity, request)
+                    assertEquals(SearchBackendRecord.HNSW, result.backend)
+                    assertArrayEquals("vector-00".bytes(), result.neighbors.first().key)
+                    val manifest = index.manifest
+                    index.proveSearch(proximity, request).use { proof ->
+                        assertEquals(
+                            SearchBackendRecord.HNSW,
+                            proof.verify(proximity.descriptor).result.backend,
+                        )
+                    }
+                    proximity.loadHnsw(manifest).use { loaded ->
+                        assertArrayEquals(manifest, loaded.manifest)
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
     fun proximityRichSearchRequestIsSharedByMapSessionAndProof() {
         ProllyNative.useLocalDebugLibrary()
         Engine.memory().use { engine ->

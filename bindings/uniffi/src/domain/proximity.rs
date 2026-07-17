@@ -99,6 +99,48 @@ mod tests {
         assert_eq!(parsed["packed_page"]["kind"], 7);
         assert_eq!(parsed["packed_page"]["distance"], "f64-le");
     }
+
+    #[test]
+    fn hnsw_accelerator_lifecycle_is_portable_and_source_bound() {
+        let engine = Arc::new(ProllyEngine::memory(default_config()).unwrap());
+        let records = (0..16)
+            .map(|index| ProximityRecordRecord {
+                key: format!("vector-{index:02}").into_bytes(),
+                vector: vec![index as f32, 0.0],
+                value: format!("value-{index:02}").into_bytes(),
+            })
+            .collect();
+        let map = engine
+            .build_proximity_map(ProximityConfigRecord::new(2), records, None)
+            .unwrap();
+        let built = map
+            .build_hnsw(default_hnsw_config(), default_hnsw_build_limits())
+            .unwrap();
+        assert_eq!(built.stats.records, 16);
+        assert!(built.index.is_canonical());
+        assert_eq!(built.index.source_descriptor(), map.descriptor());
+
+        let mut request = ProximitySearchRequestRecord::exact(vec![0.0, 0.0], 3);
+        request.policy = SearchPolicyKind::FixedBudget;
+        request.backend = SearchBackendRecord::Hnsw;
+        let result = built.index.search(map.clone(), request.clone()).unwrap();
+        assert_eq!(result.backend, SearchBackendRecord::Hnsw);
+        assert_eq!(result.neighbors[0].key, b"vector-00");
+        let proof = built
+            .index
+            .prove_search(map.clone(), request, ContentGraphLimitsRecord::defaults())
+            .unwrap();
+        assert_eq!(
+            proof
+                .verify(Some(map.descriptor()), ContentGraphLimitsRecord::defaults())
+                .unwrap()
+                .result
+                .backend,
+            SearchBackendRecord::Hnsw
+        );
+        let loaded = map.load_hnsw(built.index.manifest()).unwrap();
+        assert_eq!(loaded.manifest(), built.index.manifest());
+    }
 }
 use std::ops::ControlFlow;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -106,13 +148,14 @@ use std::sync::Arc;
 
 use prolly::{
     AdaptiveQuality, BuildParallelism, ContentGraphLimits, ContentObjectKind, DistanceMetric,
-    HierarchyConfig, HnswSearchOptions, Neighbor, OverflowConfig, PlannerPolicy, PqSearchOptions,
-    ProximityConfig, ProximityFilter, ProximityMap, ProximityMembershipProof, ProximityMutation,
-    ProximityMutationStats, ProximityRecord, ProximitySearchClaim, ProximitySearchProof,
-    ProximitySearchStats, ProximityStructuralProof, ProximityVerification, QueryKernel,
-    ScalarQuantizationConfig, SearchBackend, SearchBudget, SearchCompletion, SearchOptions,
-    SearchPolicy, SearchRequest, SearchResult, TypedContentObject, TypedContentRoot,
-    VectorStorageConfig,
+    HierarchyConfig, HnswBuildLimits, HnswBuildStats, HnswConfig, HnswIndex,
+    HnswRoutingVectorEncoding, HnswSearchOptions, Neighbor, OverflowConfig, PlannerPolicy,
+    PqSearchOptions, ProximityConfig, ProximityFilter, ProximityMap, ProximityMembershipProof,
+    ProximityMutation, ProximityMutationStats, ProximityRecord, ProximitySearchClaim,
+    ProximitySearchProof, ProximitySearchStats, ProximityStructuralProof, ProximityVerification,
+    QueryKernel, ScalarQuantizationConfig, SearchBackend, SearchBudget, SearchCompletion,
+    SearchOptions, SearchPolicy, SearchRequest, SearchResult, Store, TypedContentObject,
+    TypedContentRoot, VectorStorageConfig,
 };
 
 use crate::{BindingEngine, KeyProofRecord, ProllyBindingError, ProllyEngine};
@@ -752,6 +795,122 @@ pub struct ProximitySearchResultRecord {
     pub plan_format_version: u8,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, uniffi::Enum)]
+pub enum HnswRoutingVectorEncodingRecord {
+    FullF32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct HnswConfigRecord {
+    pub max_connections: u16,
+    pub ef_construction: u32,
+    pub ef_search: u32,
+    pub level_bits: u8,
+    pub overfetch_multiplier: u32,
+    pub seed: u64,
+    pub routing_vector_encoding: HnswRoutingVectorEncodingRecord,
+}
+
+impl From<HnswConfig> for HnswConfigRecord {
+    fn from(value: HnswConfig) -> Self {
+        Self {
+            max_connections: value.max_connections,
+            ef_construction: value.ef_construction,
+            ef_search: value.ef_search,
+            level_bits: value.level_bits,
+            overfetch_multiplier: value.overfetch_multiplier,
+            seed: value.seed,
+            routing_vector_encoding: HnswRoutingVectorEncodingRecord::FullF32,
+        }
+    }
+}
+
+impl From<HnswConfigRecord> for HnswConfig {
+    fn from(value: HnswConfigRecord) -> Self {
+        let routing_vector_encoding = match value.routing_vector_encoding {
+            HnswRoutingVectorEncodingRecord::FullF32 => HnswRoutingVectorEncoding::FullF32,
+        };
+        Self {
+            max_connections: value.max_connections,
+            ef_construction: value.ef_construction,
+            ef_search: value.ef_search,
+            level_bits: value.level_bits,
+            overfetch_multiplier: value.overfetch_multiplier,
+            seed: value.seed,
+            routing_vector_encoding,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct HnswBuildLimitsRecord {
+    pub max_records: Option<u64>,
+    pub max_owned_bytes: Option<u64>,
+    pub max_distance_evaluations: Option<u64>,
+    pub worker_threads: u64,
+    pub max_encoded_graph_bytes: Option<u64>,
+}
+
+impl TryFrom<HnswBuildLimitsRecord> for HnswBuildLimits {
+    type Error = ProllyBindingError;
+
+    fn try_from(value: HnswBuildLimitsRecord) -> Result<Self, Self::Error> {
+        Ok(Self {
+            max_records: optional_usize(value.max_records, "max_records")?,
+            max_owned_bytes: optional_usize(value.max_owned_bytes, "max_owned_bytes")?,
+            max_distance_evaluations: optional_usize(
+                value.max_distance_evaluations,
+                "max_distance_evaluations",
+            )?,
+            worker_threads: to_usize(value.worker_threads, "worker_threads")?,
+            max_encoded_graph_bytes: optional_usize(
+                value.max_encoded_graph_bytes,
+                "max_encoded_graph_bytes",
+            )?,
+        })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct HnswBuildStatsRecord {
+    pub records: u64,
+    pub distance_evaluations: u64,
+    pub directed_edges: u64,
+    pub maximum_level: u8,
+    pub owned_bytes: u64,
+    pub encoded_graph_bytes: u64,
+}
+
+impl From<HnswBuildStats> for HnswBuildStatsRecord {
+    fn from(value: HnswBuildStats) -> Self {
+        Self {
+            records: value.records as u64,
+            distance_evaluations: value.distance_evaluations as u64,
+            directed_edges: value.directed_edges as u64,
+            maximum_level: value.maximum_level,
+            owned_bytes: value.owned_bytes as u64,
+            encoded_graph_bytes: value.encoded_graph_bytes as u64,
+        }
+    }
+}
+
+#[uniffi::export]
+pub fn default_hnsw_config() -> HnswConfigRecord {
+    HnswConfig::default().into()
+}
+
+#[uniffi::export]
+pub fn default_hnsw_build_limits() -> HnswBuildLimitsRecord {
+    let value = HnswBuildLimits::default();
+    HnswBuildLimitsRecord {
+        max_records: value.max_records.map(|value| value as u64),
+        max_owned_bytes: value.max_owned_bytes.map(|value| value as u64),
+        max_distance_evaluations: value.max_distance_evaluations.map(|value| value as u64),
+        worker_threads: value.worker_threads as u64,
+        max_encoded_graph_bytes: value.max_encoded_graph_bytes.map(|value| value as u64),
+    }
+}
+
 impl From<SearchResult> for ProximitySearchResultRecord {
     fn from(value: SearchResult) -> Self {
         Self {
@@ -931,6 +1090,35 @@ macro_rules! with_proximity_map {
     }};
 }
 
+macro_rules! with_proximity_store_map {
+    ($self:expr, $store:ident, $map:ident, $body:block) => {{
+        let descriptor = crate::cid_from_vec($self.descriptor.clone())?;
+        match &$self.engine.inner {
+            BindingEngine::Memory(engine) => {
+                let $store = engine.store().clone();
+                let $map = ProximityMap::load($store.clone(), descriptor)?;
+                $body
+            }
+            BindingEngine::File(engine) => {
+                let $store = engine.store().clone();
+                let $map = ProximityMap::load($store.clone(), descriptor)?;
+                $body
+            }
+            #[cfg(feature = "sqlite")]
+            BindingEngine::Sqlite(engine) => {
+                let $store = engine.store().clone();
+                let $map = ProximityMap::load($store.clone(), descriptor)?;
+                $body
+            }
+            BindingEngine::Host(engine) => {
+                let $store = engine.store().clone();
+                let $map = ProximityMap::load($store.clone(), descriptor)?;
+                $body
+            }
+        }
+    }};
+}
+
 enum BindingProximitySessionMap {
     Memory(ProximityMap<Arc<prolly::MemStore>>),
     File(ProximityMap<Arc<prolly::FileNodeStore>>),
@@ -1020,6 +1208,139 @@ pub struct BindingProximityMap {
     engine: Arc<ProllyEngine>,
     descriptor: Vec<u8>,
     fast_handle: AtomicU64,
+}
+
+#[derive(uniffi::Object)]
+pub struct BindingHnswIndex {
+    engine: Arc<ProllyEngine>,
+    manifest: Vec<u8>,
+    source_descriptor: Vec<u8>,
+    config: HnswConfigRecord,
+    canonical: bool,
+}
+
+fn search_hnsw<S>(
+    store: S,
+    manifest: &prolly::Cid,
+    source: &prolly::Cid,
+    request: SearchRequest<'_>,
+) -> Result<ProximitySearchResultRecord, ProllyBindingError>
+where
+    S: Store + Clone + Send + Sync,
+    S::Error: Send + Sync,
+{
+    let index = HnswIndex::load(store.clone(), manifest.clone())?;
+    let map = ProximityMap::load(store, source.clone())?;
+    index
+        .search(&map, request)
+        .map(Into::into)
+        .map_err(Into::into)
+}
+
+fn prove_hnsw_search<S>(
+    store: S,
+    manifest: &prolly::Cid,
+    source: &prolly::Cid,
+    request: SearchRequest<'_>,
+    limits: &ContentGraphLimits,
+) -> Result<ProximitySearchProof, ProllyBindingError>
+where
+    S: Store + Clone + Send + Sync,
+    S::Error: Send + Sync,
+{
+    let index = HnswIndex::load(store.clone(), manifest.clone())?;
+    let map = ProximityMap::load(store, source.clone())?;
+    index
+        .prove_search(&map, request, limits)
+        .map_err(Into::into)
+}
+
+#[uniffi::export]
+impl BindingHnswIndex {
+    pub fn manifest(&self) -> Vec<u8> {
+        self.manifest.clone()
+    }
+
+    pub fn source_descriptor(&self) -> Vec<u8> {
+        self.source_descriptor.clone()
+    }
+
+    pub fn config(&self) -> HnswConfigRecord {
+        self.config.clone()
+    }
+
+    pub fn is_canonical(&self) -> bool {
+        self.canonical
+    }
+
+    pub fn search(
+        &self,
+        map: Arc<BindingProximityMap>,
+        request: ProximitySearchRequestRecord,
+    ) -> Result<ProximitySearchResultRecord, ProllyBindingError> {
+        if !Arc::ptr_eq(&self.engine, &map.engine) {
+            return Err(ProllyBindingError::InvalidArgument {
+                reason: "HNSW index and proximity map belong to different engines".to_string(),
+            });
+        }
+        let manifest = crate::cid_from_vec(self.manifest.clone())?;
+        let source = crate::cid_from_vec(map.descriptor())?;
+        let request = proximity_search_request(&request)?;
+        match &self.engine.inner {
+            BindingEngine::Memory(engine) => {
+                search_hnsw(engine.store().clone(), &manifest, &source, request)
+            }
+            BindingEngine::File(engine) => {
+                search_hnsw(engine.store().clone(), &manifest, &source, request)
+            }
+            #[cfg(feature = "sqlite")]
+            BindingEngine::Sqlite(engine) => {
+                search_hnsw(engine.store().clone(), &manifest, &source, request)
+            }
+            BindingEngine::Host(engine) => {
+                search_hnsw(engine.store().clone(), &manifest, &source, request)
+            }
+        }
+    }
+
+    pub fn prove_search(
+        &self,
+        map: Arc<BindingProximityMap>,
+        request: ProximitySearchRequestRecord,
+        limits: ContentGraphLimitsRecord,
+    ) -> Result<Arc<BindingProximitySearchProof>, ProllyBindingError> {
+        if !Arc::ptr_eq(&self.engine, &map.engine) {
+            return Err(ProllyBindingError::InvalidArgument {
+                reason: "HNSW index and proximity map belong to different engines".to_string(),
+            });
+        }
+        let manifest = crate::cid_from_vec(self.manifest.clone())?;
+        let source = crate::cid_from_vec(map.descriptor())?;
+        let request = proximity_search_request(&request)?;
+        let limits = ContentGraphLimits::try_from(limits)?;
+        let proof = match &self.engine.inner {
+            BindingEngine::Memory(engine) => {
+                prove_hnsw_search(engine.store().clone(), &manifest, &source, request, &limits)
+            }
+            BindingEngine::File(engine) => {
+                prove_hnsw_search(engine.store().clone(), &manifest, &source, request, &limits)
+            }
+            #[cfg(feature = "sqlite")]
+            BindingEngine::Sqlite(engine) => {
+                prove_hnsw_search(engine.store().clone(), &manifest, &source, request, &limits)
+            }
+            BindingEngine::Host(engine) => {
+                prove_hnsw_search(engine.store().clone(), &manifest, &source, request, &limits)
+            }
+        }?;
+        Ok(Arc::new(BindingProximitySearchProof { inner: proof }))
+    }
+}
+
+#[derive(Clone, uniffi::Record)]
+pub struct HnswBuildResultRecord {
+    pub index: Arc<BindingHnswIndex>,
+    pub stats: HnswBuildStatsRecord,
 }
 
 impl BindingProximityMap {
@@ -1123,6 +1444,50 @@ impl BindingProximityMap {
 
     pub fn clear_content_cache(&self) -> Result<(), ProllyBindingError> {
         with_proximity_map!(self, map, { map.clear_content_cache().map_err(Into::into) })
+    }
+
+    pub fn build_hnsw(
+        &self,
+        config: HnswConfigRecord,
+        limits: HnswBuildLimitsRecord,
+    ) -> Result<HnswBuildResultRecord, ProllyBindingError> {
+        let config: HnswConfig = config.into();
+        let limits = HnswBuildLimits::try_from(limits)?;
+        with_proximity_map!(self, map, {
+            let (index, stats) = HnswIndex::build_with_limits(&map, config, limits)?;
+            Ok(HnswBuildResultRecord {
+                index: Arc::new(BindingHnswIndex {
+                    engine: self.engine.clone(),
+                    manifest: index.manifest_cid().0.to_vec(),
+                    source_descriptor: index.source_descriptor().0.to_vec(),
+                    config: index.config().clone().into(),
+                    canonical: index.is_canonical(),
+                }),
+                stats: stats.into(),
+            })
+        })
+    }
+
+    pub fn load_hnsw(
+        &self,
+        manifest: Vec<u8>,
+    ) -> Result<Arc<BindingHnswIndex>, ProllyBindingError> {
+        let manifest = crate::cid_from_vec(manifest)?;
+        with_proximity_store_map!(self, store, map, {
+            let index = HnswIndex::load(store, manifest)?;
+            if index.source_descriptor() != &map.tree().descriptor {
+                return Err(ProllyBindingError::InvalidArgument {
+                    reason: "HNSW index is bound to a different source descriptor".to_string(),
+                });
+            }
+            Ok(Arc::new(BindingHnswIndex {
+                engine: self.engine.clone(),
+                manifest: index.manifest_cid().0.to_vec(),
+                source_descriptor: index.source_descriptor().0.to_vec(),
+                config: index.config().clone().into(),
+                canonical: index.is_canonical(),
+            }))
+        })
     }
 
     pub fn search(

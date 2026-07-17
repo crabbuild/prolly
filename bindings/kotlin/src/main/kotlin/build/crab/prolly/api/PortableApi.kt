@@ -2,6 +2,7 @@ package build.crab.prolly.api
 
 import build.crab.prolly.BindingIndexedMap
 import build.crab.prolly.BindingIndexedSnapshot
+import build.crab.prolly.BindingHnswIndex
 import build.crab.prolly.BindingIndexRegistry
 import build.crab.prolly.BindingMapComparison
 import build.crab.prolly.BindingMapMerge
@@ -16,6 +17,9 @@ import build.crab.prolly.BindingMapSnapshot
 import build.crab.prolly.ConfigRecord
 import build.crab.prolly.ContentGraphLimitsRecord
 import build.crab.prolly.EntryRecord
+import build.crab.prolly.HnswBuildLimitsRecord
+import build.crab.prolly.HnswBuildStatsRecord
+import build.crab.prolly.HnswConfigRecord
 import build.crab.prolly.IndexProjectionRecord
 import build.crab.prolly.IndexedSnapshotIdRecord
 import build.crab.prolly.KeyProofRecord
@@ -37,6 +41,8 @@ import build.crab.prolly.SecondaryIndexExtractorCallback
 import build.crab.prolly.SnapshotBundleRecord
 import build.crab.prolly.defaultConfig
 import build.crab.prolly.defaultContentGraphLimits
+import build.crab.prolly.defaultHnswBuildLimits
+import build.crab.prolly.defaultHnswConfig
 import build.crab.prolly.defaultProximityConfig
 import build.crab.prolly.exactProximitySearchRequest
 import build.crab.prolly.verifyKeyProof as verifyNativeKeyProof
@@ -49,6 +55,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 data class ProximityRecord(val key: ByteArray, val vector: List<Float>, val value: ByteArray)
+data class HnswBuildResult(val index: HnswIndex, val stats: HnswBuildStatsRecord)
 
 private fun ownedSearchRequest(request: ProximitySearchRequestRecord) = request.copy(
     query = request.query.toList(),
@@ -386,6 +393,14 @@ class ProximityMap(internal val native: BindingProximityMap) : AutoCloseable {
     val descriptor: ByteArray get() = native.descriptor()
     val count: ULong get() = native.count()
     val config: ProximityConfigRecord get() = native.config()
+    fun buildHnsw(
+        config: HnswConfigRecord = defaultHnswConfig(),
+        limits: HnswBuildLimitsRecord = defaultHnswBuildLimits(),
+    ): HnswBuildResult {
+        val result = native.buildHnsw(config, limits)
+        return HnswBuildResult(HnswIndex(result.index), result.stats)
+    }
+    fun loadHnsw(manifest: ByteArray) = HnswIndex(native.loadHnsw(manifest.copyOf()))
     fun get(key: ByteArray) = native.get(key.copyOf())
     fun containsKey(key: ByteArray) = native.containsKey(key.copyOf())
     fun search(request: ProximitySearchRequestRecord): ProximitySearchResultRecord =
@@ -417,6 +432,21 @@ class ProximityMap(internal val native: BindingProximityMap) : AutoCloseable {
     fun proveStructure(limits: ContentGraphLimitsRecord = defaultContentGraphLimits()) =
         native.proveStructure(limits)
     fun clearCache() = native.clearContentCache()
+    override fun close() = native.close()
+}
+
+class HnswIndex(internal val native: BindingHnswIndex) : AutoCloseable {
+    val manifest: ByteArray get() = native.manifest().copyOf()
+    val sourceDescriptor: ByteArray get() = native.sourceDescriptor().copyOf()
+    val config: HnswConfigRecord get() = native.config()
+    val isCanonical: Boolean get() = native.isCanonical()
+    fun search(map: ProximityMap, request: ProximitySearchRequestRecord): ProximitySearchResultRecord =
+        native.search(map.native, ownedSearchRequest(request))
+    fun proveSearch(
+        map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        limits: ContentGraphLimitsRecord = defaultContentGraphLimits(),
+    ) = ProximitySearchProof(native.proveSearch(map.native, ownedSearchRequest(request), limits))
     override fun close() = native.close()
 }
 
