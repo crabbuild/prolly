@@ -4,5 +4,6 @@ use (
 	..
 	./mysql
 	./postgres
+	./redis
 	./sqlite
 )

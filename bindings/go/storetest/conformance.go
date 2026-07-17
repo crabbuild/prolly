@@ -95,10 +95,12 @@ func testNodeScanOrder(t *testing.T, ctx context.Context, store prolly.RemoteSto
 	if !descriptor.Capabilities.NodeScan {
 		t.Skip("node scan unsupported")
 	}
-	_ = store.PutNode(ctx, []byte("z"), []byte("z"))
-	_ = store.PutNode(ctx, []byte("a"), []byte("a"))
+	aKey := bytes.Repeat([]byte{0x11}, 32)
+	zKey := bytes.Repeat([]byte{0xee}, 32)
+	_ = store.PutNode(ctx, zKey, []byte("z"))
+	_ = store.PutNode(ctx, aKey, []byte("a"))
 	keys, err := store.ListNodeCIDs(ctx)
-	if err != nil || !strictlySorted(keys) || !containsBytes(keys, []byte("a")) || !containsBytes(keys, []byte("z")) {
+	if err != nil || !strictlySorted(keys) || !containsBytes(keys, aKey) || !containsBytes(keys, zKey) {
 		t.Fatalf("keys = %q, %v", keys, err)
 	}
 }
