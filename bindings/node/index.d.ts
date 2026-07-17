@@ -198,6 +198,94 @@ export interface NodePortableMaintenanceSummary {
   itemCount: string
   byteCount: string
 }
+export interface NodeRemoteStoreCapabilitiesRecord {
+  nativeBatchReads: boolean
+  atomicBatchWrites: boolean
+  nodeScan: boolean
+  hints: boolean
+  atomicNodesAndHint: boolean
+  rootScan: boolean
+  rootCompareAndSwap: boolean
+  transactions: boolean
+  readParallelism: number
+}
+export interface NodeRemoteStoreLimitsRecord {
+  maxBatchReadItems?: number
+  maxBatchWriteItems?: number
+  maxTransactionOperations?: number
+  maxNodeBytes?: string
+}
+export interface NodeRemoteStoreDescriptorRecord {
+  protocolMajor: number
+  adapterName: string
+  provider: string
+  schemaVersion: number
+  capabilities: NodeRemoteStoreCapabilitiesRecord
+  limits: NodeRemoteStoreLimitsRecord
+}
+export interface NodeRemoteStoreErrorRecord {
+  code: string
+  message: string
+  retryable: boolean
+  providerCode?: string
+}
+export interface NodeRemoteOptionalBytesRecord {
+  present: boolean
+  value: Buffer
+}
+export interface NodeRemoteMutationRecord {
+  cid: Buffer
+  value: NodeRemoteOptionalBytesRecord
+}
+export interface NodeRemoteEntryRecord {
+  cid: Buffer
+  node: Buffer
+}
+export interface NodeRemoteNamedRootRecord {
+  name: Buffer
+  manifest: Buffer
+}
+export interface NodeRemoteRootConditionRecord {
+  name: Buffer
+  expected: NodeRemoteOptionalBytesRecord
+}
+export interface NodeRemoteRootWriteRecord {
+  name: Buffer
+  replacement: NodeRemoteOptionalBytesRecord
+}
+export interface NodeRemoteRootCasRecord {
+  applied: boolean
+  current: NodeRemoteOptionalBytesRecord
+}
+export interface NodeRemoteTransactionConflictRecord {
+  name: Buffer
+  expected: NodeRemoteOptionalBytesRecord
+  current: NodeRemoteOptionalBytesRecord
+}
+export interface NodeRemoteTransactionRecord {
+  applied: boolean
+  conflict?: NodeRemoteTransactionConflictRecord
+}
+export interface NodeRemoteStoreRequest {
+  operation: string
+  requestId: string
+  bytes?: Array<Buffer>
+  optionalBytes?: Array<NodeRemoteOptionalBytesRecord>
+  mutations?: Array<NodeRemoteMutationRecord>
+  entries?: Array<NodeRemoteEntryRecord>
+  conditions?: Array<NodeRemoteRootConditionRecord>
+  roots?: Array<NodeRemoteRootWriteRecord>
+}
+export interface NodeRemoteStoreResponse {
+  descriptor?: NodeRemoteStoreDescriptorRecord
+  optionalBytes?: NodeRemoteOptionalBytesRecord
+  optionalValues?: Array<NodeRemoteOptionalBytesRecord>
+  bytesValues?: Array<Buffer>
+  namedRoots?: Array<NodeRemoteNamedRootRecord>
+  rootCas?: NodeRemoteRootCasRecord
+  transaction?: NodeRemoteTransactionRecord
+  error?: NodeRemoteStoreErrorRecord
+}
 export interface NodeTreeRecord {
   root?: Buffer
   config?: NodeConfigRecord
@@ -1020,6 +1108,30 @@ export declare class NativePortableProximityProof {
 }
 export declare class NativePortableProximitySearchProof {
   verify(expectedDescriptor?: Buffer | undefined | null): NodePortableSearchProofVerification
+}
+export declare class NativeRemoteProllyEngine {
+  static open(dispatcher: (request: NodeRemoteStoreRequest) => Promise<NodeRemoteStoreResponse>, config: NodeConfigRecord | null | undefined, requestId: string): Promise<NativeRemoteProllyEngine>
+  create(): NodeTreeRecord
+  get(tree: NodeTreeRecord, key: Buffer, requestId: string): Promise<Buffer | null>
+  put(tree: NodeTreeRecord, key: Buffer, value: Buffer, requestId: string): Promise<NodeTreeRecord>
+  getMany(tree: NodeTreeRecord, keys: Array<Buffer>, requestId: string): Promise<Array<Buffer | undefined | null>>
+  delete(tree: NodeTreeRecord, key: Buffer, requestId: string): Promise<NodeTreeRecord>
+  batch(tree: NodeTreeRecord, mutations: Array<NodeMutationRecord>, requestId: string): Promise<NodeTreeRecord>
+  range(tree: NodeTreeRecord, start: Buffer, end: Buffer | undefined | null, requestId: string): Promise<Array<NodeEntryRecord>>
+  loadNamedRoot(name: Buffer, requestId: string): Promise<NodeTreeRecord | null>
+  publishNamedRoot(name: Buffer, tree: NodeTreeRecord, requestId: string): Promise<void>
+  compareAndSwapNamedRoot(name: Buffer, expected: NodeTreeRecord | undefined | null, replacement: NodeTreeRecord | undefined | null, requestId: string): Promise<NodeNamedRootUpdateRecord>
+  beginTransaction(requestId: string): Promise<NativeRemoteProllyTransaction>
+  close(): void
+}
+export declare class NativeRemoteProllyTransaction {
+  create(requestId: string): Promise<NodeTreeRecord>
+  get(tree: NodeTreeRecord, key: Buffer, requestId: string): Promise<Buffer | null>
+  put(tree: NodeTreeRecord, key: Buffer, value: Buffer, requestId: string): Promise<NodeTreeRecord>
+  publishNamedRoot(name: Buffer, tree: NodeTreeRecord, requestId: string): Promise<void>
+  commit(requestId: string): Promise<NodeTransactionUpdateRecord>
+  rollback(requestId: string): Promise<void>
+  close(): void
 }
 export declare class NativeProllyBlobStore {
   static memory(): NativeProllyBlobStore

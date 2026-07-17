@@ -122,11 +122,14 @@ use prolly_bindings::{
     ValueRefRecord as BindingValueRefRecord, WriteResultRecord as BindingWriteResultRecord,
     WriteStatsRecord as BindingWriteStatsRecord,
 };
-use serde::Deserialize;
 use send_wrapper::SendWrapper;
+use serde::Deserialize;
 use std::sync::{Arc, Mutex};
 
 mod portable;
+mod remote_store;
+
+pub use remote_store::*;
 
 #[napi(object)]
 pub struct NodeTreeRecord {
@@ -991,6 +994,12 @@ impl NativeProllyBlobStore {
 pub struct NativeMergePolicyRegistry {
     inner: Arc<BindingMergePolicyRegistry>,
     callback_error: Arc<Mutex<Option<String>>>,
+}
+
+impl Default for NativeMergePolicyRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[napi]
@@ -2804,6 +2813,7 @@ impl NativeProllyEngine {
         js_name = "mergeRangeWithResolver",
         ts_args_type = "base: NodeTreeRecord, left: NodeTreeRecord, right: NodeTreeRecord, start: Buffer, end: Buffer | null | undefined, resolver: (conflict: NodeConflictRecord) => NodeResolutionRecord"
     )]
+    #[allow(clippy::too_many_arguments)]
     pub fn merge_range_with_resolver(
         &self,
         env: Env,

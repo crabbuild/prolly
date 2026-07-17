@@ -15,12 +15,14 @@ doc = false
 bench = false
 
 [dependencies]
-napi = { version = "2.16", default-features = false, features = ["napi4", "serde-json"] }
+napi = { version = "2.16", default-features = false, features = ["napi4", "serde-json", "tokio_rt"] }
 napi-derive = "2.16"
 prolly-bindings = { path = "../../uniffi" }
+async-trait = "0.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 send_wrapper = "0.6"
+tokio = { version = "1", features = ["rt", "sync"] }
 
 [build-dependencies]
 napi-build = "2.2"
