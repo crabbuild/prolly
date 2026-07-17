@@ -61,6 +61,15 @@ test("WASM exposes portable maps and explicit native exclusions", { skip: !gener
     vector: new Float32Array([0.1, 0.1]), topK: 1, policy: "exact",
   });
   assert.equal(Buffer.from(result.neighbors[0].key).toString(), "a");
+  assert.equal(proximity.count(), 1n);
+  assert.equal(proximity.contains(bytes("a")), true);
+  assert.equal(proximity.config().dimensions, 2);
+  assert.equal(proximity.proveStructure().verify(proximity.descriptor()).summary.recordCount, 1n);
+  const mutation = proximity.mutate([
+    { key: bytes("b"), vector: new Float32Array([1, 1]), value: bytes("beta") },
+  ]);
+  assert.equal(mutation.map.count(), 2n);
+  assert.ok(mutation.stats.recordsRebuilt >= 1n);
 
   session.close();
   proximity.close();

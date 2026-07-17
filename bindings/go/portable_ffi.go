@@ -118,13 +118,17 @@ extern uint64_t uniffi_prolly_bindings_fn_clone_bindingproximitymap(uint64_t ptr
 extern void uniffi_prolly_bindings_fn_free_bindingproximitymap(uint64_t ptr, RustCallStatus *out_err);
 extern void uniffi_prolly_bindings_fn_method_bindingproximitymap_clear_content_cache(uint64_t ptr, RustCallStatus *out_err);
 extern int8_t uniffi_prolly_bindings_fn_method_bindingproximitymap_contains_key(uint64_t ptr, RustBuffer key, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximitymap_config(uint64_t ptr, RustCallStatus *out_err);
 extern uint64_t uniffi_prolly_bindings_fn_method_bindingproximitymap_count(uint64_t ptr, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximitymap_descriptor(uint64_t ptr, RustCallStatus *out_err);
 extern uint64_t uniffi_prolly_bindings_fn_method_bindingproximitymap_fast_handle(uint64_t ptr, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximitymap_get(uint64_t ptr, RustBuffer key, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximitymap_mutate(uint64_t ptr, RustBuffer mutations, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximitymap_prove_membership(uint64_t ptr, RustBuffer key, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximitymap_prove_structure(uint64_t ptr, RustBuffer limits, RustCallStatus *out_err);
 extern uint64_t uniffi_prolly_bindings_fn_method_bindingproximitymap_prove_search(uint64_t ptr, RustBuffer request, RustBuffer limits, RustCallStatus *out_err);
 extern uint64_t uniffi_prolly_bindings_fn_method_bindingproximitymap_read_session(uint64_t ptr, RustCallStatus *out_err);
+extern uint64_t uniffi_prolly_bindings_fn_method_bindingproximitymap_rebuild(uint64_t ptr, RustBuffer mutations, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximitymap_verify(uint64_t ptr, RustCallStatus *out_err);
 extern uint64_t uniffi_prolly_bindings_fn_clone_bindingproximityreadsession(uint64_t ptr, RustCallStatus *out_err);
 extern void uniffi_prolly_bindings_fn_free_bindingproximityreadsession(uint64_t ptr, RustCallStatus *out_err);
@@ -132,6 +136,7 @@ extern int8_t uniffi_prolly_bindings_fn_method_bindingproximityreadsession_conta
 extern uint64_t uniffi_prolly_bindings_fn_method_bindingproximityreadsession_fast_handle(uint64_t ptr, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximityreadsession_get(uint64_t ptr, RustBuffer key, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_func_verify_proximity_membership_proof(RustBuffer proof, RustBuffer expected_descriptor, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_func_verify_proximity_structure_proof(RustBuffer proof, RustBuffer expected_descriptor, RustBuffer limits, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_func_default_content_graph_limits(RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_func_exact_proximity_search_request(RustBuffer query, uint64_t k, RustCallStatus *out_err);
 extern uint64_t uniffi_prolly_bindings_fn_clone_bindingproximitysearchproof(uint64_t ptr, RustCallStatus *out_err);
@@ -896,6 +901,19 @@ func ffiProximityDescriptor(handle uint64) ([]byte, error) {
 	return portableTakeBuffer(buf), nil
 }
 
+func ffiProximityConfig(handle uint64) ([]byte, error) {
+	clone, err := ffiCloneProximity(handle)
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingproximitymap_config(C.uint64_t(clone), &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
 func ffiProximityCount(handle uint64) (uint64, error) {
 	clone, err := ffiCloneProximity(handle)
 	if err != nil {
@@ -947,6 +965,54 @@ func ffiProximityProveMembership(handle uint64, key []byte) ([]byte, error) {
 	return ffiProximityBufferCall(handle, key, func(clone C.uint64_t, key C.RustBuffer, status *C.RustCallStatus) C.RustBuffer {
 		return C.uniffi_prolly_bindings_fn_method_bindingproximitymap_prove_membership(clone, key, status)
 	})
+}
+
+func ffiProximityMutate(handle uint64, mutations []byte) ([]byte, error) {
+	clone, err := ffiCloneProximity(handle)
+	if err != nil {
+		return nil, err
+	}
+	mutationsBuf, err := portableInput(mutations)
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingproximitymap_mutate(C.uint64_t(clone), mutationsBuf, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiProximityRebuild(handle uint64, mutations []byte) (uint64, error) {
+	clone, err := ffiCloneProximity(handle)
+	if err != nil {
+		return 0, err
+	}
+	mutationsBuf, err := portableInput(mutations)
+	if err != nil {
+		return 0, err
+	}
+	var status C.RustCallStatus
+	updated := C.uniffi_prolly_bindings_fn_method_bindingproximitymap_rebuild(C.uint64_t(clone), mutationsBuf, &status)
+	return uint64(updated), portableStatusError(&status)
+}
+
+func ffiProximityProveStructure(handle uint64, limits []byte) ([]byte, error) {
+	clone, err := ffiCloneProximity(handle)
+	if err != nil {
+		return nil, err
+	}
+	limitsBuf, err := portableInput(limits)
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingproximitymap_prove_structure(C.uint64_t(clone), limitsBuf, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
 }
 
 func ffiExactProximitySearchRequest(query []float32, k uint64) ([]byte, error) {
@@ -1055,6 +1121,27 @@ func ffiVerifyProximityMembershipProof(proof, expectedDescriptor []byte) ([]byte
 	}
 	var status C.RustCallStatus
 	buf := C.uniffi_prolly_bindings_fn_func_verify_proximity_membership_proof(proofBuf, expectedBuf, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiVerifyProximityStructureProof(proof, expectedDescriptor, limits []byte) ([]byte, error) {
+	proofBuf, err := portableInput(proof)
+	if err != nil {
+		return nil, err
+	}
+	expectedBuf, err := portableInput(encodeOptionalByteArray(expectedDescriptor))
+	if err != nil {
+		return nil, err
+	}
+	limitsBuf, err := portableInput(limits)
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_func_verify_proximity_structure_proof(proofBuf, expectedBuf, limitsBuf, &status)
 	if err := portableStatusError(&status); err != nil {
 		return nil, err
 	}

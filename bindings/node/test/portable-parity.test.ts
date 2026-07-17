@@ -116,6 +116,16 @@ test("proofs, retained sessions, and maintenance stay native", async () => {
     const membership = proximity.proveMembership(bytes("p")).verify(proximity.descriptor());
     assert.equal(Buffer.from(membership.value ?? []).toString(), "payload");
     assert.equal(proximity.verify().recordCount, 1n);
+    assert.equal(proximity.count(), 1n);
+    assert.equal(proximity.contains(bytes("p")), true);
+    assert.equal(proximity.config().dimensions, 2);
+    const structural = proximity.proveStructure().verify(proximity.descriptor());
+    assert.equal(structural.summary.recordCount, 1n);
+    const mutation = proximity.mutate([
+      { key: bytes("q"), vector: new Float32Array([1, 1]), value: bytes("second") },
+    ]);
+    assert.equal(mutation.map.count(), 2n);
+    assert.ok(mutation.stats.recordsRebuilt >= 1n);
     const searchProof = proximity.proveSearch(exactSearch(new Float32Array([0, 0]), 1));
     const verifiedSearch = searchProof.verify(proximity.descriptor());
     assert.equal(Buffer.from(verifiedSearch.result.neighbors[0]!.key).toString(), "p");

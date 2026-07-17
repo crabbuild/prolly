@@ -3,15 +3,17 @@ use napi::bindgen_prelude::{Buffer, Env, Error, Float32Array, FunctionRef, Resul
 use napi_derive::napi;
 use prolly_bindings::{
     default_content_graph_limits, default_proximity_config, exact_proximity_search_request,
-    verify_key_proof, verify_proximity_membership_proof, BindingIndexRegistry, BindingIndexedMap,
-    BindingIndexedSnapshot, BindingMapSnapshot, BindingProximityMap, BindingProximityReadSession,
-    BindingProximitySearchProof, BindingSecondaryIndexSnapshot, BindingVersionedMap,
+    verify_key_proof, verify_proximity_membership_proof, verify_proximity_structure_proof,
+    BindingIndexRegistry, BindingIndexedMap, BindingIndexedSnapshot, BindingMapSnapshot,
+    BindingProximityMap, BindingProximityReadSession, BindingProximitySearchProof,
+    BindingSecondaryIndexSnapshot, BindingVersionedMap, DistanceMetricRecord,
     ExactProximityRecordRecord, IndexBuildResultRecord, IndexEntryRecord, IndexMatchRecord,
     IndexPageRecord, IndexProjectionRecord, IndexedSourceRecord, IndexedVersionRecord,
-    KeyProofRecord, MapVersionRecord, ProllyBindingError, ProllyReadSession,
-    ProximityMembershipProofRecord, ProximityNeighborRecord, ProximityRecordRecord,
-    ProximitySearchClaimKindRecord, ProximitySearchResultRecord, SearchBackendRecord,
-    SearchCompletionRecord, SecondaryIndexExtractorCallback,
+    KeyProofRecord, MapVersionRecord, ProllyBindingError, ProllyReadSession, ProximityConfigRecord,
+    ProximityMembershipProofRecord, ProximityMutationRecord, ProximityMutationStatsRecord,
+    ProximityNeighborRecord, ProximityRecordRecord, ProximitySearchClaimKindRecord,
+    ProximitySearchResultRecord, ProximityStructuralProofRecord, ProximityVerificationRecord,
+    SearchBackendRecord, SearchCompletionRecord, SecondaryIndexExtractorCallback,
 };
 use std::sync::Arc;
 
@@ -159,6 +161,145 @@ impl From<ExactProximityRecordRecord> for NodePortableExactProximityRecord {
             value: Buffer::from(value.value),
         }
     }
+}
+
+#[napi(object)]
+pub struct NodePortableProximityConfig {
+    pub dimensions: u32,
+    pub metric: String,
+    pub log_chunk_size: u32,
+    pub level_hash_seed: String,
+    pub min_page_bytes: u32,
+    pub target_page_bytes: u32,
+    pub max_page_bytes: u32,
+    pub overflow_hash_seed: String,
+    pub inline_threshold_bytes: u32,
+    pub scalar_quantization_group_size: Option<u32>,
+}
+
+impl From<ProximityConfigRecord> for NodePortableProximityConfig {
+    fn from(value: ProximityConfigRecord) -> Self {
+        Self {
+            dimensions: value.dimensions,
+            metric: match value.metric {
+                DistanceMetricRecord::L2Squared => "l2_squared",
+                DistanceMetricRecord::Cosine => "cosine",
+                DistanceMetricRecord::InnerProduct => "inner_product",
+            }
+            .to_string(),
+            log_chunk_size: u32::from(value.log_chunk_size),
+            level_hash_seed: value.level_hash_seed.to_string(),
+            min_page_bytes: value.min_page_bytes,
+            target_page_bytes: value.target_page_bytes,
+            max_page_bytes: value.max_page_bytes,
+            overflow_hash_seed: value.overflow_hash_seed.to_string(),
+            inline_threshold_bytes: value.inline_threshold_bytes,
+            scalar_quantization_group_size: value.scalar_quantization_group_size,
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NodePortableProximityMutation {
+    pub key: Buffer,
+    pub vector: Option<Float32Array>,
+    pub value: Option<Buffer>,
+}
+
+#[napi(object)]
+pub struct NodePortableProximityMutationStats {
+    pub directory_entries_scanned: String,
+    pub directory_nodes_read: String,
+    pub directory_nodes_rebuilt: String,
+    pub directory_nodes_written: String,
+    pub directory_nodes_reused: String,
+    pub directory_levels_rebuilt: String,
+    pub directory_right_edge_rebuilt: bool,
+    pub records_rebuilt: String,
+    pub nodes_read: String,
+    pub nodes_written: String,
+    pub nodes_reused: String,
+    pub distance_evaluations: String,
+    pub full_proximity_rebuild: bool,
+}
+
+impl From<ProximityMutationStatsRecord> for NodePortableProximityMutationStats {
+    fn from(value: ProximityMutationStatsRecord) -> Self {
+        Self {
+            directory_entries_scanned: value.directory_entries_scanned.to_string(),
+            directory_nodes_read: value.directory_nodes_read.to_string(),
+            directory_nodes_rebuilt: value.directory_nodes_rebuilt.to_string(),
+            directory_nodes_written: value.directory_nodes_written.to_string(),
+            directory_nodes_reused: value.directory_nodes_reused.to_string(),
+            directory_levels_rebuilt: value.directory_levels_rebuilt.to_string(),
+            directory_right_edge_rebuilt: value.directory_right_edge_rebuilt,
+            records_rebuilt: value.records_rebuilt.to_string(),
+            nodes_read: value.nodes_read.to_string(),
+            nodes_written: value.nodes_written.to_string(),
+            nodes_reused: value.nodes_reused.to_string(),
+            distance_evaluations: value.distance_evaluations.to_string(),
+            full_proximity_rebuild: value.full_proximity_rebuild,
+        }
+    }
+}
+
+#[napi]
+pub struct NodePortableProximityMutationResult {
+    map: Arc<BindingProximityMap>,
+    stats: ProximityMutationStatsRecord,
+}
+
+#[napi]
+impl NodePortableProximityMutationResult {
+    #[napi]
+    pub fn map(&self) -> NativePortableProximityMap {
+        NativePortableProximityMap {
+            inner: Arc::clone(&self.map),
+        }
+    }
+
+    #[napi]
+    pub fn stats(&self) -> NodePortableProximityMutationStats {
+        self.stats.clone().into()
+    }
+}
+
+#[napi(object)]
+pub struct NodePortableProximityVerification {
+    pub record_count: String,
+    pub proximity_node_count: String,
+    pub external_vector_count: String,
+    pub quantized_node_count: String,
+    pub scalar_quantizer_count: String,
+    pub overflow_page_count: String,
+    pub overflow_directory_count: String,
+    pub maximum_level: u32,
+    pub maximum_node_bytes: String,
+    pub distance_checks: String,
+}
+
+impl From<ProximityVerificationRecord> for NodePortableProximityVerification {
+    fn from(value: ProximityVerificationRecord) -> Self {
+        Self {
+            record_count: value.record_count.to_string(),
+            proximity_node_count: value.proximity_node_count.to_string(),
+            external_vector_count: value.external_vector_count.to_string(),
+            quantized_node_count: value.quantized_node_count.to_string(),
+            scalar_quantizer_count: value.scalar_quantizer_count.to_string(),
+            overflow_page_count: value.overflow_page_count.to_string(),
+            overflow_directory_count: value.overflow_directory_count.to_string(),
+            maximum_level: u32::from(value.maximum_level),
+            maximum_node_bytes: value.maximum_node_bytes.to_string(),
+            distance_checks: value.distance_checks.to_string(),
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NodePortableStructuralVerification {
+    pub descriptor: Buffer,
+    pub object_count: String,
+    pub summary: NodePortableProximityVerification,
 }
 
 #[napi(object)]
@@ -678,6 +819,32 @@ impl NativePortableProximityMap {
     }
 
     #[napi]
+    pub fn count(&self) -> Result<String> {
+        self.inner
+            .count()
+            .map(|value| value.to_string())
+            .map_err(to_napi_error)
+    }
+
+    #[napi]
+    pub fn config(&self) -> Result<NodePortableProximityConfig> {
+        self.inner.config().map(Into::into).map_err(to_napi_error)
+    }
+
+    #[napi]
+    pub fn get(&self, key: Buffer) -> Result<Option<NodePortableExactProximityRecord>> {
+        self.inner
+            .get(key.to_vec())
+            .map(|record| record.map(Into::into))
+            .map_err(to_napi_error)
+    }
+
+    #[napi]
+    pub fn contains(&self, key: Buffer) -> Result<bool> {
+        self.inner.contains_key(key.to_vec()).map_err(to_napi_error)
+    }
+
+    #[napi]
     pub fn search(&self, query: Float32Array, k: String) -> Result<NodePortableSearchResult> {
         let k = k.parse::<u64>().map_err(|error| {
             Error::new(Status::InvalidArg, format!("invalid top-k value: {error}"))
@@ -694,10 +861,50 @@ impl NativePortableProximityMap {
     }
 
     #[napi]
-    pub fn verify(&self) -> Result<String> {
+    pub fn verify(&self) -> Result<NodePortableProximityVerification> {
+        self.inner.verify().map(Into::into).map_err(to_napi_error)
+    }
+
+    #[napi]
+    pub fn mutate(
+        &self,
+        mutations: Vec<NodePortableProximityMutation>,
+    ) -> Result<NodePortableProximityMutationResult> {
         self.inner
-            .verify()
-            .map(|value| value.record_count.to_string())
+            .mutate(
+                mutations
+                    .into_iter()
+                    .map(|value| ProximityMutationRecord {
+                        key: value.key.to_vec(),
+                        vector: value.vector.map(|vector| vector.to_vec()),
+                        value: value.value.map(|value| value.to_vec()),
+                    })
+                    .collect(),
+            )
+            .map(|value| NodePortableProximityMutationResult {
+                map: value.map,
+                stats: value.stats,
+            })
+            .map_err(to_napi_error)
+    }
+
+    #[napi]
+    pub fn rebuild(
+        &self,
+        mutations: Vec<NodePortableProximityMutation>,
+    ) -> Result<NativePortableProximityMap> {
+        self.inner
+            .rebuild(
+                mutations
+                    .into_iter()
+                    .map(|value| ProximityMutationRecord {
+                        key: value.key.to_vec(),
+                        vector: value.vector.map(|vector| vector.to_vec()),
+                        value: value.value.map(|value| value.to_vec()),
+                    })
+                    .collect(),
+            )
+            .map(|inner| NativePortableProximityMap { inner })
             .map_err(to_napi_error)
     }
 
@@ -706,6 +913,14 @@ impl NativePortableProximityMap {
         self.inner
             .prove_membership(key.to_vec())
             .map(|inner| NativePortableProximityProof { inner })
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "proveStructure")]
+    pub fn prove_structure(&self) -> Result<NativePortableProximityStructuralProof> {
+        self.inner
+            .prove_structure(default_content_graph_limits())
+            .map(|inner| NativePortableProximityStructuralProof { inner })
             .map_err(to_napi_error)
     }
 
@@ -725,6 +940,32 @@ impl NativePortableProximityMap {
             )
             .map(|inner| NativePortableProximitySearchProof { inner })
             .map_err(to_napi_error)
+    }
+}
+
+#[napi]
+pub struct NativePortableProximityStructuralProof {
+    inner: ProximityStructuralProofRecord,
+}
+
+#[napi]
+impl NativePortableProximityStructuralProof {
+    #[napi]
+    pub fn verify(
+        &self,
+        expected_descriptor: Option<Buffer>,
+    ) -> Result<NodePortableStructuralVerification> {
+        verify_proximity_structure_proof(
+            self.inner.clone(),
+            expected_descriptor.map(|value| value.to_vec()),
+            default_content_graph_limits(),
+        )
+        .map(|value| NodePortableStructuralVerification {
+            descriptor: Buffer::from(value.descriptor),
+            object_count: value.object_count.to_string(),
+            summary: value.summary.into(),
+        })
+        .map_err(to_napi_error)
     }
 }
 

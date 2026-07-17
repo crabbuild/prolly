@@ -9,6 +9,7 @@ import build.crab.prolly.javaapi.Engine;
 import build.crab.prolly.javaapi.IndexEntry;
 import build.crab.prolly.javaapi.IndexProjection;
 import build.crab.prolly.javaapi.ProximityRecord;
+import build.crab.prolly.javaapi.ProximityMutation;
 import build.crab.prolly.javaapi.Proofs;
 import build.crab.prolly.javaapi.SearchRequest;
 import java.nio.ByteBuffer;
@@ -112,7 +113,17 @@ class PortableParityTest {
                 var membership = Proofs.verify(
                         proximity.proveMembership(bytes("p")), proximity.descriptor());
                 assertArrayEquals(bytes("payload"), membership.getRecord().getValue());
-                assertEquals(1, proximity.verifiedRecordCount());
+            assertEquals(1, proximity.verifiedRecordCount());
+            assertEquals(1, proximity.count());
+            assertTrue(proximity.contains(bytes("p")));
+            assertEquals(2, proximity.config().dimensions());
+            assertEquals(1, Proofs.verify(
+                    proximity.proveStructure(), proximity.descriptor())
+                    .summary().recordCount());
+            var mutation = proximity.mutate(List.of(ProximityMutation.upsert(
+                    bytes("q"), new float[]{1, 1}, bytes("second"))));
+            assertEquals(2, mutation.map().count());
+            assertTrue(mutation.stats().recordsRebuilt() >= 1);
                 try (var searchProof = proximity.proveSearch(
                         SearchRequest.exact(new float[] {0, 0}, 1))) {
                     var verifiedSearch = searchProof.verify(proximity.descriptor());

@@ -699,6 +699,38 @@ export interface PortableSearchResult {
   backend: string;
 }
 
+export interface PortableProximityConfig {
+  dimensions: number;
+  metric: "l2_squared" | "cosine" | "inner_product";
+  logChunkSize: number;
+  levelHashSeed: bigint;
+  minPageBytes: number;
+  targetPageBytes: number;
+  maxPageBytes: number;
+  overflowHashSeed: bigint;
+  inlineThresholdBytes: number;
+  scalarQuantizationGroupSize?: number;
+}
+
+export interface PortableProximityMutation {
+  key: Uint8Array;
+  vector?: Float32Array;
+  value?: Uint8Array;
+}
+
+export interface PortableProximityVerification {
+  recordCount: bigint;
+  proximityNodeCount: bigint;
+  externalVectorCount: bigint;
+  quantizedNodeCount: bigint;
+  scalarQuantizerCount: bigint;
+  overflowPageCount: bigint;
+  overflowDirectoryCount: bigint;
+  maximumLevel: number;
+  maximumNodeBytes: bigint;
+  distanceChecks: bigint;
+}
+
 export class WasmViewExpiredError extends Error {
   constructor() {
     super("scoped WASM view has expired");
@@ -988,8 +1020,39 @@ export class WasmProximityMap implements Disposable {
   search(request: PortableSearchRequest): Promise<PortableSearchResult> {
     return this.read().search(request);
   }
+  get(key: Uint8Array): { vector: Float32Array; value: Uint8Array } | undefined {
+    return this.nativeHandle().get(ownedPortableBytes(key)) ?? undefined;
+  }
+  contains(key: Uint8Array): boolean { return this.nativeHandle().contains(ownedPortableBytes(key)); }
+  count(): bigint { return BigInt(this.nativeHandle().count()); }
+  config(): PortableProximityConfig { return this.nativeHandle().config(); }
+  mutate(mutations: PortableProximityMutation[]): {
+    map: WasmProximityMap;
+    stats: {
+      directoryEntriesScanned: bigint; directoryNodesRead: bigint;
+      directoryNodesRebuilt: bigint; directoryNodesWritten: bigint;
+      directoryNodesReused: bigint; directoryLevelsRebuilt: bigint;
+      directoryRightEdgeRebuilt: boolean;
+      recordsRebuilt: bigint; nodesRead: bigint; nodesWritten: bigint; nodesReused: bigint;
+      distanceEvaluations: bigint; fullProximityRebuild: boolean;
+    };
+  } {
+    const result = this.nativeHandle().mutate(mutations.map((mutation) => ({
+      key: ownedPortableBytes(mutation.key),
+      vector: mutation.vector == null ? undefined : new Float32Array(mutation.vector),
+      value: mutation.value == null ? undefined : ownedPortableBytes(mutation.value),
+    })));
+    return { map: new WasmProximityMap(result.map), stats: result.stats };
+  }
+  rebuild(mutations: PortableProximityMutation[]): WasmProximityMap {
+    return new WasmProximityMap(this.nativeHandle().rebuild(mutations.map((mutation) => ({
+      key: ownedPortableBytes(mutation.key),
+      vector: mutation.vector == null ? undefined : new Float32Array(mutation.vector),
+      value: mutation.value == null ? undefined : ownedPortableBytes(mutation.value),
+    }))));
+  }
   descriptor(): Uint8Array { return this.nativeHandle().descriptor(); }
-  verify(): { recordCount: bigint } { return { recordCount: BigInt(this.nativeHandle().verify()) }; }
+  verify(): PortableProximityVerification { return this.nativeHandle().verify(); }
   proveMembership(key: Uint8Array): WasmProximityProof {
     return new WasmProximityProof(this.nativeHandle().proveMembership(ownedPortableBytes(key)));
   }
@@ -997,6 +1060,22 @@ export class WasmProximityMap implements Disposable {
     return new WasmProximitySearchProof(
       this.nativeHandle().proveSearch(new Float32Array(vector), topK),
     );
+  }
+  proveStructure(): WasmProximityStructuralProof {
+    return new WasmProximityStructuralProof(this.nativeHandle().proveStructure());
+  }
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class WasmProximityStructuralProof implements Disposable {
+  #native?: any;
+  constructor(native: any) { this.#native = native; }
+  verify(expected?: Uint8Array): {
+    descriptor: Uint8Array; objectCount: bigint; summary: PortableProximityVerification;
+  } {
+    if (this.#native == null) throw new Error("WASM proximity structural proof is closed");
+    return this.#native.verify(expected == null ? undefined : ownedPortableBytes(expected));
   }
   close(): void { this.#native?.free?.(); this.#native = undefined; }
   [Symbol.dispose](): void { this.close(); }

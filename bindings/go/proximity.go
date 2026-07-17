@@ -16,6 +16,50 @@ type ProximityRecord struct {
 	Value  []byte
 }
 
+type ProximityConfig struct {
+	Dimensions                  uint32
+	Metric                      string
+	LogChunkSize                uint8
+	LevelHashSeed               uint64
+	MinPageBytes                uint32
+	TargetPageBytes             uint32
+	MaxPageBytes                uint32
+	OverflowHashSeed            uint64
+	InlineThresholdBytes        uint32
+	ScalarQuantizationGroupSize *uint32
+}
+
+type ProximityMutation struct {
+	Key    []byte
+	Vector []float32
+	Value  []byte
+	Delete bool
+}
+
+func UpsertProximity(key []byte, vector []float32, value []byte) ProximityMutation {
+	return ProximityMutation{Key: append([]byte(nil), key...), Vector: append([]float32(nil), vector...), Value: append([]byte(nil), value...)}
+}
+
+func DeleteProximity(key []byte) ProximityMutation {
+	return ProximityMutation{Key: append([]byte(nil), key...), Delete: true}
+}
+
+type ProximityMutationStats struct {
+	DirectoryEntriesScanned   uint64
+	DirectoryNodesRead        uint64
+	DirectoryNodesRebuilt     uint64
+	DirectoryNodesWritten     uint64
+	DirectoryNodesReused      uint64
+	DirectoryLevelsRebuilt    uint64
+	DirectoryRightEdgeRebuilt bool
+	NodesRead                 uint64
+	NodesWritten              uint64
+	NodesReused               uint64
+	RecordsRebuilt            uint64
+	DistanceEvaluations       uint64
+	FullProximityRebuild      bool
+}
+
 type ExactProximityRecord struct {
 	Vector []float32
 	Value  []byte
@@ -27,6 +71,16 @@ type ExactProximityRecord struct {
 // semantics.
 type ProximityMembershipProof struct {
 	encoded []byte
+}
+
+type ProximityStructuralProof struct {
+	encoded []byte
+}
+
+type ProximityStructuralVerification struct {
+	Descriptor  []byte
+	ObjectCount uint64
+	Summary     ProximityVerification
 }
 
 type ProximityMembershipVerification struct {
@@ -103,6 +157,10 @@ func (e *Engine) BuildProximity(dimensions uint32, records []ProximityRecord) (*
 	if err != nil {
 		return nil, err
 	}
+	return newProximityMap(handle)
+}
+
+func newProximityMap(handle uint64) (*ProximityMap, error) {
 	fast, err := ffiProximityFastHandle(handle)
 	if err != nil {
 		ffiFreeProximity(handle)
@@ -137,6 +195,27 @@ func encodeFloat32Sequence(values []float32) []byte {
 		writeU32(&out, math.Float32bits(value))
 	}
 	return out.Bytes()
+}
+
+func encodeProximityMutations(mutations []ProximityMutation) ([]byte, error) {
+	var out bytes.Buffer
+	writeI32(&out, int32(len(mutations)))
+	for _, mutation := range mutations {
+		encodeByteArrayInto(&out, mutation.Key)
+		if mutation.Delete {
+			out.WriteByte(0)
+			out.WriteByte(0)
+			continue
+		}
+		if len(mutation.Vector) == 0 {
+			return nil, errors.New("proximity upsert vector must be non-empty")
+		}
+		out.WriteByte(1)
+		out.Write(encodeFloat32Sequence(mutation.Vector))
+		out.WriteByte(1)
+		encodeByteArrayInto(&out, mutation.Value)
+	}
+	return out.Bytes(), nil
 }
 
 func (m *ProximityMap) Close() {
@@ -180,6 +259,64 @@ func (m *ProximityMap) Descriptor() ([]byte, error) {
 		return nil, err
 	}
 	return descriptor, d.done()
+}
+
+func (m *ProximityMap) Config() (ProximityConfig, error) {
+	handle, _, unlock, err := m.withHandle()
+	if err != nil {
+		return ProximityConfig{}, err
+	}
+	defer unlock()
+	raw, err := ffiProximityConfig(handle)
+	if err != nil {
+		return ProximityConfig{}, err
+	}
+	d := byteDecoder{data: raw}
+	var config ProximityConfig
+	if config.Dimensions, err = d.readUint32(); err != nil {
+		return ProximityConfig{}, err
+	}
+	metric, err := d.readInt32()
+	if err != nil {
+		return ProximityConfig{}, err
+	}
+	config.Metric = map[int32]string{1: "l2-squared", 2: "cosine", 3: "inner-product"}[metric]
+	if config.Metric == "" {
+		return ProximityConfig{}, errors.New("unknown proximity distance metric")
+	}
+	if config.LogChunkSize, err = d.readByte(); err != nil {
+		return ProximityConfig{}, err
+	}
+	if config.LevelHashSeed, err = d.readUint64(); err != nil {
+		return ProximityConfig{}, err
+	}
+	if config.MinPageBytes, err = d.readUint32(); err != nil {
+		return ProximityConfig{}, err
+	}
+	if config.TargetPageBytes, err = d.readUint32(); err != nil {
+		return ProximityConfig{}, err
+	}
+	if config.MaxPageBytes, err = d.readUint32(); err != nil {
+		return ProximityConfig{}, err
+	}
+	if config.OverflowHashSeed, err = d.readUint64(); err != nil {
+		return ProximityConfig{}, err
+	}
+	if config.InlineThresholdBytes, err = d.readUint32(); err != nil {
+		return ProximityConfig{}, err
+	}
+	present, err := d.readByte()
+	if err != nil {
+		return ProximityConfig{}, err
+	}
+	if present != 0 {
+		value, err := d.readUint32()
+		if err != nil {
+			return ProximityConfig{}, err
+		}
+		config.ScalarQuantizationGroupSize = &value
+	}
+	return config, d.done()
 }
 
 func (m *ProximityMap) Count() (uint64, error) {
@@ -232,6 +369,97 @@ func (m *ProximityMap) ProveMembership(key []byte) (ProximityMembershipProof, er
 		return ProximityMembershipProof{}, err
 	}
 	return ProximityMembershipProof{encoded: raw}, nil
+}
+
+func (m *ProximityMap) Mutate(mutations []ProximityMutation) (*ProximityMap, ProximityMutationStats, error) {
+	handle, _, unlock, err := m.withHandle()
+	if err != nil {
+		return nil, ProximityMutationStats{}, err
+	}
+	defer unlock()
+	encoded, err := encodeProximityMutations(mutations)
+	if err != nil {
+		return nil, ProximityMutationStats{}, err
+	}
+	raw, err := ffiProximityMutate(handle, encoded)
+	if err != nil {
+		return nil, ProximityMutationStats{}, err
+	}
+	d := byteDecoder{data: raw}
+	updatedHandle, err := d.readUint64()
+	if err != nil {
+		return nil, ProximityMutationStats{}, err
+	}
+	stats, err := decodeProximityMutationStats(&d)
+	if err != nil {
+		ffiFreeProximity(updatedHandle)
+		return nil, ProximityMutationStats{}, err
+	}
+	if err := d.done(); err != nil {
+		ffiFreeProximity(updatedHandle)
+		return nil, ProximityMutationStats{}, err
+	}
+	updated, err := newProximityMap(updatedHandle)
+	return updated, stats, err
+}
+
+func (m *ProximityMap) Rebuild(mutations []ProximityMutation) (*ProximityMap, error) {
+	handle, _, unlock, err := m.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	encoded, err := encodeProximityMutations(mutations)
+	if err != nil {
+		return nil, err
+	}
+	updatedHandle, err := ffiProximityRebuild(handle, encoded)
+	if err != nil {
+		return nil, err
+	}
+	return newProximityMap(updatedHandle)
+}
+
+func (m *ProximityMap) ProveStructure() (ProximityStructuralProof, error) {
+	handle, _, unlock, err := m.withHandle()
+	if err != nil {
+		return ProximityStructuralProof{}, err
+	}
+	defer unlock()
+	limits, err := ffiDefaultContentGraphLimits()
+	if err != nil {
+		return ProximityStructuralProof{}, err
+	}
+	raw, err := ffiProximityProveStructure(handle, limits)
+	if err != nil {
+		return ProximityStructuralProof{}, err
+	}
+	return ProximityStructuralProof{encoded: raw}, nil
+}
+
+func VerifyProximityStructuralProof(proof ProximityStructuralProof, expectedDescriptor []byte) (ProximityStructuralVerification, error) {
+	limits, err := ffiDefaultContentGraphLimits()
+	if err != nil {
+		return ProximityStructuralVerification{}, err
+	}
+	raw, err := ffiVerifyProximityStructureProof(proof.encoded, append([]byte(nil), expectedDescriptor...), limits)
+	if err != nil {
+		return ProximityStructuralVerification{}, err
+	}
+	d := byteDecoder{data: raw}
+	descriptor, err := d.readByteArray()
+	if err != nil {
+		return ProximityStructuralVerification{}, err
+	}
+	objectCount, err := d.readUint64()
+	if err != nil {
+		return ProximityStructuralVerification{}, err
+	}
+	summary, err := decodeProximityVerificationFrom(&d)
+	if err != nil {
+		return ProximityStructuralVerification{}, err
+	}
+	return ProximityStructuralVerification{Descriptor: descriptor, ObjectCount: objectCount, Summary: summary}, d.done()
 }
 
 type ProximitySearchProof struct {
@@ -655,6 +883,14 @@ func decodeProximityMembershipVerification(raw []byte) (ProximityMembershipVerif
 
 func decodeProximityVerification(raw []byte) (ProximityVerification, error) {
 	d := byteDecoder{data: raw}
+	result, err := decodeProximityVerificationFrom(&d)
+	if err != nil {
+		return ProximityVerification{}, err
+	}
+	return result, d.done()
+}
+
+func decodeProximityVerificationFrom(d *byteDecoder) (ProximityVerification, error) {
 	var result ProximityVerification
 	fields := []*uint64{
 		&result.RecordCount, &result.ProximityNodeCount, &result.ExternalVectorCount,
@@ -679,5 +915,43 @@ func decodeProximityVerification(raw []byte) (ProximityVerification, error) {
 	if result.DistanceChecks, err = d.readUint64(); err != nil {
 		return ProximityVerification{}, err
 	}
-	return result, d.done()
+	return result, nil
+}
+
+func decodeProximityMutationStats(d *byteDecoder) (ProximityMutationStats, error) {
+	var result ProximityMutationStats
+	fields := []*uint64{
+		&result.DirectoryEntriesScanned, &result.DirectoryNodesRead,
+		&result.DirectoryNodesRebuilt, &result.DirectoryNodesWritten,
+		&result.DirectoryNodesReused, &result.DirectoryLevelsRebuilt,
+	}
+	for _, field := range fields {
+		value, err := d.readUint64()
+		if err != nil {
+			return ProximityMutationStats{}, err
+		}
+		*field = value
+	}
+	rightEdge, err := d.readByte()
+	if err != nil {
+		return ProximityMutationStats{}, err
+	}
+	result.DirectoryRightEdgeRebuilt = rightEdge != 0
+	fields = []*uint64{
+		&result.NodesRead, &result.NodesWritten, &result.NodesReused,
+		&result.RecordsRebuilt, &result.DistanceEvaluations,
+	}
+	for _, field := range fields {
+		value, err := d.readUint64()
+		if err != nil {
+			return ProximityMutationStats{}, err
+		}
+		*field = value
+	}
+	full, err := d.readByte()
+	if err != nil {
+		return ProximityMutationStats{}, err
+	}
+	result.FullProximityRebuild = full != 0
+	return result, nil
 }

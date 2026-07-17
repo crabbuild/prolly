@@ -55,6 +55,55 @@ export interface NodePortableExactProximityRecord {
   vector: Array<number>
   value: Buffer
 }
+export interface NodePortableProximityConfig {
+  dimensions: number
+  metric: string
+  logChunkSize: number
+  levelHashSeed: string
+  minPageBytes: number
+  targetPageBytes: number
+  maxPageBytes: number
+  overflowHashSeed: string
+  inlineThresholdBytes: number
+  scalarQuantizationGroupSize?: number
+}
+export interface NodePortableProximityMutation {
+  key: Buffer
+  vector?: Float32Array
+  value?: Buffer
+}
+export interface NodePortableProximityMutationStats {
+  directoryEntriesScanned: string
+  directoryNodesRead: string
+  directoryNodesRebuilt: string
+  directoryNodesWritten: string
+  directoryNodesReused: string
+  directoryLevelsRebuilt: string
+  directoryRightEdgeRebuilt: boolean
+  recordsRebuilt: string
+  nodesRead: string
+  nodesWritten: string
+  nodesReused: string
+  distanceEvaluations: string
+  fullProximityRebuild: boolean
+}
+export interface NodePortableProximityVerification {
+  recordCount: string
+  proximityNodeCount: string
+  externalVectorCount: string
+  quantizedNodeCount: string
+  scalarQuantizerCount: string
+  overflowPageCount: string
+  overflowDirectoryCount: string
+  maximumLevel: number
+  maximumNodeBytes: string
+  distanceChecks: string
+}
+export interface NodePortableStructuralVerification {
+  descriptor: Buffer
+  objectCount: string
+  summary: NodePortableProximityVerification
+}
 export interface NodePortableNeighbor {
   key: Buffer
   value: Buffer
@@ -772,6 +821,10 @@ export declare function tombstoneFromStoredBytes(bytes: Buffer): NodeTombstoneRe
 export declare function isTombstoneValue(bytes: Buffer): boolean
 export declare function tombstoneUpsertMutation(key: Buffer, tombstone: NodeTombstoneRecord): NodeMutationRecord
 export declare function tombstoneCompactionMutation(key: Buffer, storedValue: Buffer): NodeMutationRecord | null
+export declare class NodePortableProximityMutationResult {
+  map(): NativePortableProximityMap
+  stats(): NodePortableProximityMutationStats
+}
 export declare class NativePortableVersionedMap {
   initialize(): NodePortableMapVersion
   get(key: Buffer): Buffer | null
@@ -822,11 +875,21 @@ export declare class NativePortableSecondaryIndex {
 }
 export declare class NativePortableProximityMap {
   read(): NativePortableProximityReadSession
+  count(): string
+  config(): NodePortableProximityConfig
+  get(key: Buffer): NodePortableExactProximityRecord | null
+  contains(key: Buffer): boolean
   search(query: Float32Array, k: string): NodePortableSearchResult
   descriptor(): Buffer
-  verify(): string
+  verify(): NodePortableProximityVerification
+  mutate(mutations: Array<NodePortableProximityMutation>): NodePortableProximityMutationResult
+  rebuild(mutations: Array<NodePortableProximityMutation>): NativePortableProximityMap
   proveMembership(key: Buffer): NativePortableProximityProof
+  proveStructure(): NativePortableProximityStructuralProof
   proveSearch(query: Float32Array, k: string): NativePortableProximitySearchProof
+}
+export declare class NativePortableProximityStructuralProof {
+  verify(expectedDescriptor?: Buffer | undefined | null): NodePortableStructuralVerification
 }
 export declare class NativePortableProximityReadSession {
   search(query: Float32Array, k: string): NodePortableSearchResult

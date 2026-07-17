@@ -13,6 +13,17 @@ public final class ProximityMap implements AutoCloseable {
         return nativeMap;
     }
     public byte[] descriptor() { return open().getDescriptor().clone(); }
+    public long count() { return JavaPortableBridge.count(open()); }
+    public ProximityConfig config() {
+        var value = JavaPortableBridge.config(open());
+        return new ProximityConfig(
+                value.getDimensions(), value.getMetric(), value.getLogChunkSize(),
+                value.getLevelHashSeed(), value.getMinPageBytes(), value.getTargetPageBytes(),
+                value.getMaxPageBytes(), value.getOverflowHashSeed(),
+                value.getInlineThresholdBytes(), value.getScalarQuantizationGroupSize());
+    }
+    public build.crab.prolly.ExactProximityRecordRecord get(byte[] key) { return open().get(key.clone()); }
+    public boolean contains(byte[] key) { return open().containsKey(key.clone()); }
     public ProximityReadSession read() { return new ProximityReadSession(this, open().read()); }
     public SearchResult search(SearchRequest request) {
         List<Float> query = new ArrayList<>(request.vector().length);
@@ -42,9 +53,51 @@ public final class ProximityMap implements AutoCloseable {
     public build.crab.prolly.ProximityStructuralProofRecord proveStructure() {
         return JavaPortableBridge.proveStructure(open());
     }
-    public build.crab.prolly.ProximityVerificationRecord verify() { return open().verify(); }
+    public MutationResult mutate(List<ProximityMutation> mutations) {
+        var nativeMutations = mutations.stream().map(mutation -> {
+            List<Float> vector = null;
+            if (mutation.vector() != null) {
+                vector = new ArrayList<>(mutation.vector().length);
+                for (float value : mutation.vector()) vector.add(value);
+            }
+            return new build.crab.prolly.ProximityMutationRecord(
+                    mutation.key(), vector, mutation.value());
+        }).toList();
+        var result = JavaPortableBridge.mutate(open(), nativeMutations);
+        var stats = result.getStats();
+        return new MutationResult(new ProximityMap(result.getMap()), new ProximityMutationStats(
+                stats.getDirectoryEntriesScanned(), stats.getDirectoryNodesRead(),
+                stats.getDirectoryNodesRebuilt(), stats.getDirectoryNodesWritten(),
+                stats.getDirectoryNodesReused(), stats.getDirectoryLevelsRebuilt(),
+                stats.getDirectoryRightEdgeRebuilt(), stats.getNodesRead(), stats.getNodesWritten(),
+                stats.getNodesReused(), stats.getRecordsRebuilt(), stats.getDistanceEvaluations(),
+                stats.getFullProximityRebuild()));
+    }
+    public ProximityMap rebuild(List<ProximityMutation> mutations) {
+        var nativeMutations = mutations.stream().map(mutation -> {
+            List<Float> vector = null;
+            if (mutation.vector() != null) {
+                vector = new ArrayList<>(mutation.vector().length);
+                for (float value : mutation.vector()) vector.add(value);
+            }
+            return new build.crab.prolly.ProximityMutationRecord(
+                    mutation.key(), vector, mutation.value());
+        }).toList();
+        return new ProximityMap(JavaPortableBridge.rebuild(open(), nativeMutations));
+    }
+    public record MutationResult(
+            ProximityMap map,
+            ProximityMutationStats stats) {}
+    public ProximityVerification verify() {
+        var value = JavaPortableBridge.verify(open());
+        return new ProximityVerification(
+                value.getRecordCount(), value.getProximityNodeCount(), value.getExternalVectorCount(),
+                value.getQuantizedNodeCount(), value.getScalarQuantizerCount(),
+                value.getOverflowPageCount(), value.getOverflowDirectoryCount(),
+                value.getMaximumLevel(), value.getMaximumNodeBytes(), value.getDistanceChecks());
+    }
     public long verifiedRecordCount() {
-        return JavaPortableBridge.recordCount(verify());
+        return verify().recordCount();
     }
     public void clearCache() { open().clearCache(); }
     @Override public void close() {

@@ -14,4 +14,19 @@ public final class Proofs {
         return build.crab.prolly.api.JavaPortableBridge.verify(
                 proof, expectedDescriptor == null ? null : expectedDescriptor.clone());
     }
+
+    public static ProximityStructuralVerification verify(
+            build.crab.prolly.ProximityStructuralProofRecord proof,
+            byte[] expectedDescriptor) {
+        var value = build.crab.prolly.api.JavaPortableBridge.verifyStructural(
+                proof, expectedDescriptor == null ? null : expectedDescriptor.clone());
+        var summary = value.getSummary();
+        return new ProximityStructuralVerification(
+                value.getDescriptor(), value.getObjectCount(), new ProximityVerification(
+                        summary.getRecordCount(), summary.getProximityNodeCount(),
+                        summary.getExternalVectorCount(), summary.getQuantizedNodeCount(),
+                        summary.getScalarQuantizerCount(), summary.getOverflowPageCount(),
+                        summary.getOverflowDirectoryCount(), summary.getMaximumLevel(),
+                        summary.getMaximumNodeBytes(), summary.getDistanceChecks()));
+    }
 }

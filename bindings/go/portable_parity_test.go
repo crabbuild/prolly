@@ -299,6 +299,9 @@ func TestPortableProximityProofAndMaintenance(t *testing.T) {
 	if count, err := proximity.Count(); err != nil || count != 1 {
 		t.Fatalf("count = %d, %v", count, err)
 	}
+	if config, err := proximity.Config(); err != nil || config.Dimensions != 2 {
+		t.Fatalf("config = %+v, %v", config, err)
+	}
 	if ok, err := proximity.Contains([]byte("a")); err != nil || !ok {
 		t.Fatalf("contains = %v, %v", ok, err)
 	}
@@ -317,6 +320,24 @@ func TestPortableProximityProofAndMaintenance(t *testing.T) {
 	verified, err := VerifyProximityMembershipProof(proof, descriptor)
 	if err != nil || !bytes.Equal(verified.Key, []byte("a")) || verified.Record == nil {
 		t.Fatalf("verified = %+v, %v", verified, err)
+	}
+	structural, err := proximity.ProveStructure()
+	if err != nil {
+		t.Fatal(err)
+	}
+	verifiedStructure, err := VerifyProximityStructuralProof(structural, descriptor)
+	if err != nil || verifiedStructure.Summary.RecordCount != 1 {
+		t.Fatalf("verified structure = %+v, %v", verifiedStructure, err)
+	}
+	mutated, mutationStats, err := proximity.Mutate([]ProximityMutation{
+		UpsertProximity([]byte("b"), []float32{1, 1}, []byte("beta")),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mutated.Close()
+	if count, err := mutated.Count(); err != nil || count != 2 || mutationStats.RecordsRebuilt == 0 {
+		t.Fatalf("mutated count/stats = %d, %+v, %v", count, mutationStats, err)
 	}
 	searchProof, err := proximity.ProveSearch(ExactSearch([]float32{0, 0}, 1))
 	if err != nil {
