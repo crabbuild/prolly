@@ -41,6 +41,28 @@ func TestDynamoDBConformance(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = store.DeleteTable(context.Background()) })
+	_, err = client.PutItem(ctx, &awsdynamodb.PutItemInput{TableName: &store.options.TableName, Item: store.item(store.rootKey([]byte("rust-root")), []byte("rust-manifest"))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	root, err := store.GetRootManifest(ctx, []byte("rust-root"))
+	if err != nil || !root.Present || string(root.Value) != "rust-manifest" {
+		t.Fatalf("Rust-layout root = %#v, %v", root, err)
+	}
+	if err := store.PutHint(ctx, []byte("go-ns"), []byte("go-key"), []byte("go-hint")); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := client.GetItem(ctx, &awsdynamodb.GetItemInput{TableName: &store.options.TableName, Key: store.keyItem(store.hintKey([]byte("go-ns"), []byte("go-key"))), ConsistentRead: aws.Bool(true)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	value, err := binaryAttribute(raw.Item, valueAttr)
+	if err != nil || string(value) != "go-hint" {
+		t.Fatalf("Go-layout hint = %q, %v", value, err)
+	}
+	if err := store.ClearNamespace(ctx); err != nil {
+		t.Fatal(err)
+	}
 	storetest.RunWithStore(t, prolly.RemoteStore(store))
 }
 

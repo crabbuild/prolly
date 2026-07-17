@@ -24,11 +24,15 @@ DYNAMODB_PORT="$(env_or_default PROLLY_STORE_DYNAMODB_PORT PROLLY_ADAPTERS_DYNAM
 REDIS_PORT="$(env_or_default PROLLY_STORE_REDIS_PORT PROLLY_ADAPTERS_REDIS_PORT 56379)"
 POSTGRES_PORT="$(env_or_default PROLLY_STORE_POSTGRES_PORT PROLLY_ADAPTERS_POSTGRES_PORT 55432)"
 MYSQL_PORT="$(env_or_default PROLLY_STORE_MYSQL_PORT PROLLY_ADAPTERS_MYSQL_PORT 53306)"
+SPANNER_GRPC_PORT="$(env_or_default PROLLY_STORE_SPANNER_GRPC_PORT PROLLY_ADAPTERS_SPANNER_GRPC_PORT 9010)"
+SPANNER_REST_PORT="$(env_or_default PROLLY_STORE_SPANNER_REST_PORT PROLLY_ADAPTERS_SPANNER_REST_PORT 9020)"
 
 export PROLLY_STORE_DYNAMODB_PORT="$DYNAMODB_PORT"
 export PROLLY_STORE_REDIS_PORT="$REDIS_PORT"
 export PROLLY_STORE_POSTGRES_PORT="$POSTGRES_PORT"
 export PROLLY_STORE_MYSQL_PORT="$MYSQL_PORT"
+export PROLLY_STORE_SPANNER_GRPC_PORT="$SPANNER_GRPC_PORT"
+export PROLLY_STORE_SPANNER_REST_PORT="$SPANNER_REST_PORT"
 
 compose() {
   docker compose -p "$PROJECT_NAME" -f "$COMPOSE_FILE" "$@"
@@ -81,6 +85,7 @@ wait_for_tcp "DynamoDB Local" "$DYNAMODB_PORT"
 wait_for_service "Redis" redis redis-cli ping
 wait_for_service "Postgres" postgres pg_isready -U prolly -d prolly
 wait_for_service "MySQL" mysql mysqladmin ping -h 127.0.0.1 -uprolly -pprolly --silent
+wait_for_tcp "Spanner emulator" "$SPANNER_GRPC_PORT"
 
 export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-test}"
 export AWS_REGION="${AWS_REGION:-us-west-2}"
@@ -90,6 +95,11 @@ export PROLLY_STORE_DYNAMODB_TABLE="${PROLLY_STORE_DYNAMODB_TABLE:-${PROLLY_ADAP
 export PROLLY_STORE_MYSQL_URL="mysql://prolly:prolly@127.0.0.1:$MYSQL_PORT/prolly"
 export PROLLY_STORE_POSTGRES_URL="postgres://prolly:prolly@127.0.0.1:$POSTGRES_PORT/prolly"
 export PROLLY_STORE_REDIS_URL="redis://127.0.0.1:$REDIS_PORT/"
+export PROLLY_POSTGRES_URL="$PROLLY_STORE_POSTGRES_URL?sslmode=disable"
+export PROLLY_MYSQL_DSN="prolly:prolly@tcp(127.0.0.1:$MYSQL_PORT)/prolly?parseTime=true"
+export PROLLY_REDIS_ADDR="127.0.0.1:$REDIS_PORT"
+export PROLLY_DYNAMODB_ENDPOINT="$PROLLY_STORE_DYNAMODB_ENDPOINT"
+export SPANNER_EMULATOR_HOST="127.0.0.1:$SPANNER_GRPC_PORT"
 
 cd "$ROOT_DIR"
 cargo test \
@@ -101,3 +111,5 @@ cargo test \
   -p prolly-store-mysql \
   -p prolly-store-postgres \
   -p prolly-store-redis
+
+"$ROOT_DIR/scripts/test-go-stores.sh" --services-running

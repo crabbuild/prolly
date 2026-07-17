@@ -1,6 +1,6 @@
 # Cross-Language Store Adapters Technical Design
 
-- Status: proposed implementation design
+- Status: protocol and Go provider row implemented; other language rows remain planned
 - Target protocol: `prolly-store-protocol-v1`
 - Applies to: Rust, Node/TypeScript, Python, Go, Java/Kotlin, Swift, Ruby, and
   browser/WASM bindings
@@ -876,6 +876,34 @@ Rust users continue to use the independently published `prolly-store-*`
 crates directly.
 
 ## Implementation Plan
+
+### Current Go implementation
+
+The Go binding now exposes the version-1 asynchronous foreign-store bridge and
+owned async transactions. Provider SDKs remain isolated in seven independent
+modules under `bindings/go/stores`:
+
+- SQLite (`modernc.org/sqlite`)
+- PostgreSQL (`pgx/v5`)
+- MySQL (`go-sql-driver/mysql`)
+- Redis (`go-redis/v9`)
+- DynamoDB (AWS SDK for Go v2)
+- Cosmos DB (`azcosmos`)
+- Cloud Spanner (Google Cloud Go client)
+
+Every module implements the same context-aware `RemoteStore` protocol and runs
+the shared `storetest` suite. SQLite, PostgreSQL, MySQL, Redis, DynamoDB Local,
+and the Spanner emulator have provider-backed gates. Cosmos DB always runs its
+SDK-contract transaction model and additionally exposes an opt-in live Azure
+gate. The exact capability and service-limit claims are recorded in
+`conformance/store-protocol-v1/compatibility.json` and validated by
+`bindings/go/internal/verifycompat`.
+
+`scripts/test-go-stores.sh` verifies all seven modules, physical-layout
+fixtures, the async Rust engine bridge, cancellation behavior, and that the Go
+core dependency graph contains no provider SDK. Ruby/Cosmos DB and
+Swift/Cosmos DB or Spanner remain explicitly unsupported because the providers
+do not publish supported client SDKs for those language combinations.
 
 ### Phase 0: Protocol and documentation
 
