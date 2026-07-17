@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-17T00:56:43+00:00",
+  "generated_at": "2026-07-17T01:20:30+00:00",
   "rustdoc_format_version": 57,
   "languages": [
     "python",
@@ -8650,6 +8650,17 @@
     },
     {
       "rust": "prolly::MapVersionId::for_tree",
+      "classification": "portable",
+      "status": "planned",
+      "family": "versioned-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::MapVersionId::from_bytes",
       "classification": "portable",
       "status": "planned",
       "family": "versioned-map",

@@ -275,6 +275,20 @@ impl MapVersionId {
         self.0
     }
 
+    /// Decode a version identifier from its portable 32-byte representation.
+    ///
+    /// This is the inverse of [`MapVersionId::as_cid`] and is intended for
+    /// persistence and language-binding boundaries. It does not hash `bytes`.
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
+        let cid = <[u8; 32]>::try_from(bytes).map_err(|_| {
+            Error::InvalidVersionedMap(format!(
+                "map version identifier must be exactly 32 bytes, got {}",
+                bytes.len()
+            ))
+        })?;
+        Ok(Self(Cid(cid)))
+    }
+
     pub(crate) fn from_cid(cid: Cid) -> Self {
         Self(cid)
     }
@@ -3653,6 +3667,17 @@ mod index_fence_tests {
         catalog_map_id, control_record_key, control_root_name, ActiveIndexControl, IndexControl,
     };
     use crate::prolly::store::MemStore;
+
+    #[test]
+    fn map_version_id_decodes_only_exact_cid_bytes() {
+        let expected = MapVersionId::for_tree(&Tree::new(Config::default())).unwrap();
+        assert_eq!(
+            MapVersionId::from_bytes(expected.as_cid().as_bytes()).unwrap(),
+            expected
+        );
+        assert!(MapVersionId::from_bytes(&[0; 31]).is_err());
+        assert!(MapVersionId::from_bytes(&[0; 33]).is_err());
+    }
 
     #[test]
     fn absent_control_read_conflicts_with_later_activation() {

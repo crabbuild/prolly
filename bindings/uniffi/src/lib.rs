@@ -36,6 +36,12 @@ use thiserror::Error;
 mod domain;
 mod fast_abi;
 
+pub use domain::versioned::{
+    BindingMapComparison, BindingMapMerge, BindingMapSnapshot, BindingMapSubscription,
+    BindingVersionedMap, MapCatalogVerificationRecord, MapChangeEventRecord, MapUpdateKind,
+    MapUpdateRecord, MapVersionRecord, VersionPruneRecord,
+};
+
 type MemoryEngine = Prolly<Arc<MemStore>>;
 type FileEngine = Prolly<Arc<FileNodeStore>>;
 #[cfg(feature = "sqlite")]
@@ -56,6 +62,7 @@ type FileTransaction = OwnedProllyTransaction<Arc<FileNodeStore>>;
 #[cfg(feature = "sqlite")]
 type SqliteTransaction = OwnedProllyTransaction<Arc<SqliteStore>>;
 
+#[derive(Clone)]
 enum BindingEngine {
     Memory(Arc<MemoryEngine>),
     File(Arc<FileEngine>),
@@ -2324,6 +2331,21 @@ impl ProllyEngine {
 
     pub fn create(&self) -> TreeRecord {
         with_engine!(self, engine, { engine.create().into() })
+    }
+
+    /// Open an application-facing managed map. The returned object shares the
+    /// underlying engine and may outlive this particular foreign handle.
+    pub fn versioned_map(
+        &self,
+        id: Vec<u8>,
+    ) -> Result<Arc<BindingVersionedMap>, ProllyBindingError> {
+        BindingVersionedMap::new(
+            Arc::new(Self {
+                inner: self.inner.clone(),
+            }),
+            id,
+        )
+        .map(Arc::new)
     }
 
     /// Bind one immutable tree to a reusable read object. Foreign callers that
