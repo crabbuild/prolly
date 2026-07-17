@@ -68,6 +68,37 @@ tree behavior.
 | Ruby | `bindings/ruby/test/prolly_smoke_test.rb` | `PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" BUNDLE_GEMFILE=bindings/ruby/Gemfile BUNDLE_PATH=/tmp/prolly-ruby-bundle bundle exec ruby -Ibindings/ruby/lib bindings/ruby/test/prolly_smoke_test.rb` |
 | Swift | `bindings/swift/Examples/FixtureCheck`, cookbook executable targets | `DYLD_LIBRARY_PATH="$PWD/target/debug" swift run --package-path bindings/swift prolly-fixture-check` |
 
+## Async Store Provider Gate
+
+The shared protocol has isolated provider modules for Go, Node/TypeScript,
+Kotlin, and Java. Node supports SQLite, PostgreSQL, MySQL, Redis, DynamoDB,
+Cosmos DB, Cloud Spanner, and PGlite. Go, Kotlin, and Java support the same
+seven providers except PGlite, which is a JavaScript/WebAssembly database.
+
+Run the manifest and dependency-boundary gate without services:
+
+```sh
+node scripts/verify-store-compatibility.mjs
+```
+
+Run all Node and JVM provider suites with managed local services:
+
+```sh
+./scripts/test-node-jvm-stores.sh
+```
+
+Pass `--services-running` to reuse PostgreSQL, MySQL, Redis, DynamoDB Local,
+and the Spanner emulator already listening on the configured
+`PROLLY_STORE_*_PORT` values. The runner tears down only Compose services that
+it started. Cosmos DB's SDK-contract suite always runs; set
+`RUN_PROLLY_COSMOS_LIVE=1` and provide `PROLLY_COSMOS_ENDPOINT`,
+`PROLLY_COSMOS_KEY`, and `PROLLY_COSMOS_DATABASE` for the managed-cloud gate.
+
+The compatibility verifier rejects missing matrix cells, protocol/schema
+drift, SDK-coordinate drift, incomplete capability or limit declarations,
+placeholder unsupported reasons, mismatched package metadata, and provider SDKs
+leaking into the Node, Kotlin, or Java core artifacts.
+
 ## Generated Binding Regeneration
 
 When the UniFFI facade changes, build it once, then regenerate the checked-in

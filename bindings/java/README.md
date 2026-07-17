@@ -109,6 +109,33 @@ future pipelines. Use it to keep application orchestration non-blocking, but
 still design tree updates as explicit, deterministic operations. Avoid hiding
 large transactional workflows inside unbounded asynchronous chains.
 
+## Async Store Providers
+
+Java provider artifacts are thin `CompletableFuture` facades over the shared
+Kotlin implementations. `build.crab:prolly-java` contains no provider SDK.
+Each `*Stores.from(...)` method borrows application-owned inputs and closing the
+adapter never closes a data source, SDK client, Redis connection, or executor.
+
+| Artifact | Minimal Java construction | Preparation |
+| --- | --- | --- |
+| `prolly-java-store-sqlite` | `SqliteStores.from(dataSource, executor)` | `SqliteStores.initializeSchema(store)` |
+| `prolly-java-store-postgres` | `PostgresStores.from(dataSource, executor)` | `PostgresStores.initializeSchema(store)` |
+| `prolly-java-store-mysql` | `MysqlStores.from(dataSource, executor)` | `MysqlStores.initializeSchema(store)` |
+| `prolly-java-store-redis` | `RedisStores.from(connection.async())` | use Lettuce `ByteArrayCodec` |
+| `prolly-java-store-dynamodb` | `DynamoDbStores.from(client, "prolly", prefix)` | `DynamoDbStores.initializeTable(store)` |
+| `prolly-java-store-cosmosdb` | `CosmosDbStores.from(container, "prolly", prefix)` | `CosmosDbStores.validateContainer(store)` |
+| `prolly-java-store-spanner` | `SpannerStores.from(database, executor)` | apply Kotlin `SPANNER_DDL` |
+
+Initialization methods return cancellable `CompletableFuture` values. JDBC work
+runs on the supplied bounded executor; cloud SDK retry, credential, TLS, proxy,
+and shutdown policy stays with the application. DynamoDB and Cosmos DB enforce
+their documented 100-operation strict-transaction limits. Redis production use
+requires a durable AOF policy, recovery testing, persistence monitoring, and
+backups.
+
+Run all Java and Kotlin provider modules, plus their Node counterparts and local
+emulators, with `./scripts/test-node-jvm-stores.sh` from the repository root.
+
 ## Merge And Callback Guidance
 
 Use built-in resolver names when they match the value semantics. Use

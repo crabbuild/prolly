@@ -6,7 +6,7 @@
 
 **Architecture:** Keep provider SDKs outside the core bindings. Node uses a napi-rs promise callback bridge into `RemoteStoreBackend`; Kotlin uses the existing UniFFI asynchronous foreign trait and Java exposes `CompletableFuture` facades over the same Kotlin implementations. Each provider is delivered as one vertical slice across Node and JVM, with the physical layout and capabilities copied from the Rust and Go adapters.
 
-**Tech Stack:** Rust 1.81+ and napi-rs 2.16; Node 20+ and TypeScript executed by Node; Kotlin 2.2.21, coroutines 1.10.2, Java 17, Maven 3.9; better-sqlite3 12.11.1, pg 8.22.0, mysql2 3.23.0, redis 6.1.0, AWS SDK 3.1089.0, Azure Cosmos 4.9.3, Cloud Spanner 8.9.0, PGlite 0.5.4; sqlite-jdbc 3.53.2.0, PostgreSQL JDBC 42.7.13, MySQL Connector/J 9.7.0, Lettuce 7.6.0.RELEASE, AWS SDK for Java 2.48.2, Azure Cosmos 4.81.0, and Google Cloud Spanner 6.119.0.
+**Tech Stack:** Rust 1.81+ and napi-rs 2.16; Node 20+ and TypeScript executed by Node; Kotlin 2.2.21, coroutines 1.10.2, Java 17, Maven 3.9; better-sqlite3 12.11.1, pg 8.22.0, mysql2 3.23.0, redis 6.1.0, AWS SDK 3.1089.0, Azure Cosmos 4.9.3, Cloud Spanner 8.0.0, PGlite 0.5.4; sqlite-jdbc 3.53.2.0, PostgreSQL JDBC 42.7.13, MySQL Connector/J 9.7.0, Lettuce 7.6.0.RELEASE, AWS SDK for Java 2.48.2, Azure Cosmos 4.81.0, and Google Cloud Spanner 6.119.0.
 
 ## Global Constraints
 
