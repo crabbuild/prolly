@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "description": "Portable hard-cutover immutable proximity-map conformance cases",
+  "configuration": {
+    "dimensions": 2,
+    "metric": "l2_squared",
+    "scalar_quantization": null
+  },
+  "workflow": [
+    "build",
+    "load",
+    "read_session",
+    "get",
+    "scan_records",
+    "search",
+    "mutate_batch",
+    "rebuild_batch",
+    "verify",
+    "prove_membership",
+    "prove_structure"
+  ],
+  "records": [
+    {"key_hex": "6100", "vector_f32_bits": [0, 2147483648], "value_hex": "ff00"},
+    {"key_hex": "62ff", "vector_f32_bits": [1065353216, 1065353216], "value_hex": "00ff"}
+  ],
+  "packed_page": {
+    "magic": "PRPG",
+    "version": 2,
+    "kind": 7,
+    "distance": "f64-le",
+    "lease_required": true
+  },
+  "error_cases": [
+    "dimension_mismatch",
+    "non_finite_vector",
+    "duplicate_key",
+    "invalid_budget",
+    "unsorted_eligible_keys",
+    "descriptor_mismatch",
+    "closed_fast_handle"
+  ]
+}

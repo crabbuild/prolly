@@ -5,6 +5,8 @@ package prolly
 #include <stdlib.h>
 #include <string.h>
 
+#ifndef PROLLY_GO_CALLBACK_TYPES
+#define PROLLY_GO_CALLBACK_TYPES
 typedef struct RustBuffer {
 	uint64_t capacity;
 	uint64_t len;
@@ -15,6 +17,7 @@ typedef struct RustCallStatus {
 	int8_t code;
 	RustBuffer error_buf;
 } RustCallStatus;
+#endif
 
 extern RustBuffer ffi_prolly_bindings_rustbuffer_alloc(uint64_t size, RustCallStatus *out_err);
 extern void ffi_prolly_bindings_rustbuffer_free(RustBuffer buf, RustCallStatus *out_err);

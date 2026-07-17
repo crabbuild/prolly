@@ -12,6 +12,7 @@ repositories {
 
 dependencies {
     implementation("net.java.dev.jna:jna:5.14.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
     testImplementation("org.junit.jupiter:junit-jupiter:5.11.4")
     testImplementation("com.fasterxml.jackson.core:jackson-databind:2.17.2")
 }

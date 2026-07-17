@@ -1,0 +1,9 @@
+{
+  "protocol_major": 1,
+  "cases": [
+    {"name": "empty-present", "present": true, "hex": ""},
+    {"name": "missing", "present": false, "hex": ""},
+    {"name": "binary", "present": true, "hex": "00ff017f"}
+  ]
+}
+

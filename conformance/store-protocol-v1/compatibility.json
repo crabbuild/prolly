@@ -1,0 +1,98 @@
+{
+  "protocol_major": 1,
+  "languages": {
+    "go": {
+      "sqlite": {
+        "status": "supported",
+        "module": "build.crab/prolly-go/stores/sqlite",
+        "sdk_module": "modernc.org/sqlite",
+        "sdk_version": "v1.54.0",
+        "minimum_go": "1.25.0",
+        "protocol_major": 1,
+        "schema_version": 1,
+        "capabilities": {"native_batch_reads":true,"atomic_batch_writes":true,"node_scan":true,"hints":true,"atomic_nodes_and_hint":true,"root_scan":true,"root_compare_and_swap":true,"transactions":true,"read_parallelism":16},
+        "limits": {"max_batch_read_items":null,"max_batch_write_items":null,"max_transaction_operations":null,"max_node_bytes":null},
+        "evidence": ["cd bindings/go/stores/sqlite && go test -race ./..."]
+      },
+      "postgresql": {
+        "status": "supported",
+        "module": "build.crab/prolly-go/stores/postgres",
+        "sdk_module": "github.com/jackc/pgx/v5",
+        "sdk_version": "v5.10.0",
+        "minimum_go": "1.25.0",
+        "protocol_major": 1,
+        "schema_version": 1,
+        "capabilities": {"native_batch_reads":true,"atomic_batch_writes":true,"node_scan":true,"hints":true,"atomic_nodes_and_hint":true,"root_scan":true,"root_compare_and_swap":true,"transactions":true,"read_parallelism":16},
+        "limits": {"max_batch_read_items":null,"max_batch_write_items":null,"max_transaction_operations":null,"max_node_bytes":null},
+        "evidence": ["PROLLY_POSTGRES_URL=postgres://prolly:prolly@127.0.0.1:55432/prolly?sslmode=disable go test -race ./bindings/go/stores/postgres/..."]
+      },
+      "mysql": {
+        "status": "supported",
+        "module": "build.crab/prolly-go/stores/mysql",
+        "sdk_module": "github.com/go-sql-driver/mysql",
+        "sdk_version": "v1.10.0",
+        "minimum_go": "1.24.0",
+        "protocol_major": 1,
+        "schema_version": 1,
+        "capabilities": {"native_batch_reads":true,"atomic_batch_writes":true,"node_scan":true,"hints":true,"atomic_nodes_and_hint":true,"root_scan":true,"root_compare_and_swap":true,"transactions":true,"read_parallelism":16},
+        "limits": {"max_batch_read_items":null,"max_batch_write_items":null,"max_transaction_operations":null,"max_node_bytes":null},
+        "evidence": ["PROLLY_MYSQL_DSN=prolly:prolly@tcp(127.0.0.1:53306)/prolly?parseTime=true go test -race ./bindings/go/stores/mysql/..."]
+      },
+      "redis": {
+        "status": "supported",
+        "module": "build.crab/prolly-go/stores/redis",
+        "sdk_module": "github.com/redis/go-redis/v9",
+        "sdk_version": "v9.21.0",
+        "minimum_go": "1.24.0",
+        "protocol_major": 1,
+        "schema_version": 1,
+        "capabilities": {"native_batch_reads":true,"atomic_batch_writes":true,"node_scan":true,"hints":true,"atomic_nodes_and_hint":true,"root_scan":true,"root_compare_and_swap":true,"transactions":true,"read_parallelism":16},
+        "limits": {"max_batch_read_items":null,"max_batch_write_items":null,"max_transaction_operations":null,"max_node_bytes":null},
+        "evidence": ["PROLLY_REDIS_ADDR=127.0.0.1:56379 go test -race ./bindings/go/stores/redis/..."]
+      },
+      "dynamodb": {
+        "status": "supported",
+        "module": "build.crab/prolly-go/stores/dynamodb",
+        "sdk_module": "github.com/aws/aws-sdk-go-v2/service/dynamodb",
+        "sdk_version": "v1.60.1",
+        "minimum_go": "1.24.0",
+        "protocol_major": 1,
+        "schema_version": 1,
+        "capabilities": {"native_batch_reads":true,"atomic_batch_writes":false,"node_scan":true,"hints":true,"atomic_nodes_and_hint":false,"root_scan":true,"root_compare_and_swap":true,"transactions":true,"read_parallelism":16},
+        "limits": {"max_batch_read_items":100,"max_batch_write_items":25,"max_transaction_operations":100,"max_node_bytes":null},
+        "evidence": ["PROLLY_DYNAMODB_ENDPOINT=http://127.0.0.1:8000 go test -race ./bindings/go/stores/dynamodb/..."]
+      },
+      "cosmosdb": {
+        "status": "supported",
+        "module": "build.crab/prolly-go/stores/cosmosdb",
+        "sdk_module": "github.com/Azure/azure-sdk-for-go/sdk/data/azcosmos",
+        "sdk_version": "v1.5.0",
+        "minimum_go": "1.25.0",
+        "protocol_major": 1,
+        "schema_version": 1,
+        "capabilities": {"native_batch_reads":false,"atomic_batch_writes":false,"node_scan":true,"hints":true,"atomic_nodes_and_hint":false,"root_scan":true,"root_compare_and_swap":true,"transactions":true,"read_parallelism":16},
+        "limits": {"max_batch_read_items":null,"max_batch_write_items":null,"max_transaction_operations":100,"max_node_bytes":null},
+        "evidence": ["cd bindings/go/stores/cosmosdb && go test -race ./...", "live: PROLLY_COSMOS_ENDPOINT, PROLLY_COSMOS_KEY, and PROLLY_COSMOS_DATABASE"]
+      },
+      "spanner": {
+        "status": "supported",
+        "module": "build.crab/prolly-go/stores/spanner",
+        "sdk_module": "cloud.google.com/go/spanner",
+        "sdk_version": "v1.93.0",
+        "minimum_go": "1.25.0",
+        "protocol_major": 1,
+        "schema_version": 1,
+        "capabilities": {"native_batch_reads":false,"atomic_batch_writes":true,"node_scan":true,"hints":true,"atomic_nodes_and_hint":true,"root_scan":true,"root_compare_and_swap":true,"transactions":true,"read_parallelism":16},
+        "limits": {"max_batch_read_items":null,"max_batch_write_items":null,"max_transaction_operations":null,"max_node_bytes":null},
+        "evidence": ["SPANNER_EMULATOR_HOST=127.0.0.1:9010 go test -race ./bindings/go/stores/spanner/..."]
+      }
+    },
+    "ruby": {
+      "cosmosdb": {"status":"unsupported","reason":"Microsoft does not publish a supported Cosmos DB Ruby client SDK"}
+    },
+    "swift": {
+      "cosmosdb": {"status":"unsupported","reason":"Microsoft does not publish a supported Cosmos DB Swift client SDK"},
+      "spanner": {"status":"unsupported","reason":"Google does not publish a supported Cloud Spanner Swift client SDK"}
+    }
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "encoding": "byte-arrays-are-hex",
+  "scenarios": [
+    {
+      "id": "snapshot-remains-pinned",
+      "map_id": "7573657273",
+      "operations": [
+        { "op": "initialize" },
+        { "op": "put", "key": "616c696365", "value": "616374697665", "capture": "first" },
+        { "op": "snapshot_at", "version": "first", "capture": "snapshot" },
+        { "op": "put", "key": "616c696365", "value": "64697361626c6564" },
+        { "op": "snapshot_get", "snapshot": "snapshot", "key": "616c696365", "expect": "616374697665" },
+        { "op": "get", "key": "616c696365", "expect": "64697361626c6564" }
+      ]
+    },
+    {
+      "id": "stale-conditional-update-conflicts",
+      "map_id": "7573657273",
+      "operations": [
+        { "op": "initialize", "capture": "initial" },
+        { "op": "put", "key": "61", "value": "31", "capture": "head" },
+        { "op": "apply_if", "expected": "initial", "mutations": [], "expect_kind": "conflict", "expect_current": "head" }
+      ]
+    },
+    {
+      "id": "backup-restores-full-catalog",
+      "map_id": "7573657273",
+      "operations": [
+        { "op": "initialize" },
+        { "op": "put", "key": "61", "value": "31" },
+        { "op": "put", "key": "62", "value": "32", "capture": "head" },
+        { "op": "backup", "capture": "backup" },
+        { "op": "restore_into_empty", "backup": "backup", "expect_head": "head", "expect_versions": 3 }
+      ]
+    }
+  ]
+}

@@ -1,15 +1,9 @@
 # Generated Kotlin UniFFI Sources
 
-Generated from `bindings/uniffi` with:
+Generated from `bindings/uniffi` with the repository script:
 
 ```sh
-cargo build --manifest-path bindings/uniffi/Cargo.toml --target-dir target
-VIRTUAL_ENV=/tmp/prolly-uniffi-venv \
-PATH=/tmp/prolly-uniffi-venv/bin:$PATH \
-uniffi-bindgen generate target/debug/libprolly_bindings.dylib \
-  --language kotlin \
-  --out-dir bindings/kotlin/src/main/kotlin/build/crab/prolly/generated \
-  --config bindings/uniffi/uniffi.toml
+scripts/regenerate-kotlin-bindings.sh
 ```
 
 Tool versions used for this snapshot:
@@ -24,3 +18,6 @@ Local adaptation:
 
 - binding error payload fields are exported from Rust as `reason` so generated
   Kotlin does not hide `Throwable.message`.
+- generated async engine and transaction Kotlin type names are prefixed with
+  `RemoteNative` to keep the public coroutine facade unambiguous. The script
+  verifies that this post-processing cannot change Rust FFI symbol names.

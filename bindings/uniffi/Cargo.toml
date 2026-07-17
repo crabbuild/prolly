@@ -20,7 +20,9 @@ default = ["sqlite"]
 sqlite = ["dep:prolly-store-sqlite"]
 
 [dependencies]
-prolly-map = { path = "../.." }
+async-trait = "0.1"
+futures-util = "0.3"
+prolly-map = { path = "../..", features = ["async-store"] }
 prolly-store-sqlite = { path = "../../stores/prolly-store-sqlite", optional = true }
 serde = "1.0"
 serde_json = "1.0"

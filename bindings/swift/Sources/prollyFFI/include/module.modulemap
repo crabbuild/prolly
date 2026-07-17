@@ -1,5 +1,6 @@
 module prollyFFI {
     header "prollyFFI.h"
+    header "prollyFast.h"
     export *
     use "Darwin"
     use "_Builtin_stdbool"

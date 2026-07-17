@@ -635,3 +635,965 @@ export async function loadProllyWasm(
   await module.default();
   return module;
 }
+
+type PortableNative = Record<string, any>;
+
+function ownedPortableBytes(value: Uint8Array): Uint8Array {
+  return Uint8Array.from(value);
+}
+
+function portableAbortError(): Error {
+  const error = new Error("prolly WASM operation aborted");
+  error.name = "AbortError";
+  return error;
+}
+
+async function portablePromise<T>(signal: AbortSignal | undefined, operation: () => T): Promise<T> {
+  if (signal?.aborted) throw portableAbortError();
+  await Promise.resolve();
+  if (signal?.aborted) throw portableAbortError();
+  const result = operation();
+  if (signal?.aborted) throw portableAbortError();
+  return result;
+}
+
+export interface PortableIndexEntry {
+  term: Uint8Array;
+  projection?: Uint8Array;
+}
+
+export interface PortableIndexRegistration {
+  name: Uint8Array;
+  generation: bigint;
+  extractorId: string;
+  projection: "keys_only" | "include" | "all";
+  extract(primaryKey: Uint8Array, sourceValue: Uint8Array): PortableIndexEntry[];
+}
+
+export interface PortableIndexedVersion {
+  sourceVersion: Uint8Array;
+  catalogVersion?: Uint8Array;
+  indexCount: bigint;
+}
+
+export interface PortableIndexBuildResult {
+  sourceVersion: Uint8Array;
+  indexVersion: Uint8Array;
+  catalogVersion: Uint8Array;
+  generation: bigint;
+  entries: bigint;
+  attempts: bigint;
+  activated: boolean;
+}
+
+export type PortableIndexedMutation =
+  | { kind: "upsert"; key: Uint8Array; value: Uint8Array }
+  | { kind: "delete"; key: Uint8Array };
+
+export interface PortableIndexedUpdate {
+  kind: "applied" | "unchanged" | "conflict";
+  previousSourceVersion?: Uint8Array;
+  current?: PortableIndexedVersion;
+}
+
+export interface PortableIndexedSnapshotId {
+  sourceVersion: Uint8Array;
+  catalogVersion: Uint8Array;
+}
+
+export interface PortableIndexVerification {
+  name: Uint8Array;
+  sourceVersion: Uint8Array;
+  expectedIndexVersion: Uint8Array;
+  actualIndexVersion: Uint8Array;
+  expectedEntries: bigint;
+  actualEntries: bigint;
+  semanticDifferences: bigint;
+  valid: boolean;
+  canonical: boolean;
+}
+
+export interface PortableIndexedMapHealth {
+  sourceMapId: Uint8Array;
+  sourceVersion?: Uint8Array;
+  catalogVersion?: Uint8Array;
+  activeIndexes: Array<{
+    name: Uint8Array; generation: bigint; fingerprint: Uint8Array;
+    projection: "keys_only" | "include" | "all";
+    indexMapId: Uint8Array; indexVersion: Uint8Array;
+  }>;
+  supportsTransactions: boolean;
+}
+
+export interface PortableIndexedMapMetrics {
+  normalizedSourceMutations: bigint;
+  recordsExtracted: bigint;
+  termsEmitted: bigint;
+  projectedBytes: bigint;
+  physicalUpserts: bigint;
+  physicalDeletes: bigint;
+  unchangedEmissionsSkipped: bigint;
+  sourceNodesWritten: bigint;
+  indexNodesWritten: bigint;
+  catalogNodesWritten: bigint;
+  retries: bigint;
+  buildAttempts: bigint;
+  verificationOutcomes: bigint;
+  retainedRoots: bigint;
+}
+
+export interface PortableIndexedRetention {
+  retainedSourceVersions: Uint8Array[];
+  removedSourceVersions: Uint8Array[];
+  retainedIndexVersions: Uint8Array[];
+  removedIndexVersions: Uint8Array[];
+  removedCatalogVersions: Uint8Array[];
+  removedCheckpointRecords: bigint;
+  removedNamedRoots: Uint8Array[];
+}
+
+export interface PortableIndexMatch {
+  term: Uint8Array;
+  primaryKey: Uint8Array;
+  projection?: Uint8Array;
+}
+
+export interface PortableIndexedSource extends PortableIndexMatch {
+  sourceValue: Uint8Array;
+}
+
+export interface PortableIndexPage {
+  matches: PortableIndexMatch[];
+  nextCursor?: Uint8Array;
+}
+
+export interface PortableIndexPageOptions {
+  pageSize?: number;
+  signal?: AbortSignal;
+}
+
+export interface PortableProximityRecord {
+  key: Uint8Array;
+  vector: Float32Array;
+  value?: Uint8Array;
+}
+
+export interface PortableSearchRequest {
+  vector: Float32Array;
+  topK: number;
+  policy: "exact";
+  signal?: AbortSignal;
+}
+
+export interface PortableSearchResult {
+  neighbors: Array<{ key: Uint8Array; value: Uint8Array; distance: number }>;
+  completion: string;
+  backend: string;
+}
+
+export interface PortableProximityConfig {
+  dimensions: number;
+  metric: "l2_squared" | "cosine" | "inner_product";
+  logChunkSize: number;
+  levelHashSeed: bigint;
+  minPageBytes: number;
+  targetPageBytes: number;
+  maxPageBytes: number;
+  overflowHashSeed: bigint;
+  inlineThresholdBytes: number;
+  scalarQuantizationGroupSize?: number;
+}
+
+export interface PortableProximityMutation {
+  key: Uint8Array;
+  vector?: Float32Array;
+  value?: Uint8Array;
+}
+
+export interface PortableProximityVerification {
+  recordCount: bigint;
+  proximityNodeCount: bigint;
+  externalVectorCount: bigint;
+  quantizedNodeCount: bigint;
+  scalarQuantizerCount: bigint;
+  overflowPageCount: bigint;
+  overflowDirectoryCount: bigint;
+  maximumLevel: number;
+  maximumNodeBytes: bigint;
+  distanceChecks: bigint;
+}
+
+export class WasmViewExpiredError extends Error {
+  constructor() {
+    super("scoped WASM view has expired");
+    this.name = "WasmViewExpiredError";
+  }
+}
+
+function scopedPortableBytes(value: Uint8Array, scope: { alive: boolean }): Uint8Array {
+  return new Proxy(value, {
+    get(target, property) {
+      if (!scope.alive) throw new WasmViewExpiredError();
+      const member = Reflect.get(target, property, target);
+      return typeof member === "function" ? member.bind(target) : member;
+    },
+    set() { throw new TypeError("scoped WASM views are read-only"); },
+  });
+}
+
+export class Engine implements Disposable {
+  #module?: PortableNative;
+  #native?: any;
+
+  private constructor(module: PortableNative, native: any) {
+    this.#module = module;
+    this.#native = native;
+  }
+
+  static memory(module: PortableNative): Engine {
+    return new Engine(module, module.WasmProllyEngine.memory());
+  }
+
+  static file(_module: PortableNative, _path: string): never {
+    throw new Error("filesystem engines are unsupported in WASM");
+  }
+
+  static sqlite(_module: PortableNative, _path: string): never {
+    throw new Error("SQLite engines are unsupported in WASM");
+  }
+
+  #open(): any {
+    if (this.#native == null) throw new Error("WASM engine is closed");
+    return this.#native;
+  }
+
+  versionedMap(id: Uint8Array): WasmVersionedMap {
+    return new WasmVersionedMap(this.#open().versionedMap(ownedPortableBytes(id)));
+  }
+
+  indexRegistry(): WasmIndexRegistry {
+    return new WasmIndexRegistry(this.#open().indexRegistry());
+  }
+
+  indexedMap(id: Uint8Array, registry: WasmIndexRegistry): WasmIndexedMap {
+    return new WasmIndexedMap(
+      this.#open().indexedMap(ownedPortableBytes(id), registry.nativeHandle()),
+    );
+  }
+
+  buildProximity(
+    dimensions: number,
+    records: PortableProximityRecord[],
+    signal?: AbortSignal,
+  ): Promise<WasmProximityMap> {
+    const native = this.#open();
+    const owned = records.map((record) => ({
+      key: ownedPortableBytes(record.key),
+      vector: new Float32Array(record.vector),
+      value: ownedPortableBytes(record.value ?? new Uint8Array()),
+    }));
+    return portablePromise(signal, () =>
+      new WasmProximityMap(native.buildProximity(dimensions, owned)));
+  }
+
+  close(): void {
+    this.#native?.free?.();
+    this.#native = undefined;
+    this.#module = undefined;
+  }
+
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export interface WasmMapVersion {
+  id: Uint8Array;
+  createdAtMillis?: bigint;
+  isHead: boolean;
+}
+
+export interface WasmMapMutation {
+  kind: "upsert" | "delete";
+  key: Uint8Array;
+  value?: Uint8Array;
+}
+
+export interface WasmMapUpdate {
+  kind: "applied" | "unchanged" | "conflict";
+  previous?: Uint8Array;
+  current?: WasmMapVersion;
+}
+
+export interface WasmVersionPrune {
+  retained: Uint8Array[];
+  removed: Uint8Array[];
+}
+
+function wasmMapVersion(value: any): WasmMapVersion {
+  return {
+    id: value.id,
+    createdAtMillis: value.createdAtMillis == null ? undefined : BigInt(value.createdAtMillis),
+    isHead: value.isHead,
+  };
+}
+
+function wasmMapUpdate(value: any): WasmMapUpdate {
+  return {
+    kind: value.kind,
+    previous: value.previous ?? undefined,
+    current: value.current == null ? undefined : wasmMapVersion(value.current),
+  };
+}
+
+function ownedWasmMutations(mutations: readonly WasmMapMutation[]): WasmMapMutation[] {
+  return mutations.map((mutation) => ({
+    kind: mutation.kind,
+    key: ownedPortableBytes(mutation.key),
+    value: mutation.value == null ? undefined : ownedPortableBytes(mutation.value),
+  }));
+}
+
+export class WasmVersionedMap implements Disposable {
+  #native?: any;
+  constructor(native: any) { this.#native = native; }
+  #open(): any {
+    if (this.#native == null) throw new Error("WASM versioned map is closed");
+    return this.#native;
+  }
+  id(): Uint8Array { return this.#open().id(); }
+  isInitialized(signal?: AbortSignal): Promise<boolean> {
+    const native = this.#open();
+    return portablePromise(signal, () => native.isInitialized());
+  }
+  initialize(signal?: AbortSignal): Promise<WasmMapVersion> {
+    const native = this.#open();
+    return portablePromise(signal, () => wasmMapVersion(native.initialize()));
+  }
+  head(signal?: AbortSignal): Promise<WasmMapVersion | undefined> {
+    const native = this.#open();
+    return portablePromise(signal, () => {
+      const value = native.head();
+      return value == null ? undefined : wasmMapVersion(value);
+    });
+  }
+  headId(signal?: AbortSignal): Promise<Uint8Array | undefined> {
+    const native = this.#open();
+    return portablePromise(signal, () => native.headId() ?? undefined);
+  }
+  version(id: Uint8Array, signal?: AbortSignal): Promise<WasmMapVersion | undefined> {
+    const native = this.#open(); id = ownedPortableBytes(id);
+    return portablePromise(signal, () => {
+      const value = native.version(id);
+      return value == null ? undefined : wasmMapVersion(value);
+    });
+  }
+  versions(signal?: AbortSignal): Promise<WasmMapVersion[]> {
+    const native = this.#open();
+    return portablePromise(signal, () => native.versions().map(wasmMapVersion));
+  }
+  get(key: Uint8Array, signal?: AbortSignal): Promise<Uint8Array | undefined> {
+    const native = this.#open(); key = ownedPortableBytes(key);
+    return portablePromise(signal, () => native.get(key) ?? undefined);
+  }
+  containsKey(key: Uint8Array, signal?: AbortSignal): Promise<boolean> {
+    const native = this.#open(); key = ownedPortableBytes(key);
+    return portablePromise(signal, () => native.containsKey(key));
+  }
+  getMany(keys: readonly Uint8Array[], signal?: AbortSignal): Promise<Array<Uint8Array | undefined>> {
+    const native = this.#open(); const owned = keys.map(ownedPortableBytes);
+    return portablePromise(signal, () => native.getMany(owned).map((value: Uint8Array | null) => value ?? undefined));
+  }
+  getAt(id: Uint8Array, key: Uint8Array, signal?: AbortSignal): Promise<Uint8Array | undefined> {
+    const native = this.#open(); id = ownedPortableBytes(id); key = ownedPortableBytes(key);
+    return portablePromise(signal, () => native.getAt(id, key) ?? undefined);
+  }
+  getManyAt(id: Uint8Array, keys: readonly Uint8Array[], signal?: AbortSignal): Promise<Array<Uint8Array | undefined>> {
+    const native = this.#open(); id = ownedPortableBytes(id); const owned = keys.map(ownedPortableBytes);
+    return portablePromise(signal, () => native.getManyAt(id, owned).map((value: Uint8Array | null) => value ?? undefined));
+  }
+  put(key: Uint8Array, value: Uint8Array, signal?: AbortSignal): Promise<WasmMapVersion> {
+    const native = this.#open(); key = ownedPortableBytes(key); value = ownedPortableBytes(value);
+    return portablePromise(signal, () => wasmMapVersion(native.put(key, value)));
+  }
+  apply(mutations: readonly WasmMapMutation[], signal?: AbortSignal): Promise<WasmMapVersion> {
+    const native = this.#open(); const owned = ownedWasmMutations(mutations);
+    return portablePromise(signal, () => wasmMapVersion(native.apply(owned)));
+  }
+  applyIf(expected: Uint8Array | undefined, mutations: readonly WasmMapMutation[], signal?: AbortSignal): Promise<WasmMapUpdate> {
+    const native = this.#open();
+    const ownedExpected = expected == null ? undefined : ownedPortableBytes(expected);
+    const owned = ownedWasmMutations(mutations);
+    return portablePromise(signal, () => wasmMapUpdate(native.applyIf(ownedExpected, owned)));
+  }
+  putIf(expected: Uint8Array | undefined, key: Uint8Array, value: Uint8Array, signal?: AbortSignal): Promise<WasmMapUpdate> {
+    const native = this.#open();
+    const ownedExpected = expected == null ? undefined : ownedPortableBytes(expected);
+    key = ownedPortableBytes(key); value = ownedPortableBytes(value);
+    return portablePromise(signal, () => wasmMapUpdate(native.putIf(ownedExpected, key, value)));
+  }
+  deleteIf(expected: Uint8Array | undefined, key: Uint8Array, signal?: AbortSignal): Promise<WasmMapUpdate> {
+    const native = this.#open();
+    const ownedExpected = expected == null ? undefined : ownedPortableBytes(expected); key = ownedPortableBytes(key);
+    return portablePromise(signal, () => wasmMapUpdate(native.deleteIf(ownedExpected, key)));
+  }
+  delete(key: Uint8Array, signal?: AbortSignal): Promise<WasmMapVersion> {
+    const native = this.#open(); key = ownedPortableBytes(key);
+    return portablePromise(signal, () => wasmMapVersion(native.delete(key)));
+  }
+  snapshot(signal?: AbortSignal): Promise<WasmMapSnapshot | undefined> {
+    const native = this.#open();
+    return portablePromise(signal, () => {
+      const value = native.snapshot();
+      return value == null ? undefined : new WasmMapSnapshot(value);
+    });
+  }
+  snapshotAt(id: Uint8Array, signal?: AbortSignal): Promise<WasmMapSnapshot | undefined> {
+    const native = this.#open(); id = ownedPortableBytes(id);
+    return portablePromise(signal, () => {
+      const value = native.snapshotAt(id);
+      return value == null ? undefined : new WasmMapSnapshot(value);
+    });
+  }
+  backup(signal?: AbortSignal): Promise<Uint8Array> {
+    const native = this.#open();
+    return portablePromise(signal, () => native.backup());
+  }
+  restoreBackup(bytes: Uint8Array, signal?: AbortSignal): Promise<WasmMapVersion> {
+    const native = this.#open(); bytes = ownedPortableBytes(bytes);
+    return portablePromise(signal, () => wasmMapVersion(native.restoreBackup(bytes)));
+  }
+  keepLast(count: number, signal?: AbortSignal): Promise<WasmVersionPrune> {
+    if (!Number.isSafeInteger(count) || count < 0 || count > 0xffff_ffff) {
+      return Promise.reject(new RangeError("keepLast count must be a non-negative uint32"));
+    }
+    const native = this.#open();
+    return portablePromise(signal, () => native.keepLast(count));
+  }
+  verifyCatalog(): { itemCount: bigint; byteCount: bigint } {
+    const value = this.#open().verifyCatalog();
+    return { itemCount: BigInt(value.itemCount), byteCount: BigInt(value.byteCount) };
+  }
+  planGc(): { itemCount: bigint; byteCount: bigint } {
+    const value = this.#open().planGc();
+    return { itemCount: BigInt(value.itemCount), byteCount: BigInt(value.byteCount) };
+  }
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class WasmMapSnapshot implements Disposable {
+  #native?: any;
+  constructor(native: any) { this.#native = native; }
+  #open(): any { if (this.#native == null) throw new Error("WASM map snapshot is closed"); return this.#native; }
+  id(): Uint8Array { return this.#open().id(); }
+  version(): WasmMapVersion { return wasmMapVersion(this.#open().version()); }
+  get(key: Uint8Array): Uint8Array | undefined { return this.#open().get(ownedPortableBytes(key)) ?? undefined; }
+  getMany(keys: readonly Uint8Array[]): Array<Uint8Array | undefined> {
+    return this.#open().getMany(keys.map(ownedPortableBytes)).map(
+      (value: Uint8Array | null) => value ?? undefined,
+    );
+  }
+  containsKey(key: Uint8Array): boolean { return this.#open().containsKey(ownedPortableBytes(key)); }
+  firstEntry(): WasmEntryRecord | undefined { return this.#open().firstEntry() ?? undefined; }
+  lastEntry(): WasmEntryRecord | undefined { return this.#open().lastEntry() ?? undefined; }
+  lowerBound(key: Uint8Array): WasmEntryRecord | undefined {
+    return this.#open().lowerBound(ownedPortableBytes(key)) ?? undefined;
+  }
+  upperBound(key: Uint8Array): WasmEntryRecord | undefined {
+    return this.#open().upperBound(ownedPortableBytes(key)) ?? undefined;
+  }
+  range(start: Uint8Array = new Uint8Array(), end?: Uint8Array): WasmEntryRecord[] {
+    return this.#open().range(
+      ownedPortableBytes(start), end == null ? undefined : ownedPortableBytes(end),
+    );
+  }
+  prefix(prefix: Uint8Array): WasmEntryRecord[] {
+    return this.#open().prefix(ownedPortableBytes(prefix));
+  }
+  rangePage(
+    cursor?: WasmRangeCursorRecord,
+    end?: Uint8Array,
+    limit = 256,
+  ): WasmRangePageRecord {
+    return this.#open().rangePage(
+      cursor, end == null ? undefined : ownedPortableBytes(end), limit,
+    );
+  }
+  prefixPage(
+    prefix: Uint8Array,
+    cursor?: WasmRangeCursorRecord,
+    limit = 256,
+  ): WasmRangePageRecord {
+    return this.#open().prefixPage(ownedPortableBytes(prefix), cursor, limit);
+  }
+  reversePage(
+    cursor?: WasmReverseCursorRecord,
+    start: Uint8Array = new Uint8Array(),
+    limit = 256,
+  ): WasmReversePageRecord {
+    return this.#open().reversePage(cursor, ownedPortableBytes(start), limit);
+  }
+  prefixReversePage(
+    prefix: Uint8Array,
+    cursor?: WasmReverseCursorRecord,
+    limit = 256,
+  ): WasmReversePageRecord {
+    return this.#open().prefixReversePage(ownedPortableBytes(prefix), cursor, limit);
+  }
+  proveKey(key: Uint8Array): WasmKeyProof { return new WasmKeyProof(this.#open().proveKey(ownedPortableBytes(key))); }
+  stats(): { itemCount: bigint; byteCount: bigint } {
+    const value = this.#open().stats(); return { itemCount: BigInt(value.itemCount), byteCount: BigInt(value.byteCount) };
+  }
+  exportSummary(): { itemCount: bigint; byteCount: bigint } {
+    const value = this.#open().export(); return { itemCount: BigInt(value.itemCount), byteCount: BigInt(value.byteCount) };
+  }
+  read(): WasmReadSession { return new WasmReadSession(this.#open().read()); }
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class WasmReadSession implements Disposable {
+  #native?: any;
+  constructor(native: any) { this.#native = native; }
+  get(key: Uint8Array): Uint8Array | undefined {
+    if (this.#native == null) throw new Error("WASM read session is closed");
+    return this.#native.get(ownedPortableBytes(key)) ?? undefined;
+  }
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class WasmKeyProof implements Disposable {
+  #native?: any;
+  constructor(native: any) { this.#native = native; }
+  verify(): { valid: boolean; exists: boolean; value?: Uint8Array } {
+    if (this.#native == null) throw new Error("WASM key proof is closed");
+    return this.#native.verify();
+  }
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class WasmIndexRegistry implements Disposable {
+  #native?: any;
+  constructor(native: any) { this.#native = native; }
+  nativeHandle(): any {
+    if (this.#native == null) throw new Error("WASM index registry is closed");
+    return this.#native;
+  }
+  register(registration: PortableIndexRegistration): void {
+    this.nativeHandle().register(
+      ownedPortableBytes(registration.name), registration.generation,
+      registration.extractorId, registration.projection,
+      (key: Uint8Array, value: Uint8Array) => registration.extract(key, value).map((entry) => ({
+        term: ownedPortableBytes(entry.term),
+        projection: entry.projection == null ? undefined : ownedPortableBytes(entry.projection),
+      })),
+    );
+  }
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+function portableIndexedVersion(value: any): PortableIndexedVersion {
+  return {
+    sourceVersion: value.sourceVersion,
+    catalogVersion: value.catalogVersion,
+    indexCount: BigInt(value.indexCount),
+  };
+}
+
+function portableIndexedUpdate(value: any): PortableIndexedUpdate {
+  return {
+    kind: value.kind,
+    previousSourceVersion: value.previousSourceVersion,
+    current: value.current == null ? undefined : portableIndexedVersion(value.current),
+  };
+}
+
+function portableIndexVerification(value: any): PortableIndexVerification {
+  return {
+    name: value.name, sourceVersion: value.sourceVersion,
+    expectedIndexVersion: value.expectedIndexVersion, actualIndexVersion: value.actualIndexVersion,
+    expectedEntries: BigInt(value.expectedEntries), actualEntries: BigInt(value.actualEntries),
+    semanticDifferences: BigInt(value.semanticDifferences), valid: value.valid, canonical: value.canonical,
+  };
+}
+
+function ownPortableIndexedMutations(mutations: readonly PortableIndexedMutation[]) {
+  return mutations.map((mutation) => ({
+    kind: mutation.kind,
+    key: ownedPortableBytes(mutation.key),
+    value: mutation.kind === "upsert" ? ownedPortableBytes(mutation.value) : undefined,
+  }));
+}
+
+export class WasmIndexedMap implements Disposable {
+  #native?: any;
+  constructor(native: any) { this.#native = native; }
+  #open(): any {
+    if (this.#native == null) throw new Error("WASM indexed map is closed");
+    return this.#native;
+  }
+  id(): Uint8Array { return this.#open().id(); }
+  get(key: Uint8Array, signal?: AbortSignal): Promise<Uint8Array | undefined> {
+    const native = this.#open(); key = ownedPortableBytes(key);
+    return portablePromise(signal, () => native.get(key) ?? undefined);
+  }
+  put(key: Uint8Array, value: Uint8Array, signal?: AbortSignal): Promise<PortableIndexedVersion> {
+    const native = this.#open(); key = ownedPortableBytes(key); value = ownedPortableBytes(value);
+    return portablePromise(signal, () => portableIndexedVersion(native.put(key, value)));
+  }
+  apply(mutations: readonly PortableIndexedMutation[], signal?: AbortSignal): Promise<PortableIndexedVersion> {
+    const native = this.#open(); const owned = ownPortableIndexedMutations(mutations);
+    return portablePromise(signal, () => portableIndexedVersion(native.apply(owned)));
+  }
+  applyIf(expectedSource: Uint8Array | undefined, mutations: readonly PortableIndexedMutation[], signal?: AbortSignal): Promise<PortableIndexedUpdate> {
+    const native = this.#open();
+    expectedSource = expectedSource == null ? undefined : ownedPortableBytes(expectedSource);
+    const owned = ownPortableIndexedMutations(mutations);
+    return portablePromise(signal, () => portableIndexedUpdate(native.applyIf(expectedSource, owned)));
+  }
+  delete(key: Uint8Array, signal?: AbortSignal): Promise<PortableIndexedVersion> {
+    const native = this.#open(); key = ownedPortableBytes(key);
+    return portablePromise(signal, () => portableIndexedVersion(native.delete(key)));
+  }
+  ensureIndex(name: Uint8Array, signal?: AbortSignal): Promise<PortableIndexBuildResult> {
+    const native = this.#open(); name = ownedPortableBytes(name);
+    return portablePromise(signal, () => {
+      const value = native.ensureIndex(name);
+      return {
+        sourceVersion: value.sourceVersion, indexVersion: value.indexVersion,
+        catalogVersion: value.catalogVersion, generation: BigInt(value.generation),
+        entries: BigInt(value.entries), attempts: BigInt(value.attempts), activated: value.activated,
+      };
+    });
+  }
+  snapshot(signal?: AbortSignal): Promise<WasmIndexedSnapshot> {
+    const native = this.#open();
+    return portablePromise(signal, () => new WasmIndexedSnapshot(native.snapshot()));
+  }
+  snapshotAt(sourceVersion: Uint8Array, signal?: AbortSignal): Promise<WasmIndexedSnapshot> {
+    const native = this.#open(); sourceVersion = ownedPortableBytes(sourceVersion);
+    return portablePromise(signal, () => new WasmIndexedSnapshot(native.snapshotAt(sourceVersion)));
+  }
+  snapshotById(id: PortableIndexedSnapshotId, signal?: AbortSignal): Promise<WasmIndexedSnapshot> {
+    const native = this.#open();
+    const source = ownedPortableBytes(id.sourceVersion);
+    const catalog = ownedPortableBytes(id.catalogVersion);
+    return portablePromise(signal, () => new WasmIndexedSnapshot(native.snapshotById(source, catalog)));
+  }
+  health(): PortableIndexedMapHealth {
+    const value = this.#open().health();
+    return {
+      sourceMapId: value.sourceMapId, sourceVersion: value.sourceVersion,
+      catalogVersion: value.catalogVersion, supportsTransactions: value.supportsTransactions,
+      activeIndexes: value.activeIndexes.map((index: any) => ({
+        name: index.name, generation: BigInt(index.generation), fingerprint: index.fingerprint,
+        projection: index.projection, indexMapId: index.indexMapId, indexVersion: index.indexVersion,
+      })),
+    };
+  }
+  metrics(): PortableIndexedMapMetrics {
+    const value = this.#open().metrics();
+    return Object.fromEntries(Object.entries(value).map(([key, count]) => [key, BigInt(count as string)])) as unknown as PortableIndexedMapMetrics;
+  }
+  verifyIndex(name: Uint8Array, sourceVersion: Uint8Array): PortableIndexVerification {
+    return portableIndexVerification(this.#open().verifyIndex(ownedPortableBytes(name), ownedPortableBytes(sourceVersion)));
+  }
+  verifyAll(sourceVersion: Uint8Array): PortableIndexVerification[] {
+    return this.#open().verifyAll(ownedPortableBytes(sourceVersion)).map(portableIndexVerification);
+  }
+  repairIndex(name: Uint8Array, sourceVersion: Uint8Array): PortableIndexVerification {
+    return portableIndexVerification(this.#open().repairIndex(ownedPortableBytes(name), ownedPortableBytes(sourceVersion)));
+  }
+  deactivateIndex(name: Uint8Array, signal?: AbortSignal): Promise<PortableIndexedVersion> {
+    const native = this.#open(); name = ownedPortableBytes(name);
+    return portablePromise(signal, () => portableIndexedVersion(native.deactivateIndex(name)));
+  }
+  exportCurrent(): Uint8Array { return this.#open().exportCurrent(); }
+  importCurrent(bundle: Uint8Array, expectedSource?: Uint8Array, signal?: AbortSignal): Promise<PortableIndexedVersion> {
+    const native = this.#open(); bundle = ownedPortableBytes(bundle);
+    expectedSource = expectedSource == null ? undefined : ownedPortableBytes(expectedSource);
+    return portablePromise(signal, () => portableIndexedVersion(native.importCurrent(bundle, expectedSource)));
+  }
+  keepLast(count: bigint): PortableIndexedRetention {
+    const value = this.#open().keepLast(count);
+    return {
+      retainedSourceVersions: value.retainedSourceVersions,
+      removedSourceVersions: value.removedSourceVersions,
+      retainedIndexVersions: value.retainedIndexVersions,
+      removedIndexVersions: value.removedIndexVersions,
+      removedCatalogVersions: value.removedCatalogVersions,
+      removedCheckpointRecords: BigInt(value.removedCheckpointRecords),
+      removedNamedRoots: value.removedNamedRoots,
+    };
+  }
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class WasmIndexedSnapshot implements Disposable {
+  #native?: any;
+  constructor(native: any) { this.#native = native; }
+  #open(): any {
+    if (this.#native == null) throw new Error("WASM indexed snapshot is closed");
+    return this.#native;
+  }
+  id(): PortableIndexedSnapshotId { return this.#open().id(); }
+  index(name: Uint8Array): WasmSecondaryIndex {
+    return new WasmSecondaryIndex(this.#open().index(ownedPortableBytes(name)));
+  }
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class WasmSecondaryIndex implements Disposable {
+  #native?: any;
+  constructor(native: any) { this.#native = native; }
+  #open(): any {
+    if (this.#native == null) throw new Error("WASM secondary index is closed");
+    return this.#native;
+  }
+  name(): Uint8Array { return this.#open().name(); }
+  exact(term: Uint8Array, signal?: AbortSignal): Promise<PortableIndexMatch[]> {
+    const native = this.#open(); term = ownedPortableBytes(term);
+    return portablePromise(signal, () => native.exact(term));
+  }
+  prefix(prefix: Uint8Array, signal?: AbortSignal): Promise<PortableIndexMatch[]> {
+    const native = this.#open(); prefix = ownedPortableBytes(prefix);
+    return portablePromise(signal, () => native.prefix(prefix));
+  }
+  range(start: Uint8Array, end?: Uint8Array, signal?: AbortSignal): Promise<PortableIndexMatch[]> {
+    const native = this.#open(); start = ownedPortableBytes(start);
+    end = end == null ? undefined : ownedPortableBytes(end);
+    return portablePromise(signal, () => native.range(start, end));
+  }
+  records(term: Uint8Array, signal?: AbortSignal): Promise<PortableIndexedSource[]> {
+    const native = this.#open(); term = ownedPortableBytes(term);
+    return portablePromise(signal, () => native.records(term));
+  }
+  exactPage(term: Uint8Array, cursor: Uint8Array | undefined, limit: bigint, signal?: AbortSignal): Promise<PortableIndexPage> {
+    const native = this.#open(); term = ownedPortableBytes(term);
+    cursor = cursor == null ? undefined : ownedPortableBytes(cursor);
+    return portablePromise(signal, () => native.exactPage(term, cursor, limit));
+  }
+  exactReversePage(term: Uint8Array, cursor: Uint8Array | undefined, limit: bigint, signal?: AbortSignal): Promise<PortableIndexPage> {
+    const native = this.#open(); term = ownedPortableBytes(term);
+    cursor = cursor == null ? undefined : ownedPortableBytes(cursor);
+    return portablePromise(signal, () => native.exactReversePage(term, cursor, limit));
+  }
+  prefixPage(prefix: Uint8Array, cursor: Uint8Array | undefined, limit: bigint, signal?: AbortSignal): Promise<PortableIndexPage> {
+    const native = this.#open(); prefix = ownedPortableBytes(prefix);
+    cursor = cursor == null ? undefined : ownedPortableBytes(cursor);
+    return portablePromise(signal, () => native.prefixPage(prefix, cursor, limit));
+  }
+  prefixReversePage(prefix: Uint8Array, cursor: Uint8Array | undefined, limit: bigint, signal?: AbortSignal): Promise<PortableIndexPage> {
+    const native = this.#open(); prefix = ownedPortableBytes(prefix);
+    cursor = cursor == null ? undefined : ownedPortableBytes(cursor);
+    return portablePromise(signal, () => native.prefixReversePage(prefix, cursor, limit));
+  }
+  rangePage(start: Uint8Array, end: Uint8Array | undefined, cursor: Uint8Array | undefined, limit: bigint, signal?: AbortSignal): Promise<PortableIndexPage> {
+    const native = this.#open(); start = ownedPortableBytes(start);
+    end = end == null ? undefined : ownedPortableBytes(end);
+    cursor = cursor == null ? undefined : ownedPortableBytes(cursor);
+    return portablePromise(signal, () => native.rangePage(start, end, cursor, limit));
+  }
+  rangeReversePage(start: Uint8Array, end: Uint8Array | undefined, cursor: Uint8Array | undefined, limit: bigint, signal?: AbortSignal): Promise<PortableIndexPage> {
+    const native = this.#open(); start = ownedPortableBytes(start);
+    end = end == null ? undefined : ownedPortableBytes(end);
+    cursor = cursor == null ? undefined : ownedPortableBytes(cursor);
+    return portablePromise(signal, () => native.rangeReversePage(start, end, cursor, limit));
+  }
+  async *#pages(
+    next: (cursor: Uint8Array | undefined, limit: bigint) => Promise<PortableIndexPage>,
+    options: PortableIndexPageOptions,
+  ): AsyncIterable<PortableIndexMatch[]> {
+    const pageSize = options.pageSize ?? 256;
+    if (!Number.isSafeInteger(pageSize) || pageSize <= 0) {
+      throw new RangeError("WASM index pageSize must be a positive safe integer");
+    }
+    let cursor: Uint8Array | undefined;
+    do {
+      const page = await next(cursor, BigInt(pageSize));
+      yield page.matches;
+      cursor = page.nextCursor;
+    } while (cursor != null);
+  }
+  exactPages(term: Uint8Array, options: PortableIndexPageOptions = {}): AsyncIterable<PortableIndexMatch[]> {
+    term = ownedPortableBytes(term);
+    return this.#pages((cursor, limit) => this.exactPage(term, cursor, limit, options.signal), options);
+  }
+  exactReversePages(term: Uint8Array, options: PortableIndexPageOptions = {}): AsyncIterable<PortableIndexMatch[]> {
+    term = ownedPortableBytes(term);
+    return this.#pages((cursor, limit) => this.exactReversePage(term, cursor, limit, options.signal), options);
+  }
+  prefixPages(prefix: Uint8Array, options: PortableIndexPageOptions = {}): AsyncIterable<PortableIndexMatch[]> {
+    prefix = ownedPortableBytes(prefix);
+    return this.#pages((cursor, limit) => this.prefixPage(prefix, cursor, limit, options.signal), options);
+  }
+  prefixReversePages(prefix: Uint8Array, options: PortableIndexPageOptions = {}): AsyncIterable<PortableIndexMatch[]> {
+    prefix = ownedPortableBytes(prefix);
+    return this.#pages((cursor, limit) => this.prefixReversePage(prefix, cursor, limit, options.signal), options);
+  }
+  rangePages(start: Uint8Array, end?: Uint8Array, options: PortableIndexPageOptions = {}): AsyncIterable<PortableIndexMatch[]> {
+    start = ownedPortableBytes(start); end = end == null ? undefined : ownedPortableBytes(end);
+    return this.#pages((cursor, limit) => this.rangePage(start, end, cursor, limit, options.signal), options);
+  }
+  rangeReversePages(start: Uint8Array, end?: Uint8Array, options: PortableIndexPageOptions = {}): AsyncIterable<PortableIndexMatch[]> {
+    start = ownedPortableBytes(start); end = end == null ? undefined : ownedPortableBytes(end);
+    return this.#pages((cursor, limit) => this.rangeReversePage(start, end, cursor, limit, options.signal), options);
+  }
+  async exactView(
+    term: Uint8Array,
+    visit: (row: PortableIndexMatch) => boolean | void,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    for await (const rows of this.exactPages(term, { signal })) {
+      for (const row of rows) {
+        const scope = { alive: true };
+        try {
+          if (visit({
+            term: scopedPortableBytes(row.term, scope),
+            primaryKey: scopedPortableBytes(row.primaryKey, scope),
+            projection: row.projection == null
+              ? undefined : scopedPortableBytes(row.projection, scope),
+          }) === false) return;
+        } finally {
+          scope.alive = false;
+        }
+      }
+    }
+  }
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class WasmProximityMap implements Disposable {
+  #native?: any;
+  constructor(native: any) { this.#native = native; }
+  nativeHandle(): any {
+    if (this.#native == null) throw new Error("WASM proximity map is closed");
+    return this.#native;
+  }
+  read(): WasmProximityReadSession {
+    return new WasmProximityReadSession(this.nativeHandle().read());
+  }
+  search(request: PortableSearchRequest): Promise<PortableSearchResult> {
+    return this.read().search(request);
+  }
+  get(key: Uint8Array): { vector: Float32Array; value: Uint8Array } | undefined {
+    return this.nativeHandle().get(ownedPortableBytes(key)) ?? undefined;
+  }
+  contains(key: Uint8Array): boolean { return this.nativeHandle().contains(ownedPortableBytes(key)); }
+  count(): bigint { return BigInt(this.nativeHandle().count()); }
+  config(): PortableProximityConfig { return this.nativeHandle().config(); }
+  mutate(mutations: PortableProximityMutation[]): {
+    map: WasmProximityMap;
+    stats: {
+      directoryEntriesScanned: bigint; directoryNodesRead: bigint;
+      directoryNodesRebuilt: bigint; directoryNodesWritten: bigint;
+      directoryNodesReused: bigint; directoryLevelsRebuilt: bigint;
+      directoryRightEdgeRebuilt: boolean;
+      recordsRebuilt: bigint; nodesRead: bigint; nodesWritten: bigint; nodesReused: bigint;
+      distanceEvaluations: bigint; fullProximityRebuild: boolean;
+    };
+  } {
+    const result = this.nativeHandle().mutate(mutations.map((mutation) => ({
+      key: ownedPortableBytes(mutation.key),
+      vector: mutation.vector == null ? undefined : new Float32Array(mutation.vector),
+      value: mutation.value == null ? undefined : ownedPortableBytes(mutation.value),
+    })));
+    return { map: new WasmProximityMap(result.map), stats: result.stats };
+  }
+  rebuild(mutations: PortableProximityMutation[]): WasmProximityMap {
+    return new WasmProximityMap(this.nativeHandle().rebuild(mutations.map((mutation) => ({
+      key: ownedPortableBytes(mutation.key),
+      vector: mutation.vector == null ? undefined : new Float32Array(mutation.vector),
+      value: mutation.value == null ? undefined : ownedPortableBytes(mutation.value),
+    }))));
+  }
+  descriptor(): Uint8Array { return this.nativeHandle().descriptor(); }
+  verify(): PortableProximityVerification { return this.nativeHandle().verify(); }
+  proveMembership(key: Uint8Array): WasmProximityProof {
+    return new WasmProximityProof(this.nativeHandle().proveMembership(ownedPortableBytes(key)));
+  }
+  proveSearch(vector: Float32Array, topK: number): WasmProximitySearchProof {
+    return new WasmProximitySearchProof(
+      this.nativeHandle().proveSearch(new Float32Array(vector), topK),
+    );
+  }
+  proveStructure(): WasmProximityStructuralProof {
+    return new WasmProximityStructuralProof(this.nativeHandle().proveStructure());
+  }
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class WasmProximityStructuralProof implements Disposable {
+  #native?: any;
+  constructor(native: any) { this.#native = native; }
+  verify(expected?: Uint8Array): {
+    descriptor: Uint8Array; objectCount: bigint; summary: PortableProximityVerification;
+  } {
+    if (this.#native == null) throw new Error("WASM proximity structural proof is closed");
+    return this.#native.verify(expected == null ? undefined : ownedPortableBytes(expected));
+  }
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class WasmProximityProof implements Disposable {
+  #native?: any;
+  constructor(native: any) { this.#native = native; }
+  verify(expected?: Uint8Array): { value?: Uint8Array } {
+    if (this.#native == null) throw new Error("WASM proximity proof is closed");
+    return { value: this.#native.verify(expected == null ? undefined : ownedPortableBytes(expected)) ?? undefined };
+  }
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class WasmProximitySearchProof implements Disposable {
+  #native?: any;
+  constructor(native: any) { this.#native = native; }
+  verify(expected?: Uint8Array): {
+    result: PortableSearchResult;
+    claim: string;
+    terminalLowerBound?: number;
+    replayedEvents: bigint;
+  } {
+    if (this.#native == null) throw new Error("WASM proximity search proof is closed");
+    const value = this.#native.verify(
+      expected == null ? undefined : ownedPortableBytes(expected),
+    );
+    return {
+      result: value.result,
+      claim: value.claim,
+      terminalLowerBound: value.terminalLowerBound,
+      replayedEvents: BigInt(value.replayedEvents),
+    };
+  }
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class WasmProximityReadSession implements Disposable {
+  #native?: any;
+  constructor(native: any) { this.#native = native; }
+  get(key: Uint8Array): { vector: Float32Array; value: Uint8Array } | undefined {
+    if (this.#native == null) throw new Error("WASM proximity session is closed");
+    return this.#native.get(ownedPortableBytes(key)) ?? undefined;
+  }
+  contains(key: Uint8Array): boolean {
+    if (this.#native == null) throw new Error("WASM proximity session is closed");
+    return this.#native.contains(ownedPortableBytes(key));
+  }
+  search(request: PortableSearchRequest): Promise<PortableSearchResult> {
+    if (this.#native == null) return Promise.reject(new Error("WASM proximity session is closed"));
+    const native = this.#native;
+    const vector = new Float32Array(request.vector);
+    return portablePromise(request.signal, () => native.search(vector, request.topK));
+  }
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}

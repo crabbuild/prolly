@@ -145,7 +145,7 @@ impl Resolution {
 ///     }
 /// });
 /// ```
-pub type Resolver = Box<dyn Fn(&Conflict) -> Resolution>;
+pub type Resolver = Box<dyn Fn(&Conflict) -> Resolution + Send + Sync>;
 
 /// Ready-made standard merge resolvers.
 pub mod resolver {

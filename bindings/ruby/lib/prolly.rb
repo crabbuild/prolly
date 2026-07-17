@@ -838,3 +838,6 @@ module Prolly
     end
   end
 end
+
+require_relative 'prolly/packed_page'
+require_relative 'prolly/api'

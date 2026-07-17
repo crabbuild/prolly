@@ -33,7 +33,41 @@ use prolly_store_sqlite::SqliteStore;
 use serde::Serialize;
 use thiserror::Error;
 
+mod domain;
 mod fast_abi;
+mod async_store;
+
+pub use async_store::*;
+
+pub use domain::indexed::{
+    ActiveIndexHealthRecord, BindingIndexRegistry, BindingIndexedMap, BindingIndexedSnapshot,
+    BindingSecondaryIndexSnapshot, IndexBuildResultRecord, IndexEntryRecord, IndexMatchRecord,
+    IndexPageRecord, IndexProjectionRecord, IndexVerificationRecord, IndexedMapHealthRecord,
+    IndexedMapMetricsRecord, IndexedRetentionRecord, IndexedSnapshotIdRecord, IndexedSourceRecord,
+    IndexedUpdateKind, IndexedUpdateRecord, IndexedVersionRecord, SecondaryIndexExtractorCallback,
+    SecondaryIndexLimitsRecord,
+};
+pub use domain::proximity::{
+    default_content_graph_limits, default_proximity_config, exact_proximity_search_request,
+    verify_proximity_membership_proof, verify_proximity_structure_proof, AdaptiveQualityRecord,
+    BindingProximityMap, BindingProximityReadSession, BindingProximitySearchProof,
+    ContentGraphLimitsRecord, ContentObjectKindRecord, DistanceMetricRecord,
+    ExactProximityRecordRecord, ProximityConfigRecord, ProximityFilterKind, ProximityFilterRecord,
+    ProximityMembershipProofRecord, ProximityMembershipVerificationRecord, ProximityMutationRecord,
+    ProximityMutationResultRecord, ProximityMutationStatsRecord, ProximityNeighborRecord,
+    ProximityRecordRecord, ProximityRecordVisitorCallback, ProximitySearchClaimKindRecord,
+    ProximitySearchClaimRecord, ProximitySearchRequestRecord, ProximitySearchResultRecord,
+    ProximitySearchStatsRecord, ProximitySearchVerificationRecord, ProximityStructuralProofRecord,
+    ProximityStructuralVerificationRecord, ProximityVerificationRecord, QueryKernelRecord,
+    SearchBackendRecord, SearchBudgetRecord, SearchCompletionRecord, SearchPolicyKind,
+    TypedContentObjectRecord,
+};
+pub use domain::versioned::{
+    BindingMapComparison, BindingMapMerge, BindingMapSnapshot, BindingMapSubscription,
+    BindingVersionedMap, BindingVersionedTransaction, MapCatalogVerificationRecord,
+    MapChangeEventRecord, MapUpdateKind, MapUpdateRecord, MapVersionRecord, VersionPruneRecord,
+    VersionedMapBatchResultRecord, VersionedTransactionCommitRecord,
+};
 
 type MemoryEngine = Prolly<Arc<MemStore>>;
 type FileEngine = Prolly<Arc<FileNodeStore>>;
@@ -55,6 +89,7 @@ type FileTransaction = OwnedProllyTransaction<Arc<FileNodeStore>>;
 #[cfg(feature = "sqlite")]
 type SqliteTransaction = OwnedProllyTransaction<Arc<SqliteStore>>;
 
+#[derive(Clone)]
 enum BindingEngine {
     Memory(Arc<MemoryEngine>),
     File(Arc<FileEngine>),
@@ -1539,7 +1574,7 @@ impl MergePolicyRegistry {
 
     pub fn set_default_host_resolver<F>(&self, resolver: F) -> Result<(), ProllyBindingError>
     where
-        F: Fn(ConflictRecord) -> ResolutionRecord + 'static,
+        F: Fn(ConflictRecord) -> ResolutionRecord + Send + Sync + 'static,
     {
         let policy = policy_fn_from_host_callback(resolver);
         self.lock()?
@@ -1553,7 +1588,7 @@ impl MergePolicyRegistry {
         resolver: F,
     ) -> Result<(), ProllyBindingError>
     where
-        F: Fn(ConflictRecord) -> ResolutionRecord + 'static,
+        F: Fn(ConflictRecord) -> ResolutionRecord + Send + Sync + 'static,
     {
         let policy = policy_fn_from_host_callback(resolver);
         self.lock()?
@@ -1567,7 +1602,7 @@ impl MergePolicyRegistry {
         resolver: F,
     ) -> Result<(), ProllyBindingError>
     where
-        F: Fn(ConflictRecord) -> ResolutionRecord + 'static,
+        F: Fn(ConflictRecord) -> ResolutionRecord + Send + Sync + 'static,
     {
         let policy = policy_fn_from_host_callback(resolver);
         self.lock()?
@@ -2323,6 +2358,83 @@ impl ProllyEngine {
 
     pub fn create(&self) -> TreeRecord {
         with_engine!(self, engine, { engine.create().into() })
+    }
+
+    /// Open an application-facing managed map. The returned object shares the
+    /// underlying engine and may outlive this particular foreign handle.
+    pub fn versioned_map(
+        &self,
+        id: Vec<u8>,
+    ) -> Result<Arc<BindingVersionedMap>, ProllyBindingError> {
+        BindingVersionedMap::new(
+            Arc::new(Self {
+                inner: self.inner.clone(),
+            }),
+            id,
+        )
+        .map(Arc::new)
+    }
+
+    /// Open an application-facing indexed map using a frozen snapshot of the
+    /// supplied extractor registry.
+    pub fn indexed_map(
+        &self,
+        id: Vec<u8>,
+        registry: Arc<BindingIndexRegistry>,
+    ) -> Result<Arc<BindingIndexedMap>, ProllyBindingError> {
+        BindingIndexedMap::new(
+            Arc::new(Self {
+                inner: self.inner.clone(),
+            }),
+            id,
+            registry,
+        )
+        .map(Arc::new)
+    }
+
+    /// Canonically build one immutable proximity map and return its
+    /// descriptor-bound application handle.
+    pub fn build_proximity_map(
+        &self,
+        config: ProximityConfigRecord,
+        records: Vec<ProximityRecordRecord>,
+        threads: Option<u64>,
+    ) -> Result<Arc<BindingProximityMap>, ProllyBindingError> {
+        domain::proximity::build_proximity_map(
+            Arc::new(Self {
+                inner: self.inner.clone(),
+            }),
+            config,
+            records,
+            threads,
+        )
+    }
+
+    /// Reopen and validate an immutable proximity descriptor from this
+    /// engine's content store.
+    pub fn load_proximity_map(
+        &self,
+        descriptor: Vec<u8>,
+    ) -> Result<Arc<BindingProximityMap>, ProllyBindingError> {
+        domain::proximity::load_proximity_map(
+            Arc::new(Self {
+                inner: self.inner.clone(),
+            }),
+            descriptor,
+        )
+    }
+
+    pub fn begin_versioned_transaction(
+        &self,
+    ) -> Result<Arc<BindingVersionedTransaction>, ProllyBindingError> {
+        if matches!(&self.inner, BindingEngine::Host(_)) {
+            return Err(ProllyBindingError::Internal {
+                reason: "custom host stores do not expose versioned-map transactions".to_string(),
+            });
+        }
+        Ok(Arc::new(BindingVersionedTransaction::new(Arc::new(Self {
+            inner: self.inner.clone(),
+        }))))
     }
 
     /// Bind one immutable tree to a reusable read object. Foreign callers that
@@ -4363,7 +4475,7 @@ impl ProllyEngine {
         resolver: F,
     ) -> Result<TreeRecord, ProllyBindingError>
     where
-        F: Fn(ConflictRecord) -> ResolutionRecord + 'static,
+        F: Fn(ConflictRecord) -> ResolutionRecord + Send + Sync + 'static,
     {
         let base = base.try_into()?;
         let left = left.try_into()?;
@@ -4385,7 +4497,7 @@ impl ProllyEngine {
         resolver: F,
     ) -> Result<MergeExplanationRecord, ProllyBindingError>
     where
-        F: Fn(ConflictRecord) -> ResolutionRecord + 'static,
+        F: Fn(ConflictRecord) -> ResolutionRecord + Send + Sync + 'static,
     {
         let base = base.try_into()?;
         let left = left.try_into()?;
@@ -4407,7 +4519,7 @@ impl ProllyEngine {
         resolver: F,
     ) -> Result<TreeRecord, ProllyBindingError>
     where
-        F: Fn(ConflictRecord) -> ResolutionRecord + 'static,
+        F: Fn(ConflictRecord) -> ResolutionRecord + Send + Sync + 'static,
     {
         let base = base.try_into()?;
         let left = left.try_into()?;
@@ -4437,7 +4549,7 @@ impl ProllyEngine {
         resolver: F,
     ) -> Result<TreeRecord, ProllyBindingError>
     where
-        F: Fn(ConflictRecord) -> ResolutionRecord + 'static,
+        F: Fn(ConflictRecord) -> ResolutionRecord + Send + Sync + 'static,
     {
         let base = base.try_into()?;
         let left = left.try_into()?;
@@ -7666,7 +7778,7 @@ fn resolver_from_callback(callback: Arc<dyn MergeResolverCallback>) -> Resolver 
 
 fn resolver_from_host_callback<F>(callback: F) -> Resolver
 where
-    F: Fn(ConflictRecord) -> ResolutionRecord + 'static,
+    F: Fn(ConflictRecord) -> ResolutionRecord + Send + Sync + 'static,
 {
     Box::new(move |conflict| callback(ConflictRecord::from(conflict)).into())
 }
@@ -8203,9 +8315,11 @@ mod tests {
         assert_eq!(config.node_cache_max_nodes, Some(16));
         assert_eq!(config.node_cache_max_bytes, Some(4096));
 
-        let mut format = prolly::TreeFormat::default();
-        format.chunking = prolly::chunking::logical_bytes_key_weibull();
-        format.node_layout = prolly::NodeLayoutSpec::Plain;
+        let format = prolly::TreeFormat {
+            chunking: prolly::chunking::logical_bytes_key_weibull(),
+            node_layout: prolly::NodeLayoutSpec::Plain,
+            ..Default::default()
+        };
         let format_bytes = format.canonical_bytes().unwrap();
         let configured = tree_config_from_format_bytes(format_bytes, None, None).unwrap();
         assert_eq!(Config::try_from(configured).unwrap().format, format);

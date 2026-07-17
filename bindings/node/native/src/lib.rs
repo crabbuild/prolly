@@ -122,8 +122,14 @@ use prolly_bindings::{
     ValueRefRecord as BindingValueRefRecord, WriteResultRecord as BindingWriteResultRecord,
     WriteStatsRecord as BindingWriteStatsRecord,
 };
+use send_wrapper::SendWrapper;
 use serde::Deserialize;
 use std::sync::{Arc, Mutex};
+
+mod portable;
+mod remote_store;
+
+pub use remote_store::*;
 
 #[napi(object)]
 pub struct NodeTreeRecord {
@@ -988,6 +994,12 @@ impl NativeProllyBlobStore {
 pub struct NativeMergePolicyRegistry {
     inner: Arc<BindingMergePolicyRegistry>,
     callback_error: Arc<Mutex<Option<String>>>,
+}
+
+impl Default for NativeMergePolicyRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[napi]
@@ -2801,6 +2813,7 @@ impl NativeProllyEngine {
         js_name = "mergeRangeWithResolver",
         ts_args_type = "base: NodeTreeRecord, left: NodeTreeRecord, right: NodeTreeRecord, start: Buffer, end: Buffer | null | undefined, resolver: (conflict: NodeConflictRecord) => NodeResolutionRecord"
     )]
+    #[allow(clippy::too_many_arguments)]
     pub fn merge_range_with_resolver(
         &self,
         env: Env,
@@ -6110,7 +6123,11 @@ fn js_resolver(
     env: Env,
     resolver: NodeResolverFunction,
     callback_error: Arc<Mutex<Option<String>>>,
-) -> impl Fn(BindingConflictRecord) -> BindingResolutionRecord + 'static {
+) -> impl Fn(BindingConflictRecord) -> BindingResolutionRecord + Send + Sync + 'static {
+    // Merge callbacks are invoked synchronously on the Node thread. The
+    // checked wrapper preserves that runtime invariant while allowing the
+    // core resolver type to remain Send + Sync for async Rust callers.
+    let thread_bound = SendWrapper::new((env, resolver));
     move |conflict| {
         if callback_error
             .lock()
@@ -6120,7 +6137,8 @@ fn js_resolver(
             return unresolved_resolution();
         }
 
-        let function = match resolver.borrow_back(&env) {
+        let (env, resolver) = &*thread_bound;
+        let function = match resolver.borrow_back(env) {
             Ok(function) => function,
             Err(error) => {
                 if let Ok(mut guard) = callback_error.lock() {

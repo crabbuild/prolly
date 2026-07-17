@@ -1,5 +1,24 @@
 # Prolly Go Binding
 
+## Asynchronous remote stores
+
+`RemoteStore` is the shared version-1, context-aware protocol for host-native
+database clients. `NewAsyncEngine` bridges an injected Go store through UniFFI
+to Rust `AsyncProlly`; provider calls remain asynchronous, cancellation flows
+from `context.Context`, and fetched nodes are still validated by the Rust
+engine.
+
+Provider SDKs are not dependencies of this core module. Install one of the
+separate modules under `stores/sqlite`, `stores/postgres`, `stores/mysql`,
+`stores/redis`, `stores/dynamodb`, `stores/cosmosdb`, or `stores/spanner`, then
+inject its store into `NewAsyncEngine`. Each module accepts the ecosystem's
+native client or pool and publishes an immutable capability descriptor.
+
+Run `../../scripts/test-go-stores.sh` from this directory to start the local
+services and execute the shared race-enabled conformance suite for all seven
+providers. Live Cosmos DB testing is opt-in through `RUN_PROLLY_COSMOS_LIVE=1`
+and the three `PROLLY_COSMOS_*` credential variables.
+
 This package is the first Go binding for the Rust `prolly-bindings` facade.
 It uses the design's cgo fallback path and calls the UniFFI-exported Rust ABI.
 
