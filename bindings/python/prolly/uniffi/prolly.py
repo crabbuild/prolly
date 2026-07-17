@@ -533,6 +533,8 @@ def _uniffi_check_api_checksums(lib):
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_func_default_proximity_search_runtime_policy() != 8352:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_func_default_secondary_index_limits() != 62049:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_func_delete_mutation() != 23016:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_func_diff_page_proof_from_bytes() != 24710:
@@ -2549,6 +2551,10 @@ _UniffiLib.uniffi_prolly_bindings_fn_func_default_proximity_search_runtime_polic
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UniffiLib.uniffi_prolly_bindings_fn_func_default_proximity_search_runtime_policy.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_func_default_secondary_index_limits.argtypes = (
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_func_default_secondary_index_limits.restype = _UniffiRustBuffer
 _UniffiLib.uniffi_prolly_bindings_fn_func_delete_mutation.argtypes = (
     _UniffiRustBuffer,
     ctypes.POINTER(_UniffiRustCallStatus),
@@ -6207,6 +6213,9 @@ _UniffiLib.uniffi_prolly_bindings_checksum_func_default_proximity_config.restype
 _UniffiLib.uniffi_prolly_bindings_checksum_func_default_proximity_search_runtime_policy.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_func_default_proximity_search_runtime_policy.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_func_default_secondary_index_limits.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_func_default_secondary_index_limits.restype = ctypes.c_uint16
 _UniffiLib.uniffi_prolly_bindings_checksum_func_delete_mutation.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_func_delete_mutation.restype = ctypes.c_uint16
@@ -32448,6 +32457,17 @@ def default_proximity_search_runtime_policy() -> ProximitySearchRuntimePolicyRec
         *_uniffi_lowered_args,
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
+def default_secondary_index_limits() -> SecondaryIndexLimitsRecord:
+    _uniffi_lowered_args = (
+    )
+    _uniffi_lift_return = _UniffiFfiConverterTypeSecondaryIndexLimitsRecord.lift
+    _uniffi_error_converter = None
+    _uniffi_ffi_result = _uniffi_rust_call_with_error(
+        _uniffi_error_converter,
+        _UniffiLib.uniffi_prolly_bindings_fn_func_default_secondary_index_limits,
+        *_uniffi_lowered_args,
+    )
+    return _uniffi_lift_return(_uniffi_ffi_result)
 def delete_mutation(key: bytes) -> MutationRecord:
 
     _UniffiFfiConverterBytes.check_lower(key)
@@ -34342,6 +34362,7 @@ __all__ = [
     "default_pq_config",
     "default_proximity_config",
     "default_proximity_search_runtime_policy",
+    "default_secondary_index_limits",
     "delete_mutation",
     "diff_page_proof_from_bytes",
     "diff_page_proof_to_bytes",

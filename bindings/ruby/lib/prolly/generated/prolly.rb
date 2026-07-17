@@ -13992,8 +13992,10 @@ private_class_method :consume_buffer_into_error
 module UniFFILib
   extend FFI::Library
 
+
   library_override = ENV['PROLLY_BINDINGS_LIBRARY']
   ffi_lib(library_override && !library_override.empty? ? library_override : 'prolly_bindings')
+
 
   attach_function :uniffi_prolly_bindings_fn_clone_conflictvisitorcallback,
     [:uint64, RustCallStatus.by_ref],
@@ -15933,6 +15935,9 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_fn_func_versioned_value_to_bytes,
     [RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_func_default_secondary_index_limits,
+    [RustCallStatus.by_ref],
+    RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_func_default_composite_accelerator_config,
     [RustCallStatus.by_ref],
     RustBuffer.by_value
@@ -16351,6 +16356,9 @@ module UniFFILib
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_func_versioned_value_to_bytes,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_func_default_secondary_index_limits,
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_func_default_composite_accelerator_config,
@@ -25091,6 +25099,15 @@ def self.versioned_value_to_bytes(record)
 
   result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_func_versioned_value_to_bytes,RustBuffer.alloc_from_TypeVersionedValueRecord(record))
   return result.consumeIntoBytes
+end
+
+
+
+
+
+def self.default_secondary_index_limits()
+  result = Prolly.rust_call(:uniffi_prolly_bindings_fn_func_default_secondary_index_limits,)
+  return result.consumeIntoTypeSecondaryIndexLimitsRecord
 end
 
 

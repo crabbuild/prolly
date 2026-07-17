@@ -2,6 +2,10 @@ import Foundation
 import Prolly
 import prollyFFI
 
+public func defaultSecondaryIndexLimits() -> SecondaryIndexLimitsRecord {
+    Prolly.defaultSecondaryIndexLimits()
+}
+
 public struct ProximityRecord: Sendable {
     public let key: Data
     public let vector: [Float]

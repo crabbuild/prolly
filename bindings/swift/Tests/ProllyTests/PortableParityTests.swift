@@ -510,6 +510,13 @@ final class PortableParityTests: XCTestCase {
             let version = try indexed.put(Data("k".utf8), value: Data("term".utf8))
             _ = try indexed.ensureIndex(Data("by_value".utf8))
             let oldSnapshotID = try indexed.snapshot().id
+            var tooSmall = ProllyAPI.defaultSecondaryIndexLimits()
+            tooSmall.maxTermBytes = 3
+            XCTAssertThrowsError(try indexed.replaceIndex(
+                Data("by_value".utf8), generation: 2, extractorID: "value-too-small-v2",
+                projection: .all, limits: tooSmall
+            ) { _, value in [IndexEntryRecord(term: Data(value), projection: nil)] })
+            XCTAssertEqual(try indexed.health().activeIndexes.first?.generation, 1)
             let replacement = try indexed.replaceIndex(
                 Data("by_value".utf8), generation: 2, extractorID: "value-v2", projection: .all
             ) { _, value in [IndexEntryRecord(term: Data(value), projection: nil)] }

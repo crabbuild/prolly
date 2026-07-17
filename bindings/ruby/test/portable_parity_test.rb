@@ -532,6 +532,31 @@ class PortableParityTest < Minitest::Test
       version = indexed.put('k'.b, 'term'.b)
       indexed.ensure_index('by_value'.b)
       old_snapshot_id = indexed.snapshot.id
+      defaults = Prolly.default_secondary_index_limits
+      too_small = Prolly::SecondaryIndexLimitsRecord.new(
+        max_term_bytes: 3,
+        max_projection_bytes: defaults.max_projection_bytes,
+        max_all_value_bytes: defaults.max_all_value_bytes,
+        max_terms_per_record: defaults.max_terms_per_record,
+        max_projected_bytes_per_record: defaults.max_projected_bytes_per_record,
+        max_derived_mutations_per_transaction: defaults.max_derived_mutations_per_transaction,
+        max_projected_bytes_per_transaction: defaults.max_projected_bytes_per_transaction,
+        max_indexes: defaults.max_indexes,
+        build_page_size: defaults.build_page_size,
+        max_temporary_sort_bytes: defaults.max_temporary_sort_bytes,
+        max_bundle_nodes: defaults.max_bundle_nodes,
+        max_bundle_bytes: defaults.max_bundle_bytes,
+        max_verification_entries: defaults.max_verification_entries,
+        max_write_retries: defaults.max_write_retries,
+        max_build_retries: defaults.max_build_retries
+      )
+      assert_raises(Prolly::ProllyBindingError::Internal) do
+        indexed.replace_index(
+          'by_value'.b, 2, 'value-too-small-v2', Prolly::IndexProjectionRecord::ALL,
+          ->(_key, value) { [[value, nil]] }, limits: too_small
+        )
+      end
+      assert_equal 1, indexed.health.active_indexes.first.generation
       replacement = indexed.replace_index(
         'by_value'.b, 2, 'value-v2', Prolly::IndexProjectionRecord::ALL,
         ->(_key, value) { [[value, nil]] }

@@ -84,6 +84,8 @@ import kotlinx.coroutines.withContext
 import java.util.concurrent.CompletableFuture
 
 data class ProximityRecord(val key: ByteArray, val vector: List<Float>, val value: ByteArray)
+fun defaultSecondaryIndexLimits(): SecondaryIndexLimitsRecord =
+    build.crab.prolly.defaultSecondaryIndexLimits()
 data class HnswBuildResult(val index: HnswIndex, val stats: HnswBuildStatsRecord)
 data class ProductQuantizationBuildResult(
     val index: ProductQuantizer,
@@ -477,7 +479,8 @@ class IndexRegistry(internal val native: BindingIndexRegistry) : AutoCloseable {
         extractorId: String,
         projection: IndexProjectionRecord,
         extractor: SecondaryIndexExtractorCallback,
-    ) = native.register(name.copyOf(), generation, extractorId, projection, null, extractor)
+        limits: SecondaryIndexLimitsRecord? = null,
+    ) = native.register(name.copyOf(), generation, extractorId, projection, limits, extractor)
     override fun close() = native.close()
 }
 

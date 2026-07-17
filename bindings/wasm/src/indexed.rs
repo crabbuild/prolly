@@ -4,7 +4,7 @@ use js_sys::{Array, Function, Object, Reflect, Uint8Array};
 use prolly::{
     IndexProjection, IndexedMapMetricsSnapshot, IndexedMapUpdate, IndexedSnapshotBundle,
     IndexedSnapshotId, Mutation, SecondaryIndex, SecondaryIndexCursor, SecondaryIndexEntry,
-    SecondaryIndexError, SecondaryIndexPage, SecondaryIndexRegistry,
+    SecondaryIndexError, SecondaryIndexLimits, SecondaryIndexPage, SecondaryIndexRegistry,
 };
 use std::cell::RefCell;
 use std::sync::Arc;
@@ -80,6 +80,40 @@ fn index_projection(value: &str) -> Result<IndexProjection, JsValue> {
     }
 }
 
+fn secondary_index_limits(value: Option<JsValue>) -> Result<SecondaryIndexLimits, JsValue> {
+    let Some(value) = value else {
+        return Ok(SecondaryIndexLimits::default());
+    };
+    let field = |name: &str| -> Result<usize, JsValue> {
+        let value = Reflect::get(&value, &JsValue::from_str(name))
+            .map_err(|error| JsValue::from_str(&js_value_message(error)))?;
+        let text = value
+            .as_string()
+            .ok_or_else(|| JsValue::from_str(&format!("{name} must be a decimal string")))?;
+        text.parse::<u64>()
+            .map_err(|error| JsValue::from_str(&format!("invalid {name}: {error}")))?
+            .try_into()
+            .map_err(|_| JsValue::from_str(&format!("{name} does not fit this platform")))
+    };
+    Ok(SecondaryIndexLimits {
+        max_term_bytes: field("maxTermBytes")?,
+        max_projection_bytes: field("maxProjectionBytes")?,
+        max_all_value_bytes: field("maxAllValueBytes")?,
+        max_terms_per_record: field("maxTermsPerRecord")?,
+        max_projected_bytes_per_record: field("maxProjectedBytesPerRecord")?,
+        max_derived_mutations_per_transaction: field("maxDerivedMutationsPerTransaction")?,
+        max_projected_bytes_per_transaction: field("maxProjectedBytesPerTransaction")?,
+        max_indexes: field("maxIndexes")?,
+        build_page_size: field("buildPageSize")?,
+        max_temporary_sort_bytes: field("maxTemporarySortBytes")?,
+        max_bundle_nodes: field("maxBundleNodes")?,
+        max_bundle_bytes: field("maxBundleBytes")?,
+        max_verification_entries: field("maxVerificationEntries")?,
+        max_write_retries: field("maxWriteRetries")?,
+        max_build_retries: field("maxBuildRetries")?,
+    })
+}
+
 #[wasm_bindgen(js_name = WasmIndexRegistry)]
 pub struct WasmIndexRegistry {
     registry: SecondaryIndexRegistry,
@@ -100,12 +134,14 @@ impl WasmIndexRegistry {
         generation: u64,
         extractor_id: String,
         projection: String,
+        limits: Option<JsValue>,
         extractor: Function,
     ) -> Result<(), JsValue> {
         let projection = index_projection(&projection)?;
         let callback = JsIndexExtractor(extractor);
         let definition = SecondaryIndex::builder(name.to_vec(), generation, extractor_id)
             .projection(projection)
+            .limits(secondary_index_limits(limits)?)
             .extract(move |key, value| callback.extract(key, value))
             .map_err(js_error)?;
         self.registry = self
@@ -306,12 +342,14 @@ impl WasmIndexedMap {
         generation: u64,
         extractor_id: String,
         projection: String,
+        limits: Option<JsValue>,
         extractor: Function,
     ) -> Result<Object, JsValue> {
         let projection = index_projection(&projection)?;
         let callback = JsIndexExtractor(extractor);
         let definition = SecondaryIndex::builder(name.to_vec(), generation, extractor_id)
             .projection(projection)
+            .limits(secondary_index_limits(limits)?)
             .extract(move |key, value| callback.extract(key, value))
             .map_err(js_error)?;
         let registry = self.registry_snapshot();

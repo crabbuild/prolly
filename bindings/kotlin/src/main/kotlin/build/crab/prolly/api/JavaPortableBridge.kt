@@ -69,6 +69,7 @@ import build.crab.prolly.ReverseCursorRecord
 import build.crab.prolly.ReversePageRecord
 import build.crab.prolly.ProvedRangePageRecord
 import build.crab.prolly.SecondaryIndexExtractorCallback
+import build.crab.prolly.SecondaryIndexLimitsRecord
 import build.crab.prolly.SearchBackendRecord
 import build.crab.prolly.SearchBudgetRecord
 import build.crab.prolly.SearchPolicyKind
@@ -469,6 +470,24 @@ data class JavaIndexBuildResult(
     val activated: Boolean,
 )
 
+data class JavaSecondaryIndexLimits(
+    val maxTermBytes: Long,
+    val maxProjectionBytes: Long,
+    val maxAllValueBytes: Long,
+    val maxTermsPerRecord: Long,
+    val maxProjectedBytesPerRecord: Long,
+    val maxDerivedMutationsPerTransaction: Long,
+    val maxProjectedBytesPerTransaction: Long,
+    val maxIndexes: Long,
+    val buildPageSize: Long,
+    val maxTemporarySortBytes: Long,
+    val maxBundleNodes: Long,
+    val maxBundleBytes: Long,
+    val maxVerificationEntries: Long,
+    val maxWriteRetries: Long,
+    val maxBuildRetries: Long,
+)
+
 data class JavaIndexedUpdate(
     val kind: String,
     val previousSourceVersion: ByteArray?,
@@ -578,6 +597,15 @@ private fun build.crab.prolly.GcSweepRecord.toJava() = JavaGcSweep(
 private fun IndexBuildResultRecord.toJava() = JavaIndexBuildResult(
     sourceVersion, indexVersion, catalogVersion, generation.toLong(), entries.toLong(),
     attempts.toLong(), activated,
+)
+
+private fun SecondaryIndexLimitsRecord.toJava() = JavaSecondaryIndexLimits(
+    maxTermBytes.toLong(), maxProjectionBytes.toLong(), maxAllValueBytes.toLong(),
+    maxTermsPerRecord.toLong(), maxProjectedBytesPerRecord.toLong(),
+    maxDerivedMutationsPerTransaction.toLong(), maxProjectedBytesPerTransaction.toLong(),
+    maxIndexes.toLong(), buildPageSize.toLong(), maxTemporarySortBytes.toLong(),
+    maxBundleNodes.toLong(), maxBundleBytes.toLong(), maxVerificationEntries.toLong(),
+    maxWriteRetries.toLong(), maxBuildRetries.toLong(),
 )
 
 private fun IndexedUpdateRecord.toJava() = JavaIndexedUpdate(
@@ -963,8 +991,39 @@ object JavaPortableBridge {
         generation: Long,
         extractorId: String,
         projection: IndexProjectionRecord,
+        limits: SecondaryIndexLimitsRecord?,
         extractor: SecondaryIndexExtractorCallback,
-    ) = registry.register(name, generation.toULong(), extractorId, projection, extractor)
+    ) = registry.register(name, generation.toULong(), extractorId, projection, extractor, limits)
+
+    @JvmStatic
+    fun defaultSecondaryIndexLimits(): JavaSecondaryIndexLimits =
+        build.crab.prolly.defaultSecondaryIndexLimits().toJava()
+
+    @JvmStatic
+    fun secondaryIndexLimits(
+        maxTermBytes: Long,
+        maxProjectionBytes: Long,
+        maxAllValueBytes: Long,
+        maxTermsPerRecord: Long,
+        maxProjectedBytesPerRecord: Long,
+        maxDerivedMutationsPerTransaction: Long,
+        maxProjectedBytesPerTransaction: Long,
+        maxIndexes: Long,
+        buildPageSize: Long,
+        maxTemporarySortBytes: Long,
+        maxBundleNodes: Long,
+        maxBundleBytes: Long,
+        maxVerificationEntries: Long,
+        maxWriteRetries: Long,
+        maxBuildRetries: Long,
+    ) = SecondaryIndexLimitsRecord(
+        maxTermBytes.toULong(), maxProjectionBytes.toULong(), maxAllValueBytes.toULong(),
+        maxTermsPerRecord.toULong(), maxProjectedBytesPerRecord.toULong(),
+        maxDerivedMutationsPerTransaction.toULong(), maxProjectedBytesPerTransaction.toULong(),
+        maxIndexes.toULong(), buildPageSize.toULong(), maxTemporarySortBytes.toULong(),
+        maxBundleNodes.toULong(), maxBundleBytes.toULong(), maxVerificationEntries.toULong(),
+        maxWriteRetries.toULong(), maxBuildRetries.toULong(),
+    )
 
     @JvmStatic
     fun buildProximity(
@@ -1393,9 +1452,10 @@ object JavaPortableBridge {
         generation: Long,
         extractorId: String,
         projection: IndexProjectionRecord,
+        limits: SecondaryIndexLimitsRecord?,
         extractor: SecondaryIndexExtractorCallback,
     ): JavaIndexBuildResult = map.replaceIndex(
-        name.copyOf(), generation.toULong(), extractorId, projection, extractor,
+        name.copyOf(), generation.toULong(), extractorId, projection, extractor, limits,
     ).toJava()
 
     @JvmStatic

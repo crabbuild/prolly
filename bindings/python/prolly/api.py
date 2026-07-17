@@ -88,6 +88,10 @@ ProximitySearchRuntimePolicy = _native.ProximitySearchRuntimePolicyRecord
 ProximitySearchRuntimeStats = _native.ProximitySearchRuntimeStatsRecord
 
 
+def default_secondary_index_limits():
+    return _native.default_secondary_index_limits()
+
+
 class ProximityCancellationToken(_Scoped):
     def __init__(self):
         super().__init__()
@@ -1992,6 +1996,7 @@ __all__ = [
     "ScanOutcome",
     "VersionedMap",
     "VersionedTransaction",
+    "default_secondary_index_limits",
     "verify_key_proof",
     "verify_proximity_membership_proof",
     "verify_proximity_structure_proof",

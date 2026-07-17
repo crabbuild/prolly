@@ -13,7 +13,55 @@ export interface IndexRegistration {
   generation: bigint;
   extractorId: string;
   projection: IndexProjection;
+  limits?: SecondaryIndexLimits;
   extract(primaryKey: Uint8Array, sourceValue: Uint8Array): IndexEntry[];
+}
+
+export interface SecondaryIndexLimits {
+  maxTermBytes: bigint;
+  maxProjectionBytes: bigint;
+  maxAllValueBytes: bigint;
+  maxTermsPerRecord: bigint;
+  maxProjectedBytesPerRecord: bigint;
+  maxDerivedMutationsPerTransaction: bigint;
+  maxProjectedBytesPerTransaction: bigint;
+  maxIndexes: bigint;
+  buildPageSize: bigint;
+  maxTemporarySortBytes: bigint;
+  maxBundleNodes: bigint;
+  maxBundleBytes: bigint;
+  maxVerificationEntries: bigint;
+  maxWriteRetries: bigint;
+  maxBuildRetries: bigint;
+}
+
+export function defaultSecondaryIndexLimits(): SecondaryIndexLimits {
+  return {
+    maxTermBytes: 4n * 1024n,
+    maxProjectionBytes: 64n * 1024n,
+    maxAllValueBytes: 1024n * 1024n,
+    maxTermsPerRecord: 1024n,
+    maxProjectedBytesPerRecord: 1024n * 1024n,
+    maxDerivedMutationsPerTransaction: 100_000n,
+    maxProjectedBytesPerTransaction: 64n * 1024n * 1024n,
+    maxIndexes: 32n,
+    buildPageSize: 4096n,
+    maxTemporarySortBytes: 256n * 1024n * 1024n,
+    maxBundleNodes: 1_000_000n,
+    maxBundleBytes: 1024n * 1024n * 1024n,
+    maxVerificationEntries: 10_000_000n,
+    maxWriteRetries: 8n,
+    maxBuildRetries: 8n,
+  };
+}
+
+type NativeSecondaryIndexLimits = Record<keyof SecondaryIndexLimits, string>;
+
+function nativeSecondaryIndexLimits(value: SecondaryIndexLimits | undefined): NativeSecondaryIndexLimits | undefined {
+  if (value == null) return undefined;
+  return Object.fromEntries(
+    Object.entries(value).map(([name, limit]) => [name, limit.toString()]),
+  ) as NativeSecondaryIndexLimits;
 }
 
 export interface IndexedVersion {
@@ -126,6 +174,7 @@ interface NativeIndexRegistry {
     generation: string,
     extractorId: string,
     projection: string,
+    limits: NativeSecondaryIndexLimits | undefined,
     extract: (request: { primaryKey: Uint8Array; sourceValue: Uint8Array }) => IndexEntry[],
   ): void;
 }
@@ -186,6 +235,7 @@ export class IndexRegistry implements Disposable {
       registration.generation.toString(),
       registration.extractorId,
       registration.projection,
+      nativeSecondaryIndexLimits(registration.limits),
       ({ primaryKey, sourceValue }) => registration.extract(primaryKey, sourceValue).map((entry) => ({
         term: ownedBytes(entry.term),
         projection: entry.projection == null ? undefined : ownedBytes(entry.projection),
@@ -222,6 +272,7 @@ interface NativeIndexedMap {
     generation: string,
     extractorId: string,
     projection: IndexProjection,
+    limits: NativeSecondaryIndexLimits | undefined,
     extractor: (request: { primaryKey: Uint8Array; sourceValue: Uint8Array }) => IndexEntry[],
   ): NativeIndexBuildResult;
   deactivateIndex(name: Uint8Array): NativeIndexedVersion;
@@ -350,6 +401,7 @@ export class IndexedMap implements Disposable {
         registration.generation.toString(),
         registration.extractorId,
         registration.projection,
+        nativeSecondaryIndexLimits(registration.limits),
         ({ primaryKey, sourceValue }) => registration.extract(primaryKey, sourceValue).map((entry) => ({
           term: ownedBytes(entry.term),
           projection: entry.projection == null ? undefined : ownedBytes(entry.projection),

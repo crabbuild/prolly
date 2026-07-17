@@ -49,6 +49,26 @@ type SecondaryIndexLimits struct {
 	MaxBuildRetries                   uint64
 }
 
+func DefaultSecondaryIndexLimits() SecondaryIndexLimits {
+	return SecondaryIndexLimits{
+		MaxTermBytes: 4 * 1024,
+		MaxProjectionBytes: 64 * 1024,
+		MaxAllValueBytes: 1024 * 1024,
+		MaxTermsPerRecord: 1024,
+		MaxProjectedBytesPerRecord: 1024 * 1024,
+		MaxDerivedMutationsPerTransaction: 100_000,
+		MaxProjectedBytesPerTransaction: 64 * 1024 * 1024,
+		MaxIndexes: 32,
+		BuildPageSize: 4096,
+		MaxTemporarySortBytes: 256 * 1024 * 1024,
+		MaxBundleNodes: 1_000_000,
+		MaxBundleBytes: 1024 * 1024 * 1024,
+		MaxVerificationEntries: 10_000_000,
+		MaxWriteRetries: 8,
+		MaxBuildRetries: 8,
+	}
+}
+
 type IndexRegistry struct {
 	handle uint64
 	closed atomic.Bool

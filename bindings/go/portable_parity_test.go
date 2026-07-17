@@ -1562,6 +1562,20 @@ func TestPortableIndexedProofAndMaintenance(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	tooSmall := DefaultSecondaryIndexLimits()
+	tooSmall.MaxTermBytes = 2
+	if _, err := indexed.ReplaceIndex(
+		[]byte("by_team"), 2, "team-too-small-v2", IndexProjectionAll, &tooSmall,
+		IndexExtractorFunc(func(_ []byte, source []byte) ([]IndexEntry, error) {
+			return []IndexEntry{{Term: bytes.Clone(source)}}, nil
+		}),
+	); err == nil {
+		t.Fatal("expected replacement to enforce max term bytes")
+	}
+	health, err := indexed.Health()
+	if err != nil || health.ActiveIndexes[0].Generation != 1 {
+		t.Fatalf("failed replacement changed active generation: %+v, %v", health, err)
+	}
 	replacement, err := indexed.ReplaceIndex(
 		[]byte("by_team"), 2, "team-v2", IndexProjectionAll, nil,
 		IndexExtractorFunc(func(_ []byte, source []byte) ([]IndexEntry, error) {
@@ -1571,7 +1585,7 @@ func TestPortableIndexedProofAndMaintenance(t *testing.T) {
 	if err != nil || replacement.Generation != 2 {
 		t.Fatalf("replacement = %+v, %v", replacement, err)
 	}
-	health, err := indexed.Health()
+	health, err = indexed.Health()
 	if err != nil || len(health.ActiveIndexes) != 1 || health.ActiveIndexes[0].Generation != 2 {
 		t.Fatalf("replacement health = %+v, %v", health, err)
 	}

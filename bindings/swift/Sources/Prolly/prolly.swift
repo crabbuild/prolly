@@ -26942,6 +26942,12 @@ public func versionedValueToBytes(record: VersionedValueRecord)throws  -> Data  
     )
 })
 }
+public func defaultSecondaryIndexLimits() -> SecondaryIndexLimitsRecord  {
+    return try!  FfiConverterTypeSecondaryIndexLimitsRecord_lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_func_default_secondary_index_limits($0
+    )
+})
+}
 public func defaultCompositeAcceleratorConfig() -> CompositeAcceleratorConfigRecord  {
     return try!  FfiConverterTypeCompositeAcceleratorConfigRecord_lift(try! rustCall() {
     uniffi_prolly_bindings_fn_func_default_composite_accelerator_config($0
@@ -27411,6 +27417,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_func_versioned_value_to_bytes() != 30630) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_func_default_secondary_index_limits() != 62049) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_func_default_composite_accelerator_config() != 39819) {

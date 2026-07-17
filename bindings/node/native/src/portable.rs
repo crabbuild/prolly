@@ -44,7 +44,8 @@ use prolly_bindings::{
     ProximitySearchRuntimePolicyRecord, ProximitySearchRuntimeStatsRecord,
     ProximityStructuralProofRecord, ProximityVerificationRecord, QueryKernelRecord,
     RangeProofRecord, SearchBackendRecord, SearchBudgetRecord, SearchCompletionRecord,
-    SearchPolicyKind, SecondaryIndexExtractorCallback, VersionPruneRecord,
+    SearchPolicyKind, SecondaryIndexExtractorCallback, SecondaryIndexLimitsRecord,
+    VersionPruneRecord,
 };
 use std::sync::Arc;
 
@@ -1432,6 +1433,64 @@ struct NodeIndexExtractor {
     callback: NodePortableIndexExtractor,
 }
 
+#[napi(object)]
+pub struct NodePortableSecondaryIndexLimits {
+    pub max_term_bytes: String,
+    pub max_projection_bytes: String,
+    pub max_all_value_bytes: String,
+    pub max_terms_per_record: String,
+    pub max_projected_bytes_per_record: String,
+    pub max_derived_mutations_per_transaction: String,
+    pub max_projected_bytes_per_transaction: String,
+    pub max_indexes: String,
+    pub build_page_size: String,
+    pub max_temporary_sort_bytes: String,
+    pub max_bundle_nodes: String,
+    pub max_bundle_bytes: String,
+    pub max_verification_entries: String,
+    pub max_write_retries: String,
+    pub max_build_retries: String,
+}
+
+impl TryFrom<NodePortableSecondaryIndexLimits> for SecondaryIndexLimitsRecord {
+    type Error = Error;
+
+    fn try_from(value: NodePortableSecondaryIndexLimits) -> Result<Self> {
+        Ok(Self {
+            max_term_bytes: parse_u64(value.max_term_bytes, "maxTermBytes")?,
+            max_projection_bytes: parse_u64(value.max_projection_bytes, "maxProjectionBytes")?,
+            max_all_value_bytes: parse_u64(value.max_all_value_bytes, "maxAllValueBytes")?,
+            max_terms_per_record: parse_u64(value.max_terms_per_record, "maxTermsPerRecord")?,
+            max_projected_bytes_per_record: parse_u64(
+                value.max_projected_bytes_per_record,
+                "maxProjectedBytesPerRecord",
+            )?,
+            max_derived_mutations_per_transaction: parse_u64(
+                value.max_derived_mutations_per_transaction,
+                "maxDerivedMutationsPerTransaction",
+            )?,
+            max_projected_bytes_per_transaction: parse_u64(
+                value.max_projected_bytes_per_transaction,
+                "maxProjectedBytesPerTransaction",
+            )?,
+            max_indexes: parse_u64(value.max_indexes, "maxIndexes")?,
+            build_page_size: parse_u64(value.build_page_size, "buildPageSize")?,
+            max_temporary_sort_bytes: parse_u64(
+                value.max_temporary_sort_bytes,
+                "maxTemporarySortBytes",
+            )?,
+            max_bundle_nodes: parse_u64(value.max_bundle_nodes, "maxBundleNodes")?,
+            max_bundle_bytes: parse_u64(value.max_bundle_bytes, "maxBundleBytes")?,
+            max_verification_entries: parse_u64(
+                value.max_verification_entries,
+                "maxVerificationEntries",
+            )?,
+            max_write_retries: parse_u64(value.max_write_retries, "maxWriteRetries")?,
+            max_build_retries: parse_u64(value.max_build_retries, "maxBuildRetries")?,
+        })
+    }
+}
+
 // FunctionRef is a persistent Node reference. Index extraction is currently
 // invoked synchronously on the JavaScript thread by this adapter.
 unsafe impl Send for NodeIndexExtractor {}
@@ -2775,6 +2834,7 @@ impl NativePortableIndexRegistry {
         generation: String,
         extractor_id: String,
         projection: String,
+        limits: Option<NodePortableSecondaryIndexLimits>,
         extractor: NodePortableIndexExtractor,
     ) -> Result<()> {
         let generation = generation.parse::<u64>().map_err(|error| {
@@ -2800,7 +2860,7 @@ impl NativePortableIndexRegistry {
                 generation,
                 extractor_id,
                 projection,
-                None,
+                limits.map(TryInto::try_into).transpose()?,
                 Arc::new(NodeIndexExtractor {
                     env: self.env,
                     callback: extractor,
@@ -3003,6 +3063,7 @@ impl NativePortableIndexedMap {
         generation: String,
         extractor_id: String,
         projection: String,
+        limits: Option<NodePortableSecondaryIndexLimits>,
         extractor: NodePortableIndexExtractor,
     ) -> Result<NodePortableIndexBuildResult> {
         let generation = generation.parse::<u64>().map_err(|error| {
@@ -3023,7 +3084,7 @@ impl NativePortableIndexedMap {
                 generation,
                 extractor_id,
                 projection,
-                None,
+                limits.map(TryInto::try_into).transpose()?,
                 Arc::new(NodeIndexExtractor {
                     env: self.env,
                     callback: extractor,

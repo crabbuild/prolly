@@ -37,9 +37,10 @@ mod domain;
 mod fast_abi;
 
 pub use domain::indexed::{
-    ActiveIndexHealthRecord, BindingIndexRegistry, BindingIndexedMap, BindingIndexedSnapshot,
-    BindingSecondaryIndexSnapshot, IndexBuildResultRecord, IndexEntryRecord, IndexMatchRecord,
-    IndexPageRecord, IndexProjectionRecord, IndexVerificationRecord, IndexedMapHealthRecord,
+    default_secondary_index_limits, ActiveIndexHealthRecord, BindingIndexRegistry,
+    BindingIndexedMap, BindingIndexedSnapshot, BindingSecondaryIndexSnapshot,
+    IndexBuildResultRecord, IndexEntryRecord, IndexMatchRecord, IndexPageRecord,
+    IndexProjectionRecord, IndexVerificationRecord, IndexedMapHealthRecord,
     IndexedMapMetricsRecord, IndexedRetentionRecord, IndexedSnapshotIdRecord, IndexedSourceRecord,
     IndexedUpdateKind, IndexedUpdateRecord, IndexedVersionRecord, SecondaryIndexExtractorCallback,
     SecondaryIndexLimitsRecord,
