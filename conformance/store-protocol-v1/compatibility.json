@@ -73,6 +73,18 @@
         "capabilities": {"native_batch_reads":false,"atomic_batch_writes":false,"node_scan":true,"hints":true,"atomic_nodes_and_hint":false,"root_scan":true,"root_compare_and_swap":true,"transactions":true,"read_parallelism":16},
         "limits": {"max_batch_read_items":null,"max_batch_write_items":null,"max_transaction_operations":100,"max_node_bytes":null},
         "evidence": ["npm --prefix bindings/node/stores/cosmosdb test", "npm --prefix bindings/node/stores/cosmosdb run check", "live: PROLLY_COSMOS_ENDPOINT, PROLLY_COSMOS_KEY, and PROLLY_COSMOS_DATABASE"]
+      },
+      "spanner": {
+        "status": "supported",
+        "module": "@trail/prolly-store-spanner",
+        "sdk_module": "@google-cloud/spanner",
+        "sdk_version": "8.0.0",
+        "minimum_node": "20.0.0",
+        "protocol_major": 1,
+        "schema_version": 1,
+        "capabilities": {"native_batch_reads":false,"atomic_batch_writes":true,"node_scan":true,"hints":true,"atomic_nodes_and_hint":true,"root_scan":true,"root_compare_and_swap":true,"transactions":true,"read_parallelism":16},
+        "limits": {"max_batch_read_items":null,"max_batch_write_items":null,"max_transaction_operations":null,"max_node_bytes":null},
+        "evidence": ["SPANNER_EMULATOR_HOST=127.0.0.1:9010 npm --prefix bindings/node/stores/spanner test", "npm --prefix bindings/node/stores/spanner run check"]
       }
     },
     "kotlin": {
@@ -147,6 +159,18 @@
         "capabilities": {"native_batch_reads":false,"atomic_batch_writes":false,"node_scan":true,"hints":true,"atomic_nodes_and_hint":false,"root_scan":true,"root_compare_and_swap":true,"transactions":true,"read_parallelism":16},
         "limits": {"max_batch_read_items":null,"max_batch_write_items":null,"max_transaction_operations":100,"max_node_bytes":null},
         "evidence": ["mvn -f bindings/pom.xml -pl kotlin/stores/cosmosdb -am test", "live: PROLLY_COSMOS_ENDPOINT, PROLLY_COSMOS_KEY, and PROLLY_COSMOS_DATABASE"]
+      },
+      "spanner": {
+        "status": "supported",
+        "module": "build.crab:prolly-kotlin-store-spanner",
+        "sdk_module": "com.google.cloud:google-cloud-spanner",
+        "sdk_version": "6.119.0",
+        "minimum_java": "17",
+        "protocol_major": 1,
+        "schema_version": 1,
+        "capabilities": {"native_batch_reads":false,"atomic_batch_writes":true,"node_scan":true,"hints":true,"atomic_nodes_and_hint":true,"root_scan":true,"root_compare_and_swap":true,"transactions":true,"read_parallelism":16},
+        "limits": {"max_batch_read_items":null,"max_batch_write_items":null,"max_transaction_operations":null,"max_node_bytes":null},
+        "evidence": ["SPANNER_EMULATOR_HOST=127.0.0.1:9010 mvn -f bindings/pom.xml -pl kotlin/stores/spanner -am test"]
       }
     },
     "java": {
@@ -221,6 +245,18 @@
         "capabilities": {"native_batch_reads":false,"atomic_batch_writes":false,"node_scan":true,"hints":true,"atomic_nodes_and_hint":false,"root_scan":true,"root_compare_and_swap":true,"transactions":true,"read_parallelism":16},
         "limits": {"max_batch_read_items":null,"max_batch_write_items":null,"max_transaction_operations":100,"max_node_bytes":null},
         "evidence": ["mvn -f bindings/pom.xml -pl java/stores/cosmosdb -am test", "live: PROLLY_COSMOS_ENDPOINT, PROLLY_COSMOS_KEY, and PROLLY_COSMOS_DATABASE"]
+      },
+      "spanner": {
+        "status": "supported",
+        "module": "build.crab:prolly-java-store-spanner",
+        "sdk_module": "com.google.cloud:google-cloud-spanner",
+        "sdk_version": "6.119.0",
+        "minimum_java": "17",
+        "protocol_major": 1,
+        "schema_version": 1,
+        "capabilities": {"native_batch_reads":false,"atomic_batch_writes":true,"node_scan":true,"hints":true,"atomic_nodes_and_hint":true,"root_scan":true,"root_compare_and_swap":true,"transactions":true,"read_parallelism":16},
+        "limits": {"max_batch_read_items":null,"max_batch_write_items":null,"max_transaction_operations":null,"max_node_bytes":null},
+        "evidence": ["SPANNER_EMULATOR_HOST=127.0.0.1:9010 mvn -f bindings/pom.xml -pl java/stores/spanner -am test"]
       }
     },
     "go": {
