@@ -23,6 +23,24 @@ export interface VersionPrune {
   retained: Uint8Array[];
   removed: Uint8Array[];
 }
+export interface VersionedParallelConfig { maxThreads: bigint; parallelismThreshold: bigint; }
+export interface VersionedBatchApplyStats {
+  inputMutations: bigint;
+  effectiveMutations: bigint;
+  preprocessInputSorted: boolean;
+  affectedLeaves: bigint;
+  changedLeaves: bigint;
+  sparseLeafApplies: bigint;
+  writtenNodes: bigint;
+  writtenBytes: bigint;
+  usedAppendFastPath: boolean;
+  usedBatchedRoute: boolean;
+  usedCoalescedRebuild: boolean;
+  usedDeferredRebalancing: boolean;
+  usedBottomUpRebuild: boolean;
+  cacheWrittenNodes: boolean;
+}
+export interface VersionedMapBatchResult { version: MapVersion; stats: VersionedBatchApplyStats; }
 export interface CatalogVerification {
   head: Uint8Array;
   versionCount: bigint;
@@ -117,6 +135,7 @@ interface NativeVersionedMap {
   id(): Uint8Array;
   isInitialized(): boolean;
   initialize(): NativeMapVersion;
+  initializeSorted(entries: MapEntry[]): NativeMapUpdate;
   head(): NativeMapVersion | null;
   headId(): Uint8Array | null;
   version(id: Uint8Array): NativeMapVersion | null;
@@ -139,6 +158,10 @@ interface NativeVersionedMap {
   rollbackTo(id: Uint8Array): NativeMapVersion;
   put(key: Uint8Array, value: Uint8Array): NativeMapVersion;
   apply(mutations: MapMutation[]): NativeMapVersion;
+  append(mutations: MapMutation[]): NativeMapVersion;
+  parallelApply(mutations: MapMutation[], config: NativeVersionedParallelConfig): NativeVersionedMapBatchResult;
+  rebuildSortedIf(expected: Uint8Array | null, entries: MapEntry[]): NativeMapUpdate;
+  rebuildFromEntriesIf(expected: Uint8Array | null, entries: MapEntry[]): NativeMapUpdate;
   applyAtMillis(mutations: MapMutation[], timestampMillis: string): NativeMapVersion;
   applyIf(expected: Uint8Array | null, mutations: MapMutation[]): NativeMapUpdate;
   applyIfAtMillis(expected: Uint8Array | null, mutations: MapMutation[], timestampMillis: string): NativeMapUpdate;
@@ -206,6 +229,16 @@ interface NativeMapUpdate {
   previous?: Uint8Array;
   current?: NativeMapVersion;
 }
+
+interface NativeVersionedParallelConfig { maxThreads: string; parallelismThreshold: string; }
+interface NativeVersionedBatchApplyStats {
+  inputMutations: string; effectiveMutations: string; preprocessInputSorted: boolean;
+  affectedLeaves: string; changedLeaves: string; sparseLeafApplies: string;
+  writtenNodes: string; writtenBytes: string; usedAppendFastPath: boolean;
+  usedBatchedRoute: boolean; usedCoalescedRebuild: boolean; usedDeferredRebalancing: boolean;
+  usedBottomUpRebuild: boolean; cacheWrittenNodes: boolean;
+}
+interface NativeVersionedMapBatchResult { version: NativeMapVersion; stats: NativeVersionedBatchApplyStats; }
 
 interface NativeMaintenanceSummary { itemCount: string; byteCount: string; }
 interface NativeCatalogVerification { head: Uint8Array; versionCount: string; reachableNodes: string; reachableBytes: string; }
@@ -324,6 +357,32 @@ function ownedMutations(mutations: readonly MapMutation[]): MapMutation[] {
   }));
 }
 
+function ownedEntries(entries: readonly MapEntry[]): MapEntry[] {
+  return entries.map((entry) => ({ key: ownedBytes(entry.key), value: ownedBytes(entry.value) }));
+}
+
+function versionedBatchResult(value: NativeVersionedMapBatchResult): VersionedMapBatchResult {
+  return {
+    version: mapVersion(value.version),
+    stats: {
+      inputMutations: BigInt(value.stats.inputMutations),
+      effectiveMutations: BigInt(value.stats.effectiveMutations),
+      preprocessInputSorted: value.stats.preprocessInputSorted,
+      affectedLeaves: BigInt(value.stats.affectedLeaves),
+      changedLeaves: BigInt(value.stats.changedLeaves),
+      sparseLeafApplies: BigInt(value.stats.sparseLeafApplies),
+      writtenNodes: BigInt(value.stats.writtenNodes),
+      writtenBytes: BigInt(value.stats.writtenBytes),
+      usedAppendFastPath: value.stats.usedAppendFastPath,
+      usedBatchedRoute: value.stats.usedBatchedRoute,
+      usedCoalescedRebuild: value.stats.usedCoalescedRebuild,
+      usedDeferredRebalancing: value.stats.usedDeferredRebalancing,
+      usedBottomUpRebuild: value.stats.usedBottomUpRebuild,
+      cacheWrittenNodes: value.stats.cacheWrittenNodes,
+    },
+  };
+}
+
 function checkedPageLimit(limit: bigint): string {
   if (limit < 0n || limit > 0xffff_ffff_ffff_ffffn) {
     throw new RangeError("page limit must be an unsigned 64-bit integer");
@@ -372,6 +431,11 @@ export class VersionedMap implements Disposable {
   initialize(signal?: AbortSignal): Promise<MapVersion> {
     const native = this.#open();
     return nativePromise(signal, () => mapVersion(native.initialize()));
+  }
+
+  initializeSorted(entries: readonly MapEntry[], signal?: AbortSignal): Promise<MapUpdate> {
+    const native = this.#open(); const owned = ownedEntries(entries);
+    return nativePromise(signal, () => mapUpdate(native.initializeSorted(owned)));
   }
 
   head(signal?: AbortSignal): Promise<MapVersion | undefined> {
@@ -495,6 +559,32 @@ export class VersionedMap implements Disposable {
   apply(mutations: readonly MapMutation[], signal?: AbortSignal): Promise<MapVersion> {
     const native = this.#open(); const owned = ownedMutations(mutations);
     return nativePromise(signal, () => mapVersion(native.apply(owned)));
+  }
+
+  append(mutations: readonly MapMutation[], signal?: AbortSignal): Promise<MapVersion> {
+    const native = this.#open(); const owned = ownedMutations(mutations);
+    return nativePromise(signal, () => mapVersion(native.append(owned)));
+  }
+  parallelApply(mutations: readonly MapMutation[], config: VersionedParallelConfig, signal?: AbortSignal): Promise<VersionedMapBatchResult> {
+    const native = this.#open(); const owned = ownedMutations(mutations);
+    const ownedConfig = {
+      maxThreads: checkedU64(config.maxThreads, "maxThreads"),
+      parallelismThreshold: checkedU64(config.parallelismThreshold, "parallelismThreshold"),
+    };
+    return nativePromise(signal, () => versionedBatchResult(native.parallelApply(owned, ownedConfig)));
+  }
+  rebuildSortedIf(expected: Uint8Array | undefined, entries: readonly MapEntry[], signal?: AbortSignal): Promise<MapUpdate> {
+    const native = this.#open(); const ownedExpected = expected == null ? null : ownedBytes(expected);
+    const owned = ownedEntries(entries);
+    return nativePromise(signal, () => mapUpdate(native.rebuildSortedIf(ownedExpected, owned)));
+  }
+  rebuildFromEntriesIf(expected: Uint8Array | undefined, entries: readonly MapEntry[], signal?: AbortSignal): Promise<MapUpdate> {
+    const native = this.#open(); const ownedExpected = expected == null ? null : ownedBytes(expected);
+    const owned = ownedEntries(entries);
+    return nativePromise(signal, () => mapUpdate(native.rebuildFromEntriesIf(ownedExpected, owned)));
+  }
+  rebuildFromIterIf(expected: Uint8Array | undefined, entries: readonly MapEntry[], signal?: AbortSignal): Promise<MapUpdate> {
+    return this.rebuildFromEntriesIf(expected, entries, signal);
   }
 
   applyAtMillis(mutations: readonly MapMutation[], timestampMillis: bigint, signal?: AbortSignal): Promise<MapVersion> {

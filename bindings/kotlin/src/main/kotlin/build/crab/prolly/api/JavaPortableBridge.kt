@@ -1,5 +1,7 @@
 package build.crab.prolly.api
 
+import build.crab.prolly.BatchApplyStatsRecord
+import build.crab.prolly.EntryRecord
 import build.crab.prolly.IndexProjectionRecord
 import build.crab.prolly.IndexBuildResultRecord
 import build.crab.prolly.IndexMatchRecord
@@ -25,6 +27,7 @@ import build.crab.prolly.MapUpdateRecord
 import build.crab.prolly.MapVersionRecord
 import build.crab.prolly.MutationKind
 import build.crab.prolly.MutationRecord
+import build.crab.prolly.ParallelConfigRecord
 import build.crab.prolly.MultiKeyProofRecord
 import build.crab.prolly.MultiKeyProofVerificationRecord
 import build.crab.prolly.ProximityVerificationRecord
@@ -55,6 +58,30 @@ data class JavaMapMutation(
     val kind: String,
     val key: ByteArray,
     val value: ByteArray?,
+)
+
+data class JavaMapEntry(val key: ByteArray, val value: ByteArray)
+
+data class JavaBatchApplyStats(
+    val inputMutations: Long,
+    val effectiveMutations: Long,
+    val preprocessInputSorted: Boolean,
+    val affectedLeaves: Long,
+    val changedLeaves: Long,
+    val sparseLeafApplies: Long,
+    val writtenNodes: Long,
+    val writtenBytes: Long,
+    val usedAppendFastPath: Boolean,
+    val usedBatchedRoute: Boolean,
+    val usedCoalescedRebuild: Boolean,
+    val usedDeferredRebalancing: Boolean,
+    val usedBottomUpRebuild: Boolean,
+    val cacheWrittenNodes: Boolean,
+)
+
+data class JavaVersionedMapBatchResult(
+    val version: MapVersionRecord,
+    val stats: JavaBatchApplyStats,
 )
 
 data class JavaMapUpdate(
@@ -329,7 +356,55 @@ private fun ProximityVerificationRecord.toJava() = JavaProximityVerification(
     distanceChecks.toLong(),
 )
 
+private fun BatchApplyStatsRecord.toJava() = JavaBatchApplyStats(
+    inputMutations.toLong(), effectiveMutations.toLong(), preprocessInputSorted,
+    affectedLeaves.toLong(), changedLeaves.toLong(), sparseLeafApplies.toLong(),
+    writtenNodes.toLong(), writtenBytes.toLong(), usedAppendFastPath, usedBatchedRoute,
+    usedCoalescedRebuild, usedDeferredRebalancing, usedBottomUpRebuild, cacheWrittenNodes,
+)
+
 object JavaPortableBridge {
+    @JvmStatic
+    fun initializeVersionedSorted(map: VersionedMap, entries: List<JavaMapEntry>): JavaMapUpdate =
+        map.initializeSorted(entries.map { EntryRecord(it.key.copyOf(), it.value.copyOf()) }).toJava()
+
+    @JvmStatic
+    fun appendVersioned(map: VersionedMap, mutations: List<JavaMapMutation>): MapVersionRecord =
+        map.append(mutations.map { it.toNative() })
+
+    @JvmStatic
+    fun parallelApplyVersioned(
+        map: VersionedMap,
+        mutations: List<JavaMapMutation>,
+        maxThreads: Long,
+        parallelismThreshold: Long,
+    ): JavaVersionedMapBatchResult {
+        require(maxThreads >= 0 && parallelismThreshold >= 0) { "parallel config must be non-negative" }
+        val result = map.parallelApply(
+            mutations.map { it.toNative() },
+            ParallelConfigRecord(maxThreads.toULong(), parallelismThreshold.toULong()),
+        )
+        return JavaVersionedMapBatchResult(result.version, result.stats.toJava())
+    }
+
+    @JvmStatic
+    fun rebuildVersionedSortedIf(
+        map: VersionedMap,
+        expected: ByteArray?,
+        entries: List<JavaMapEntry>,
+    ): JavaMapUpdate = map.rebuildSortedIf(
+        expected?.copyOf(), entries.map { EntryRecord(it.key.copyOf(), it.value.copyOf()) },
+    ).toJava()
+
+    @JvmStatic
+    fun rebuildVersionedFromEntriesIf(
+        map: VersionedMap,
+        expected: ByteArray?,
+        entries: List<JavaMapEntry>,
+    ): JavaMapUpdate = map.rebuildFromEntriesIf(
+        expected?.copyOf(), entries.map { EntryRecord(it.key.copyOf(), it.value.copyOf()) },
+    ).toJava()
+
     @JvmStatic
     fun mapVersionCreatedAtMillis(version: MapVersionRecord): Long? =
         version.createdAtMillis?.toLong()

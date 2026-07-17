@@ -7,6 +7,51 @@ import (
 	"testing"
 )
 
+func TestVersionedBulkPublicationUsesNativePerformancePaths(t *testing.T) {
+	config, err := DefaultConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine, err := NewMemoryEngine(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(engine.Close)
+	versioned, err := engine.VersionedMap([]byte("bulk-publication"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(versioned.Close)
+	initialized, err := versioned.InitializeSorted([]Entry{{Key: []byte("a"), Value: []byte("one")}, {Key: []byte("b"), Value: []byte("two")}})
+	if err != nil || initialized.Current == nil {
+		t.Fatalf("initialize sorted = %#v, %v", initialized, err)
+	}
+	if _, err := versioned.Append([]Mutation{UpsertMutation([]byte("c"), []byte("three"))}); err != nil {
+		t.Fatal(err)
+	}
+	parallel, err := versioned.ParallelApply([]Mutation{
+		UpsertMutation([]byte("b"), []byte("updated")), UpsertMutation([]byte("d"), []byte("four")),
+	}, NewParallelConfig(1, 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parallel.Stats.InputMutations != 2 {
+		t.Fatalf("parallel stats = %#v", parallel.Stats)
+	}
+	rebuilt, err := versioned.RebuildSortedIf(parallel.Version.ID, []Entry{{Key: []byte("x"), Value: []byte("nine")}, {Key: []byte("y"), Value: []byte("ten")}})
+	if err != nil || rebuilt.Kind != MapUpdateApplied || rebuilt.Current == nil {
+		t.Fatalf("sorted rebuild = %#v, %v", rebuilt, err)
+	}
+	iterRebuilt, err := versioned.RebuildFromEntriesIf(rebuilt.Current.ID, []Entry{{Key: []byte("q"), Value: []byte("queue")}, {Key: []byte("p"), Value: []byte("priority")}})
+	if err != nil || iterRebuilt.Current == nil {
+		t.Fatalf("iter rebuild = %#v, %v", iterRebuilt, err)
+	}
+	value, ok, err := versioned.Get([]byte("p"))
+	if err != nil || !ok || !bytes.Equal(value, []byte("priority")) {
+		t.Fatalf("rebuilt value = %q, %v, %v", value, ok, err)
+	}
+}
+
 func TestPortableVersionedIndexedAndProximityMaps(t *testing.T) {
 	config, err := DefaultConfig()
 	if err != nil {

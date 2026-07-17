@@ -73,6 +73,7 @@ extern void uniffi_prolly_bindings_fn_free_bindingversionedmap(uint64_t ptr, Rus
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_id(uint64_t ptr, RustCallStatus *out_err);
 extern int8_t uniffi_prolly_bindings_fn_method_bindingversionedmap_is_initialized(uint64_t ptr, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_initialize(uint64_t ptr, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_initialize_sorted(uint64_t ptr, RustBuffer entries, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_head(uint64_t ptr, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_head_id(uint64_t ptr, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_version(uint64_t ptr, RustBuffer id, RustCallStatus *out_err);
@@ -84,6 +85,10 @@ extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_get_at(ui
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_get_many_at(uint64_t ptr, RustBuffer id, RustBuffer keys, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_put(uint64_t ptr, RustBuffer key, RustBuffer value, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_apply(uint64_t ptr, RustBuffer mutations, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_append(uint64_t ptr, RustBuffer mutations, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_parallel_apply(uint64_t ptr, RustBuffer mutations, RustBuffer config, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_rebuild_sorted_if(uint64_t ptr, RustBuffer expected, RustBuffer entries, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_rebuild_from_entries_if(uint64_t ptr, RustBuffer expected, RustBuffer entries, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_apply_at_millis(uint64_t ptr, RustBuffer mutations, uint64_t timestamp_millis, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_apply_if(uint64_t ptr, RustBuffer expected, RustBuffer mutations, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_apply_if_at_millis(uint64_t ptr, RustBuffer expected, RustBuffer mutations, uint64_t timestamp_millis, RustCallStatus *out_err);
@@ -662,6 +667,95 @@ func ffiVersionedApply(handle uint64, mutations []byte) ([]byte, error) {
 	}
 	var status C.RustCallStatus
 	buf := C.uniffi_prolly_bindings_fn_method_bindingversionedmap_apply(clone, mutationsBuf, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiVersionedInitializeSorted(handle uint64, entries []byte) ([]byte, error) {
+	clone, err := portableCloneVersioned(handle)
+	if err != nil {
+		return nil, err
+	}
+	entriesBuf, err := portableInput(entries)
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingversionedmap_initialize_sorted(clone, entriesBuf, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiVersionedAppend(handle uint64, mutations []byte) ([]byte, error) {
+	clone, err := portableCloneVersioned(handle)
+	if err != nil {
+		return nil, err
+	}
+	mutationsBuf, err := portableInput(mutations)
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingversionedmap_append(clone, mutationsBuf, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiVersionedParallelApply(handle uint64, mutations, config []byte) ([]byte, error) {
+	clone, err := portableCloneVersioned(handle)
+	if err != nil {
+		return nil, err
+	}
+	mutationsBuf, err := portableInput(mutations)
+	if err != nil {
+		return nil, err
+	}
+	configBuf, err := portableInput(config)
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingversionedmap_parallel_apply(clone, mutationsBuf, configBuf, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiVersionedRebuildSortedIf(handle uint64, expected, entries []byte) ([]byte, error) {
+	return ffiVersionedRebuildEntries(handle, expected, entries, true)
+}
+
+func ffiVersionedRebuildFromEntriesIf(handle uint64, expected, entries []byte) ([]byte, error) {
+	return ffiVersionedRebuildEntries(handle, expected, entries, false)
+}
+
+func ffiVersionedRebuildEntries(handle uint64, expected, entries []byte, sorted bool) ([]byte, error) {
+	clone, err := portableCloneVersioned(handle)
+	if err != nil {
+		return nil, err
+	}
+	expectedBuf, err := portableInput(encodeOptionalByteArray(expected))
+	if err != nil {
+		return nil, err
+	}
+	entriesBuf, err := portableInput(entries)
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	var buf C.RustBuffer
+	if sorted {
+		buf = C.uniffi_prolly_bindings_fn_method_bindingversionedmap_rebuild_sorted_if(clone, expectedBuf, entriesBuf, &status)
+	} else {
+		buf = C.uniffi_prolly_bindings_fn_method_bindingversionedmap_rebuild_from_entries_if(clone, expectedBuf, entriesBuf, &status)
+	}
 	if err := portableStatusError(&status); err != nil {
 		return nil, err
 	}

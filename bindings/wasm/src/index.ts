@@ -981,6 +981,28 @@ export interface WasmVersionPrune {
   removed: Uint8Array[];
 }
 
+export interface WasmVersionedParallelConfig { maxThreads: bigint; parallelismThreshold: bigint; }
+export interface WasmVersionedBatchApplyStats {
+  inputMutations: bigint;
+  effectiveMutations: bigint;
+  preprocessInputSorted: boolean;
+  affectedLeaves: bigint;
+  changedLeaves: bigint;
+  sparseLeafApplies: bigint;
+  writtenNodes: bigint;
+  writtenBytes: bigint;
+  usedAppendFastPath: boolean;
+  usedBatchedRoute: boolean;
+  usedCoalescedRebuild: boolean;
+  usedDeferredRebalancing: boolean;
+  usedBottomUpRebuild: boolean;
+  cacheWrittenNodes: boolean;
+}
+export interface WasmVersionedMapBatchResult {
+  version: WasmMapVersion;
+  stats: WasmVersionedBatchApplyStats;
+}
+
 export interface WasmCatalogVerification {
   head: Uint8Array;
   versionCount: bigint;
@@ -1061,6 +1083,28 @@ function wasmMapUpdate(value: any): WasmMapUpdate {
   };
 }
 
+function wasmVersionedBatchResult(value: any): WasmVersionedMapBatchResult {
+  return {
+    version: wasmMapVersion(value.version),
+    stats: {
+      inputMutations: BigInt(value.stats.inputMutations),
+      effectiveMutations: BigInt(value.stats.effectiveMutations),
+      preprocessInputSorted: value.stats.preprocessInputSorted,
+      affectedLeaves: BigInt(value.stats.affectedLeaves),
+      changedLeaves: BigInt(value.stats.changedLeaves),
+      sparseLeafApplies: BigInt(value.stats.sparseLeafApplies),
+      writtenNodes: BigInt(value.stats.writtenNodes),
+      writtenBytes: BigInt(value.stats.writtenBytes),
+      usedAppendFastPath: value.stats.usedAppendFastPath,
+      usedBatchedRoute: value.stats.usedBatchedRoute,
+      usedCoalescedRebuild: value.stats.usedCoalescedRebuild,
+      usedDeferredRebalancing: value.stats.usedDeferredRebalancing,
+      usedBottomUpRebuild: value.stats.usedBottomUpRebuild,
+      cacheWrittenNodes: value.stats.cacheWrittenNodes,
+    },
+  };
+}
+
 function wasmCatalogVerification(value: any): WasmCatalogVerification {
   return {
     head: value.head,
@@ -1105,6 +1149,13 @@ function ownedWasmMutations(mutations: readonly WasmMapMutation[]): WasmMapMutat
   }));
 }
 
+function ownedWasmEntries(entries: readonly WasmEntryRecord[]): WasmEntryRecord[] {
+  return entries.map((entry) => ({
+    key: ownedPortableBytes(entry.key),
+    value: ownedPortableBytes(entry.value),
+  }));
+}
+
 export class WasmVersionedMap implements Disposable {
   #native?: any;
   #memory?: WebAssembly.Memory;
@@ -1121,6 +1172,10 @@ export class WasmVersionedMap implements Disposable {
   initialize(signal?: AbortSignal): Promise<WasmMapVersion> {
     const native = this.#open();
     return portablePromise(signal, () => wasmMapVersion(native.initialize()));
+  }
+  initializeSorted(entries: readonly WasmEntryRecord[], signal?: AbortSignal): Promise<WasmMapUpdate> {
+    const native = this.#open(); const owned = ownedWasmEntries(entries);
+    return portablePromise(signal, () => wasmMapUpdate(native.initializeSorted(owned)));
   }
   head(signal?: AbortSignal): Promise<WasmMapVersion | undefined> {
     const native = this.#open();
@@ -1218,6 +1273,31 @@ export class WasmVersionedMap implements Disposable {
   apply(mutations: readonly WasmMapMutation[], signal?: AbortSignal): Promise<WasmMapVersion> {
     const native = this.#open(); const owned = ownedWasmMutations(mutations);
     return portablePromise(signal, () => wasmMapVersion(native.apply(owned)));
+  }
+  append(mutations: readonly WasmMapMutation[], signal?: AbortSignal): Promise<WasmMapVersion> {
+    const native = this.#open(); const owned = ownedWasmMutations(mutations);
+    return portablePromise(signal, () => wasmMapVersion(native.append(owned)));
+  }
+  parallelApply(mutations: readonly WasmMapMutation[], config: WasmVersionedParallelConfig, signal?: AbortSignal): Promise<WasmVersionedMapBatchResult> {
+    const native = this.#open(); const owned = ownedWasmMutations(mutations);
+    const ownedConfig = {
+      maxThreads: config.maxThreads.toString(),
+      parallelismThreshold: config.parallelismThreshold.toString(),
+    };
+    return portablePromise(signal, () => wasmVersionedBatchResult(native.parallelApply(owned, ownedConfig)));
+  }
+  rebuildSortedIf(expected: Uint8Array | undefined, entries: readonly WasmEntryRecord[], signal?: AbortSignal): Promise<WasmMapUpdate> {
+    const native = this.#open(); const ownedExpected = expected == null ? undefined : ownedPortableBytes(expected);
+    const owned = ownedWasmEntries(entries);
+    return portablePromise(signal, () => wasmMapUpdate(native.rebuildSortedIf(ownedExpected, owned)));
+  }
+  rebuildFromEntriesIf(expected: Uint8Array | undefined, entries: readonly WasmEntryRecord[], signal?: AbortSignal): Promise<WasmMapUpdate> {
+    const native = this.#open(); const ownedExpected = expected == null ? undefined : ownedPortableBytes(expected);
+    const owned = ownedWasmEntries(entries);
+    return portablePromise(signal, () => wasmMapUpdate(native.rebuildFromEntriesIf(ownedExpected, owned)));
+  }
+  rebuildFromIterIf(expected: Uint8Array | undefined, entries: readonly WasmEntryRecord[], signal?: AbortSignal): Promise<WasmMapUpdate> {
+    return this.rebuildFromEntriesIf(expected, entries, signal);
   }
   applyAtMillis(mutations: readonly WasmMapMutation[], timestampMillis: bigint, signal?: AbortSignal): Promise<WasmMapVersion> {
     const native = this.#open(); const owned = ownedWasmMutations(mutations);

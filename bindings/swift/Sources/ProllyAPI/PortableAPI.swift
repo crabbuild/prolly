@@ -109,6 +109,9 @@ public final class VersionedMap: @unchecked Sendable {
     public var id: Data { native.id() }
     public func isInitialized() throws -> Bool { try open { try native.isInitialized() } }
     public func initialize() throws -> MapVersionRecord { try open { try native.initialize() } }
+    public func initializeSorted(_ entries: [EntryRecord]) throws -> MapUpdateRecord {
+        try open { try native.initializeSorted(entries: entries.map(ownedEntry)) }
+    }
     public func head() throws -> MapVersionRecord? { try open { try native.head() } }
     public func headID() throws -> Data? { try open { try native.headId() } }
     public func version(_ id: Data) throws -> MapVersionRecord? {
@@ -190,6 +193,42 @@ public final class VersionedMap: @unchecked Sendable {
     }
     public func apply(_ mutations: [MutationRecord]) throws -> MapVersionRecord {
         try open { try native.apply(mutations: mutations.map(ownedMutation)) }
+    }
+    public func append(_ mutations: [MutationRecord]) throws -> MapVersionRecord {
+        try open { try native.append(mutations: mutations.map(ownedMutation)) }
+    }
+    public func parallelApply(
+        _ mutations: [MutationRecord],
+        config: ParallelConfigRecord
+    ) throws -> VersionedMapBatchResultRecord {
+        try open {
+            try native.parallelApply(
+                mutations: mutations.map(ownedMutation),
+                config: ParallelConfigRecord(
+                    maxThreads: config.maxThreads,
+                    parallelismThreshold: config.parallelismThreshold
+                )
+            )
+        }
+    }
+    public func rebuildSortedIf(_ expected: Data?, entries: [EntryRecord]) throws -> MapUpdateRecord {
+        try open {
+            try native.rebuildSortedIf(
+                expected: expected.map { Data($0) },
+                entries: entries.map(ownedEntry)
+            )
+        }
+    }
+    public func rebuildFromEntriesIf(_ expected: Data?, entries: [EntryRecord]) throws -> MapUpdateRecord {
+        try open {
+            try native.rebuildFromEntriesIf(
+                expected: expected.map { Data($0) },
+                entries: entries.map(ownedEntry)
+            )
+        }
+    }
+    public func rebuildFromIterIf(_ expected: Data?, entries: [EntryRecord]) throws -> MapUpdateRecord {
+        try rebuildFromEntriesIf(expected, entries: entries)
     }
     public func applyAtMillis(
         _ mutations: [MutationRecord],
@@ -389,6 +428,10 @@ private func ownedMutation(_ mutation: MutationRecord) -> MutationRecord {
         key: Data(mutation.key),
         value: mutation.value.map { Data($0) }
     )
+}
+
+private func ownedEntry(_ entry: EntryRecord) -> EntryRecord {
+    EntryRecord(key: Data(entry.key), value: Data(entry.value))
 }
 
 public final class MapSnapshot: @unchecked Sendable {
