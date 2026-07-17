@@ -245,4 +245,17 @@ final class PortableParityTests: XCTestCase {
             searchProof.close()
         }
     }
+    func testVersionedComparisonsPinVersionsAndPageDiffs() throws {
+        try Engine.withMemory { engine in
+            let map = try engine.versionedMap(Data("comparison".utf8))
+            let base = try map.initialize()
+            let target = try map.put(Data("k".utf8), value: Data("v".utf8))
+            let comparison = try map.compare(base: base.id, target: target.id)
+            XCTAssertEqual(comparison.base.id, base.id)
+            XCTAssertEqual(comparison.target.id, target.id)
+            XCTAssertEqual(try comparison.diff().map(\.key), [Data("k".utf8)])
+            XCTAssertEqual(try comparison.diffPage(limit: 1).diffs.map(\.key), [Data("k".utf8)])
+            comparison.close()
+        }
+    }
 }

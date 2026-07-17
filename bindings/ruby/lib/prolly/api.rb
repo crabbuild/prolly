@@ -284,6 +284,8 @@ module Prolly
     def delete(key) = open! { @native.delete(key.b) }
     def snapshot = open! { @native.snapshot&.then { |value| MapSnapshot.new(value) } }
     def snapshot_at(id) = open! { @native.snapshot_at(id.b)&.then { |value| MapSnapshot.new(value) } }
+    def compare(base, target) = open! { MapComparison.new(@native.compare(base.b, target.b)) }
+    def compare_to_head(base) = open! { MapComparison.new(@native.compare_to_head(base.b)) }
     def backup = open! { @native.backup }
     def restore_backup(bundle) = open! { @native.restore_backup(bundle.b) }
     def keep_last(count) = open! { @native.keep_last(count) }
@@ -303,6 +305,26 @@ module Prolly
 
     def open!
       raise 'versioned map is closed' if @closed
+      yield
+    end
+  end
+
+  class MapComparison
+    def initialize(native)
+      @native = native
+      @closed = false
+    end
+
+    def base = open! { @native.base }
+    def target = open! { @native.target }
+    def diff = open! { @native.diff }
+    def diff_page(cursor = nil, range_end = nil, limit = 256) = open! { @native.diff_page(cursor, range_end&.b, limit) }
+    def close = @closed = true
+
+    private
+
+    def open!
+      raise IOError, 'map comparison is closed' if @closed
       yield
     end
   end

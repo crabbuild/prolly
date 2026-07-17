@@ -234,4 +234,18 @@ class PortableParityTest < Minitest::Test
       end
     end
   end
+
+  def test_versioned_comparison_pins_versions_and_pages_diffs
+    Prolly::Engine.memory.use do |engine|
+      map = engine.versioned_map('comparison'.b)
+      base = map.initialize_map
+      target = map.put('k'.b, 'v'.b)
+      comparison = map.compare(base.id, target.id)
+      assert_equal base.id, comparison.base.id
+      assert_equal target.id, comparison.target.id
+      assert_equal ['k'.b], comparison.diff.map(&:key)
+      assert_equal ['k'.b], comparison.diff_page(nil, nil, 1).diffs.map(&:key)
+      comparison.close
+    end
+  end
 end

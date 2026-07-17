@@ -271,6 +271,17 @@ class PortableParityTests(unittest.TestCase):
                 self.assertEqual(verified_search.result.neighbors[0].key, b"p")
                 self.assertGreater(verified_search.replayed_events, 0)
 
+    def test_versioned_comparison_pins_versions_and_pages_diffs(self):
+        with Engine.memory() as engine:
+            versioned = engine.versioned_map(b"comparison")
+            base = versioned.initialize()
+            target = versioned.put(b"k", b"v")
+            with versioned.compare(base.id, target.id) as comparison:
+                self.assertEqual(comparison.base.id, base.id)
+                self.assertEqual(comparison.target.id, target.id)
+                self.assertEqual([diff.key for diff in comparison.diff()], [b"k"])
+                self.assertEqual([diff.key for diff in comparison.diff_page(limit=1).diffs], [b"k"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -345,6 +345,21 @@ class PortableParityTest {
         }
     }
 
+    @Test
+    void versionedComparisonsPinVersionsAndPageDiffs() {
+        Prolly.useLocalDebugLibrary();
+        try (Engine engine = Engine.memory(); var map = engine.versionedMap(bytes("comparison"))) {
+            var base = map.initialize();
+            var target = map.put(bytes("k"), bytes("v"));
+            try (var comparison = map.compare(base.id(), target.id())) {
+                assertArrayEquals(base.id(), comparison.base().id());
+                assertArrayEquals(target.id(), comparison.target().id());
+                assertEquals(List.of("k"), comparison.diff().stream().map(diff -> new String(diff.getKey())).toList());
+                assertEquals(List.of("k"), comparison.diffPage(1).getDiffs().stream().map(diff -> new String(diff.getKey())).toList());
+            }
+        }
+    }
+
     private static byte[] bytes(String value) {
         return value.getBytes(StandardCharsets.UTF_8);
     }

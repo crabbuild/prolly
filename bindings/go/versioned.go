@@ -37,6 +37,7 @@ type VersionPrune struct {
 }
 
 type VersionedMap struct {
+	engine *Engine
 	handle uint64
 	closed atomic.Bool
 	mu     sync.RWMutex
@@ -52,9 +53,88 @@ func (e *Engine) VersionedMap(id []byte) (*VersionedMap, error) {
 	if err != nil {
 		return nil, err
 	}
-	result := &VersionedMap{handle: handle}
+	result := &VersionedMap{engine: e, handle: handle}
 	runtime.SetFinalizer(result, (*VersionedMap).Close)
 	return result, nil
+}
+
+// MapComparison pins two cataloged versions so later head changes cannot alter
+// the comparison inputs.
+type MapComparison struct {
+	engine *Engine
+	base   MapVersion
+	target MapVersion
+	closed atomic.Bool
+}
+
+func (m *VersionedMap) Compare(baseID, targetID []byte) (*MapComparison, error) {
+	base, err := m.Version(append([]byte(nil), baseID...))
+	if err != nil {
+		return nil, err
+	}
+	if base == nil {
+		return nil, errors.New("base map version is not cataloged")
+	}
+	target, err := m.Version(append([]byte(nil), targetID...))
+	if err != nil {
+		return nil, err
+	}
+	if target == nil {
+		return nil, errors.New("target map version is not cataloged")
+	}
+	return &MapComparison{engine: m.engine, base: *base, target: *target}, nil
+}
+
+func (m *VersionedMap) CompareToHead(baseID []byte) (*MapComparison, error) {
+	head, err := m.Head()
+	if err != nil {
+		return nil, err
+	}
+	if head == nil {
+		return nil, errors.New("versioned map has not been initialized")
+	}
+	return m.Compare(baseID, head.ID)
+}
+
+func (c *MapComparison) Close() {
+	if c != nil {
+		c.closed.Store(true)
+	}
+}
+
+func (c *MapComparison) open() error {
+	if c == nil || c.closed.Load() {
+		return errors.New("map comparison is closed")
+	}
+	return nil
+}
+
+func (c *MapComparison) Base() (MapVersion, error) {
+	if err := c.open(); err != nil {
+		return MapVersion{}, err
+	}
+	return c.base, nil
+}
+
+func (c *MapComparison) Target() (MapVersion, error) {
+	if err := c.open(); err != nil {
+		return MapVersion{}, err
+	}
+	return c.target, nil
+}
+
+func (c *MapComparison) Diff() ([]Diff, error) {
+	if err := c.open(); err != nil {
+		return nil, err
+	}
+	return c.engine.Diff(c.base.Tree, c.target.Tree)
+}
+
+func (c *MapComparison) DiffPage(cursor *RangeCursor, end []byte, limit uint64) (DiffPage, error) {
+	if err := c.open(); err != nil {
+		return DiffPage{}, err
+	}
+	return c.engine.DiffPage(c.base.Tree, c.target.Tree, cursor, append([]byte(nil), end...), limit)
 }
 
 func (m *VersionedMap) Close() {

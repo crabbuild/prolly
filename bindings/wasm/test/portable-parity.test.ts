@@ -336,3 +336,17 @@ test("WASM indexed maintenance and every bounded page direction are complete", {
   assert.equal(indexed.health().activeIndexes.length, 0);
   engine.close();
 });
+
+test("WASM versioned comparisons pin versions and page diffs", { skip: !generatedPresent }, async () => {
+  const engine = api.Engine.memory(wasm);
+  const map = engine.versionedMap(bytes("comparison"));
+  const base = await map.initialize();
+  const target = await map.put(bytes("k"), bytes("v"));
+  const comparison = map.compare(base.id, target.id);
+  assert.deepEqual(comparison.base().id, base.id);
+  assert.deepEqual(comparison.target().id, target.id);
+  assert.deepEqual(comparison.diff().map((diff: any) => Buffer.from(diff.key).toString()), ["k"]);
+  assert.deepEqual(comparison.diffPage(undefined, undefined, 1).diffs.map((diff: any) => Buffer.from(diff.key).toString()), ["k"]);
+  comparison.close();
+  engine.close();
+});

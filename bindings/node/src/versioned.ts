@@ -29,6 +29,14 @@ export interface RangeCursor { afterKey?: Uint8Array; }
 export interface ReverseCursor { beforeKey?: Uint8Array; }
 export interface RangePage { entries: MapEntry[]; nextCursor?: RangeCursor; }
 export interface ReversePage { entries: MapEntry[]; nextCursor?: ReverseCursor; }
+export interface MapDiff {
+  kind: "added" | "removed" | "changed";
+  key: Uint8Array;
+  value?: Uint8Array;
+  old?: Uint8Array;
+  newValue?: Uint8Array;
+}
+export interface DiffPage { diffs: MapDiff[]; nextCursor?: RangeCursor; }
 /** Read-only page views that expire when the scan callback returns. */
 export interface MapEntryView { key: Uint8Array; value: Uint8Array; }
 export interface ReadScanOutcome { visited: bigint; stopped: boolean; }
@@ -88,11 +96,20 @@ interface NativeVersionedMap {
   delete(key: Uint8Array): NativeMapVersion;
   snapshot(): NativeMapSnapshot | null;
   snapshotAt(id: Uint8Array): NativeMapSnapshot | null;
+  compare(base: Uint8Array, target: Uint8Array): NativeMapComparison;
+  compareToHead(base: Uint8Array): NativeMapComparison;
   backup(): Uint8Array;
   restoreBackup(bytes: Uint8Array): NativeMapVersion;
   keepLast(count: number): { retained: Uint8Array[]; removed: Uint8Array[] };
   verifyCatalog(): NativeMaintenanceSummary;
   planGc(): NativeMaintenanceSummary;
+}
+
+interface NativeMapComparison {
+  base(): NativeMapVersion;
+  target(): NativeMapVersion;
+  diff(): MapDiff[];
+  diffPage(cursor: RangeCursor | null, end: Uint8Array | null, limit: string): DiffPage;
 }
 
 interface NativeMapUpdate {
@@ -326,6 +343,15 @@ export class VersionedMap implements Disposable {
     });
   }
 
+  compare(base: Uint8Array, target: Uint8Array): MapComparison {
+    const native = this.#open();
+    return new MapComparison(native.compare(ownedBytes(base), ownedBytes(target)));
+  }
+
+  compareToHead(base: Uint8Array): MapComparison {
+    return new MapComparison(this.#open().compareToHead(ownedBytes(base)));
+  }
+
   backup(signal?: AbortSignal): Promise<Uint8Array> {
     const native = this.#open();
     return nativePromise(signal, () => native.backup());
@@ -361,6 +387,29 @@ export class VersionedMap implements Disposable {
   [Symbol.dispose](): void {
     this.close();
   }
+}
+
+export class MapComparison implements Disposable {
+  #native?: NativeMapComparison;
+  constructor(native: NativeMapComparison) { this.#native = native; }
+  #open(): NativeMapComparison {
+    if (this.#native == null) throw new Error("map comparison is closed");
+    return this.#native;
+  }
+  base(): MapVersion { return mapVersion(this.#open().base()); }
+  target(): MapVersion { return mapVersion(this.#open().target()); }
+  diff(signal?: AbortSignal): Promise<MapDiff[]> {
+    const native = this.#open();
+    return nativePromise(signal, () => native.diff());
+  }
+  diffPage(cursor?: RangeCursor, end?: Uint8Array, limit: bigint = 256n, signal?: AbortSignal): Promise<DiffPage> {
+    const native = this.#open();
+    const ownedCursor = ownedRangeCursor(cursor);
+    const ownedEnd = end == null ? null : ownedBytes(end);
+    return nativePromise(signal, () => native.diffPage(ownedCursor, ownedEnd, checkedPageLimit(limit)));
+  }
+  close(): void { this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
 }
 
 export class MapSnapshot implements Disposable {

@@ -3,6 +3,7 @@ package build.crab.prolly.api
 import build.crab.prolly.BindingIndexedMap
 import build.crab.prolly.BindingIndexedSnapshot
 import build.crab.prolly.BindingIndexRegistry
+import build.crab.prolly.BindingMapComparison
 import build.crab.prolly.BindingProximityMap
 import build.crab.prolly.BindingProximityReadSession
 import build.crab.prolly.BindingProximitySearchProof
@@ -101,6 +102,9 @@ class VersionedMap(internal val native: BindingVersionedMap) : AutoCloseable {
     fun delete(key: ByteArray) = native.delete(key.copyOf())
     fun snapshot() = native.snapshot()?.let(::MapSnapshot)
     fun snapshotAt(id: ByteArray) = native.snapshotAt(id.copyOf())?.let(::MapSnapshot)
+    fun compare(base: ByteArray, target: ByteArray) =
+        MapComparison(native.compare(base.copyOf(), target.copyOf()))
+    fun compareToHead(base: ByteArray) = MapComparison(native.compareToHead(base.copyOf()))
     fun versions() = native.versions()
     fun backup() = native.backup()
     fun restoreBackup(bundle: ByteArray) = native.restoreBackup(bundle.copyOf())
@@ -115,6 +119,15 @@ class VersionedMap(internal val native: BindingVersionedMap) : AutoCloseable {
                 withContext(Dispatchers.IO) { native.put(copiedKey, copiedValue) }
             }
         }
+    override fun close() = native.close()
+}
+
+class MapComparison(internal val native: BindingMapComparison) : AutoCloseable {
+    fun base() = native.base()
+    fun target() = native.target()
+    fun diff() = native.diff()
+    fun diffPage(cursor: RangeCursorRecord? = null, end: ByteArray? = null, limit: ULong = 256uL) =
+        native.diffPage(cursor, end?.copyOf(), limit)
     override fun close() = native.close()
 }
 

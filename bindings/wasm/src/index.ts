@@ -977,6 +977,19 @@ export interface WasmVersionPrune {
   removed: Uint8Array[];
 }
 
+export interface WasmMapDiff {
+  kind: "added" | "removed" | "changed";
+  key: Uint8Array;
+  value?: Uint8Array;
+  old?: Uint8Array;
+  newValue?: Uint8Array;
+}
+
+export interface WasmDiffPage {
+  diffs: WasmMapDiff[];
+  nextCursor?: WasmRangeCursorRecord | null;
+}
+
 function wasmMapVersion(value: any): WasmMapVersion {
   return {
     id: value.id,
@@ -1103,6 +1116,14 @@ export class WasmVersionedMap implements Disposable {
       return value == null ? undefined : new WasmMapSnapshot(value, this.#memory);
     });
   }
+  compare(base: Uint8Array, target: Uint8Array): WasmMapComparison {
+    return new WasmMapComparison(this.#open().compare(
+      ownedPortableBytes(base), ownedPortableBytes(target),
+    ));
+  }
+  compareToHead(base: Uint8Array): WasmMapComparison {
+    return new WasmMapComparison(this.#open().compareToHead(ownedPortableBytes(base)));
+  }
   backup(signal?: AbortSignal): Promise<Uint8Array> {
     const native = this.#open();
     return portablePromise(signal, () => native.backup());
@@ -1125,6 +1146,22 @@ export class WasmVersionedMap implements Disposable {
   planGc(): { itemCount: bigint; byteCount: bigint } {
     const value = this.#open().planGc();
     return { itemCount: BigInt(value.itemCount), byteCount: BigInt(value.byteCount) };
+  }
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class WasmMapComparison implements Disposable {
+  #native?: any;
+  constructor(native: any) { this.#native = native; }
+  #open(): any { if (this.#native == null) throw new Error("WASM map comparison is closed"); return this.#native; }
+  base(): WasmMapVersion { return wasmMapVersion(this.#open().base()); }
+  target(): WasmMapVersion { return wasmMapVersion(this.#open().target()); }
+  diff(): WasmMapDiff[] { return this.#open().diff(); }
+  diffPage(cursor?: WasmRangeCursorRecord, end?: Uint8Array, limit = 256): WasmDiffPage {
+    return this.#open().diffPage(
+      cursor, end == null ? undefined : ownedPortableBytes(end), limit,
+    );
   }
   close(): void { this.#native?.free?.(); this.#native = undefined; }
   [Symbol.dispose](): void { this.close(); }

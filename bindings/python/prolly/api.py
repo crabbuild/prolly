@@ -206,6 +206,14 @@ class VersionedMap(_Scoped):
         value = self._inner.snapshot_at(bytes(version_id))
         return None if value is None else MapSnapshot(value)
 
+    def compare(self, base: bytes, target: bytes) -> "MapComparison":
+        self._open()
+        return MapComparison(self._inner.compare(bytes(base), bytes(target)))
+
+    def compare_to_head(self, base: bytes) -> "MapComparison":
+        self._open()
+        return MapComparison(self._inner.compare_to_head(bytes(base)))
+
     def keep_last(self, count: int):
         self._open()
         return self._inner.keep_last(count)
@@ -242,6 +250,30 @@ class VersionedMap(_Scoped):
             return await asyncio.to_thread(self._inner.put, copied_key, copied_value)
 
         return run()
+
+
+class MapComparison(_Scoped):
+    def __init__(self, inner: _native.BindingMapComparison):
+        super().__init__()
+        self._inner = inner
+
+    @property
+    def base(self):
+        self._open()
+        return self._inner.base()
+
+    @property
+    def target(self):
+        self._open()
+        return self._inner.target()
+
+    def diff(self):
+        self._open()
+        return self._inner.diff()
+
+    def diff_page(self, cursor=None, end: bytes | None = None, limit: int = 256):
+        self._open()
+        return self._inner.diff_page(cursor, None if end is None else bytes(end), limit)
 
 
 class MapSnapshot(_Scoped):
@@ -726,6 +758,7 @@ __all__ = [
     "IndexRegistry",
     "IndexedMap",
     "IndexedSnapshot",
+    "MapComparison",
     "MapSnapshot",
     "NeighborView",
     "ProximityMap",
