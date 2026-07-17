@@ -35,6 +35,9 @@ use thiserror::Error;
 
 mod domain;
 mod fast_abi;
+mod async_store;
+
+pub use async_store::*;
 
 pub use domain::indexed::{
     ActiveIndexHealthRecord, BindingIndexRegistry, BindingIndexedMap, BindingIndexedSnapshot,
