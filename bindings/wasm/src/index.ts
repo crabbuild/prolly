@@ -1090,6 +1090,53 @@ export class WasmVersionedMap implements Disposable {
     const native = this.#open(); id = ownedPortableBytes(id); const owned = keys.map(ownedPortableBytes);
     return portablePromise(signal, () => native.getManyAt(id, owned).map((value: Uint8Array | null) => value ?? undefined));
   }
+  range(start: Uint8Array = new Uint8Array(), end?: Uint8Array, signal?: AbortSignal): Promise<WasmEntryRecord[]> {
+    const native = this.#open(); start = ownedPortableBytes(start);
+    const ownedEnd = end == null ? undefined : ownedPortableBytes(end);
+    return portablePromise(signal, () => native.range(start, ownedEnd));
+  }
+  prefix(prefix: Uint8Array, signal?: AbortSignal): Promise<WasmEntryRecord[]> {
+    const native = this.#open(); prefix = ownedPortableBytes(prefix);
+    return portablePromise(signal, () => native.prefix(prefix));
+  }
+  rangeAt(id: Uint8Array, start: Uint8Array = new Uint8Array(), end?: Uint8Array, signal?: AbortSignal): Promise<WasmEntryRecord[]> {
+    const native = this.#open(); id = ownedPortableBytes(id); start = ownedPortableBytes(start);
+    const ownedEnd = end == null ? undefined : ownedPortableBytes(end);
+    return portablePromise(signal, () => native.rangeAt(id, start, ownedEnd));
+  }
+  prefixAt(id: Uint8Array, prefix: Uint8Array, signal?: AbortSignal): Promise<WasmEntryRecord[]> {
+    const native = this.#open(); id = ownedPortableBytes(id); prefix = ownedPortableBytes(prefix);
+    return portablePromise(signal, () => native.prefixAt(id, prefix));
+  }
+  rangePage(cursor?: WasmRangeCursorRecord, end?: Uint8Array, limit = 256, signal?: AbortSignal): Promise<WasmRangePageRecord> {
+    const native = this.#open(); const ownedEnd = end == null ? undefined : ownedPortableBytes(end);
+    return portablePromise(signal, () => native.rangePage(cursor, ownedEnd, limit));
+  }
+  prefixPage(prefix: Uint8Array, cursor?: WasmRangeCursorRecord, limit = 256, signal?: AbortSignal): Promise<WasmRangePageRecord> {
+    const native = this.#open(); prefix = ownedPortableBytes(prefix);
+    return portablePromise(signal, () => native.prefixPage(prefix, cursor, limit));
+  }
+  rangePageAt(id: Uint8Array, cursor?: WasmRangeCursorRecord, end?: Uint8Array, limit = 256, signal?: AbortSignal): Promise<WasmRangePageRecord> {
+    const native = this.#open(); id = ownedPortableBytes(id);
+    const ownedEnd = end == null ? undefined : ownedPortableBytes(end);
+    return portablePromise(signal, () => native.rangePageAt(id, cursor, ownedEnd, limit));
+  }
+  prefixPageAt(id: Uint8Array, prefix: Uint8Array, cursor?: WasmRangeCursorRecord, limit = 256, signal?: AbortSignal): Promise<WasmRangePageRecord> {
+    const native = this.#open(); id = ownedPortableBytes(id); prefix = ownedPortableBytes(prefix);
+    return portablePromise(signal, () => native.prefixPageAt(id, prefix, cursor, limit));
+  }
+  diff(base: Uint8Array, target: Uint8Array, signal?: AbortSignal): Promise<WasmMapDiff[]> {
+    const native = this.#open(); base = ownedPortableBytes(base); target = ownedPortableBytes(target);
+    return portablePromise(signal, () => native.diff(base, target));
+  }
+  changesSince(base: Uint8Array, signal?: AbortSignal): Promise<WasmMapDiff[]> {
+    const native = this.#open(); base = ownedPortableBytes(base);
+    return portablePromise(signal, () => native.changesSince(base));
+  }
+  rollbackTo(id: Uint8Array, signal?: AbortSignal): Promise<WasmMapVersion> {
+    const native = this.#open(); id = ownedPortableBytes(id);
+    return portablePromise(signal, () => wasmMapVersion(native.rollbackTo(id)));
+  }
   put(key: Uint8Array, value: Uint8Array, signal?: AbortSignal): Promise<WasmMapVersion> {
     const native = this.#open(); key = ownedPortableBytes(key); value = ownedPortableBytes(value);
     return portablePromise(signal, () => wasmMapVersion(native.put(key, value)));

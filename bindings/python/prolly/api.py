@@ -170,6 +170,58 @@ class VersionedMap(_Scoped):
         self._open()
         return self._inner.get_many_at(bytes(version_id), [bytes(key) for key in keys])
 
+    def range(self, start: bytes = b"", end: bytes | None = None):
+        self._open()
+        return self._inner.range(bytes(start), None if end is None else bytes(end))
+
+    def prefix(self, prefix: bytes):
+        self._open()
+        return self._inner.prefix(bytes(prefix))
+
+    def range_at(self, version_id: bytes, start: bytes = b"", end: bytes | None = None):
+        self._open()
+        return self._inner.range_at(
+            bytes(version_id), bytes(start), None if end is None else bytes(end)
+        )
+
+    def prefix_at(self, version_id: bytes, prefix: bytes):
+        self._open()
+        return self._inner.prefix_at(bytes(version_id), bytes(prefix))
+
+    def range_page(self, cursor=None, end: bytes | None = None, limit: int = 256):
+        self._open()
+        return self._inner.range_page(cursor, None if end is None else bytes(end), limit)
+
+    def prefix_page(self, prefix: bytes, cursor=None, limit: int = 256):
+        self._open()
+        return self._inner.prefix_page(bytes(prefix), cursor, limit)
+
+    def range_page_at(
+        self, version_id: bytes, cursor=None, end: bytes | None = None, limit: int = 256
+    ):
+        self._open()
+        return self._inner.range_page_at(
+            bytes(version_id), cursor, None if end is None else bytes(end), limit
+        )
+
+    def prefix_page_at(
+        self, version_id: bytes, prefix: bytes, cursor=None, limit: int = 256
+    ):
+        self._open()
+        return self._inner.prefix_page_at(bytes(version_id), bytes(prefix), cursor, limit)
+
+    def diff(self, base: bytes, target: bytes):
+        self._open()
+        return self._inner.diff(bytes(base), bytes(target))
+
+    def changes_since(self, base: bytes):
+        self._open()
+        return self._inner.changes_since(bytes(base))
+
+    def rollback_to(self, version_id: bytes):
+        self._open()
+        return self._inner.rollback_to(bytes(version_id))
+
     def put(self, key: bytes, value: bytes):
         self._open()
         return self._inner.put(bytes(key), bytes(value))

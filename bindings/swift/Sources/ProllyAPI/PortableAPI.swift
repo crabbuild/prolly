@@ -128,6 +128,63 @@ public final class VersionedMap: @unchecked Sendable {
     public func getMany(at id: Data, keys: [Data]) throws -> [Data?] {
         try open { try native.getManyAt(id: Data(id), keys: keys.map { Data($0) }) }
     }
+    public func range(from start: Data = Data(), to end: Data? = nil) throws -> [EntryRecord] {
+        try open { try native.range(start: Data(start), rangeEnd: end.map { Data($0) }) }
+    }
+    public func prefix(_ prefix: Data) throws -> [EntryRecord] {
+        try open { try native.prefix(prefix: Data(prefix)) }
+    }
+    public func range(at id: Data, from start: Data = Data(), to end: Data? = nil) throws -> [EntryRecord] {
+        try open {
+            try native.rangeAt(id: Data(id), start: Data(start), rangeEnd: end.map { Data($0) })
+        }
+    }
+    public func prefix(at id: Data, _ prefix: Data) throws -> [EntryRecord] {
+        try open { try native.prefixAt(id: Data(id), prefix: Data(prefix)) }
+    }
+    public func rangePage(
+        cursor: RangeCursorRecord? = nil,
+        to end: Data? = nil,
+        limit: UInt64 = 256
+    ) throws -> RangePageRecord {
+        try open { try native.rangePage(cursor: cursor, rangeEnd: end.map { Data($0) }, limit: limit) }
+    }
+    public func prefixPage(
+        _ prefix: Data,
+        cursor: RangeCursorRecord? = nil,
+        limit: UInt64 = 256
+    ) throws -> RangePageRecord {
+        try open { try native.prefixPage(prefix: Data(prefix), cursor: cursor, limit: limit) }
+    }
+    public func rangePage(
+        at id: Data,
+        cursor: RangeCursorRecord? = nil,
+        to end: Data? = nil,
+        limit: UInt64 = 256
+    ) throws -> RangePageRecord {
+        try open {
+            try native.rangePageAt(id: Data(id), cursor: cursor, rangeEnd: end.map { Data($0) }, limit: limit)
+        }
+    }
+    public func prefixPage(
+        at id: Data,
+        _ prefix: Data,
+        cursor: RangeCursorRecord? = nil,
+        limit: UInt64 = 256
+    ) throws -> RangePageRecord {
+        try open {
+            try native.prefixPageAt(id: Data(id), prefix: Data(prefix), cursor: cursor, limit: limit)
+        }
+    }
+    public func diff(base: Data, target: Data) throws -> [DiffRecord] {
+        try open { try native.diff(base: Data(base), target: Data(target)) }
+    }
+    public func changes(since base: Data) throws -> [DiffRecord] {
+        try open { try native.changesSince(base: Data(base)) }
+    }
+    public func rollback(to id: Data) throws -> MapVersionRecord {
+        try open { try native.rollbackTo(id: Data(id)) }
+    }
     public func put(_ key: Data, value: Data) throws -> MapVersionRecord {
         try open { try native.put(key: Data(key), value: Data(value)) }
     }

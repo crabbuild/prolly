@@ -249,6 +249,34 @@ class PortableParityTest < Minitest::Test
     end
   end
 
+  def test_versioned_history_navigation_diff_and_rollback_stay_native
+    Prolly::Engine.memory.use do |engine|
+      map = engine.versioned_map('history-navigation'.b)
+      map.initialize_map
+      map.put('a'.b, 'one'.b)
+      map.put('ab'.b, 'two'.b)
+      base = map.put('b'.b, 'three'.b)
+      target = map.put('a'.b, 'updated'.b)
+
+      assert_equal %w[a ab b].map(&:b), map.range('a'.b, 'c'.b).map(&:key)
+      assert_equal %w[a ab].map(&:b), map.prefix('a'.b).map(&:key)
+      assert_equal 'one'.b, map.range_at(base.id, 'a'.b, 'b'.b).first.value
+      assert_equal %w[a ab].map(&:b), map.prefix_at(base.id, 'a'.b).map(&:key)
+      assert_equal %w[a ab].map(&:b), map.range_page(nil, nil, 2).entries.map(&:key)
+      assert_equal ['a'.b], map.prefix_page('a'.b, nil, 1).entries.map(&:key)
+      historical_page = map.prefix_page_at(base.id, 'a'.b, nil, 1)
+      assert_equal ['a'.b], historical_page.entries.map(&:key)
+      refute_nil historical_page.next_cursor
+      assert_equal ['a'.b], map.diff(base.id, target.id).map(&:key)
+      assert_equal ['a'.b], map.changes_since(base.id).map(&:key)
+
+      rolled_back = map.rollback_to(base.id)
+      assert_equal rolled_back.id, map.head_id
+      assert_equal 'one'.b, map.get('a'.b)
+      assert_empty map.changes_since(base.id)
+    end
+  end
+
 
   def test_versioned_subscription_resumes_and_polls_owned_diffs
     Prolly::Engine.memory.use do |engine|

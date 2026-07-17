@@ -158,6 +158,110 @@ func TestPortableVersionedComparisonPinsVersionsAndPagesDiffs(t *testing.T) {
 	}
 }
 
+func TestPortableVersionedHistoryNavigationDiffAndRollback(t *testing.T) {
+	config, err := DefaultConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine, err := NewMemoryEngine(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer engine.Close()
+	versioned, err := engine.VersionedMap([]byte("history-navigation"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer versioned.Close()
+	if _, err = versioned.Initialize(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = versioned.Put([]byte("a"), []byte("one")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = versioned.Put([]byte("ab"), []byte("two")); err != nil {
+		t.Fatal(err)
+	}
+	base, err := versioned.Put([]byte("b"), []byte("three"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	target, err := versioned.Put([]byte("a"), []byte("updated"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assertEntryKeys := func(label string, rows []Entry, expected ...string) {
+		t.Helper()
+		if len(rows) != len(expected) {
+			t.Fatalf("%s keys = %#v", label, rows)
+		}
+		for i, key := range expected {
+			if !bytes.Equal(rows[i].Key, []byte(key)) {
+				t.Fatalf("%s key[%d] = %q", label, i, rows[i].Key)
+			}
+		}
+	}
+	rows, err := versioned.Range([]byte("a"), []byte("c"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertEntryKeys("range", rows, "a", "ab", "b")
+	rows, err = versioned.Prefix([]byte("a"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertEntryKeys("prefix", rows, "a", "ab")
+	rows, err = versioned.RangeAt(base.ID, []byte("a"), []byte("b"))
+	if err != nil || len(rows) != 2 || !bytes.Equal(rows[0].Value, []byte("one")) {
+		t.Fatalf("historical range = %#v, %v", rows, err)
+	}
+	rows, err = versioned.PrefixAt(base.ID, []byte("a"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertEntryKeys("historical prefix", rows, "a", "ab")
+	page, err := versioned.RangePage(nil, nil, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertEntryKeys("range page", page.Entries, "a", "ab")
+	page, err = versioned.PrefixPage([]byte("a"), nil, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertEntryKeys("prefix page", page.Entries, "a")
+	page, err = versioned.PrefixPageAt(base.ID, []byte("a"), nil, 1)
+	if err != nil || page.NextCursor == nil {
+		t.Fatalf("historical page = %#v, %v", page, err)
+	}
+	assertEntryKeys("historical prefix page", page.Entries, "a")
+	diffs, err := versioned.Diff(base.ID, target.ID)
+	if err != nil || len(diffs) != 1 || !bytes.Equal(diffs[0].Key, []byte("a")) {
+		t.Fatalf("diff = %#v, %v", diffs, err)
+	}
+	diffs, err = versioned.ChangesSince(base.ID)
+	if err != nil || len(diffs) != 1 || !bytes.Equal(diffs[0].Key, []byte("a")) {
+		t.Fatalf("changes = %#v, %v", diffs, err)
+	}
+	rolledBack, err := versioned.RollbackTo(base.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	head, ok, err := versioned.HeadID()
+	if err != nil || !ok || !bytes.Equal(head, rolledBack.ID) {
+		t.Fatalf("rollback head = %x, %v, %v", head, ok, err)
+	}
+	value, ok, err := versioned.Get([]byte("a"))
+	if err != nil || !ok || !bytes.Equal(value, []byte("one")) {
+		t.Fatalf("rollback value = %q, %v, %v", value, ok, err)
+	}
+	diffs, err = versioned.ChangesSince(base.ID)
+	if err != nil || len(diffs) != 0 {
+		t.Fatalf("rollback changes = %#v, %v", diffs, err)
+	}
+}
+
 func TestPortableVersionedSubscriptionResumesAndPollsOwnedDiffs(t *testing.T) {
 	config, err := DefaultConfig()
 	if err != nil {

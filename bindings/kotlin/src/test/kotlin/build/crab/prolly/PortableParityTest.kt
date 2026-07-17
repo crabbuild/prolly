@@ -267,6 +267,37 @@ class PortableParityTest {
     }
 
     @Test
+    fun versionedHistoryNavigationDiffAndRollbackStayNative() {
+        ProllyNative.useLocalDebugLibrary()
+        Engine.memory().use { engine ->
+            engine.versionedMap("history-navigation".bytes()).use { map ->
+                map.initialize()
+                map.put("a".bytes(), "one".bytes())
+                map.put("ab".bytes(), "two".bytes())
+                val base = map.put("b".bytes(), "three".bytes())
+                val target = map.put("a".bytes(), "updated".bytes())
+
+                assertEquals(listOf("a", "ab", "b"), map.range("a".bytes(), "c".bytes()).map { String(it.key) })
+                assertEquals(listOf("a", "ab"), map.prefix("a".bytes()).map { String(it.key) })
+                assertArrayEquals("one".bytes(), map.rangeAt(base.id, "a".bytes(), "b".bytes()).first().value)
+                assertEquals(listOf("a", "ab"), map.prefixAt(base.id, "a".bytes()).map { String(it.key) })
+                assertEquals(listOf("a", "ab"), map.rangePage(limit = 2uL).entries.map { String(it.key) })
+                assertEquals(listOf("a"), map.prefixPage("a".bytes(), limit = 1uL).entries.map { String(it.key) })
+                val historicalPage = map.prefixPageAt(base.id, "a".bytes(), limit = 1uL)
+                assertEquals(listOf("a"), historicalPage.entries.map { String(it.key) })
+                assertEquals(true, historicalPage.nextCursor != null)
+                assertEquals(listOf("a"), map.diff(base.id, target.id).map { String(it.key) })
+                assertEquals(listOf("a"), map.changesSince(base.id).map { String(it.key) })
+
+                val rolledBack = map.rollbackTo(base.id)
+                assertArrayEquals(rolledBack.id, map.headId())
+                assertArrayEquals("one".bytes(), map.get("a".bytes()))
+                assertEquals(emptyList<String>(), map.changesSince(base.id).map { String(it.key) })
+            }
+        }
+    }
+
+    @Test
     fun versionedSubscriptionsResumeAndPollOwnedDiffs() {
         ProllyNative.useLocalDebugLibrary()
         Engine.memory().use { engine ->

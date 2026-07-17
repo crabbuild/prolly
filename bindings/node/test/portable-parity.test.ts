@@ -403,6 +403,36 @@ test("versioned comparisons pin versions and page diffs", async () => {
   }
 });
 
+test("versioned history navigation, diffs, and rollback stay native", async () => {
+  const engine = await Engine.memory();
+  try {
+    const map = engine.versionedMap(bytes("history-navigation"));
+    await map.initialize();
+    await map.put(bytes("a"), bytes("one"));
+    await map.put(bytes("ab"), bytes("two"));
+    const base = await map.put(bytes("b"), bytes("three"));
+    const target = await map.put(bytes("a"), bytes("updated"));
+    const keys = (rows: readonly { key: Uint8Array }[]) => rows.map((row) => Buffer.from(row.key).toString());
+
+    assert.deepEqual(keys(await map.range(bytes("a"), bytes("c"))), ["a", "ab", "b"]);
+    assert.deepEqual(keys(await map.prefix(bytes("a"))), ["a", "ab"]);
+    assert.equal(Buffer.from((await map.rangeAt(base.id, bytes("a"), bytes("b")))[0]!.value).toString(), "one");
+    assert.deepEqual(keys(await map.prefixAt(base.id, bytes("a"))), ["a", "ab"]);
+    assert.deepEqual(keys((await map.rangePage(undefined, undefined, 2n)).entries), ["a", "ab"]);
+    assert.deepEqual(keys((await map.prefixPage(bytes("a"), undefined, 1n)).entries), ["a"]);
+    const historicalPage = await map.prefixPageAt(base.id, bytes("a"), undefined, 1n);
+    assert.deepEqual(keys(historicalPage.entries), ["a"]);
+    assert.ok(historicalPage.nextCursor != null);
+    assert.deepEqual((await map.diff(base.id, target.id)).map((row) => Buffer.from(row.key).toString()), ["a"]);
+    assert.deepEqual((await map.changesSince(base.id)).map((row) => Buffer.from(row.key).toString()), ["a"]);
+
+    const rolledBack = await map.rollbackTo(base.id);
+    assert.deepEqual(await map.headId(), rolledBack.id);
+    assert.equal(Buffer.from((await map.get(bytes("a")))!).toString(), "one");
+    assert.deepEqual(await map.changesSince(base.id), []);
+  } finally { engine.close(); }
+});
+
 test("versioned subscriptions resume and poll owned diffs", async () => {
   const engine = await Engine.memory();
   try {

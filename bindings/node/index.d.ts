@@ -922,6 +922,17 @@ export declare class NativePortableVersionedMap {
   getMany(keys: Array<Buffer>): Array<Buffer | undefined | null>
   getAt(id: Buffer, key: Buffer): Buffer | null
   getManyAt(id: Buffer, keys: Array<Buffer>): Array<Buffer | undefined | null>
+  range(start: Buffer, end?: Buffer | undefined | null): Array<NodeEntryRecord>
+  prefix(prefix: Buffer): Array<NodeEntryRecord>
+  rangeAt(id: Buffer, start: Buffer, end?: Buffer | undefined | null): Array<NodeEntryRecord>
+  prefixAt(id: Buffer, prefix: Buffer): Array<NodeEntryRecord>
+  rangePage(cursor: NodeRangeCursorRecord | undefined | null, end: Buffer | undefined | null, limit: string): NodeRangePageRecord
+  prefixPage(prefix: Buffer, cursor: NodeRangeCursorRecord | undefined | null, limit: string): NodeRangePageRecord
+  rangePageAt(id: Buffer, cursor: NodeRangeCursorRecord | undefined | null, end: Buffer | undefined | null, limit: string): NodeRangePageRecord
+  prefixPageAt(id: Buffer, prefix: Buffer, cursor: NodeRangeCursorRecord | undefined | null, limit: string): NodeRangePageRecord
+  diff(base: Buffer, target: Buffer): Array<NodeDiffRecord>
+  changesSince(base: Buffer): Array<NodeDiffRecord>
+  rollbackTo(id: Buffer): NodePortableMapVersion
   put(key: Buffer, value: Buffer): NodePortableMapVersion
   apply(mutations: Array<NodeMutationRecord>): NodePortableMapVersion
   applyIf(expected: Buffer | undefined | null, mutations: Array<NodeMutationRecord>): NodePortableMapUpdate

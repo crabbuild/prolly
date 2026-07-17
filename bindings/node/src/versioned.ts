@@ -97,6 +97,17 @@ interface NativeVersionedMap {
   getMany(keys: Uint8Array[]): Array<Uint8Array | null>;
   getAt(id: Uint8Array, key: Uint8Array): Uint8Array | null;
   getManyAt(id: Uint8Array, keys: Uint8Array[]): Array<Uint8Array | null>;
+  range(start: Uint8Array, end: Uint8Array | null): MapEntry[];
+  prefix(prefix: Uint8Array): MapEntry[];
+  rangeAt(id: Uint8Array, start: Uint8Array, end: Uint8Array | null): MapEntry[];
+  prefixAt(id: Uint8Array, prefix: Uint8Array): MapEntry[];
+  rangePage(cursor: RangeCursor | null, end: Uint8Array | null, limit: string): RangePage;
+  prefixPage(prefix: Uint8Array, cursor: RangeCursor | null, limit: string): RangePage;
+  rangePageAt(id: Uint8Array, cursor: RangeCursor | null, end: Uint8Array | null, limit: string): RangePage;
+  prefixPageAt(id: Uint8Array, prefix: Uint8Array, cursor: RangeCursor | null, limit: string): RangePage;
+  diff(base: Uint8Array, target: Uint8Array): MapDiff[];
+  changesSince(base: Uint8Array): MapDiff[];
+  rollbackTo(id: Uint8Array): NativeMapVersion;
   put(key: Uint8Array, value: Uint8Array): NativeMapVersion;
   apply(mutations: MapMutation[]): NativeMapVersion;
   applyIf(expected: Uint8Array | null, mutations: MapMutation[]): NativeMapUpdate;
@@ -328,6 +339,65 @@ export class VersionedMap implements Disposable {
   getManyAt(id: Uint8Array, keys: readonly Uint8Array[], signal?: AbortSignal): Promise<Array<Uint8Array | undefined>> {
     const native = this.#open(); id = ownedBytes(id); const owned = keys.map(ownedBytes);
     return nativePromise(signal, () => native.getManyAt(id, owned).map((value) => value ?? undefined));
+  }
+
+  range(start: Uint8Array = new Uint8Array(), end?: Uint8Array, signal?: AbortSignal): Promise<MapEntry[]> {
+    const native = this.#open(); start = ownedBytes(start); const ownedEnd = end == null ? null : ownedBytes(end);
+    return nativePromise(signal, () => native.range(start, ownedEnd));
+  }
+
+  prefix(prefix: Uint8Array, signal?: AbortSignal): Promise<MapEntry[]> {
+    const native = this.#open(); prefix = ownedBytes(prefix);
+    return nativePromise(signal, () => native.prefix(prefix));
+  }
+
+  rangeAt(id: Uint8Array, start: Uint8Array = new Uint8Array(), end?: Uint8Array, signal?: AbortSignal): Promise<MapEntry[]> {
+    const native = this.#open(); id = ownedBytes(id); start = ownedBytes(start);
+    const ownedEnd = end == null ? null : ownedBytes(end);
+    return nativePromise(signal, () => native.rangeAt(id, start, ownedEnd));
+  }
+
+  prefixAt(id: Uint8Array, prefix: Uint8Array, signal?: AbortSignal): Promise<MapEntry[]> {
+    const native = this.#open(); id = ownedBytes(id); prefix = ownedBytes(prefix);
+    return nativePromise(signal, () => native.prefixAt(id, prefix));
+  }
+
+  rangePage(cursor?: RangeCursor, end?: Uint8Array, limit: bigint = 256n, signal?: AbortSignal): Promise<RangePage> {
+    const native = this.#open(); const ownedCursor = ownedRangeCursor(cursor);
+    const ownedEnd = end == null ? null : ownedBytes(end);
+    return nativePromise(signal, () => native.rangePage(ownedCursor, ownedEnd, checkedPageLimit(limit)));
+  }
+
+  prefixPage(prefix: Uint8Array, cursor?: RangeCursor, limit: bigint = 256n, signal?: AbortSignal): Promise<RangePage> {
+    const native = this.#open(); prefix = ownedBytes(prefix); const ownedCursor = ownedRangeCursor(cursor);
+    return nativePromise(signal, () => native.prefixPage(prefix, ownedCursor, checkedPageLimit(limit)));
+  }
+
+  rangePageAt(id: Uint8Array, cursor?: RangeCursor, end?: Uint8Array, limit: bigint = 256n, signal?: AbortSignal): Promise<RangePage> {
+    const native = this.#open(); id = ownedBytes(id); const ownedCursor = ownedRangeCursor(cursor);
+    const ownedEnd = end == null ? null : ownedBytes(end);
+    return nativePromise(signal, () => native.rangePageAt(id, ownedCursor, ownedEnd, checkedPageLimit(limit)));
+  }
+
+  prefixPageAt(id: Uint8Array, prefix: Uint8Array, cursor?: RangeCursor, limit: bigint = 256n, signal?: AbortSignal): Promise<RangePage> {
+    const native = this.#open(); id = ownedBytes(id); prefix = ownedBytes(prefix);
+    const ownedCursor = ownedRangeCursor(cursor);
+    return nativePromise(signal, () => native.prefixPageAt(id, prefix, ownedCursor, checkedPageLimit(limit)));
+  }
+
+  diff(base: Uint8Array, target: Uint8Array, signal?: AbortSignal): Promise<MapDiff[]> {
+    const native = this.#open(); base = ownedBytes(base); target = ownedBytes(target);
+    return nativePromise(signal, () => native.diff(base, target));
+  }
+
+  changesSince(base: Uint8Array, signal?: AbortSignal): Promise<MapDiff[]> {
+    const native = this.#open(); base = ownedBytes(base);
+    return nativePromise(signal, () => native.changesSince(base));
+  }
+
+  rollbackTo(id: Uint8Array, signal?: AbortSignal): Promise<MapVersion> {
+    const native = this.#open(); id = ownedBytes(id);
+    return nativePromise(signal, () => mapVersion(native.rollbackTo(id)));
   }
 
   put(key: Uint8Array, value: Uint8Array, signal?: AbortSignal): Promise<MapVersion> {

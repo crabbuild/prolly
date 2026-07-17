@@ -284,6 +284,17 @@ module Prolly
     def version(id) = open! { @native.version(id.b) }
     def versions = open! { @native.versions }
     def get(key) = open! { @native.get(key.b) }
+    def range(start = ''.b, range_end = nil) = open! { @native.range(start.b, range_end&.b) }
+    def prefix(prefix) = open! { @native.prefix(prefix.b) }
+    def range_at(id, start = ''.b, range_end = nil) = open! { @native.range_at(id.b, start.b, range_end&.b) }
+    def prefix_at(id, prefix) = open! { @native.prefix_at(id.b, prefix.b) }
+    def range_page(cursor = nil, range_end = nil, limit = 256) = open! { @native.range_page(cursor, range_end&.b, limit) }
+    def prefix_page(prefix, cursor = nil, limit = 256) = open! { @native.prefix_page(prefix.b, cursor, limit) }
+    def range_page_at(id, cursor = nil, range_end = nil, limit = 256) = open! { @native.range_page_at(id.b, cursor, range_end&.b, limit) }
+    def prefix_page_at(id, prefix, cursor = nil, limit = 256) = open! { @native.prefix_page_at(id.b, prefix.b, cursor, limit) }
+    def diff(base, target) = open! { @native.diff(base.b, target.b) }
+    def changes_since(base) = open! { @native.changes_since(base.b) }
+    def rollback_to(id) = open! { @native.rollback_to(id.b) }
     def put(key, value) = open! { @native.put(key.b, value.b) }
     def delete(key) = open! { @native.delete(key.b) }
     def snapshot = open! { @native.snapshot&.then { |value| MapSnapshot.new(value) } }

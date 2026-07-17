@@ -845,6 +845,139 @@ impl NativePortableVersionedMap {
     }
 
     #[napi]
+    pub fn range(&self, start: Buffer, end: Option<Buffer>) -> Result<Vec<NodeEntryRecord>> {
+        self.inner
+            .range(start.to_vec(), end.map(|value| value.to_vec()))
+            .map(|entries| entries.into_iter().map(Into::into).collect())
+            .map_err(to_napi_error)
+    }
+
+    #[napi]
+    pub fn prefix(&self, prefix: Buffer) -> Result<Vec<NodeEntryRecord>> {
+        self.inner
+            .prefix(prefix.to_vec())
+            .map(|entries| entries.into_iter().map(Into::into).collect())
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "rangeAt")]
+    pub fn range_at(
+        &self,
+        id: Buffer,
+        start: Buffer,
+        end: Option<Buffer>,
+    ) -> Result<Vec<NodeEntryRecord>> {
+        self.inner
+            .range_at(id.to_vec(), start.to_vec(), end.map(|value| value.to_vec()))
+            .map(|entries| entries.into_iter().map(Into::into).collect())
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "prefixAt")]
+    pub fn prefix_at(&self, id: Buffer, prefix: Buffer) -> Result<Vec<NodeEntryRecord>> {
+        self.inner
+            .prefix_at(id.to_vec(), prefix.to_vec())
+            .map(|entries| entries.into_iter().map(Into::into).collect())
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "rangePage")]
+    pub fn range_page(
+        &self,
+        cursor: Option<NodeRangeCursorRecord>,
+        end: Option<Buffer>,
+        limit: String,
+    ) -> Result<NodeRangePageRecord> {
+        self.inner
+            .range_page(
+                cursor.map(Into::into),
+                end.map(|value| value.to_vec()),
+                parse_index_page_limit(&limit)?,
+            )
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "prefixPage")]
+    pub fn prefix_page(
+        &self,
+        prefix: Buffer,
+        cursor: Option<NodeRangeCursorRecord>,
+        limit: String,
+    ) -> Result<NodeRangePageRecord> {
+        self.inner
+            .prefix_page(
+                prefix.to_vec(),
+                cursor.map(Into::into),
+                parse_index_page_limit(&limit)?,
+            )
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "rangePageAt")]
+    pub fn range_page_at(
+        &self,
+        id: Buffer,
+        cursor: Option<NodeRangeCursorRecord>,
+        end: Option<Buffer>,
+        limit: String,
+    ) -> Result<NodeRangePageRecord> {
+        self.inner
+            .range_page_at(
+                id.to_vec(),
+                cursor.map(Into::into),
+                end.map(|value| value.to_vec()),
+                parse_index_page_limit(&limit)?,
+            )
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "prefixPageAt")]
+    pub fn prefix_page_at(
+        &self,
+        id: Buffer,
+        prefix: Buffer,
+        cursor: Option<NodeRangeCursorRecord>,
+        limit: String,
+    ) -> Result<NodeRangePageRecord> {
+        self.inner
+            .prefix_page_at(
+                id.to_vec(),
+                prefix.to_vec(),
+                cursor.map(Into::into),
+                parse_index_page_limit(&limit)?,
+            )
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi]
+    pub fn diff(&self, base: Buffer, target: Buffer) -> Result<Vec<NodeDiffRecord>> {
+        self.inner
+            .diff(base.to_vec(), target.to_vec())
+            .map(|diffs| diffs.into_iter().map(Into::into).collect())
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "changesSince")]
+    pub fn changes_since(&self, base: Buffer) -> Result<Vec<NodeDiffRecord>> {
+        self.inner
+            .changes_since(base.to_vec())
+            .map(|diffs| diffs.into_iter().map(Into::into).collect())
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "rollbackTo")]
+    pub fn rollback_to(&self, id: Buffer) -> Result<NodePortableMapVersion> {
+        self.inner
+            .rollback_to(id.to_vec())
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi]
     pub fn put(&self, key: Buffer, value: Buffer) -> Result<NodePortableMapVersion> {
         self.inner
             .put(key.to_vec(), value.to_vec())

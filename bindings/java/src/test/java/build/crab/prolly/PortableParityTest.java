@@ -361,6 +361,35 @@ class PortableParityTest {
     }
 
     @Test
+    void versionedHistoryNavigationDiffAndRollbackStayNative() {
+        Prolly.useLocalDebugLibrary();
+        try (Engine engine = Engine.memory(); var map = engine.versionedMap(bytes("history-navigation"))) {
+            map.initialize();
+            map.put(bytes("a"), bytes("one"));
+            map.put(bytes("ab"), bytes("two"));
+            var base = map.put(bytes("b"), bytes("three"));
+            var target = map.put(bytes("a"), bytes("updated"));
+
+            assertEquals(List.of("a", "ab", "b"), map.range(bytes("a"), bytes("c")).stream().map(row -> new String(row.getKey())).toList());
+            assertEquals(List.of("a", "ab"), map.prefix(bytes("a")).stream().map(row -> new String(row.getKey())).toList());
+            assertArrayEquals(bytes("one"), map.rangeAt(base.id(), bytes("a"), bytes("b")).get(0).getValue());
+            assertEquals(List.of("a", "ab"), map.prefixAt(base.id(), bytes("a")).stream().map(row -> new String(row.getKey())).toList());
+            assertEquals(List.of("a", "ab"), map.rangePage(null, null, 2).getEntries().stream().map(row -> new String(row.getKey())).toList());
+            assertEquals(List.of("a"), map.prefixPage(bytes("a"), null, 1).getEntries().stream().map(row -> new String(row.getKey())).toList());
+            var historicalPage = map.prefixPageAt(base.id(), bytes("a"), null, 1);
+            assertEquals(List.of("a"), historicalPage.getEntries().stream().map(row -> new String(row.getKey())).toList());
+            assertNotNull(historicalPage.getNextCursor());
+            assertEquals(List.of("a"), map.diff(base.id(), target.id()).stream().map(row -> new String(row.getKey())).toList());
+            assertEquals(List.of("a"), map.changesSince(base.id()).stream().map(row -> new String(row.getKey())).toList());
+
+            var rolledBack = map.rollbackTo(base.id());
+            assertArrayEquals(rolledBack.id(), map.headId().orElseThrow());
+            assertArrayEquals(bytes("one"), map.get(bytes("a")).orElseThrow());
+            assertTrue(map.changesSince(base.id()).isEmpty());
+        }
+    }
+
+    @Test
     void versionedSubscriptionsResumeAndPollOwnedDiffs() {
         Prolly.useLocalDebugLibrary();
         try (Engine engine = Engine.memory(); var map = engine.versionedMap(bytes("subscription"))) {
