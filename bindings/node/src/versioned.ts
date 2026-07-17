@@ -38,6 +38,12 @@ export interface MapDiff {
 }
 export interface DiffPage { diffs: MapDiff[]; nextCursor?: RangeCursor; }
 export interface MapChangeEvent { previous?: Uint8Array; current: MapVersion; diffs: MapDiff[]; }
+export interface VersionedTransactionCommit {
+  applied: boolean;
+  versions: MapVersion[];
+  conflictMapId?: Uint8Array;
+  conflictCurrent?: MapVersion;
+}
 /** Read-only page views that expire when the scan callback returns. */
 export interface MapEntryView { key: Uint8Array; value: Uint8Array; }
 export interface ReadScanOutcome { visited: bigint; stopped: boolean; }
@@ -118,6 +124,22 @@ interface NativeMapChangeEvent { previous?: Uint8Array; current: NativeMapVersio
 interface NativeMapSubscription {
   lastSeen(): Uint8Array | null;
   poll(): NativeMapChangeEvent | null;
+}
+interface NativeVersionedTransactionCommit {
+  applied: boolean;
+  versions: NativeMapVersion[];
+  conflictMapId?: Uint8Array;
+  conflictCurrent?: NativeMapVersion;
+}
+interface NativeVersionedTransaction {
+  head(mapId: Uint8Array): NativeMapVersion | null;
+  get(mapId: Uint8Array, key: Uint8Array): Uint8Array | null;
+  apply(mapId: Uint8Array, mutations: MapMutation[]): NativeMapVersion;
+  applyIf(mapId: Uint8Array, expected: Uint8Array | null, mutations: MapMutation[]): NativeMapUpdate;
+  put(mapId: Uint8Array, key: Uint8Array, value: Uint8Array): NativeMapVersion;
+  delete(mapId: Uint8Array, key: Uint8Array): NativeMapVersion;
+  commit(): NativeVersionedTransactionCommit;
+  rollback(): void;
 }
 
 interface NativeMapUpdate {
@@ -403,6 +425,61 @@ export class VersionedMap implements Disposable {
   [Symbol.dispose](): void {
     this.close();
   }
+}
+
+export class VersionedTransaction implements Disposable {
+  #native?: NativeVersionedTransaction;
+  constructor(native: NativeVersionedTransaction) { this.#native = native; }
+  #open(): NativeVersionedTransaction {
+    if (this.#native == null) throw new Error("versioned transaction is completed");
+    return this.#native;
+  }
+  head(mapId: Uint8Array, signal?: AbortSignal): Promise<MapVersion | undefined> {
+    const native = this.#open(); mapId = ownedBytes(mapId);
+    return nativePromise(signal, () => {
+      const value = native.head(mapId); return value == null ? undefined : mapVersion(value);
+    });
+  }
+  get(mapId: Uint8Array, key: Uint8Array, signal?: AbortSignal): Promise<Uint8Array | undefined> {
+    const native = this.#open(); mapId = ownedBytes(mapId); key = ownedBytes(key);
+    return nativePromise(signal, () => native.get(mapId, key) ?? undefined);
+  }
+  apply(mapId: Uint8Array, mutations: readonly MapMutation[], signal?: AbortSignal): Promise<MapVersion> {
+    const native = this.#open(); mapId = ownedBytes(mapId); const owned = ownedMutations(mutations);
+    return nativePromise(signal, () => mapVersion(native.apply(mapId, owned)));
+  }
+  applyIf(mapId: Uint8Array, expected: Uint8Array | undefined, mutations: readonly MapMutation[], signal?: AbortSignal): Promise<MapUpdate> {
+    const native = this.#open(); mapId = ownedBytes(mapId);
+    const ownedExpected = expected == null ? null : ownedBytes(expected);
+    const owned = ownedMutations(mutations);
+    return nativePromise(signal, () => mapUpdate(native.applyIf(mapId, ownedExpected, owned)));
+  }
+  put(mapId: Uint8Array, key: Uint8Array, value: Uint8Array, signal?: AbortSignal): Promise<MapVersion> {
+    const native = this.#open(); mapId = ownedBytes(mapId); key = ownedBytes(key); value = ownedBytes(value);
+    return nativePromise(signal, () => mapVersion(native.put(mapId, key, value)));
+  }
+  delete(mapId: Uint8Array, key: Uint8Array, signal?: AbortSignal): Promise<MapVersion> {
+    const native = this.#open(); mapId = ownedBytes(mapId); key = ownedBytes(key);
+    return nativePromise(signal, () => mapVersion(native.delete(mapId, key)));
+  }
+  commit(signal?: AbortSignal): Promise<VersionedTransactionCommit> {
+    const native = this.#open(); this.#native = undefined;
+    return nativePromise(signal, () => {
+      const value = native.commit();
+      return {
+        applied: value.applied,
+        versions: value.versions.map(mapVersion),
+        conflictMapId: value.conflictMapId,
+        conflictCurrent: value.conflictCurrent == null ? undefined : mapVersion(value.conflictCurrent),
+      };
+    });
+  }
+  rollback(signal?: AbortSignal): Promise<void> {
+    const native = this.#open(); this.#native = undefined;
+    return nativePromise(signal, () => native.rollback());
+  }
+  close(): void { this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
 }
 
 export class MapComparison implements Disposable {

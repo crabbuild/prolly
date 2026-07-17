@@ -421,3 +421,22 @@ test("versioned subscriptions resume and poll owned diffs", async () => {
     engine.close();
   }
 });
+
+test("multi-map transactions are atomic and read staged values", async () => {
+  const engine = await Engine.memory();
+  try {
+    const tx = engine.beginVersionedTransaction();
+    await tx.put(bytes("a"), bytes("k"), bytes("one"));
+    await tx.put(bytes("b"), bytes("k"), bytes("two"));
+    assert.equal(Buffer.from((await tx.get(bytes("a"), bytes("k")))!).toString(), "one");
+    const committed = await tx.commit();
+    assert.equal(committed.applied, true);
+    assert.equal(committed.versions.length, 2);
+    assert.equal(Buffer.from((await engine.versionedMap(bytes("a")).get(bytes("k")))!).toString(), "one");
+    assert.equal(Buffer.from((await engine.versionedMap(bytes("b")).get(bytes("k")))!).toString(), "two");
+    const rolledBack = engine.beginVersionedTransaction();
+    await rolledBack.put(bytes("a"), bytes("discard"), bytes("x"));
+    await rolledBack.rollback();
+    assert.equal(await engine.versionedMap(bytes("a")).get(bytes("discard")), undefined);
+  } finally { engine.close(); }
+});

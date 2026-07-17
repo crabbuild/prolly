@@ -142,6 +142,10 @@ module Prolly
       ensure_open
       VersionedMap.new(@native.versioned_map(id.b))
     end
+    def begin_versioned_transaction
+      ensure_open
+      VersionedTransaction.new(@native.begin_versioned_transaction)
+    end
 
     def index_registry
       ensure_open
@@ -307,6 +311,26 @@ module Prolly
 
     def open!
       raise 'versioned map is closed' if @closed
+      yield
+    end
+  end
+
+  class VersionedTransaction
+    def initialize(native) = @native = native
+    def head(map_id) = open! { @native.head(map_id.b) }
+    def get(map_id, key) = open! { @native.get(map_id.b, key.b) }
+    def apply(map_id, mutations) = open! { @native.apply(map_id.b, mutations) }
+    def apply_if(map_id, expected, mutations) = open! { @native.apply_if(map_id.b, expected&.b, mutations) }
+    def put(map_id, key, value) = open! { @native.put(map_id.b, key.b, value.b) }
+    def delete(map_id, key) = open! { @native.delete(map_id.b, key.b) }
+    def commit = open! { @native.commit }.tap { close }
+    def rollback = open! { @native.rollback }.tap { close }
+    def close
+      @native = nil
+    end
+    private
+    def open!
+      raise IOError, 'versioned transaction is completed' unless @native
       yield
     end
   end

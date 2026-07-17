@@ -12,6 +12,7 @@ use prolly::{
     VersionedMapBackup, VersionedMapUpdate,
 };
 use std::cell::RefCell;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use wasm_bindgen::prelude::*;
 
@@ -495,6 +496,220 @@ impl WasmMapSubscription {
     }
 }
 
+#[derive(Clone)]
+struct WasmStagedMapEdit {
+    expected: Option<prolly::MapVersion>,
+    mutations: Vec<prolly::Mutation>,
+}
+
+#[wasm_bindgen(js_name = WasmVersionedTransaction)]
+pub struct WasmVersionedTransaction {
+    engine: Arc<super::WasmEngine>,
+    edits: RefCell<Option<BTreeMap<Vec<u8>, WasmStagedMapEdit>>>,
+}
+
+impl WasmVersionedTransaction {
+    fn staged_version(&self, edit: &WasmStagedMapEdit) -> Result<prolly::MapVersion, JsValue> {
+        let base = edit
+            .expected
+            .as_ref()
+            .map(|value| value.tree.clone())
+            .unwrap_or_else(|| self.engine.create());
+        let tree = self
+            .engine
+            .batch(&base, edit.mutations.clone())
+            .map_err(js_error)?;
+        let id = MapVersionId::for_tree(&tree).map_err(js_error)?;
+        Ok(prolly::MapVersion {
+            id,
+            tree,
+            created_at_millis: None,
+            is_head: true,
+        })
+    }
+
+    fn head_value(&self, map_id: &[u8]) -> Result<Option<prolly::MapVersion>, JsValue> {
+        let edits = self.edits.borrow();
+        let edits = edits
+            .as_ref()
+            .ok_or_else(|| JsValue::from_str("versioned transaction is completed"))?;
+        match edits.get(map_id) {
+            Some(edit) => self.staged_version(edit).map(Some),
+            None => self.engine.versioned_map(map_id).head().map_err(js_error),
+        }
+    }
+
+    fn stage(
+        &self,
+        map_id: Vec<u8>,
+        mutations: Vec<prolly::Mutation>,
+    ) -> Result<prolly::MapVersion, JsValue> {
+        let current = self
+            .engine
+            .versioned_map(&map_id)
+            .head()
+            .map_err(js_error)?;
+        let mut edits = self.edits.borrow_mut();
+        let edits = edits
+            .as_mut()
+            .ok_or_else(|| JsValue::from_str("versioned transaction is completed"))?;
+        let edit = edits.entry(map_id).or_insert_with(|| WasmStagedMapEdit {
+            expected: current,
+            mutations: Vec::new(),
+        });
+        edit.mutations.extend(mutations);
+        self.staged_version(edit)
+    }
+}
+
+#[wasm_bindgen(js_class = WasmVersionedTransaction)]
+impl WasmVersionedTransaction {
+    pub fn head(&self, map_id: Uint8Array) -> Result<Option<Object>, JsValue> {
+        self.head_value(&map_id.to_vec())?
+            .map(map_version_object)
+            .transpose()
+    }
+
+    pub fn get(&self, map_id: Uint8Array, key: Uint8Array) -> Result<JsValue, JsValue> {
+        match self.head_value(&map_id.to_vec())? {
+            Some(version) => self
+                .engine
+                .get(&version.tree, &key.to_vec())
+                .map(optional_bytes)
+                .map_err(js_error),
+            None => Ok(JsValue::UNDEFINED),
+        }
+    }
+
+    pub fn apply(&self, map_id: Uint8Array, mutations: Array) -> Result<Object, JsValue> {
+        self.stage(
+            map_id.to_vec(),
+            crate::indexed::mutations_from_array(&mutations)?,
+        )
+        .and_then(map_version_object)
+    }
+
+    #[wasm_bindgen(js_name = applyIf)]
+    pub fn apply_if(
+        &self,
+        map_id: Uint8Array,
+        expected: Option<Uint8Array>,
+        mutations: Array,
+    ) -> Result<Object, JsValue> {
+        let expected = expected
+            .map(|value| MapVersionId::from_bytes(&value.to_vec()))
+            .transpose()
+            .map_err(js_error)?;
+        let current = self.head_value(&map_id.to_vec())?;
+        if current.as_ref().map(|value| &value.id) != expected.as_ref() {
+            return map_update_object(VersionedMapUpdate::Conflict { current });
+        }
+        let previous = current.map(|value| value.id);
+        let current = self.stage(
+            map_id.to_vec(),
+            crate::indexed::mutations_from_array(&mutations)?,
+        )?;
+        map_update_object(if previous.as_ref() == Some(&current.id) {
+            VersionedMapUpdate::Unchanged {
+                current: Some(current),
+            }
+        } else {
+            VersionedMapUpdate::Applied { previous, current }
+        })
+    }
+
+    pub fn put(
+        &self,
+        map_id: Uint8Array,
+        key: Uint8Array,
+        value: Uint8Array,
+    ) -> Result<Object, JsValue> {
+        self.stage(
+            map_id.to_vec(),
+            vec![prolly::Mutation::Upsert {
+                key: key.to_vec(),
+                val: value.to_vec(),
+            }],
+        )
+        .and_then(map_version_object)
+    }
+
+    pub fn delete(&self, map_id: Uint8Array, key: Uint8Array) -> Result<Object, JsValue> {
+        self.stage(
+            map_id.to_vec(),
+            vec![prolly::Mutation::Delete { key: key.to_vec() }],
+        )
+        .and_then(map_version_object)
+    }
+
+    pub fn commit(&self) -> Result<Object, JsValue> {
+        let edits = self
+            .edits
+            .borrow_mut()
+            .take()
+            .ok_or_else(|| JsValue::from_str("versioned transaction is completed"))?;
+        let mut logical_conflict = None;
+        let result = self.engine.versioned_maps_transaction(|maps| {
+            let mut versions = Vec::with_capacity(edits.len());
+            for (map_id, edit) in edits {
+                let expected = edit.expected.as_ref().map(|value| &value.id);
+                match maps.apply_if(&map_id, expected, edit.mutations)? {
+                    VersionedMapUpdate::Applied { current, .. } => versions.push(current),
+                    VersionedMapUpdate::Unchanged {
+                        current: Some(current),
+                    } => versions.push(current),
+                    VersionedMapUpdate::Conflict { current } => {
+                        logical_conflict = Some((map_id, current));
+                        return Err(prolly::Error::InvalidVersionedMap(
+                            "portable multi-map transaction conflict".into(),
+                        ));
+                    }
+                    VersionedMapUpdate::Unchanged { current: None } => {
+                        return Err(prolly::Error::InvalidVersionedMap(
+                            "multi-map transaction produced no current version".into(),
+                        ));
+                    }
+                }
+            }
+            Ok(versions)
+        });
+        let object = Object::new();
+        if let Some((map_id, current)) = logical_conflict {
+            Reflect::set(&object, &"applied".into(), &false.into())?;
+            Reflect::set(&object, &"versions".into(), &Array::new().into())?;
+            set_bytes(&object, "conflictMapId", &map_id)?;
+            Reflect::set(
+                &object,
+                &"conflictCurrent".into(),
+                &current
+                    .map(map_version_object)
+                    .transpose()?
+                    .map(Into::into)
+                    .unwrap_or(JsValue::UNDEFINED),
+            )?;
+            return Ok(object);
+        }
+        let versions = result.map_err(js_error)?;
+        let array = Array::new();
+        for version in versions {
+            array.push(&map_version_object(version)?.into());
+        }
+        Reflect::set(&object, &"applied".into(), &true.into())?;
+        Reflect::set(&object, &"versions".into(), &array.into())?;
+        Reflect::set(&object, &"conflictMapId".into(), &JsValue::UNDEFINED)?;
+        Reflect::set(&object, &"conflictCurrent".into(), &JsValue::UNDEFINED)?;
+        Ok(object)
+    }
+
+    pub fn rollback(&self) -> Result<(), JsValue> {
+        self.edits
+            .borrow_mut()
+            .take()
+            .ok_or_else(|| JsValue::from_str("versioned transaction is completed"))?;
+        Ok(())
+    }
+}
+
 #[wasm_bindgen(js_name = WasmMapSnapshot)]
 pub struct WasmMapSnapshot {
     engine: Arc<super::WasmEngine>,
@@ -871,6 +1086,14 @@ fn set_version_ids(object: &Object, name: &str, values: Vec<MapVersionId>) -> Re
 
 #[wasm_bindgen(js_class = WasmProllyEngine)]
 impl WasmProllyEngine {
+    #[wasm_bindgen(js_name = beginVersionedTransaction)]
+    pub fn portable_begin_versioned_transaction(&self) -> WasmVersionedTransaction {
+        WasmVersionedTransaction {
+            engine: Arc::clone(&self.inner),
+            edits: RefCell::new(Some(BTreeMap::new())),
+        }
+    }
+
     #[wasm_bindgen(js_name = versionedMap)]
     pub fn portable_versioned_map(&self, id: Uint8Array) -> Result<WasmVersionedMap, JsValue> {
         let id = id.to_vec();

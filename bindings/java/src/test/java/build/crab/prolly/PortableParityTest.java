@@ -378,6 +378,30 @@ class PortableParityTest {
         }
     }
 
+    @Test
+    void multiMapTransactionsAreAtomicAndReadStagedValues() {
+        Prolly.useLocalDebugLibrary();
+        try (Engine engine = Engine.memory()) {
+            try (var tx = engine.beginVersionedTransaction()) {
+                tx.put(bytes("a"), bytes("k"), bytes("one"));
+                tx.put(bytes("b"), bytes("k"), bytes("two"));
+                assertArrayEquals(bytes("one"), tx.get(bytes("a"), bytes("k")).orElseThrow());
+                var committed = tx.commit();
+                assertTrue(committed.applied());
+                assertEquals(2, committed.versions().size());
+            }
+            try (var a = engine.versionedMap(bytes("a")); var b = engine.versionedMap(bytes("b"))) {
+                assertArrayEquals(bytes("one"), a.get(bytes("k")).orElseThrow());
+                assertArrayEquals(bytes("two"), b.get(bytes("k")).orElseThrow());
+            }
+            try (var tx = engine.beginVersionedTransaction()) {
+                tx.put(bytes("a"), bytes("discard"), bytes("x"));
+                tx.rollback();
+            }
+            try (var a = engine.versionedMap(bytes("a"))) { assertTrue(a.get(bytes("discard")).isEmpty()); }
+        }
+    }
+
     private static byte[] bytes(String value) {
         return value.getBytes(StandardCharsets.UTF_8);
     }

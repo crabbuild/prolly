@@ -207,6 +207,12 @@ export interface NodePortableMapChangeEvent {
   current: NodePortableMapVersion
   diffs: Array<NodeDiffRecord>
 }
+export interface NodePortableVersionedTransactionCommit {
+  applied: boolean
+  versions: Array<NodePortableMapVersion>
+  conflictMapId?: Buffer
+  conflictCurrent?: NodePortableMapVersion
+}
 export interface NodeTreeRecord {
   root?: Buffer
   config?: NodeConfigRecord
@@ -944,6 +950,16 @@ export declare class NativePortableMapSubscription {
   lastSeen(): Buffer | null
   poll(): NodePortableMapChangeEvent | null
 }
+export declare class NativePortableVersionedTransaction {
+  head(mapId: Buffer): NodePortableMapVersion | null
+  get(mapId: Buffer, key: Buffer): Buffer | null
+  apply(mapId: Buffer, mutations: Array<NodeMutationRecord>): NodePortableMapVersion
+  applyIf(mapId: Buffer, expected: Buffer | undefined | null, mutations: Array<NodeMutationRecord>): NodePortableMapUpdate
+  put(mapId: Buffer, key: Buffer, value: Buffer): NodePortableMapVersion
+  delete(mapId: Buffer, key: Buffer): NodePortableMapVersion
+  commit(): NodePortableVersionedTransactionCommit
+  rollback(): void
+}
 export declare class NativePortableMapSnapshot {
   id(): Buffer
   version(): NodePortableMapVersion
@@ -1097,6 +1113,7 @@ export declare class NativeProllyTransaction {
   rollback(): void
 }
 export declare class NativeProllyEngine {
+  beginVersionedTransaction(): NativePortableVersionedTransaction
   versionedMap(id: Buffer): NativePortableVersionedMap
   indexedMap(id: Buffer, registry: NativePortableIndexRegistry): NativePortableIndexedMap
   buildProximity(dimensions: number, records: Array<NodePortableProximityRecord>): NativePortableProximityMap

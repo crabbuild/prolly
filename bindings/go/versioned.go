@@ -83,6 +83,171 @@ type MapSubscription struct {
 	mu       sync.Mutex
 }
 
+type VersionedTransactionCommit struct {
+	Applied         bool
+	Versions        []MapVersion
+	ConflictMapID   []byte
+	ConflictCurrent *MapVersion
+}
+
+// VersionedTransaction atomically commits edits spanning multiple managed maps.
+type VersionedTransaction struct {
+	handle uint64
+	closed atomic.Bool
+	mu     sync.RWMutex
+}
+
+func (e *Engine) BeginVersionedTransaction() (*VersionedTransaction, error) {
+	handle, err := ffiEngineBeginVersionedTransaction(e)
+	if err != nil {
+		return nil, err
+	}
+	result := &VersionedTransaction{handle: handle}
+	runtime.SetFinalizer(result, (*VersionedTransaction).Close)
+	return result, nil
+}
+
+func (t *VersionedTransaction) Close() {
+	if t == nil || t.closed.Swap(true) {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	runtime.SetFinalizer(t, nil)
+	if t.handle != 0 {
+		ffiFreeVersionedTransaction(t.handle)
+		t.handle = 0
+	}
+}
+
+func (t *VersionedTransaction) withHandle() (uint64, func(), error) {
+	if t == nil || t.closed.Load() {
+		return 0, nil, errors.New("versioned transaction is completed")
+	}
+	t.mu.RLock()
+	if t.closed.Load() || t.handle == 0 {
+		t.mu.RUnlock()
+		return 0, nil, errors.New("versioned transaction is completed")
+	}
+	return t.handle, t.mu.RUnlock, nil
+}
+
+func (t *VersionedTransaction) Head(mapID []byte) (*MapVersion, error) {
+	handle, unlock, err := t.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	raw, err := ffiVersionedTransactionHead(handle, bytes.Clone(mapID))
+	if err != nil {
+		return nil, err
+	}
+	return decodeOptionalPortableMapVersion(raw)
+}
+
+func (t *VersionedTransaction) Get(mapID, key []byte) ([]byte, bool, error) {
+	handle, unlock, err := t.withHandle()
+	if err != nil {
+		return nil, false, err
+	}
+	defer unlock()
+	raw, err := ffiVersionedTransactionGet(handle, bytes.Clone(mapID), bytes.Clone(key))
+	if err != nil {
+		return nil, false, err
+	}
+	d := byteDecoder{data: raw}
+	value, ok, err := d.readOptionalByteArray()
+	if err != nil {
+		return nil, false, err
+	}
+	return value, ok, d.done()
+}
+
+func (t *VersionedTransaction) Apply(mapID []byte, mutations []Mutation) (MapVersion, error) {
+	handle, unlock, err := t.withHandle()
+	if err != nil {
+		return MapVersion{}, err
+	}
+	defer unlock()
+	encoded, err := encodeMutations(cloneMutations(mutations))
+	if err != nil {
+		return MapVersion{}, err
+	}
+	raw, err := ffiVersionedTransactionApply(handle, bytes.Clone(mapID), encoded)
+	if err != nil {
+		return MapVersion{}, err
+	}
+	return decodePortableMapVersion(raw)
+}
+
+func (t *VersionedTransaction) ApplyIf(mapID, expected []byte, mutations []Mutation) (MapUpdate, error) {
+	handle, unlock, err := t.withHandle()
+	if err != nil {
+		return MapUpdate{}, err
+	}
+	defer unlock()
+	encoded, err := encodeMutations(cloneMutations(mutations))
+	if err != nil {
+		return MapUpdate{}, err
+	}
+	raw, err := ffiVersionedTransactionApplyIf(handle, bytes.Clone(mapID), bytes.Clone(expected), encoded)
+	if err != nil {
+		return MapUpdate{}, err
+	}
+	return decodePortableMapUpdate(raw)
+}
+
+func (t *VersionedTransaction) Put(mapID, key, value []byte) (MapVersion, error) {
+	handle, unlock, err := t.withHandle()
+	if err != nil {
+		return MapVersion{}, err
+	}
+	defer unlock()
+	raw, err := ffiVersionedTransactionPut(handle, bytes.Clone(mapID), bytes.Clone(key), bytes.Clone(value))
+	if err != nil {
+		return MapVersion{}, err
+	}
+	return decodePortableMapVersion(raw)
+}
+
+func (t *VersionedTransaction) Delete(mapID, key []byte) (MapVersion, error) {
+	handle, unlock, err := t.withHandle()
+	if err != nil {
+		return MapVersion{}, err
+	}
+	defer unlock()
+	raw, err := ffiVersionedTransactionDelete(handle, bytes.Clone(mapID), bytes.Clone(key))
+	if err != nil {
+		return MapVersion{}, err
+	}
+	return decodePortableMapVersion(raw)
+}
+
+func (t *VersionedTransaction) Commit() (VersionedTransactionCommit, error) {
+	handle, unlock, err := t.withHandle()
+	if err != nil {
+		return VersionedTransactionCommit{}, err
+	}
+	raw, callErr := ffiVersionedTransactionCommit(handle)
+	unlock()
+	t.Close()
+	if callErr != nil {
+		return VersionedTransactionCommit{}, callErr
+	}
+	return decodeVersionedTransactionCommit(raw)
+}
+
+func (t *VersionedTransaction) Rollback() error {
+	handle, unlock, err := t.withHandle()
+	if err != nil {
+		return err
+	}
+	callErr := ffiVersionedTransactionRollback(handle)
+	unlock()
+	t.Close()
+	return callErr
+}
+
 func (m *VersionedMap) Subscribe() (*MapSubscription, error) {
 	id, err := m.ID()
 	if err != nil {
@@ -1035,6 +1200,52 @@ func decodePortableMapVersions(raw []byte) ([]MapVersion, error) {
 		versions = append(versions, version)
 	}
 	return versions, decoder.done()
+}
+
+func decodeVersionedTransactionCommit(raw []byte) (VersionedTransactionCommit, error) {
+	d := byteDecoder{data: raw}
+	applied, err := d.readBool()
+	if err != nil {
+		return VersionedTransactionCommit{}, err
+	}
+	count, err := d.readInt32()
+	if err != nil || count < 0 {
+		if err == nil {
+			err = errors.New("invalid transaction version sequence length")
+		}
+		return VersionedTransactionCommit{}, err
+	}
+	versions := make([]MapVersion, 0, count)
+	for range count {
+		version, err := readPortableMapVersion(&d)
+		if err != nil {
+			return VersionedTransactionCommit{}, err
+		}
+		versions = append(versions, version)
+	}
+	conflictMapID, present, err := d.readOptionalByteArray()
+	if err != nil {
+		return VersionedTransactionCommit{}, err
+	}
+	if !present {
+		conflictMapID = nil
+	}
+	presentVersion, err := d.readByte()
+	if err != nil {
+		return VersionedTransactionCommit{}, err
+	}
+	var conflictCurrent *MapVersion
+	if presentVersion != 0 {
+		value, err := readPortableMapVersion(&d)
+		if err != nil {
+			return VersionedTransactionCommit{}, err
+		}
+		conflictCurrent = &value
+	}
+	return VersionedTransactionCommit{
+		Applied: applied, Versions: versions, ConflictMapID: conflictMapID,
+		ConflictCurrent: conflictCurrent,
+	}, d.done()
 }
 
 func decodePortableMapUpdate(raw []byte) (MapUpdate, error) {

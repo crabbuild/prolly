@@ -14,12 +14,12 @@ use prolly_bindings::{
     ActiveIndexHealthRecord, BindingIndexRegistry, BindingIndexedMap, BindingIndexedSnapshot,
     BindingMapComparison, BindingMapSnapshot, BindingMapSubscription, BindingProximityMap,
     BindingProximityReadSession, BindingProximitySearchProof, BindingSecondaryIndexSnapshot,
-    BindingVersionedMap, DistanceMetricRecord, ExactProximityRecordRecord, IndexBuildResultRecord,
-    IndexEntryRecord, IndexMatchRecord, IndexPageRecord, IndexProjectionRecord,
-    IndexVerificationRecord, IndexedMapHealthRecord, IndexedMapMetricsRecord,
-    IndexedRetentionRecord, IndexedSnapshotIdRecord, IndexedSourceRecord, IndexedUpdateKind,
-    IndexedUpdateRecord, IndexedVersionRecord, KeyProofRecord, MapUpdateKind, MapUpdateRecord,
-    MapVersionRecord, MultiKeyProofRecord, ProllyBindingError, ProllyReadSession,
+    BindingVersionedMap, BindingVersionedTransaction, DistanceMetricRecord,
+    ExactProximityRecordRecord, IndexBuildResultRecord, IndexEntryRecord, IndexMatchRecord,
+    IndexPageRecord, IndexProjectionRecord, IndexVerificationRecord, IndexedMapHealthRecord,
+    IndexedMapMetricsRecord, IndexedRetentionRecord, IndexedSnapshotIdRecord, IndexedSourceRecord,
+    IndexedUpdateKind, IndexedUpdateRecord, IndexedVersionRecord, KeyProofRecord, MapUpdateKind,
+    MapUpdateRecord, MapVersionRecord, MultiKeyProofRecord, ProllyBindingError, ProllyReadSession,
     ProvedRangePageRecord, ProximityConfigRecord, ProximityMembershipProofRecord,
     ProximityMutationRecord, ProximityMutationStatsRecord, ProximityNeighborRecord,
     ProximityRecordRecord, ProximitySearchClaimKindRecord, ProximitySearchResultRecord,
@@ -657,6 +657,14 @@ pub struct NodePortableMapChangeEvent {
     pub diffs: Vec<NodeDiffRecord>,
 }
 
+#[napi(object)]
+pub struct NodePortableVersionedTransactionCommit {
+    pub applied: bool,
+    pub versions: Vec<NodePortableMapVersion>,
+    pub conflict_map_id: Option<Buffer>,
+    pub conflict_current: Option<NodePortableMapVersion>,
+}
+
 impl From<ProximitySearchResultRecord> for NodePortableSearchResult {
     fn from(value: ProximitySearchResultRecord) -> Self {
         let completion = match value.completion {
@@ -1079,6 +1087,117 @@ impl NativePortableMapSubscription {
                 })
             })
             .map_err(to_napi_error)
+    }
+}
+
+#[napi]
+pub struct NativePortableVersionedTransaction {
+    inner: Option<Arc<BindingVersionedTransaction>>,
+}
+
+impl NativePortableVersionedTransaction {
+    fn open(&self) -> Result<&Arc<BindingVersionedTransaction>> {
+        self.inner
+            .as_ref()
+            .ok_or_else(|| Error::new(Status::GenericFailure, "versioned transaction is completed"))
+    }
+}
+
+#[napi]
+impl NativePortableVersionedTransaction {
+    #[napi]
+    pub fn head(&self, map_id: Buffer) -> Result<Option<NodePortableMapVersion>> {
+        self.open()?
+            .head(map_id.to_vec())
+            .map(|value| value.map(Into::into))
+            .map_err(to_napi_error)
+    }
+
+    #[napi]
+    pub fn get(&self, map_id: Buffer, key: Buffer) -> Result<Option<Buffer>> {
+        self.open()?
+            .get(map_id.to_vec(), key.to_vec())
+            .map(|value| value.map(Buffer::from))
+            .map_err(to_napi_error)
+    }
+
+    #[napi]
+    pub fn apply(
+        &self,
+        map_id: Buffer,
+        mutations: Vec<NodeMutationRecord>,
+    ) -> Result<NodePortableMapVersion> {
+        let mutations = mutations
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect::<Result<Vec<_>>>()?;
+        self.open()?
+            .apply(map_id.to_vec(), mutations)
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "applyIf")]
+    pub fn apply_if(
+        &self,
+        map_id: Buffer,
+        expected: Option<Buffer>,
+        mutations: Vec<NodeMutationRecord>,
+    ) -> Result<NodePortableMapUpdate> {
+        let mutations = mutations
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect::<Result<Vec<_>>>()?;
+        self.open()?
+            .apply_if(
+                map_id.to_vec(),
+                expected.map(|value| value.to_vec()),
+                mutations,
+            )
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi]
+    pub fn put(
+        &self,
+        map_id: Buffer,
+        key: Buffer,
+        value: Buffer,
+    ) -> Result<NodePortableMapVersion> {
+        self.open()?
+            .put(map_id.to_vec(), key.to_vec(), value.to_vec())
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi]
+    pub fn delete(&self, map_id: Buffer, key: Buffer) -> Result<NodePortableMapVersion> {
+        self.open()?
+            .delete(map_id.to_vec(), key.to_vec())
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi]
+    pub fn commit(&mut self) -> Result<NodePortableVersionedTransactionCommit> {
+        let result = self.open()?.commit();
+        self.inner = None;
+        result
+            .map(|value| NodePortableVersionedTransactionCommit {
+                applied: value.applied,
+                versions: value.versions.into_iter().map(Into::into).collect(),
+                conflict_map_id: value.conflict_map_id.map(Buffer::from),
+                conflict_current: value.conflict_current.map(Into::into),
+            })
+            .map_err(to_napi_error)
+    }
+
+    #[napi]
+    pub fn rollback(&mut self) -> Result<()> {
+        let result = self.open()?.rollback();
+        self.inner = None;
+        result.map_err(to_napi_error)
     }
 }
 
@@ -2201,6 +2320,16 @@ impl NativePortableProximitySearchProof {
 
 #[napi]
 impl NativeProllyEngine {
+    #[napi(js_name = "beginVersionedTransaction")]
+    pub fn portable_begin_versioned_transaction(
+        &self,
+    ) -> Result<NativePortableVersionedTransaction> {
+        self.inner
+            .begin_versioned_transaction()
+            .map(|inner| NativePortableVersionedTransaction { inner: Some(inner) })
+            .map_err(to_napi_error)
+    }
+
     #[napi(js_name = "versionedMap")]
     pub fn portable_versioned_map(&self, id: Buffer) -> Result<NativePortableVersionedMap> {
         self.inner

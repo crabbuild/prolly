@@ -920,6 +920,10 @@ export class Engine implements Disposable {
     );
   }
 
+  beginVersionedTransaction(): WasmVersionedTransaction {
+    return new WasmVersionedTransaction(this.#open().beginVersionedTransaction());
+  }
+
   indexRegistry(): WasmIndexRegistry {
     return new WasmIndexRegistry(this.#open().indexRegistry());
   }
@@ -994,6 +998,13 @@ export interface WasmMapChangeEvent {
   previous?: Uint8Array;
   current: WasmMapVersion;
   diffs: WasmMapDiff[];
+}
+
+export interface WasmVersionedTransactionCommit {
+  applied: boolean;
+  versions: WasmMapVersion[];
+  conflictMapId?: Uint8Array;
+  conflictCurrent?: WasmMapVersion;
 }
 
 function wasmMapVersion(value: any): WasmMapVersion {
@@ -1158,6 +1169,56 @@ export class WasmVersionedMap implements Disposable {
   planGc(): { itemCount: bigint; byteCount: bigint } {
     const value = this.#open().planGc();
     return { itemCount: BigInt(value.itemCount), byteCount: BigInt(value.byteCount) };
+  }
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class WasmVersionedTransaction implements Disposable {
+  #native?: any;
+  constructor(native: any) { this.#native = native; }
+  #open(): any { if (this.#native == null) throw new Error("WASM versioned transaction is completed"); return this.#native; }
+  head(mapId: Uint8Array, signal?: AbortSignal): Promise<WasmMapVersion | undefined> {
+    const native = this.#open(); mapId = ownedPortableBytes(mapId);
+    return portablePromise(signal, () => { const value = native.head(mapId); return value == null ? undefined : wasmMapVersion(value); });
+  }
+  get(mapId: Uint8Array, key: Uint8Array, signal?: AbortSignal): Promise<Uint8Array | undefined> {
+    const native = this.#open(); mapId = ownedPortableBytes(mapId); key = ownedPortableBytes(key);
+    return portablePromise(signal, () => native.get(mapId, key) ?? undefined);
+  }
+  apply(mapId: Uint8Array, mutations: readonly WasmMapMutation[], signal?: AbortSignal): Promise<WasmMapVersion> {
+    const native = this.#open(); mapId = ownedPortableBytes(mapId); const owned = ownedWasmMutations(mutations);
+    return portablePromise(signal, () => wasmMapVersion(native.apply(mapId, owned)));
+  }
+  applyIf(mapId: Uint8Array, expected: Uint8Array | undefined, mutations: readonly WasmMapMutation[], signal?: AbortSignal): Promise<WasmMapUpdate> {
+    const native = this.#open(); mapId = ownedPortableBytes(mapId);
+    const ownedExpected = expected == null ? undefined : ownedPortableBytes(expected);
+    const owned = ownedWasmMutations(mutations);
+    return portablePromise(signal, () => wasmMapUpdate(native.applyIf(mapId, ownedExpected, owned)));
+  }
+  put(mapId: Uint8Array, key: Uint8Array, value: Uint8Array, signal?: AbortSignal): Promise<WasmMapVersion> {
+    const native = this.#open(); mapId = ownedPortableBytes(mapId); key = ownedPortableBytes(key); value = ownedPortableBytes(value);
+    return portablePromise(signal, () => wasmMapVersion(native.put(mapId, key, value)));
+  }
+  delete(mapId: Uint8Array, key: Uint8Array, signal?: AbortSignal): Promise<WasmMapVersion> {
+    const native = this.#open(); mapId = ownedPortableBytes(mapId); key = ownedPortableBytes(key);
+    return portablePromise(signal, () => wasmMapVersion(native.delete(mapId, key)));
+  }
+  commit(signal?: AbortSignal): Promise<WasmVersionedTransactionCommit> {
+    const native = this.#open(); this.#native = undefined;
+    return portablePromise(signal, () => {
+      const value = native.commit();
+      return {
+        applied: value.applied,
+        versions: value.versions.map(wasmMapVersion),
+        conflictMapId: value.conflictMapId ?? undefined,
+        conflictCurrent: value.conflictCurrent == null ? undefined : wasmMapVersion(value.conflictCurrent),
+      };
+    });
+  }
+  rollback(signal?: AbortSignal): Promise<void> {
+    const native = this.#open(); this.#native = undefined;
+    return portablePromise(signal, () => native.rollback());
   }
   close(): void { this.#native?.free?.(); this.#native = undefined; }
   [Symbol.dispose](): void { this.close(); }

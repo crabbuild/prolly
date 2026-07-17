@@ -296,6 +296,22 @@ class PortableParityTests(unittest.TestCase):
                 self.assertEqual([diff.key for diff in event.diffs], [b"k"])
                 self.assertEqual(subscription.last_seen, current.id)
 
+    def test_multi_map_transaction_is_atomic_and_reads_staged_values(self):
+        with Engine.memory() as engine:
+            tx = engine.begin_versioned_transaction()
+            tx.put(b"a", b"k", b"one")
+            tx.put(b"b", b"k", b"two")
+            self.assertEqual(tx.get(b"a", b"k"), b"one")
+            committed = tx.commit()
+            self.assertTrue(committed.applied)
+            self.assertEqual(len(committed.versions), 2)
+            self.assertEqual(engine.versioned_map(b"a").get(b"k"), b"one")
+            self.assertEqual(engine.versioned_map(b"b").get(b"k"), b"two")
+            rolled_back = engine.begin_versioned_transaction()
+            rolled_back.put(b"a", b"discard", b"x")
+            rolled_back.rollback()
+            self.assertIsNone(engine.versioned_map(b"a").get(b"discard"))
+
 
 if __name__ == "__main__":
     unittest.main()
