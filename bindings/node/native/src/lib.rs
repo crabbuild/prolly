@@ -5054,7 +5054,7 @@ impl From<BindingSnapshotBundleRecord> for NodeSnapshotBundleRecord {
 }
 
 impl NodeSnapshotBundleRecord {
-    fn into_binding(self, config: ConfigRecord) -> BindingSnapshotBundleRecord {
+    pub(crate) fn into_binding(self, config: ConfigRecord) -> BindingSnapshotBundleRecord {
         BindingSnapshotBundleRecord {
             format_version: self.format_version,
             tree: self.tree.into_tree(config),

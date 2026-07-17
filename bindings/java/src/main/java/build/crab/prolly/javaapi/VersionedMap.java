@@ -228,6 +228,15 @@ public final class VersionedMap implements AutoCloseable {
     public MapVersion restoreBackup(byte[] bytes) {
         return MapVersion.fromNative(open().restoreBackup(bytes.clone()));
     }
+    public MapVersion importAsHead(build.crab.prolly.SnapshotBundleRecord bundle) {
+        return MapVersion.fromNative(open().importAsHead(
+                build.crab.prolly.api.JavaPortableBridge.ownedSnapshotBundle(bundle)));
+    }
+    public MapVersion importAsHead(
+            build.crab.prolly.SnapshotBundleRecord bundle, long timestampMillis) {
+        return MapVersion.fromNative(build.crab.prolly.api.JavaPortableBridge.importAsHeadAtMillis(
+                open(), bundle, timestampMillis));
+    }
     public build.crab.prolly.MapCatalogVerificationRecord verifyCatalog() {
         return open().verifyCatalog();
     }
@@ -328,6 +337,23 @@ public final class VersionedMap implements AutoCloseable {
             var value = nativeHandle.snapshotAt(ownedId);
             return value == null ? null : new MapSnapshot(value);
         });
+    }
+
+    public CompletableFuture<MapVersion> importAsHeadAsync(
+            build.crab.prolly.SnapshotBundleRecord bundle) {
+        var nativeHandle = open();
+        var owned = build.crab.prolly.api.JavaPortableBridge.ownedSnapshotBundle(bundle);
+        return CompletableFuture.supplyAsync(
+                () -> MapVersion.fromNative(nativeHandle.importAsHead(owned)));
+    }
+
+    public CompletableFuture<MapVersion> importAsHeadAsync(
+            build.crab.prolly.SnapshotBundleRecord bundle, long timestampMillis) {
+        var nativeHandle = open();
+        var owned = build.crab.prolly.api.JavaPortableBridge.ownedSnapshotBundle(bundle);
+        return CompletableFuture.supplyAsync(() -> MapVersion.fromNative(
+                build.crab.prolly.api.JavaPortableBridge.importAsHeadAtMillis(
+                        nativeHandle, owned, timestampMillis)));
     }
 
     public CompletableFuture<MapSubscription> subscribeAsync() {

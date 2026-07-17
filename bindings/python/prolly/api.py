@@ -480,6 +480,10 @@ class VersionedMap(_Scoped):
         self._open()
         return self._inner.import_as_head(bundle)
 
+    def import_as_head_at_millis(self, bundle, timestamp_millis: int):
+        self._open()
+        return self._inner.import_as_head_at_millis(bundle, timestamp_millis)
+
     def plan_gc(self):
         self._open()
         return self._inner.plan_gc()
@@ -520,6 +524,20 @@ class VersionedMap(_Scoped):
     def snapshot_at_async(self, version_id: bytes):
         owned_id = bytes(version_id)
         return _background(lambda: self.snapshot_at(owned_id))
+
+    def import_as_head_async(self, bundle):
+        owned = _native.snapshot_bundle_to_bytes(bundle)
+        return _background(
+            lambda: self.import_as_head(_native.snapshot_bundle_from_bytes(owned))
+        )
+
+    def import_as_head_at_millis_async(self, bundle, timestamp_millis: int):
+        owned = _native.snapshot_bundle_to_bytes(bundle)
+        return _background(
+            lambda: self.import_as_head_at_millis(
+                _native.snapshot_bundle_from_bytes(owned), timestamp_millis
+            )
+        )
 
     def subscribe_async(self):
         return _background(self.subscribe)
@@ -744,6 +762,9 @@ class MapSnapshot(_Scoped):
     def export(self):
         self._open()
         return self._inner.export()
+
+    def export_async(self):
+        return _background(self.export)
 
     def read(self) -> "ReadSession":
         self._open()

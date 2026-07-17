@@ -73,6 +73,7 @@ import build.crab.prolly.SecondaryIndexLimitsRecord
 import build.crab.prolly.SearchBackendRecord
 import build.crab.prolly.SearchBudgetRecord
 import build.crab.prolly.SearchPolicyKind
+import build.crab.prolly.SnapshotBundleRecord
 import build.crab.prolly.defaultHnswBuildLimits as nativeDefaultHnswBuildLimits
 import build.crab.prolly.defaultHnswConfig as nativeDefaultHnswConfig
 import build.crab.prolly.defaultPqBuildLimits as nativeDefaultPqBuildLimits
@@ -754,6 +755,20 @@ private fun BatchApplyStatsRecord.toJava() = JavaBatchApplyStats(
 )
 
 object JavaPortableBridge {
+    @JvmStatic
+    fun ownedSnapshotBundle(bundle: SnapshotBundleRecord): SnapshotBundleRecord =
+        build.crab.prolly.api.ownedSnapshotBundle(bundle)
+
+    @JvmStatic
+    fun importAsHeadAtMillis(
+        map: VersionedMap,
+        bundle: SnapshotBundleRecord,
+        timestampMillis: Long,
+    ): MapVersionRecord {
+        require(timestampMillis >= 0) { "timestampMillis must be non-negative" }
+        return map.importAsHead(bundle, timestampMillis.toULong())
+    }
+
     @JvmStatic
     fun diffPage(
         comparison: MapComparison,

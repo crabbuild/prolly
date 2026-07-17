@@ -4,7 +4,7 @@ use super::{
     NodeMultiKeyProofVerificationRecord, NodeMutationRecord, NodeNamedRootRetentionRecord,
     NodeParallelConfigRecord, NodeRangeCursorRecord, NodeRangePageProofVerificationRecord,
     NodeRangePageRecord, NodeRangeProofVerificationRecord, NodeReverseCursorRecord,
-    NodeReversePageRecord, NodeTreeRecord,
+    NodeReversePageRecord, NodeSnapshotBundleRecord, NodeTreeRecord,
 };
 use napi::bindgen_prelude::{
     AsyncTask, Buffer, Env, Error, Float32Array, FunctionRef, Result, Status, Task,
@@ -13,19 +13,19 @@ use napi::JsObject;
 use napi_derive::napi;
 use prolly_bindings::{
     default_composite_accelerator_config, default_composite_build_limits,
-    default_composite_rebuild_options, default_content_graph_limits, default_hnsw_build_limits,
-    default_hnsw_config, default_pq_build_limits, default_pq_config, default_proximity_config,
-    default_proximity_search_runtime_policy, verify_key_proof, verify_multi_key_proof,
-    verify_proximity_membership_proof, verify_proximity_structure_proof, verify_range_page_proof,
-    verify_range_proof, AcceleratorCatalogEntryRecord, ActiveIndexHealthRecord,
-    AdaptiveQualityRecord, BindingAcceleratorCatalog, BindingCompositeAccelerator,
-    BindingHnswIndex, BindingIndexRegistry, BindingIndexedMap, BindingIndexedSnapshot,
-    BindingMapComparison, BindingMapMerge, BindingMapSnapshot, BindingMapSubscription,
-    BindingProductQuantizer, BindingProximityCancellationToken, BindingProximityMap,
-    BindingProximityReadSession, BindingProximitySearchProof, BindingProximitySearchRuntime,
-    BindingSecondaryIndexSnapshot, BindingVersionedMap, BindingVersionedTransaction,
-    CatalogAcceleratorKindRecord, CompositeAcceleratorConfigRecord, CompositeBaseKindRecord,
-    CompositeBuildLimitsRecord, CompositeBuildOrRebuildKindRecord,
+    default_composite_rebuild_options, default_config, default_content_graph_limits,
+    default_hnsw_build_limits, default_hnsw_config, default_pq_build_limits, default_pq_config,
+    default_proximity_config, default_proximity_search_runtime_policy, verify_key_proof,
+    verify_multi_key_proof, verify_proximity_membership_proof, verify_proximity_structure_proof,
+    verify_range_page_proof, verify_range_proof, AcceleratorCatalogEntryRecord,
+    ActiveIndexHealthRecord, AdaptiveQualityRecord, BindingAcceleratorCatalog,
+    BindingCompositeAccelerator, BindingHnswIndex, BindingIndexRegistry, BindingIndexedMap,
+    BindingIndexedSnapshot, BindingMapComparison, BindingMapMerge, BindingMapSnapshot,
+    BindingMapSubscription, BindingProductQuantizer, BindingProximityCancellationToken,
+    BindingProximityMap, BindingProximityReadSession, BindingProximitySearchProof,
+    BindingProximitySearchRuntime, BindingSecondaryIndexSnapshot, BindingVersionedMap,
+    BindingVersionedTransaction, CatalogAcceleratorKindRecord, CompositeAcceleratorConfigRecord,
+    CompositeBaseKindRecord, CompositeBuildLimitsRecord, CompositeBuildOrRebuildKindRecord,
     CompositeBuildOrRebuildOutcomeRecord, CompositeBuildOutcomeRecord, CompositeBuildStatsRecord,
     CompositeRebuildOptionsRecord, DistanceMetricRecord, ExactProximityRecordRecord,
     FullRebuildReasonKindRecord, FullRebuildReasonRecord, HnswBuildLimitsRecord,
@@ -2037,6 +2037,35 @@ impl NativePortableVersionedMap {
             .map_err(to_napi_error)
     }
 
+    #[napi(js_name = "importAsHead")]
+    pub fn import_as_head(
+        &self,
+        bundle: NodeSnapshotBundleRecord,
+    ) -> Result<NodePortableMapVersion> {
+        self.inner
+            .import_as_head(bundle.into_binding(default_config()))
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "importAsHeadAtMillis")]
+    pub fn import_as_head_at_millis(
+        &self,
+        bundle: NodeSnapshotBundleRecord,
+        timestamp_millis: String,
+    ) -> Result<NodePortableMapVersion> {
+        let timestamp_millis = timestamp_millis.parse::<u64>().map_err(|_| {
+            Error::new(
+                Status::InvalidArg,
+                "timestamp must be an unsigned 64-bit integer",
+            )
+        })?;
+        self.inner
+            .import_as_head_at_millis(bundle.into_binding(default_config()), timestamp_millis)
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
     #[napi(js_name = "keepLast")]
     pub fn keep_last(&self, count: u32) -> Result<NodePortableVersionPrune> {
         self.inner
@@ -2584,19 +2613,8 @@ impl NativePortableMapSnapshot {
     }
 
     #[napi]
-    pub fn export(&self) -> Result<NodePortableMaintenanceSummary> {
-        self.inner
-            .export()
-            .map(|value| NodePortableMaintenanceSummary {
-                item_count: value.nodes.len().to_string(),
-                byte_count: value
-                    .nodes
-                    .iter()
-                    .map(|node| node.bytes.len() as u64)
-                    .sum::<u64>()
-                    .to_string(),
-            })
-            .map_err(to_napi_error)
+    pub fn export(&self) -> Result<NodeSnapshotBundleRecord> {
+        self.inner.export().map(Into::into).map_err(to_napi_error)
     }
 
     #[napi]

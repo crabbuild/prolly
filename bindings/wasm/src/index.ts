@@ -80,6 +80,17 @@ export interface WasmSnapshotBundleRecord {
   byteCount: number;
 }
 
+/** Opaque, lossless snapshot bundle returned by a pinned versioned-map snapshot. */
+export interface WasmSnapshotBundleHandle {
+  readonly formatVersion: number;
+  readonly tree: unknown;
+  readonly nodes: WasmSnapshotBundleNodeRecord[];
+  readonly nodeCount: number;
+  readonly byteCount: number;
+  toBytes(): Uint8Array;
+  free(): void;
+}
+
 export interface WasmSnapshotBundleSummaryRecord {
   formatVersion: number;
   root?: Uint8Array | null;
@@ -1827,6 +1838,20 @@ export class WasmVersionedMap implements Disposable {
     const native = this.#open(); bytes = ownedPortableBytes(bytes);
     return portablePromise(signal, () => wasmMapVersion(native.restoreBackup(bytes)));
   }
+  importAsHead(bundle: WasmSnapshotBundleHandle, signal?: AbortSignal): Promise<WasmMapVersion> {
+    const native = this.#open(); const owned = ownedPortableBytes(bundle.toBytes());
+    return portablePromise(signal, () => wasmMapVersion(native.importAsHead(owned)));
+  }
+  importAsHeadAtMillis(
+    bundle: WasmSnapshotBundleHandle,
+    timestampMillis: bigint,
+    signal?: AbortSignal,
+  ): Promise<WasmMapVersion> {
+    const native = this.#open(); const owned = ownedPortableBytes(bundle.toBytes());
+    return portablePromise(signal, () => wasmMapVersion(
+      native.importAsHeadAtMillis(owned, timestampMillis),
+    ));
+  }
   keepLast(count: number, signal?: AbortSignal): Promise<WasmVersionPrune> {
     if (!Number.isSafeInteger(count) || count < 0 || count > 0xffff_ffff) {
       return Promise.reject(new RangeError("keepLast count must be a non-negative uint32"));
@@ -2052,8 +2077,9 @@ export class WasmMapSnapshot implements Disposable {
   stats(): { itemCount: bigint; byteCount: bigint } {
     const value = this.#open().stats(); return { itemCount: BigInt(value.itemCount), byteCount: BigInt(value.byteCount) };
   }
-  exportSummary(): { itemCount: bigint; byteCount: bigint } {
-    const value = this.#open().export(); return { itemCount: BigInt(value.itemCount), byteCount: BigInt(value.byteCount) };
+  export(signal?: AbortSignal): Promise<WasmSnapshotBundleHandle> {
+    const native = this.#open();
+    return portablePromise(signal, () => native.export());
   }
   read(): WasmReadSession { return new WasmReadSession(this.#open().read(), this.#memory); }
   close(): void { this.#native?.free?.(); this.#native = undefined; }

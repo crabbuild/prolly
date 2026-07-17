@@ -311,6 +311,12 @@ final class PortableParityTests: XCTestCase {
             XCTAssertEqual(try await versioned.headAsync().value?.id, updated.id)
             let snapshot = try XCTUnwrap(try await versioned.snapshotAtAsync(updated.id).value)
             XCTAssertEqual(try await snapshot.getAsync(Data("k".utf8)).value, Data("v".utf8))
+            var bundle = try await snapshot.exportAsync().value
+            let imported = try engine.versionedMap(Data("async-import".utf8))
+            let pendingImport = imported.importAsHeadAsync(bundle)
+            bundle.nodes[0].bytes[0] = 0
+            _ = try await pendingImport.value
+            XCTAssertEqual(try imported.get(Data("k".utf8)), Data("v".utf8))
             let session = try snapshot.read()
             XCTAssertEqual(try await session.getAsync(Data("k".utf8)).value, Data("v".utf8))
             session.close()
@@ -452,6 +458,16 @@ final class PortableParityTests: XCTestCase {
                 let restored = try target.restoreBackup(source.backup())
                 XCTAssertEqual(restored.id, try source.headID())
                 XCTAssertEqual(try target.get(Data("k".utf8)), Data("v2".utf8))
+                let bundle = try XCTUnwrap(source.snapshot()).export()
+                let importedMap = try targetEngine.versionedMap(Data("versioned-import".utf8))
+                XCTAssertTrue(try importedMap.importAsHead(bundle).isHead)
+                XCTAssertEqual(try importedMap.get(Data("k".utf8)), Data("v2".utf8))
+                let timestampedMap = try targetEngine.versionedMap(Data("versioned-import-at".utf8))
+                let timestamped = try timestampedMap.importAsHead(
+                    bundle, timestampMillis: 12_345
+                )
+                XCTAssertEqual(timestamped.createdAtMillis, 12_345)
+                XCTAssertEqual(try timestampedMap.get(Data("k".utf8)), Data("v2".utf8))
                 let pruned = try source.keepLast(1)
                 XCTAssertFalse(pruned.retained.isEmpty)
                 XCTAssertFalse(pruned.removed.isEmpty)

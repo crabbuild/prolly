@@ -432,6 +432,13 @@ class PortableParityTest {
             var head = map.headAsync().get().orElseThrow();
             try (var snapshot = map.snapshotAtAsync(head.id()).get()) {
                 assertArrayEquals(bytes("original-value"), snapshot.getAsync(bytes("original-key")).get().orElseThrow());
+                var bundle = snapshot.exportAsync().get();
+                try (var imported = engine.versionedMap(bytes("async-import"))) {
+                    var pendingImport = imported.importAsHeadAsync(bundle);
+                    bundle.getNodes().get(0).getBytes()[0] = 0;
+                    pendingImport.get();
+                    assertArrayEquals(bytes("original-value"), imported.get(bytes("original-key")).orElseThrow());
+                }
                 try (var session = snapshot.read()) {
                     assertArrayEquals(bytes("original-value"), session.getAsync(bytes("original-key")).get().orElseThrow());
                 }
@@ -685,6 +692,18 @@ class PortableParityTest {
             var restored = target.restoreBackup(source.backup());
             assertArrayEquals(source.headId().orElseThrow(), restored.id());
             assertArrayEquals(bytes("v2"), target.get(bytes("k")).orElseThrow());
+            build.crab.prolly.SnapshotBundleRecord bundle;
+            try (var snapshot = source.snapshot()) {
+                bundle = snapshot.export();
+            }
+            try (var importedMap = targetEngine.versionedMap(bytes("versioned-import"));
+                    var timestampedMap = targetEngine.versionedMap(bytes("versioned-import-at"))) {
+                assertTrue(importedMap.importAsHead(bundle).head());
+                assertArrayEquals(bytes("v2"), importedMap.get(bytes("k")).orElseThrow());
+                var timestamped = timestampedMap.importAsHead(bundle, 12_345L);
+                assertEquals(12_345L, timestamped.createdAtMillis().orElseThrow());
+                assertArrayEquals(bytes("v2"), timestampedMap.get(bytes("k")).orElseThrow());
+            }
             var pruned = source.keepLast(1);
             assertFalse(pruned.retained().isEmpty());
             assertFalse(pruned.removed().isEmpty());

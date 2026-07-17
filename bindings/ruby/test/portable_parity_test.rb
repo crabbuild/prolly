@@ -383,6 +383,12 @@ class PortableParityTest < Minitest::Test
       assert_equal updated.id, versioned.head_async.value.id
       snapshot = versioned.snapshot_at_async(updated.id).value
       assert_equal 'v'.b, snapshot.get_async('k'.b).value
+      bundle = snapshot.export_async.value
+      imported = engine.versioned_map('async-import'.b)
+      pending_import = imported.import_as_head_async(bundle)
+      bundle.nodes.first.bytes.replace('mutated-after-handoff'.b)
+      pending_import.value
+      assert_equal 'v'.b, imported.get('k'.b)
       snapshot.read.use { |session| assert_equal 'v'.b, session.get_async('k'.b).value }
       refute_nil subscription.poll_async.value
       snapshot.close
@@ -474,6 +480,14 @@ class PortableParityTest < Minitest::Test
         restored = target.restore_backup(source.backup)
         assert_equal source.head_id, restored.id
         assert_equal 'v2'.b, target.get('k'.b)
+        bundle = source.snapshot.export
+        imported_map = target_engine.versioned_map('versioned-import'.b)
+        assert imported_map.import_as_head(bundle).is_head
+        assert_equal 'v2'.b, imported_map.get('k'.b)
+        timestamped_map = target_engine.versioned_map('versioned-import-at'.b)
+        timestamped = timestamped_map.import_as_head_at_millis(bundle, 12_345)
+        assert_equal 12_345, timestamped.created_at_millis
+        assert_equal 'v2'.b, timestamped_map.get('k'.b)
         pruned = source.keep_last(1)
         refute_empty pruned.retained
         refute_empty pruned.removed

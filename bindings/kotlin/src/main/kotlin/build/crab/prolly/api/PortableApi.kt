@@ -60,6 +60,8 @@ import build.crab.prolly.ProximityStructuralProofRecord
 import build.crab.prolly.SecondaryIndexExtractorCallback
 import build.crab.prolly.SecondaryIndexLimitsRecord
 import build.crab.prolly.SnapshotBundleRecord
+import build.crab.prolly.SnapshotBundleNodeRecord
+import build.crab.prolly.TreeRecord
 import build.crab.prolly.defaultConfig
 import build.crab.prolly.defaultCompositeAcceleratorConfig
 import build.crab.prolly.defaultCompositeBuildLimits
@@ -121,6 +123,21 @@ private fun CompositeBuildOrRebuildOutcomeRecord.portable() = CompositeBuildOrRe
     hnswStats,
     pqStats,
 )
+
+internal fun ownedSnapshotBundle(bundle: SnapshotBundleRecord): SnapshotBundleRecord {
+    val config = bundle.tree.config
+    return SnapshotBundleRecord(
+        bundle.formatVersion,
+        TreeRecord(
+            bundle.tree.root?.copyOf(),
+            config.copy(
+                encoding = config.encoding.copy(),
+                formatBytes = config.formatBytes?.copyOf(),
+            ),
+        ),
+        bundle.nodes.map { SnapshotBundleNodeRecord(it.cid.copyOf(), it.bytes.copyOf()) },
+    )
+}
 
 private fun ownedSearchRequest(request: ProximitySearchRequestRecord) = request.copy(
     query = request.query.toList(),
@@ -273,7 +290,9 @@ class VersionedMap(internal val native: BindingVersionedMap) : AutoCloseable {
     fun versions() = native.versions()
     fun backup() = native.backup()
     fun restoreBackup(bundle: ByteArray) = native.restoreBackup(bundle.copyOf())
-    fun importAsHead(bundle: SnapshotBundleRecord) = native.importAsHead(bundle)
+    fun importAsHead(bundle: SnapshotBundleRecord) = native.importAsHead(ownedSnapshotBundle(bundle))
+    fun importAsHead(bundle: SnapshotBundleRecord, timestampMillis: ULong) =
+        native.importAsHeadAtMillis(ownedSnapshotBundle(bundle), timestampMillis)
     fun keepLast(count: ULong) = native.keepLast(count)
     fun pruneVersions(keepLatest: ULong) = native.pruneVersions(keepLatest)
     fun keepForAt(nowMillis: ULong, maxAgeMillis: ULong) = native.keepForAt(nowMillis, maxAgeMillis)
@@ -307,6 +326,13 @@ class VersionedMap(internal val native: BindingVersionedMap) : AutoCloseable {
     suspend fun snapshotAtAsync(id: ByteArray) = id.copyOf().let { owned ->
         withContext(Dispatchers.IO) { snapshotAt(owned) }
     }
+    suspend fun importAsHeadAsync(bundle: SnapshotBundleRecord) = ownedSnapshotBundle(bundle).let { owned ->
+        withContext(Dispatchers.IO) { native.importAsHead(owned) }
+    }
+    suspend fun importAsHeadAsync(bundle: SnapshotBundleRecord, timestampMillis: ULong) =
+        ownedSnapshotBundle(bundle).let { owned ->
+            withContext(Dispatchers.IO) { native.importAsHeadAtMillis(owned, timestampMillis) }
+        }
     suspend fun subscribeAsync() = withContext(Dispatchers.IO) { subscribe() }
     suspend fun subscribeFromAsync(lastSeen: ByteArray? = null) = lastSeen?.copyOf().let { owned ->
         withContext(Dispatchers.IO) { subscribeFrom(owned) }
@@ -452,6 +478,7 @@ class MapSnapshot(internal val native: BindingMapSnapshot) : AutoCloseable {
         withContext(Dispatchers.IO) { provePrefix(owned) }
     }
     suspend fun statsAsync() = withContext(Dispatchers.IO) { stats() }
+    suspend fun exportAsync() = withContext(Dispatchers.IO) { export() }
     override fun close() = native.close()
 }
 

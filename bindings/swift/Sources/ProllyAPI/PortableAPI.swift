@@ -412,6 +412,17 @@ public final class VersionedMap: @unchecked Sendable {
     public func restoreBackup(_ bundle: Data) throws -> MapVersionRecord {
         try open { try native.restoreBackup(bytes: Data(bundle)) }
     }
+    public func importAsHead(_ bundle: SnapshotBundleRecord) throws -> MapVersionRecord {
+        try open { try native.importAsHead(bundle: bundle) }
+    }
+    public func importAsHead(
+        _ bundle: SnapshotBundleRecord,
+        timestampMillis: UInt64
+    ) throws -> MapVersionRecord {
+        try open {
+            try native.importAsHeadAtMillis(bundle: bundle, timestampMillis: timestampMillis)
+        }
+    }
     public func keepLast(_ count: UInt64) throws -> VersionPruneRecord {
         try open { try native.keepLast(count: count) }
     }
@@ -473,6 +484,22 @@ public final class VersionedMap: @unchecked Sendable {
     public func snapshotAtAsync(_ id: Data) -> Task<MapSnapshot?, Error> {
         let owned = Data(id)
         return Task { try Task.checkCancellation(); return try self.snapshot(at: owned) }
+    }
+    public func importAsHeadAsync(
+        _ bundle: SnapshotBundleRecord
+    ) -> Task<MapVersionRecord, Error> {
+        let owned = bundle
+        return Task { try Task.checkCancellation(); return try self.importAsHead(owned) }
+    }
+    public func importAsHeadAsync(
+        _ bundle: SnapshotBundleRecord,
+        timestampMillis: UInt64
+    ) -> Task<MapVersionRecord, Error> {
+        let owned = bundle
+        return Task {
+            try Task.checkCancellation()
+            return try self.importAsHead(owned, timestampMillis: timestampMillis)
+        }
     }
     public func subscribeAsync(from lastSeen: Data? = nil) -> Task<MapSubscription, Error> {
         let owned = lastSeen.map { Data($0) }
@@ -710,6 +737,9 @@ public final class MapSnapshot: @unchecked Sendable {
     }
     public func statsAsync() -> Task<TreeStatsRecord, Error> {
         Task { try Task.checkCancellation(); return try self.stats() }
+    }
+    public func exportAsync() -> Task<SnapshotBundleRecord, Error> {
+        Task { try Task.checkCancellation(); return try self.export() }
     }
 
     private func open<R>(_ body: () throws -> R) throws -> R {
