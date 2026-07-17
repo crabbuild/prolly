@@ -34,6 +34,9 @@ import build.crab.prolly.defaultContentGraphLimits
 import build.crab.prolly.defaultProximityConfig
 import build.crab.prolly.exactProximitySearchRequest
 import build.crab.prolly.verifyKeyProof as verifyNativeKeyProof
+import build.crab.prolly.verifyMultiKeyProof as verifyNativeMultiKeyProof
+import build.crab.prolly.verifyRangePageProof as verifyNativeRangePageProof
+import build.crab.prolly.verifyRangeProof as verifyNativeRangeProof
 import build.crab.prolly.verifyProximityMembershipProof as verifyNativeProximityMembershipProof
 import build.crab.prolly.verifyProximityStructureProof as verifyNativeProximityStructureProof
 import kotlinx.coroutines.Dispatchers
@@ -162,6 +165,12 @@ class MapSnapshot(internal val native: BindingMapSnapshot) : AutoCloseable {
     fun proveKeys(keys: List<ByteArray>) = native.proveKeys(keys.map(ByteArray::copyOf))
     fun proveRange(start: ByteArray = ByteArray(0), end: ByteArray? = null) =
         native.proveRange(start.copyOf(), end?.copyOf())
+    fun provePrefix(prefix: ByteArray) = native.provePrefix(prefix.copyOf())
+    fun proveRangePage(
+        cursor: RangeCursorRecord? = null,
+        end: ByteArray? = null,
+        limit: ULong = 256uL,
+    ) = native.proveRangePage(ownedRangeCursor(cursor), end?.copyOf(), limit)
     fun stats() = native.stats()
     fun export() = native.export()
     fun read() = ReadSession(native.readSession())
@@ -304,6 +313,15 @@ class ProximitySearchProof(internal val native: BindingProximitySearchProof) : A
 }
 
 fun verifyKeyProof(proof: KeyProofRecord) = verifyNativeKeyProof(proof)
+
+fun verifyMultiKeyProof(proof: build.crab.prolly.MultiKeyProofRecord) =
+    verifyNativeMultiKeyProof(proof)
+
+fun verifyRangeProof(proof: build.crab.prolly.RangeProofRecord) =
+    verifyNativeRangeProof(proof)
+
+fun verifyRangePageProof(proof: build.crab.prolly.RangePageProofRecord) =
+    verifyNativeRangePageProof(proof)
 
 fun verifyProximityMembershipProof(
     proof: ProximityMembershipProofRecord,

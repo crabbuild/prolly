@@ -1,10 +1,15 @@
 use super::{
-    entries_to_array, entry_object, js_error, optional_bytes, range_page_to_object,
-    reverse_page_to_object, WasmProllyEngine, WasmRangeCursor, WasmReverseCursor,
+    entries_to_array, entry_object, js_error, multi_key_proof_verification_to_object,
+    optional_bytes, range_page_proof_verification_to_object, range_page_to_object,
+    range_proof_verification_to_object, reverse_page_to_object, WasmProllyEngine, WasmRangeCursor,
+    WasmReverseCursor,
 };
 use crate::page::set_bytes;
 use js_sys::{Array, Object, Reflect, Uint8Array};
-use prolly::{KeyProof, MapVersionId, OwnedReadSession, VersionedMapBackup, VersionedMapUpdate};
+use prolly::{
+    KeyProof, MapVersionId, MultiKeyProof, OwnedReadSession, ProvedRangePage, RangeProof,
+    VersionedMapBackup, VersionedMapUpdate,
+};
 use std::sync::Arc;
 use wasm_bindgen::prelude::*;
 
@@ -476,6 +481,59 @@ impl WasmMapSnapshot {
             .map(|inner| WasmKeyProof { inner })
             .map_err(js_error)
     }
+
+    #[wasm_bindgen(js_name = proveKeys)]
+    pub fn prove_keys(&self, keys: Array) -> Result<WasmMultiKeyProof, JsValue> {
+        let keys = keys
+            .iter()
+            .map(|value| Uint8Array::new(&value).to_vec())
+            .collect::<Vec<_>>();
+        self.load()?
+            .prove_keys(&keys)
+            .map(|inner| WasmMultiKeyProof { inner })
+            .map_err(js_error)
+    }
+
+    #[wasm_bindgen(js_name = proveRange)]
+    pub fn prove_range(
+        &self,
+        start: Uint8Array,
+        end: Option<Uint8Array>,
+    ) -> Result<WasmRangeProof, JsValue> {
+        let end = end.map(|value| value.to_vec());
+        self.load()?
+            .prove_range(&start.to_vec(), end.as_deref())
+            .map(|inner| WasmRangeProof { inner })
+            .map_err(js_error)
+    }
+
+    #[wasm_bindgen(js_name = provePrefix)]
+    pub fn prove_prefix(&self, prefix: Uint8Array) -> Result<WasmRangeProof, JsValue> {
+        self.load()?
+            .prove_prefix(&prefix.to_vec())
+            .map(|inner| WasmRangeProof { inner })
+            .map_err(js_error)
+    }
+
+    #[wasm_bindgen(js_name = proveRangePage)]
+    pub fn prove_range_page(
+        &self,
+        cursor: Option<WasmRangeCursor>,
+        end: Option<Uint8Array>,
+        limit: u32,
+    ) -> Result<WasmProvedRangePage, JsValue> {
+        let end = end.map(|value| value.to_vec());
+        self.load()?
+            .prove_range_page(
+                &cursor
+                    .map(|value| value.inner)
+                    .unwrap_or_else(prolly::RangeCursor::start),
+                end.as_deref(),
+                limit as usize,
+            )
+            .map(|inner| WasmProvedRangePage { inner })
+            .map_err(js_error)
+    }
     pub fn stats(&self) -> Result<Object, JsValue> {
         let value = self.load()?.stats().map_err(js_error)?;
         maintenance_summary(
@@ -540,6 +598,46 @@ impl WasmKeyProof {
             }
         }
         Ok(object)
+    }
+}
+
+#[wasm_bindgen(js_name = WasmMultiKeyProof)]
+pub struct WasmMultiKeyProof {
+    inner: MultiKeyProof,
+}
+
+#[wasm_bindgen(js_class = WasmMultiKeyProof)]
+impl WasmMultiKeyProof {
+    pub fn verify(&self) -> Result<Object, JsValue> {
+        multi_key_proof_verification_to_object(prolly::verify_multi_key_proof(&self.inner))
+    }
+}
+
+#[wasm_bindgen(js_name = WasmRangeProof)]
+pub struct WasmRangeProof {
+    inner: RangeProof,
+}
+
+#[wasm_bindgen(js_class = WasmRangeProof)]
+impl WasmRangeProof {
+    pub fn verify(&self) -> Result<Object, JsValue> {
+        range_proof_verification_to_object(prolly::verify_range_proof(&self.inner))
+    }
+}
+
+#[wasm_bindgen(js_name = WasmProvedRangePage)]
+pub struct WasmProvedRangePage {
+    inner: ProvedRangePage,
+}
+
+#[wasm_bindgen(js_class = WasmProvedRangePage)]
+impl WasmProvedRangePage {
+    pub fn page(&self) -> Result<Object, JsValue> {
+        range_page_to_object(self.inner.page.clone())
+    }
+
+    pub fn verify(&self) -> Result<Object, JsValue> {
+        range_page_proof_verification_to_object(prolly::verify_range_page_proof(&self.inner.proof))
     }
 }
 

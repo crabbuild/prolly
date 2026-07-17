@@ -2653,7 +2653,7 @@ fn key_proof_verification_to_object(
     Ok(object)
 }
 
-fn multi_key_proof_verification_to_object(
+pub(crate) fn multi_key_proof_verification_to_object(
     verification: prolly::MultiKeyProofVerification,
 ) -> Result<Object, JsValue> {
     let object = Object::new();
@@ -2672,7 +2672,7 @@ fn multi_key_proof_verification_to_object(
     Ok(object)
 }
 
-fn range_proof_verification_to_object(
+pub(crate) fn range_proof_verification_to_object(
     verification: prolly::RangeProofVerification,
 ) -> Result<Object, JsValue> {
     let object = Object::new();
@@ -2702,7 +2702,7 @@ fn range_proof_verification_to_object(
     Ok(object)
 }
 
-fn range_page_proof_verification_to_object(
+pub(crate) fn range_page_proof_verification_to_object(
     verification: prolly::RangePageProofVerification,
 ) -> Result<Object, JsValue> {
     let object = Object::new();

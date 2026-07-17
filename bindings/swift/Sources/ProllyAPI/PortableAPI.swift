@@ -257,6 +257,20 @@ public final class MapSnapshot: @unchecked Sendable {
     public func proveRange(from start: Data = Data(), to end: Data? = nil) throws -> RangeProofRecord {
         try open { try native.proveRange(start: Data(start), rangeEnd: end.map { Data($0) }) }
     }
+    public func provePrefix(_ prefix: Data) throws -> RangeProofRecord {
+        try open { try native.provePrefix(prefix: Data(prefix)) }
+    }
+    public func proveRangePage(
+        cursor: RangeCursorRecord? = nil,
+        to end: Data? = nil,
+        limit: UInt64 = 256
+    ) throws -> ProvedRangePageRecord {
+        try open {
+            try native.proveRangePage(
+                cursor: cursor, rangeEnd: end.map { Data($0) }, limit: limit
+            )
+        }
+    }
     public func stats() throws -> TreeStatsRecord { try open { try native.stats() } }
     public func export() throws -> SnapshotBundleRecord { try open { try native.export() } }
     public func read() throws -> ReadSession { try open { ReadSession(native: try native.readSession()) } }
@@ -596,6 +610,20 @@ public final class ProximitySearchProof: @unchecked Sendable {
 public enum Proofs {
     public static func verify(_ proof: KeyProofRecord) throws -> KeyProofVerificationRecord {
         try verifyKeyProof(proof: proof)
+    }
+
+    public static func verify(_ proof: MultiKeyProofRecord) throws -> MultiKeyProofVerificationRecord {
+        try verifyMultiKeyProof(proof: proof)
+    }
+
+    public static func verify(_ proof: RangeProofRecord) throws -> RangeProofVerificationRecord {
+        try verifyRangeProof(proof: proof)
+    }
+
+    public static func verify(
+        _ proof: RangePageProofRecord
+    ) throws -> RangePageProofVerificationRecord {
+        try verifyRangePageProof(proof: proof)
     }
 
     public static func verify(

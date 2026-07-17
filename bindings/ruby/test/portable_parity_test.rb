@@ -152,11 +152,21 @@ class PortableParityTest < Minitest::Test
       versioned = engine.versioned_map('proofs'.b)
       versioned.initialize_map
       versioned.put('k'.b, 'v'.b)
+      versioned.put('ka'.b, 'v2'.b)
       snapshot = versioned.snapshot
       verified = Prolly.verify_key_proof(snapshot.prove_key('k'.b))
       assert verified.valid
       assert_equal 'v'.b, verified.value
-      assert_equal 1, snapshot.stats.total_key_value_pairs
+      multi = Prolly.verify_multi_key_proof(snapshot.prove_keys(['k'.b, 'missing'.b]))
+      assert_equal [true, false], multi.results.map(&:exists)
+      ranged = Prolly.verify_range_proof(snapshot.prove_range('k'.b, 'l'.b))
+      assert_equal ['k'.b, 'ka'.b], ranged.entries.map(&:key)
+      prefixed = Prolly.verify_range_proof(snapshot.prove_prefix('k'.b))
+      assert_equal ['k'.b, 'ka'.b], prefixed.entries.map(&:key)
+      proved_page = snapshot.prove_range_page(nil, 'l'.b, 1)
+      assert Prolly.verify_range_page_proof(proved_page.proof).valid
+      assert_equal ['k'.b], proved_page.page.entries.map(&:key)
+      assert_equal 2, snapshot.stats.total_key_value_pairs
       refute_empty snapshot.export.nodes
       snapshot.read.use { |session| assert_equal 'v'.b, session.get('k'.b) }
       assert_operator versioned.verify_catalog.version_count, :>=, 2

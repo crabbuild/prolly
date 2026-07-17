@@ -8,6 +8,9 @@ from prolly import (
     ProximityRecord,
     ProximityMutationRecord,
     verify_key_proof,
+    verify_multi_key_proof,
+    verify_range_page_proof,
+    verify_range_proof,
     verify_proximity_membership_proof,
     verify_proximity_structure_proof,
 )
@@ -177,10 +180,22 @@ class PortableParityTests(unittest.TestCase):
             versioned = engine.versioned_map(b"proofs")
             versioned.initialize()
             versioned.put(b"k", b"v")
+            versioned.put(b"ka", b"v2")
             with versioned.snapshot() as snapshot:
                 verified = verify_key_proof(snapshot.prove_key(b"k"))
                 self.assertTrue(verified.valid)
                 self.assertEqual(verified.value, b"v")
+                multi = verify_multi_key_proof(snapshot.prove_keys([b"k", b"missing"]))
+                self.assertTrue(multi.valid)
+                self.assertEqual([result.exists for result in multi.results], [True, False])
+                ranged = verify_range_proof(snapshot.prove_range(b"k", b"l"))
+                self.assertEqual([entry.key for entry in ranged.entries], [b"k", b"ka"])
+                prefixed = verify_range_proof(snapshot.prove_prefix(b"k"))
+                self.assertEqual([entry.key for entry in prefixed.entries], [b"k", b"ka"])
+                proved_page = snapshot.prove_range_page(None, b"l", 1)
+                page = verify_range_page_proof(proved_page.proof)
+                self.assertTrue(page.valid)
+                self.assertEqual([entry.key for entry in proved_page.page.entries], [b"k"])
                 self.assertGreaterEqual(snapshot.stats().total_key_value_pairs, 1)
                 self.assertGreater(len(snapshot.export().nodes), 0)
                 with snapshot.read() as session:

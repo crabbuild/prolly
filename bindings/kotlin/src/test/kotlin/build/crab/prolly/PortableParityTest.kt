@@ -3,6 +3,9 @@ package build.crab.prolly
 import build.crab.prolly.api.Engine
 import build.crab.prolly.api.ProximityRecord
 import build.crab.prolly.api.verifyKeyProof
+import build.crab.prolly.api.verifyMultiKeyProof
+import build.crab.prolly.api.verifyRangePageProof
+import build.crab.prolly.api.verifyRangeProof
 import build.crab.prolly.api.verifyProximityMembershipProof
 import build.crab.prolly.api.verifyProximityStructureProof
 import kotlinx.coroutines.runBlocking
@@ -145,11 +148,19 @@ class PortableParityTest {
             engine.versionedMap("proofs".bytes()).use { versioned ->
                 versioned.initialize()
                 versioned.put("k".bytes(), "v".bytes())
+                versioned.put("ka".bytes(), "v2".bytes())
                 versioned.snapshot()!!.use { snapshot ->
                     val verified = verifyKeyProof(snapshot.proveKey("k".bytes()))
                     assertEquals(true, verified.valid)
                     assertArrayEquals("v".bytes(), verified.value)
-                    assertEquals(1uL, snapshot.stats().totalKeyValuePairs)
+                    val multi = verifyMultiKeyProof(snapshot.proveKeys(listOf("k".bytes(), "missing".bytes())))
+                    assertEquals(listOf(true, false), multi.results.map { it.exists })
+                    assertEquals(listOf("k", "ka"), verifyRangeProof(snapshot.proveRange("k".bytes(), "l".bytes())).entries.map { String(it.key) })
+                    assertEquals(listOf("k", "ka"), verifyRangeProof(snapshot.provePrefix("k".bytes())).entries.map { String(it.key) })
+                    val provedPage = snapshot.proveRangePage(end = "l".bytes(), limit = 1uL)
+                    assertEquals(true, verifyRangePageProof(provedPage.proof).valid)
+                    assertEquals(listOf("k"), provedPage.page.entries.map { String(it.key) })
+                    assertEquals(2uL, snapshot.stats().totalKeyValuePairs)
                     assertEquals(true, snapshot.export().nodes.isNotEmpty())
                     snapshot.read().use { session ->
                         assertArrayEquals("v".bytes(), session.get("k".bytes()))

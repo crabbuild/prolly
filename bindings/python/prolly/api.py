@@ -316,6 +316,16 @@ class MapSnapshot(_Scoped):
         self._open()
         return self._inner.prove_range(bytes(start), None if end is None else bytes(end))
 
+    def prove_prefix(self, prefix: bytes):
+        self._open()
+        return self._inner.prove_prefix(bytes(prefix))
+
+    def prove_range_page(self, cursor=None, end: bytes | None = None, limit: int = 256):
+        self._open()
+        return self._inner.prove_range_page(
+            cursor, None if end is None else bytes(end), limit
+        )
+
     def stats(self):
         self._open()
         return self._inner.stats()

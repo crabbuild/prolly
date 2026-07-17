@@ -111,6 +111,10 @@ extern RustBuffer uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prefix_pag
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingmapsnapshot_reverse_page(uint64_t ptr, RustBuffer cursor, RustBuffer start, uint64_t limit, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prefix_reverse_page(uint64_t ptr, RustBuffer prefix, RustBuffer cursor, uint64_t limit, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prove_key(uint64_t ptr, RustBuffer key, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prove_keys(uint64_t ptr, RustBuffer keys, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prove_range(uint64_t ptr, RustBuffer start, RustBuffer range_end, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prove_prefix(uint64_t ptr, RustBuffer prefix, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prove_range_page(uint64_t ptr, RustBuffer cursor, RustBuffer range_end, uint64_t limit, RustCallStatus *out_err);
 extern uint64_t uniffi_prolly_bindings_fn_method_bindingmapsnapshot_read_session(uint64_t ptr, RustCallStatus *out_err);
 extern uint64_t uniffi_prolly_bindings_fn_clone_prollyreadsession(uint64_t ptr, RustCallStatus *out_err);
 extern void uniffi_prolly_bindings_fn_free_prollyreadsession(uint64_t ptr, RustCallStatus *out_err);
@@ -1041,6 +1045,82 @@ func ffiMapSnapshotProveKey(handle uint64, key []byte) ([]byte, error) {
 	}
 	var status C.RustCallStatus
 	buf := C.uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prove_key(clone, keyBuf, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiMapSnapshotProveKeys(handle uint64, keys [][]byte) ([]byte, error) {
+	clone, err := portableCloneMapSnapshot(handle)
+	if err != nil {
+		return nil, err
+	}
+	keysBuf, err := portableInput(encodeByteArraySequence(keys))
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prove_keys(clone, keysBuf, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiMapSnapshotProveRange(handle uint64, start, end []byte) ([]byte, error) {
+	clone, err := portableCloneMapSnapshot(handle)
+	if err != nil {
+		return nil, err
+	}
+	startBuf, err := portableInput(encodeByteArray(start))
+	if err != nil {
+		return nil, err
+	}
+	endBuf, err := portableInput(encodeOptionalByteArray(end))
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prove_range(clone, startBuf, endBuf, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiMapSnapshotProvePrefix(handle uint64, prefix []byte) ([]byte, error) {
+	clone, err := portableCloneMapSnapshot(handle)
+	if err != nil {
+		return nil, err
+	}
+	prefixBuf, err := portableInput(encodeByteArray(prefix))
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prove_prefix(clone, prefixBuf, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiMapSnapshotProveRangePage(handle uint64, cursor *RangeCursor, end []byte, limit uint64) ([]byte, error) {
+	clone, err := portableCloneMapSnapshot(handle)
+	if err != nil {
+		return nil, err
+	}
+	cursorBuf, err := portableInput(encodeOptionalRangeCursor(cursor))
+	if err != nil {
+		return nil, err
+	}
+	endBuf, err := portableInput(encodeOptionalByteArray(end))
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prove_range_page(clone, cursorBuf, endBuf, C.uint64_t(limit), &status)
 	if err := portableStatusError(&status); err != nil {
 		return nil, err
 	}

@@ -29,6 +29,33 @@ export interface RangeCursor { afterKey?: Uint8Array; }
 export interface ReverseCursor { beforeKey?: Uint8Array; }
 export interface RangePage { entries: MapEntry[]; nextCursor?: RangeCursor; }
 export interface ReversePage { entries: MapEntry[]; nextCursor?: ReverseCursor; }
+export interface KeyProofVerification {
+  valid: boolean;
+  exists: boolean;
+  absence?: boolean;
+  root?: Uint8Array;
+  key?: Uint8Array;
+  value?: Uint8Array;
+}
+export interface MultiKeyProofVerification {
+  valid: boolean;
+  root?: Uint8Array;
+  results: KeyProofVerification[];
+}
+export interface RangeProofVerification {
+  valid: boolean;
+  root?: Uint8Array;
+  start: Uint8Array;
+  end?: Uint8Array;
+  entries: MapEntry[];
+}
+export interface RangePageProofVerification {
+  valid: boolean;
+  root?: Uint8Array;
+  after?: Uint8Array;
+  end?: Uint8Array;
+  entries: MapEntry[];
+}
 
 interface NativeMapVersion {
   id: Uint8Array;
@@ -89,13 +116,23 @@ interface NativeMapSnapshot {
   reversePage(cursor: ReverseCursor | null, start: Uint8Array, limit: string): ReversePage;
   prefixReversePage(prefix: Uint8Array, cursor: ReverseCursor | null, limit: string): ReversePage;
   proveKey(key: Uint8Array): NativeKeyProof;
+  proveKeys(keys: Uint8Array[]): NativeMultiKeyProof;
+  proveRange(start: Uint8Array, end: Uint8Array | null): NativeRangeProof;
+  provePrefix(prefix: Uint8Array): NativeRangeProof;
+  proveRangePage(cursor: RangeCursor | null, end: Uint8Array | null, limit: string): NativeProvedRangePage;
   stats(): NativeMaintenanceSummary;
   export(): NativeMaintenanceSummary;
   read(): NativeReadSession;
 }
 interface NativeReadSession { get(key: Uint8Array): Uint8Array | null; }
 interface NativeKeyProof {
-  verify(): { valid: boolean; exists: boolean; value?: Uint8Array };
+  verify(): KeyProofVerification;
+}
+interface NativeMultiKeyProof { verify(): MultiKeyProofVerification; }
+interface NativeRangeProof { verify(): RangeProofVerification; }
+interface NativeProvedRangePage {
+  page(): RangePage;
+  verify(): RangePageProofVerification;
 }
 
 export interface MaintenanceSummary { itemCount: bigint; byteCount: bigint; }
@@ -378,6 +415,22 @@ export class MapSnapshot implements Disposable {
     const native = this.#open();
     return new KeyProof(native.proveKey(ownedBytes(key)));
   }
+  proveKeys(keys: readonly Uint8Array[]): MultiKeyProof {
+    const native = this.#open();
+    return new MultiKeyProof(native.proveKeys(keys.map(ownedBytes)));
+  }
+  proveRange(start: Uint8Array = new Uint8Array(), end?: Uint8Array): RangeProof {
+    const native = this.#open(); start = ownedBytes(start); const ownedEnd = end == null ? null : ownedBytes(end);
+    return new RangeProof(native.proveRange(start, ownedEnd));
+  }
+  provePrefix(prefix: Uint8Array): RangeProof {
+    const native = this.#open();
+    return new RangeProof(native.provePrefix(ownedBytes(prefix)));
+  }
+  proveRangePage(cursor?: RangeCursor, end?: Uint8Array, limit: bigint = 256n): ProvedRangePage {
+    const native = this.#open(); const ownedCursor = ownedRangeCursor(cursor); const ownedEnd = end == null ? null : ownedBytes(end);
+    return new ProvedRangePage(native.proveRangePage(ownedCursor, ownedEnd, checkedPageLimit(limit)));
+  }
   stats(): MaintenanceSummary { return maintenance(this.#open().stats()); }
   exportSummary(): MaintenanceSummary { return maintenance(this.#open().export()); }
   read(): ReadSession { return new ReadSession(this.#open().read()); }
@@ -399,8 +452,45 @@ export class ReadSession implements Disposable {
 export class KeyProof implements Disposable {
   #native?: NativeKeyProof;
   constructor(native: NativeKeyProof) { this.#native = native; }
-  verify(): { valid: boolean; exists: boolean; value?: Uint8Array } {
+  verify(): KeyProofVerification {
     if (this.#native == null) throw new Error("key proof is closed");
+    return this.#native.verify();
+  }
+  close(): void { this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class MultiKeyProof implements Disposable {
+  #native?: NativeMultiKeyProof;
+  constructor(native: NativeMultiKeyProof) { this.#native = native; }
+  verify(): MultiKeyProofVerification {
+    if (this.#native == null) throw new Error("multi-key proof is closed");
+    return this.#native.verify();
+  }
+  close(): void { this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class RangeProof implements Disposable {
+  #native?: NativeRangeProof;
+  constructor(native: NativeRangeProof) { this.#native = native; }
+  verify(): RangeProofVerification {
+    if (this.#native == null) throw new Error("range proof is closed");
+    return this.#native.verify();
+  }
+  close(): void { this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class ProvedRangePage implements Disposable {
+  #native?: NativeProvedRangePage;
+  constructor(native: NativeProvedRangePage) { this.#native = native; }
+  page(): RangePage {
+    if (this.#native == null) throw new Error("proved range page is closed");
+    return this.#native.page();
+  }
+  verify(): RangePageProofVerification {
+    if (this.#native == null) throw new Error("proved range page is closed");
     return this.#native.verify();
   }
   close(): void { this.#native = undefined; }
