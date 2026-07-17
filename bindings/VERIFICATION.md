@@ -71,9 +71,9 @@ tree behavior.
 ## Async Store Provider Gate
 
 The shared protocol has isolated provider modules for Go, Node/TypeScript,
-Kotlin, and Java. Node supports SQLite, PostgreSQL, MySQL, Redis, DynamoDB,
-Cosmos DB, Cloud Spanner, and PGlite. Go, Kotlin, and Java support the same
-seven providers except PGlite, which is a JavaScript/WebAssembly database.
+Kotlin, Java, Python, Ruby, Swift, and browser/WASM. Server languages use their
+official database SDKs. Browser packages provide IndexedDB, OPFS, and PGlite;
+Ruby/Cosmos DB and Swift/Cosmos DB or Spanner remain explicitly unsupported.
 
 Run the manifest and dependency-boundary gate without services:
 
@@ -87,6 +87,18 @@ Run all Node and JVM provider suites with managed local services:
 ./scripts/test-node-jvm-stores.sh
 ```
 
+Run the complete cross-language provider gate, including managed local
+services, language package installation, browser persistence tests, and the
+Spanner emulator:
+
+```sh
+./scripts/test-all-language-stores.sh
+```
+
+Use `--services-running` to reuse the configured service ports. Set
+`PROLLY_STORE_SKIP_INSTALL=1` only when the exact Python, Ruby, and browser
+dependencies are already installed.
+
 Pass `--services-running` to reuse PostgreSQL, MySQL, Redis, DynamoDB Local,
 and the Spanner emulator already listening on the configured
 `PROLLY_STORE_*_PORT` values. The runner tears down only Compose services that
@@ -97,7 +109,7 @@ it started. Cosmos DB's SDK-contract suite always runs; set
 The compatibility verifier rejects missing matrix cells, protocol/schema
 drift, SDK-coordinate drift, incomplete capability or limit declarations,
 placeholder unsupported reasons, mismatched package metadata, and provider SDKs
-leaking into the Node, Kotlin, or Java core artifacts.
+leaking into core language artifacts.
 
 ## Generated Binding Regeneration
 
