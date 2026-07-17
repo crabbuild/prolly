@@ -227,25 +227,13 @@ pub trait ForeignRemoteStore: Send + Sync {
 
     async fn batch_nodes(&self, ops: Vec<NodeMutationRecord>) -> UnitResultRecord;
 
-    async fn batch_get_nodes_ordered(
-        &self,
-        cids: Vec<Vec<u8>>,
-    ) -> OptionalBytesListResultRecord;
+    async fn batch_get_nodes_ordered(&self, cids: Vec<Vec<u8>>) -> OptionalBytesListResultRecord;
 
     async fn list_node_cids(&self) -> BytesListResultRecord;
 
-    async fn get_hint(
-        &self,
-        namespace: Vec<u8>,
-        key: Vec<u8>,
-    ) -> OptionalBytesResultRecord;
+    async fn get_hint(&self, namespace: Vec<u8>, key: Vec<u8>) -> OptionalBytesResultRecord;
 
-    async fn put_hint(
-        &self,
-        namespace: Vec<u8>,
-        key: Vec<u8>,
-        value: Vec<u8>,
-    ) -> UnitResultRecord;
+    async fn put_hint(&self, namespace: Vec<u8>, key: Vec<u8>, value: Vec<u8>) -> UnitResultRecord;
 
     async fn batch_put_nodes_with_hint(
         &self,
@@ -257,11 +245,7 @@ pub trait ForeignRemoteStore: Send + Sync {
 
     async fn get_root_manifest(&self, name: Vec<u8>) -> OptionalBytesResultRecord;
 
-    async fn put_root_manifest(
-        &self,
-        name: Vec<u8>,
-        manifest: Vec<u8>,
-    ) -> UnitResultRecord;
+    async fn put_root_manifest(&self, name: Vec<u8>, manifest: Vec<u8>) -> UnitResultRecord;
 
     async fn delete_root_manifest(&self, name: Vec<u8>) -> UnitResultRecord;
 
@@ -289,9 +273,7 @@ pub struct ForeignRemoteBackend {
 }
 
 impl ForeignRemoteBackend {
-    pub async fn new(
-        callback: Arc<dyn ForeignRemoteStore>,
-    ) -> Result<Self, ForeignStoreError> {
+    pub async fn new(callback: Arc<dyn ForeignRemoteStore>) -> Result<Self, ForeignStoreError> {
         let result = callback.descriptor().await;
         if let Some(error) = result.error {
             return Err(ForeignStoreError(error));
@@ -324,10 +306,7 @@ impl ForeignRemoteBackend {
         check_limit(
             "batch write items",
             count as u64,
-            self.descriptor
-                .limits
-                .max_batch_write_items
-                .map(u64::from),
+            self.descriptor.limits.max_batch_write_items.map(u64::from),
         )
     }
 }
@@ -377,10 +356,7 @@ impl RemoteStoreBackend for ForeignRemoteBackend {
         check_limit(
             "batch read items",
             keys.len() as u64,
-            self.descriptor
-                .limits
-                .max_batch_read_items
-                .map(u64::from),
+            self.descriptor.limits.max_batch_read_items.map(u64::from),
         )?;
         let result = self
             .callback
@@ -465,9 +441,7 @@ impl RemoteStoreBackend for ForeignRemoteBackend {
         value: &[u8],
     ) -> Result<(), Self::Error> {
         if !self.descriptor.capabilities.hints {
-            return Err(ForeignStoreError::unsupported(
-                "batch_put_nodes_with_hint",
-            ));
+            return Err(ForeignStoreError::unsupported("batch_put_nodes_with_hint"));
         }
         self.check_batch_write_count(entries.len())?;
         if !self.descriptor.capabilities.atomic_nodes_and_hint {
@@ -488,12 +462,7 @@ impl RemoteStoreBackend for ForeignRemoteBackend {
         }
         finish_unit(
             self.callback
-                .batch_put_nodes_with_hint(
-                    nodes,
-                    namespace.to_vec(),
-                    key.to_vec(),
-                    value.to_vec(),
-                )
+                .batch_put_nodes_with_hint(nodes, namespace.to_vec(), key.to_vec(), value.to_vec())
                 .await,
         )
     }
@@ -502,11 +471,7 @@ impl RemoteStoreBackend for ForeignRemoteBackend {
         finish_optional_bytes(self.callback.get_root_manifest(name.to_vec()).await)
     }
 
-    async fn put_root_manifest(
-        &self,
-        name: &[u8],
-        manifest: &[u8],
-    ) -> Result<(), Self::Error> {
+    async fn put_root_manifest(&self, name: &[u8], manifest: &[u8]) -> Result<(), Self::Error> {
         finish_unit(
             self.callback
                 .put_root_manifest(name.to_vec(), manifest.to_vec())
@@ -705,6 +670,14 @@ pub struct AsyncProllyEngine {
 }
 
 #[uniffi::export]
+pub async fn open_remote_prolly_engine(
+    store: Arc<dyn ForeignRemoteStore>,
+    config: ConfigRecord,
+) -> Result<Arc<AsyncProllyEngine>, ProllyBindingError> {
+    Ok(Arc::new(AsyncProllyEngine::new(store, config).await?))
+}
+
+#[uniffi::export]
 impl AsyncProllyEngine {
     #[uniffi::constructor]
     pub async fn new(
@@ -738,10 +711,7 @@ impl AsyncProllyEngine {
         keys: Vec<Vec<u8>>,
     ) -> Result<Vec<Option<Vec<u8>>>, ProllyBindingError> {
         let tree = Tree::try_from(tree)?;
-        self.inner
-            .get_many(&tree, &keys)
-            .await
-            .map_err(Into::into)
+        self.inner.get_many(&tree, &keys).await.map_err(Into::into)
     }
 
     pub async fn put(
@@ -842,12 +812,7 @@ impl AsyncProllyEngine {
             .unwrap_or_else(prolly::RangeCursor::start);
         let page = self
             .inner
-            .range_page(
-                &tree,
-                &cursor,
-                end.as_deref(),
-                to_usize(limit, "limit")?,
-            )
+            .range_page(&tree, &cursor, end.as_deref(), to_usize(limit, "limit")?)
             .await?;
         Ok(RangePageRecord {
             entries: page
@@ -915,9 +880,7 @@ impl AsyncProllyEngine {
             .map_err(Into::into)
     }
 
-    pub async fn list_named_roots(
-        &self,
-    ) -> Result<Vec<NamedRootRecord>, ProllyBindingError> {
+    pub async fn list_named_roots(&self) -> Result<Vec<NamedRootRecord>, ProllyBindingError> {
         self.inner
             .list_named_roots()
             .await
@@ -1202,10 +1165,7 @@ fn validate_descriptor(
     )?;
     validate_optional_limit(
         "max_transaction_operations",
-        descriptor
-            .limits
-            .max_transaction_operations
-            .map(u64::from),
+        descriptor.limits.max_transaction_operations.map(u64::from),
     )?;
     validate_optional_limit("max_node_bytes", descriptor.limits.max_node_bytes)?;
     Ok(descriptor)
@@ -1375,11 +1335,7 @@ mod tests {
             }
         }
 
-        async fn get_hint(
-            &self,
-            namespace: Vec<u8>,
-            key: Vec<u8>,
-        ) -> OptionalBytesResultRecord {
+        async fn get_hint(&self, namespace: Vec<u8>, key: Vec<u8>) -> OptionalBytesResultRecord {
             OptionalBytesResultRecord {
                 value: OptionalBytesRecord {
                     present: true,
@@ -1418,11 +1374,7 @@ mod tests {
             }
         }
 
-        async fn put_root_manifest(
-            &self,
-            _name: Vec<u8>,
-            _manifest: Vec<u8>,
-        ) -> UnitResultRecord {
+        async fn put_root_manifest(&self, _name: Vec<u8>, _manifest: Vec<u8>) -> UnitResultRecord {
             UnitResultRecord { error: None }
         }
 
@@ -1490,7 +1442,10 @@ mod tests {
             let backend = ForeignRemoteBackend::new(Arc::new(OrderedBatchStore))
                 .await
                 .unwrap();
-            assert_eq!(backend.get_node(b"node").await.unwrap(), Some(b"node".to_vec()));
+            assert_eq!(
+                backend.get_node(b"node").await.unwrap(),
+                Some(b"node".to_vec())
+            );
             backend.put_node(b"node", b"value").await.unwrap();
             backend.delete_node(b"node").await.unwrap();
             backend
@@ -1500,15 +1455,27 @@ mod tests {
                 }])
                 .await
                 .unwrap();
-            assert_eq!(backend.list_node_cids().await.unwrap(), vec![b"a".to_vec(), b"b".to_vec()]);
-            assert_eq!(backend.get_hint(b"ns", b"key").await.unwrap(), Some(b"nskey".to_vec()));
+            assert_eq!(
+                backend.list_node_cids().await.unwrap(),
+                vec![b"a".to_vec(), b"b".to_vec()]
+            );
+            assert_eq!(
+                backend.get_hint(b"ns", b"key").await.unwrap(),
+                Some(b"nskey".to_vec())
+            );
             backend.put_hint(b"ns", b"key", b"value").await.unwrap();
             backend
                 .batch_put_nodes_with_hint(&[(b"node", b"value")], b"ns", b"key", b"hint")
                 .await
                 .unwrap();
-            assert_eq!(backend.get_root_manifest(b"main").await.unwrap(), Some(b"main".to_vec()));
-            backend.put_root_manifest(b"main", b"manifest").await.unwrap();
+            assert_eq!(
+                backend.get_root_manifest(b"main").await.unwrap(),
+                Some(b"main".to_vec())
+            );
+            backend
+                .put_root_manifest(b"main", b"manifest")
+                .await
+                .unwrap();
             backend.delete_root_manifest(b"main").await.unwrap();
             assert_eq!(
                 backend
@@ -1599,11 +1566,7 @@ mod tests {
             }
         }
 
-        async fn get_hint(
-            &self,
-            namespace: Vec<u8>,
-            key: Vec<u8>,
-        ) -> OptionalBytesResultRecord {
+        async fn get_hint(&self, namespace: Vec<u8>, key: Vec<u8>) -> OptionalBytesResultRecord {
             let value = self
                 .state
                 .lock()
@@ -1654,11 +1617,7 @@ mod tests {
             }
         }
 
-        async fn put_root_manifest(
-            &self,
-            name: Vec<u8>,
-            manifest: Vec<u8>,
-        ) -> UnitResultRecord {
+        async fn put_root_manifest(&self, name: Vec<u8>, manifest: Vec<u8>) -> UnitResultRecord {
             self.state.lock().unwrap().roots.insert(name, manifest);
             UnitResultRecord { error: None }
         }
@@ -1835,11 +1794,15 @@ mod tests {
             assert_eq!(page.entries.len(), 1);
             let diffs = engine.diff(base.clone(), left.clone()).await.unwrap();
             assert_eq!(diffs.len(), 1);
-            let merged = engine
-                .merge(base, left, right, None)
-                .await
-                .unwrap();
-            assert_eq!(engine.range(merged.clone(), Vec::new(), None).await.unwrap().len(), 2);
+            let merged = engine.merge(base, left, right, None).await.unwrap();
+            assert_eq!(
+                engine
+                    .range(merged.clone(), Vec::new(), None)
+                    .await
+                    .unwrap()
+                    .len(),
+                2
+            );
             assert_eq!(
                 engine
                     .collect_stats(merged)

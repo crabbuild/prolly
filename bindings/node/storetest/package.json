@@ -1,0 +1,10 @@
+{
+  "name": "@trail/prolly-storetest",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "node --test test/*.test.ts"
+  },
+  "exports": "./src/index.ts"
+}
