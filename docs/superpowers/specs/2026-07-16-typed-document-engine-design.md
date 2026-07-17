@@ -1027,6 +1027,833 @@ A binding may not claim document-engine compatibility until it passes the same
 DVF, `ValueCid`, `SortKey`, path, patch, diff, merge, schema, index, and error
 fixtures as Rust.
 
+## Normative Usage and Verification Scenarios
+
+The examples in this section define the intended developer experience and
+black-box acceptance behavior. They use proposed Rust names to make the design
+concrete. The implementation plan may adjust spelling or ownership details,
+but it must preserve the operations, invariants, and observable assertions.
+
+Every example should become an executable integration test. A test is not
+complete when it asserts only the final materialized value. Where applicable,
+it must also assert:
+
+1. logical identity and typed equality;
+2. collection and document optimistic-precondition behavior;
+3. source/index atomicity;
+4. historical snapshot repeatability;
+5. bounded read, diff, query, and write work;
+6. typed graph closure under verification, sync, and GC.
+
+The examples use ergonomic constructors expected from the public document
+module:
+
+```rust,ignore
+use prolly::document::{
+    array, object, set, tuple, typed_map, CanonicalF64, Date, Decimal128,
+    DocumentConfig, DocumentFormat, DocumentLimits, DocumentValue as Value,
+    JsonNumberPolicy, SortKey, Timestamp, ValueCid, ValueOrd, ValuePath,
+};
+```
+
+`object`, `set`, and `typed_map` are fallible because they validate canonical
+field names, duplicate identity, ordering limits, and recursive key/member
+limits. The examples use `?` to propagate those failures and import additional
+operation-specific types where needed.
+
+### Example 1: canonical values, identity, and ordering
+
+Two objects built in different insertion orders must have identical canonical
+bytes and logical identity.
+
+```rust,ignore
+let left = object([
+    ("display_name", Value::String("Ada".into())),
+    ("active", Value::Bool(true)),
+])?;
+
+let right = object([
+    ("active", Value::Bool(true)),
+    ("display_name", Value::String("Ada".into())),
+])?;
+
+assert_eq!(left, right);
+assert_eq!(dvf::encode(&left)?, dvf::encode(&right)?);
+assert_eq!(ValueCid::of(&left)?, ValueCid::of(&right)?);
+```
+
+Numeric identity remains type strict.
+
+```rust,ignore
+let signed = Value::I64(1);
+let unsigned = Value::U64(1);
+let decimal = Value::Decimal(Decimal128::new(1, 0)?);
+let float = Value::F64(CanonicalF64::new(1.0)?);
+
+assert_ne!(signed, unsigned);
+assert_ne!(unsigned, decimal);
+assert_ne!(decimal, float);
+assert_ne!(ValueCid::of(&signed)?, ValueCid::of(&unsigned)?);
+```
+
+`SortKey` bytes must reproduce `ValueOrd` for all pairs, including recursive
+containers.
+
+```rust,ignore
+let mut values = vec![
+    Value::String("1".into()),
+    Value::I64(1),
+    Value::U64(1),
+    tuple([Value::String("tenant".into()), Value::U64(7)]),
+    set([Value::I64(2), Value::I64(1)])?,
+];
+
+let mut by_value = values.clone();
+by_value.sort_by(ValueOrd::compare);
+
+values.sort_by_key(|value| SortKey::encode(value).unwrap());
+assert_eq!(values, by_value);
+
+for value in values {
+    assert_eq!(SortKey::decode(&SortKey::encode(&value)?)?, value);
+}
+```
+
+Required verification:
+
+- golden DVF, `ValueCid`, and `SortKey` bytes are checked in;
+- negative zero and decimal trailing-zero variants canonicalize identically;
+- NaN, infinity, duplicate object fields, duplicate set members, and duplicate
+  typed-map keys fail with stable error codes;
+- construction order never changes canonical output.
+
+### Example 2: create a document collection and read exact paths
+
+```rust,ignore
+let store = MemStore::new();
+let engine = Prolly::new(store, Config::default());
+let users = engine.document_map(
+    b"users",
+    DocumentConfig::builder()
+        .format(DocumentFormat::default())
+        .json_number_policy(JsonNumberPolicy::Exact)
+        .build()?,
+)?;
+
+let ada = object([
+    ("id", Value::U64(7)),
+    ("display_name", Value::String("Ada".into())),
+    ("active", Value::Bool(true)),
+    ("address", object([
+        ("city", Value::String("Vancouver".into())),
+        ("country", Value::String("CA".into())),
+    ])?),
+    ("tags", array([
+        Value::String("rust".into()),
+        Value::String("database".into()),
+    ])),
+])?;
+
+let written = users.put(b"user-7", ada.clone())?;
+let snapshot = users.snapshot()?;
+let document = snapshot.document(b"user-7")?.unwrap();
+
+assert_eq!(document.value_cid(), ValueCid::of(&ada)?);
+assert_eq!(
+    document.get_pointer("/address/city")?.materialize()?,
+    Value::String("Vancouver".into()),
+);
+assert_eq!(
+    document
+        .get_path(&ValuePath::root().field("tags").array_index(1))?
+        .materialize()?,
+    Value::String("database".into()),
+);
+assert_eq!(snapshot.version_id(), written.collection_version());
+```
+
+Required verification:
+
+- a snapshot opened before a later write continues returning the old value;
+- a missing document returns `None`, while a missing path returns the distinct
+  `PathNotFound` error;
+- a cursor or view used with another snapshot returns `SnapshotMismatch`;
+- materializing the complete document exactly reproduces `ada`.
+
+### Example 3: inline and indexed representations are logically identical
+
+The test harness must be able to force representation choices without changing
+the logical value.
+
+```rust,ignore
+let value = object([
+    ("profile", object([
+        ("name", Value::String("Ada".into())),
+        ("bio", Value::String("x".repeat(128 * 1024))),
+    ])?),
+    ("active", Value::Bool(true)),
+])?;
+
+let inline_engine = ValueEngine::new(
+    MemStore::new(),
+    DocumentFormat::testing().force_inline(),
+)?;
+let indexed_engine = ValueEngine::new(
+    MemStore::new(),
+    DocumentFormat::testing().force_indexed(),
+)?;
+
+let inline = inline_engine.store(&value)?;
+let indexed = indexed_engine.store(&value)?;
+
+assert!(inline.representation().is_inline());
+assert!(indexed.representation().is_indexed());
+assert_eq!(inline.value_cid(), indexed.value_cid());
+assert_eq!(inline.materialize()?, indexed.materialize()?);
+assert!(ValueDiffer::new(&inline, &indexed).collect()?.is_empty());
+```
+
+An indexed lookup must avoid reading the complete value.
+
+```rust,ignore
+indexed_engine.reset_metrics();
+let name = indexed
+    .get_pointer("/profile/name")?
+    .materialize()?;
+let metrics = indexed_engine.metrics();
+
+assert_eq!(name, Value::String("Ada".into()));
+assert!(metrics.logical_value_bytes > metrics.bytes_read);
+assert_eq!(metrics.full_value_materializations, 0);
+```
+
+Required verification:
+
+- forcing either representation preserves every path, query, patch, diff, and
+  schema result;
+- physical storage CIDs may differ while `ValueCid` remains equal;
+- crossing the configured threshold during a real edit produces only the
+  logical edit in `DocumentMap` diff;
+- a representation migration preserves every `ValueCid`.
+
+### Example 4: standards-oriented JSON import, Pointer, and Patch
+
+```rust,ignore
+let imported = json::import(
+    br#"{"a/b":{"~name":1},"tags":["rust"]}"#,
+    JsonNumberPolicy::Exact,
+)?;
+
+assert_eq!(
+    imported.get_pointer("/a~1b/~0name")?,
+    Value::I64(1),
+);
+```
+
+Patch operations execute sequentially and publish atomically.
+
+```rust,ignore
+users.put(b"json-user", imported)?;
+let before = users.snapshot()?;
+let before_document = before.document(b"json-user")?.unwrap();
+
+let patch = JsonPatch::parse(br#"[
+  {"op":"test", "path":"/a~1b/~0name", "value":1},
+  {"op":"replace", "path":"/a~1b/~0name", "value":2},
+  {"op":"add", "path":"/tags/-", "value":"prolly"},
+  {"op":"copy", "from":"/tags/0", "path":"/primary_tag"}
+]"#, JsonNumberPolicy::Exact)?;
+
+users.apply_json_patch_if(
+    b"json-user",
+    Some(before.version_id()),
+    Some(before_document.value_cid()),
+    patch,
+)?;
+
+let after = users.snapshot()?;
+let document = after.document(b"json-user")?.unwrap();
+assert_eq!(document.get_pointer("/a~1b/~0name")?.materialize()?, Value::I64(2));
+assert_eq!(document.get_pointer("/tags/1")?.materialize()?, Value::String("prolly".into()));
+assert_eq!(document.get_pointer("/primary_tag")?.materialize()?, Value::String("rust".into()));
+```
+
+A failed type-strict test changes nothing.
+
+```rust,ignore
+let head_before = users.head_id()?;
+let cid_before = users.snapshot()?.document(b"json-user")?.unwrap().value_cid();
+
+let err = users.apply_json_patch(
+    b"json-user",
+    JsonPatch::test("/a~1b/~0name", Value::U64(2)),
+).unwrap_err();
+
+assert_eq!(err.code(), ErrorCode::PatchTestFailed);
+assert_eq!(err.operation_index(), Some(0));
+assert_eq!(users.head_id()?, head_before);
+assert_eq!(users.snapshot()?.document(b"json-user")?.unwrap().value_cid(), cid_before);
+```
+
+### Example 5: tuples, sets, and arbitrary typed-map keys
+
+Typed-map keys may themselves be containers.
+
+```rust,ignore
+let tenant_key = tuple([
+    Value::String("tenant".into()),
+    Value::U64(42),
+]);
+let object_key = object([
+    ("region", Value::String("ca-west".into())),
+    ("replica", Value::U64(2)),
+])?;
+let primary_cid = Cid::from_bytes(b"primary");
+
+let catalog = typed_map([
+    (
+        tenant_key.clone(),
+        tuple([
+            Value::String("primary".into()),
+            Value::Cid(primary_cid.clone()),
+        ]),
+    ),
+    (
+        object_key.clone(),
+        set([
+            Value::String("read".into()),
+            Value::String("write".into()),
+        ])?,
+    ),
+])?;
+
+let root = object([("catalog", catalog)])?;
+users.put(b"native-containers", root)?;
+
+let document = users.snapshot()?.document(b"native-containers")?.unwrap();
+let role = document.get_path(
+    &ValuePath::root()
+        .field("catalog")
+        .map_key(tenant_key.clone())
+        .tuple_slot(0),
+)?;
+assert_eq!(role.materialize()?, Value::String("primary".into()));
+```
+
+Native patches use container-specific semantics.
+
+```rust,ignore
+let patch = ValuePatch::new([
+    ValuePatchOp::TupleReplace {
+        path: ValuePath::root().field("catalog").map_key(tenant_key.clone()),
+        slot: 0,
+        value: Value::String("standby".into()),
+    },
+    ValuePatchOp::SetInsert {
+        path: ValuePath::root().field("catalog").map_key(object_key.clone()),
+        member: Value::String("admin".into()),
+    },
+    ValuePatchOp::MapUpsert {
+        path: ValuePath::root().field("catalog"),
+        key: set([Value::I64(1), Value::U64(1)])?,
+        value: Value::Bool(true),
+    },
+]);
+
+users.apply_value_patch(b"native-containers", patch)?;
+```
+
+Required verification:
+
+- map lookup is exact and type strict: `I64(42)` does not match `U64(42)`;
+- inserting an already-present canonical set member is an idempotent no-op,
+  while constructors reject duplicate input; neither creates a duplicate
+  physical entry;
+- replacing a selected set member is implemented as remove plus insert and
+  rejects a resulting duplicate atomically;
+- typed keys exceeding depth, byte, or comparison limits fail before any root
+  advances;
+- iteration order equals `ValueOrd`, independent of insertion order.
+
+### Example 6: bounded positional array diff and patch round trip
+
+```rust,ignore
+let base = Value::Array((0..10_000).map(Value::U64).collect());
+let target = Value::Array((10_000..20_000).map(Value::U64).collect());
+
+let limits = DiffLimits::builder()
+    .max_sequence_comparisons(256)
+    .max_pending_events(32)
+    .build()?;
+
+let result = ValueDiffer::with_limits(&base, &target, limits).collect_with_stats()?;
+assert!(result.stats.sequence_comparisons <= 256);
+assert!(result.stats.used_array_fallback);
+
+let patched = ValuePatchApplier::apply(&base, &result.to_patch()?)?;
+assert_eq!(patched, target);
+```
+
+Append and replacement receive separate locality assertions against indexed
+arrays.
+
+```rust,ignore
+let before = indexed_array.storage_stats()?;
+let after = indexed_array.append(Value::U64(10_000))?;
+let write = after.last_write_stats();
+
+assert!(write.nodes_reused > 0);
+assert!(write.entries_rewritten < before.logical_entries);
+assert_eq!(after.get_index(10_000)?.materialize()?, Value::U64(10_000));
+```
+
+The implementation must not claim front insertion is localized in MVP. Its
+work is measured, bounded by write limits, and visible in explain output.
+
+### Example 7: declarative, multi-valued, compound, and unique indexes
+
+```rust,ignore
+let by_email = DocumentIndex::builder("by-email", 1)
+    .key(ValueQuery::field("email"))
+    .unique()
+    .sparse()
+    .build()?;
+
+let by_tag = DocumentIndex::builder("by-tag", 1)
+    .key(ValueQuery::field("tags").each())
+    .build()?;
+
+let by_tenant_status = DocumentIndex::builder("by-tenant-status", 1)
+    .key(ValueQuery::tuple([
+        ValueQuery::field("tenant_id"),
+        ValueQuery::field("status"),
+    ]))
+    .include([ValueQuery::field("display_name")])
+    .build()?;
+
+let users = engine.document_map(
+    b"indexed-users",
+    DocumentConfig::default(),
+)?;
+users.ensure_indexes([by_email, by_tag, by_tenant_status])?;
+```
+
+```rust,ignore
+users.put(b"u1", object([
+    ("email", Value::String("ada@example.com".into())),
+    ("tenant_id", Value::U64(7)),
+    ("status", Value::String("active".into())),
+    ("display_name", Value::String("Ada".into())),
+    ("tags", array([
+        Value::String("rust".into()),
+        Value::String("database".into()),
+    ])),
+])?)?;
+
+let snapshot = users.indexed_snapshot()?;
+assert_eq!(
+    snapshot.index("by-email")?.exact(&Value::String("ada@example.com".into()))?.document_ids(),
+    vec![b"u1".to_vec()],
+);
+assert_eq!(
+    snapshot.index("by-tag")?.exact(&Value::String("rust".into()))?.document_ids(),
+    vec![b"u1".to_vec()],
+);
+```
+
+A unique violation must expose neither source nor index changes.
+
+```rust,ignore
+let source_before = users.head_id()?;
+let catalog_before = users.indexed_snapshot()?.snapshot_id();
+
+let err = users.put(b"u2", object([
+    ("email", Value::String("ada@example.com".into())),
+])?).unwrap_err();
+
+assert_eq!(err.code(), ErrorCode::UniqueIndexViolation);
+assert_eq!(err.index_name(), Some("by-email"));
+assert_eq!(users.head_id()?, source_before);
+assert_eq!(users.indexed_snapshot()?.snapshot_id(), catalog_before);
+assert!(users.snapshot()?.document(b"u2")?.is_none());
+```
+
+Dependency pruning distinguishes index terms from covering projections.
+
+```rust,ignore
+users.reset_metrics();
+users.apply_value_patch(
+    b"u1",
+    ValuePatch::replace(
+        ValuePath::root().field("display_name"),
+        Value::String("Ada Lovelace".into()),
+    ),
+)?;
+
+let metrics = users.metrics();
+assert_eq!(metrics.index_extractions("by-email"), 0);
+assert_eq!(metrics.index_extractions("by-tag"), 0);
+assert_eq!(metrics.index_extractions("by-tenant-status"), 1);
+```
+
+The final assertion is `1` because the covering projection depends on
+`display_name` even though the index term does not.
+
+### Example 8: schema validation and shadow migration
+
+```rust,ignore
+let user_v1 = DocumentSchema::object()
+    .required("email", DocumentSchema::string())
+    .optional("display_name", DocumentSchema::string())
+    .deny_additional_fields()
+    .compile()?;
+
+let users = engine.document_map(
+    b"schema-users",
+    DocumentConfig::builder().schema(user_v1.clone()).build()?,
+)?;
+
+users.put(b"u1", object([
+    ("email", Value::String("ada@example.com".into())),
+])?)?;
+```
+
+An invalid write leaves every root unchanged.
+
+```rust,ignore
+let head_before = users.head_id()?;
+let err = users.put(b"u2", object([
+    ("email", Value::U64(7)),
+])?).unwrap_err();
+
+assert_eq!(err.code(), ErrorCode::SchemaViolation);
+assert_eq!(err.value_path(), Some(&ValuePath::root().field("email")));
+assert_eq!(users.head_id()?, head_before);
+```
+
+A transforming migration shadow-builds source and indexes before publication.
+
+```rust,ignore
+let user_v2 = DocumentSchema::object()
+    .required("email", DocumentSchema::string())
+    .required("active", DocumentSchema::bool())
+    .optional("display_name", DocumentSchema::string())
+    .deny_additional_fields()
+    .compile()?;
+
+let old_snapshot = users.snapshot()?;
+let migration = users.prepare_migration(user_v2, |value| {
+    value.object_insert("active", Value::Bool(true))
+})?;
+
+let report = migration.verify()?;
+assert_eq!(report.invalid_documents, 0);
+assert!(report.indexes_semantically_valid);
+migration.publish_if(old_snapshot.version_id())?;
+
+assert!(old_snapshot.document(b"u1")?.unwrap().get_pointer("/active").is_err());
+assert_eq!(
+    users.snapshot()?.document(b"u1")?.unwrap().get_pointer("/active")?.materialize()?,
+    Value::Bool(true),
+);
+```
+
+### Example 9: logical diff, patch generation, and merge
+
+```rust,ignore
+let base = object([
+    ("name", Value::String("Ada".into())),
+    ("city", Value::String("Vancouver".into())),
+    ("active", Value::Bool(true)),
+])?;
+let left = object([
+    ("name", Value::String("Ada Lovelace".into())),
+    ("city", Value::String("Vancouver".into())),
+    ("active", Value::Bool(true)),
+])?;
+let right = object([
+    ("name", Value::String("Ada".into())),
+    ("city", Value::String("Toronto".into())),
+    ("active", Value::Bool(true)),
+])?;
+
+let diff = ValueDiffer::new(&base, &left).collect()?;
+assert_eq!(diff.paths(), vec![ValuePath::root().field("name")]);
+assert_eq!(ValuePatchApplier::apply(&base, &diff.to_patch()?)?, left);
+
+let merged = ValueMerger::merge(&base, &left, &right, None)?;
+assert_eq!(merged.get_pointer("/name")?, Value::String("Ada Lovelace".into()));
+assert_eq!(merged.get_pointer("/city")?, Value::String("Toronto".into()));
+```
+
+Two different scalar edits produce one exact conflict.
+
+```rust,ignore
+let right_name = base.replace_pointer("/name", Value::String("Countess".into()))?;
+let conflicts = ValueMerger::stream_conflicts(&base, &left, &right_name)?.collect()?;
+
+assert_eq!(conflicts.len(), 1);
+assert_eq!(conflicts[0].path, ValuePath::root().field("name"));
+assert_eq!(conflicts[0].kind, ConflictKind::DivergentScalar);
+```
+
+Independent array replacements may merge, but overlapping positional shifts
+must conflict. Tests must cover insert/insert, insert/remove, and remove/update
+at the same and adjacent positions.
+
+### Example 10: persist unresolved merge artifacts
+
+```rust,ignore
+let prepared = users.prepare_merge(base_version, left_version, right_version)?;
+let conflicts = prepared.stream_conflicts()?.collect::<Result<Vec<_>, _>>()?;
+
+let artifacts = engine.artifact_map(b"users-merge-artifacts")?;
+prepared.persist_candidate_and_artifacts_if(
+    users.head_id()?,
+    &artifacts,
+    conflicts.iter(),
+)?;
+
+assert_eq!(artifacts.count_kind(ArtifactKind::MergeConflict)?, conflicts.len() as u64);
+let name_conflict = artifacts.by_path(&ValuePath::root().field("name"))?;
+assert_eq!(name_conflict.len(), 1);
+```
+
+Required verification:
+
+- persistence is explicit and atomic with the candidate merge state;
+- a failed publication writes no visible artifacts;
+- resolving an artifact records the selected resolution and produces a new
+  candidate `ValueCid` without mutating the original candidate;
+- artifact history remains readable while retained.
+
+### Example 11: verified structural patch reuse
+
+```rust,ignore
+let base = source.snapshot()?.document(b"large-doc")?.unwrap();
+let target = source.snapshot_at(target_version)?.document(b"large-doc")?.unwrap();
+let structural = ValueStructuralPatch::between(&base, &target)?;
+
+copy_patch_objects(&source_store, &destination_store, &structural)?;
+let applied = destination.apply_structural_patch(&base, &structural)?;
+
+assert_eq!(applied.value_cid(), target.value_cid());
+assert_eq!(applied.materialize()?, target.materialize()?);
+assert!(applied.last_write_stats().subtrees_reused > 0);
+```
+
+Tampered metadata fails closed.
+
+```rust,ignore
+let head_before = destination.head_id()?;
+let mut tampered = structural.clone();
+tampered.edits[0].logical_count += 1;
+let err = destination.apply_structural_patch(&base, &tampered).unwrap_err();
+
+assert_eq!(err.code(), ErrorCode::InvalidStructuralPatch);
+assert_eq!(destination.head_id()?, head_before);
+```
+
+Separate tests tamper with CID bytes, level, range, format digest, edit order,
+and graph closure.
+
+### Example 12: proofs, sync, backup, retention, and GC
+
+Continuing with `user-7` from Example 2:
+
+```rust,ignore
+let snapshot = users.snapshot()?;
+let proof = snapshot.prove_path(
+    b"user-7",
+    &ValuePath::root().field("address").field("city"),
+)?;
+
+let verified = proof.verify(snapshot.collection_root())?;
+assert!(verified.valid);
+assert_eq!(verified.value, Some(Value::String("Vancouver".into())));
+```
+
+Copying a collection into an empty destination must reproduce logical and
+historical identity.
+
+```rust,ignore
+let bundle = users.export_current()?;
+let destination = Prolly::new(MemStore::new(), Config::default());
+let imported = destination.import_document_collection(bundle, None)?;
+
+let source_doc = users.snapshot()?.document(b"user-7")?.unwrap();
+let imported_doc = imported.snapshot()?.document(b"user-7")?.unwrap();
+assert_eq!(source_doc.value_cid(), imported_doc.value_cid());
+assert_eq!(source_doc.materialize()?, imported_doc.materialize()?);
+assert!(imported.verify_collection()?.is_valid());
+```
+
+Retention and GC tests use at least two document versions with distinct nested
+roots.
+
+```rust,ignore
+users.keep_versions([old_version.clone(), current_version.clone()])?;
+let first_plan = users.plan_gc()?;
+assert!(!first_plan.reclaimable.contains(&old_nested_root));
+
+users.keep_versions([current_version.clone()])?;
+let second_plan = users.plan_gc()?;
+assert!(second_plan.reclaimable.contains(&old_nested_root));
+
+users.sweep_gc(&second_plan)?;
+assert!(users.snapshot_at(&old_version)?.is_none());
+assert!(users.verify_collection()?.is_valid());
+```
+
+### Example 13: specialized map facades
+
+`TupleMap` exposes composite ordering without manual byte layouts.
+
+```rust,ignore
+let t1 = Timestamp::new(1_700_000_000, 0)?;
+let t2 = Timestamp::new(1_700_000_001, 0)?;
+let events = engine.tuple_map(b"events")?;
+events.put(
+    tuple([Value::String("tenant-7".into()), Value::Timestamp(t1)]),
+    object([("kind", Value::String("created".into()))])?,
+)?;
+events.put(
+    tuple([Value::String("tenant-7".into()), Value::Timestamp(t2)]),
+    object([("kind", Value::String("updated".into()))])?,
+)?;
+
+let rows = events.prefix(tuple([Value::String("tenant-7".into())]))?;
+assert_eq!(rows.len(), 2);
+assert!(rows[0].key() < rows[1].key());
+```
+
+`AddressMap` provides named CID behavior.
+
+```rust,ignore
+let main_cid = Cid::from_bytes(b"main")?;
+let feature_cid = Cid::from_bytes(b"feature/docs")?;
+let addresses = engine.address_map(b"branches")?;
+addresses.edit(|editor| {
+    editor.put("main", main_cid.clone())?;
+    editor.put("feature/docs", feature_cid.clone())?;
+    Ok(())
+})?;
+
+assert_eq!(addresses.get("main")?, Some(main_cid));
+assert_eq!(addresses.prefix("feature/")?.len(), 1);
+assert!(addresses.verify_graphs()?.is_valid());
+```
+
+`ArtifactMap` provides typed lifecycle queries.
+
+```rust,ignore
+let artifacts = engine.artifact_map(b"validation-artifacts")?;
+artifacts.add(Artifact::schema_violation(
+    b"u7",
+    ValuePath::root().field("email"),
+    "expected string",
+))?;
+
+assert_eq!(artifacts.count_kind(ArtifactKind::SchemaViolation)?, 1);
+artifacts.resolve_all(ArtifactKind::SchemaViolation, Resolution::Dismissed)?;
+assert_eq!(artifacts.unresolved_count()?, 0);
+```
+
+### Example 14: limits, corruption, and failure atomicity
+
+```rust,ignore
+fn nested_array(depth: usize) -> Value {
+    (0..depth).fold(Value::Null, |value, _| array([value]))
+}
+
+let limited = engine.document_map(
+    b"limited",
+    DocumentConfig::builder()
+        .limits(DocumentLimits::builder()
+            .max_depth(8)
+            .max_typed_key_bytes(1024)
+            .max_query_matches(100)
+            .max_patch_operations(32)
+            .build()?)
+        .build()?,
+)?;
+
+let head_before = limited.head_id()?;
+let err = limited.put(b"too-deep", nested_array(9)).unwrap_err();
+assert_eq!(err.code(), ErrorCode::ResourceLimitExceeded);
+assert_eq!(err.limit_name(), Some("max_depth"));
+assert_eq!(limited.head_id()?, head_before);
+```
+
+Corrupt input must return an error without panicking or allocating beyond its
+declared length budget.
+
+```rust,ignore
+let mut bytes = dvf::encode(&Value::String("safe".into()))?;
+bytes.pop();
+let decode_limits = DocumentLimits::default();
+
+let outcome = std::panic::catch_unwind(|| {
+    dvf::decode_with_limits(&bytes, &decode_limits)
+});
+assert!(outcome.is_ok());
+assert_eq!(outcome.unwrap().unwrap_err().code(), ErrorCode::InvalidEncoding);
+```
+
+The same no-publication assertion applies to schema failures, unique-index
+violations, stale collection heads, stale `ValueCid`, query limits, patch
+limits, index emission limits, and invalid structural patches.
+
+### Example 15: cross-language conformance
+
+A fixture contains the logical value, canonical products, and expected
+operations rather than only a Rust-generated byte blob.
+
+```rust,ignore
+let fixture = ConformanceFixture::load("typed-map-container-key")?;
+let value = typed_map([(
+    tuple([
+        Value::String("tenant".into()),
+        Value::U64(7),
+    ]),
+    object([("active", Value::Bool(true))])?,
+)])?;
+
+assert_eq!(dvf::encode(&value)?, fixture.dvf_bytes);
+assert_eq!(ValueCid::of(&value)?, fixture.value_cid);
+assert_eq!(SortKey::encode(&value)?, fixture.sort_key_bytes);
+assert_eq!(extended_json::import(&fixture.extended_json)?, value);
+```
+
+Rust generates the initial reviewed fixture. Every binding must decode the
+checked-in bytes, construct the same native value, re-encode identical bytes,
+produce the same `ValueCid` and `SortKey`, and return the same stable errors for
+the paired invalid fixtures. Fixture review includes the literal DVF,
+`ValueCid`, `SortKey`, and Extended JSON bytes; generated-at-test-time expected
+values are not accepted as golden fixtures.
+
+### Acceptance scenario matrix
+
+| Scenario | Logical assertion | Engine assertion |
+| --- | --- | --- |
+| Canonical construction | equal values and `ValueCid` | identical DVF and `SortKey` |
+| Forced inline/indexed | equal materialized value | no logical diff; bounded indexed reads |
+| Successful patch | exact expected paths changed | one atomic source/index publication |
+| Failed patch test | value unchanged | source and index heads unchanged |
+| Recursive map/set key | exact type-strict lookup | canonical order and bounded comparison |
+| Large-array diff | patch reproduces target | work stays under configured budget |
+| Unique violation | conflicting document absent | source, index, and catalog unchanged |
+| Dependency-pruned patch | expected document or projection change | unrelated indexes are skipped; affected projection is updated |
+| Schema violation | invalid value absent | no visible objects or head movement |
+| Shadow migration | new schema values valid | old snapshot remains exact and readable |
+| Disjoint merge | combined logical result | unchanged subtrees reused |
+| Merge conflict | exact path-aware conflict | optional artifacts publish atomically |
+| Structural patch | target `ValueCid` reproduced | verified subtree reuse is nonzero |
+| Path proof | claimed value or absence verifies | proof anchors to exact collection root |
+| Export/import | same values and history | destination graph verifies independently |
+| Retention/GC | retained versions readable | only unreachable typed roots reclaimed |
+| Corrupt or over-limit input | structured error | no panic, partial publication, or excess work |
+
 ## Testing Strategy
 
 ### Golden conformance
