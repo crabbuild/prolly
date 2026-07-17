@@ -429,6 +429,18 @@
         "capabilities": {"native_batch_reads":false,"atomic_batch_writes":false,"node_scan":true,"hints":true,"atomic_nodes_and_hint":false,"root_scan":true,"root_compare_and_swap":true,"transactions":true,"read_parallelism":16},
         "limits": {"max_batch_read_items":null,"max_batch_write_items":null,"max_transaction_operations":100,"max_node_bytes":null},
         "evidence": ["PROLLY_BINDINGS_LIBRARY=target/debug/libprolly_bindings.dylib PYTHONPATH=bindings/python:bindings/python/stores/cosmosdb python3 -m unittest discover -s bindings/python/stores/cosmosdb/tests", "live: PROLLY_COSMOS_ENDPOINT, PROLLY_COSMOS_KEY, and PROLLY_COSMOS_DATABASE"]
+      },
+      "spanner": {
+        "status": "supported",
+        "module": "trail-prolly-store-spanner",
+        "sdk_module": "google-cloud-spanner",
+        "sdk_version": "3.69.0",
+        "minimum_python": "3.10",
+        "protocol_major": 1,
+        "schema_version": 1,
+        "capabilities": {"native_batch_reads":false,"atomic_batch_writes":true,"node_scan":true,"hints":true,"atomic_nodes_and_hint":true,"root_scan":true,"root_compare_and_swap":true,"transactions":true,"read_parallelism":16},
+        "limits": {"max_batch_read_items":null,"max_batch_write_items":null,"max_transaction_operations":null,"max_node_bytes":null},
+        "evidence": ["SPANNER_EMULATOR_HOST=127.0.0.1:9010 PROLLY_BINDINGS_LIBRARY=target/debug/libprolly_bindings.dylib PYTHONPATH=bindings/python:bindings/python/stores/spanner python3 -m unittest discover -s bindings/python/stores/spanner/tests"]
       }
     },
     "ruby": {
@@ -492,7 +504,19 @@
         "limits": {"max_batch_read_items":100,"max_batch_write_items":25,"max_transaction_operations":100,"max_node_bytes":null},
         "evidence": ["PROLLY_DYNAMODB_ENDPOINT=http://127.0.0.1:8000 PROLLY_BINDINGS_LIBRARY=target/debug/libprolly_bindings.dylib BUNDLE_GEMFILE=bindings/ruby/stores/dynamodb/Gemfile bundle exec ruby -Ibindings/ruby/stores/dynamodb/lib bindings/ruby/stores/dynamodb/test/dynamodb_store_test.rb"]
       },
-      "cosmosdb": {"status":"unsupported","reason":"Microsoft does not publish a supported Cosmos DB Ruby client SDK"}
+      "cosmosdb": {"status":"unsupported","reason":"Microsoft does not publish a supported Cosmos DB Ruby client SDK"},
+      "spanner": {
+        "status": "supported",
+        "module": "trail-prolly-store-spanner",
+        "sdk_module": "google-cloud-spanner",
+        "sdk_version": "2.36.0",
+        "minimum_ruby": "3.2",
+        "protocol_major": 1,
+        "schema_version": 1,
+        "capabilities": {"native_batch_reads":false,"atomic_batch_writes":true,"node_scan":true,"hints":true,"atomic_nodes_and_hint":true,"root_scan":true,"root_compare_and_swap":true,"transactions":true,"read_parallelism":1},
+        "limits": {"max_batch_read_items":null,"max_batch_write_items":null,"max_transaction_operations":null,"max_node_bytes":null},
+        "evidence": ["SPANNER_EMULATOR_HOST=127.0.0.1:9010 PROLLY_BINDINGS_LIBRARY=target/debug/libprolly_bindings.dylib BUNDLE_GEMFILE=bindings/ruby/stores/spanner/Gemfile bundle exec ruby -Ibindings/ruby/stores/spanner/lib bindings/ruby/stores/spanner/test/spanner_store_test.rb"]
+      }
     },
     "swift": {
       "sqlite": {
