@@ -13,3 +13,7 @@ func TestFakeConformance(t *testing.T) {
 		return storetest.NewFakeStore(storetest.AllCapabilities())
 	})
 }
+
+func TestFakeConformanceSharedStore(t *testing.T) {
+	storetest.RunWithStore(t, storetest.NewFakeStore(storetest.AllCapabilities()))
+}

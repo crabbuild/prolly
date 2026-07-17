@@ -98,9 +98,27 @@ func testNodeScanOrder(t *testing.T, ctx context.Context, store prolly.RemoteSto
 	_ = store.PutNode(ctx, []byte("z"), []byte("z"))
 	_ = store.PutNode(ctx, []byte("a"), []byte("a"))
 	keys, err := store.ListNodeCIDs(ctx)
-	if err != nil || len(keys) != 2 || bytes.Compare(keys[0], keys[1]) >= 0 {
+	if err != nil || !strictlySorted(keys) || !containsBytes(keys, []byte("a")) || !containsBytes(keys, []byte("z")) {
 		t.Fatalf("keys = %q, %v", keys, err)
 	}
+}
+
+func strictlySorted(values [][]byte) bool {
+	for index := 1; index < len(values); index++ {
+		if bytes.Compare(values[index-1], values[index]) >= 0 {
+			return false
+		}
+	}
+	return true
+}
+
+func containsBytes(values [][]byte, expected []byte) bool {
+	for _, value := range values {
+		if bytes.Equal(value, expected) {
+			return true
+		}
+	}
+	return false
 }
 
 func testHints(t *testing.T, ctx context.Context, store prolly.RemoteStore) {
