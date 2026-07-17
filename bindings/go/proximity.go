@@ -20,7 +20,8 @@ type ProximityRecord struct {
 // ProximityVectorView is a callback-scoped, unaligned-safe view over the
 // canonical little-endian vector stored in an immutable native leaf.
 type ProximityVectorView struct {
-	raw []byte
+	raw   []byte
+	scope *viewScope
 }
 
 func (v ProximityVectorView) Dimensions() int { return len(v.raw) / 4 }
@@ -28,7 +29,19 @@ func (v ProximityVectorView) Component(index int) float32 {
 	if index < 0 || index >= v.Dimensions() {
 		panic("proximity vector index is out of range")
 	}
-	return math.Float32frombits(binary.LittleEndian.Uint32(v.raw[index*4 : index*4+4]))
+	var value float32
+	read := func() { value = math.Float32frombits(binary.LittleEndian.Uint32(v.raw[index*4 : index*4+4])) }
+	if v.scope == nil {
+		read()
+	} else {
+		v.scope.mu.RLock()
+		defer v.scope.mu.RUnlock()
+		if !v.scope.alive {
+			panic(ErrViewExpired)
+		}
+		read()
+	}
+	return value
 }
 func (v ProximityVectorView) Copy() []float32 {
 	result := make([]float32, v.Dimensions())
@@ -43,6 +56,13 @@ func (v ProximityVectorView) Copy() []float32 {
 type ProximityRecordView struct {
 	Vector ProximityVectorView
 	Value  []byte
+}
+
+// ProximityScanRecordView is valid only during its ScanRecordViews callback.
+type ProximityScanRecordView struct {
+	Key    ScopedBytes
+	Vector ProximityVectorView
+	Value  ScopedBytes
 }
 
 var proximityRecordVisitorVtableOnce sync.Once
@@ -1740,6 +1760,20 @@ func (m *ProximityMap) ScanRecords(visitor func(ProximityRecord) bool) (uint64, 
 	return visited, err
 }
 
+// ScanRecordViews visits `[start,end)` through callback-scoped views into
+// leased native pages and stops when visitor returns false.
+func (m *ProximityMap) ScanRecordViews(start, end []byte, visitor func(ProximityScanRecordView) bool) (ScanOutcome, error) {
+	if visitor == nil {
+		return ScanOutcome{}, errors.New("nil proximity record view visitor")
+	}
+	_, fast, unlock, err := m.withHandle()
+	if err != nil {
+		return ScanOutcome{}, err
+	}
+	defer unlock()
+	return scanProximityRecordViews(fast, start, end, visitor)
+}
+
 func (m *ProximityMap) ProveMembership(key []byte) (ProximityMembershipProof, error) {
 	handle, _, unlock, err := m.withHandle()
 	if err != nil {
@@ -2193,6 +2227,70 @@ func (s *ProximitySession) ScanRecords(visitor func(ProximityRecord) bool) (uint
 		removeGoProximityRecordVisitor(callback)
 	}
 	return visited, err
+}
+
+// ScanRecordViews reuses the retained session and visits `[start,end)` through
+// callback-scoped views into leased native pages.
+func (s *ProximitySession) ScanRecordViews(start, end []byte, visitor func(ProximityScanRecordView) bool) (ScanOutcome, error) {
+	if visitor == nil {
+		return ScanOutcome{}, errors.New("nil proximity record view visitor")
+	}
+	fast, unlock, err := s.withFast()
+	if err != nil {
+		return ScanOutcome{}, err
+	}
+	defer unlock()
+	return scanProximityRecordViews(fast, start, end, visitor)
+}
+
+func scanProximityRecordViews(fast uint64, start, end []byte, visitor func(ProximityScanRecordView) bool) (ScanOutcome, error) {
+	start = append([]byte(nil), start...)
+	var boundedEnd []byte
+	if end != nil {
+		boundedEnd = append([]byte(nil), end...)
+	}
+	var after []byte
+	var visited uint64
+	for {
+		page, err := fastProximityRangePage(fast, start, boundedEnd, after, end != nil, after != nil)
+		if err != nil {
+			return ScanOutcome{}, err
+		}
+		scope := newViewScope()
+		rows, decodeErr := decodeProximityRecordViews(page.bytes, scope)
+		if decodeErr != nil {
+			scope.close()
+			page.close()
+			return ScanOutcome{}, decodeErr
+		}
+		stopped := false
+		for _, row := range rows {
+			key, copyErr := row.Key.Copy()
+			if copyErr != nil {
+				scope.close()
+				page.close()
+				return ScanOutcome{}, copyErr
+			}
+			after = key
+			visited++
+			if !visitor(row) {
+				stopped = true
+				break
+			}
+		}
+		terminal := page.terminal
+		scope.close()
+		page.close()
+		if stopped {
+			return ScanOutcome{Visited: visited, Stopped: true}, nil
+		}
+		if terminal {
+			return ScanOutcome{Visited: visited, Stopped: false}, nil
+		}
+		if len(rows) == 0 {
+			return ScanOutcome{}, errors.New("non-terminal proximity record page made no progress")
+		}
+	}
 }
 func (s *ProximitySession) withFast() (uint64, func(), error) {
 	if s == nil || s.closed.Load() {

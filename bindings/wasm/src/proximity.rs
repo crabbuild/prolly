@@ -1086,6 +1086,15 @@ impl WasmProximityMap {
     pub fn scan_records(&self, visitor: &Function) -> Result<String, JsValue> {
         scan_proximity_records(&self.load()?, visitor)
     }
+    #[wasm_bindgen(js_name = scanRecordViews)]
+    pub fn scan_record_views(
+        &self,
+        start: Uint8Array,
+        end: Option<Uint8Array>,
+        visitor: &Function,
+    ) -> Result<Object, JsValue> {
+        scan_proximity_record_views(&self.load()?, start, end, visitor)
+    }
     #[wasm_bindgen(js_name = withSearchView)]
     pub fn with_search_view(
         &self,
@@ -2150,6 +2159,15 @@ impl WasmProximityReadSession {
     pub fn scan_records(&self, visitor: &Function) -> Result<String, JsValue> {
         scan_proximity_records(&self.map, visitor)
     }
+    #[wasm_bindgen(js_name = scanRecordViews)]
+    pub fn scan_record_views(
+        &self,
+        start: Uint8Array,
+        end: Option<Uint8Array>,
+        visitor: &Function,
+    ) -> Result<Object, JsValue> {
+        scan_proximity_record_views(&self.map, start, end, visitor)
+    }
 
     #[wasm_bindgen(js_name = withSearchView)]
     pub fn with_search_view(
@@ -2262,6 +2280,66 @@ fn scan_proximity_records(
         return Err(error);
     }
     Ok(outcome.visited.to_string())
+}
+
+fn scan_proximity_record_views(
+    map: &ProximityMap<Arc<prolly::MemStore>>,
+    start: Uint8Array,
+    end: Option<Uint8Array>,
+    visitor: &Function,
+) -> Result<Object, JsValue> {
+    let start = start.to_vec();
+    let end = end.map(|value| value.to_vec());
+    let mut callback_error = None;
+    let outcome = map
+        .scan_records_range_until(&start, end.as_deref(), |key, record| {
+            let row = (|| -> Result<Object, JsValue> {
+                let object = Object::new();
+                // SAFETY: all three slices are retained by the map traversal
+                // for the complete synchronous JavaScript callback.
+                let key_view = unsafe { Uint8Array::view(key) };
+                let vector_bytes = record.vector.as_le_bytes();
+                let vector_view = unsafe { Uint8Array::view(vector_bytes) };
+                let value_view = unsafe { Uint8Array::view(record.value) };
+                Reflect::set(&object, &"key".into(), &key_view.into())?;
+                Reflect::set(&object, &"vectorBytes".into(), &vector_view.into())?;
+                Reflect::set(&object, &"value".into(), &value_view.into())?;
+                Ok(object)
+            })();
+            let should_continue = row.and_then(|row| {
+                visitor
+                    .call1(&JsValue::UNDEFINED, &row.into())
+                    .and_then(|value| {
+                        value.as_bool().ok_or_else(|| {
+                            JsValue::from_str("proximity record visitor must return a boolean")
+                        })
+                    })
+            });
+            match should_continue {
+                Ok(true) => std::ops::ControlFlow::Continue(()),
+                Ok(false) => std::ops::ControlFlow::Break(()),
+                Err(error) => {
+                    callback_error = Some(error);
+                    std::ops::ControlFlow::Break(())
+                }
+            }
+        })
+        .map_err(js_error)?;
+    if let Some(error) = callback_error {
+        return Err(error);
+    }
+    let object = Object::new();
+    Reflect::set(
+        &object,
+        &"visited".into(),
+        &outcome.visited.to_string().into(),
+    )?;
+    Reflect::set(
+        &object,
+        &"stopped".into(),
+        &outcome.break_value.is_some().into(),
+    )?;
+    Ok(object)
 }
 
 fn with_proximity_record_view(

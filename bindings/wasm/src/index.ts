@@ -851,15 +851,26 @@ export class WasmProximityVectorView implements Iterable<number> {
   readonly dimensions: number;
   readonly #data: DataView;
   readonly #scope: { alive: boolean };
+  readonly #memory?: WebAssembly.Memory;
+  readonly #borrowedBuffer: ArrayBufferLike;
 
-  constructor(bytes: Uint8Array, dimensions: number, scope: { alive: boolean }) {
+  constructor(
+    bytes: Uint8Array,
+    dimensions: number,
+    scope: { alive: boolean },
+    memory?: WebAssembly.Memory,
+  ) {
     this.dimensions = dimensions;
     this.#data = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     this.#scope = scope;
+    this.#memory = memory;
+    this.#borrowedBuffer = bytes.buffer;
   }
 
   component(index: number): number {
-    if (!this.#scope.alive) throw new WasmViewExpiredError();
+    if (!this.#scope.alive || (this.#memory != null && this.#memory.buffer !== this.#borrowedBuffer)) {
+      throw new WasmViewExpiredError();
+    }
     if (!Number.isInteger(index) || index < 0 || index >= this.dimensions) {
       throw new RangeError("proximity vector index is out of range");
     }
@@ -875,6 +886,10 @@ export class WasmProximityVectorView implements Iterable<number> {
 export interface WasmProximityRecordView {
   vector: WasmProximityVectorView;
   value: Uint8Array;
+}
+
+export interface WasmProximityScanRecordView extends WasmProximityRecordView {
+  key: Uint8Array;
 }
 
 export interface PortableSearchRequest {
@@ -1424,6 +1439,7 @@ export class Engine implements Disposable {
   indexedMap(id: Uint8Array, registry: WasmIndexRegistry): WasmIndexedMap {
     return new WasmIndexedMap(
       this.#open().indexedMap(ownedPortableBytes(id), registry.nativeHandle()),
+      this.#module?.wasmMemory(),
     );
   }
 
@@ -2465,9 +2481,38 @@ function decodeWasmProximityRecordView(
   const [valueLength, valueStart] = readWasmRecordVarint(raw, vectorEnd);
   if (valueStart + valueLength !== raw.byteLength) throw new Error("retained proximity value length is invalid");
   return {
-    vector: new WasmProximityVectorView(raw.subarray(vectorStart, vectorEnd), dimensions, scope),
+    vector: new WasmProximityVectorView(
+      raw.subarray(vectorStart, vectorEnd), dimensions, scope, memory,
+    ),
     value: scopedPortableBytes(raw.subarray(valueStart), scope, memory),
   };
+}
+
+function scanWasmProximityRecordViews(
+  native: any,
+  memory: WebAssembly.Memory | undefined,
+  start: Uint8Array,
+  end: Uint8Array | undefined,
+  visitor: (record: WasmProximityScanRecordView) => boolean,
+): { visited: bigint; stopped: boolean } {
+  if (typeof visitor !== "function") throw new TypeError("proximity record visitor must be a function");
+  const outcome = native.scanRecordViews(
+    ownedPortableBytes(start),
+    end == null ? undefined : ownedPortableBytes(end),
+    (row: { key: Uint8Array; vectorBytes: Uint8Array; value: Uint8Array }) => {
+      const scope = { alive: true };
+      try {
+        return visitor({
+          key: scopedPortableBytes(row.key, scope, memory),
+          vector: new WasmProximityVectorView(
+            row.vectorBytes, row.vectorBytes.byteLength / 4, scope, memory,
+          ),
+          value: scopedPortableBytes(row.value, scope, memory),
+        });
+      } finally { scope.alive = false; }
+    },
+  );
+  return { visited: BigInt(outcome.visited), stopped: outcome.stopped };
 }
 
 function readWasmScopedU64(value: Uint8Array, start: number): bigint {
@@ -2581,7 +2626,8 @@ function ownPortableIndexedMutations(mutations: readonly PortableIndexedMutation
 
 export class WasmIndexedMap implements Disposable {
   #native?: any;
-  constructor(native: any) { this.#native = native; }
+  #memory?: WebAssembly.Memory;
+  constructor(native: any, memory?: WebAssembly.Memory) { this.#native = native; this.#memory = memory; }
   #open(): any {
     if (this.#native == null) throw new Error("WASM indexed map is closed");
     return this.#native;
@@ -2590,6 +2636,14 @@ export class WasmIndexedMap implements Disposable {
   get(key: Uint8Array, signal?: AbortSignal): Promise<Uint8Array | undefined> {
     const native = this.#open(); key = ownedPortableBytes(key);
     return portablePromise(signal, () => native.get(key) ?? undefined);
+  }
+  withValueView(key: Uint8Array, visit: (value: Uint8Array) => void): boolean {
+    if (typeof visit !== "function") throw new TypeError("indexed value visitor must be a function");
+    return this.#open().withValueView(ownedPortableBytes(key), (value: Uint8Array) => {
+      const scope = { alive: true };
+      try { visit(scopedPortableBytes(value, scope, this.#memory)); }
+      finally { scope.alive = false; }
+    });
   }
   put(key: Uint8Array, value: Uint8Array, signal?: AbortSignal): Promise<PortableIndexedVersion> {
     const native = this.#open(); key = ownedPortableBytes(key); value = ownedPortableBytes(value);
@@ -2703,7 +2757,7 @@ export class WasmIndexedMap implements Disposable {
     };
   }
   planGc(): WasmGcPlan { return wasmGcPlan(this.#open().planGc()); }
-  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  close(): void { this.#native?.free?.(); this.#native = undefined; this.#memory = undefined; }
   [Symbol.dispose](): void { this.close(); }
 }
 
@@ -2979,6 +3033,13 @@ export class WasmProximityMap implements Disposable {
       vector: new Float32Array(record.vector),
       value: ownedPortableBytes(record.value ?? new Uint8Array()),
     })));
+  }
+  scanRecordViews(
+    start: Uint8Array,
+    end: Uint8Array | undefined,
+    visitor: (record: WasmProximityScanRecordView) => boolean,
+  ): { visited: bigint; stopped: boolean } {
+    return scanWasmProximityRecordViews(this.nativeHandle(), this.#memory, start, end, visitor);
   }
   withSearchView<R>(
     query: Float32Array,
@@ -3412,6 +3473,14 @@ export class WasmProximityReadSession implements Disposable {
       vector: new Float32Array(record.vector),
       value: ownedPortableBytes(record.value ?? new Uint8Array()),
     })));
+  }
+  scanRecordViews(
+    start: Uint8Array,
+    end: Uint8Array | undefined,
+    visitor: (record: WasmProximityScanRecordView) => boolean,
+  ): { visited: bigint; stopped: boolean } {
+    if (this.#native == null) throw new Error("WASM proximity session is closed");
+    return scanWasmProximityRecordViews(this.#native, this.#memory, start, end, visitor);
   }
   withSearchView<R>(
     query: Float32Array,

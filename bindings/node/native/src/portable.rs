@@ -103,6 +103,19 @@ extern "C" {
         k: u32,
         max_arena_bytes: u64,
     ) -> NodeFastPageResult;
+    fn prolly_fast_proximity_scan_range_page(
+        map_handle: u64,
+        start_ptr: *const u8,
+        start_len: usize,
+        end_ptr: *const u8,
+        end_len: usize,
+        has_end: u8,
+        after_ptr: *const u8,
+        after_len: usize,
+        has_after: u8,
+        max_records: u32,
+        max_arena_bytes: u64,
+    ) -> NodeFastPageResult;
     fn prolly_fast_scan_close(scan_handle: u64);
     fn prolly_fast_page_release(lease_handle: u64);
     fn prolly_fast_read_session_get_lease(
@@ -111,6 +124,11 @@ extern "C" {
         key_len: usize,
     ) -> NodeFastValueLeaseResult;
     fn prolly_fast_proximity_get_lease(
+        map_handle: u64,
+        key_ptr: *const u8,
+        key_len: usize,
+    ) -> NodeFastValueLeaseResult;
+    fn prolly_fast_indexed_get_lease(
         map_handle: u64,
         key_ptr: *const u8,
         key_len: usize,
@@ -206,6 +224,63 @@ fn with_proximity_record_view(
     };
     visit.borrow_back(&env)?.call(argument)?;
     Ok(true)
+}
+
+fn with_proximity_record_range_page(
+    env: Env,
+    map_handle: u64,
+    start: &Buffer,
+    end: Option<&Buffer>,
+    after: Option<&Buffer>,
+    max_records: u32,
+    visit: FunctionRef<JsObject, ()>,
+) -> Result<()> {
+    let (end_ptr, end_len, has_end) = end
+        .map(|value| (value.as_ptr(), value.len(), 1))
+        .unwrap_or((std::ptr::null(), 0, 0));
+    let (after_ptr, after_len, has_after) = after
+        .map(|value| (value.as_ptr(), value.len(), 1))
+        .unwrap_or((std::ptr::null(), 0, 0));
+    let page = unsafe {
+        prolly_fast_proximity_scan_range_page(
+            map_handle,
+            start.as_ptr(),
+            start.len(),
+            end_ptr,
+            end_len,
+            has_end,
+            after_ptr,
+            after_len,
+            has_after,
+            max_records,
+            4 * 1024 * 1024,
+        )
+    };
+    if page.status != 0 || page.lease_handle == 0 || page.data_ptr.is_null() {
+        return Err(Error::new(
+            Status::GenericFailure,
+            format!(
+                "native proximity range page failed with status {}",
+                page.status
+            ),
+        ));
+    }
+    let _page = NodeFastPageGuard(page.lease_handle);
+    let length = usize::try_from(page.data_len).map_err(|_| {
+        Error::new(
+            Status::GenericFailure,
+            "native proximity page exceeds the host address space",
+        )
+    })?;
+    let borrowed = unsafe {
+        env.create_buffer_with_borrowed_data(page.data_ptr.cast_mut(), length, (), |(), _env| {})?
+    };
+    let mut argument = env.create_object()?;
+    argument.set_named_property("bytes", borrowed.into_unknown())?;
+    argument.set_named_property("recordCount", page.record_count)?;
+    argument.set_named_property("terminal", page.terminal != 0)?;
+    visit.borrow_back(&env)?.call(argument)?;
+    Ok(())
 }
 
 #[napi(object)]
@@ -3156,6 +3231,69 @@ impl NativePortableIndexedMap {
             .map_err(to_napi_error)
     }
 
+    #[napi(js_name = "withValueView")]
+    pub fn with_value_view(
+        &self,
+        env: Env,
+        key: Buffer,
+        visit: FunctionRef<JsObject, ()>,
+    ) -> Result<bool> {
+        let result = unsafe {
+            prolly_fast_indexed_get_lease(self.inner.fast_handle(), key.as_ptr(), key.len())
+        };
+        if result.status != 0 {
+            return Err(Error::new(
+                Status::GenericFailure,
+                format!(
+                    "native indexed point read failed with status {}",
+                    result.status
+                ),
+            ));
+        }
+        if result.found == 0 {
+            if result.lease_handle != 0 {
+                unsafe { prolly_fast_value_release(result.lease_handle) };
+                return Err(Error::new(
+                    Status::GenericFailure,
+                    "missing indexed point read returned a value lease",
+                ));
+            }
+            return Ok(false);
+        }
+        let length = usize::try_from(result.data_len).map_err(|_| {
+            Error::new(
+                Status::GenericFailure,
+                "indexed point read exceeds the host address space",
+            )
+        })?;
+        if result.lease_handle == 0 || (length != 0 && result.data_ptr.is_null()) {
+            if result.lease_handle != 0 {
+                unsafe { prolly_fast_value_release(result.lease_handle) };
+            }
+            return Err(Error::new(
+                Status::GenericFailure,
+                "native indexed point read returned an invalid value lease",
+            ));
+        }
+        let _lease = NodeFastValueGuard(result.lease_handle);
+        let argument = if length == 0 {
+            env.create_buffer(0)?.into_unknown().coerce_to_object()?
+        } else {
+            unsafe {
+                env.create_buffer_with_borrowed_data(
+                    result.data_ptr.cast_mut(),
+                    length,
+                    (),
+                    |(), _env| {},
+                )?
+            }
+            .into_unknown()
+            .coerce_to_object()?
+        };
+        visit.borrow_back(&env)?.call(argument)?;
+        Ok(true)
+    }
+
     #[napi]
     pub fn put(&self, key: Buffer, value: Buffer) -> Result<NodePortableIndexedVersion> {
         self.inner
@@ -4463,6 +4601,30 @@ impl NativePortableProximityMap {
         with_proximity_record_view(env, self.inner.fast_handle(), &key, visit)
     }
 
+    #[napi(
+        js_name = "withRecordRangePage",
+        ts_args_type = "start: Buffer, end: Buffer | undefined, after: Buffer | undefined, maxRecords: number, visitor: (page: { bytes: Buffer; recordCount: number; terminal: boolean }) => void"
+    )]
+    pub fn with_record_range_page(
+        &self,
+        env: Env,
+        start: Buffer,
+        end: Option<Buffer>,
+        after: Option<Buffer>,
+        max_records: u32,
+        visit: FunctionRef<JsObject, ()>,
+    ) -> Result<()> {
+        with_proximity_record_range_page(
+            env,
+            self.inner.fast_handle(),
+            &start,
+            end.as_ref(),
+            after.as_ref(),
+            max_records,
+            visit,
+        )
+    }
+
     #[napi]
     pub fn contains(&self, key: Buffer) -> Result<bool> {
         self.inner.contains_key(key.to_vec()).map_err(to_napi_error)
@@ -4705,6 +4867,30 @@ impl NativePortableProximityReadSession {
         visit: FunctionRef<JsObject, ()>,
     ) -> Result<bool> {
         with_proximity_record_view(env, self.inner.fast_handle(), &key, visit)
+    }
+
+    #[napi(
+        js_name = "withRecordRangePage",
+        ts_args_type = "start: Buffer, end: Buffer | undefined, after: Buffer | undefined, maxRecords: number, visitor: (page: { bytes: Buffer; recordCount: number; terminal: boolean }) => void"
+    )]
+    pub fn with_record_range_page(
+        &self,
+        env: Env,
+        start: Buffer,
+        end: Option<Buffer>,
+        after: Option<Buffer>,
+        max_records: u32,
+        visit: FunctionRef<JsObject, ()>,
+    ) -> Result<()> {
+        with_proximity_record_range_page(
+            env,
+            self.inner.fast_handle(),
+            &start,
+            end.as_ref(),
+            after.as_ref(),
+            max_records,
+            visit,
+        )
     }
 
     #[napi]

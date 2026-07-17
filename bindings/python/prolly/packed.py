@@ -112,6 +112,7 @@ class ProximityVectorView:
 class ProximityRecordView:
     vector: ProximityVectorView
     value: ScopedBytes
+    key: ScopedBytes | None = None
 
 
 @dataclass(frozen=True)
@@ -272,6 +273,49 @@ def point_read_view(
         release(result.lease_handle)
 
 
+def indexed_point_read_view(
+    map_handle: int,
+    key: bytes,
+    visit: Callable[[ScopedBytes], _R],
+) -> tuple[bool, _R | None]:
+    """Expose one current-head indexed source value for the callback scope."""
+    if not callable(visit):
+        raise TypeError("indexed point-read visitor must be callable")
+    library = _native._UniffiLib
+    get_lease = library.prolly_fast_indexed_get_lease
+    get_lease.argtypes = [ctypes.c_uint64, ctypes.POINTER(ctypes.c_uint8), ctypes.c_size_t]
+    get_lease.restype = _FastValueLeaseResult
+    release = library.prolly_fast_value_release
+    release.argtypes = [ctypes.c_uint64]
+    release.restype = None
+    key_bytes = bytes(key)
+    key_buffer = (ctypes.c_uint8 * len(key_bytes)).from_buffer_copy(key_bytes)
+    result = get_lease(map_handle, key_buffer if key_bytes else None, len(key_bytes))
+    if result.status != 0:
+        raise RuntimeError(f"native indexed point read failed with status {result.status}")
+    if not result.found:
+        if result.lease_handle:
+            release(result.lease_handle)
+            raise RuntimeError("missing indexed point read returned a value lease")
+        return False, None
+    if not result.lease_handle or (result.data_len and not result.data_ptr):
+        if result.lease_handle:
+            release(result.lease_handle)
+        raise RuntimeError("native indexed point read returned an invalid value lease")
+    scope = _Scope()
+    try:
+        view = memoryview(b"")
+        if result.data_len:
+            raw = (ctypes.c_uint8 * result.data_len).from_address(
+                ctypes.addressof(result.data_ptr.contents)
+            )
+            view = memoryview(raw).cast("B")
+        return True, visit(ScopedBytes(view, scope))
+    finally:
+        scope.close()
+        release(result.lease_handle)
+
+
 def proximity_point_read_view(
     map_handle: int,
     key: bytes,
@@ -396,6 +440,92 @@ def proximity_search_view(
     finally:
         scope.close()
         release(result.lease_handle)
+
+
+def proximity_scan_range_view(
+    map_handle: int,
+    start: bytes,
+    end: bytes | None,
+    visit: Callable[[ProximityRecordView], bool],
+    *,
+    max_records: int = 4096,
+    max_arena_bytes: int = 4 * 1024 * 1024,
+) -> ScanOutcome:
+    """Visit `[start, end)` through callback-scoped views into leased pages."""
+    if not callable(visit):
+        raise TypeError("proximity record visitor must be callable")
+    if max_records <= 0 or max_arena_bytes <= 0:
+        raise ValueError("packed scan limits must be positive")
+    library = _native._UniffiLib
+    next_page = library.prolly_fast_proximity_scan_range_page
+    next_page.argtypes = [
+        ctypes.c_uint64,
+        ctypes.POINTER(ctypes.c_uint8), ctypes.c_size_t,
+        ctypes.POINTER(ctypes.c_uint8), ctypes.c_size_t, ctypes.c_uint8,
+        ctypes.POINTER(ctypes.c_uint8), ctypes.c_size_t, ctypes.c_uint8,
+        ctypes.c_uint32, ctypes.c_uint64,
+    ]
+    next_page.restype = _FastPageResult
+    release = library.prolly_fast_page_release
+    release.argtypes = [ctypes.c_uint64]
+    release.restype = None
+    start_bytes = bytes(start)
+    end_bytes = None if end is None else bytes(end)
+    start_buffer = (ctypes.c_uint8 * len(start_bytes)).from_buffer_copy(start_bytes)
+    end_buffer = None if end_bytes is None else (ctypes.c_uint8 * len(end_bytes)).from_buffer_copy(end_bytes)
+    after: bytes | None = None
+    visited = 0
+    while True:
+        after_buffer = None if after is None else (ctypes.c_uint8 * len(after)).from_buffer_copy(after)
+        result = next_page(
+            map_handle,
+            start_buffer if start_bytes else None, len(start_bytes),
+            end_buffer if end_bytes else None, 0 if end_bytes is None else len(end_bytes), 0 if end_bytes is None else 1,
+            after_buffer if after else None, 0 if after is None else len(after), 0 if after is None else 1,
+            max_records, max_arena_bytes,
+        )
+        if result.status != 0:
+            raise RuntimeError(f"native proximity range scan failed with status {result.status}")
+        scope = _Scope()
+        try:
+            if not result.data_ptr:
+                raise ValueError("native proximity scan page pointer was null")
+            raw = (ctypes.c_uint8 * result.data_len).from_address(ctypes.addressof(result.data_ptr.contents))
+            page = memoryview(raw).cast("B")
+            if len(page) < 28 or bytes(page[:4]) != b"PRPG":
+                raise ValueError("invalid proximity scan page header")
+            version, kind, flags, count, table_bytes, arena_bytes = struct.unpack_from("<HHIIIQ", page, 4)
+            if version != 2 or kind != 8 or count != result.record_count or table_bytes != count * 24:
+                raise ValueError("invalid proximity scan page table")
+            if bool(flags & 1) != bool(result.terminal) or 28 + table_bytes + arena_bytes != len(page):
+                raise ValueError("invalid proximity scan page bounds")
+            arena = page[28 + table_bytes:]
+            previous = after
+            for index in range(count):
+                key_off, key_len, vector_off, vector_len, value_off, value_len = struct.unpack_from(
+                    "<IIIIII", page, 28 + index * 24
+                )
+                key_view = _slice(arena, key_off, key_len)
+                key = bytes(key_view)
+                if previous is not None and previous >= key:
+                    raise ValueError("proximity scan keys are not strictly ordered")
+                previous = key
+                visited += 1
+                record = ProximityRecordView(
+                    ProximityVectorView(_slice(arena, vector_off, vector_len), scope),
+                    ScopedBytes(_slice(arena, value_off, value_len), scope),
+                    ScopedBytes(key_view, scope),
+                )
+                if not visit(record):
+                    return ScanOutcome(visited=visited, stopped=True)
+            after = previous
+            if not result.terminal and count == 0:
+                raise RuntimeError("non-terminal proximity scan page made no progress")
+        finally:
+            scope.close()
+            release(result.lease_handle)
+        if result.terminal:
+            return ScanOutcome(visited=visited, stopped=False)
 
 
 def scan_range_view(

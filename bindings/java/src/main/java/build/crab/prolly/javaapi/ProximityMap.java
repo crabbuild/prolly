@@ -37,6 +37,14 @@ public final class ProximityMap implements AutoCloseable {
         return JavaPortableBridge.scanRecords(open(), record -> visitor.test(new ProximityRecord(
                 record.getKey().clone(), toFloatArray(record.getVector()), record.getValue().clone())));
     }
+    public ReadScanOutcome scanRecordViews(
+            byte[] start, byte[] end, Predicate<ProximityScanRecordView> visitor) {
+        if (visitor == null) throw new NullPointerException("visitor");
+        var outcome = open().scanRecordViews(
+                start.clone(), end == null ? null : end.clone(),
+                value -> visitor.test(ProximityScanRecordView.fromNative(value)));
+        return new ReadScanOutcome(outcome.getVisited(), outcome.getStopped());
+    }
     private static float[] toFloatArray(List<Float> values) {
         var result = new float[values.size()];
         for (int index = 0; index < values.size(); index++) result[index] = values.get(index);

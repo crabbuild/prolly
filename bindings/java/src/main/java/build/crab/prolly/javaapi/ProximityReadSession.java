@@ -65,6 +65,15 @@ public final class ProximityReadSession implements AutoCloseable {
                     record.getKey().clone(), vector, record.getValue().clone()));
         });
     }
+    public ReadScanOutcome scanRecordViews(
+            byte[] start, byte[] end, Predicate<ProximityScanRecordView> visitor) {
+        if (nativeSession == null) throw new IllegalStateException("proximity session is closed");
+        if (visitor == null) throw new NullPointerException("visitor");
+        var outcome = nativeSession.scanRecordViews(
+                start.clone(), end == null ? null : end.clone(),
+                value -> visitor.test(ProximityScanRecordView.fromNative(value)));
+        return new ReadScanOutcome(outcome.getVisited(), outcome.getStopped());
+    }
     @Override public void close() {
         if (nativeSession != null) { nativeSession.close(); nativeSession = null; }
     }

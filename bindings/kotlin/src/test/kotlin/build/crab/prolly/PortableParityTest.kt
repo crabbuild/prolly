@@ -334,6 +334,17 @@ class PortableParityTest {
                     scanned.size < 2
                 })
                 assertEquals(listOf("a", "ab"), scanned)
+                val rangeViews = mutableListOf<String>()
+                var escapedKey: build.crab.prolly.api.ScopedBytes? = null
+                val outcome = proximity.scanRecordViews("ab".bytes(), "c".bytes()) {
+                    escapedKey = it.key
+                    rangeViews += String(it.key.bytes())
+                    true
+                }
+                assertEquals(2L, outcome.visited)
+                assertEquals(false, outcome.stopped)
+                assertEquals(listOf("ab", "b"), rangeViews)
+                assertThrows<IllegalStateException> { escapedKey!!.bytes() }
                 proximity.read().use { session ->
                     assertEquals(
                         listOf("a", "ab"),
@@ -449,6 +460,12 @@ class PortableParityTest {
                 )
                 engine.indexedMap("members".bytes(), registry).use { indexed ->
                     indexed.put("u1".bytes(), "red".bytes())
+                    var escapedValue: build.crab.prolly.api.ScopedBytes? = null
+                    assertEquals(true, indexed.getView("u1".bytes()) {
+                        escapedValue = it
+                        assertArrayEquals("red".bytes(), it.bytes())
+                    })
+                    assertThrows<IllegalStateException> { escapedValue!!.bytes() }
                     indexed.ensureIndex("by_team".bytes())
                     indexed.snapshot().use { snapshot ->
                         snapshot.index("by_team".bytes()).use { index ->

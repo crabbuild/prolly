@@ -326,6 +326,14 @@ func TestRichProximitySearchPreservesPolicyFilterStatsSessionAndProof(t *testing
 	if err != nil || visited != 2 || fmt.Sprint(scanned) != "[a ab]" {
 		t.Fatalf("map record scan = %v, %d, %v", scanned, visited, err)
 	}
+	var ranged []string
+	outcome, err := proximity.ScanRecordViews([]byte("ab"), []byte("c"), func(record ProximityScanRecordView) bool {
+		ranged = append(ranged, record.Key.String())
+		return true
+	})
+	if err != nil || outcome != (ScanOutcome{Visited: 2}) || fmt.Sprint(ranged) != "[ab b]" {
+		t.Fatalf("map record view range = %v, %#v, %v", ranged, outcome, err)
+	}
 	var retained []string
 	visited, err = session.ScanRecords(func(record ProximityRecord) bool {
 		retained = append(retained, string(record.Key))
@@ -804,6 +812,14 @@ func TestPortableVersionedIndexedAndProximityMaps(t *testing.T) {
 	t.Cleanup(indexed.Close)
 	if _, err := indexed.Put([]byte("u1"), []byte("red")); err != nil {
 		t.Fatal(err)
+	}
+	found, err := indexed.GetView([]byte("u1"), func(value []byte) {
+		if string(value) != "red" {
+			t.Fatalf("indexed view = %q", value)
+		}
+	})
+	if err != nil || !found {
+		t.Fatalf("indexed GetView found=%v err=%v", found, err)
 	}
 	if _, err := indexed.EnsureIndex([]byte("by_team")); err != nil {
 		t.Fatal(err)

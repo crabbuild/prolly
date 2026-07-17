@@ -54,7 +54,23 @@
     {
       "state": "bound-idiomatic",
       "rust": [
-        "prolly::ProximityMap::build_with_parallelism",
+        "prolly::ProximityMap::build_with_parallelism"
+      ],
+      "evidence": [
+        "bindings/python/prolly/api.py#Engine.build_proximity",
+        "bindings/go/proximity.go#Engine.BuildProximityWithOptions",
+        "bindings/node/src/index.ts#Engine.buildProximity",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#Engine.buildProximity",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/Engine.java#buildProximity",
+        "bindings/ruby/lib/prolly/api.rb#Engine.build_proximity",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#Engine.buildProximity",
+        "bindings/wasm/src/index.ts#Engine.buildProximity"
+      ],
+      "rationale": "Every host exposes explicit proximity-build worker selection through its Engine factory; WASM accepts the portable single-thread value and rejects unsupported worker counts explicitly."
+    },
+    {
+      "state": "bound-idiomatic",
+      "rust": [
         "prolly::ProximityMap::get_with"
       ],
       "evidence": [
@@ -68,21 +84,25 @@
         "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#ProximityMap.withRecordView",
         "bindings/wasm/src/index.ts#WasmProximityMap.withRecordView"
       ],
-      "rationale": "Every host exposes explicit build worker selection and a callback-scoped, retained-leaf exact record view. Native hosts use the shared PRVR lease ABI; WASM borrows the same immutable leaf in linear memory and explicitly rejects worker counts above one on its single-thread target."
+      "rationale": "Every host exposes a callback-scoped, retained-leaf exact record view. Native hosts use the shared PRVR lease ABI, while WASM borrows the same immutable leaf in linear memory."
     },
     {
-      "state": "confirmed-performance-gap",
+      "state": "bound-idiomatic",
       "rust": [
         "prolly::ProximityMap::scan_records_range_until"
       ],
       "evidence": [
-        "src/prolly/proximity/map.rs",
-        "bindings/go/proximity.go",
-        "bindings/node/src/proximity.ts",
-        "bindings/java/src/main/java/build/crab/prolly/javaapi/ProximityMap.java",
-        "bindings/wasm/src/index.ts"
+        "bindings/uniffi/src/fast_abi.rs#prolly_fast_proximity_scan_range_page",
+        "bindings/python/prolly/api.py#ProximityMap.scan_record_views",
+        "bindings/go/proximity.go#ProximityMap.ScanRecordViews",
+        "bindings/node/src/proximity.ts#ProximityMap.scanRecordViews",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#ProximityMap.scanRecordViews",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/ProximityMap.java#scanRecordViews",
+        "bindings/ruby/lib/prolly/api.rb#ProximityMap.scan_record_views",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#ProximityMap.scanRecordViews",
+        "bindings/wasm/src/index.ts#WasmProximityMap.scanRecordViews"
       ],
-      "rationale": "The seekable half-open zero-copy record scan is not yet exposed consistently; Ruby has an unbounded leased scan view and the shared ABI has cursor pages, but all hosts still need explicit start/end bounds and early-stop parity."
+      "rationale": "Every host exposes inclusive-start/exclusive-end record-view scans with early stop and callback-scoped key/vector/value access. Native hosts page through the shared retained PRPG ABI; WASM borrows validated record slices directly from linear memory."
     }
   ]
 }

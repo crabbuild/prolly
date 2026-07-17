@@ -225,6 +225,29 @@ impl WasmIndexedMap {
         result
     }
 
+    #[wasm_bindgen(js_name = withValueView)]
+    pub fn with_value_view(&self, key: Uint8Array, visitor: &Function) -> Result<bool, JsValue> {
+        let map = self
+            .engine
+            .indexed_map(&self.id, self.registry_snapshot())
+            .map_err(js_error)?;
+        let mut callback_result = Ok(());
+        let found = map
+            .get_with(&key.to_vec(), |value| {
+                // SAFETY: the immutable source leaf remains retained for the
+                // complete synchronous JavaScript callback.
+                let borrowed = unsafe { Uint8Array::view(value) };
+                callback_result = visitor
+                    .call1(&JsValue::UNDEFINED, &borrowed.into())
+                    .map(|_| ());
+            })
+            .map_err(js_error)?
+            .is_some();
+        self.capture_metrics(map.metrics());
+        callback_result?;
+        Ok(found)
+    }
+
     pub fn put(&self, key: Uint8Array, value: Uint8Array) -> Result<Object, JsValue> {
         let map = self
             .engine

@@ -59,22 +59,22 @@
       "rationale": "Hosts use owned mutation lists instead of the Rust editor callback, planGc for indexed GC, retain the registry passed to Engine.indexedMap, and reopen the raw source as Engine.versionedMap(indexedMap.id)."
     },
     {
-      "state": "confirmed-performance-gap",
+      "state": "bound-idiomatic",
       "rust": [
         "prolly::IndexedMap::get_with"
       ],
       "evidence": [
-        "src/prolly/secondary_index/coordinator.rs",
-        "bindings/python/prolly/api.py#IndexedMap",
-        "bindings/go/indexed.go#IndexedMap",
-        "bindings/node/src/indexed.ts#IndexedMap",
-        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#IndexedMap",
-        "bindings/java/src/main/java/build/crab/prolly/javaapi/IndexedMap.java",
-        "bindings/ruby/lib/prolly/api.rb#IndexedMap",
-        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#IndexedMap",
-        "bindings/wasm/src/index.ts#WasmIndexedMap"
+        "bindings/uniffi/src/fast_abi.rs#prolly_fast_indexed_get_lease",
+        "bindings/python/prolly/api.py#IndexedMap.get_view",
+        "bindings/go/indexed.go#IndexedMap.GetView",
+        "bindings/node/src/indexed.ts#IndexedMap.withValueView",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#IndexedMap.getView",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/IndexedMap.java#getView",
+        "bindings/ruby/lib/prolly/api.rb#IndexedMap.get_view",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#IndexedMap.withValueView",
+        "bindings/wasm/src/index.ts#WasmIndexedMap.withValueView"
       ],
-      "rationale": "All wrappers expose owned get, but the callback-scoped source-value lease is not yet reachable from an IndexedMap or IndexedSnapshot in every host."
+      "rationale": "Every host exposes an idiomatic callback-scoped current-head source-value view. Native hosts retain the immutable source leaf through the shared lease ABI, while WASM borrows the same value from linear memory for the synchronous callback."
     }
   ]
 }

@@ -51,21 +51,21 @@ type SecondaryIndexLimits struct {
 
 func DefaultSecondaryIndexLimits() SecondaryIndexLimits {
 	return SecondaryIndexLimits{
-		MaxTermBytes: 4 * 1024,
-		MaxProjectionBytes: 64 * 1024,
-		MaxAllValueBytes: 1024 * 1024,
-		MaxTermsPerRecord: 1024,
-		MaxProjectedBytesPerRecord: 1024 * 1024,
+		MaxTermBytes:                      4 * 1024,
+		MaxProjectionBytes:                64 * 1024,
+		MaxAllValueBytes:                  1024 * 1024,
+		MaxTermsPerRecord:                 1024,
+		MaxProjectedBytesPerRecord:        1024 * 1024,
 		MaxDerivedMutationsPerTransaction: 100_000,
-		MaxProjectedBytesPerTransaction: 64 * 1024 * 1024,
-		MaxIndexes: 32,
-		BuildPageSize: 4096,
-		MaxTemporarySortBytes: 256 * 1024 * 1024,
-		MaxBundleNodes: 1_000_000,
-		MaxBundleBytes: 1024 * 1024 * 1024,
-		MaxVerificationEntries: 10_000_000,
-		MaxWriteRetries: 8,
-		MaxBuildRetries: 8,
+		MaxProjectedBytesPerTransaction:   64 * 1024 * 1024,
+		MaxIndexes:                        32,
+		BuildPageSize:                     4096,
+		MaxTemporarySortBytes:             256 * 1024 * 1024,
+		MaxBundleNodes:                    1_000_000,
+		MaxBundleBytes:                    1024 * 1024 * 1024,
+		MaxVerificationEntries:            10_000_000,
+		MaxWriteRetries:                   8,
+		MaxBuildRetries:                   8,
 	}
 }
 
@@ -246,6 +246,7 @@ type IndexedRetention struct {
 
 type IndexedMap struct {
 	handle uint64
+	fast   uint64
 	closed atomic.Bool
 	mu     sync.RWMutex
 }
@@ -260,7 +261,12 @@ func (e *Engine) IndexedMap(id []byte, registry *IndexRegistry) (*IndexedMap, er
 	if err != nil {
 		return nil, err
 	}
-	result := &IndexedMap{handle: handle}
+	fast, err := ffiIndexedMapFastHandle(handle)
+	if err != nil {
+		ffiFreeIndexedMap(handle)
+		return nil, err
+	}
+	result := &IndexedMap{handle: handle, fast: fast}
 	runtime.SetFinalizer(result, (*IndexedMap).Close)
 	return result, nil
 }
@@ -381,6 +387,23 @@ func (m *IndexedMap) Get(key []byte) ([]byte, bool, error) {
 		return nil, false, err
 	}
 	return value, ok, decoder.done()
+}
+
+// GetView exposes the current durable source value without copying it across
+// the language boundary. The visitor must not retain value after returning.
+func (m *IndexedMap) GetView(key []byte, visitor func([]byte)) (bool, error) {
+	if visitor == nil {
+		return false, errors.New("nil indexed value view visitor")
+	}
+	if m == nil {
+		return false, errors.New("indexed map is closed")
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.closed.Load() || m.fast == 0 {
+		return false, errors.New("indexed map is closed")
+	}
+	return withFastIndexedValue(m.fast, key, visitor)
 }
 func (m *IndexedMap) EnsureIndex(name []byte) (IndexBuildResult, error) {
 	handle, unlock, err := m.withHandle()

@@ -349,6 +349,22 @@ class PortableParityTests(unittest.TestCase):
                 2,
             )
             self.assertEqual(scanned, [b"a", b"ab"])
+            range_views = []
+            escaped_range_key = []
+            outcome = proximity.scan_record_views(
+                b"ab",
+                b"c",
+                lambda record: (
+                    escaped_range_key.append(record.key),
+                    range_views.append((bytes(record.key), record.vector.to_list(), bytes(record.value))),
+                    True,
+                )[-1],
+            )
+            self.assertEqual(outcome.visited, 2)
+            self.assertFalse(outcome.stopped)
+            self.assertEqual([row[0] for row in range_views], [b"ab", b"b"])
+            with self.assertRaises(RuntimeError):
+                bytes(escaped_range_key[0])
             with engine.proximity_search_runtime() as runtime, proximity.read() as session:
                 self.assertEqual(
                     [
@@ -435,6 +451,14 @@ class PortableParityTests(unittest.TestCase):
             )
             indexed = engine.indexed_map(b"members", registry)
             indexed.put(b"u1", b"red")
+            indexed_view = []
+            self.assertEqual(
+                indexed.get_view(b"u1", lambda value: indexed_view.append(value) or bytes(value)),
+                (True, b"red"),
+            )
+            with self.assertRaises(RuntimeError):
+                bytes(indexed_view[0])
+            self.assertEqual(indexed.get_view(b"missing", bytes), (False, None))
             indexed.ensure_index(b"by_team")
             records = indexed.snapshot().index(b"by_team").records(b"red")
             self.assertEqual([record.primary_key for record in records], [b"u1"])

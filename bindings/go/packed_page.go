@@ -305,3 +305,39 @@ func decodeNeighborViews(page []byte, scope *viewScope) ([]NeighborView, error) 
 	}
 	return rows, nil
 }
+
+func decodeProximityRecordViews(page []byte, scope *viewScope) ([]ProximityScanRecordView, error) {
+	header, err := parsePackedHeader(page, 8, 24)
+	if err != nil {
+		return nil, err
+	}
+	arenaStart := 28 + header.tableBytes
+	rows := make([]ProximityScanRecordView, 0, header.count)
+	for index := 0; index < header.count; index++ {
+		base := 28 + index*24
+		field := func(offsetAt int) (ScopedBytes, error) {
+			return scopedArenaField(page, arenaStart, header.arenaBytes,
+				int(binary.LittleEndian.Uint32(page[base+offsetAt:base+offsetAt+4])),
+				int(binary.LittleEndian.Uint32(page[base+offsetAt+4:base+offsetAt+8])), scope)
+		}
+		key, err := field(0)
+		if err != nil {
+			return nil, err
+		}
+		vector, err := field(8)
+		if err != nil {
+			return nil, err
+		}
+		value, err := field(16)
+		if err != nil {
+			return nil, err
+		}
+		if vector.Len()%4 != 0 {
+			return nil, errors.New("proximity vector byte length is invalid")
+		}
+		rows = append(rows, ProximityScanRecordView{
+			Key: key, Vector: ProximityVectorView{raw: vector.data, scope: scope}, Value: value,
+		})
+	}
+	return rows, nil
+}

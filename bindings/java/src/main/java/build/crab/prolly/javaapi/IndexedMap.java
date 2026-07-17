@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 import build.crab.prolly.IndexEntryRecord;
 import build.crab.prolly.SecondaryIndexExtractorCallback;
 
@@ -33,6 +34,14 @@ public final class IndexedMap implements AutoCloseable {
     public Optional<byte[]> get(byte[] key) {
         byte[] value = open().get(key.clone());
         return Optional.ofNullable(value == null ? null : value.clone());
+    }
+
+    public boolean getView(byte[] key, Consumer<ScopedBytes> visitor) {
+        Objects.requireNonNull(visitor, "visitor");
+        return open().getView(key.clone(), value -> {
+            visitor.accept(new ScopedBytes(value));
+            return kotlin.Unit.INSTANCE;
+        });
     }
 
     public IndexedVersion put(byte[] key, byte[] value) {

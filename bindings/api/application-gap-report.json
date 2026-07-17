@@ -5,10 +5,10 @@
     "async-store"
   ],
   "summary": {
-    "release_complete_application_operations": 129,
-    "bound_pending_manifest_evidence": 2,
+    "release_complete_application_operations": 133,
+    "bound_pending_manifest_evidence": 0,
     "confirmed_missing_implementation": 0,
-    "confirmed_performance_gap": 2,
+    "confirmed_performance_gap": 0,
     "unmapped_application_operations": 463,
     "mapped_missing_evidence": 0,
     "platform_review_required": 0,
@@ -247,6 +247,36 @@
         "bindings/ruby/lib/prolly/api.rb#IndexedMap",
         "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#IndexedMap",
         "bindings/wasm/src/index.ts#WasmIndexedMap"
+      ]
+    },
+    {
+      "rust": "prolly::IndexedMap::get_with",
+      "kind": "function",
+      "owner": "prolly::IndexedMap",
+      "member_kind": "inherent-item",
+      "family": "indexed-map",
+      "classification": "idiomatic",
+      "status": "implemented",
+      "missing_languages": [],
+      "tests": [
+        "portable-parity::scoped-view-lifetime",
+        "portable-parity::indexed-current-head-view"
+      ],
+      "performance": "owned",
+      "rationale": "Rust's lifetime-bound indexed value callback is exposed as a synchronous scoped view with explicit post-scope invalidation.",
+      "audience": "application",
+      "audience_rationale": "prolly::IndexedMap::get_with has runtime behavior in the requested indexed-map application domain and requires direct or idiomatic host evidence.",
+      "reconciliation": "bound-idiomatic",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/fast_abi.rs#prolly_fast_indexed_get_lease",
+        "bindings/python/prolly/api.py#IndexedMap.get_view",
+        "bindings/go/indexed.go#IndexedMap.GetView",
+        "bindings/node/src/indexed.ts#IndexedMap.withValueView",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#IndexedMap.getView",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/IndexedMap.java#getView",
+        "bindings/ruby/lib/prolly/api.rb#IndexedMap.get_view",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#IndexedMap.withValueView",
+        "bindings/wasm/src/index.ts#WasmIndexedMap.withValueView"
       ]
     },
     {
@@ -803,6 +833,34 @@
       ]
     },
     {
+      "rust": "prolly::ProximityMap::build_with_parallelism",
+      "kind": "function",
+      "owner": "prolly::ProximityMap",
+      "member_kind": "inherent-item",
+      "family": "proximity-map",
+      "classification": "portable",
+      "status": "implemented",
+      "missing_languages": [],
+      "tests": [
+        "portable-parity::proximity-parallel-build"
+      ],
+      "performance": "owned",
+      "rationale": "The Rust parallel build constructor is exposed through each language's Engine factory with an explicit worker-count option.",
+      "audience": "application",
+      "audience_rationale": "prolly::ProximityMap::build_with_parallelism has runtime behavior in the requested proximity-map application domain and requires direct or idiomatic host evidence.",
+      "reconciliation": "bound-idiomatic",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#Engine.build_proximity",
+        "bindings/go/proximity.go#Engine.BuildProximityWithOptions",
+        "bindings/node/src/index.ts#Engine.buildProximity",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#Engine.buildProximity",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/Engine.java#buildProximity",
+        "bindings/ruby/lib/prolly/api.rb#Engine.build_proximity",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#Engine.buildProximity",
+        "bindings/wasm/src/index.ts#Engine.buildProximity"
+      ]
+    },
+    {
       "rust": "prolly::ProximityMap::clear_content_cache",
       "kind": "function",
       "owner": "prolly::ProximityMap",
@@ -887,6 +945,36 @@
         "bindings/ruby/lib/prolly/api.rb#ProximityMap",
         "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#ProximityMap",
         "bindings/wasm/src/index.ts#WasmProximityMap"
+      ]
+    },
+    {
+      "rust": "prolly::ProximityMap::get_with",
+      "kind": "function",
+      "owner": "prolly::ProximityMap",
+      "member_kind": "inherent-item",
+      "family": "proximity-map",
+      "classification": "idiomatic",
+      "status": "implemented",
+      "missing_languages": [],
+      "tests": [
+        "portable-parity::scoped-view-lifetime",
+        "portable-parity::proximity-scoped-record-view"
+      ],
+      "performance": "owned",
+      "rationale": "Rust's lifetime-bound proximity record callback is exposed as a synchronous scoped record view with explicit post-scope invalidation.",
+      "audience": "application",
+      "audience_rationale": "prolly::ProximityMap::get_with has runtime behavior in the requested proximity-map application domain and requires direct or idiomatic host evidence.",
+      "reconciliation": "bound-idiomatic",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/fast_abi.rs#prolly_fast_proximity_get_lease",
+        "bindings/python/prolly/api.py#ProximityMap.get_view",
+        "bindings/go/proximity.go#ProximityMap.GetView",
+        "bindings/node/src/proximity.ts#ProximityMap.withRecordView",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#ProximityMap.getView",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/ProximityMap.java#getView",
+        "bindings/ruby/lib/prolly/api.rb#ProximityMap.get_view",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#ProximityMap.withRecordView",
+        "bindings/wasm/src/index.ts#WasmProximityMap.withRecordView"
       ]
     },
     {
@@ -1119,6 +1207,36 @@
         "bindings/ruby/lib/prolly/api.rb#ProximityMap",
         "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#ProximityMap",
         "bindings/wasm/src/index.ts#WasmProximityMap"
+      ]
+    },
+    {
+      "rust": "prolly::ProximityMap::scan_records_range_until",
+      "kind": "function",
+      "owner": "prolly::ProximityMap",
+      "member_kind": "inherent-item",
+      "family": "proximity-map",
+      "classification": "idiomatic",
+      "status": "implemented",
+      "missing_languages": [],
+      "tests": [
+        "portable-parity::scoped-view-lifetime",
+        "portable-parity::proximity-bounded-record-view"
+      ],
+      "performance": "owned",
+      "rationale": "Rust's range callback is exposed as an inclusive-start/exclusive-end scan of scoped record views with identical early-stop behavior.",
+      "audience": "application",
+      "audience_rationale": "prolly::ProximityMap::scan_records_range_until has runtime behavior in the requested proximity-map application domain and requires direct or idiomatic host evidence.",
+      "reconciliation": "bound-idiomatic",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/fast_abi.rs#prolly_fast_proximity_scan_range_page",
+        "bindings/python/prolly/api.py#ProximityMap.scan_record_views",
+        "bindings/go/proximity.go#ProximityMap.ScanRecordViews",
+        "bindings/node/src/proximity.ts#ProximityMap.scanRecordViews",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#ProximityMap.scanRecordViews",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/ProximityMap.java#scanRecordViews",
+        "bindings/ruby/lib/prolly/api.rb#ProximityMap.scan_record_views",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#ProximityMap.scanRecordViews",
+        "bindings/wasm/src/index.ts#WasmProximityMap.scanRecordViews"
       ]
     },
     {
@@ -3507,151 +3625,9 @@
       "reconciliation_evidence": []
     }
   ],
-  "bound_pending_manifest_evidence": [
-    {
-      "rust": "prolly::ProximityMap::build_with_parallelism",
-      "kind": "function",
-      "owner": "prolly::ProximityMap",
-      "member_kind": "inherent-item",
-      "family": "proximity-map",
-      "classification": "portable",
-      "status": "planned",
-      "missing_languages": [
-        "go",
-        "java",
-        "kotlin",
-        "node",
-        "python",
-        "ruby",
-        "swift",
-        "wasm"
-      ],
-      "tests": [],
-      "performance": "owned",
-      "rationale": null,
-      "audience": "application",
-      "audience_rationale": "prolly::ProximityMap::build_with_parallelism has runtime behavior in the requested proximity-map application domain and requires direct or idiomatic host evidence.",
-      "reconciliation": "bound-idiomatic",
-      "reconciliation_evidence": [
-        "bindings/uniffi/src/fast_abi.rs#prolly_fast_proximity_get_lease",
-        "bindings/python/prolly/api.py#ProximityMap.get_view",
-        "bindings/go/proximity.go#ProximityMap.GetView",
-        "bindings/node/src/proximity.ts#ProximityMap.withRecordView",
-        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#ProximityMap.getView",
-        "bindings/java/src/main/java/build/crab/prolly/javaapi/ProximityMap.java#getView",
-        "bindings/ruby/lib/prolly/api.rb#ProximityMap.get_view",
-        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#ProximityMap.withRecordView",
-        "bindings/wasm/src/index.ts#WasmProximityMap.withRecordView"
-      ]
-    },
-    {
-      "rust": "prolly::ProximityMap::get_with",
-      "kind": "function",
-      "owner": "prolly::ProximityMap",
-      "member_kind": "inherent-item",
-      "family": "proximity-map",
-      "classification": "portable",
-      "status": "planned",
-      "missing_languages": [
-        "go",
-        "java",
-        "kotlin",
-        "node",
-        "python",
-        "ruby",
-        "swift",
-        "wasm"
-      ],
-      "tests": [],
-      "performance": "owned",
-      "rationale": null,
-      "audience": "application",
-      "audience_rationale": "prolly::ProximityMap::get_with has runtime behavior in the requested proximity-map application domain and requires direct or idiomatic host evidence.",
-      "reconciliation": "bound-idiomatic",
-      "reconciliation_evidence": [
-        "bindings/uniffi/src/fast_abi.rs#prolly_fast_proximity_get_lease",
-        "bindings/python/prolly/api.py#ProximityMap.get_view",
-        "bindings/go/proximity.go#ProximityMap.GetView",
-        "bindings/node/src/proximity.ts#ProximityMap.withRecordView",
-        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#ProximityMap.getView",
-        "bindings/java/src/main/java/build/crab/prolly/javaapi/ProximityMap.java#getView",
-        "bindings/ruby/lib/prolly/api.rb#ProximityMap.get_view",
-        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#ProximityMap.withRecordView",
-        "bindings/wasm/src/index.ts#WasmProximityMap.withRecordView"
-      ]
-    }
-  ],
+  "bound_pending_manifest_evidence": [],
   "confirmed_missing_implementation": [],
-  "confirmed_performance_gap": [
-    {
-      "rust": "prolly::IndexedMap::get_with",
-      "kind": "function",
-      "owner": "prolly::IndexedMap",
-      "member_kind": "inherent-item",
-      "family": "indexed-map",
-      "classification": "portable",
-      "status": "planned",
-      "missing_languages": [
-        "go",
-        "java",
-        "kotlin",
-        "node",
-        "python",
-        "ruby",
-        "swift",
-        "wasm"
-      ],
-      "tests": [],
-      "performance": "owned",
-      "rationale": null,
-      "audience": "application",
-      "audience_rationale": "prolly::IndexedMap::get_with has runtime behavior in the requested indexed-map application domain and requires direct or idiomatic host evidence.",
-      "reconciliation": "confirmed-performance-gap",
-      "reconciliation_evidence": [
-        "src/prolly/secondary_index/coordinator.rs",
-        "bindings/python/prolly/api.py#IndexedMap",
-        "bindings/go/indexed.go#IndexedMap",
-        "bindings/node/src/indexed.ts#IndexedMap",
-        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#IndexedMap",
-        "bindings/java/src/main/java/build/crab/prolly/javaapi/IndexedMap.java",
-        "bindings/ruby/lib/prolly/api.rb#IndexedMap",
-        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#IndexedMap",
-        "bindings/wasm/src/index.ts#WasmIndexedMap"
-      ]
-    },
-    {
-      "rust": "prolly::ProximityMap::scan_records_range_until",
-      "kind": "function",
-      "owner": "prolly::ProximityMap",
-      "member_kind": "inherent-item",
-      "family": "proximity-map",
-      "classification": "portable",
-      "status": "planned",
-      "missing_languages": [
-        "go",
-        "java",
-        "kotlin",
-        "node",
-        "python",
-        "ruby",
-        "swift",
-        "wasm"
-      ],
-      "tests": [],
-      "performance": "owned",
-      "rationale": null,
-      "audience": "application",
-      "audience_rationale": "prolly::ProximityMap::scan_records_range_until has runtime behavior in the requested proximity-map application domain and requires direct or idiomatic host evidence.",
-      "reconciliation": "confirmed-performance-gap",
-      "reconciliation_evidence": [
-        "src/prolly/proximity/map.rs",
-        "bindings/go/proximity.go",
-        "bindings/node/src/proximity.ts",
-        "bindings/java/src/main/java/build/crab/prolly/javaapi/ProximityMap.java",
-        "bindings/wasm/src/index.ts"
-      ]
-    }
-  ],
+  "confirmed_performance_gap": [],
   "unmapped_application_operations": [
     {
       "rust": "prolly::AcceleratorCatalog::accelerators",

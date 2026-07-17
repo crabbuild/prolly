@@ -705,6 +705,37 @@ test("WASM indexed maps expose batch CAS and historical snapshots", { skip: !gen
   engine.close();
 });
 
+test("WASM indexed values and bounded proximity records expose scoped views", { skip: !generatedPresent }, async () => {
+  const engine = api.Engine.memory(wasm);
+  const registry = engine.indexRegistry();
+  const indexed = engine.indexedMap(bytes("view-indexed"), registry);
+  await indexed.put(bytes("u1"), bytes("red"));
+  let escapedValue: Uint8Array | undefined;
+  assert.equal(indexed.withValueView(bytes("u1"), (value) => {
+    assert.equal(Buffer.from(value).toString(), "red");
+    escapedValue = value;
+  }), true);
+  assert.throws(() => escapedValue![0], /expired/);
+
+  const map = await engine.buildProximity(2, [
+    { key: bytes("a"), vector: new Float32Array([1, 0]), value: bytes("A") },
+    { key: bytes("b"), vector: new Float32Array([0, 1]), value: bytes("B") },
+    { key: bytes("c"), vector: new Float32Array([1, 1]), value: bytes("C") },
+    { key: bytes("d"), vector: new Float32Array([2, 2]), value: bytes("D") },
+  ]);
+  const seen: string[] = [];
+  let escapedKey: Uint8Array | undefined;
+  assert.deepEqual(map.scanRecordViews(bytes("b"), bytes("d"), (record) => {
+    seen.push(Buffer.from(record.key).toString());
+    assert.equal(record.vector.dimensions, 2);
+    escapedKey = record.key;
+    return true;
+  }), { visited: 2n, stopped: false });
+  assert.deepEqual(seen, ["b", "c"]);
+  assert.throws(() => escapedKey![0], /expired/);
+  map.close(); indexed.close(); registry.close(); engine.close();
+});
+
 test("WASM indexed maintenance and every bounded page direction are complete", { skip: !generatedPresent }, async () => {
   const engine = api.Engine.memory(wasm);
   const registry = engine.indexRegistry();

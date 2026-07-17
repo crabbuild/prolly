@@ -18,7 +18,7 @@ use super::error::{Diff, Error, Mutation};
 use super::key::decode_segments;
 use super::manifest::{ManifestStore, ManifestStoreScan, NamedRootRetention, RootManifest};
 use super::range::{CursorWindow, RangeCursor, RangeIter, RangePage, ReverseCursor, ReversePage};
-use super::read::{EntryRef, ReadSession, ValueRefView};
+use super::read::{EntryRef, OwnedValueLease, ReadSession, ValueRefView};
 use super::secondary_index::{control_record_key, control_root_name, IndexControl};
 use super::stats::TreeStats;
 use super::store::Store;
@@ -1952,6 +1952,16 @@ where
     ) -> Result<Option<R>, Error> {
         match self.head()? {
             Some(version) => self.prolly.get_with(&version.tree, key, read),
+            None => Ok(None),
+        }
+    }
+
+    /// Retain the packed leaf containing a current-head value. Native language
+    /// adapters use this for callback-scoped zero-copy reads and release the
+    /// lease deterministically when the callback returns.
+    pub fn get_lease(&self, key: &[u8]) -> Result<Option<OwnedValueLease>, Error> {
+        match self.head()? {
+            Some(version) => self.prolly.read(&version.tree)?.get_lease(key),
             None => Ok(None),
         }
     }

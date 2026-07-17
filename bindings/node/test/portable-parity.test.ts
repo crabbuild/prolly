@@ -964,3 +964,37 @@ test("proximity exact reads expose callback-scoped zero-copy record views", asyn
     map.close();
   } finally { engine.close(); }
 });
+
+test("indexed values and bounded proximity records expose scoped views", async () => {
+  const engine = await Engine.memory();
+  try {
+    const registry = engine.indexRegistry();
+    const indexed = engine.indexedMap(bytes("view-indexed"), registry);
+    await indexed.put(bytes("u1"), bytes("red"));
+    let escapedValue: Uint8Array | undefined;
+    assert.equal(indexed.withValueView(bytes("u1"), (value) => {
+      assert.equal(Buffer.from(value).toString(), "red");
+      escapedValue = value;
+    }), true);
+    assert.throws(() => escapedValue![0], /expired/);
+    assert.equal(indexed.withValueView(bytes("missing"), () => assert.fail()), false);
+
+    const map = await engine.buildProximity(2, [
+      { key: bytes("a"), vector: [1, 0], value: bytes("A") },
+      { key: bytes("b"), vector: [0, 1], value: bytes("B") },
+      { key: bytes("c"), vector: [1, 1], value: bytes("C") },
+      { key: bytes("d"), vector: [2, 2], value: bytes("D") },
+    ]);
+    const seen: string[] = [];
+    let escapedKey: Uint8Array | undefined;
+    assert.deepEqual(map.scanRecordViews(bytes("b"), bytes("d"), (record) => {
+      seen.push(Buffer.from(record.key).toString());
+      assert.equal(record.vector.dimensions, 2);
+      escapedKey = record.key;
+      return true;
+    }), { visited: 2n, stopped: false });
+    assert.deepEqual(seen, ["b", "c"]);
+    assert.throws(() => escapedKey![0], /expired/);
+    map.close(); indexed.close(); registry.close();
+  } finally { engine.close(); }
+});
