@@ -381,6 +381,18 @@
         "capabilities": {"native_batch_reads":true,"atomic_batch_writes":true,"node_scan":true,"hints":true,"atomic_nodes_and_hint":true,"root_scan":true,"root_compare_and_swap":true,"transactions":true,"read_parallelism":16},
         "limits": {"max_batch_read_items":null,"max_batch_write_items":null,"max_transaction_operations":null,"max_node_bytes":null},
         "evidence": ["PROLLY_POSTGRES_URL=postgresql://prolly:prolly@127.0.0.1:55432/prolly?sslmode=disable PROLLY_BINDINGS_LIBRARY=target/debug/libprolly_bindings.dylib PYTHONPATH=bindings/python:bindings/python/stores/postgres python3 -m unittest discover -s bindings/python/stores/postgres/tests"]
+      },
+      "mysql": {
+        "status": "supported",
+        "module": "trail-prolly-store-mysql",
+        "sdk_module": "aiomysql",
+        "sdk_version": "0.3.2",
+        "minimum_python": "3.10",
+        "protocol_major": 1,
+        "schema_version": 1,
+        "capabilities": {"native_batch_reads":true,"atomic_batch_writes":true,"node_scan":true,"hints":true,"atomic_nodes_and_hint":true,"root_scan":true,"root_compare_and_swap":true,"transactions":true,"read_parallelism":16},
+        "limits": {"max_batch_read_items":null,"max_batch_write_items":null,"max_transaction_operations":null,"max_node_bytes":null},
+        "evidence": ["PROLLY_MYSQL_URL=mysql://prolly:prolly@127.0.0.1:53306/prolly PROLLY_BINDINGS_LIBRARY=target/debug/libprolly_bindings.dylib PYTHONPATH=bindings/python:bindings/python/stores/mysql python3 -m unittest discover -s bindings/python/stores/mysql/tests"]
       }
     },
     "ruby": {
@@ -408,6 +420,18 @@
         "limits": {"max_batch_read_items":null,"max_batch_write_items":null,"max_transaction_operations":null,"max_node_bytes":null},
         "evidence": ["PROLLY_POSTGRES_URL=postgresql://prolly:prolly@127.0.0.1:55432/prolly?sslmode=disable PROLLY_BINDINGS_LIBRARY=target/debug/libprolly_bindings.dylib BUNDLE_GEMFILE=bindings/ruby/stores/postgres/Gemfile bundle exec ruby -Ibindings/ruby/stores/postgres/lib bindings/ruby/stores/postgres/test/postgres_store_test.rb"]
       },
+      "mysql": {
+        "status": "supported",
+        "module": "trail-prolly-store-mysql",
+        "sdk_module": "mysql2",
+        "sdk_version": "0.5.7",
+        "minimum_ruby": "3.2",
+        "protocol_major": 1,
+        "schema_version": 1,
+        "capabilities": {"native_batch_reads":false,"atomic_batch_writes":true,"node_scan":true,"hints":true,"atomic_nodes_and_hint":true,"root_scan":true,"root_compare_and_swap":true,"transactions":true,"read_parallelism":1},
+        "limits": {"max_batch_read_items":null,"max_batch_write_items":null,"max_transaction_operations":null,"max_node_bytes":null},
+        "evidence": ["PROLLY_MYSQL_URL=mysql://prolly:prolly@127.0.0.1:53306/prolly PROLLY_BINDINGS_LIBRARY=target/debug/libprolly_bindings.dylib BUNDLE_GEMFILE=bindings/ruby/stores/mysql/Gemfile bundle exec ruby -Ibindings/ruby/stores/mysql/lib bindings/ruby/stores/mysql/test/mysql_store_test.rb"]
+      },
       "cosmosdb": {"status":"unsupported","reason":"Microsoft does not publish a supported Cosmos DB Ruby client SDK"}
     },
     "swift": {
@@ -434,6 +458,18 @@
         "capabilities": {"native_batch_reads":false,"atomic_batch_writes":true,"node_scan":true,"hints":true,"atomic_nodes_and_hint":true,"root_scan":true,"root_compare_and_swap":true,"transactions":true,"read_parallelism":16},
         "limits": {"max_batch_read_items":null,"max_batch_write_items":null,"max_transaction_operations":null,"max_node_bytes":null},
         "evidence": ["PROLLY_POSTGRES_URL=postgresql://prolly:prolly@127.0.0.1:55432/prolly?sslmode=disable PROLLY_BINDINGS_LIBRARY_DIR=target/debug DYLD_LIBRARY_PATH=target/debug swift run --package-path bindings/swift prolly-store-postgres-check"]
+      },
+      "mysql": {
+        "status": "supported",
+        "module": "ProllyStoreMySQL",
+        "sdk_module": "MySQLNIO",
+        "sdk_version": "1.8.0",
+        "minimum_swift": "5.10",
+        "protocol_major": 1,
+        "schema_version": 1,
+        "capabilities": {"native_batch_reads":false,"atomic_batch_writes":true,"node_scan":true,"hints":true,"atomic_nodes_and_hint":true,"root_scan":true,"root_compare_and_swap":true,"transactions":true,"read_parallelism":1},
+        "limits": {"max_batch_read_items":null,"max_batch_write_items":null,"max_transaction_operations":null,"max_node_bytes":null},
+        "evidence": ["PROLLY_MYSQL_URL=mysql://prolly:prolly@127.0.0.1:53306/prolly PROLLY_BINDINGS_LIBRARY_DIR=target/debug DYLD_LIBRARY_PATH=target/debug swift run --package-path bindings/swift prolly-store-mysql-check"]
       },
       "cosmosdb": {"status":"unsupported","reason":"Microsoft does not publish a supported Cosmos DB Swift client SDK"},
       "spanner": {"status":"unsupported","reason":"Google does not publish a supported Cloud Spanner Swift client SDK"}

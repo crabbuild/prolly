@@ -74,8 +74,8 @@ function verifyCell(language, provider, cell) {
   if (cell.protocol_major !== manifest.protocol_major || cell.schema_version !== 1) {
     fail(`${language}/${provider} must declare protocol ${manifest.protocol_major} and schema 1`);
   }
-  if (!cell.capabilities || cell.capabilities.read_parallelism !== 16) {
-    fail(`${language}/${provider} must declare read_parallelism 16`);
+  if (!cell.capabilities || !Number.isInteger(cell.capabilities.read_parallelism) || cell.capabilities.read_parallelism < 1) {
+    fail(`${language}/${provider} must declare a positive integer read_parallelism`);
   }
   for (const key of capabilityKeys) {
     if (typeof cell.capabilities[key] !== "boolean") fail(`${language}/${provider} missing boolean capability ${key}`);

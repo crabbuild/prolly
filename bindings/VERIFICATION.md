@@ -204,6 +204,25 @@ PROLLY_POSTGRES_URL=postgresql://prolly:prolly@127.0.0.1:55432/prolly?sslmode=di
   swift run --package-path bindings/swift prolly-store-postgres-check
 ```
 
+Provider-first MySQL checks:
+
+```sh
+PROLLY_MYSQL_URL=mysql://prolly:prolly@127.0.0.1:53306/prolly \
+  PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" \
+  PYTHONPATH=bindings/python:bindings/python/stores/mysql \
+  python3 -m unittest discover -s bindings/python/stores/mysql/tests -v
+PROLLY_MYSQL_URL=mysql://prolly:prolly@127.0.0.1:53306/prolly \
+  PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" \
+  BUNDLE_GEMFILE=bindings/ruby/stores/mysql/Gemfile \
+  BUNDLE_PATH=/tmp/prolly-ruby-mysql-bundle \
+  bundle exec ruby -Ibindings/ruby/stores/mysql/lib \
+  bindings/ruby/stores/mysql/test/mysql_store_test.rb
+PROLLY_MYSQL_URL=mysql://prolly:prolly@127.0.0.1:53306/prolly \
+  PROLLY_BINDINGS_LIBRARY_DIR="$PWD/target/debug" \
+  DYLD_LIBRARY_PATH="$PWD/target/debug" \
+  swift run --package-path bindings/swift prolly-store-mysql-check
+```
+
 Before publishing a binding release:
 
 1. Build the Rust facade with `cargo build --manifest-path bindings/uniffi/Cargo.toml --target-dir target`.

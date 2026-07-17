@@ -16,8 +16,10 @@ let package = Package(
         .library(name: "ProllyAPI", targets: ["ProllyAPI"]),
         .library(name: "ProllyStoreSQLite", targets: ["ProllyStoreSQLite"]),
         .library(name: "ProllyStorePostgres", targets: ["ProllyStorePostgres"]),
+        .library(name: "ProllyStoreMySQL", targets: ["ProllyStoreMySQL"]),
         .executable(name: "prolly-store-sqlite-check", targets: ["StoreSQLiteCheck"]),
         .executable(name: "prolly-store-postgres-check", targets: ["StorePostgresCheck"]),
+        .executable(name: "prolly-store-mysql-check", targets: ["StoreMySQLCheck"]),
         .executable(name: "prolly-agent-event-log", targets: ["AgentEventLog"]),
         .executable(name: "prolly-background-compaction", targets: ["BackgroundCompaction"]),
         .executable(name: "prolly-basic-map", targets: ["BasicMap"]),
@@ -45,6 +47,8 @@ let package = Package(
         // package because newer releases require the Swift 6 plugin toolchain.
         .package(url: "https://github.com/apple/swift-async-algorithms.git", exact: "1.0.0"),
         .package(url: "https://github.com/apple/swift-log.git", exact: "1.6.4"),
+        .package(url: "https://github.com/apple/swift-nio.git", exact: "2.86.2"),
+        .package(url: "https://github.com/vapor/mysql-nio.git", exact: "1.8.0"),
     ],
     targets: [
         .systemLibrary(name: "CSQLite", pkgConfig: "sqlite3"),
@@ -82,6 +86,15 @@ let package = Package(
             ],
             exclude: ["README.md"]
         ),
+        .target(
+            name: "ProllyStoreMySQL",
+            dependencies: [
+                "Prolly",
+                .product(name: "MySQLNIO", package: "mysql-nio"),
+                .product(name: "NIOCore", package: "swift-nio"),
+            ],
+            exclude: ["README.md"]
+        ),
         .executableTarget(
             name: "StoreSQLiteCheck",
             dependencies: ["Prolly", "ProllyStoreSQLite", "CSQLite"],
@@ -91,6 +104,15 @@ let package = Package(
             name: "StorePostgresCheck",
             dependencies: ["Prolly", "ProllyStorePostgres", .product(name: "PostgresNIO", package: "postgres-nio")],
             path: "Examples/StorePostgresCheck"
+        ),
+        .executableTarget(
+            name: "StoreMySQLCheck",
+            dependencies: [
+                "Prolly", "ProllyStoreMySQL",
+                .product(name: "MySQLNIO", package: "mysql-nio"),
+                .product(name: "NIOPosix", package: "swift-nio"),
+            ],
+            path: "Examples/StoreMySQLCheck"
         ),
         .testTarget(
             name: "ProllyTests",
