@@ -1,7 +1,10 @@
 package build.crab.prolly.api
 
 import build.crab.prolly.BatchApplyStatsRecord
+import build.crab.prolly.AdaptiveQualityRecord
 import build.crab.prolly.EntryRecord
+import build.crab.prolly.ConflictPageRecord
+import build.crab.prolly.DiffPageRecord
 import build.crab.prolly.IndexProjectionRecord
 import build.crab.prolly.IndexBuildResultRecord
 import build.crab.prolly.IndexMatchRecord
@@ -17,6 +20,8 @@ import build.crab.prolly.KeyProofRecord
 import build.crab.prolly.KeyProofVerificationRecord
 import build.crab.prolly.ProximityMembershipProofRecord
 import build.crab.prolly.ProximityMembershipVerificationRecord
+import build.crab.prolly.ProximityFilterKind
+import build.crab.prolly.ProximityFilterRecord
 import build.crab.prolly.ProximityMutationRecord
 import build.crab.prolly.ProximityMutationStatsRecord
 import build.crab.prolly.ProximityStructuralProofRecord
@@ -33,7 +38,9 @@ import build.crab.prolly.MultiKeyProofVerificationRecord
 import build.crab.prolly.ProximityVerificationRecord
 import build.crab.prolly.TreeStatsRecord
 import build.crab.prolly.ProximitySearchResultRecord
+import build.crab.prolly.ProximitySearchRequestRecord
 import build.crab.prolly.ProximitySearchVerificationRecord
+import build.crab.prolly.QueryKernelRecord
 import build.crab.prolly.RangeCursorRecord
 import build.crab.prolly.RangePageRecord
 import build.crab.prolly.RangePageProofRecord
@@ -44,6 +51,9 @@ import build.crab.prolly.ReverseCursorRecord
 import build.crab.prolly.ReversePageRecord
 import build.crab.prolly.ProvedRangePageRecord
 import build.crab.prolly.SecondaryIndexExtractorCallback
+import build.crab.prolly.SearchBackendRecord
+import build.crab.prolly.SearchBudgetRecord
+import build.crab.prolly.SearchPolicyKind
 import build.crab.prolly.verifyMultiKeyProof as verifyNativeMultiKeyProof
 import build.crab.prolly.verifyRangePageProof as verifyNativeRangePageProof
 import build.crab.prolly.verifyRangeProof as verifyNativeRangeProof
@@ -82,6 +92,64 @@ data class JavaBatchApplyStats(
 data class JavaVersionedMapBatchResult(
     val version: MapVersionRecord,
     val stats: JavaBatchApplyStats,
+)
+
+data class JavaProximitySearchRequest(
+    val query: List<Float>,
+    val k: Long,
+    val policy: String,
+    val adaptiveQuality: String?,
+    val maxNodes: Long?,
+    val maxCommittedBytes: Long?,
+    val maxDistanceEvaluations: Long?,
+    val maxFrontierEntries: Long?,
+    val filterKind: String,
+    val start: ByteArray?,
+    val rangeEnd: ByteArray?,
+    val prefix: ByteArray?,
+    val eligibleKeys: List<ByteArray>,
+    val kernel: String,
+    val backend: String,
+    val hnswEfSearch: Int?,
+    val pqRerankMultiplier: Int?,
+) {
+    fun toNative() = ProximitySearchRequestRecord(
+        query = query.toList(),
+        k = k.toULong(),
+        policy = SearchPolicyKind.valueOf(policy),
+        adaptiveQuality = adaptiveQuality?.let(AdaptiveQualityRecord::valueOf),
+        budget = SearchBudgetRecord(
+            maxNodes?.toULong(),
+            maxCommittedBytes?.toULong(),
+            maxDistanceEvaluations?.toULong(),
+            maxFrontierEntries?.toULong(),
+        ),
+        filter = ProximityFilterRecord(
+            ProximityFilterKind.valueOf(filterKind),
+            start?.copyOf(),
+            rangeEnd?.copyOf(),
+            prefix?.copyOf(),
+            eligibleKeys.map(ByteArray::copyOf),
+        ),
+        kernel = QueryKernelRecord.valueOf(kernel),
+        backend = SearchBackendRecord.valueOf(backend),
+        hnswEfSearch = hnswEfSearch?.toUInt(),
+        pqRerankMultiplier = pqRerankMultiplier?.toUShort(),
+    )
+}
+
+data class JavaProximitySearchStats(
+    val levelsVisited: Long,
+    val nodesRead: Long,
+    val bytesRead: Long,
+    val physicalBytesRead: Long,
+    val committedBytes: Long,
+    val distanceEvaluations: Long,
+    val quantizedDistanceEvaluations: Long,
+    val rerankedCandidates: Long,
+    val frontierPeak: Long,
+    val candidateHandlesPeak: Long,
+    val candidateRetainedBytesPeak: Long,
 )
 
 data class JavaMapUpdate(
@@ -365,6 +433,21 @@ private fun BatchApplyStatsRecord.toJava() = JavaBatchApplyStats(
 
 object JavaPortableBridge {
     @JvmStatic
+    fun diffPage(
+        comparison: MapComparison,
+        cursor: RangeCursorRecord?,
+        end: ByteArray?,
+        limit: Long,
+    ): DiffPageRecord = comparison.diffPage(cursor, end?.copyOf(), limit.toULong())
+
+    @JvmStatic
+    fun conflictPage(
+        merge: MapMerge,
+        cursor: RangeCursorRecord?,
+        limit: Long,
+    ): ConflictPageRecord = merge.conflictPage(cursor, limit.toULong())
+
+    @JvmStatic
     fun initializeVersionedSorted(map: VersionedMap, entries: List<JavaMapEntry>): JavaMapUpdate =
         map.initializeSorted(entries.map { EntryRecord(it.key.copyOf(), it.value.copyOf()) }).toJava()
 
@@ -595,25 +678,41 @@ object JavaPortableBridge {
     ): ProximityMap = engine.buildProximity(dimensions.toUInt(), records)
 
     @JvmStatic
-    fun searchExact(
+    fun search(
         map: ProximityMap,
-        query: List<Float>,
-        k: Long,
-    ): ProximitySearchResultRecord = map.searchExact(query, k.toULong())
+        request: JavaProximitySearchRequest,
+    ): ProximitySearchResultRecord = map.search(request.toNative())
 
     @JvmStatic
-    fun searchExact(
+    fun search(
         session: ProximityReadSession,
-        query: List<Float>,
-        k: Long,
-    ): ProximitySearchResultRecord = session.searchExact(query, k.toULong())
+        request: JavaProximitySearchRequest,
+    ): ProximitySearchResultRecord = session.search(request.toNative())
+
+    @JvmStatic
+    fun searchStats(result: ProximitySearchResultRecord) = JavaProximitySearchStats(
+        result.stats.levelsVisited.toLong(),
+        result.stats.nodesRead.toLong(),
+        result.stats.bytesRead.toLong(),
+        result.stats.physicalBytesRead.toLong(),
+        result.stats.committedBytes.toLong(),
+        result.stats.distanceEvaluations.toLong(),
+        result.stats.quantizedDistanceEvaluations.toLong(),
+        result.stats.rerankedCandidates.toLong(),
+        result.stats.frontierPeak.toLong(),
+        result.stats.candidateHandlesPeak.toLong(),
+        result.stats.candidateRetainedBytesPeak.toLong(),
+    )
+
+    @JvmStatic
+    fun searchPlanFormatVersion(result: ProximitySearchResultRecord): Int =
+        result.planFormatVersion.toInt()
 
     @JvmStatic
     fun proveSearch(
         map: ProximityMap,
-        query: List<Float>,
-        k: Long,
-    ): ProximitySearchProof = map.proveSearchExact(query, k.toULong())
+        request: JavaProximitySearchRequest,
+    ): ProximitySearchProof = map.proveSearch(request.toNative())
 
     @JvmStatic
     fun verify(

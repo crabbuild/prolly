@@ -3,6 +3,7 @@ package build.crab.prolly.javaapi;
 import build.crab.prolly.DiffPageRecord;
 import build.crab.prolly.DiffRecord;
 import build.crab.prolly.RangeCursorRecord;
+import build.crab.prolly.api.JavaPortableBridge;
 import java.util.List;
 
 /** Version-pinned map comparison; later head changes do not affect its results. */
@@ -22,7 +23,7 @@ public final class MapComparison implements AutoCloseable {
     public MapVersion target() { return MapVersion.fromNative(open().target()); }
     public List<DiffRecord> diff() { return open().diff(); }
     public DiffPageRecord diffPage(RangeCursorRecord cursor, byte[] end, long limit) {
-        return open().diffPage(cursor, end == null ? null : end.clone(), limit);
+        return JavaPortableBridge.diffPage(open(), cursor, end == null ? null : end.clone(), limit);
     }
     public DiffPageRecord diffPage(long limit) { return diffPage(null, null, limit); }
 
