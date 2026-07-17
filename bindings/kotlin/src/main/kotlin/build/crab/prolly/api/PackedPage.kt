@@ -5,6 +5,7 @@ import com.sun.jna.Memory
 import com.sun.jna.Native
 import com.sun.jna.Pointer
 import com.sun.jna.Structure
+import java.lang.ref.Cleaner
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.concurrent.atomic.AtomicBoolean
@@ -107,6 +108,30 @@ data class IndexMatchView(
     val projection: ScopedBytes?,
 )
 
+class PackedIndexPage internal constructor(
+    leaseHandle: Long,
+    scope: PageScope,
+    val rows: List<IndexMatchView>,
+) : AutoCloseable {
+    private class Lease(private val leaseHandle: Long, private val scope: PageScope) : Runnable {
+        private val closed = AtomicBoolean(false)
+        override fun run() {
+            if (closed.compareAndSet(false, true)) {
+                scope.close()
+                FastAbi.INSTANCE.prolly_fast_page_release(leaseHandle)
+            }
+        }
+    }
+
+    private val cleanable = cleaner.register(this, Lease(leaseHandle, scope))
+
+    override fun close() = cleanable.clean()
+
+    companion object {
+        private val cleaner: Cleaner = Cleaner.create()
+    }
+}
+
 internal object PackedPages {
     private const val HEADER_SIZE = 28
     private const val MAX_ARENA = 64L * 1024 * 1024
@@ -167,7 +192,7 @@ internal object PackedPages {
             return withPage(result, expectedKind = 5, recordWidth = 36) { page, arenaStart, count, scope ->
                 val rows = ArrayList<IndexMatchView>(count)
                 repeat(count) { index ->
-                    val base = HEADER_SIZE + index * 28
+                    val base = HEADER_SIZE + index * 36
                     val flags = page.getInt(base)
                     val termOffset = page.getInt(base + 4)
                     val termLength = page.getInt(base + 8)
@@ -185,6 +210,65 @@ internal object PackedPages {
             }
         } finally {
             FastAbi.INSTANCE.prolly_fast_index_cursor_close(opened.scanHandle)
+        }
+    }
+
+    fun openIndexExact(
+        snapshotHandle: ULong,
+        term: ByteArray,
+        limit: UInt,
+    ): PackedIndexPage {
+        require(limit > 0u) { "limit must be positive" }
+        val termMemory = Memory(term.size.toLong().coerceAtLeast(1))
+        if (term.isNotEmpty()) termMemory.write(0, term, 0, term.size)
+        val opened = FastAbi.INSTANCE.prolly_fast_index_cursor_open(
+            snapshotHandle.toLong(), 1, termMemory, term.size.toLong(), null, 0, 0, 0,
+        )
+        check(opened.status == 0) { "native index cursor open failed with status ${opened.status}" }
+        val result = try {
+            FastAbi.INSTANCE.prolly_fast_index_cursor_next(
+                snapshotHandle.toLong(), opened.scanHandle, limit.toInt(), MAX_ARENA,
+            )
+        } finally {
+            FastAbi.INSTANCE.prolly_fast_index_cursor_close(opened.scanHandle)
+        }
+        check(result.status == 0) { "native index cursor read failed with status ${result.status}" }
+        val scope = PageScope()
+        try {
+            val pointer = requireNotNull(result.dataPtr) { "native page pointer was null" }
+            val length = Math.toIntExact(result.dataLen)
+            val page = pointer.getByteBuffer(0, result.dataLen).order(ByteOrder.LITTLE_ENDIAN)
+            require(page.get(0) == 'P'.code.toByte() && page.get(1) == 'R'.code.toByte() &&
+                page.get(2) == 'P'.code.toByte() && page.get(3) == 'G'.code.toByte()) { "invalid packed page magic" }
+            require(page.getShort(4).toInt() == 2 && page.getShort(6).toInt() == 5) { "unexpected packed page kind" }
+            val count = page.getInt(12)
+            val tableBytes = page.getInt(16)
+            val arenaBytes = page.getLong(20)
+            require(tableBytes == count * 36 && HEADER_SIZE + tableBytes + arenaBytes == length.toLong()) {
+                "invalid packed page bounds"
+            }
+            val arenaStart = HEADER_SIZE + tableBytes
+            val rows = ArrayList<IndexMatchView>(count)
+            repeat(count) { index ->
+                val base = HEADER_SIZE + index * 36
+                val flags = page.getInt(base)
+                val termOffset = page.getInt(base + 4)
+                val termLength = page.getInt(base + 8)
+                val keyOffset = page.getInt(base + 12)
+                val keyLength = page.getInt(base + 16)
+                val projectionOffset = page.getInt(base + 20)
+                val projectionLength = page.getInt(base + 24)
+                rows += IndexMatchView(
+                    ScopedBytes(page, arenaStart + termOffset, termLength, scope),
+                    ScopedBytes(page, arenaStart + keyOffset, keyLength, scope),
+                    if (flags and 1 != 0) ScopedBytes(page, arenaStart + projectionOffset, projectionLength, scope) else null,
+                )
+            }
+            return PackedIndexPage(result.leaseHandle, scope, rows)
+        } catch (error: Throwable) {
+            scope.close()
+            FastAbi.INSTANCE.prolly_fast_page_release(result.leaseHandle)
+            throw error
         }
     }
 
