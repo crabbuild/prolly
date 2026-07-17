@@ -112,7 +112,7 @@ func (m *IndexedMap) SnapshotAsync(ctx context.Context) *Future[*IndexedSnapshot
 }
 
 func (s *ProximitySession) SearchAsync(ctx context.Context, request SearchRequest) *Future[SearchResult] {
-	request.Query = append([]float32(nil), request.Query...)
+	request = cloneSearchRequest(request)
 	return startFuture(ctx, func() (SearchResult, error) { return s.Search(ctx, request) })
 }
 

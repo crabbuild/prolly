@@ -113,13 +113,161 @@ type ProximityVerification struct {
 	DistanceChecks         uint64
 }
 
+type SearchPolicy int32
+
+const (
+	SearchPolicyExact       SearchPolicy = 1
+	SearchPolicyFixedBudget SearchPolicy = 2
+	SearchPolicyAdaptive    SearchPolicy = 3
+)
+
+type AdaptiveQuality int32
+
+const (
+	AdaptiveQualityFast       AdaptiveQuality = 1
+	AdaptiveQualityBalanced   AdaptiveQuality = 2
+	AdaptiveQualityHighRecall AdaptiveQuality = 3
+)
+
+type QueryKernel int32
+
+const (
+	QueryKernelScalarDeterministic QueryKernel = 1
+	QueryKernelSIMDDeterministic   QueryKernel = 2
+	QueryKernelAutoDeterministic   QueryKernel = 3
+)
+
+type SearchBackend int32
+
+const (
+	SearchBackendNative           SearchBackend = 1
+	SearchBackendProductQuantized SearchBackend = 2
+	SearchBackendHNSW             SearchBackend = 3
+	SearchBackendComposite        SearchBackend = 4
+	SearchBackendAuto             SearchBackend = 5
+)
+
+type ProximityFilterKind int32
+
+const (
+	ProximityFilterAll          ProximityFilterKind = 1
+	ProximityFilterKeyRange     ProximityFilterKind = 2
+	ProximityFilterPrefix       ProximityFilterKind = 3
+	ProximityFilterEligibleKeys ProximityFilterKind = 4
+)
+
+type SearchBudget struct {
+	MaxNodes               *uint64
+	MaxCommittedBytes      *uint64
+	MaxDistanceEvaluations *uint64
+	MaxFrontierEntries     *uint64
+}
+
+type ProximityFilter struct {
+	Kind         ProximityFilterKind
+	Start        []byte
+	End          []byte
+	Prefix       []byte
+	EligibleKeys [][]byte
+}
+
+func AllFilter() ProximityFilter { return ProximityFilter{Kind: ProximityFilterAll} }
+func KeyRangeFilter(start, end []byte) ProximityFilter {
+	return ProximityFilter{Kind: ProximityFilterKeyRange, Start: bytes.Clone(start), End: bytes.Clone(end)}
+}
+func PrefixFilter(prefix []byte) ProximityFilter {
+	return ProximityFilter{Kind: ProximityFilterPrefix, Prefix: bytes.Clone(prefix)}
+}
+func EligibleKeysFilter(keys [][]byte) ProximityFilter {
+	return ProximityFilter{Kind: ProximityFilterEligibleKeys, EligibleKeys: cloneByteSlices(keys)}
+}
+
 type SearchRequest struct {
-	Query []float32
-	K     uint32
+	Query              []float32
+	K                  uint32
+	Policy             SearchPolicy
+	AdaptiveQuality    *AdaptiveQuality
+	Budget             SearchBudget
+	Filter             ProximityFilter
+	Kernel             QueryKernel
+	Backend            SearchBackend
+	HNSWEFSearch       *uint32
+	PQRerankMultiplier *uint16
 }
 
 func ExactSearch(query []float32, k uint32) SearchRequest {
-	return SearchRequest{Query: append([]float32(nil), query...), K: k}
+	return SearchRequest{
+		Query: append([]float32(nil), query...), K: k, Policy: SearchPolicyExact,
+		Filter: AllFilter(), Kernel: QueryKernelAutoDeterministic, Backend: SearchBackendNative,
+	}
+}
+
+func cloneSearchRequest(request SearchRequest) SearchRequest {
+	request.Query = append([]float32(nil), request.Query...)
+	request.Filter.Start = bytes.Clone(request.Filter.Start)
+	request.Filter.End = bytes.Clone(request.Filter.End)
+	request.Filter.Prefix = bytes.Clone(request.Filter.Prefix)
+	request.Filter.EligibleKeys = cloneByteSlices(request.Filter.EligibleKeys)
+	if request.AdaptiveQuality != nil {
+		value := *request.AdaptiveQuality
+		request.AdaptiveQuality = &value
+	}
+	cloneU64 := func(value *uint64) *uint64 {
+		if value == nil {
+			return nil
+		}
+		copy := *value
+		return &copy
+	}
+	request.Budget.MaxNodes = cloneU64(request.Budget.MaxNodes)
+	request.Budget.MaxCommittedBytes = cloneU64(request.Budget.MaxCommittedBytes)
+	request.Budget.MaxDistanceEvaluations = cloneU64(request.Budget.MaxDistanceEvaluations)
+	request.Budget.MaxFrontierEntries = cloneU64(request.Budget.MaxFrontierEntries)
+	if request.HNSWEFSearch != nil {
+		value := *request.HNSWEFSearch
+		request.HNSWEFSearch = &value
+	}
+	if request.PQRerankMultiplier != nil {
+		value := *request.PQRerankMultiplier
+		request.PQRerankMultiplier = &value
+	}
+	return request
+}
+
+func (request SearchRequest) validate() error {
+	if len(request.Query) == 0 || request.K == 0 {
+		return errors.New("proximity query and k must be non-empty")
+	}
+	if request.Policy < SearchPolicyExact || request.Policy > SearchPolicyAdaptive {
+		return errors.New("invalid proximity search policy")
+	}
+	if request.Policy == SearchPolicyAdaptive && request.AdaptiveQuality == nil {
+		return errors.New("adaptive proximity search requires adaptive quality")
+	}
+	if request.AdaptiveQuality != nil && (*request.AdaptiveQuality < AdaptiveQualityFast || *request.AdaptiveQuality > AdaptiveQualityHighRecall) {
+		return errors.New("invalid adaptive quality")
+	}
+	if request.Filter.Kind < ProximityFilterAll || request.Filter.Kind > ProximityFilterEligibleKeys {
+		return errors.New("invalid proximity filter")
+	}
+	if request.Filter.Kind == ProximityFilterPrefix && request.Filter.Prefix == nil {
+		return errors.New("prefix filter requires prefix")
+	}
+	if request.Kernel < QueryKernelScalarDeterministic || request.Kernel > QueryKernelAutoDeterministic {
+		return errors.New("invalid query kernel")
+	}
+	if request.Backend < SearchBackendNative || request.Backend > SearchBackendAuto {
+		return errors.New("invalid search backend")
+	}
+	return nil
+}
+
+func (request SearchRequest) usesPackedExactPath() bool {
+	return request.Policy == SearchPolicyExact && request.AdaptiveQuality == nil &&
+		request.Budget.MaxNodes == nil && request.Budget.MaxCommittedBytes == nil &&
+		request.Budget.MaxDistanceEvaluations == nil && request.Budget.MaxFrontierEntries == nil &&
+		request.Filter.Kind == ProximityFilterAll && request.Kernel == QueryKernelAutoDeterministic &&
+		request.Backend == SearchBackendNative && request.HNSWEFSearch == nil && request.PQRerankMultiplier == nil
 }
 
 type Neighbor struct {
@@ -129,9 +277,25 @@ type Neighbor struct {
 	Rank     uint32
 }
 type SearchResult struct {
-	Neighbors  []Neighbor
-	Completion string
-	Backend    string
+	Neighbors         []Neighbor
+	Stats             SearchStats
+	Completion        string
+	Backend           string
+	PlanFormatVersion uint8
+}
+
+type SearchStats struct {
+	LevelsVisited                uint64
+	NodesRead                    uint64
+	BytesRead                    uint64
+	PhysicalBytesRead            uint64
+	CommittedBytes               uint64
+	DistanceEvaluations          uint64
+	QuantizedDistanceEvaluations uint64
+	RerankedCandidates           uint64
+	FrontierPeak                 uint64
+	CandidateHandlesPeak         uint64
+	CandidateRetainedBytesPeak   uint64
 }
 
 type ProximityMap struct {
@@ -195,6 +359,48 @@ func encodeFloat32Sequence(values []float32) []byte {
 		writeU32(&out, math.Float32bits(value))
 	}
 	return out.Bytes()
+}
+
+func encodeProximitySearchRequest(request SearchRequest) ([]byte, error) {
+	request = cloneSearchRequest(request)
+	if err := request.validate(); err != nil {
+		return nil, err
+	}
+	var out bytes.Buffer
+	out.Write(encodeFloat32Sequence(request.Query))
+	writeU64(&out, uint64(request.K))
+	writeI32(&out, int32(request.Policy))
+	if request.AdaptiveQuality == nil {
+		out.WriteByte(0)
+	} else {
+		out.WriteByte(1)
+		writeI32(&out, int32(*request.AdaptiveQuality))
+	}
+	encodeOptionalU64(&out, request.Budget.MaxNodes)
+	encodeOptionalU64(&out, request.Budget.MaxCommittedBytes)
+	encodeOptionalU64(&out, request.Budget.MaxDistanceEvaluations)
+	encodeOptionalU64(&out, request.Budget.MaxFrontierEntries)
+	writeI32(&out, int32(request.Filter.Kind))
+	encodeOptionalByteArrayInto(&out, request.Filter.Start)
+	encodeOptionalByteArrayInto(&out, request.Filter.End)
+	encodeOptionalByteArrayInto(&out, request.Filter.Prefix)
+	out.Write(encodeByteArraySequence(request.Filter.EligibleKeys))
+	writeI32(&out, int32(request.Kernel))
+	writeI32(&out, int32(request.Backend))
+	if request.HNSWEFSearch == nil {
+		out.WriteByte(0)
+	} else {
+		out.WriteByte(1)
+		writeU32(&out, *request.HNSWEFSearch)
+	}
+	if request.PQRerankMultiplier == nil {
+		out.WriteByte(0)
+	} else {
+		out.WriteByte(1)
+		out.WriteByte(byte(*request.PQRerankMultiplier >> 8))
+		out.WriteByte(byte(*request.PQRerankMultiplier))
+	}
+	return out.Bytes(), nil
 }
 
 func encodeProximityMutations(mutations []ProximityMutation) ([]byte, error) {
@@ -469,18 +675,16 @@ type ProximitySearchProof struct {
 }
 
 func (m *ProximityMap) ProveSearch(request SearchRequest) (*ProximitySearchProof, error) {
-	if len(request.Query) == 0 || request.K == 0 {
-		return nil, errors.New("proximity query and k must be non-empty")
+	request = cloneSearchRequest(request)
+	nativeRequest, err := encodeProximitySearchRequest(request)
+	if err != nil {
+		return nil, err
 	}
 	handle, _, unlock, err := m.withHandle()
 	if err != nil {
 		return nil, err
 	}
 	defer unlock()
-	nativeRequest, err := ffiExactProximitySearchRequest(append([]float32(nil), request.Query...), uint64(request.K))
-	if err != nil {
-		return nil, err
-	}
 	limits, err := ffiDefaultContentGraphLimits()
 	if err != nil {
 		return nil, err
@@ -492,6 +696,33 @@ func (m *ProximityMap) ProveSearch(request SearchRequest) (*ProximitySearchProof
 	proof := &ProximitySearchProof{handle: proofHandle}
 	runtime.SetFinalizer(proof, (*ProximitySearchProof).Close)
 	return proof, nil
+}
+
+func (m *ProximityMap) Search(ctx context.Context, request SearchRequest) (SearchResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return SearchResult{}, err
+	}
+	request = cloneSearchRequest(request)
+	nativeRequest, err := encodeProximitySearchRequest(request)
+	if err != nil {
+		return SearchResult{}, err
+	}
+	handle, _, unlock, err := m.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer unlock()
+	raw, err := ffiProximitySearchRecord(handle, nativeRequest)
+	if err != nil {
+		return SearchResult{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return SearchResult{}, err
+	}
+	return decodeProximitySearchResultBytes(raw)
 }
 
 func (p *ProximitySearchProof) Close() {
@@ -663,34 +894,37 @@ func (s *ProximitySession) withFast() (uint64, func(), error) {
 }
 
 func (s *ProximitySession) Search(ctx context.Context, request SearchRequest) (SearchResult, error) {
-	var result SearchResult
-	err := s.WithSearchView(ctx, request, func(rows []NeighborView) error {
-		result.Neighbors = make([]Neighbor, 0, len(rows))
-		for _, row := range rows {
-			key, err := row.Key.Copy()
-			if err != nil {
-				return err
-			}
-			var value []byte
-			if row.Value != nil {
-				value, err = row.Value.Copy()
-				if err != nil {
-					return err
-				}
-			}
-			result.Neighbors = append(result.Neighbors, Neighbor{key, value, row.Distance, row.Rank})
-		}
-		return nil
-	})
+	request = cloneSearchRequest(request)
+	if err := request.validate(); err != nil {
+		return SearchResult{}, err
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return SearchResult{}, err
+	}
+	nativeRequest, err := encodeProximitySearchRequest(request)
 	if err != nil {
 		return SearchResult{}, err
 	}
-	result.Completion = "exact"
-	result.Backend = "native"
-	return result, nil
+	handle, unlock, err := s.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer unlock()
+	raw, err := ffiProximityReadSessionSearch(handle, nativeRequest)
+	if err != nil {
+		return SearchResult{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return SearchResult{}, err
+	}
+	return decodeProximitySearchResultBytes(raw)
 }
 
 func (s *ProximitySession) WithSearchView(ctx context.Context, request SearchRequest, visit func([]NeighborView) error) error {
+	request = cloneSearchRequest(request)
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -700,8 +934,11 @@ func (s *ProximitySession) WithSearchView(ctx context.Context, request SearchReq
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if len(request.Query) == 0 || request.K == 0 {
-		return errors.New("proximity query and k must be non-empty")
+	if err := request.validate(); err != nil {
+		return err
+	}
+	if !request.usesPackedExactPath() {
+		return errors.New("zero-copy proximity views require an exact native request")
 	}
 	fast, unlock, err := s.withFast()
 	if err != nil {
@@ -771,10 +1008,25 @@ func decodeProximitySearchResult(d *byteDecoder) (SearchResult, error) {
 			Key: key, Value: value, Distance: math.Float64frombits(distanceBits), Rank: uint32(index),
 		})
 	}
-	for range 11 {
-		if _, err := d.readUint64(); err != nil {
+	stats := []*uint64{
+		&result.Stats.LevelsVisited,
+		&result.Stats.NodesRead,
+		&result.Stats.BytesRead,
+		&result.Stats.PhysicalBytesRead,
+		&result.Stats.CommittedBytes,
+		&result.Stats.DistanceEvaluations,
+		&result.Stats.QuantizedDistanceEvaluations,
+		&result.Stats.RerankedCandidates,
+		&result.Stats.FrontierPeak,
+		&result.Stats.CandidateHandlesPeak,
+		&result.Stats.CandidateRetainedBytesPeak,
+	}
+	for _, field := range stats {
+		value, err := d.readUint64()
+		if err != nil {
 			return SearchResult{}, err
 		}
+		*field = value
 	}
 	completion, err := d.readInt32()
 	if err != nil {
@@ -797,10 +1049,20 @@ func decodeProximitySearchResult(d *byteDecoder) (SearchResult, error) {
 	if result.Backend == "" {
 		return SearchResult{}, errors.New("unknown proximity search backend")
 	}
-	if _, err := d.readByte(); err != nil {
+	result.PlanFormatVersion, err = d.readByte()
+	if err != nil {
 		return SearchResult{}, err
 	}
 	return result, nil
+}
+
+func decodeProximitySearchResultBytes(raw []byte) (SearchResult, error) {
+	d := byteDecoder{data: raw}
+	result, err := decodeProximitySearchResult(&d)
+	if err != nil {
+		return SearchResult{}, err
+	}
+	return result, d.done()
 }
 
 func decodeProximitySearchVerification(raw []byte) (ProximitySearchVerification, error) {
