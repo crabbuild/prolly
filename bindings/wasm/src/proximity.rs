@@ -1062,6 +1062,10 @@ impl WasmProximityMap {
     pub fn descriptor(&self) -> Vec<u8> {
         self.descriptor.as_bytes().to_vec()
     }
+    #[wasm_bindgen(js_name = clearContentCache)]
+    pub fn clear_content_cache(&self) -> Result<(), JsValue> {
+        self.load()?.clear_content_cache().map_err(js_error)
+    }
     pub fn count(&self) -> Result<String, JsValue> {
         Ok(self.load()?.tree().count.to_string())
     }
@@ -2319,6 +2323,22 @@ impl WasmProllyEngine {
         Ok(WasmProximityMap {
             engine: Arc::clone(&self.inner),
             descriptor: map.tree().descriptor.clone(),
+        })
+    }
+
+    #[wasm_bindgen(js_name = loadProximity)]
+    pub fn portable_load_proximity(
+        &self,
+        descriptor: Uint8Array,
+    ) -> Result<WasmProximityMap, JsValue> {
+        let raw: [u8; 32] = descriptor
+            .to_vec()
+            .try_into()
+            .map_err(|_| JsValue::from_str("proximity descriptor must be 32 bytes"))?;
+        ProximityMap::load(self.inner.store().clone(), Cid(raw)).map_err(js_error)?;
+        Ok(WasmProximityMap {
+            engine: Arc::clone(&self.inner),
+            descriptor: Cid(raw),
         })
     }
 }

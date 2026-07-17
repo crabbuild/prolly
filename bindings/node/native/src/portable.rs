@@ -4129,6 +4129,11 @@ pub struct NativePortableProximityMap {
 
 #[napi]
 impl NativePortableProximityMap {
+    #[napi(js_name = "clearContentCache")]
+    pub fn clear_content_cache(&self) -> Result<()> {
+        self.inner.clear_content_cache().map_err(to_napi_error)
+    }
+
     #[napi(js_name = "buildHnsw")]
     pub fn build_hnsw(
         &self,
@@ -4824,6 +4829,17 @@ impl NativeProllyEngine {
             .collect();
         self.inner
             .build_proximity_map(default_proximity_config(dimensions), records, None)
+            .map(|inner| NativePortableProximityMap { inner })
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "loadProximity")]
+    pub fn portable_load_proximity(
+        &self,
+        descriptor: Buffer,
+    ) -> Result<NativePortableProximityMap> {
+        self.inner
+            .load_proximity_map(descriptor.to_vec())
             .map(|inner| NativePortableProximityMap { inner })
             .map_err(to_napi_error)
     }

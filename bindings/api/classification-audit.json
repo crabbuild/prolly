@@ -5,8 +5,8 @@
     "async-store"
   ],
   "summary": {
-    "release_complete": 97,
-    "reviewed_incomplete": 665,
+    "release_complete": 138,
+    "reviewed_incomplete": 624,
     "unreviewed_runtime_candidate": 645,
     "unreviewed_data_model": 1473,
     "unreviewed_rust_abstraction": 0
@@ -9698,8 +9698,8 @@
       "member_kind": "inherent-item",
       "family": "indexed-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::IndexedMap::apply_if",
@@ -9708,8 +9708,8 @@
       "member_kind": "inherent-item",
       "family": "indexed-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::IndexedMap::deactivate_index",
@@ -9718,8 +9718,8 @@
       "member_kind": "inherent-item",
       "family": "indexed-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::IndexedMap::delete",
@@ -9728,8 +9728,8 @@
       "member_kind": "inherent-item",
       "family": "indexed-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::IndexedMap::edit",
@@ -9738,8 +9738,8 @@
       "member_kind": "inherent-item",
       "family": "indexed-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::IndexedMap::ensure_index",
@@ -9748,8 +9748,8 @@
       "member_kind": "inherent-item",
       "family": "indexed-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::IndexedMap::export_current",
@@ -9758,8 +9758,8 @@
       "member_kind": "inherent-item",
       "family": "indexed-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::IndexedMap::get",
@@ -9768,8 +9768,8 @@
       "member_kind": "inherent-item",
       "family": "indexed-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::IndexedMap::get_with",
@@ -9788,8 +9788,8 @@
       "member_kind": "inherent-item",
       "family": "indexed-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::IndexedMap::id",
@@ -9798,8 +9798,8 @@
       "member_kind": "inherent-item",
       "family": "indexed-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::IndexedMap::import_current",
@@ -9808,8 +9808,8 @@
       "member_kind": "inherent-item",
       "family": "indexed-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::IndexedMap::keep_last",
@@ -9818,8 +9818,8 @@
       "member_kind": "inherent-item",
       "family": "indexed-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::IndexedMap::metrics",
@@ -9828,8 +9828,8 @@
       "member_kind": "inherent-item",
       "family": "indexed-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::IndexedMap::plan_indexed_gc",
@@ -9838,8 +9838,8 @@
       "member_kind": "inherent-item",
       "family": "indexed-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::IndexedMap::put",
@@ -9848,8 +9848,8 @@
       "member_kind": "inherent-item",
       "family": "indexed-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::IndexedMap::registry",
@@ -9858,8 +9858,8 @@
       "member_kind": "inherent-item",
       "family": "indexed-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::IndexedMap::repair_index",
@@ -9868,8 +9868,8 @@
       "member_kind": "inherent-item",
       "family": "indexed-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::IndexedMap::replace_index",
@@ -9878,8 +9878,8 @@
       "member_kind": "inherent-item",
       "family": "indexed-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::IndexedMap::snapshot",
@@ -9888,8 +9888,8 @@
       "member_kind": "inherent-item",
       "family": "indexed-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::IndexedMap::snapshot_at",
@@ -9898,8 +9898,8 @@
       "member_kind": "inherent-item",
       "family": "indexed-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::IndexedMap::snapshot_by_id",
@@ -9908,8 +9908,8 @@
       "member_kind": "inherent-item",
       "family": "indexed-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::IndexedMap::source",
@@ -9918,8 +9918,8 @@
       "member_kind": "inherent-item",
       "family": "indexed-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::IndexedMap::verify_all",
@@ -9928,8 +9928,8 @@
       "member_kind": "inherent-item",
       "family": "indexed-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::IndexedMap::verify_index",
@@ -9938,8 +9938,8 @@
       "member_kind": "inherent-item",
       "family": "indexed-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::IndexedMapEditor",
@@ -17998,8 +17998,8 @@
       "member_kind": "inherent-item",
       "family": "proximity-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::ProximityMap::build_with_parallelism",
@@ -18018,8 +18018,8 @@
       "member_kind": "inherent-item",
       "family": "proximity-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::ProximityMap::contains_key",
@@ -18028,8 +18028,8 @@
       "member_kind": "inherent-item",
       "family": "proximity-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::ProximityMap::get",
@@ -18038,8 +18038,8 @@
       "member_kind": "inherent-item",
       "family": "proximity-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::ProximityMap::get_with",
@@ -18058,8 +18058,8 @@
       "member_kind": "inherent-item",
       "family": "proximity-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::ProximityMap::mutate_batch",
@@ -18068,8 +18068,8 @@
       "member_kind": "inherent-item",
       "family": "proximity-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::ProximityMap::prove_membership",
@@ -18078,8 +18078,8 @@
       "member_kind": "inherent-item",
       "family": "proximity-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::ProximityMap::prove_search",
@@ -18088,8 +18088,8 @@
       "member_kind": "inherent-item",
       "family": "proximity-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::ProximityMap::prove_structure",
@@ -18098,8 +18098,8 @@
       "member_kind": "inherent-item",
       "family": "proximity-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::ProximityMap::read",
@@ -18108,8 +18108,8 @@
       "member_kind": "inherent-item",
       "family": "proximity-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::ProximityMap::rebuild_batch",
@@ -18118,8 +18118,8 @@
       "member_kind": "inherent-item",
       "family": "proximity-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::ProximityMap::scan_records",
@@ -18128,8 +18128,8 @@
       "member_kind": "inherent-item",
       "family": "proximity-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::ProximityMap::scan_records_range_until",
@@ -18148,8 +18148,8 @@
       "member_kind": "inherent-item",
       "family": "proximity-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::ProximityMap::search",
@@ -18158,8 +18158,8 @@
       "member_kind": "inherent-item",
       "family": "proximity-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::ProximityMap::search_with",
@@ -18168,8 +18168,8 @@
       "member_kind": "inherent-item",
       "family": "proximity-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::ProximityMap::tree",
@@ -18178,8 +18178,8 @@
       "member_kind": "inherent-item",
       "family": "proximity-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::ProximityMap::verify",
@@ -18188,8 +18188,8 @@
       "member_kind": "inherent-item",
       "family": "proximity-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::ProximityMembershipProof",

@@ -385,6 +385,10 @@ test("portable versioned, indexed, and proximity maps stay native", async () => 
     const proximity = await engine.buildProximity(2, [
       { key: bytes("a"), vector: new Float32Array([0, 0]), value: bytes("alpha") },
     ]);
+    proximity.clearCache();
+    const loadedProximity = await engine.loadProximity(proximity.descriptor());
+    assert.equal(Buffer.from(loadedProximity.get(bytes("a"))?.value ?? []).toString(), "alpha");
+    loadedProximity.close();
     const proximitySession = proximity.read();
     assert.equal(proximitySession.contains(bytes("a")), true);
     assert.equal(Buffer.from(proximitySession.get(bytes("a"))?.value ?? []).toString(), "alpha");

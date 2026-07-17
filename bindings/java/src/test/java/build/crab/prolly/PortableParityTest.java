@@ -340,6 +340,10 @@ class PortableParityTest {
                      new ProximityRecord(bytes("a"), new float[] {0, 0}, bytes("alpha")),
                      new ProximityRecord(bytes("ab"), new float[] {1, 0}, bytes("alphabet")),
                      new ProximityRecord(bytes("b"), new float[] {0.1f, 0}, bytes("beta"))))) {
+            proximity.clearCache();
+            try (var loaded = engine.loadProximity(proximity.descriptor())) {
+                assertArrayEquals(bytes("alpha"), loaded.get(bytes("a")).getValue());
+            }
             var request = SearchRequest.fixedBudget(
                     new float[] {0, 0},
                     3,

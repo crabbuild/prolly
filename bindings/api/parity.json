@@ -10964,114 +10964,307 @@
     {
       "rust": "prolly::IndexedMap::apply",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "indexed-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "IndexedMap.apply",
+        "go": "prolly.(*IndexedMap).Apply",
+        "node": "IndexedMap.apply",
+        "kotlin": "IndexedMap.apply",
+        "java": "IndexedMap.apply",
+        "ruby": "IndexedMap#apply",
+        "swift": "IndexedMap.apply",
+        "wasm": "WasmIndexedMap.apply"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::indexed-map-lifecycle",
+        "portable-parity::indexed-map-maintenance"
+      ],
       "docs": [],
       "audience": "application",
       "audience_rationale": "prolly::IndexedMap::apply has runtime behavior in the requested indexed-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#IndexedMap",
+        "bindings/go/indexed.go#IndexedMap",
+        "bindings/node/src/indexed.ts#IndexedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#IndexedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/IndexedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#IndexedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#IndexedMap",
+        "bindings/wasm/src/index.ts#WasmIndexedMap"
+      ],
+      "reconciliation_rationale": "The durable indexed-map operations and complete owned result records are exposed by all eight portable wrappers."
     },
     {
       "rust": "prolly::IndexedMap::apply_if",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "indexed-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "IndexedMap.apply_if",
+        "go": "prolly.(*IndexedMap).ApplyIf",
+        "node": "IndexedMap.applyIf",
+        "kotlin": "IndexedMap.applyIf",
+        "java": "IndexedMap.applyIf",
+        "ruby": "IndexedMap#apply_if",
+        "swift": "IndexedMap.applyIf",
+        "wasm": "WasmIndexedMap.applyIf"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::indexed-map-lifecycle",
+        "portable-parity::indexed-map-maintenance"
+      ],
       "docs": [],
       "audience": "application",
       "audience_rationale": "prolly::IndexedMap::apply_if has runtime behavior in the requested indexed-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#IndexedMap",
+        "bindings/go/indexed.go#IndexedMap",
+        "bindings/node/src/indexed.ts#IndexedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#IndexedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/IndexedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#IndexedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#IndexedMap",
+        "bindings/wasm/src/index.ts#WasmIndexedMap"
+      ],
+      "reconciliation_rationale": "The durable indexed-map operations and complete owned result records are exposed by all eight portable wrappers."
     },
     {
       "rust": "prolly::IndexedMap::deactivate_index",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "indexed-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "IndexedMap.deactivate_index",
+        "go": "prolly.(*IndexedMap).DeactivateIndex",
+        "node": "IndexedMap.deactivateIndex",
+        "kotlin": "IndexedMap.deactivateIndex",
+        "java": "IndexedMap.deactivateIndex",
+        "ruby": "IndexedMap#deactivate_index",
+        "swift": "IndexedMap.deactivateIndex",
+        "wasm": "WasmIndexedMap.deactivateIndex"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::indexed-map-lifecycle",
+        "portable-parity::indexed-map-maintenance"
+      ],
       "docs": [],
       "audience": "application",
       "audience_rationale": "prolly::IndexedMap::deactivate_index has runtime behavior in the requested indexed-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#IndexedMap",
+        "bindings/go/indexed.go#IndexedMap",
+        "bindings/node/src/indexed.ts#IndexedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#IndexedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/IndexedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#IndexedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#IndexedMap",
+        "bindings/wasm/src/index.ts#WasmIndexedMap"
+      ],
+      "reconciliation_rationale": "The durable indexed-map operations and complete owned result records are exposed by all eight portable wrappers."
     },
     {
       "rust": "prolly::IndexedMap::delete",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "indexed-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "IndexedMap.delete",
+        "go": "prolly.(*IndexedMap).Delete",
+        "node": "IndexedMap.delete",
+        "kotlin": "IndexedMap.delete",
+        "java": "IndexedMap.delete",
+        "ruby": "IndexedMap#delete",
+        "swift": "IndexedMap.delete",
+        "wasm": "WasmIndexedMap.delete"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::indexed-map-lifecycle",
+        "portable-parity::indexed-map-maintenance"
+      ],
       "docs": [],
       "audience": "application",
       "audience_rationale": "prolly::IndexedMap::delete has runtime behavior in the requested indexed-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#IndexedMap",
+        "bindings/go/indexed.go#IndexedMap",
+        "bindings/node/src/indexed.ts#IndexedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#IndexedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/IndexedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#IndexedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#IndexedMap",
+        "bindings/wasm/src/index.ts#WasmIndexedMap"
+      ],
+      "reconciliation_rationale": "The durable indexed-map operations and complete owned result records are exposed by all eight portable wrappers."
     },
     {
       "rust": "prolly::IndexedMap::edit",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "indexed-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "IndexedMap.apply",
+        "go": "prolly.(*IndexedMap).Apply",
+        "node": "IndexedMap.apply",
+        "kotlin": "IndexedMap.apply",
+        "java": "IndexedMap.apply",
+        "ruby": "IndexedMap#apply",
+        "swift": "IndexedMap.apply",
+        "wasm": "WasmIndexedMap.apply"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::indexed-map-lifecycle",
+        "portable-parity::indexed-map-maintenance"
+      ],
       "docs": [],
       "audience": "application",
       "audience_rationale": "prolly::IndexedMap::edit has runtime behavior in the requested indexed-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-idiomatic",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py",
+        "bindings/go/indexed.go",
+        "bindings/node/src/indexed.ts",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi",
+        "bindings/ruby/lib/prolly/api.rb",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
+        "bindings/wasm/src/index.ts"
+      ],
+      "reconciliation_rationale": "Hosts use owned mutation lists instead of the Rust editor callback, planGc for indexed GC, retain the registry passed to Engine.indexedMap, and reopen the raw source as Engine.versionedMap(indexedMap.id).",
+      "rationale": "prolly::IndexedMap::edit is exposed through the reviewed indexed-map host composition recorded in the per-language mappings."
     },
     {
       "rust": "prolly::IndexedMap::ensure_index",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "indexed-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "IndexedMap.ensure_index",
+        "go": "prolly.(*IndexedMap).EnsureIndex",
+        "node": "IndexedMap.ensureIndex",
+        "kotlin": "IndexedMap.ensureIndex",
+        "java": "IndexedMap.ensureIndex",
+        "ruby": "IndexedMap#ensure_index",
+        "swift": "IndexedMap.ensureIndex",
+        "wasm": "WasmIndexedMap.ensureIndex"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::indexed-map-lifecycle",
+        "portable-parity::indexed-map-maintenance"
+      ],
       "docs": [],
       "audience": "application",
       "audience_rationale": "prolly::IndexedMap::ensure_index has runtime behavior in the requested indexed-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#IndexedMap",
+        "bindings/go/indexed.go#IndexedMap",
+        "bindings/node/src/indexed.ts#IndexedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#IndexedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/IndexedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#IndexedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#IndexedMap",
+        "bindings/wasm/src/index.ts#WasmIndexedMap"
+      ],
+      "reconciliation_rationale": "The durable indexed-map operations and complete owned result records are exposed by all eight portable wrappers."
     },
     {
       "rust": "prolly::IndexedMap::export_current",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "indexed-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "IndexedMap.export_current",
+        "go": "prolly.(*IndexedMap).ExportCurrent",
+        "node": "IndexedMap.exportCurrent",
+        "kotlin": "IndexedMap.exportCurrent",
+        "java": "IndexedMap.exportCurrent",
+        "ruby": "IndexedMap#export_current",
+        "swift": "IndexedMap.exportCurrent",
+        "wasm": "WasmIndexedMap.exportCurrent"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::indexed-map-lifecycle",
+        "portable-parity::indexed-map-maintenance"
+      ],
       "docs": [],
       "audience": "application",
       "audience_rationale": "prolly::IndexedMap::export_current has runtime behavior in the requested indexed-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#IndexedMap",
+        "bindings/go/indexed.go#IndexedMap",
+        "bindings/node/src/indexed.ts#IndexedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#IndexedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/IndexedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#IndexedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#IndexedMap",
+        "bindings/wasm/src/index.ts#WasmIndexedMap"
+      ],
+      "reconciliation_rationale": "The durable indexed-map operations and complete owned result records are exposed by all eight portable wrappers."
     },
     {
       "rust": "prolly::IndexedMap::get",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "indexed-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "IndexedMap.get",
+        "go": "prolly.(*IndexedMap).Get",
+        "node": "IndexedMap.get",
+        "kotlin": "IndexedMap.get",
+        "java": "IndexedMap.get",
+        "ruby": "IndexedMap#get",
+        "swift": "IndexedMap.get",
+        "wasm": "WasmIndexedMap.get"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::indexed-map-lifecycle",
+        "portable-parity::indexed-map-maintenance"
+      ],
       "docs": [],
       "audience": "application",
       "audience_rationale": "prolly::IndexedMap::get has runtime behavior in the requested indexed-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#IndexedMap",
+        "bindings/go/indexed.go#IndexedMap",
+        "bindings/node/src/indexed.ts#IndexedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#IndexedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/IndexedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#IndexedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#IndexedMap",
+        "bindings/wasm/src/index.ts#WasmIndexedMap"
+      ],
+      "reconciliation_rationale": "The durable indexed-map operations and complete owned result records are exposed by all eight portable wrappers."
     },
     {
       "rust": "prolly::IndexedMap::get_with",
@@ -11085,231 +11278,631 @@
       "docs": [],
       "audience": "application",
       "audience_rationale": "prolly::IndexedMap::get_with has runtime behavior in the requested indexed-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "confirmed-performance-gap",
+      "reconciliation_evidence": [
+        "src/prolly/secondary_index/coordinator.rs",
+        "bindings/python/prolly/api.py#IndexedMap",
+        "bindings/go/indexed.go#IndexedMap",
+        "bindings/node/src/indexed.ts#IndexedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#IndexedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/IndexedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#IndexedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#IndexedMap",
+        "bindings/wasm/src/index.ts#WasmIndexedMap"
+      ],
+      "reconciliation_rationale": "All wrappers expose owned get, but the callback-scoped source-value lease is not yet reachable from an IndexedMap or IndexedSnapshot in every host."
     },
     {
       "rust": "prolly::IndexedMap::health",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "indexed-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "IndexedMap.health",
+        "go": "prolly.(*IndexedMap).Health",
+        "node": "IndexedMap.health",
+        "kotlin": "IndexedMap.health",
+        "java": "IndexedMap.health",
+        "ruby": "IndexedMap#health",
+        "swift": "IndexedMap.health",
+        "wasm": "WasmIndexedMap.health"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::indexed-map-lifecycle",
+        "portable-parity::indexed-map-maintenance"
+      ],
       "docs": [],
       "audience": "application",
       "audience_rationale": "prolly::IndexedMap::health has runtime behavior in the requested indexed-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#IndexedMap",
+        "bindings/go/indexed.go#IndexedMap",
+        "bindings/node/src/indexed.ts#IndexedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#IndexedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/IndexedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#IndexedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#IndexedMap",
+        "bindings/wasm/src/index.ts#WasmIndexedMap"
+      ],
+      "reconciliation_rationale": "The durable indexed-map operations and complete owned result records are exposed by all eight portable wrappers."
     },
     {
       "rust": "prolly::IndexedMap::id",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "indexed-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "IndexedMap.id",
+        "go": "prolly.(*IndexedMap).ID",
+        "node": "IndexedMap.id",
+        "kotlin": "IndexedMap.id",
+        "java": "IndexedMap.id",
+        "ruby": "IndexedMap#id",
+        "swift": "IndexedMap.id",
+        "wasm": "WasmIndexedMap.id"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::indexed-map-lifecycle",
+        "portable-parity::indexed-map-maintenance"
+      ],
       "docs": [],
       "audience": "application",
       "audience_rationale": "prolly::IndexedMap::id has runtime behavior in the requested indexed-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#IndexedMap",
+        "bindings/go/indexed.go#IndexedMap",
+        "bindings/node/src/indexed.ts#IndexedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#IndexedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/IndexedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#IndexedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#IndexedMap",
+        "bindings/wasm/src/index.ts#WasmIndexedMap"
+      ],
+      "reconciliation_rationale": "The durable indexed-map operations and complete owned result records are exposed by all eight portable wrappers."
     },
     {
       "rust": "prolly::IndexedMap::import_current",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "indexed-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "IndexedMap.import_current",
+        "go": "prolly.(*IndexedMap).ImportCurrent",
+        "node": "IndexedMap.importCurrent",
+        "kotlin": "IndexedMap.importCurrent",
+        "java": "IndexedMap.importCurrent",
+        "ruby": "IndexedMap#import_current",
+        "swift": "IndexedMap.importCurrent",
+        "wasm": "WasmIndexedMap.importCurrent"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::indexed-map-lifecycle",
+        "portable-parity::indexed-map-maintenance"
+      ],
       "docs": [],
       "audience": "application",
       "audience_rationale": "prolly::IndexedMap::import_current has runtime behavior in the requested indexed-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#IndexedMap",
+        "bindings/go/indexed.go#IndexedMap",
+        "bindings/node/src/indexed.ts#IndexedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#IndexedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/IndexedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#IndexedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#IndexedMap",
+        "bindings/wasm/src/index.ts#WasmIndexedMap"
+      ],
+      "reconciliation_rationale": "The durable indexed-map operations and complete owned result records are exposed by all eight portable wrappers."
     },
     {
       "rust": "prolly::IndexedMap::keep_last",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "indexed-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "IndexedMap.keep_last",
+        "go": "prolly.(*IndexedMap).KeepLast",
+        "node": "IndexedMap.keepLast",
+        "kotlin": "IndexedMap.keepLast",
+        "java": "IndexedMap.keepLast",
+        "ruby": "IndexedMap#keep_last",
+        "swift": "IndexedMap.keepLast",
+        "wasm": "WasmIndexedMap.keepLast"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::indexed-map-lifecycle",
+        "portable-parity::indexed-map-maintenance"
+      ],
       "docs": [],
       "audience": "application",
       "audience_rationale": "prolly::IndexedMap::keep_last has runtime behavior in the requested indexed-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#IndexedMap",
+        "bindings/go/indexed.go#IndexedMap",
+        "bindings/node/src/indexed.ts#IndexedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#IndexedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/IndexedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#IndexedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#IndexedMap",
+        "bindings/wasm/src/index.ts#WasmIndexedMap"
+      ],
+      "reconciliation_rationale": "The durable indexed-map operations and complete owned result records are exposed by all eight portable wrappers."
     },
     {
       "rust": "prolly::IndexedMap::metrics",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "indexed-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "IndexedMap.metrics",
+        "go": "prolly.(*IndexedMap).Metrics",
+        "node": "IndexedMap.metrics",
+        "kotlin": "IndexedMap.metrics",
+        "java": "IndexedMap.metrics",
+        "ruby": "IndexedMap#metrics",
+        "swift": "IndexedMap.metrics",
+        "wasm": "WasmIndexedMap.metrics"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::indexed-map-lifecycle",
+        "portable-parity::indexed-map-maintenance"
+      ],
       "docs": [],
       "audience": "application",
       "audience_rationale": "prolly::IndexedMap::metrics has runtime behavior in the requested indexed-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#IndexedMap",
+        "bindings/go/indexed.go#IndexedMap",
+        "bindings/node/src/indexed.ts#IndexedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#IndexedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/IndexedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#IndexedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#IndexedMap",
+        "bindings/wasm/src/index.ts#WasmIndexedMap"
+      ],
+      "reconciliation_rationale": "The durable indexed-map operations and complete owned result records are exposed by all eight portable wrappers."
     },
     {
       "rust": "prolly::IndexedMap::plan_indexed_gc",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "indexed-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "IndexedMap.plan_gc",
+        "go": "prolly.(*IndexedMap).PlanGC",
+        "node": "IndexedMap.planGc",
+        "kotlin": "IndexedMap.planGc",
+        "java": "IndexedMap.planGc",
+        "ruby": "IndexedMap#plan_gc",
+        "swift": "IndexedMap.planGC",
+        "wasm": "WasmIndexedMap.planGc"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::indexed-map-lifecycle",
+        "portable-parity::indexed-map-maintenance"
+      ],
       "docs": [],
       "audience": "application",
       "audience_rationale": "prolly::IndexedMap::plan_indexed_gc has runtime behavior in the requested indexed-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-idiomatic",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py",
+        "bindings/go/indexed.go",
+        "bindings/node/src/indexed.ts",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi",
+        "bindings/ruby/lib/prolly/api.rb",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
+        "bindings/wasm/src/index.ts"
+      ],
+      "reconciliation_rationale": "Hosts use owned mutation lists instead of the Rust editor callback, planGc for indexed GC, retain the registry passed to Engine.indexedMap, and reopen the raw source as Engine.versionedMap(indexedMap.id).",
+      "rationale": "prolly::IndexedMap::plan_indexed_gc is exposed through the reviewed indexed-map host composition recorded in the per-language mappings."
     },
     {
       "rust": "prolly::IndexedMap::put",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "indexed-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "IndexedMap.put",
+        "go": "prolly.(*IndexedMap).Put",
+        "node": "IndexedMap.put",
+        "kotlin": "IndexedMap.put",
+        "java": "IndexedMap.put",
+        "ruby": "IndexedMap#put",
+        "swift": "IndexedMap.put",
+        "wasm": "WasmIndexedMap.put"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::indexed-map-lifecycle",
+        "portable-parity::indexed-map-maintenance"
+      ],
       "docs": [],
       "audience": "application",
       "audience_rationale": "prolly::IndexedMap::put has runtime behavior in the requested indexed-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#IndexedMap",
+        "bindings/go/indexed.go#IndexedMap",
+        "bindings/node/src/indexed.ts#IndexedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#IndexedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/IndexedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#IndexedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#IndexedMap",
+        "bindings/wasm/src/index.ts#WasmIndexedMap"
+      ],
+      "reconciliation_rationale": "The durable indexed-map operations and complete owned result records are exposed by all eight portable wrappers."
     },
     {
       "rust": "prolly::IndexedMap::registry",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "indexed-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "Engine.indexed_map(..., registry)",
+        "go": "prolly.(*Engine).IndexedMap(..., registry)",
+        "node": "Engine.indexedMap(..., registry)",
+        "kotlin": "Engine.indexedMap(..., registry)",
+        "java": "Engine.indexedMap(..., registry)",
+        "ruby": "Engine#indexed_map(..., registry)",
+        "swift": "Engine.indexedMap(_:registry:)",
+        "wasm": "Engine.indexedMap(..., registry)"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::indexed-map-lifecycle",
+        "portable-parity::indexed-map-maintenance"
+      ],
       "docs": [],
       "audience": "application",
       "audience_rationale": "prolly::IndexedMap::registry has runtime behavior in the requested indexed-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-idiomatic",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py",
+        "bindings/go/indexed.go",
+        "bindings/node/src/indexed.ts",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi",
+        "bindings/ruby/lib/prolly/api.rb",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
+        "bindings/wasm/src/index.ts"
+      ],
+      "reconciliation_rationale": "Hosts use owned mutation lists instead of the Rust editor callback, planGc for indexed GC, retain the registry passed to Engine.indexedMap, and reopen the raw source as Engine.versionedMap(indexedMap.id).",
+      "rationale": "prolly::IndexedMap::registry is exposed through the reviewed indexed-map host composition recorded in the per-language mappings."
     },
     {
       "rust": "prolly::IndexedMap::repair_index",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "indexed-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "IndexedMap.repair_index",
+        "go": "prolly.(*IndexedMap).RepairIndex",
+        "node": "IndexedMap.repairIndex",
+        "kotlin": "IndexedMap.repairIndex",
+        "java": "IndexedMap.repairIndex",
+        "ruby": "IndexedMap#repair_index",
+        "swift": "IndexedMap.repairIndex",
+        "wasm": "WasmIndexedMap.repairIndex"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::indexed-map-lifecycle",
+        "portable-parity::indexed-map-maintenance"
+      ],
       "docs": [],
       "audience": "application",
       "audience_rationale": "prolly::IndexedMap::repair_index has runtime behavior in the requested indexed-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#IndexedMap",
+        "bindings/go/indexed.go#IndexedMap",
+        "bindings/node/src/indexed.ts#IndexedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#IndexedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/IndexedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#IndexedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#IndexedMap",
+        "bindings/wasm/src/index.ts#WasmIndexedMap"
+      ],
+      "reconciliation_rationale": "The durable indexed-map operations and complete owned result records are exposed by all eight portable wrappers."
     },
     {
       "rust": "prolly::IndexedMap::replace_index",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "indexed-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "IndexedMap.replace_index",
+        "go": "prolly.(*IndexedMap).ReplaceIndex",
+        "node": "IndexedMap.replaceIndex",
+        "kotlin": "IndexedMap.replaceIndex",
+        "java": "IndexedMap.replaceIndex",
+        "ruby": "IndexedMap#replace_index",
+        "swift": "IndexedMap.replaceIndex",
+        "wasm": "WasmIndexedMap.replaceIndex"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::indexed-map-lifecycle",
+        "portable-parity::indexed-map-maintenance"
+      ],
       "docs": [],
       "audience": "application",
       "audience_rationale": "prolly::IndexedMap::replace_index has runtime behavior in the requested indexed-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#IndexedMap",
+        "bindings/go/indexed.go#IndexedMap",
+        "bindings/node/src/indexed.ts#IndexedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#IndexedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/IndexedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#IndexedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#IndexedMap",
+        "bindings/wasm/src/index.ts#WasmIndexedMap"
+      ],
+      "reconciliation_rationale": "The durable indexed-map operations and complete owned result records are exposed by all eight portable wrappers."
     },
     {
       "rust": "prolly::IndexedMap::snapshot",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "indexed-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "IndexedMap.snapshot",
+        "go": "prolly.(*IndexedMap).Snapshot",
+        "node": "IndexedMap.snapshot",
+        "kotlin": "IndexedMap.snapshot",
+        "java": "IndexedMap.snapshot",
+        "ruby": "IndexedMap#snapshot",
+        "swift": "IndexedMap.snapshot",
+        "wasm": "WasmIndexedMap.snapshot"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::indexed-map-lifecycle",
+        "portable-parity::indexed-map-maintenance"
+      ],
       "docs": [],
       "audience": "application",
       "audience_rationale": "prolly::IndexedMap::snapshot has runtime behavior in the requested indexed-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#IndexedMap",
+        "bindings/go/indexed.go#IndexedMap",
+        "bindings/node/src/indexed.ts#IndexedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#IndexedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/IndexedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#IndexedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#IndexedMap",
+        "bindings/wasm/src/index.ts#WasmIndexedMap"
+      ],
+      "reconciliation_rationale": "The durable indexed-map operations and complete owned result records are exposed by all eight portable wrappers."
     },
     {
       "rust": "prolly::IndexedMap::snapshot_at",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "indexed-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "IndexedMap.snapshot_at",
+        "go": "prolly.(*IndexedMap).SnapshotAt",
+        "node": "IndexedMap.snapshotAt",
+        "kotlin": "IndexedMap.snapshotAt",
+        "java": "IndexedMap.snapshotAt",
+        "ruby": "IndexedMap#snapshot_at",
+        "swift": "IndexedMap.snapshot(at:)",
+        "wasm": "WasmIndexedMap.snapshotAt"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::indexed-map-lifecycle",
+        "portable-parity::indexed-map-maintenance"
+      ],
       "docs": [],
       "audience": "application",
       "audience_rationale": "prolly::IndexedMap::snapshot_at has runtime behavior in the requested indexed-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#IndexedMap",
+        "bindings/go/indexed.go#IndexedMap",
+        "bindings/node/src/indexed.ts#IndexedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#IndexedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/IndexedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#IndexedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#IndexedMap",
+        "bindings/wasm/src/index.ts#WasmIndexedMap"
+      ],
+      "reconciliation_rationale": "The durable indexed-map operations and complete owned result records are exposed by all eight portable wrappers."
     },
     {
       "rust": "prolly::IndexedMap::snapshot_by_id",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "indexed-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "IndexedMap.snapshot_by_id",
+        "go": "prolly.(*IndexedMap).SnapshotByID",
+        "node": "IndexedMap.snapshotById",
+        "kotlin": "IndexedMap.snapshotById",
+        "java": "IndexedMap.snapshotById",
+        "ruby": "IndexedMap#snapshot_by_id",
+        "swift": "IndexedMap.snapshot(id:)",
+        "wasm": "WasmIndexedMap.snapshotById"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::indexed-map-lifecycle",
+        "portable-parity::indexed-map-maintenance"
+      ],
       "docs": [],
       "audience": "application",
       "audience_rationale": "prolly::IndexedMap::snapshot_by_id has runtime behavior in the requested indexed-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#IndexedMap",
+        "bindings/go/indexed.go#IndexedMap",
+        "bindings/node/src/indexed.ts#IndexedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#IndexedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/IndexedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#IndexedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#IndexedMap",
+        "bindings/wasm/src/index.ts#WasmIndexedMap"
+      ],
+      "reconciliation_rationale": "The durable indexed-map operations and complete owned result records are exposed by all eight portable wrappers."
     },
     {
       "rust": "prolly::IndexedMap::source",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "indexed-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "Engine.versioned_map(IndexedMap.id)",
+        "go": "prolly.(*Engine).VersionedMap(IndexedMap.ID)",
+        "node": "Engine.versionedMap(IndexedMap.id)",
+        "kotlin": "Engine.versionedMap(IndexedMap.id)",
+        "java": "Engine.versionedMap(IndexedMap.id)",
+        "ruby": "Engine#versioned_map(IndexedMap#id)",
+        "swift": "Engine.versionedMap(IndexedMap.id)",
+        "wasm": "Engine.versionedMap(IndexedMap.id)"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::indexed-map-lifecycle",
+        "portable-parity::indexed-map-maintenance"
+      ],
       "docs": [],
       "audience": "application",
       "audience_rationale": "prolly::IndexedMap::source has runtime behavior in the requested indexed-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-idiomatic",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py",
+        "bindings/go/indexed.go",
+        "bindings/node/src/indexed.ts",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi",
+        "bindings/ruby/lib/prolly/api.rb",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
+        "bindings/wasm/src/index.ts"
+      ],
+      "reconciliation_rationale": "Hosts use owned mutation lists instead of the Rust editor callback, planGc for indexed GC, retain the registry passed to Engine.indexedMap, and reopen the raw source as Engine.versionedMap(indexedMap.id).",
+      "rationale": "prolly::IndexedMap::source is exposed through the reviewed indexed-map host composition recorded in the per-language mappings."
     },
     {
       "rust": "prolly::IndexedMap::verify_all",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "indexed-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "IndexedMap.verify_all",
+        "go": "prolly.(*IndexedMap).VerifyAll",
+        "node": "IndexedMap.verifyAll",
+        "kotlin": "IndexedMap.verifyAll",
+        "java": "IndexedMap.verifyAll",
+        "ruby": "IndexedMap#verify_all",
+        "swift": "IndexedMap.verifyAll",
+        "wasm": "WasmIndexedMap.verifyAll"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::indexed-map-lifecycle",
+        "portable-parity::indexed-map-maintenance"
+      ],
       "docs": [],
       "audience": "application",
       "audience_rationale": "prolly::IndexedMap::verify_all has runtime behavior in the requested indexed-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#IndexedMap",
+        "bindings/go/indexed.go#IndexedMap",
+        "bindings/node/src/indexed.ts#IndexedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#IndexedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/IndexedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#IndexedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#IndexedMap",
+        "bindings/wasm/src/index.ts#WasmIndexedMap"
+      ],
+      "reconciliation_rationale": "The durable indexed-map operations and complete owned result records are exposed by all eight portable wrappers."
     },
     {
       "rust": "prolly::IndexedMap::verify_index",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "indexed-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "IndexedMap.verify_index",
+        "go": "prolly.(*IndexedMap).VerifyIndex",
+        "node": "IndexedMap.verifyIndex",
+        "kotlin": "IndexedMap.verifyIndex",
+        "java": "IndexedMap.verifyIndex",
+        "ruby": "IndexedMap#verify_index",
+        "swift": "IndexedMap.verifyIndex",
+        "wasm": "WasmIndexedMap.verifyIndex"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::indexed-map-lifecycle",
+        "portable-parity::indexed-map-maintenance"
+      ],
       "docs": [],
       "audience": "application",
       "audience_rationale": "prolly::IndexedMap::verify_index has runtime behavior in the requested indexed-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#IndexedMap",
+        "bindings/go/indexed.go#IndexedMap",
+        "bindings/node/src/indexed.ts#IndexedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#IndexedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/IndexedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#IndexedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#IndexedMap",
+        "bindings/wasm/src/index.ts#WasmIndexedMap"
+      ],
+      "reconciliation_rationale": "The durable indexed-map operations and complete owned result records are exposed by all eight portable wrappers."
     },
     {
       "rust": "prolly::IndexedMapEditor",
@@ -20827,16 +21420,41 @@
     {
       "rust": "prolly::ProximityMap::build",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "proximity-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "Engine.build_proximity",
+        "go": "prolly.(*Engine).BuildProximity",
+        "node": "Engine.buildProximity",
+        "kotlin": "Engine.buildProximity",
+        "java": "Engine.buildProximity",
+        "ruby": "Engine#build_proximity",
+        "swift": "Engine.buildProximity",
+        "wasm": "Engine.buildProximity"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::proximity-map-lifecycle",
+        "portable-parity::proximity-session-proof-search"
+      ],
       "docs": [],
       "audience": "application",
       "audience_rationale": "prolly::ProximityMap::build has runtime behavior in the requested proximity-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-idiomatic",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py",
+        "bindings/go/proximity.go",
+        "bindings/node/src/proximity.ts",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi",
+        "bindings/ruby/lib/prolly/api.rb",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
+        "bindings/wasm/src/index.ts"
+      ],
+      "reconciliation_rationale": "Hosts build through Engine factories, dispatch accelerated searches through typed accelerator/catalog handles, and represent the Rust tree as an opaque ProximityMap with descriptor/config/count accessors.",
+      "rationale": "prolly::ProximityMap::build is exposed through the reviewed proximity host composition recorded in the per-language mappings."
     },
     {
       "rust": "prolly::ProximityMap::build_with_parallelism",
@@ -20850,49 +21468,130 @@
       "docs": [],
       "audience": "application",
       "audience_rationale": "prolly::ProximityMap::build_with_parallelism has runtime behavior in the requested proximity-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "confirmed-performance-gap",
+      "reconciliation_evidence": [
+        "src/prolly/proximity/map.rs",
+        "bindings/go/proximity.go",
+        "bindings/node/src/proximity.ts",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/ProximityMap.java",
+        "bindings/wasm/src/index.ts"
+      ],
+      "reconciliation_rationale": "Explicit build parallelism is not portable to four hosts, exact get lacks a callback-scoped vector/value lease, and the seekable half-open zero-copy record scan is not exposed consistently."
     },
     {
       "rust": "prolly::ProximityMap::clear_content_cache",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "proximity-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "ProximityMap.clear_cache",
+        "go": "prolly.(*ProximityMap).ClearContentCache",
+        "node": "ProximityMap.clearCache",
+        "kotlin": "ProximityMap.clearCache",
+        "java": "ProximityMap.clearCache",
+        "ruby": "ProximityMap#clear_cache",
+        "swift": "ProximityMap.clearCache",
+        "wasm": "WasmProximityMap.clearCache"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::proximity-descriptor-reopen",
+        "portable-parity::proximity-cache-invalidation"
+      ],
       "docs": [],
       "audience": "application",
       "audience_rationale": "prolly::ProximityMap::clear_content_cache has runtime behavior in the requested proximity-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#ProximityMap",
+        "bindings/go/proximity.go#ProximityMap",
+        "bindings/node/src/proximity.ts#ProximityMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#ProximityMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/ProximityMap.java",
+        "bindings/ruby/lib/prolly/api.rb#ProximityMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#ProximityMap",
+        "bindings/wasm/src/index.ts#WasmProximityMap"
+      ],
+      "reconciliation_rationale": "Exact reads, owned mutation/rebuild results, proofs, retained sessions, ordered early-stop scans, searches, and verification are exposed by all eight wrappers."
     },
     {
       "rust": "prolly::ProximityMap::contains_key",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "proximity-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "ProximityMap.contains",
+        "go": "prolly.(*ProximityMap).Contains",
+        "node": "ProximityMap.contains",
+        "kotlin": "ProximityMap.containsKey",
+        "java": "ProximityMap.contains",
+        "ruby": "ProximityMap#contains?",
+        "swift": "ProximityMap.contains",
+        "wasm": "WasmProximityMap.contains"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::proximity-map-lifecycle",
+        "portable-parity::proximity-session-proof-search"
+      ],
       "docs": [],
       "audience": "application",
       "audience_rationale": "prolly::ProximityMap::contains_key has runtime behavior in the requested proximity-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#ProximityMap",
+        "bindings/go/proximity.go#ProximityMap",
+        "bindings/node/src/proximity.ts#ProximityMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#ProximityMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/ProximityMap.java",
+        "bindings/ruby/lib/prolly/api.rb#ProximityMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#ProximityMap",
+        "bindings/wasm/src/index.ts#WasmProximityMap"
+      ],
+      "reconciliation_rationale": "Exact reads, owned mutation/rebuild results, proofs, retained sessions, ordered early-stop scans, searches, and verification are exposed by all eight wrappers."
     },
     {
       "rust": "prolly::ProximityMap::get",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "proximity-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "ProximityMap.get",
+        "go": "prolly.(*ProximityMap).Get",
+        "node": "ProximityMap.get",
+        "kotlin": "ProximityMap.get",
+        "java": "ProximityMap.get",
+        "ruby": "ProximityMap#get",
+        "swift": "ProximityMap.get",
+        "wasm": "WasmProximityMap.get"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::proximity-map-lifecycle",
+        "portable-parity::proximity-session-proof-search"
+      ],
       "docs": [],
       "audience": "application",
       "audience_rationale": "prolly::ProximityMap::get has runtime behavior in the requested proximity-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#ProximityMap",
+        "bindings/go/proximity.go#ProximityMap",
+        "bindings/node/src/proximity.ts#ProximityMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#ProximityMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/ProximityMap.java",
+        "bindings/ruby/lib/prolly/api.rb#ProximityMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#ProximityMap",
+        "bindings/wasm/src/index.ts#WasmProximityMap"
+      ],
+      "reconciliation_rationale": "Exact reads, owned mutation/rebuild results, proofs, retained sessions, ordered early-stop scans, searches, and verification are exposed by all eight wrappers."
     },
     {
       "rust": "prolly::ProximityMap::get_with",
@@ -20906,119 +21605,321 @@
       "docs": [],
       "audience": "application",
       "audience_rationale": "prolly::ProximityMap::get_with has runtime behavior in the requested proximity-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "confirmed-performance-gap",
+      "reconciliation_evidence": [
+        "src/prolly/proximity/map.rs",
+        "bindings/go/proximity.go",
+        "bindings/node/src/proximity.ts",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/ProximityMap.java",
+        "bindings/wasm/src/index.ts"
+      ],
+      "reconciliation_rationale": "Explicit build parallelism is not portable to four hosts, exact get lacks a callback-scoped vector/value lease, and the seekable half-open zero-copy record scan is not exposed consistently."
     },
     {
       "rust": "prolly::ProximityMap::load",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "proximity-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "Engine.load_proximity",
+        "go": "prolly.(*Engine).LoadProximity",
+        "node": "Engine.loadProximity",
+        "kotlin": "Engine.loadProximity",
+        "java": "Engine.loadProximity",
+        "ruby": "Engine#load_proximity",
+        "swift": "Engine.loadProximity",
+        "wasm": "Engine.loadProximity"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::proximity-descriptor-reopen",
+        "portable-parity::proximity-cache-invalidation"
+      ],
       "docs": [],
       "audience": "application",
       "audience_rationale": "prolly::ProximityMap::load has runtime behavior in the requested proximity-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-idiomatic",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py",
+        "bindings/go/proximity.go",
+        "bindings/node/src/proximity.ts",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi",
+        "bindings/ruby/lib/prolly/api.rb",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
+        "bindings/wasm/src/index.ts"
+      ],
+      "reconciliation_rationale": "Hosts build through Engine factories, dispatch accelerated searches through typed accelerator/catalog handles, and represent the Rust tree as an opaque ProximityMap with descriptor/config/count accessors.",
+      "rationale": "Rust ProximityMap::load is exposed through the engine-bound descriptor reopen factory in each host."
     },
     {
       "rust": "prolly::ProximityMap::mutate_batch",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "proximity-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "ProximityMap.mutate",
+        "go": "prolly.(*ProximityMap).Mutate",
+        "node": "ProximityMap.mutate",
+        "kotlin": "ProximityMap.mutate",
+        "java": "ProximityMap.mutate",
+        "ruby": "ProximityMap#mutate",
+        "swift": "ProximityMap.mutate",
+        "wasm": "WasmProximityMap.mutate"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::proximity-map-lifecycle",
+        "portable-parity::proximity-session-proof-search"
+      ],
       "docs": [],
       "audience": "application",
       "audience_rationale": "prolly::ProximityMap::mutate_batch has runtime behavior in the requested proximity-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#ProximityMap",
+        "bindings/go/proximity.go#ProximityMap",
+        "bindings/node/src/proximity.ts#ProximityMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#ProximityMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/ProximityMap.java",
+        "bindings/ruby/lib/prolly/api.rb#ProximityMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#ProximityMap",
+        "bindings/wasm/src/index.ts#WasmProximityMap"
+      ],
+      "reconciliation_rationale": "Exact reads, owned mutation/rebuild results, proofs, retained sessions, ordered early-stop scans, searches, and verification are exposed by all eight wrappers."
     },
     {
       "rust": "prolly::ProximityMap::prove_membership",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "proximity-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "ProximityMap.prove_membership",
+        "go": "prolly.(*ProximityMap).ProveMembership",
+        "node": "ProximityMap.proveMembership",
+        "kotlin": "ProximityMap.proveMembership",
+        "java": "ProximityMap.proveMembership",
+        "ruby": "ProximityMap#prove_membership",
+        "swift": "ProximityMap.proveMembership",
+        "wasm": "WasmProximityMap.proveMembership"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::proximity-map-lifecycle",
+        "portable-parity::proximity-session-proof-search"
+      ],
       "docs": [],
       "audience": "application",
       "audience_rationale": "prolly::ProximityMap::prove_membership has runtime behavior in the requested proximity-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#ProximityMap",
+        "bindings/go/proximity.go#ProximityMap",
+        "bindings/node/src/proximity.ts#ProximityMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#ProximityMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/ProximityMap.java",
+        "bindings/ruby/lib/prolly/api.rb#ProximityMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#ProximityMap",
+        "bindings/wasm/src/index.ts#WasmProximityMap"
+      ],
+      "reconciliation_rationale": "Exact reads, owned mutation/rebuild results, proofs, retained sessions, ordered early-stop scans, searches, and verification are exposed by all eight wrappers."
     },
     {
       "rust": "prolly::ProximityMap::prove_search",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "proximity-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "ProximityMap.prove_search",
+        "go": "prolly.(*ProximityMap).ProveSearch",
+        "node": "ProximityMap.proveSearch",
+        "kotlin": "ProximityMap.proveSearch",
+        "java": "ProximityMap.proveSearch",
+        "ruby": "ProximityMap#prove_search",
+        "swift": "ProximityMap.proveSearch",
+        "wasm": "WasmProximityMap.proveSearch"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::proximity-map-lifecycle",
+        "portable-parity::proximity-session-proof-search"
+      ],
       "docs": [],
       "audience": "application",
       "audience_rationale": "prolly::ProximityMap::prove_search has runtime behavior in the requested proximity-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#ProximityMap",
+        "bindings/go/proximity.go#ProximityMap",
+        "bindings/node/src/proximity.ts#ProximityMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#ProximityMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/ProximityMap.java",
+        "bindings/ruby/lib/prolly/api.rb#ProximityMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#ProximityMap",
+        "bindings/wasm/src/index.ts#WasmProximityMap"
+      ],
+      "reconciliation_rationale": "Exact reads, owned mutation/rebuild results, proofs, retained sessions, ordered early-stop scans, searches, and verification are exposed by all eight wrappers."
     },
     {
       "rust": "prolly::ProximityMap::prove_structure",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "proximity-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "ProximityMap.prove_structure",
+        "go": "prolly.(*ProximityMap).ProveStructure",
+        "node": "ProximityMap.proveStructure",
+        "kotlin": "ProximityMap.proveStructure",
+        "java": "ProximityMap.proveStructure",
+        "ruby": "ProximityMap#prove_structure",
+        "swift": "ProximityMap.proveStructure",
+        "wasm": "WasmProximityMap.proveStructure"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::proximity-map-lifecycle",
+        "portable-parity::proximity-session-proof-search"
+      ],
       "docs": [],
       "audience": "application",
       "audience_rationale": "prolly::ProximityMap::prove_structure has runtime behavior in the requested proximity-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#ProximityMap",
+        "bindings/go/proximity.go#ProximityMap",
+        "bindings/node/src/proximity.ts#ProximityMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#ProximityMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/ProximityMap.java",
+        "bindings/ruby/lib/prolly/api.rb#ProximityMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#ProximityMap",
+        "bindings/wasm/src/index.ts#WasmProximityMap"
+      ],
+      "reconciliation_rationale": "Exact reads, owned mutation/rebuild results, proofs, retained sessions, ordered early-stop scans, searches, and verification are exposed by all eight wrappers."
     },
     {
       "rust": "prolly::ProximityMap::read",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "proximity-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "ProximityMap.read",
+        "go": "prolly.(*ProximityMap).Read",
+        "node": "ProximityMap.read",
+        "kotlin": "ProximityMap.read",
+        "java": "ProximityMap.read",
+        "ruby": "ProximityMap#read",
+        "swift": "ProximityMap.read",
+        "wasm": "WasmProximityMap.read"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::proximity-map-lifecycle",
+        "portable-parity::proximity-session-proof-search"
+      ],
       "docs": [],
       "audience": "application",
       "audience_rationale": "prolly::ProximityMap::read has runtime behavior in the requested proximity-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#ProximityMap",
+        "bindings/go/proximity.go#ProximityMap",
+        "bindings/node/src/proximity.ts#ProximityMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#ProximityMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/ProximityMap.java",
+        "bindings/ruby/lib/prolly/api.rb#ProximityMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#ProximityMap",
+        "bindings/wasm/src/index.ts#WasmProximityMap"
+      ],
+      "reconciliation_rationale": "Exact reads, owned mutation/rebuild results, proofs, retained sessions, ordered early-stop scans, searches, and verification are exposed by all eight wrappers."
     },
     {
       "rust": "prolly::ProximityMap::rebuild_batch",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "proximity-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "ProximityMap.rebuild",
+        "go": "prolly.(*ProximityMap).Rebuild",
+        "node": "ProximityMap.rebuild",
+        "kotlin": "ProximityMap.rebuild",
+        "java": "ProximityMap.rebuild",
+        "ruby": "ProximityMap#rebuild",
+        "swift": "ProximityMap.rebuild",
+        "wasm": "WasmProximityMap.rebuild"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::proximity-map-lifecycle",
+        "portable-parity::proximity-session-proof-search"
+      ],
       "docs": [],
       "audience": "application",
       "audience_rationale": "prolly::ProximityMap::rebuild_batch has runtime behavior in the requested proximity-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#ProximityMap",
+        "bindings/go/proximity.go#ProximityMap",
+        "bindings/node/src/proximity.ts#ProximityMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#ProximityMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/ProximityMap.java",
+        "bindings/ruby/lib/prolly/api.rb#ProximityMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#ProximityMap",
+        "bindings/wasm/src/index.ts#WasmProximityMap"
+      ],
+      "reconciliation_rationale": "Exact reads, owned mutation/rebuild results, proofs, retained sessions, ordered early-stop scans, searches, and verification are exposed by all eight wrappers."
     },
     {
       "rust": "prolly::ProximityMap::scan_records",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "proximity-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "ProximityMap.scan_records",
+        "go": "prolly.(*ProximityMap).ScanRecords",
+        "node": "ProximityMap.scanRecords",
+        "kotlin": "ProximityMap.scanRecords",
+        "java": "ProximityMap.scanRecords",
+        "ruby": "ProximityMap#scan_records",
+        "swift": "ProximityMap.scanRecords",
+        "wasm": "WasmProximityMap.scanRecords"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::proximity-map-lifecycle",
+        "portable-parity::proximity-session-proof-search"
+      ],
       "docs": [],
       "audience": "application",
       "audience_rationale": "prolly::ProximityMap::scan_records has runtime behavior in the requested proximity-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#ProximityMap",
+        "bindings/go/proximity.go#ProximityMap",
+        "bindings/node/src/proximity.ts#ProximityMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#ProximityMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/ProximityMap.java",
+        "bindings/ruby/lib/prolly/api.rb#ProximityMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#ProximityMap",
+        "bindings/wasm/src/index.ts#WasmProximityMap"
+      ],
+      "reconciliation_rationale": "Exact reads, owned mutation/rebuild results, proofs, retained sessions, ordered early-stop scans, searches, and verification are exposed by all eight wrappers."
     },
     {
       "rust": "prolly::ProximityMap::scan_records_range_until",
@@ -21032,77 +21933,208 @@
       "docs": [],
       "audience": "application",
       "audience_rationale": "prolly::ProximityMap::scan_records_range_until has runtime behavior in the requested proximity-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "confirmed-performance-gap",
+      "reconciliation_evidence": [
+        "src/prolly/proximity/map.rs",
+        "bindings/go/proximity.go",
+        "bindings/node/src/proximity.ts",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/ProximityMap.java",
+        "bindings/wasm/src/index.ts"
+      ],
+      "reconciliation_rationale": "Explicit build parallelism is not portable to four hosts, exact get lacks a callback-scoped vector/value lease, and the seekable half-open zero-copy record scan is not exposed consistently."
     },
     {
       "rust": "prolly::ProximityMap::scan_records_until",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "proximity-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "ProximityMap.scan_records",
+        "go": "prolly.(*ProximityMap).ScanRecords",
+        "node": "ProximityMap.scanRecords",
+        "kotlin": "ProximityMap.scanRecords",
+        "java": "ProximityMap.scanRecords",
+        "ruby": "ProximityMap#scan_records",
+        "swift": "ProximityMap.scanRecords",
+        "wasm": "WasmProximityMap.scanRecords"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::proximity-map-lifecycle",
+        "portable-parity::proximity-session-proof-search"
+      ],
       "docs": [],
       "audience": "application",
       "audience_rationale": "prolly::ProximityMap::scan_records_until has runtime behavior in the requested proximity-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#ProximityMap",
+        "bindings/go/proximity.go#ProximityMap",
+        "bindings/node/src/proximity.ts#ProximityMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#ProximityMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/ProximityMap.java",
+        "bindings/ruby/lib/prolly/api.rb#ProximityMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#ProximityMap",
+        "bindings/wasm/src/index.ts#WasmProximityMap"
+      ],
+      "reconciliation_rationale": "Exact reads, owned mutation/rebuild results, proofs, retained sessions, ordered early-stop scans, searches, and verification are exposed by all eight wrappers."
     },
     {
       "rust": "prolly::ProximityMap::search",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "proximity-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "ProximityMap.search",
+        "go": "prolly.(*ProximityMap).Search",
+        "node": "ProximityMap.search",
+        "kotlin": "ProximityMap.search",
+        "java": "ProximityMap.search",
+        "ruby": "ProximityMap#search",
+        "swift": "ProximityMap.search",
+        "wasm": "WasmProximityMap.search"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::proximity-map-lifecycle",
+        "portable-parity::proximity-session-proof-search"
+      ],
       "docs": [],
       "audience": "application",
       "audience_rationale": "prolly::ProximityMap::search has runtime behavior in the requested proximity-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#ProximityMap",
+        "bindings/go/proximity.go#ProximityMap",
+        "bindings/node/src/proximity.ts#ProximityMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#ProximityMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/ProximityMap.java",
+        "bindings/ruby/lib/prolly/api.rb#ProximityMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#ProximityMap",
+        "bindings/wasm/src/index.ts#WasmProximityMap"
+      ],
+      "reconciliation_rationale": "Exact reads, owned mutation/rebuild results, proofs, retained sessions, ordered early-stop scans, searches, and verification are exposed by all eight wrappers."
     },
     {
       "rust": "prolly::ProximityMap::search_with",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "proximity-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "HnswIndex/ProductQuantizer/CompositeAccelerator.search_with_runtime",
+        "go": "prolly.(*HNSWIndex/*ProductQuantizer/*CompositeAccelerator).SearchWithRuntime",
+        "node": "HnswIndex/ProductQuantizer/CompositeAccelerator.searchWithRuntime",
+        "kotlin": "HnswIndex/ProductQuantizer/CompositeAccelerator.searchWithRuntime",
+        "java": "HnswIndex/ProductQuantizer/CompositeAccelerator.searchWithRuntime",
+        "ruby": "HnswIndex/ProductQuantizer/CompositeAccelerator#search_with_runtime",
+        "swift": "HnswIndex/ProductQuantizer/CompositeAccelerator.searchWithRuntime",
+        "wasm": "WasmHnswIndex/WasmProductQuantizer/WasmCompositeAccelerator.searchWithRuntime"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::proximity-map-lifecycle",
+        "portable-parity::proximity-session-proof-search"
+      ],
       "docs": [],
       "audience": "application",
       "audience_rationale": "prolly::ProximityMap::search_with has runtime behavior in the requested proximity-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-idiomatic",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py",
+        "bindings/go/proximity.go",
+        "bindings/node/src/proximity.ts",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi",
+        "bindings/ruby/lib/prolly/api.rb",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
+        "bindings/wasm/src/index.ts"
+      ],
+      "reconciliation_rationale": "Hosts build through Engine factories, dispatch accelerated searches through typed accelerator/catalog handles, and represent the Rust tree as an opaque ProximityMap with descriptor/config/count accessors.",
+      "rationale": "prolly::ProximityMap::search_with is exposed through the reviewed proximity host composition recorded in the per-language mappings."
     },
     {
       "rust": "prolly::ProximityMap::tree",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "proximity-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "ProximityMap.descriptor/config/count",
+        "go": "prolly.(*ProximityMap).Descriptor/Config/Count",
+        "node": "ProximityMap.descriptor/config/count",
+        "kotlin": "ProximityMap.descriptor/config/count",
+        "java": "ProximityMap.descriptor/config/count",
+        "ruby": "ProximityMap#descriptor/config/count",
+        "swift": "ProximityMap.descriptor/config/count",
+        "wasm": "WasmProximityMap.descriptor/config/count"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::proximity-map-lifecycle",
+        "portable-parity::proximity-session-proof-search"
+      ],
       "docs": [],
       "audience": "application",
       "audience_rationale": "prolly::ProximityMap::tree has runtime behavior in the requested proximity-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-idiomatic",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py",
+        "bindings/go/proximity.go",
+        "bindings/node/src/proximity.ts",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi",
+        "bindings/ruby/lib/prolly/api.rb",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
+        "bindings/wasm/src/index.ts"
+      ],
+      "reconciliation_rationale": "Hosts build through Engine factories, dispatch accelerated searches through typed accelerator/catalog handles, and represent the Rust tree as an opaque ProximityMap with descriptor/config/count accessors.",
+      "rationale": "prolly::ProximityMap::tree is exposed through the reviewed proximity host composition recorded in the per-language mappings."
     },
     {
       "rust": "prolly::ProximityMap::verify",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "proximity-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "ProximityMap.verify",
+        "go": "prolly.(*ProximityMap).Verify",
+        "node": "ProximityMap.verify",
+        "kotlin": "ProximityMap.verify",
+        "java": "ProximityMap.verify",
+        "ruby": "ProximityMap#verify",
+        "swift": "ProximityMap.verify",
+        "wasm": "WasmProximityMap.verify"
+      },
       "exclusions": {},
-      "tests": [],
+      "tests": [
+        "portable-parity::proximity-map-lifecycle",
+        "portable-parity::proximity-session-proof-search"
+      ],
       "docs": [],
       "audience": "application",
       "audience_rationale": "prolly::ProximityMap::verify has runtime behavior in the requested proximity-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#ProximityMap",
+        "bindings/go/proximity.go#ProximityMap",
+        "bindings/node/src/proximity.ts#ProximityMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#ProximityMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/ProximityMap.java",
+        "bindings/ruby/lib/prolly/api.rb#ProximityMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#ProximityMap",
+        "bindings/wasm/src/index.ts#WasmProximityMap"
+      ],
+      "reconciliation_rationale": "Exact reads, owned mutation/rebuild results, proofs, retained sessions, ordered early-stop scans, searches, and verification are exposed by all eight wrappers."
     },
     {
       "rust": "prolly::ProximityMembershipProof",

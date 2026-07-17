@@ -870,6 +870,18 @@ func (e *Engine) BuildProximity(dimensions uint32, records []ProximityRecord) (*
 	return newProximityMap(handle)
 }
 
+// LoadProximity reopens and validates an immutable proximity descriptor.
+func (e *Engine) LoadProximity(descriptor []byte) (*ProximityMap, error) {
+	if len(descriptor) != 32 {
+		return nil, errors.New("proximity descriptor must be 32 bytes")
+	}
+	handle, err := ffiEngineLoadProximity(e, append([]byte(nil), descriptor...))
+	if err != nil {
+		return nil, err
+	}
+	return newProximityMap(handle)
+}
+
 func newProximityMap(handle uint64) (*ProximityMap, error) {
 	fast, err := ffiProximityFastHandle(handle)
 	if err != nil {
