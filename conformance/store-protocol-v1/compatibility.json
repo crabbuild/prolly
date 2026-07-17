@@ -49,6 +49,18 @@
         "capabilities": {"native_batch_reads":true,"atomic_batch_writes":true,"node_scan":true,"hints":true,"atomic_nodes_and_hint":true,"root_scan":true,"root_compare_and_swap":true,"transactions":true,"read_parallelism":16},
         "limits": {"max_batch_read_items":null,"max_batch_write_items":null,"max_transaction_operations":null,"max_node_bytes":null},
         "evidence": ["PROLLY_REDIS_URL=redis://127.0.0.1:56379 npm --prefix bindings/node/stores/redis test", "npm --prefix bindings/node/stores/redis run check"]
+      },
+      "dynamodb": {
+        "status": "supported",
+        "module": "@trail/prolly-store-dynamodb",
+        "sdk_module": "@aws-sdk/client-dynamodb",
+        "sdk_version": "3.1089.0",
+        "minimum_node": "20.0.0",
+        "protocol_major": 1,
+        "schema_version": 1,
+        "capabilities": {"native_batch_reads":true,"atomic_batch_writes":false,"node_scan":true,"hints":true,"atomic_nodes_and_hint":false,"root_scan":true,"root_compare_and_swap":true,"transactions":true,"read_parallelism":16},
+        "limits": {"max_batch_read_items":100,"max_batch_write_items":25,"max_transaction_operations":100,"max_node_bytes":null},
+        "evidence": ["PROLLY_DYNAMODB_ENDPOINT=http://127.0.0.1:8000 npm --prefix bindings/node/stores/dynamodb test", "npm --prefix bindings/node/stores/dynamodb run check"]
       }
     },
     "kotlin": {
@@ -99,6 +111,18 @@
         "capabilities": {"native_batch_reads":true,"atomic_batch_writes":true,"node_scan":true,"hints":true,"atomic_nodes_and_hint":true,"root_scan":true,"root_compare_and_swap":true,"transactions":true,"read_parallelism":16},
         "limits": {"max_batch_read_items":null,"max_batch_write_items":null,"max_transaction_operations":null,"max_node_bytes":null},
         "evidence": ["PROLLY_REDIS_URL=redis://127.0.0.1:56379 mvn -f bindings/pom.xml -pl kotlin/stores/redis -am test"]
+      },
+      "dynamodb": {
+        "status": "supported",
+        "module": "build.crab:prolly-kotlin-store-dynamodb",
+        "sdk_module": "software.amazon.awssdk:dynamodb",
+        "sdk_version": "2.48.2",
+        "minimum_java": "17",
+        "protocol_major": 1,
+        "schema_version": 1,
+        "capabilities": {"native_batch_reads":true,"atomic_batch_writes":false,"node_scan":true,"hints":true,"atomic_nodes_and_hint":false,"root_scan":true,"root_compare_and_swap":true,"transactions":true,"read_parallelism":16},
+        "limits": {"max_batch_read_items":100,"max_batch_write_items":25,"max_transaction_operations":100,"max_node_bytes":null},
+        "evidence": ["PROLLY_DYNAMODB_ENDPOINT=http://127.0.0.1:8000 mvn -f bindings/pom.xml -pl kotlin/stores/dynamodb -am test"]
       }
     },
     "java": {
@@ -149,6 +173,18 @@
         "capabilities": {"native_batch_reads":true,"atomic_batch_writes":true,"node_scan":true,"hints":true,"atomic_nodes_and_hint":true,"root_scan":true,"root_compare_and_swap":true,"transactions":true,"read_parallelism":16},
         "limits": {"max_batch_read_items":null,"max_batch_write_items":null,"max_transaction_operations":null,"max_node_bytes":null},
         "evidence": ["PROLLY_REDIS_URL=redis://127.0.0.1:56379 mvn -f bindings/pom.xml -pl java/stores/redis -am test"]
+      },
+      "dynamodb": {
+        "status": "supported",
+        "module": "build.crab:prolly-java-store-dynamodb",
+        "sdk_module": "software.amazon.awssdk:dynamodb",
+        "sdk_version": "2.48.2",
+        "minimum_java": "17",
+        "protocol_major": 1,
+        "schema_version": 1,
+        "capabilities": {"native_batch_reads":true,"atomic_batch_writes":false,"node_scan":true,"hints":true,"atomic_nodes_and_hint":false,"root_scan":true,"root_compare_and_swap":true,"transactions":true,"read_parallelism":16},
+        "limits": {"max_batch_read_items":100,"max_batch_write_items":25,"max_transaction_operations":100,"max_node_bytes":null},
+        "evidence": ["PROLLY_DYNAMODB_ENDPOINT=http://127.0.0.1:8000 mvn -f bindings/pom.xml -pl java/stores/dynamodb -am test"]
       }
     },
     "go": {
