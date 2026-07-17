@@ -6,7 +6,14 @@ import asyncio
 from dataclasses import dataclass
 from typing import Any, Callable, Iterable, Sequence
 
-from .packed import NeighborView, ScopedBytes, proximity_search_view
+from .packed import (
+    EntryView,
+    NeighborView,
+    ScanOutcome,
+    ScopedBytes,
+    proximity_search_view,
+    scan_range_view,
+)
 from .uniffi import prolly as _native
 
 
@@ -351,6 +358,19 @@ class ReadSession(_Scoped):
     def get_many(self, keys: Iterable[bytes]):
         self._open()
         return self._inner.get_many([bytes(key) for key in keys])
+
+    def scan_range_view(
+        self,
+        start: bytes = b"",
+        end: bytes | None = None,
+        visit: Callable[[EntryView], bool] | None = None,
+    ) -> ScanOutcome:
+        self._open()
+        if visit is None:
+            raise TypeError("visit must be provided")
+        return scan_range_view(
+            self._inner.fast_handle(), bytes(start), None if end is None else bytes(end), visit
+        )
 
 
 class IndexRegistry:
@@ -701,6 +721,7 @@ def verify_proximity_structure_proof(
 
 __all__ = [
     "Engine",
+    "EntryView",
     "IndexProjection",
     "IndexRegistry",
     "IndexedMap",
@@ -714,6 +735,7 @@ __all__ = [
     "SecondaryIndex",
     "ScopedBytes",
     "ReadSession",
+    "ScanOutcome",
     "VersionedMap",
     "verify_key_proof",
     "verify_proximity_membership_proof",

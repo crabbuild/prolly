@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import build.crab.prolly.javaapi.Engine;
@@ -17,9 +18,11 @@ import build.crab.prolly.javaapi.ProximityRecord;
 import build.crab.prolly.javaapi.ProximityMutation;
 import build.crab.prolly.javaapi.Proofs;
 import build.crab.prolly.javaapi.SearchRequest;
-import java.nio.ByteBuffer;
+import build.crab.prolly.javaapi.ScopedBytes;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
 class PortableParityTest {
@@ -76,13 +79,9 @@ class PortableParityTest {
                          var index = snapshot.index(bytes("by_team"));
                          var page = index.exactPage(bytes("red"), 2)) {
                         assertEquals(2, page.rows().size());
-                        ByteBuffer primaryKey = page.rows().get(0).primaryKey();
-                        byte[] key = new byte[primaryKey.remaining()];
-                        primaryKey.get(key);
+                        byte[] key = page.rows().get(0).primaryKey().copy();
                         assertArrayEquals(bytes("u1"), key);
-                        ByteBuffer secondPrimaryKey = page.rows().get(1).primaryKey();
-                        byte[] secondKey = new byte[secondPrimaryKey.remaining()];
-                        secondPrimaryKey.get(secondKey);
+                        byte[] secondKey = page.rows().get(1).primaryKey().copy();
                         assertArrayEquals(bytes("u2"), secondKey);
                     }
                 }
@@ -135,6 +134,20 @@ class PortableParityTest {
                 assertEquals(2, snapshot.entryCount());
                 assertFalse(snapshot.export().getNodes().isEmpty());
                 assertArrayEquals(bytes("v"), session.get(bytes("k")).orElseThrow());
+                var escaped = new AtomicReference<ScopedBytes>();
+                var seen = new ArrayList<String>();
+                var scan = session.scanRangeView(bytes("k"), bytes("l"), entry -> {
+                    escaped.compareAndSet(null, entry.key());
+                    seen.add(new String(entry.key().copy()) + "=" + new String(entry.value().copy()));
+                    return true;
+                });
+                assertEquals(2, scan.visited());
+                assertFalse(scan.stopped());
+                assertEquals(List.of("k=v", "ka=v2"), seen);
+                assertThrows(IllegalStateException.class, () -> escaped.get().copy());
+                assertEquals(
+                        new build.crab.prolly.javaapi.ReadScanOutcome(1, true),
+                        session.scanRangeView(bytes("k"), bytes("l"), entry -> false));
             }
             assertTrue(versioned.catalogVersionCount() >= 2);
             assertFalse(versioned.backup().length == 0);

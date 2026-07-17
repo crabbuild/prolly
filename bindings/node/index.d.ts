@@ -198,6 +198,10 @@ export interface NodePortableMaintenanceSummary {
   itemCount: string
   byteCount: string
 }
+export interface NodePortableReadScanOutcome {
+  visited: string
+  stopped: boolean
+}
 export interface NodeRemoteStoreCapabilitiesRecord {
   nativeBatchReads: boolean
   atomicBatchWrites: boolean

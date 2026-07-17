@@ -717,8 +717,8 @@ func (s *ProximitySession) WithSearchView(ctx context.Context, request SearchReq
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	scope := &viewScope{}
-	defer scope.expired.Store(true)
+	scope := newViewScope()
+	defer scope.close()
 	rows, err := decodeNeighborViews(page.data, scope)
 	if err != nil {
 		return err

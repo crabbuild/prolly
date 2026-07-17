@@ -180,6 +180,11 @@ class MapSnapshot(internal val native: BindingMapSnapshot) : AutoCloseable {
 class ReadSession(internal val native: ProllyReadSession) : AutoCloseable {
     fun get(key: ByteArray) = native.get(key.copyOf())
     fun getMany(keys: List<ByteArray>) = native.getMany(keys.map(ByteArray::copyOf))
+    fun scanRangeView(
+        start: ByteArray = ByteArray(0),
+        end: ByteArray? = null,
+        block: (EntryView) -> Boolean,
+    ) = PackedPages.scanRangeView(native.fastHandle(), start.copyOf(), end?.copyOf(), block)
     override fun close() = native.close()
 }
 

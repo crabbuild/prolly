@@ -168,7 +168,23 @@ class PortableParityTest < Minitest::Test
       assert_equal ['k'.b], proved_page.page.entries.map(&:key)
       assert_equal 2, snapshot.stats.total_key_value_pairs
       refute_empty snapshot.export.nodes
-      snapshot.read.use { |session| assert_equal 'v'.b, session.get('k'.b) }
+      snapshot.read.use do |session|
+        assert_equal 'v'.b, session.get('k'.b)
+        escaped = nil
+        seen = []
+        outcome = session.scan_range_view('k'.b, 'l'.b) do |entry|
+          escaped ||= entry.key
+          seen << "#{entry.key.bytes}=#{entry.value.bytes}"
+          true
+        end
+        assert_equal 2, outcome.visited
+        refute outcome.stopped
+        assert_equal ['k=v', 'ka=v2'], seen
+        assert_raises(RuntimeError) { escaped.bytes }
+        stopped = session.scan_range_view('k'.b, 'l'.b) { false }
+        assert_equal 1, stopped.visited
+        assert stopped.stopped
+      end
       assert_operator versioned.verify_catalog.version_count, :>=, 2
       refute_empty versioned.backup
       refute_empty versioned.plan_gc.reachability.live_cids

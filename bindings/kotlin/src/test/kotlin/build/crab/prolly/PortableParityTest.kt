@@ -164,6 +164,21 @@ class PortableParityTest {
                     assertEquals(true, snapshot.export().nodes.isNotEmpty())
                     snapshot.read().use { session ->
                         assertArrayEquals("v".bytes(), session.get("k".bytes()))
+                        var escaped: build.crab.prolly.api.ScopedBytes? = null
+                        val seen = mutableListOf<String>()
+                        val outcome = session.scanRangeView("k".bytes(), "l".bytes()) { entry ->
+                            if (escaped == null) escaped = entry.key
+                            seen += "${String(entry.key.bytes())}=${String(entry.value.bytes())}"
+                            true
+                        }
+                        assertEquals(2L, outcome.visited)
+                        assertEquals(false, outcome.stopped)
+                        assertEquals(listOf("k=v", "ka=v2"), seen)
+                        assertThrows<IllegalStateException> { escaped!!.bytes() }
+                        assertEquals(
+                            build.crab.prolly.api.ReadScanOutcome(1L, true),
+                            session.scanRangeView("k".bytes(), "l".bytes()) { false },
+                        )
                     }
                 }
                 assertEquals(true, versioned.verifyCatalog().versionCount >= 2uL)

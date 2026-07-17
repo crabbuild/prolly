@@ -2,6 +2,7 @@ package build.crab.prolly.javaapi;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Predicate;
 
 public final class ReadSession implements AutoCloseable {
     private build.crab.prolly.api.ReadSession nativeSession;
@@ -17,6 +18,14 @@ public final class ReadSession implements AutoCloseable {
     public List<byte[]> getMany(List<byte[]> keys) {
         return open().getMany(keys.stream().map(byte[]::clone).toList()).stream()
                 .map(value -> value == null ? null : value.clone()).toList();
+    }
+    public ReadScanOutcome scanRangeView(
+            byte[] start, byte[] end, Predicate<EntryView> visitor) {
+        if (visitor == null) throw new NullPointerException("visitor");
+        var outcome = open().scanRangeView(
+                start.clone(), end == null ? null : end.clone(),
+                value -> visitor.test(EntryView.fromNative(value)));
+        return new ReadScanOutcome(outcome.getVisited(), outcome.getStopped());
     }
     @Override public void close() {
         if (nativeSession != null) { nativeSession.close(); nativeSession = null; }

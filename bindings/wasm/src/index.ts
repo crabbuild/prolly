@@ -838,12 +838,51 @@ export class WasmViewExpiredError extends Error {
   }
 }
 
-function scopedPortableBytes(value: Uint8Array, scope: { alive: boolean }): Uint8Array {
+function scopedPortableBytes(
+  value: Uint8Array,
+  scope: { alive: boolean },
+  memory?: WebAssembly.Memory,
+): Uint8Array {
+  const borrowedBuffer = value.buffer;
+  const check = () => {
+    if (!scope.alive || (memory != null && memory.buffer !== borrowedBuffer)) {
+      throw new WasmViewExpiredError();
+    }
+  };
+  const mutators = new Set<PropertyKey>(["copyWithin", "fill", "reverse", "set", "sort"]);
+  const iterators = new Set<PropertyKey>([Symbol.iterator, "entries", "keys", "values"]);
   return new Proxy(value, {
     get(target, property) {
-      if (!scope.alive) throw new WasmViewExpiredError();
+      check();
+      if (property === "buffer") {
+        throw new TypeError("the backing WASM memory of a scoped view is not exposed; copy the view instead");
+      }
+      if (mutators.has(property)) {
+        return () => { throw new TypeError("scoped WASM views are read-only"); };
+      }
+      if (property === "subarray") {
+        return (begin?: number, end?: number) => scopedPortableBytes(target.subarray(begin, end), scope, memory);
+      }
+      if (iterators.has(property)) {
+        return () => {
+          const iteratorFactory = Reflect.get(target, property, target) as () => Iterator<unknown>;
+          const iterator = iteratorFactory.call(target);
+          return {
+            next(): IteratorResult<unknown> {
+              check();
+              return iterator.next();
+            },
+            [Symbol.iterator]() { return this; },
+          };
+        };
+      }
       const member = Reflect.get(target, property, target);
-      return typeof member === "function" ? member.bind(target) : member;
+      return typeof member === "function"
+        ? (...args: unknown[]) => {
+          check();
+          return member.apply(target, args);
+        }
+        : member;
     },
     set() { throw new TypeError("scoped WASM views are read-only"); },
   });
@@ -876,7 +915,9 @@ export class Engine implements Disposable {
   }
 
   versionedMap(id: Uint8Array): WasmVersionedMap {
-    return new WasmVersionedMap(this.#open().versionedMap(ownedPortableBytes(id)));
+    return new WasmVersionedMap(
+      this.#open().versionedMap(ownedPortableBytes(id)), this.#module?.wasmMemory(),
+    );
   }
 
   indexRegistry(): WasmIndexRegistry {
@@ -962,7 +1003,8 @@ function ownedWasmMutations(mutations: readonly WasmMapMutation[]): WasmMapMutat
 
 export class WasmVersionedMap implements Disposable {
   #native?: any;
-  constructor(native: any) { this.#native = native; }
+  #memory?: WebAssembly.Memory;
+  constructor(native: any, memory?: WebAssembly.Memory) { this.#native = native; this.#memory = memory; }
   #open(): any {
     if (this.#native == null) throw new Error("WASM versioned map is closed");
     return this.#native;
@@ -1051,14 +1093,14 @@ export class WasmVersionedMap implements Disposable {
     const native = this.#open();
     return portablePromise(signal, () => {
       const value = native.snapshot();
-      return value == null ? undefined : new WasmMapSnapshot(value);
+      return value == null ? undefined : new WasmMapSnapshot(value, this.#memory);
     });
   }
   snapshotAt(id: Uint8Array, signal?: AbortSignal): Promise<WasmMapSnapshot | undefined> {
     const native = this.#open(); id = ownedPortableBytes(id);
     return portablePromise(signal, () => {
       const value = native.snapshotAt(id);
-      return value == null ? undefined : new WasmMapSnapshot(value);
+      return value == null ? undefined : new WasmMapSnapshot(value, this.#memory);
     });
   }
   backup(signal?: AbortSignal): Promise<Uint8Array> {
@@ -1090,7 +1132,8 @@ export class WasmVersionedMap implements Disposable {
 
 export class WasmMapSnapshot implements Disposable {
   #native?: any;
-  constructor(native: any) { this.#native = native; }
+  #memory?: WebAssembly.Memory;
+  constructor(native: any, memory?: WebAssembly.Memory) { this.#native = native; this.#memory = memory; }
   #open(): any { if (this.#native == null) throw new Error("WASM map snapshot is closed"); return this.#native; }
   id(): Uint8Array { return this.#open().id(); }
   version(): WasmMapVersion { return wasmMapVersion(this.#open().version()); }
@@ -1174,17 +1217,49 @@ export class WasmMapSnapshot implements Disposable {
   exportSummary(): { itemCount: bigint; byteCount: bigint } {
     const value = this.#open().export(); return { itemCount: BigInt(value.itemCount), byteCount: BigInt(value.byteCount) };
   }
-  read(): WasmReadSession { return new WasmReadSession(this.#open().read()); }
+  read(): WasmReadSession { return new WasmReadSession(this.#open().read(), this.#memory); }
   close(): void { this.#native?.free?.(); this.#native = undefined; }
   [Symbol.dispose](): void { this.close(); }
 }
 
 export class WasmReadSession implements Disposable {
   #native?: any;
-  constructor(native: any) { this.#native = native; }
+  #memory?: WebAssembly.Memory;
+  #scanActive = false;
+  constructor(native: any, memory?: WebAssembly.Memory) { this.#native = native; this.#memory = memory; }
   get(key: Uint8Array): Uint8Array | undefined {
     if (this.#native == null) throw new Error("WASM read session is closed");
+    if (this.#scanActive) throw new Error("WASM read session cannot be re-entered during a zero-copy scan callback");
     return this.#native.get(ownedPortableBytes(key)) ?? undefined;
+  }
+  scanRangeView(
+    start: Uint8Array,
+    end: Uint8Array | undefined,
+    visit: (entry: WasmEntryRecord) => boolean,
+  ): { visited: bigint; stopped: boolean } {
+    if (this.#native == null) throw new Error("WASM read session is closed");
+    if (this.#scanActive) throw new Error("WASM read session cannot be re-entered during a zero-copy scan callback");
+    if (typeof visit !== "function") throw new TypeError("scan visitor must be a function");
+    this.#scanActive = true;
+    try {
+      const outcome = this.#native.scanRangeView(
+        ownedPortableBytes(start), end == null ? undefined : ownedPortableBytes(end),
+        (entry: WasmEntryRecord) => {
+          const scope = { alive: true };
+          try {
+            return visit({
+              key: scopedPortableBytes(entry.key, scope, this.#memory),
+              value: scopedPortableBytes(entry.value, scope, this.#memory),
+            });
+          } finally {
+            scope.alive = false;
+          }
+        },
+      );
+      return { visited: BigInt(outcome.visited), stopped: outcome.stopped };
+    } finally {
+      this.#scanActive = false;
+    }
   }
   close(): void { this.#native?.free?.(); this.#native = undefined; }
   [Symbol.dispose](): void { this.close(); }

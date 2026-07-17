@@ -290,6 +290,17 @@ public final class ReadSession: @unchecked Sendable {
     public func getMany(_ keys: [Data]) throws -> [Data?] {
         try open { try native.getMany(keys: keys.map { Data($0) }) }
     }
+    public func scanRangeView(
+        from start: Data = Data(),
+        to end: Data? = nil,
+        _ body: (ReadEntryView) throws -> Bool
+    ) throws -> ReadScanOutcome {
+        try open {
+            try withReadScanView(
+                handle: native.fastHandle(), start: Data(start), end: end.map { Data($0) }, body
+            )
+        }
+    }
     private func open<R>(_ body: () throws -> R) throws -> R {
         if closed { throw PortableAPIError.closed("ReadSession") }
         return try body()
@@ -438,6 +449,143 @@ public struct ScopedBytes: RandomAccessCollection {
         precondition(position >= 0 && position < countValue)
         return page[offset + position]
     }
+}
+
+/// Read-only native page views valid only until the scan callback returns.
+public struct ReadEntryView {
+    public let key: ScopedBytes
+    public let value: ScopedBytes
+}
+
+public struct ReadScanOutcome: Equatable, Sendable {
+    public let visited: UInt64
+    public let stopped: Bool
+
+    public init(visited: UInt64, stopped: Bool) {
+        self.visited = visited
+        self.stopped = stopped
+    }
+}
+
+private func withReadScanView(
+    handle: UInt64,
+    start: Data,
+    end: Data?,
+    _ body: (ReadEntryView) throws -> Bool
+) throws -> ReadScanOutcome {
+    let endBytes = end ?? Data()
+    let opened = start.withUnsafeBytes { startBuffer in
+        endBytes.withUnsafeBytes { endBuffer in
+            prolly_fast_read_session_scan_open(
+                handle,
+                startBuffer.bindMemory(to: UInt8.self).baseAddress,
+                startBuffer.count,
+                endBuffer.bindMemory(to: UInt8.self).baseAddress,
+                endBuffer.count,
+                end == nil ? 0 : 1
+            )
+        }
+    }
+    guard opened.status == 0 else {
+        throw PortableAPIError.packedPage("native retained scan open failed with status \(opened.status)")
+    }
+    defer { prolly_fast_scan_close(opened.scan_handle) }
+
+    var visited: UInt64 = 0
+    var previousPageKey: Data?
+    while true {
+        let result = prolly_fast_read_session_scan_next(
+            handle, opened.scan_handle, 4096, 4 * 1024 * 1024
+        )
+        guard result.status == 0, let pointer = result.data_ptr else {
+            throw PortableAPIError.packedPage("native retained scan read failed with status \(result.status)")
+        }
+        let pageOutcome = try { () throws -> (stopped: Bool, lastKey: Data?) in
+            defer { prolly_fast_page_release(result.lease_handle) }
+            let page = UnsafeRawBufferPointer(
+                start: UnsafeRawPointer(pointer), count: Int(result.data_len)
+            )
+            guard page.count >= 28,
+                  page[0] == 0x50, page[1] == 0x52, page[2] == 0x50, page[3] == 0x47,
+                  readUInt16(page, 4) == 1, readUInt16(page, 6) == 1 else {
+                throw PortableAPIError.packedPage("invalid retained packed scan header")
+            }
+            let flags = readUInt32(page, 8)
+            let count = Int(readUInt32(page, 12))
+            let tableBytes = Int(readUInt32(page, 16))
+            let arenaBytes = Int(readUInt64(page, 20))
+            guard count == Int(result.record_count), tableBytes >= count * 16,
+                  tableBytes % 16 == 0,
+                  (flags & 1 != 0) == (result.terminal != 0),
+                  28 + tableBytes + arenaBytes == page.count else {
+                throw PortableAPIError.packedPage("invalid retained packed scan bounds")
+            }
+
+            let scope = PageScope()
+            defer { scope.alive = false }
+            let arenaStart = 28 + tableBytes
+            var previousView: ScopedBytes?
+            for index in 0..<count {
+                let base = 28 + index * 16
+                let keyOffset = Int(readUInt32(page, base))
+                let keyLength = Int(readUInt32(page, base + 4))
+                let valueOffset = Int(readUInt32(page, base + 8))
+                let valueLength = Int(readUInt32(page, base + 12))
+                guard packedRangeIsValid(keyOffset, keyLength, arenaBytes),
+                      packedRangeIsValid(valueOffset, valueLength, arenaBytes) else {
+                    throw PortableAPIError.packedPage("retained scan field exceeds arena")
+                }
+                let key = ScopedBytes(
+                    page: page, offset: arenaStart + keyOffset, count: keyLength, scope: scope
+                )
+                let value = ScopedBytes(
+                    page: page, offset: arenaStart + valueOffset, count: valueLength, scope: scope
+                )
+                let ordered: Bool
+                if let previousView {
+                    ordered = compareUnsigned(previousView, key) < 0
+                } else if let previousPageKey {
+                    ordered = compareUnsigned(previousPageKey, key) < 0
+                } else {
+                    ordered = true
+                }
+                guard ordered else {
+                    throw PortableAPIError.packedPage("retained scan keys are not strictly ordered")
+                }
+                previousView = key
+                visited += 1
+                if try !body(ReadEntryView(key: key, value: value)) {
+                    return (true, nil)
+                }
+            }
+            return (false, previousView.map { Data($0) })
+        }()
+        if pageOutcome.stopped { return ReadScanOutcome(visited: visited, stopped: true) }
+        if result.terminal != 0 { return ReadScanOutcome(visited: visited, stopped: false) }
+        guard let lastKey = pageOutcome.lastKey else {
+            throw PortableAPIError.packedPage("non-terminal retained scan made no progress")
+        }
+        previousPageKey = lastKey
+    }
+}
+
+private func packedRangeIsValid(_ offset: Int, _ length: Int, _ arenaBytes: Int) -> Bool {
+    offset >= 0 && length >= 0 && offset <= arenaBytes && length <= arenaBytes - offset
+}
+
+private func compareUnsigned<L: Collection, R: Collection>(_ left: L, _ right: R) -> Int
+where L.Element == UInt8, R.Element == UInt8 {
+    var leftIndex = left.startIndex
+    var rightIndex = right.startIndex
+    while leftIndex != left.endIndex && rightIndex != right.endIndex {
+        let lhs = left[leftIndex]
+        let rhs = right[rightIndex]
+        if lhs != rhs { return lhs < rhs ? -1 : 1 }
+        left.formIndex(after: &leftIndex)
+        right.formIndex(after: &rightIndex)
+    }
+    if leftIndex == left.endIndex && rightIndex == right.endIndex { return 0 }
+    return leftIndex == left.endIndex ? -1 : 1
 }
 
 public struct NeighborView {

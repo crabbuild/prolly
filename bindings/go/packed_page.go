@@ -1,35 +1,126 @@
 package prolly
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"io"
 	"math"
-	"sync/atomic"
+	"sync"
 )
 
 var ErrViewExpired = errors.New("packed page view escaped its callback scope")
 
-type viewScope struct{ expired atomic.Bool }
+type viewScope struct {
+	mu    sync.RWMutex
+	alive bool
+}
+
+func newViewScope() *viewScope { return &viewScope{alive: true} }
+
+func (s *viewScope) close() {
+	s.mu.Lock()
+	s.alive = false
+	s.mu.Unlock()
+}
 
 type ScopedBytes struct {
 	data  []byte
 	scope *viewScope
 }
 
+// Bytes returns an owned copy, or nil after the callback scope expires.
+// Use Len, At, Equal, Compare, or WriteTo to inspect the live view without a copy.
 func (v ScopedBytes) Bytes() []byte {
-	if v.scope == nil || v.scope.expired.Load() {
-		return nil
-	}
-	return v.data
+	value, _ := v.Copy()
+	return value
 }
 
 func (v ScopedBytes) Copy() ([]byte, error) {
-	if v.scope == nil || v.scope.expired.Load() {
-		return nil, ErrViewExpired
+	var result []byte
+	err := v.withData(func(data []byte) { result = append([]byte(nil), data...) })
+	return result, err
+}
+
+func (v ScopedBytes) withData(read func([]byte)) error {
+	if v.scope == nil {
+		return ErrViewExpired
 	}
-	return append([]byte(nil), v.data...), nil
+	v.scope.mu.RLock()
+	defer v.scope.mu.RUnlock()
+	if !v.scope.alive {
+		return ErrViewExpired
+	}
+	read(v.data)
+	return nil
+}
+
+func (v ScopedBytes) mustWithData(read func([]byte)) {
+	if err := v.withData(read); err != nil {
+		panic(err)
+	}
+}
+
+func (v ScopedBytes) Len() int {
+	length := 0
+	v.mustWithData(func(data []byte) { length = len(data) })
+	return length
+}
+
+func (v ScopedBytes) At(index int) byte {
+	var value byte
+	v.mustWithData(func(data []byte) { value = data[index] })
+	return value
+}
+
+func (v ScopedBytes) AppendTo(destination []byte) []byte {
+	v.mustWithData(func(data []byte) { destination = append(destination, data...) })
+	return destination
+}
+
+func (v ScopedBytes) Equal(other []byte) bool {
+	equal := false
+	v.mustWithData(func(data []byte) { equal = bytes.Equal(data, other) })
+	return equal
+}
+
+func (v ScopedBytes) Compare(other []byte) int {
+	comparison := 0
+	v.mustWithData(func(data []byte) { comparison = bytes.Compare(data, other) })
+	return comparison
+}
+
+func (v ScopedBytes) String() string {
+	var result string
+	v.mustWithData(func(data []byte) { result = string(data) })
+	return result
+}
+
+// WriteTo writes the view synchronously without an intermediate copy. As
+// required by io.Writer, the writer must not retain the supplied byte slice.
+func (v ScopedBytes) WriteTo(writer io.Writer) (int64, error) {
+	if writer == nil {
+		return 0, errors.New("nil scoped-bytes writer")
+	}
+	var written int
+	var writeErr error
+	if err := v.withData(func(data []byte) {
+		written, writeErr = writer.Write(data)
+		if writeErr == nil && written != len(data) {
+			writeErr = io.ErrShortWrite
+		}
+	}); err != nil {
+		return 0, err
+	}
+	return int64(written), writeErr
+}
+
+func (v ScopedBytes) copyTo(destination []byte) int {
+	written := 0
+	v.mustWithData(func(data []byte) { written = copy(destination, data) })
+	return written
 }
 
 type IndexQuery struct {
@@ -150,10 +241,10 @@ func (i *SecondaryIndex) QueryView(ctx context.Context, query IndexQuery, visit 
 		if err != nil {
 			return err
 		}
-		scope := &viewScope{}
+		scope := newViewScope()
 		rows, decodeErr := decodeIndexViews(page.data, scope)
 		if decodeErr != nil {
-			scope.expired.Store(true)
+			scope.close()
 			page.Close()
 			return decodeErr
 		}
@@ -164,7 +255,7 @@ func (i *SecondaryIndex) QueryView(ctx context.Context, query IndexQuery, visit 
 				break
 			}
 		}
-		scope.expired.Store(true)
+		scope.close()
 		terminal := page.terminal
 		page.Close()
 		if !keepGoing || terminal {

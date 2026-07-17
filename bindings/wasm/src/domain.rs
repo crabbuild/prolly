@@ -1,11 +1,12 @@
 use super::{
-    entries_to_array, entry_object, js_error, multi_key_proof_verification_to_object,
-    optional_bytes, range_page_proof_verification_to_object, range_page_to_object,
-    range_proof_verification_to_object, reverse_page_to_object, WasmProllyEngine, WasmRangeCursor,
-    WasmReverseCursor,
+    borrowed_entry_view_object, call_scan_visitor, entries_to_array, entry_object, js_error,
+    multi_key_proof_verification_to_object, optional_bytes,
+    range_page_proof_verification_to_object, range_page_to_object,
+    range_proof_verification_to_object, reverse_page_to_object, scan_callback_flow,
+    scan_outcome_to_object, WasmProllyEngine, WasmRangeCursor, WasmReverseCursor,
 };
 use crate::page::set_bytes;
-use js_sys::{Array, Object, Reflect, Uint8Array};
+use js_sys::{Array, Function, Object, Reflect, Uint8Array};
 use prolly::{
     KeyProof, MapVersionId, MultiKeyProof, OwnedReadSession, ProvedRangePage, RangeProof,
     VersionedMapBackup, VersionedMapUpdate,
@@ -576,6 +577,27 @@ impl WasmReadSession {
             .get_with(&key.to_vec(), <[u8]>::to_vec)
             .map(optional_bytes)
             .map_err(js_error)
+    }
+
+    #[wasm_bindgen(js_name = scanRangeView)]
+    pub fn scan_range_view(
+        &self,
+        start: Uint8Array,
+        end: Option<Uint8Array>,
+        visitor: &Function,
+    ) -> Result<Object, JsValue> {
+        let start = start.to_vec();
+        let end = end.map(|value| value.to_vec());
+        let mut callback_error = None;
+        let outcome = self
+            .inner
+            .scan_range_until(&start, end.as_deref(), |entry| {
+                let result = borrowed_entry_view_object(entry.key(), entry.value())
+                    .and_then(|value| call_scan_visitor(visitor, value));
+                scan_callback_flow(result, &mut callback_error)
+            })
+            .map_err(js_error)?;
+        callback_error.map_or_else(|| scan_outcome_to_object(outcome), Err)
     }
 }
 

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -562,12 +563,16 @@ func TestReadSessionScanRangeViewCrossesPackedPageBoundary(t *testing.T) {
 	defer session.Close()
 
 	var previous []byte
+	var escaped ScopedBytes
 	count := 0
 	outcome, err := session.ScanRangeView(nil, nil, func(entry EntryView) bool {
-		if previous != nil && bytes.Compare(previous, entry.Key) >= 0 {
-			t.Fatalf("view scan is not ordered at %q after %q", entry.Key, previous)
+		if previous != nil && entry.Key.Compare(previous) <= 0 {
+			t.Fatalf("view scan is not ordered at %q after %q", entry.Key.String(), previous)
 		}
-		previous = append(previous[:0], entry.Key...)
+		if count == 0 {
+			escaped = entry.Key
+		}
+		previous = entry.Key.AppendTo(previous[:0])
 		count++
 		return true
 	})
@@ -577,6 +582,11 @@ func TestReadSessionScanRangeViewCrossesPackedPageBoundary(t *testing.T) {
 	if string(previous) != "00004999" {
 		t.Fatalf("view scan last key=%q", previous)
 	}
+	func() {
+		if _, err := escaped.Copy(); !errors.Is(err, ErrViewExpired) {
+			t.Fatalf("escaped packed scan view error = %v", err)
+		}
+	}()
 
 	count = 0
 	outcome, err = session.ScanRangeView(nil, nil, func(EntryView) bool {
