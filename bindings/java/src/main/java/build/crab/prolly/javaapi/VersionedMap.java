@@ -106,6 +106,14 @@ public final class VersionedMap implements AutoCloseable {
         return snapshot == null ? null : new MapSnapshot(snapshot);
     }
 
+    public MapComparison compare(byte[] base, byte[] target) {
+        return new MapComparison(open().compare(base.clone(), target.clone()));
+    }
+
+    public MapComparison compareToHead(byte[] base) {
+        return new MapComparison(open().compareToHead(base.clone()));
+    }
+
     public byte[] backup() { return open().backup().clone(); }
     public MapVersion restoreBackup(byte[] bytes) {
         return MapVersion.fromNative(open().restoreBackup(bytes.clone()));

@@ -1007,11 +1007,19 @@ export declare class NativePortableVersionedMap {
   delete(key: Buffer): NodePortableMapVersion
   snapshot(): NativePortableMapSnapshot | null
   snapshotAt(id: Buffer): NativePortableMapSnapshot | null
+  compare(base: Buffer, target: Buffer): NativePortableMapComparison
+  compareToHead(base: Buffer): NativePortableMapComparison
   backup(): Buffer
   restoreBackup(bytes: Buffer): NodePortableMapVersion
   keepLast(count: number): NodePortableVersionPrune
   verifyCatalog(): NodePortableMaintenanceSummary
   planGc(): NodePortableMaintenanceSummary
+}
+export declare class NativePortableMapComparison {
+  base(): NodePortableMapVersion
+  target(): NodePortableMapVersion
+  diff(): Array<NodeDiffRecord>
+  diffPage(cursor: NodeRangeCursorRecord | undefined | null, end: Buffer | undefined | null, limit: string): NodeDiffPageRecord
 }
 export declare class NativePortableMapSnapshot {
   id(): Buffer
@@ -1040,6 +1048,7 @@ export declare class NativePortableMapSnapshot {
 }
 export declare class NativePortableReadSession {
   get(key: Buffer): Buffer | null
+  scanRangePages(start: Buffer, end: Buffer | undefined | null, visit: (arg: object) => number): NodePortableReadScanOutcome
 }
 export declare class NativePortableKeyProof {
   verify(): NodePortableProofVerification

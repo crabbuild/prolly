@@ -152,6 +152,12 @@ public final class VersionedMap: @unchecked Sendable {
     public func snapshot(at id: Data) throws -> MapSnapshot? {
         try open { try native.snapshotAt(id: Data(id)).map(MapSnapshot.init(native:)) }
     }
+    public func compare(base: Data, target: Data) throws -> MapComparison {
+        try open { MapComparison(native: try native.compare(base: Data(base), target: Data(target))) }
+    }
+    public func compareToHead(base: Data) throws -> MapComparison {
+        try open { MapComparison(native: try native.compareToHead(base: Data(base))) }
+    }
     public func backup() throws -> Data { try open { try native.backup() } }
     public func restoreBackup(_ bundle: Data) throws -> MapVersionRecord {
         try open { try native.restoreBackup(bytes: Data(bundle)) }
@@ -176,6 +182,27 @@ public final class VersionedMap: @unchecked Sendable {
 
     private func open<R>(_ body: () throws -> R) throws -> R {
         if closed { throw PortableAPIError.closed("VersionedMap") }
+        return try body()
+    }
+}
+
+public final class MapComparison: @unchecked Sendable {
+    let native: BindingMapComparison
+    private var closed = false
+    init(native: BindingMapComparison) { self.native = native }
+    public func close() { closed = true }
+    public var base: MapVersionRecord { native.base() }
+    public var target: MapVersionRecord { native.target() }
+    public func diff() throws -> [DiffRecord] { try open { try native.diff() } }
+    public func diffPage(
+        cursor: RangeCursorRecord? = nil,
+        end: Data? = nil,
+        limit: UInt64 = 256
+    ) throws -> DiffPageRecord {
+        try open { try native.diffPage(cursor: cursor, rangeEnd: end.map { Data($0) }, limit: limit) }
+    }
+    private func open<R>(_ body: () throws -> R) throws -> R {
+        if closed { throw PortableAPIError.closed("MapComparison") }
         return try body()
     }
 }

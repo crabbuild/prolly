@@ -1,6 +1,6 @@
 use super::{
-    borrowed_entry_view_object, call_scan_visitor, entries_to_array, entry_object, js_error,
-    multi_key_proof_verification_to_object, optional_bytes,
+    borrowed_entry_view_object, call_scan_visitor, diffs_to_array, entries_to_array, entry_object,
+    js_error, multi_key_proof_verification_to_object, optional_bytes, range_cursor_value,
     range_page_proof_verification_to_object, range_page_to_object,
     range_proof_verification_to_object, reverse_page_to_object, scan_callback_flow,
     scan_outcome_to_object, WasmProllyEngine, WasmRangeCursor, WasmReverseCursor,
@@ -250,6 +250,51 @@ impl WasmVersionedMap {
             }))
     }
 
+    pub fn compare(
+        &self,
+        base: Uint8Array,
+        target: Uint8Array,
+    ) -> Result<WasmMapComparison, JsValue> {
+        let base = MapVersionId::from_bytes(&base.to_vec()).map_err(js_error)?;
+        let target = MapVersionId::from_bytes(&target.to_vec()).map_err(js_error)?;
+        let map = self.engine.versioned_map(&self.id);
+        let base = map
+            .version(&base)
+            .map_err(js_error)?
+            .ok_or_else(|| JsValue::from_str("base map version is not cataloged"))?;
+        let target = map
+            .version(&target)
+            .map_err(js_error)?
+            .ok_or_else(|| JsValue::from_str("target map version is not cataloged"))?;
+        Ok(WasmMapComparison {
+            engine: Arc::clone(&self.engine),
+            base,
+            target,
+        })
+    }
+
+    #[wasm_bindgen(js_name = compareToHead)]
+    pub fn compare_to_head(&self, base: Uint8Array) -> Result<WasmMapComparison, JsValue> {
+        let target = self
+            .engine
+            .versioned_map(&self.id)
+            .head()
+            .map_err(js_error)?
+            .ok_or_else(|| JsValue::from_str("versioned map has not been initialized"))?;
+        let base = MapVersionId::from_bytes(&base.to_vec()).map_err(js_error)?;
+        let base = self
+            .engine
+            .versioned_map(&self.id)
+            .version(&base)
+            .map_err(js_error)?
+            .ok_or_else(|| JsValue::from_str("base map version is not cataloged"))?;
+        Ok(WasmMapComparison {
+            engine: Arc::clone(&self.engine),
+            base,
+            target,
+        })
+    }
+
     pub fn backup(&self) -> Result<Vec<u8>, JsValue> {
         self.engine
             .versioned_map(&self.id)
@@ -302,6 +347,63 @@ impl WasmVersionedMap {
             value.reachability.live_nodes as u64,
             value.reclaimable_bytes as u64,
         )
+    }
+}
+
+#[wasm_bindgen(js_name = WasmMapComparison)]
+pub struct WasmMapComparison {
+    engine: Arc<super::WasmEngine>,
+    base: prolly::MapVersion,
+    target: prolly::MapVersion,
+}
+
+#[wasm_bindgen(js_class = WasmMapComparison)]
+impl WasmMapComparison {
+    pub fn base(&self) -> Result<Object, JsValue> {
+        map_version_object(self.base.clone())
+    }
+    pub fn target(&self) -> Result<Object, JsValue> {
+        map_version_object(self.target.clone())
+    }
+    pub fn diff(&self) -> Result<Array, JsValue> {
+        self.engine
+            .diff(&self.base.tree, &self.target.tree)
+            .map_err(js_error)
+            .and_then(diffs_to_array)
+    }
+    #[wasm_bindgen(js_name = diffPage)]
+    pub fn diff_page(
+        &self,
+        cursor: Option<WasmRangeCursor>,
+        end: Option<Uint8Array>,
+        limit: u32,
+    ) -> Result<Object, JsValue> {
+        let cursor = cursor
+            .map(|value| value.inner)
+            .unwrap_or_else(prolly::RangeCursor::start);
+        let end = end.map(|value| value.to_vec());
+        let page = self
+            .engine
+            .diff_page(
+                &self.base.tree,
+                &self.target.tree,
+                &cursor,
+                end.as_deref(),
+                limit as usize,
+            )
+            .map_err(js_error)?;
+        let object = Object::new();
+        Reflect::set(
+            &object,
+            &"diffs".into(),
+            &diffs_to_array(page.diffs)?.into(),
+        )?;
+        Reflect::set(
+            &object,
+            &"nextCursor".into(),
+            &range_cursor_value(page.next_cursor),
+        )?;
+        Ok(object)
     }
 }
 

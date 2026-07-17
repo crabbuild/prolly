@@ -1,8 +1,8 @@
 use super::{
-    to_napi_error, NativeProllyEngine, NodeEntryRecord, NodeMultiKeyProofVerificationRecord,
-    NodeMutationRecord, NodeRangeCursorRecord, NodeRangePageProofVerificationRecord,
-    NodeRangePageRecord, NodeRangeProofVerificationRecord, NodeReverseCursorRecord,
-    NodeReversePageRecord, NodeTreeRecord,
+    to_napi_error, NativeProllyEngine, NodeDiffPageRecord, NodeDiffRecord, NodeEntryRecord,
+    NodeMultiKeyProofVerificationRecord, NodeMutationRecord, NodeRangeCursorRecord,
+    NodeRangePageProofVerificationRecord, NodeRangePageRecord, NodeRangeProofVerificationRecord,
+    NodeReverseCursorRecord, NodeReversePageRecord, NodeTreeRecord,
 };
 use napi::bindgen_prelude::{Buffer, Env, Error, Float32Array, FunctionRef, Result, Status};
 use napi::JsObject;
@@ -12,7 +12,7 @@ use prolly_bindings::{
     verify_key_proof, verify_multi_key_proof, verify_proximity_membership_proof,
     verify_proximity_structure_proof, verify_range_page_proof, verify_range_proof,
     ActiveIndexHealthRecord, BindingIndexRegistry, BindingIndexedMap, BindingIndexedSnapshot,
-    BindingMapSnapshot, BindingProximityMap, BindingProximityReadSession,
+    BindingMapComparison, BindingMapSnapshot, BindingProximityMap, BindingProximityReadSession,
     BindingProximitySearchProof, BindingSecondaryIndexSnapshot, BindingVersionedMap,
     DistanceMetricRecord, ExactProximityRecordRecord, IndexBuildResultRecord, IndexEntryRecord,
     IndexMatchRecord, IndexPageRecord, IndexProjectionRecord, IndexVerificationRecord,
@@ -917,6 +917,22 @@ impl NativePortableVersionedMap {
     }
 
     #[napi]
+    pub fn compare(&self, base: Buffer, target: Buffer) -> Result<NativePortableMapComparison> {
+        self.inner
+            .compare(base.to_vec(), target.to_vec())
+            .map(|inner| NativePortableMapComparison { inner })
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "compareToHead")]
+    pub fn compare_to_head(&self, base: Buffer) -> Result<NativePortableMapComparison> {
+        self.inner
+            .compare_to_head(base.to_vec())
+            .map(|inner| NativePortableMapComparison { inner })
+            .map_err(to_napi_error)
+    }
+
+    #[napi]
     pub fn backup(&self) -> Result<Buffer> {
         self.inner.backup().map(Buffer::from).map_err(to_napi_error)
     }
@@ -956,6 +972,55 @@ impl NativePortableVersionedMap {
                 item_count: value.reachability.live_nodes.to_string(),
                 byte_count: value.reclaimable_bytes.to_string(),
             })
+            .map_err(to_napi_error)
+    }
+}
+
+#[napi]
+pub struct NativePortableMapComparison {
+    inner: Arc<BindingMapComparison>,
+}
+
+#[napi]
+impl NativePortableMapComparison {
+    #[napi]
+    pub fn base(&self) -> NodePortableMapVersion {
+        self.inner.base().into()
+    }
+
+    #[napi]
+    pub fn target(&self) -> NodePortableMapVersion {
+        self.inner.target().into()
+    }
+
+    #[napi]
+    pub fn diff(&self) -> Result<Vec<NodeDiffRecord>> {
+        self.inner
+            .diff()
+            .map(|diffs| diffs.into_iter().map(Into::into).collect())
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "diffPage")]
+    pub fn diff_page(
+        &self,
+        cursor: Option<NodeRangeCursorRecord>,
+        end: Option<Buffer>,
+        limit: String,
+    ) -> Result<NodeDiffPageRecord> {
+        let limit = limit.parse::<u64>().map_err(|_| {
+            Error::new(
+                Status::InvalidArg,
+                "diff page limit must be an unsigned 64-bit integer",
+            )
+        })?;
+        self.inner
+            .diff_page(
+                cursor.map(Into::into),
+                end.map(|value| value.to_vec()),
+                limit,
+            )
+            .map(Into::into)
             .map_err(to_napi_error)
     }
 }

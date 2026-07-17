@@ -249,5 +249,22 @@ class PortableParityTest {
         }
     }
 
+    @Test
+    fun versionedComparisonsPinVersionsAndPageDiffs() {
+        ProllyNative.useLocalDebugLibrary()
+        Engine.memory().use { engine ->
+            engine.versionedMap("comparison".bytes()).use { map ->
+                val base = map.initialize()
+                val target = map.put("k".bytes(), "v".bytes())
+                map.compare(base.id, target.id).use { comparison ->
+                    assertArrayEquals(base.id, comparison.base().id)
+                    assertArrayEquals(target.id, comparison.target().id)
+                    assertEquals(listOf("k"), comparison.diff().map { String(it.key) })
+                    assertEquals(listOf("k"), comparison.diffPage(limit = 1uL).diffs.map { String(it.key) })
+                }
+            }
+        }
+    }
+
     private fun String.bytes() = encodeToByteArray()
 }

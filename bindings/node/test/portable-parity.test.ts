@@ -386,3 +386,19 @@ test("secondary indexes expose identity and every bounded page direction", async
     engine.close();
   }
 });
+
+test("versioned comparisons pin versions and page diffs", async () => {
+  const engine = await Engine.memory();
+  try {
+    const map = engine.versionedMap(bytes("comparison"));
+    const base = await map.initialize();
+    const target = await map.put(bytes("k"), bytes("v"));
+    using comparison = map.compare(base.id, target.id);
+    assert.deepEqual(comparison.base().id, base.id);
+    assert.deepEqual(comparison.target().id, target.id);
+    assert.deepEqual((await comparison.diff()).map((diff) => Buffer.from(diff.key).toString()), ["k"]);
+    assert.deepEqual((await comparison.diffPage(undefined, undefined, 1n)).diffs.map((diff) => Buffer.from(diff.key).toString()), ["k"]);
+  } finally {
+    engine.close();
+  }
+});

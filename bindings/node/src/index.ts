@@ -8,7 +8,7 @@ import { VersionedMap } from "./versioned.ts";
 export { IndexRegistry, IndexedMap } from "./indexed.ts";
 export { ViewExpiredError } from "./packed.ts";
 export { exactSearch, ProximityMap, ProximityReadSession } from "./proximity.ts";
-export { VersionedMap } from "./versioned.ts";
+export { MapComparison, VersionedMap } from "./versioned.ts";
 export { RemoteAsyncProllyEngine } from "./remote-async.ts";
 export * from "./remote-store.ts";
 export type * from "./indexed.ts";
