@@ -520,6 +520,10 @@ def _uniffi_check_api_checksums(lib):
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_func_default_parallel_config() != 39626:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_func_default_pq_build_limits() != 40959:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_func_default_pq_config() != 62103:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_func_default_proximity_config() != 43437:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_func_delete_mutation() != 23016:
@@ -926,7 +930,21 @@ def _uniffi_check_api_checksums(lib):
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_bindingmapsubscription_poll() != 36190:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_bindingproductquantizer_config() != 33006:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_bindingproductquantizer_manifest() != 51829:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_bindingproductquantizer_prove_search() != 46039:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_bindingproductquantizer_quality() != 29268:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_bindingproductquantizer_search() != 14867:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_bindingproductquantizer_source_descriptor() != 61276:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_hnsw() != 15873:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_pq() != 7075:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_clear_content_cache() != 42240:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
@@ -943,6 +961,8 @@ def _uniffi_check_api_checksums(lib):
     if lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_get() != 51400:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_load_hnsw() != 8586:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_load_pq() != 63976:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_mutate() != 39394:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
@@ -1885,6 +1905,16 @@ _UniffiLib.uniffi_prolly_bindings_fn_free_bindingmapsubscription.argtypes = (
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UniffiLib.uniffi_prolly_bindings_fn_free_bindingmapsubscription.restype = None
+_UniffiLib.uniffi_prolly_bindings_fn_clone_bindingproductquantizer.argtypes = (
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_clone_bindingproductquantizer.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_free_bindingproductquantizer.argtypes = (
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_free_bindingproductquantizer.restype = None
 _UniffiLib.uniffi_prolly_bindings_fn_clone_bindingproximitymap.argtypes = (
     ctypes.c_uint64,
     ctypes.POINTER(_UniffiRustCallStatus),
@@ -2357,6 +2387,14 @@ _UniffiLib.uniffi_prolly_bindings_fn_func_default_parallel_config.argtypes = (
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UniffiLib.uniffi_prolly_bindings_fn_func_default_parallel_config.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_func_default_pq_build_limits.argtypes = (
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_func_default_pq_build_limits.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_func_default_pq_config.argtypes = (
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_func_default_pq_config.restype = _UniffiRustBuffer
 _UniffiLib.uniffi_prolly_bindings_fn_func_default_proximity_config.argtypes = (
     ctypes.c_uint32,
     ctypes.POINTER(_UniffiRustCallStatus),
@@ -3508,6 +3546,41 @@ _UniffiLib.uniffi_prolly_bindings_fn_method_bindingmapsubscription_poll.argtypes
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UniffiLib.uniffi_prolly_bindings_fn_method_bindingmapsubscription_poll.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindingproductquantizer_config.argtypes = (
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindingproductquantizer_config.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindingproductquantizer_manifest.argtypes = (
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindingproductquantizer_manifest.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindingproductquantizer_prove_search.argtypes = (
+    ctypes.c_uint64,
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindingproductquantizer_prove_search.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindingproductquantizer_quality.argtypes = (
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindingproductquantizer_quality.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindingproductquantizer_search.argtypes = (
+    ctypes.c_uint64,
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindingproductquantizer_search.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindingproductquantizer_source_descriptor.argtypes = (
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindingproductquantizer_source_descriptor.restype = _UniffiRustBuffer
 _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_build_hnsw.argtypes = (
     ctypes.c_uint64,
     _UniffiRustBuffer,
@@ -3515,6 +3588,14 @@ _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_build_hnsw.argty
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_build_hnsw.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_build_pq.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_build_pq.restype = _UniffiRustBuffer
 _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_clear_content_cache.argtypes = (
     ctypes.c_uint64,
     ctypes.POINTER(_UniffiRustCallStatus),
@@ -3558,6 +3639,12 @@ _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_load_hnsw.argtyp
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_load_hnsw.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_load_pq.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_load_pq.restype = ctypes.c_uint64
 _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_mutate.argtypes = (
     ctypes.c_uint64,
     _UniffiRustBuffer,
@@ -5658,6 +5745,12 @@ _UniffiLib.uniffi_prolly_bindings_checksum_func_default_large_value_config.resty
 _UniffiLib.uniffi_prolly_bindings_checksum_func_default_parallel_config.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_func_default_parallel_config.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_func_default_pq_build_limits.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_func_default_pq_build_limits.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_func_default_pq_config.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_func_default_pq_config.restype = ctypes.c_uint16
 _UniffiLib.uniffi_prolly_bindings_checksum_func_default_proximity_config.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_func_default_proximity_config.restype = ctypes.c_uint16
@@ -6267,9 +6360,30 @@ _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingmapsubscription_last_se
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingmapsubscription_poll.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingmapsubscription_poll.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproductquantizer_config.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproductquantizer_config.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproductquantizer_manifest.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproductquantizer_manifest.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproductquantizer_prove_search.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproductquantizer_prove_search.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproductquantizer_quality.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproductquantizer_quality.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproductquantizer_search.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproductquantizer_search.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproductquantizer_source_descriptor.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproductquantizer_source_descriptor.restype = ctypes.c_uint16
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_hnsw.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_hnsw.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_pq.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_pq.restype = ctypes.c_uint16
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_clear_content_cache.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_clear_content_cache.restype = ctypes.c_uint16
@@ -6294,6 +6408,9 @@ _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_get.restyp
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_load_hnsw.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_load_hnsw.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_load_pq.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_load_pq.restype = ctypes.c_uint16
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_mutate.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_mutate.restype = ctypes.c_uint16
@@ -10361,463 +10478,125 @@ class _UniffiFfiConverterTypeProllyBindingError(_UniffiConverterRustBuffer):
             buf.write_i32(8)
             _UniffiFfiConverterString.write(value.reason, buf)
 
-
-
-
-
-
-class DistanceMetricRecord(enum.Enum):
-
-    L2_SQUARED = 0
-
-    COSINE = 1
-
-    INNER_PRODUCT = 2
-
-
-
-class _UniffiFfiConverterTypeDistanceMetricRecord(_UniffiConverterRustBuffer):
-    @staticmethod
-    def read(buf):
-        variant = buf.read_i32()
-        if variant == 1:
-            return DistanceMetricRecord.L2_SQUARED
-        if variant == 2:
-            return DistanceMetricRecord.COSINE
-        if variant == 3:
-            return DistanceMetricRecord.INNER_PRODUCT
-        raise InternalError("Raw enum value doesn't match any cases")
-
-    @staticmethod
-    def check_lower(value):
-        if value == DistanceMetricRecord.L2_SQUARED:
-            return
-        if value == DistanceMetricRecord.COSINE:
-            return
-        if value == DistanceMetricRecord.INNER_PRODUCT:
-            return
-        raise ValueError(value)
-
-    @staticmethod
-    def write(value, buf):
-        if value == DistanceMetricRecord.L2_SQUARED:
-            buf.write_i32(1)
-        if value == DistanceMetricRecord.COSINE:
-            buf.write_i32(2)
-        if value == DistanceMetricRecord.INNER_PRODUCT:
-            buf.write_i32(3)
-
-
-
-class _UniffiFfiConverterOptionalUInt32(_UniffiConverterRustBuffer):
-    @classmethod
-    def check_lower(cls, value):
-        if value is not None:
-            _UniffiFfiConverterUInt32.check_lower(value)
-
-    @classmethod
-    def write(cls, value, buf):
-        if value is None:
-            buf.write_u8(0)
-            return
-
-        buf.write_u8(1)
-        _UniffiFfiConverterUInt32.write(value, buf)
-
-    @classmethod
-    def read(cls, buf):
-        flag = buf.read_u8()
-        if flag == 0:
-            return None
-        elif flag == 1:
-            return _UniffiFfiConverterUInt32.read(buf)
-        else:
-            raise InternalError("Unexpected flag byte for optional type")
-
 @dataclass
-class ProximityConfigRecord:
-    def __init__(self, *, dimensions:int, metric:DistanceMetricRecord, log_chunk_size:int, level_hash_seed:int, min_page_bytes:int, target_page_bytes:int, max_page_bytes:int, overflow_hash_seed:int, inline_threshold_bytes:int, scalar_quantization_group_size:typing.Optional[int]):
-        self.dimensions = dimensions
-        self.metric = metric
-        self.log_chunk_size = log_chunk_size
-        self.level_hash_seed = level_hash_seed
-        self.min_page_bytes = min_page_bytes
-        self.target_page_bytes = target_page_bytes
-        self.max_page_bytes = max_page_bytes
-        self.overflow_hash_seed = overflow_hash_seed
-        self.inline_threshold_bytes = inline_threshold_bytes
-        self.scalar_quantization_group_size = scalar_quantization_group_size
+class ProductQuantizationConfigRecord:
+    def __init__(self, *, subquantizers:int, centroids_per_subquantizer:int, training_iterations:int, rerank_multiplier:int, seed:int, max_training_vectors:int):
+        self.subquantizers = subquantizers
+        self.centroids_per_subquantizer = centroids_per_subquantizer
+        self.training_iterations = training_iterations
+        self.rerank_multiplier = rerank_multiplier
+        self.seed = seed
+        self.max_training_vectors = max_training_vectors
 
 
 
 
     def __str__(self):
-        return "ProximityConfigRecord(dimensions={}, metric={}, log_chunk_size={}, level_hash_seed={}, min_page_bytes={}, target_page_bytes={}, max_page_bytes={}, overflow_hash_seed={}, inline_threshold_bytes={}, scalar_quantization_group_size={})".format(self.dimensions, self.metric, self.log_chunk_size, self.level_hash_seed, self.min_page_bytes, self.target_page_bytes, self.max_page_bytes, self.overflow_hash_seed, self.inline_threshold_bytes, self.scalar_quantization_group_size)
+        return "ProductQuantizationConfigRecord(subquantizers={}, centroids_per_subquantizer={}, training_iterations={}, rerank_multiplier={}, seed={}, max_training_vectors={})".format(self.subquantizers, self.centroids_per_subquantizer, self.training_iterations, self.rerank_multiplier, self.seed, self.max_training_vectors)
     def __eq__(self, other):
-        if self.dimensions != other.dimensions:
+        if self.subquantizers != other.subquantizers:
             return False
-        if self.metric != other.metric:
+        if self.centroids_per_subquantizer != other.centroids_per_subquantizer:
             return False
-        if self.log_chunk_size != other.log_chunk_size:
+        if self.training_iterations != other.training_iterations:
             return False
-        if self.level_hash_seed != other.level_hash_seed:
+        if self.rerank_multiplier != other.rerank_multiplier:
             return False
-        if self.min_page_bytes != other.min_page_bytes:
+        if self.seed != other.seed:
             return False
-        if self.target_page_bytes != other.target_page_bytes:
-            return False
-        if self.max_page_bytes != other.max_page_bytes:
-            return False
-        if self.overflow_hash_seed != other.overflow_hash_seed:
-            return False
-        if self.inline_threshold_bytes != other.inline_threshold_bytes:
-            return False
-        if self.scalar_quantization_group_size != other.scalar_quantization_group_size:
+        if self.max_training_vectors != other.max_training_vectors:
             return False
         return True
 
-class _UniffiFfiConverterTypeProximityConfigRecord(_UniffiConverterRustBuffer):
+class _UniffiFfiConverterTypeProductQuantizationConfigRecord(_UniffiConverterRustBuffer):
     @staticmethod
     def read(buf):
-        return ProximityConfigRecord(
-            dimensions=_UniffiFfiConverterUInt32.read(buf),
-            metric=_UniffiFfiConverterTypeDistanceMetricRecord.read(buf),
-            log_chunk_size=_UniffiFfiConverterUInt8.read(buf),
-            level_hash_seed=_UniffiFfiConverterUInt64.read(buf),
-            min_page_bytes=_UniffiFfiConverterUInt32.read(buf),
-            target_page_bytes=_UniffiFfiConverterUInt32.read(buf),
-            max_page_bytes=_UniffiFfiConverterUInt32.read(buf),
-            overflow_hash_seed=_UniffiFfiConverterUInt64.read(buf),
-            inline_threshold_bytes=_UniffiFfiConverterUInt32.read(buf),
-            scalar_quantization_group_size=_UniffiFfiConverterOptionalUInt32.read(buf),
+        return ProductQuantizationConfigRecord(
+            subquantizers=_UniffiFfiConverterUInt32.read(buf),
+            centroids_per_subquantizer=_UniffiFfiConverterUInt16.read(buf),
+            training_iterations=_UniffiFfiConverterUInt16.read(buf),
+            rerank_multiplier=_UniffiFfiConverterUInt32.read(buf),
+            seed=_UniffiFfiConverterUInt64.read(buf),
+            max_training_vectors=_UniffiFfiConverterUInt64.read(buf),
         )
 
     @staticmethod
     def check_lower(value):
-        _UniffiFfiConverterUInt32.check_lower(value.dimensions)
-        _UniffiFfiConverterTypeDistanceMetricRecord.check_lower(value.metric)
-        _UniffiFfiConverterUInt8.check_lower(value.log_chunk_size)
-        _UniffiFfiConverterUInt64.check_lower(value.level_hash_seed)
-        _UniffiFfiConverterUInt32.check_lower(value.min_page_bytes)
-        _UniffiFfiConverterUInt32.check_lower(value.target_page_bytes)
-        _UniffiFfiConverterUInt32.check_lower(value.max_page_bytes)
-        _UniffiFfiConverterUInt64.check_lower(value.overflow_hash_seed)
-        _UniffiFfiConverterUInt32.check_lower(value.inline_threshold_bytes)
-        _UniffiFfiConverterOptionalUInt32.check_lower(value.scalar_quantization_group_size)
+        _UniffiFfiConverterUInt32.check_lower(value.subquantizers)
+        _UniffiFfiConverterUInt16.check_lower(value.centroids_per_subquantizer)
+        _UniffiFfiConverterUInt16.check_lower(value.training_iterations)
+        _UniffiFfiConverterUInt32.check_lower(value.rerank_multiplier)
+        _UniffiFfiConverterUInt64.check_lower(value.seed)
+        _UniffiFfiConverterUInt64.check_lower(value.max_training_vectors)
 
     @staticmethod
     def write(value, buf):
-        _UniffiFfiConverterUInt32.write(value.dimensions, buf)
-        _UniffiFfiConverterTypeDistanceMetricRecord.write(value.metric, buf)
-        _UniffiFfiConverterUInt8.write(value.log_chunk_size, buf)
-        _UniffiFfiConverterUInt64.write(value.level_hash_seed, buf)
-        _UniffiFfiConverterUInt32.write(value.min_page_bytes, buf)
-        _UniffiFfiConverterUInt32.write(value.target_page_bytes, buf)
-        _UniffiFfiConverterUInt32.write(value.max_page_bytes, buf)
-        _UniffiFfiConverterUInt64.write(value.overflow_hash_seed, buf)
-        _UniffiFfiConverterUInt32.write(value.inline_threshold_bytes, buf)
-        _UniffiFfiConverterOptionalUInt32.write(value.scalar_quantization_group_size, buf)
-
-class _UniffiFfiConverterOptionalTypeExactProximityRecordRecord(_UniffiConverterRustBuffer):
-    @classmethod
-    def check_lower(cls, value):
-        if value is not None:
-            _UniffiFfiConverterTypeExactProximityRecordRecord.check_lower(value)
-
-    @classmethod
-    def write(cls, value, buf):
-        if value is None:
-            buf.write_u8(0)
-            return
-
-        buf.write_u8(1)
-        _UniffiFfiConverterTypeExactProximityRecordRecord.write(value, buf)
-
-    @classmethod
-    def read(cls, buf):
-        flag = buf.read_u8()
-        if flag == 0:
-            return None
-        elif flag == 1:
-            return _UniffiFfiConverterTypeExactProximityRecordRecord.read(buf)
-        else:
-            raise InternalError("Unexpected flag byte for optional type")
-
-class _UniffiFfiConverterOptionalSequenceFloat32(_UniffiConverterRustBuffer):
-    @classmethod
-    def check_lower(cls, value):
-        if value is not None:
-            _UniffiFfiConverterSequenceFloat32.check_lower(value)
-
-    @classmethod
-    def write(cls, value, buf):
-        if value is None:
-            buf.write_u8(0)
-            return
-
-        buf.write_u8(1)
-        _UniffiFfiConverterSequenceFloat32.write(value, buf)
-
-    @classmethod
-    def read(cls, buf):
-        flag = buf.read_u8()
-        if flag == 0:
-            return None
-        elif flag == 1:
-            return _UniffiFfiConverterSequenceFloat32.read(buf)
-        else:
-            raise InternalError("Unexpected flag byte for optional type")
+        _UniffiFfiConverterUInt32.write(value.subquantizers, buf)
+        _UniffiFfiConverterUInt16.write(value.centroids_per_subquantizer, buf)
+        _UniffiFfiConverterUInt16.write(value.training_iterations, buf)
+        _UniffiFfiConverterUInt32.write(value.rerank_multiplier, buf)
+        _UniffiFfiConverterUInt64.write(value.seed, buf)
+        _UniffiFfiConverterUInt64.write(value.max_training_vectors, buf)
 
 @dataclass
-class ProximityMutationRecord:
-    def __init__(self, *, key:bytes, vector:typing.Optional[typing.List[float]], value:typing.Optional[bytes]):
-        self.key = key
-        self.vector = vector
-        self.value = value
+class ProductQuantizationBuildLimitsRecord:
+    def __init__(self, *, max_training_vectors:typing.Optional[int], max_training_bytes:typing.Optional[int], max_temporary_code_bytes:typing.Optional[int], max_distance_evaluations:typing.Optional[int], max_encoded_output_bytes:typing.Optional[int], max_worker_threads:typing.Optional[int]):
+        self.max_training_vectors = max_training_vectors
+        self.max_training_bytes = max_training_bytes
+        self.max_temporary_code_bytes = max_temporary_code_bytes
+        self.max_distance_evaluations = max_distance_evaluations
+        self.max_encoded_output_bytes = max_encoded_output_bytes
+        self.max_worker_threads = max_worker_threads
 
 
 
 
     def __str__(self):
-        return "ProximityMutationRecord(key={}, vector={}, value={})".format(self.key, self.vector, self.value)
+        return "ProductQuantizationBuildLimitsRecord(max_training_vectors={}, max_training_bytes={}, max_temporary_code_bytes={}, max_distance_evaluations={}, max_encoded_output_bytes={}, max_worker_threads={})".format(self.max_training_vectors, self.max_training_bytes, self.max_temporary_code_bytes, self.max_distance_evaluations, self.max_encoded_output_bytes, self.max_worker_threads)
     def __eq__(self, other):
-        if self.key != other.key:
+        if self.max_training_vectors != other.max_training_vectors:
             return False
-        if self.vector != other.vector:
+        if self.max_training_bytes != other.max_training_bytes:
             return False
-        if self.value != other.value:
+        if self.max_temporary_code_bytes != other.max_temporary_code_bytes:
+            return False
+        if self.max_distance_evaluations != other.max_distance_evaluations:
+            return False
+        if self.max_encoded_output_bytes != other.max_encoded_output_bytes:
+            return False
+        if self.max_worker_threads != other.max_worker_threads:
             return False
         return True
 
-class _UniffiFfiConverterTypeProximityMutationRecord(_UniffiConverterRustBuffer):
+class _UniffiFfiConverterTypeProductQuantizationBuildLimitsRecord(_UniffiConverterRustBuffer):
     @staticmethod
     def read(buf):
-        return ProximityMutationRecord(
-            key=_UniffiFfiConverterBytes.read(buf),
-            vector=_UniffiFfiConverterOptionalSequenceFloat32.read(buf),
-            value=_UniffiFfiConverterOptionalBytes.read(buf),
+        return ProductQuantizationBuildLimitsRecord(
+            max_training_vectors=_UniffiFfiConverterOptionalUInt64.read(buf),
+            max_training_bytes=_UniffiFfiConverterOptionalUInt64.read(buf),
+            max_temporary_code_bytes=_UniffiFfiConverterOptionalUInt64.read(buf),
+            max_distance_evaluations=_UniffiFfiConverterOptionalUInt64.read(buf),
+            max_encoded_output_bytes=_UniffiFfiConverterOptionalUInt64.read(buf),
+            max_worker_threads=_UniffiFfiConverterOptionalUInt64.read(buf),
         )
 
     @staticmethod
     def check_lower(value):
-        _UniffiFfiConverterBytes.check_lower(value.key)
-        _UniffiFfiConverterOptionalSequenceFloat32.check_lower(value.vector)
-        _UniffiFfiConverterOptionalBytes.check_lower(value.value)
+        _UniffiFfiConverterOptionalUInt64.check_lower(value.max_training_vectors)
+        _UniffiFfiConverterOptionalUInt64.check_lower(value.max_training_bytes)
+        _UniffiFfiConverterOptionalUInt64.check_lower(value.max_temporary_code_bytes)
+        _UniffiFfiConverterOptionalUInt64.check_lower(value.max_distance_evaluations)
+        _UniffiFfiConverterOptionalUInt64.check_lower(value.max_encoded_output_bytes)
+        _UniffiFfiConverterOptionalUInt64.check_lower(value.max_worker_threads)
 
     @staticmethod
     def write(value, buf):
-        _UniffiFfiConverterBytes.write(value.key, buf)
-        _UniffiFfiConverterOptionalSequenceFloat32.write(value.vector, buf)
-        _UniffiFfiConverterOptionalBytes.write(value.value, buf)
-
-class _UniffiFfiConverterSequenceTypeProximityMutationRecord(_UniffiConverterRustBuffer):
-    @classmethod
-    def check_lower(cls, value):
-        for item in value:
-            _UniffiFfiConverterTypeProximityMutationRecord.check_lower(item)
-
-    @classmethod
-    def write(cls, value, buf):
-        items = len(value)
-        buf.write_i32(items)
-        for item in value:
-            _UniffiFfiConverterTypeProximityMutationRecord.write(item, buf)
-
-    @classmethod
-    def read(cls, buf):
-        count = buf.read_i32()
-        if count < 0:
-            raise InternalError("Unexpected negative sequence length")
-
-        return [
-            _UniffiFfiConverterTypeProximityMutationRecord.read(buf) for i in range(count)
-        ]
-
-@dataclass
-class ProximityMutationStatsRecord:
-    def __init__(self, *, directory_entries_scanned:int, directory_nodes_read:int, directory_nodes_rebuilt:int, directory_nodes_written:int, directory_nodes_reused:int, directory_levels_rebuilt:int, directory_right_edge_rebuilt:bool, nodes_read:int, nodes_written:int, nodes_reused:int, records_rebuilt:int, distance_evaluations:int, full_proximity_rebuild:bool):
-        self.directory_entries_scanned = directory_entries_scanned
-        self.directory_nodes_read = directory_nodes_read
-        self.directory_nodes_rebuilt = directory_nodes_rebuilt
-        self.directory_nodes_written = directory_nodes_written
-        self.directory_nodes_reused = directory_nodes_reused
-        self.directory_levels_rebuilt = directory_levels_rebuilt
-        self.directory_right_edge_rebuilt = directory_right_edge_rebuilt
-        self.nodes_read = nodes_read
-        self.nodes_written = nodes_written
-        self.nodes_reused = nodes_reused
-        self.records_rebuilt = records_rebuilt
-        self.distance_evaluations = distance_evaluations
-        self.full_proximity_rebuild = full_proximity_rebuild
-
-
-
-
-    def __str__(self):
-        return "ProximityMutationStatsRecord(directory_entries_scanned={}, directory_nodes_read={}, directory_nodes_rebuilt={}, directory_nodes_written={}, directory_nodes_reused={}, directory_levels_rebuilt={}, directory_right_edge_rebuilt={}, nodes_read={}, nodes_written={}, nodes_reused={}, records_rebuilt={}, distance_evaluations={}, full_proximity_rebuild={})".format(self.directory_entries_scanned, self.directory_nodes_read, self.directory_nodes_rebuilt, self.directory_nodes_written, self.directory_nodes_reused, self.directory_levels_rebuilt, self.directory_right_edge_rebuilt, self.nodes_read, self.nodes_written, self.nodes_reused, self.records_rebuilt, self.distance_evaluations, self.full_proximity_rebuild)
-    def __eq__(self, other):
-        if self.directory_entries_scanned != other.directory_entries_scanned:
-            return False
-        if self.directory_nodes_read != other.directory_nodes_read:
-            return False
-        if self.directory_nodes_rebuilt != other.directory_nodes_rebuilt:
-            return False
-        if self.directory_nodes_written != other.directory_nodes_written:
-            return False
-        if self.directory_nodes_reused != other.directory_nodes_reused:
-            return False
-        if self.directory_levels_rebuilt != other.directory_levels_rebuilt:
-            return False
-        if self.directory_right_edge_rebuilt != other.directory_right_edge_rebuilt:
-            return False
-        if self.nodes_read != other.nodes_read:
-            return False
-        if self.nodes_written != other.nodes_written:
-            return False
-        if self.nodes_reused != other.nodes_reused:
-            return False
-        if self.records_rebuilt != other.records_rebuilt:
-            return False
-        if self.distance_evaluations != other.distance_evaluations:
-            return False
-        if self.full_proximity_rebuild != other.full_proximity_rebuild:
-            return False
-        return True
-
-class _UniffiFfiConverterTypeProximityMutationStatsRecord(_UniffiConverterRustBuffer):
-    @staticmethod
-    def read(buf):
-        return ProximityMutationStatsRecord(
-            directory_entries_scanned=_UniffiFfiConverterUInt64.read(buf),
-            directory_nodes_read=_UniffiFfiConverterUInt64.read(buf),
-            directory_nodes_rebuilt=_UniffiFfiConverterUInt64.read(buf),
-            directory_nodes_written=_UniffiFfiConverterUInt64.read(buf),
-            directory_nodes_reused=_UniffiFfiConverterUInt64.read(buf),
-            directory_levels_rebuilt=_UniffiFfiConverterUInt64.read(buf),
-            directory_right_edge_rebuilt=_UniffiFfiConverterBoolean.read(buf),
-            nodes_read=_UniffiFfiConverterUInt64.read(buf),
-            nodes_written=_UniffiFfiConverterUInt64.read(buf),
-            nodes_reused=_UniffiFfiConverterUInt64.read(buf),
-            records_rebuilt=_UniffiFfiConverterUInt64.read(buf),
-            distance_evaluations=_UniffiFfiConverterUInt64.read(buf),
-            full_proximity_rebuild=_UniffiFfiConverterBoolean.read(buf),
-        )
-
-    @staticmethod
-    def check_lower(value):
-        _UniffiFfiConverterUInt64.check_lower(value.directory_entries_scanned)
-        _UniffiFfiConverterUInt64.check_lower(value.directory_nodes_read)
-        _UniffiFfiConverterUInt64.check_lower(value.directory_nodes_rebuilt)
-        _UniffiFfiConverterUInt64.check_lower(value.directory_nodes_written)
-        _UniffiFfiConverterUInt64.check_lower(value.directory_nodes_reused)
-        _UniffiFfiConverterUInt64.check_lower(value.directory_levels_rebuilt)
-        _UniffiFfiConverterBoolean.check_lower(value.directory_right_edge_rebuilt)
-        _UniffiFfiConverterUInt64.check_lower(value.nodes_read)
-        _UniffiFfiConverterUInt64.check_lower(value.nodes_written)
-        _UniffiFfiConverterUInt64.check_lower(value.nodes_reused)
-        _UniffiFfiConverterUInt64.check_lower(value.records_rebuilt)
-        _UniffiFfiConverterUInt64.check_lower(value.distance_evaluations)
-        _UniffiFfiConverterBoolean.check_lower(value.full_proximity_rebuild)
-
-    @staticmethod
-    def write(value, buf):
-        _UniffiFfiConverterUInt64.write(value.directory_entries_scanned, buf)
-        _UniffiFfiConverterUInt64.write(value.directory_nodes_read, buf)
-        _UniffiFfiConverterUInt64.write(value.directory_nodes_rebuilt, buf)
-        _UniffiFfiConverterUInt64.write(value.directory_nodes_written, buf)
-        _UniffiFfiConverterUInt64.write(value.directory_nodes_reused, buf)
-        _UniffiFfiConverterUInt64.write(value.directory_levels_rebuilt, buf)
-        _UniffiFfiConverterBoolean.write(value.directory_right_edge_rebuilt, buf)
-        _UniffiFfiConverterUInt64.write(value.nodes_read, buf)
-        _UniffiFfiConverterUInt64.write(value.nodes_written, buf)
-        _UniffiFfiConverterUInt64.write(value.nodes_reused, buf)
-        _UniffiFfiConverterUInt64.write(value.records_rebuilt, buf)
-        _UniffiFfiConverterUInt64.write(value.distance_evaluations, buf)
-        _UniffiFfiConverterBoolean.write(value.full_proximity_rebuild, buf)
-
-@dataclass
-class ProximityMutationResultRecord:
-    def __init__(self, *, map:BindingProximityMap, stats:ProximityMutationStatsRecord):
-        self.map = map
-        self.stats = stats
-
-
-
-
-    def __str__(self):
-        return "ProximityMutationResultRecord(map={}, stats={})".format(self.map, self.stats)
-    def __eq__(self, other):
-        if self.map != other.map:
-            return False
-        if self.stats != other.stats:
-            return False
-        return True
-
-class _UniffiFfiConverterTypeProximityMutationResultRecord(_UniffiConverterRustBuffer):
-    @staticmethod
-    def read(buf):
-        return ProximityMutationResultRecord(
-            map=_UniffiFfiConverterTypeBindingProximityMap.read(buf),
-            stats=_UniffiFfiConverterTypeProximityMutationStatsRecord.read(buf),
-        )
-
-    @staticmethod
-    def check_lower(value):
-        _UniffiFfiConverterTypeBindingProximityMap.check_lower(value.map)
-        _UniffiFfiConverterTypeProximityMutationStatsRecord.check_lower(value.stats)
-
-    @staticmethod
-    def write(value, buf):
-        _UniffiFfiConverterTypeBindingProximityMap.write(value.map, buf)
-        _UniffiFfiConverterTypeProximityMutationStatsRecord.write(value.stats, buf)
-
-@dataclass
-class ProximityMembershipProofRecord:
-    def __init__(self, *, descriptor:bytes, descriptor_bytes:bytes, directory_proof:KeyProofRecord, record_bytes:typing.Optional[bytes]):
-        self.descriptor = descriptor
-        self.descriptor_bytes = descriptor_bytes
-        self.directory_proof = directory_proof
-        self.record_bytes = record_bytes
-
-
-
-
-    def __str__(self):
-        return "ProximityMembershipProofRecord(descriptor={}, descriptor_bytes={}, directory_proof={}, record_bytes={})".format(self.descriptor, self.descriptor_bytes, self.directory_proof, self.record_bytes)
-    def __eq__(self, other):
-        if self.descriptor != other.descriptor:
-            return False
-        if self.descriptor_bytes != other.descriptor_bytes:
-            return False
-        if self.directory_proof != other.directory_proof:
-            return False
-        if self.record_bytes != other.record_bytes:
-            return False
-        return True
-
-class _UniffiFfiConverterTypeProximityMembershipProofRecord(_UniffiConverterRustBuffer):
-    @staticmethod
-    def read(buf):
-        return ProximityMembershipProofRecord(
-            descriptor=_UniffiFfiConverterBytes.read(buf),
-            descriptor_bytes=_UniffiFfiConverterBytes.read(buf),
-            directory_proof=_UniffiFfiConverterTypeKeyProofRecord.read(buf),
-            record_bytes=_UniffiFfiConverterOptionalBytes.read(buf),
-        )
-
-    @staticmethod
-    def check_lower(value):
-        _UniffiFfiConverterBytes.check_lower(value.descriptor)
-        _UniffiFfiConverterBytes.check_lower(value.descriptor_bytes)
-        _UniffiFfiConverterTypeKeyProofRecord.check_lower(value.directory_proof)
-        _UniffiFfiConverterOptionalBytes.check_lower(value.record_bytes)
-
-    @staticmethod
-    def write(value, buf):
-        _UniffiFfiConverterBytes.write(value.descriptor, buf)
-        _UniffiFfiConverterBytes.write(value.descriptor_bytes, buf)
-        _UniffiFfiConverterTypeKeyProofRecord.write(value.directory_proof, buf)
-        _UniffiFfiConverterOptionalBytes.write(value.record_bytes, buf)
+        _UniffiFfiConverterOptionalUInt64.write(value.max_training_vectors, buf)
+        _UniffiFfiConverterOptionalUInt64.write(value.max_training_bytes, buf)
+        _UniffiFfiConverterOptionalUInt64.write(value.max_temporary_code_bytes, buf)
+        _UniffiFfiConverterOptionalUInt64.write(value.max_distance_evaluations, buf)
+        _UniffiFfiConverterOptionalUInt64.write(value.max_encoded_output_bytes, buf)
+        _UniffiFfiConverterOptionalUInt64.write(value.max_worker_threads, buf)
 
 
 
@@ -11209,6 +10988,31 @@ class _UniffiFfiConverterTypeSearchBackendRecord(_UniffiConverterRustBuffer):
             buf.write_i32(5)
 
 
+
+class _UniffiFfiConverterOptionalUInt32(_UniffiConverterRustBuffer):
+    @classmethod
+    def check_lower(cls, value):
+        if value is not None:
+            _UniffiFfiConverterUInt32.check_lower(value)
+
+    @classmethod
+    def write(cls, value, buf):
+        if value is None:
+            buf.write_u8(0)
+            return
+
+        buf.write_u8(1)
+        _UniffiFfiConverterUInt32.write(value, buf)
+
+    @classmethod
+    def read(cls, buf):
+        flag = buf.read_u8()
+        if flag == 0:
+            return None
+        elif flag == 1:
+            return _UniffiFfiConverterUInt32.read(buf)
+        else:
+            raise InternalError("Unexpected flag byte for optional type")
 
 class _UniffiFfiConverterOptionalUInt16(_UniffiConverterRustBuffer):
     @classmethod
@@ -11835,6 +11639,728 @@ class _UniffiFfiConverterTypeBindingProximitySearchProof:
     @classmethod
     def write(cls, value: BindingProximitySearchProof, buf: _UniffiRustBuffer):
         buf.write_u64(cls.lower(value))
+
+@dataclass
+class ProductQuantizationQualityRecord:
+    def __init__(self, *, mean_squared_error:float, maximum_squared_error:float):
+        self.mean_squared_error = mean_squared_error
+        self.maximum_squared_error = maximum_squared_error
+
+
+
+
+    def __str__(self):
+        return "ProductQuantizationQualityRecord(mean_squared_error={}, maximum_squared_error={})".format(self.mean_squared_error, self.maximum_squared_error)
+    def __eq__(self, other):
+        if self.mean_squared_error != other.mean_squared_error:
+            return False
+        if self.maximum_squared_error != other.maximum_squared_error:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeProductQuantizationQualityRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return ProductQuantizationQualityRecord(
+            mean_squared_error=_UniffiFfiConverterFloat64.read(buf),
+            maximum_squared_error=_UniffiFfiConverterFloat64.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterFloat64.check_lower(value.mean_squared_error)
+        _UniffiFfiConverterFloat64.check_lower(value.maximum_squared_error)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterFloat64.write(value.mean_squared_error, buf)
+        _UniffiFfiConverterFloat64.write(value.maximum_squared_error, buf)
+
+
+class BindingProductQuantizerProtocol(typing.Protocol):
+
+    def config(self, ) -> ProductQuantizationConfigRecord:
+        raise NotImplementedError
+    def manifest(self, ) -> bytes:
+        raise NotImplementedError
+    def prove_search(self, map: BindingProximityMap,request: ProximitySearchRequestRecord,limits: ContentGraphLimitsRecord) -> BindingProximitySearchProof:
+        raise NotImplementedError
+    def quality(self, ) -> ProductQuantizationQualityRecord:
+        raise NotImplementedError
+    def search(self, map: BindingProximityMap,request: ProximitySearchRequestRecord) -> ProximitySearchResultRecord:
+        raise NotImplementedError
+    def source_descriptor(self, ) -> bytes:
+        raise NotImplementedError
+
+class BindingProductQuantizer(BindingProductQuantizerProtocol):
+
+    _handle: ctypes.c_uint64
+
+    def __init__(self, *args, **kwargs):
+        raise ValueError("This class has no default constructor")
+
+    def __del__(self):
+        # In case of partial initialization of instances.
+        handle = getattr(self, "_handle", None)
+        if handle is not None:
+            _uniffi_rust_call(_UniffiLib.uniffi_prolly_bindings_fn_free_bindingproductquantizer, handle)
+
+    def _uniffi_clone_handle(self):
+        return _uniffi_rust_call(_UniffiLib.uniffi_prolly_bindings_fn_clone_bindingproductquantizer, self._handle)
+
+    # Used by alternative constructors or any methods which return this type.
+    @classmethod
+    def _uniffi_make_instance(cls, handle):
+        # Lightly yucky way to bypass the usual __init__ logic
+        # and just create a new instance with the required handle.
+        inst = cls.__new__(cls)
+        inst._handle = handle
+        return inst
+    def config(self, ) -> ProductQuantizationConfigRecord:
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeProductQuantizationConfigRecord.lift
+        _uniffi_error_converter = None
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproductquantizer_config,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def manifest(self, ) -> bytes:
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterBytes.lift
+        _uniffi_error_converter = None
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproductquantizer_manifest,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def prove_search(self, map: BindingProximityMap,request: ProximitySearchRequestRecord,limits: ContentGraphLimitsRecord) -> BindingProximitySearchProof:
+
+        _UniffiFfiConverterTypeBindingProximityMap.check_lower(map)
+
+        _UniffiFfiConverterTypeProximitySearchRequestRecord.check_lower(request)
+
+        _UniffiFfiConverterTypeContentGraphLimitsRecord.check_lower(limits)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeBindingProximityMap.lower(map),
+            _UniffiFfiConverterTypeProximitySearchRequestRecord.lower(request),
+            _UniffiFfiConverterTypeContentGraphLimitsRecord.lower(limits),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeBindingProximitySearchProof.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproductquantizer_prove_search,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def quality(self, ) -> ProductQuantizationQualityRecord:
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeProductQuantizationQualityRecord.lift
+        _uniffi_error_converter = None
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproductquantizer_quality,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def search(self, map: BindingProximityMap,request: ProximitySearchRequestRecord) -> ProximitySearchResultRecord:
+
+        _UniffiFfiConverterTypeBindingProximityMap.check_lower(map)
+
+        _UniffiFfiConverterTypeProximitySearchRequestRecord.check_lower(request)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeBindingProximityMap.lower(map),
+            _UniffiFfiConverterTypeProximitySearchRequestRecord.lower(request),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeProximitySearchResultRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproductquantizer_search,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def source_descriptor(self, ) -> bytes:
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterBytes.lift
+        _uniffi_error_converter = None
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproductquantizer_source_descriptor,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+
+
+
+
+
+class _UniffiFfiConverterTypeBindingProductQuantizer:
+    @staticmethod
+    def lift(value: int) -> BindingProductQuantizer:
+        return BindingProductQuantizer._uniffi_make_instance(value)
+
+    @staticmethod
+    def check_lower(value: BindingProductQuantizer):
+        if not isinstance(value, BindingProductQuantizer):
+            raise TypeError("Expected BindingProductQuantizer instance, {} found".format(type(value).__name__))
+
+    @staticmethod
+    def lower(value: BindingProductQuantizer) -> ctypes.c_uint64:
+        return value._uniffi_clone_handle()
+
+    @classmethod
+    def read(cls, buf: _UniffiRustBuffer) -> BindingProductQuantizer:
+        ptr = buf.read_u64()
+        if ptr == 0:
+            raise InternalError("Raw handle value was null")
+        return cls.lift(ptr)
+
+    @classmethod
+    def write(cls, value: BindingProductQuantizer, buf: _UniffiRustBuffer):
+        buf.write_u64(cls.lower(value))
+
+@dataclass
+class ProductQuantizationBuildStatsRecord:
+    def __init__(self, *, training_distance_evaluations:int, encoding_distance_evaluations:int, encoded_vectors:int, training_vectors:int, training_bytes:int, encoded_output_bytes:int):
+        self.training_distance_evaluations = training_distance_evaluations
+        self.encoding_distance_evaluations = encoding_distance_evaluations
+        self.encoded_vectors = encoded_vectors
+        self.training_vectors = training_vectors
+        self.training_bytes = training_bytes
+        self.encoded_output_bytes = encoded_output_bytes
+
+
+
+
+    def __str__(self):
+        return "ProductQuantizationBuildStatsRecord(training_distance_evaluations={}, encoding_distance_evaluations={}, encoded_vectors={}, training_vectors={}, training_bytes={}, encoded_output_bytes={})".format(self.training_distance_evaluations, self.encoding_distance_evaluations, self.encoded_vectors, self.training_vectors, self.training_bytes, self.encoded_output_bytes)
+    def __eq__(self, other):
+        if self.training_distance_evaluations != other.training_distance_evaluations:
+            return False
+        if self.encoding_distance_evaluations != other.encoding_distance_evaluations:
+            return False
+        if self.encoded_vectors != other.encoded_vectors:
+            return False
+        if self.training_vectors != other.training_vectors:
+            return False
+        if self.training_bytes != other.training_bytes:
+            return False
+        if self.encoded_output_bytes != other.encoded_output_bytes:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeProductQuantizationBuildStatsRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return ProductQuantizationBuildStatsRecord(
+            training_distance_evaluations=_UniffiFfiConverterUInt64.read(buf),
+            encoding_distance_evaluations=_UniffiFfiConverterUInt64.read(buf),
+            encoded_vectors=_UniffiFfiConverterUInt64.read(buf),
+            training_vectors=_UniffiFfiConverterUInt64.read(buf),
+            training_bytes=_UniffiFfiConverterUInt64.read(buf),
+            encoded_output_bytes=_UniffiFfiConverterUInt64.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterUInt64.check_lower(value.training_distance_evaluations)
+        _UniffiFfiConverterUInt64.check_lower(value.encoding_distance_evaluations)
+        _UniffiFfiConverterUInt64.check_lower(value.encoded_vectors)
+        _UniffiFfiConverterUInt64.check_lower(value.training_vectors)
+        _UniffiFfiConverterUInt64.check_lower(value.training_bytes)
+        _UniffiFfiConverterUInt64.check_lower(value.encoded_output_bytes)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterUInt64.write(value.training_distance_evaluations, buf)
+        _UniffiFfiConverterUInt64.write(value.encoding_distance_evaluations, buf)
+        _UniffiFfiConverterUInt64.write(value.encoded_vectors, buf)
+        _UniffiFfiConverterUInt64.write(value.training_vectors, buf)
+        _UniffiFfiConverterUInt64.write(value.training_bytes, buf)
+        _UniffiFfiConverterUInt64.write(value.encoded_output_bytes, buf)
+
+@dataclass
+class ProductQuantizationBuildResultRecord:
+    def __init__(self, *, index:BindingProductQuantizer, stats:ProductQuantizationBuildStatsRecord):
+        self.index = index
+        self.stats = stats
+
+
+
+
+    def __str__(self):
+        return "ProductQuantizationBuildResultRecord(index={}, stats={})".format(self.index, self.stats)
+    def __eq__(self, other):
+        if self.index != other.index:
+            return False
+        if self.stats != other.stats:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeProductQuantizationBuildResultRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return ProductQuantizationBuildResultRecord(
+            index=_UniffiFfiConverterTypeBindingProductQuantizer.read(buf),
+            stats=_UniffiFfiConverterTypeProductQuantizationBuildStatsRecord.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterTypeBindingProductQuantizer.check_lower(value.index)
+        _UniffiFfiConverterTypeProductQuantizationBuildStatsRecord.check_lower(value.stats)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterTypeBindingProductQuantizer.write(value.index, buf)
+        _UniffiFfiConverterTypeProductQuantizationBuildStatsRecord.write(value.stats, buf)
+
+
+
+
+
+
+class DistanceMetricRecord(enum.Enum):
+
+    L2_SQUARED = 0
+
+    COSINE = 1
+
+    INNER_PRODUCT = 2
+
+
+
+class _UniffiFfiConverterTypeDistanceMetricRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        variant = buf.read_i32()
+        if variant == 1:
+            return DistanceMetricRecord.L2_SQUARED
+        if variant == 2:
+            return DistanceMetricRecord.COSINE
+        if variant == 3:
+            return DistanceMetricRecord.INNER_PRODUCT
+        raise InternalError("Raw enum value doesn't match any cases")
+
+    @staticmethod
+    def check_lower(value):
+        if value == DistanceMetricRecord.L2_SQUARED:
+            return
+        if value == DistanceMetricRecord.COSINE:
+            return
+        if value == DistanceMetricRecord.INNER_PRODUCT:
+            return
+        raise ValueError(value)
+
+    @staticmethod
+    def write(value, buf):
+        if value == DistanceMetricRecord.L2_SQUARED:
+            buf.write_i32(1)
+        if value == DistanceMetricRecord.COSINE:
+            buf.write_i32(2)
+        if value == DistanceMetricRecord.INNER_PRODUCT:
+            buf.write_i32(3)
+
+
+
+@dataclass
+class ProximityConfigRecord:
+    def __init__(self, *, dimensions:int, metric:DistanceMetricRecord, log_chunk_size:int, level_hash_seed:int, min_page_bytes:int, target_page_bytes:int, max_page_bytes:int, overflow_hash_seed:int, inline_threshold_bytes:int, scalar_quantization_group_size:typing.Optional[int]):
+        self.dimensions = dimensions
+        self.metric = metric
+        self.log_chunk_size = log_chunk_size
+        self.level_hash_seed = level_hash_seed
+        self.min_page_bytes = min_page_bytes
+        self.target_page_bytes = target_page_bytes
+        self.max_page_bytes = max_page_bytes
+        self.overflow_hash_seed = overflow_hash_seed
+        self.inline_threshold_bytes = inline_threshold_bytes
+        self.scalar_quantization_group_size = scalar_quantization_group_size
+
+
+
+
+    def __str__(self):
+        return "ProximityConfigRecord(dimensions={}, metric={}, log_chunk_size={}, level_hash_seed={}, min_page_bytes={}, target_page_bytes={}, max_page_bytes={}, overflow_hash_seed={}, inline_threshold_bytes={}, scalar_quantization_group_size={})".format(self.dimensions, self.metric, self.log_chunk_size, self.level_hash_seed, self.min_page_bytes, self.target_page_bytes, self.max_page_bytes, self.overflow_hash_seed, self.inline_threshold_bytes, self.scalar_quantization_group_size)
+    def __eq__(self, other):
+        if self.dimensions != other.dimensions:
+            return False
+        if self.metric != other.metric:
+            return False
+        if self.log_chunk_size != other.log_chunk_size:
+            return False
+        if self.level_hash_seed != other.level_hash_seed:
+            return False
+        if self.min_page_bytes != other.min_page_bytes:
+            return False
+        if self.target_page_bytes != other.target_page_bytes:
+            return False
+        if self.max_page_bytes != other.max_page_bytes:
+            return False
+        if self.overflow_hash_seed != other.overflow_hash_seed:
+            return False
+        if self.inline_threshold_bytes != other.inline_threshold_bytes:
+            return False
+        if self.scalar_quantization_group_size != other.scalar_quantization_group_size:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeProximityConfigRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return ProximityConfigRecord(
+            dimensions=_UniffiFfiConverterUInt32.read(buf),
+            metric=_UniffiFfiConverterTypeDistanceMetricRecord.read(buf),
+            log_chunk_size=_UniffiFfiConverterUInt8.read(buf),
+            level_hash_seed=_UniffiFfiConverterUInt64.read(buf),
+            min_page_bytes=_UniffiFfiConverterUInt32.read(buf),
+            target_page_bytes=_UniffiFfiConverterUInt32.read(buf),
+            max_page_bytes=_UniffiFfiConverterUInt32.read(buf),
+            overflow_hash_seed=_UniffiFfiConverterUInt64.read(buf),
+            inline_threshold_bytes=_UniffiFfiConverterUInt32.read(buf),
+            scalar_quantization_group_size=_UniffiFfiConverterOptionalUInt32.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterUInt32.check_lower(value.dimensions)
+        _UniffiFfiConverterTypeDistanceMetricRecord.check_lower(value.metric)
+        _UniffiFfiConverterUInt8.check_lower(value.log_chunk_size)
+        _UniffiFfiConverterUInt64.check_lower(value.level_hash_seed)
+        _UniffiFfiConverterUInt32.check_lower(value.min_page_bytes)
+        _UniffiFfiConverterUInt32.check_lower(value.target_page_bytes)
+        _UniffiFfiConverterUInt32.check_lower(value.max_page_bytes)
+        _UniffiFfiConverterUInt64.check_lower(value.overflow_hash_seed)
+        _UniffiFfiConverterUInt32.check_lower(value.inline_threshold_bytes)
+        _UniffiFfiConverterOptionalUInt32.check_lower(value.scalar_quantization_group_size)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterUInt32.write(value.dimensions, buf)
+        _UniffiFfiConverterTypeDistanceMetricRecord.write(value.metric, buf)
+        _UniffiFfiConverterUInt8.write(value.log_chunk_size, buf)
+        _UniffiFfiConverterUInt64.write(value.level_hash_seed, buf)
+        _UniffiFfiConverterUInt32.write(value.min_page_bytes, buf)
+        _UniffiFfiConverterUInt32.write(value.target_page_bytes, buf)
+        _UniffiFfiConverterUInt32.write(value.max_page_bytes, buf)
+        _UniffiFfiConverterUInt64.write(value.overflow_hash_seed, buf)
+        _UniffiFfiConverterUInt32.write(value.inline_threshold_bytes, buf)
+        _UniffiFfiConverterOptionalUInt32.write(value.scalar_quantization_group_size, buf)
+
+class _UniffiFfiConverterOptionalTypeExactProximityRecordRecord(_UniffiConverterRustBuffer):
+    @classmethod
+    def check_lower(cls, value):
+        if value is not None:
+            _UniffiFfiConverterTypeExactProximityRecordRecord.check_lower(value)
+
+    @classmethod
+    def write(cls, value, buf):
+        if value is None:
+            buf.write_u8(0)
+            return
+
+        buf.write_u8(1)
+        _UniffiFfiConverterTypeExactProximityRecordRecord.write(value, buf)
+
+    @classmethod
+    def read(cls, buf):
+        flag = buf.read_u8()
+        if flag == 0:
+            return None
+        elif flag == 1:
+            return _UniffiFfiConverterTypeExactProximityRecordRecord.read(buf)
+        else:
+            raise InternalError("Unexpected flag byte for optional type")
+
+class _UniffiFfiConverterOptionalSequenceFloat32(_UniffiConverterRustBuffer):
+    @classmethod
+    def check_lower(cls, value):
+        if value is not None:
+            _UniffiFfiConverterSequenceFloat32.check_lower(value)
+
+    @classmethod
+    def write(cls, value, buf):
+        if value is None:
+            buf.write_u8(0)
+            return
+
+        buf.write_u8(1)
+        _UniffiFfiConverterSequenceFloat32.write(value, buf)
+
+    @classmethod
+    def read(cls, buf):
+        flag = buf.read_u8()
+        if flag == 0:
+            return None
+        elif flag == 1:
+            return _UniffiFfiConverterSequenceFloat32.read(buf)
+        else:
+            raise InternalError("Unexpected flag byte for optional type")
+
+@dataclass
+class ProximityMutationRecord:
+    def __init__(self, *, key:bytes, vector:typing.Optional[typing.List[float]], value:typing.Optional[bytes]):
+        self.key = key
+        self.vector = vector
+        self.value = value
+
+
+
+
+    def __str__(self):
+        return "ProximityMutationRecord(key={}, vector={}, value={})".format(self.key, self.vector, self.value)
+    def __eq__(self, other):
+        if self.key != other.key:
+            return False
+        if self.vector != other.vector:
+            return False
+        if self.value != other.value:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeProximityMutationRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return ProximityMutationRecord(
+            key=_UniffiFfiConverterBytes.read(buf),
+            vector=_UniffiFfiConverterOptionalSequenceFloat32.read(buf),
+            value=_UniffiFfiConverterOptionalBytes.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterBytes.check_lower(value.key)
+        _UniffiFfiConverterOptionalSequenceFloat32.check_lower(value.vector)
+        _UniffiFfiConverterOptionalBytes.check_lower(value.value)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterBytes.write(value.key, buf)
+        _UniffiFfiConverterOptionalSequenceFloat32.write(value.vector, buf)
+        _UniffiFfiConverterOptionalBytes.write(value.value, buf)
+
+class _UniffiFfiConverterSequenceTypeProximityMutationRecord(_UniffiConverterRustBuffer):
+    @classmethod
+    def check_lower(cls, value):
+        for item in value:
+            _UniffiFfiConverterTypeProximityMutationRecord.check_lower(item)
+
+    @classmethod
+    def write(cls, value, buf):
+        items = len(value)
+        buf.write_i32(items)
+        for item in value:
+            _UniffiFfiConverterTypeProximityMutationRecord.write(item, buf)
+
+    @classmethod
+    def read(cls, buf):
+        count = buf.read_i32()
+        if count < 0:
+            raise InternalError("Unexpected negative sequence length")
+
+        return [
+            _UniffiFfiConverterTypeProximityMutationRecord.read(buf) for i in range(count)
+        ]
+
+@dataclass
+class ProximityMutationStatsRecord:
+    def __init__(self, *, directory_entries_scanned:int, directory_nodes_read:int, directory_nodes_rebuilt:int, directory_nodes_written:int, directory_nodes_reused:int, directory_levels_rebuilt:int, directory_right_edge_rebuilt:bool, nodes_read:int, nodes_written:int, nodes_reused:int, records_rebuilt:int, distance_evaluations:int, full_proximity_rebuild:bool):
+        self.directory_entries_scanned = directory_entries_scanned
+        self.directory_nodes_read = directory_nodes_read
+        self.directory_nodes_rebuilt = directory_nodes_rebuilt
+        self.directory_nodes_written = directory_nodes_written
+        self.directory_nodes_reused = directory_nodes_reused
+        self.directory_levels_rebuilt = directory_levels_rebuilt
+        self.directory_right_edge_rebuilt = directory_right_edge_rebuilt
+        self.nodes_read = nodes_read
+        self.nodes_written = nodes_written
+        self.nodes_reused = nodes_reused
+        self.records_rebuilt = records_rebuilt
+        self.distance_evaluations = distance_evaluations
+        self.full_proximity_rebuild = full_proximity_rebuild
+
+
+
+
+    def __str__(self):
+        return "ProximityMutationStatsRecord(directory_entries_scanned={}, directory_nodes_read={}, directory_nodes_rebuilt={}, directory_nodes_written={}, directory_nodes_reused={}, directory_levels_rebuilt={}, directory_right_edge_rebuilt={}, nodes_read={}, nodes_written={}, nodes_reused={}, records_rebuilt={}, distance_evaluations={}, full_proximity_rebuild={})".format(self.directory_entries_scanned, self.directory_nodes_read, self.directory_nodes_rebuilt, self.directory_nodes_written, self.directory_nodes_reused, self.directory_levels_rebuilt, self.directory_right_edge_rebuilt, self.nodes_read, self.nodes_written, self.nodes_reused, self.records_rebuilt, self.distance_evaluations, self.full_proximity_rebuild)
+    def __eq__(self, other):
+        if self.directory_entries_scanned != other.directory_entries_scanned:
+            return False
+        if self.directory_nodes_read != other.directory_nodes_read:
+            return False
+        if self.directory_nodes_rebuilt != other.directory_nodes_rebuilt:
+            return False
+        if self.directory_nodes_written != other.directory_nodes_written:
+            return False
+        if self.directory_nodes_reused != other.directory_nodes_reused:
+            return False
+        if self.directory_levels_rebuilt != other.directory_levels_rebuilt:
+            return False
+        if self.directory_right_edge_rebuilt != other.directory_right_edge_rebuilt:
+            return False
+        if self.nodes_read != other.nodes_read:
+            return False
+        if self.nodes_written != other.nodes_written:
+            return False
+        if self.nodes_reused != other.nodes_reused:
+            return False
+        if self.records_rebuilt != other.records_rebuilt:
+            return False
+        if self.distance_evaluations != other.distance_evaluations:
+            return False
+        if self.full_proximity_rebuild != other.full_proximity_rebuild:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeProximityMutationStatsRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return ProximityMutationStatsRecord(
+            directory_entries_scanned=_UniffiFfiConverterUInt64.read(buf),
+            directory_nodes_read=_UniffiFfiConverterUInt64.read(buf),
+            directory_nodes_rebuilt=_UniffiFfiConverterUInt64.read(buf),
+            directory_nodes_written=_UniffiFfiConverterUInt64.read(buf),
+            directory_nodes_reused=_UniffiFfiConverterUInt64.read(buf),
+            directory_levels_rebuilt=_UniffiFfiConverterUInt64.read(buf),
+            directory_right_edge_rebuilt=_UniffiFfiConverterBoolean.read(buf),
+            nodes_read=_UniffiFfiConverterUInt64.read(buf),
+            nodes_written=_UniffiFfiConverterUInt64.read(buf),
+            nodes_reused=_UniffiFfiConverterUInt64.read(buf),
+            records_rebuilt=_UniffiFfiConverterUInt64.read(buf),
+            distance_evaluations=_UniffiFfiConverterUInt64.read(buf),
+            full_proximity_rebuild=_UniffiFfiConverterBoolean.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterUInt64.check_lower(value.directory_entries_scanned)
+        _UniffiFfiConverterUInt64.check_lower(value.directory_nodes_read)
+        _UniffiFfiConverterUInt64.check_lower(value.directory_nodes_rebuilt)
+        _UniffiFfiConverterUInt64.check_lower(value.directory_nodes_written)
+        _UniffiFfiConverterUInt64.check_lower(value.directory_nodes_reused)
+        _UniffiFfiConverterUInt64.check_lower(value.directory_levels_rebuilt)
+        _UniffiFfiConverterBoolean.check_lower(value.directory_right_edge_rebuilt)
+        _UniffiFfiConverterUInt64.check_lower(value.nodes_read)
+        _UniffiFfiConverterUInt64.check_lower(value.nodes_written)
+        _UniffiFfiConverterUInt64.check_lower(value.nodes_reused)
+        _UniffiFfiConverterUInt64.check_lower(value.records_rebuilt)
+        _UniffiFfiConverterUInt64.check_lower(value.distance_evaluations)
+        _UniffiFfiConverterBoolean.check_lower(value.full_proximity_rebuild)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterUInt64.write(value.directory_entries_scanned, buf)
+        _UniffiFfiConverterUInt64.write(value.directory_nodes_read, buf)
+        _UniffiFfiConverterUInt64.write(value.directory_nodes_rebuilt, buf)
+        _UniffiFfiConverterUInt64.write(value.directory_nodes_written, buf)
+        _UniffiFfiConverterUInt64.write(value.directory_nodes_reused, buf)
+        _UniffiFfiConverterUInt64.write(value.directory_levels_rebuilt, buf)
+        _UniffiFfiConverterBoolean.write(value.directory_right_edge_rebuilt, buf)
+        _UniffiFfiConverterUInt64.write(value.nodes_read, buf)
+        _UniffiFfiConverterUInt64.write(value.nodes_written, buf)
+        _UniffiFfiConverterUInt64.write(value.nodes_reused, buf)
+        _UniffiFfiConverterUInt64.write(value.records_rebuilt, buf)
+        _UniffiFfiConverterUInt64.write(value.distance_evaluations, buf)
+        _UniffiFfiConverterBoolean.write(value.full_proximity_rebuild, buf)
+
+@dataclass
+class ProximityMutationResultRecord:
+    def __init__(self, *, map:BindingProximityMap, stats:ProximityMutationStatsRecord):
+        self.map = map
+        self.stats = stats
+
+
+
+
+    def __str__(self):
+        return "ProximityMutationResultRecord(map={}, stats={})".format(self.map, self.stats)
+    def __eq__(self, other):
+        if self.map != other.map:
+            return False
+        if self.stats != other.stats:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeProximityMutationResultRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return ProximityMutationResultRecord(
+            map=_UniffiFfiConverterTypeBindingProximityMap.read(buf),
+            stats=_UniffiFfiConverterTypeProximityMutationStatsRecord.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterTypeBindingProximityMap.check_lower(value.map)
+        _UniffiFfiConverterTypeProximityMutationStatsRecord.check_lower(value.stats)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterTypeBindingProximityMap.write(value.map, buf)
+        _UniffiFfiConverterTypeProximityMutationStatsRecord.write(value.stats, buf)
+
+@dataclass
+class ProximityMembershipProofRecord:
+    def __init__(self, *, descriptor:bytes, descriptor_bytes:bytes, directory_proof:KeyProofRecord, record_bytes:typing.Optional[bytes]):
+        self.descriptor = descriptor
+        self.descriptor_bytes = descriptor_bytes
+        self.directory_proof = directory_proof
+        self.record_bytes = record_bytes
+
+
+
+
+    def __str__(self):
+        return "ProximityMembershipProofRecord(descriptor={}, descriptor_bytes={}, directory_proof={}, record_bytes={})".format(self.descriptor, self.descriptor_bytes, self.directory_proof, self.record_bytes)
+    def __eq__(self, other):
+        if self.descriptor != other.descriptor:
+            return False
+        if self.descriptor_bytes != other.descriptor_bytes:
+            return False
+        if self.directory_proof != other.directory_proof:
+            return False
+        if self.record_bytes != other.record_bytes:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeProximityMembershipProofRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return ProximityMembershipProofRecord(
+            descriptor=_UniffiFfiConverterBytes.read(buf),
+            descriptor_bytes=_UniffiFfiConverterBytes.read(buf),
+            directory_proof=_UniffiFfiConverterTypeKeyProofRecord.read(buf),
+            record_bytes=_UniffiFfiConverterOptionalBytes.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterBytes.check_lower(value.descriptor)
+        _UniffiFfiConverterBytes.check_lower(value.descriptor_bytes)
+        _UniffiFfiConverterTypeKeyProofRecord.check_lower(value.directory_proof)
+        _UniffiFfiConverterOptionalBytes.check_lower(value.record_bytes)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterBytes.write(value.descriptor, buf)
+        _UniffiFfiConverterBytes.write(value.descriptor_bytes, buf)
+        _UniffiFfiConverterTypeKeyProofRecord.write(value.directory_proof, buf)
+        _UniffiFfiConverterOptionalBytes.write(value.record_bytes, buf)
 
 
 
@@ -12469,6 +12995,8 @@ class BindingProximityMapProtocol(typing.Protocol):
 
     def build_hnsw(self, config: HnswConfigRecord,limits: HnswBuildLimitsRecord) -> HnswBuildResultRecord:
         raise NotImplementedError
+    def build_pq(self, config: ProductQuantizationConfigRecord,worker_threads: int,limits: ProductQuantizationBuildLimitsRecord) -> ProductQuantizationBuildResultRecord:
+        raise NotImplementedError
     def clear_content_cache(self, ) -> None:
         raise NotImplementedError
     def config(self, ) -> ProximityConfigRecord:
@@ -12484,6 +13012,8 @@ class BindingProximityMapProtocol(typing.Protocol):
     def get(self, key: bytes) -> typing.Optional[ExactProximityRecordRecord]:
         raise NotImplementedError
     def load_hnsw(self, manifest: bytes) -> BindingHnswIndex:
+        raise NotImplementedError
+    def load_pq(self, manifest: bytes) -> BindingProductQuantizer:
         raise NotImplementedError
     def mutate(self, mutations: typing.List[ProximityMutationRecord]) -> ProximityMutationResultRecord:
         raise NotImplementedError
@@ -12543,6 +13073,27 @@ class BindingProximityMap(BindingProximityMapProtocol):
         _uniffi_ffi_result = _uniffi_rust_call_with_error(
             _uniffi_error_converter,
             _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_build_hnsw,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def build_pq(self, config: ProductQuantizationConfigRecord,worker_threads: int,limits: ProductQuantizationBuildLimitsRecord) -> ProductQuantizationBuildResultRecord:
+
+        _UniffiFfiConverterTypeProductQuantizationConfigRecord.check_lower(config)
+
+        _UniffiFfiConverterUInt64.check_lower(worker_threads)
+
+        _UniffiFfiConverterTypeProductQuantizationBuildLimitsRecord.check_lower(limits)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeProductQuantizationConfigRecord.lower(config),
+            _UniffiFfiConverterUInt64.lower(worker_threads),
+            _UniffiFfiConverterTypeProductQuantizationBuildLimitsRecord.lower(limits),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeProductQuantizationBuildResultRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_build_pq,
             *_uniffi_lowered_args,
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
@@ -12648,6 +13199,21 @@ class BindingProximityMap(BindingProximityMapProtocol):
         _uniffi_ffi_result = _uniffi_rust_call_with_error(
             _uniffi_error_converter,
             _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_load_hnsw,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def load_pq(self, manifest: bytes) -> BindingProductQuantizer:
+
+        _UniffiFfiConverterBytes.check_lower(manifest)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterBytes.lower(manifest),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeBindingProductQuantizer.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_load_pq,
             *_uniffi_lowered_args,
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
@@ -29236,6 +29802,28 @@ def default_parallel_config() -> ParallelConfigRecord:
         *_uniffi_lowered_args,
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
+def default_pq_build_limits() -> ProductQuantizationBuildLimitsRecord:
+    _uniffi_lowered_args = (
+    )
+    _uniffi_lift_return = _UniffiFfiConverterTypeProductQuantizationBuildLimitsRecord.lift
+    _uniffi_error_converter = None
+    _uniffi_ffi_result = _uniffi_rust_call_with_error(
+        _uniffi_error_converter,
+        _UniffiLib.uniffi_prolly_bindings_fn_func_default_pq_build_limits,
+        *_uniffi_lowered_args,
+    )
+    return _uniffi_lift_return(_uniffi_ffi_result)
+def default_pq_config() -> ProductQuantizationConfigRecord:
+    _uniffi_lowered_args = (
+    )
+    _uniffi_lift_return = _UniffiFfiConverterTypeProductQuantizationConfigRecord.lift
+    _uniffi_error_converter = None
+    _uniffi_ffi_result = _uniffi_rust_call_with_error(
+        _uniffi_error_converter,
+        _UniffiLib.uniffi_prolly_bindings_fn_func_default_pq_config,
+        *_uniffi_lowered_args,
+    )
+    return _uniffi_lift_return(_uniffi_ffi_result)
 def default_proximity_config(dimensions: int) -> ProximityConfigRecord:
 
     _UniffiFfiConverterUInt32.check_lower(dimensions)
@@ -30924,7 +31512,6 @@ __all__ = [
     "DiffKind",
     "HnswRoutingVectorEncodingRecord",
     "ProllyBindingError",
-    "DistanceMetricRecord",
     "SearchPolicyKind",
     "AdaptiveQualityRecord",
     "ProximityFilterKind",
@@ -30932,6 +31519,7 @@ __all__ = [
     "SearchBackendRecord",
     "SearchCompletionRecord",
     "ProximitySearchClaimKindRecord",
+    "DistanceMetricRecord",
     "ContentObjectKindRecord",
     "IndexedUpdateKind",
     "MapUpdateKind",
@@ -30988,11 +31576,8 @@ __all__ = [
     "GcSweepRecord",
     "HnswBuildLimitsRecord",
     "HnswConfigRecord",
-    "ProximityConfigRecord",
-    "ProximityMutationRecord",
-    "ProximityMutationStatsRecord",
-    "ProximityMutationResultRecord",
-    "ProximityMembershipProofRecord",
+    "ProductQuantizationConfigRecord",
+    "ProductQuantizationBuildLimitsRecord",
     "SearchBudgetRecord",
     "ProximityFilterRecord",
     "ProximitySearchRequestRecord",
@@ -31001,6 +31586,14 @@ __all__ = [
     "ProximitySearchResultRecord",
     "ProximitySearchClaimRecord",
     "ProximitySearchVerificationRecord",
+    "ProductQuantizationQualityRecord",
+    "ProductQuantizationBuildStatsRecord",
+    "ProductQuantizationBuildResultRecord",
+    "ProximityConfigRecord",
+    "ProximityMutationRecord",
+    "ProximityMutationStatsRecord",
+    "ProximityMutationResultRecord",
+    "ProximityMembershipProofRecord",
     "TypedContentObjectRecord",
     "ProximityStructuralProofRecord",
     "ProximityRecordRecord",
@@ -31118,6 +31711,8 @@ __all__ = [
     "default_hnsw_config",
     "default_large_value_config",
     "default_parallel_config",
+    "default_pq_build_limits",
+    "default_pq_config",
     "default_proximity_config",
     "delete_mutation",
     "diff_page_proof_from_bytes",
@@ -31231,6 +31826,8 @@ __all__ = [
     "versioned_value_to_bytes",
     "BindingProximitySearchProof",
     "BindingProximitySearchProofProtocol",
+    "BindingProductQuantizer",
+    "BindingProductQuantizerProtocol",
     "ProximityRecordVisitorCallbackImpl",
     "ProximityRecordVisitorCallback",
     "BindingProximityReadSession",

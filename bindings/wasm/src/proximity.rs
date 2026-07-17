@@ -2,12 +2,14 @@ use super::{js_error, WasmProllyEngine};
 use crate::page::set_bytes;
 use js_sys::{Array, BigInt, Float32Array, Object, Reflect, Uint8Array};
 use prolly::{
-    AdaptiveQuality, Cid, ContentGraphLimits, DistanceMetric, HnswBuildLimits, HnswBuildStats,
-    HnswConfig, HnswIndex, HnswRoutingVectorEncoding, HnswSearchOptions, PlannerPolicy,
-    PqSearchOptions, ProximityConfig, ProximityFilter, ProximityMap, ProximityMembershipProof,
-    ProximityMutation, ProximityRecord, ProximitySearchClaim, ProximitySearchProof,
-    ProximityStructuralProof, ProximityVerification, QueryKernel, SearchBackend, SearchBudget,
-    SearchCompletion, SearchOptions, SearchPolicy, SearchRequest,
+    AdaptiveQuality, BuildParallelism, Cid, ContentGraphLimits, DistanceMetric, HnswBuildLimits,
+    HnswBuildStats, HnswConfig, HnswIndex, HnswRoutingVectorEncoding, HnswSearchOptions,
+    PlannerPolicy, PqSearchOptions, ProductQuantizationBuildLimits, ProductQuantizationBuildStats,
+    ProductQuantizationConfig, ProductQuantizationQuality, ProductQuantizer, ProximityConfig,
+    ProximityFilter, ProximityMap, ProximityMembershipProof, ProximityMutation, ProximityRecord,
+    ProximitySearchClaim, ProximitySearchProof, ProximityStructuralProof, ProximityVerification,
+    QueryKernel, SearchBackend, SearchBudget, SearchCompletion, SearchOptions, SearchPolicy,
+    SearchRequest,
 };
 use std::sync::Arc;
 use wasm_bindgen::prelude::*;
@@ -220,6 +222,103 @@ fn hnsw_build_stats_object(stats: HnswBuildStats) -> Result<Object, JsValue> {
         &object,
         &"encodedGraphBytes".into(),
         &BigInt::from(stats.encoded_graph_bytes as u64),
+    )?;
+    Ok(object)
+}
+
+fn pq_config_from_js(value: &JsValue) -> Result<ProductQuantizationConfig, JsValue> {
+    if value.is_null() || value.is_undefined() {
+        return Ok(ProductQuantizationConfig::default());
+    }
+    Ok(ProductQuantizationConfig {
+        subquantizers: required_u32(value, "subquantizers")?,
+        centroids_per_subquantizer: u16::try_from(required_u32(value, "centroidsPerSubquantizer")?)
+            .map_err(|_| JsValue::from_str("centroidsPerSubquantizer must fit u16"))?,
+        training_iterations: u16::try_from(required_u32(value, "trainingIterations")?)
+            .map_err(|_| JsValue::from_str("trainingIterations must fit u16"))?,
+        rerank_multiplier: required_u32(value, "rerankMultiplier")?,
+        seed: required_string_u64(value, "seed")?,
+        max_training_vectors: required_string_usize(value, "maxTrainingVectors")?,
+    })
+}
+
+fn pq_build_limits_from_js(value: &JsValue) -> Result<ProductQuantizationBuildLimits, JsValue> {
+    if value.is_null() || value.is_undefined() {
+        return Ok(ProductQuantizationBuildLimits::default());
+    }
+    Ok(ProductQuantizationBuildLimits {
+        max_training_vectors: optional_string_usize(value, "maxTrainingVectors")?,
+        max_training_bytes: optional_string_usize(value, "maxTrainingBytes")?,
+        max_temporary_code_bytes: optional_string_usize(value, "maxTemporaryCodeBytes")?,
+        max_distance_evaluations: optional_string_usize(value, "maxDistanceEvaluations")?,
+        max_encoded_output_bytes: optional_string_usize(value, "maxEncodedOutputBytes")?,
+        max_worker_threads: optional_string_usize(value, "maxWorkerThreads")?,
+    })
+}
+
+fn pq_config_object(config: &ProductQuantizationConfig) -> Result<Object, JsValue> {
+    let object = Object::new();
+    Reflect::set(
+        &object,
+        &"subquantizers".into(),
+        &JsValue::from_f64(config.subquantizers as f64),
+    )?;
+    Reflect::set(
+        &object,
+        &"centroidsPerSubquantizer".into(),
+        &JsValue::from_f64(config.centroids_per_subquantizer as f64),
+    )?;
+    Reflect::set(
+        &object,
+        &"trainingIterations".into(),
+        &JsValue::from_f64(config.training_iterations as f64),
+    )?;
+    Reflect::set(
+        &object,
+        &"rerankMultiplier".into(),
+        &JsValue::from_f64(config.rerank_multiplier as f64),
+    )?;
+    Reflect::set(&object, &"seed".into(), &BigInt::from(config.seed))?;
+    Reflect::set(
+        &object,
+        &"maxTrainingVectors".into(),
+        &BigInt::from(config.max_training_vectors as u64),
+    )?;
+    Ok(object)
+}
+
+fn pq_build_stats_object(stats: ProductQuantizationBuildStats) -> Result<Object, JsValue> {
+    let object = Object::new();
+    for (name, value) in [
+        (
+            "trainingDistanceEvaluations",
+            stats.training_distance_evaluations,
+        ),
+        (
+            "encodingDistanceEvaluations",
+            stats.encoding_distance_evaluations,
+        ),
+        ("encodedVectors", stats.encoded_vectors),
+        ("trainingVectors", stats.training_vectors),
+        ("trainingBytes", stats.training_bytes),
+        ("encodedOutputBytes", stats.encoded_output_bytes),
+    ] {
+        Reflect::set(&object, &name.into(), &BigInt::from(value as u64))?;
+    }
+    Ok(object)
+}
+
+fn pq_quality_object(quality: ProductQuantizationQuality) -> Result<Object, JsValue> {
+    let object = Object::new();
+    Reflect::set(
+        &object,
+        &"meanSquaredError".into(),
+        &JsValue::from_f64(quality.mean_squared_error),
+    )?;
+    Reflect::set(
+        &object,
+        &"maximumSquaredError".into(),
+        &JsValue::from_f64(quality.maximum_squared_error),
     )?;
     Ok(object)
 }
@@ -437,6 +536,55 @@ impl WasmProximityMap {
         }
         Ok(WasmHnswIndex { inner: index })
     }
+    #[wasm_bindgen(js_name = buildPq)]
+    pub fn build_pq(
+        &self,
+        config: JsValue,
+        worker_threads: String,
+        limits: JsValue,
+    ) -> Result<Object, JsValue> {
+        let config = pq_config_from_js(&config)?;
+        let worker_threads = worker_threads
+            .parse::<usize>()
+            .map_err(|error| JsValue::from_str(&format!("invalid workerThreads: {error}")))?;
+        if worker_threads != 1 {
+            return Err(JsValue::from_str(
+                "browser-safe WASM product quantization requires workerThreads = 1",
+            ));
+        }
+        let parallelism = BuildParallelism::serial();
+        let limits = pq_build_limits_from_js(&limits)?;
+        let map = self.load()?;
+        let (index, stats) = ProductQuantizer::build_with_limits(&map, config, parallelism, limits)
+            .map_err(js_error)?;
+        let result = Object::new();
+        Reflect::set(
+            &result,
+            &"index".into(),
+            &JsValue::from(WasmProductQuantizer { inner: index }),
+        )?;
+        Reflect::set(
+            &result,
+            &"stats".into(),
+            &pq_build_stats_object(stats)?.into(),
+        )?;
+        Ok(result)
+    }
+    #[wasm_bindgen(js_name = loadPq)]
+    pub fn load_pq(&self, manifest: Uint8Array) -> Result<WasmProductQuantizer, JsValue> {
+        let raw: [u8; 32] = manifest
+            .to_vec()
+            .try_into()
+            .map_err(|_| JsValue::from_str("PQ manifest CID must be 32 bytes"))?;
+        let index =
+            ProductQuantizer::load(self.engine.store().clone(), Cid(raw)).map_err(js_error)?;
+        if index.source_descriptor() != &self.descriptor {
+            return Err(JsValue::from_str(
+                "product quantizer is bound to a different source descriptor",
+            ));
+        }
+        Ok(WasmProductQuantizer { inner: index })
+    }
     pub fn verify(&self) -> Result<Object, JsValue> {
         proximity_verification_object(self.load()?.verify().map_err(js_error)?)
     }
@@ -579,6 +727,54 @@ impl WasmHnswIndex {
     #[wasm_bindgen(js_name = isCanonical)]
     pub fn is_canonical(&self) -> bool {
         self.inner.is_canonical()
+    }
+
+    pub fn search(&self, map: &WasmProximityMap, request: JsValue) -> Result<Object, JsValue> {
+        let request = owned_search_request(request)?;
+        let map = map.load()?;
+        self.inner
+            .search(&map, request.as_request())
+            .map_err(js_error)
+            .and_then(search_result_object)
+    }
+
+    #[wasm_bindgen(js_name = proveSearch)]
+    pub fn prove_search(
+        &self,
+        map: &WasmProximityMap,
+        request: JsValue,
+    ) -> Result<WasmProximitySearchProof, JsValue> {
+        let request = owned_search_request(request)?;
+        let map = map.load()?;
+        self.inner
+            .prove_search(&map, request.as_request(), &ContentGraphLimits::default())
+            .map(|inner| WasmProximitySearchProof { inner })
+            .map_err(js_error)
+    }
+}
+
+#[wasm_bindgen(js_name = WasmProductQuantizer)]
+pub struct WasmProductQuantizer {
+    inner: ProductQuantizer<Arc<prolly::MemStore>>,
+}
+
+#[wasm_bindgen(js_class = WasmProductQuantizer)]
+impl WasmProductQuantizer {
+    pub fn manifest(&self) -> Vec<u8> {
+        self.inner.manifest_cid().as_bytes().to_vec()
+    }
+
+    #[wasm_bindgen(js_name = sourceDescriptor)]
+    pub fn source_descriptor(&self) -> Vec<u8> {
+        self.inner.source_descriptor().as_bytes().to_vec()
+    }
+
+    pub fn config(&self) -> Result<Object, JsValue> {
+        pq_config_object(self.inner.config())
+    }
+
+    pub fn quality(&self) -> Result<Object, JsValue> {
+        pq_quality_object(self.inner.quality())
     }
 
     pub fn search(&self, map: &WasmProximityMap, request: JsValue) -> Result<Object, JsValue> {

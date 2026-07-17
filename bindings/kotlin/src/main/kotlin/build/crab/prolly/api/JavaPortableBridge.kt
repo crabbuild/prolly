@@ -44,6 +44,10 @@ import build.crab.prolly.TreeStatsRecord
 import build.crab.prolly.ProximitySearchResultRecord
 import build.crab.prolly.ProximitySearchRequestRecord
 import build.crab.prolly.ProximitySearchVerificationRecord
+import build.crab.prolly.ProductQuantizationBuildLimitsRecord
+import build.crab.prolly.ProductQuantizationBuildStatsRecord
+import build.crab.prolly.ProductQuantizationConfigRecord
+import build.crab.prolly.ProductQuantizationQualityRecord
 import build.crab.prolly.QueryKernelRecord
 import build.crab.prolly.RangeCursorRecord
 import build.crab.prolly.RangePageRecord
@@ -60,6 +64,8 @@ import build.crab.prolly.SearchBudgetRecord
 import build.crab.prolly.SearchPolicyKind
 import build.crab.prolly.defaultHnswBuildLimits as nativeDefaultHnswBuildLimits
 import build.crab.prolly.defaultHnswConfig as nativeDefaultHnswConfig
+import build.crab.prolly.defaultPqBuildLimits as nativeDefaultPqBuildLimits
+import build.crab.prolly.defaultPqConfig as nativeDefaultPqConfig
 import build.crab.prolly.verifyMultiKeyProof as verifyNativeMultiKeyProof
 import build.crab.prolly.verifyRangePageProof as verifyNativeRangePageProof
 import build.crab.prolly.verifyRangeProof as verifyNativeRangeProof
@@ -221,6 +227,81 @@ private fun HnswBuildLimitsRecord.toJava() = JavaHnswBuildLimits(
 private fun HnswBuildStatsRecord.toJava() = JavaHnswBuildStats(
     records.toLong(), distanceEvaluations.toLong(), directedEdges.toLong(), maximumLevel.toInt(),
     ownedBytes.toLong(), encodedGraphBytes.toLong(),
+)
+
+data class JavaProductQuantizationConfig(
+    val subquantizers: Long,
+    val centroidsPerSubquantizer: Int,
+    val trainingIterations: Int,
+    val rerankMultiplier: Long,
+    val seed: Long,
+    val maxTrainingVectors: Long,
+) {
+    fun toNative() = ProductQuantizationConfigRecord(
+        subquantizers.toUInt(),
+        centroidsPerSubquantizer.toUShort(),
+        trainingIterations.toUShort(),
+        rerankMultiplier.toUInt(),
+        seed.toULong(),
+        maxTrainingVectors.toULong(),
+    )
+}
+
+data class JavaProductQuantizationBuildLimits(
+    val maxTrainingVectors: Long?,
+    val maxTrainingBytes: Long?,
+    val maxTemporaryCodeBytes: Long?,
+    val maxDistanceEvaluations: Long?,
+    val maxEncodedOutputBytes: Long?,
+    val maxWorkerThreads: Long?,
+) {
+    fun toNative() = ProductQuantizationBuildLimitsRecord(
+        maxTrainingVectors?.toULong(),
+        maxTrainingBytes?.toULong(),
+        maxTemporaryCodeBytes?.toULong(),
+        maxDistanceEvaluations?.toULong(),
+        maxEncodedOutputBytes?.toULong(),
+        maxWorkerThreads?.toULong(),
+    )
+}
+
+data class JavaProductQuantizationBuildStats(
+    val trainingDistanceEvaluations: Long,
+    val encodingDistanceEvaluations: Long,
+    val encodedVectors: Long,
+    val trainingVectors: Long,
+    val trainingBytes: Long,
+    val encodedOutputBytes: Long,
+)
+
+data class JavaProductQuantizationQuality(
+    val meanSquaredError: Double,
+    val maximumSquaredError: Double,
+)
+
+data class JavaProductQuantizationBuildResult(
+    val index: ProductQuantizer,
+    val stats: JavaProductQuantizationBuildStats,
+)
+
+private fun ProductQuantizationConfigRecord.toJava() = JavaProductQuantizationConfig(
+    subquantizers.toLong(), centroidsPerSubquantizer.toInt(), trainingIterations.toInt(),
+    rerankMultiplier.toLong(), seed.toLong(), maxTrainingVectors.toLong(),
+)
+
+private fun ProductQuantizationBuildLimitsRecord.toJava() = JavaProductQuantizationBuildLimits(
+    maxTrainingVectors?.toLong(), maxTrainingBytes?.toLong(), maxTemporaryCodeBytes?.toLong(),
+    maxDistanceEvaluations?.toLong(), maxEncodedOutputBytes?.toLong(), maxWorkerThreads?.toLong(),
+)
+
+private fun ProductQuantizationBuildStatsRecord.toJava() = JavaProductQuantizationBuildStats(
+    trainingDistanceEvaluations.toLong(), encodingDistanceEvaluations.toLong(),
+    encodedVectors.toLong(), trainingVectors.toLong(), trainingBytes.toLong(),
+    encodedOutputBytes.toLong(),
+)
+
+private fun ProductQuantizationQualityRecord.toJava() = JavaProductQuantizationQuality(
+    meanSquaredError, maximumSquaredError,
 )
 
 data class JavaMapUpdate(
@@ -780,6 +861,48 @@ object JavaPortableBridge {
     @JvmStatic
     fun hnswProveSearch(
         index: HnswIndex,
+        map: ProximityMap,
+        request: JavaProximitySearchRequest,
+    ): ProximitySearchProof = index.proveSearch(map, request.toNative())
+
+    @JvmStatic
+    fun defaultPqConfig(): JavaProductQuantizationConfig = nativeDefaultPqConfig().toJava()
+
+    @JvmStatic
+    fun defaultPqBuildLimits(): JavaProductQuantizationBuildLimits =
+        nativeDefaultPqBuildLimits().toJava()
+
+    @JvmStatic
+    fun buildPq(
+        map: ProximityMap,
+        config: JavaProductQuantizationConfig,
+        workerThreads: Long,
+        limits: JavaProductQuantizationBuildLimits,
+    ): JavaProductQuantizationBuildResult =
+        map.buildPq(config.toNative(), workerThreads.toULong(), limits.toNative()).let {
+            JavaProductQuantizationBuildResult(it.index, it.stats.toJava())
+        }
+
+    @JvmStatic
+    fun loadPq(map: ProximityMap, manifest: ByteArray): ProductQuantizer =
+        map.loadPq(manifest.copyOf())
+
+    @JvmStatic
+    fun pqConfig(index: ProductQuantizer): JavaProductQuantizationConfig = index.config.toJava()
+
+    @JvmStatic
+    fun pqQuality(index: ProductQuantizer): JavaProductQuantizationQuality = index.quality.toJava()
+
+    @JvmStatic
+    fun pqSearch(
+        index: ProductQuantizer,
+        map: ProximityMap,
+        request: JavaProximitySearchRequest,
+    ): ProximitySearchResultRecord = index.search(map, request.toNative())
+
+    @JvmStatic
+    fun pqProveSearch(
+        index: ProductQuantizer,
         map: ProximityMap,
         request: JavaProximitySearchRequest,
     ): ProximitySearchProof = index.proveSearch(map, request.toNative())

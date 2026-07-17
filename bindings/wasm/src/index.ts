@@ -887,6 +887,65 @@ export function defaultHnswBuildLimits(): HnswBuildLimits {
   return { workerThreads: 1n };
 }
 
+export interface ProductQuantizationConfig {
+  subquantizers: number;
+  centroidsPerSubquantizer: number;
+  trainingIterations: number;
+  rerankMultiplier: number;
+  seed: bigint;
+  maxTrainingVectors: bigint;
+}
+
+export interface ProductQuantizationBuildLimits {
+  maxTrainingVectors?: bigint;
+  maxTrainingBytes?: bigint;
+  maxTemporaryCodeBytes?: bigint;
+  maxDistanceEvaluations?: bigint;
+  maxEncodedOutputBytes?: bigint;
+  maxWorkerThreads?: bigint;
+}
+
+export interface ProductQuantizationBuildStats {
+  trainingDistanceEvaluations: bigint;
+  encodingDistanceEvaluations: bigint;
+  encodedVectors: bigint;
+  trainingVectors: bigint;
+  trainingBytes: bigint;
+  encodedOutputBytes: bigint;
+}
+
+export interface ProductQuantizationQuality {
+  meanSquaredError: number;
+  maximumSquaredError: number;
+}
+
+export interface ProductQuantizationBuildOptions {
+  config?: ProductQuantizationConfig;
+  workerThreads?: bigint;
+  limits?: ProductQuantizationBuildLimits;
+  signal?: AbortSignal;
+}
+
+export interface ProductQuantizationBuildResult {
+  index: WasmProductQuantizer;
+  stats: ProductQuantizationBuildStats;
+}
+
+export function defaultPqConfig(): ProductQuantizationConfig {
+  return {
+    subquantizers: 8,
+    centroidsPerSubquantizer: 256,
+    trainingIterations: 12,
+    rerankMultiplier: 8,
+    seed: 0n,
+    maxTrainingVectors: 65_536n,
+  };
+}
+
+export function defaultPqBuildLimits(): ProductQuantizationBuildLimits {
+  return {};
+}
+
 function requireUnsignedInteger(value: number, name: string, maximum: number): number {
   if (!Number.isInteger(value) || value < 0 || value > maximum) {
     throw new RangeError(`${name} must be an unsigned integer no greater than ${maximum}`);
@@ -895,7 +954,9 @@ function requireUnsignedInteger(value: number, name: string, maximum: number): n
 }
 
 function requireUnsignedBigInt(value: bigint, name: string): bigint {
-  if (value < 0n) throw new RangeError(`${name} must be non-negative`);
+  if (value < 0n || value > 0xffff_ffff_ffff_ffffn) {
+    throw new RangeError(`${name} must fit an unsigned 64-bit integer`);
+  }
   return value;
 }
 
@@ -929,6 +990,40 @@ function ownHnswBuildLimits(value: HnswBuildLimits | undefined): object {
     maxDistanceEvaluations: optional(limits.maxDistanceEvaluations, "maxDistanceEvaluations"),
     workerThreads: requireUnsignedBigInt(limits.workerThreads, "workerThreads").toString(),
     maxEncodedGraphBytes: optional(limits.maxEncodedGraphBytes, "maxEncodedGraphBytes"),
+  };
+}
+
+function ownPqConfig(value: ProductQuantizationConfig | undefined): object {
+  const config = value ?? defaultPqConfig();
+  return {
+    subquantizers: requireUnsignedInteger(config.subquantizers, "subquantizers", 0xffff_ffff),
+    centroidsPerSubquantizer: requireUnsignedInteger(
+      config.centroidsPerSubquantizer, "centroidsPerSubquantizer", 0xffff,
+    ),
+    trainingIterations: requireUnsignedInteger(
+      config.trainingIterations, "trainingIterations", 0xffff,
+    ),
+    rerankMultiplier: requireUnsignedInteger(
+      config.rerankMultiplier, "rerankMultiplier", 0xffff_ffff,
+    ),
+    seed: requireUnsignedBigInt(config.seed, "seed").toString(),
+    maxTrainingVectors: requireUnsignedBigInt(
+      config.maxTrainingVectors, "maxTrainingVectors",
+    ).toString(),
+  };
+}
+
+function ownPqBuildLimits(value: ProductQuantizationBuildLimits | undefined): object {
+  const limits = value ?? defaultPqBuildLimits();
+  const optional = (candidate: bigint | undefined, name: string) =>
+    candidate == null ? undefined : requireUnsignedBigInt(candidate, name).toString();
+  return {
+    maxTrainingVectors: optional(limits.maxTrainingVectors, "maxTrainingVectors"),
+    maxTrainingBytes: optional(limits.maxTrainingBytes, "maxTrainingBytes"),
+    maxTemporaryCodeBytes: optional(limits.maxTemporaryCodeBytes, "maxTemporaryCodeBytes"),
+    maxDistanceEvaluations: optional(limits.maxDistanceEvaluations, "maxDistanceEvaluations"),
+    maxEncodedOutputBytes: optional(limits.maxEncodedOutputBytes, "maxEncodedOutputBytes"),
+    maxWorkerThreads: optional(limits.maxWorkerThreads, "maxWorkerThreads"),
   };
 }
 
@@ -2211,6 +2306,31 @@ export class WasmProximityMap implements Disposable {
   loadHnsw(manifest: Uint8Array): WasmHnswIndex {
     return new WasmHnswIndex(this.nativeHandle().loadHnsw(ownedPortableBytes(manifest)));
   }
+  buildPq(options: ProductQuantizationBuildOptions = {}): Promise<ProductQuantizationBuildResult> {
+    const native = this.nativeHandle();
+    const config = ownPqConfig(options.config);
+    const workerThreads = requireUnsignedBigInt(
+      options.workerThreads ?? 1n, "workerThreads",
+    ).toString();
+    const limits = ownPqBuildLimits(options.limits);
+    return portablePromise(options.signal, () => {
+      const result = native.buildPq(config, workerThreads, limits);
+      return {
+        index: new WasmProductQuantizer(result.index),
+        stats: {
+          trainingDistanceEvaluations: BigInt(result.stats.trainingDistanceEvaluations),
+          encodingDistanceEvaluations: BigInt(result.stats.encodingDistanceEvaluations),
+          encodedVectors: BigInt(result.stats.encodedVectors),
+          trainingVectors: BigInt(result.stats.trainingVectors),
+          trainingBytes: BigInt(result.stats.trainingBytes),
+          encodedOutputBytes: BigInt(result.stats.encodedOutputBytes),
+        },
+      };
+    });
+  }
+  loadPq(manifest: Uint8Array): WasmProductQuantizer {
+    return new WasmProductQuantizer(this.nativeHandle().loadPq(ownedPortableBytes(manifest)));
+  }
   mutate(mutations: PortableProximityMutation[]): {
     map: WasmProximityMap;
     stats: {
@@ -2275,6 +2395,48 @@ export class WasmHnswIndex implements Disposable {
     };
   }
   isCanonical(): boolean { return this.#open().isCanonical(); }
+  search(map: WasmProximityMap, request: PortableSearchRequest): Promise<PortableSearchResult> {
+    const native = this.#open();
+    const nativeMap = map.nativeHandle();
+    const owned = ownPortableSearchRequest(request);
+    return portablePromise(request.signal, () => native.search(nativeMap, owned));
+  }
+  proveSearch(map: WasmProximityMap, request: PortableSearchRequest): WasmProximitySearchProof {
+    return new WasmProximitySearchProof(
+      this.#open().proveSearch(map.nativeHandle(), ownPortableSearchRequest(request)),
+    );
+  }
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class WasmProductQuantizer implements Disposable {
+  #native?: any;
+  constructor(native: any) { this.#native = native; }
+  #open(): any {
+    if (this.#native == null) throw new Error("WASM product quantizer is closed");
+    return this.#native;
+  }
+  manifest(): Uint8Array { return ownedPortableBytes(this.#open().manifest()); }
+  sourceDescriptor(): Uint8Array { return ownedPortableBytes(this.#open().sourceDescriptor()); }
+  config(): ProductQuantizationConfig {
+    const value = this.#open().config();
+    return {
+      subquantizers: value.subquantizers,
+      centroidsPerSubquantizer: value.centroidsPerSubquantizer,
+      trainingIterations: value.trainingIterations,
+      rerankMultiplier: value.rerankMultiplier,
+      seed: BigInt(value.seed),
+      maxTrainingVectors: BigInt(value.maxTrainingVectors),
+    };
+  }
+  quality(): ProductQuantizationQuality {
+    const value = this.#open().quality();
+    return {
+      meanSquaredError: value.meanSquaredError,
+      maximumSquaredError: value.maximumSquaredError,
+    };
+  }
   search(map: WasmProximityMap, request: PortableSearchRequest): Promise<PortableSearchResult> {
     const native = this.#open();
     const nativeMap = map.nativeHandle();

@@ -2532,9 +2532,182 @@ public func FfiConverterTypeBindingMapSubscription_lower(_ value: BindingMapSubs
 
 
 
+public protocol BindingProductQuantizerProtocol: AnyObject, Sendable {
+
+    func config()  -> ProductQuantizationConfigRecord
+
+    func manifest()  -> Data
+
+    func proveSearch(map: BindingProximityMap, request: ProximitySearchRequestRecord, limits: ContentGraphLimitsRecord) throws  -> BindingProximitySearchProof
+
+    func quality()  -> ProductQuantizationQualityRecord
+
+    func search(map: BindingProximityMap, request: ProximitySearchRequestRecord) throws  -> ProximitySearchResultRecord
+
+    func sourceDescriptor()  -> Data
+
+}
+open class BindingProductQuantizer: BindingProductQuantizerProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_prolly_bindings_fn_clone_bindingproductquantizer(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_prolly_bindings_fn_free_bindingproductquantizer(handle, $0) }
+    }
+
+
+
+
+open func config() -> ProductQuantizationConfigRecord  {
+    return try!  FfiConverterTypeProductQuantizationConfigRecord_lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_method_bindingproductquantizer_config(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func manifest() -> Data  {
+    return try!  FfiConverterData.lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_method_bindingproductquantizer_manifest(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func proveSearch(map: BindingProximityMap, request: ProximitySearchRequestRecord, limits: ContentGraphLimitsRecord)throws  -> BindingProximitySearchProof  {
+    return try  FfiConverterTypeBindingProximitySearchProof_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingproductquantizer_prove_search(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeBindingProximityMap_lower(map),
+        FfiConverterTypeProximitySearchRequestRecord_lower(request),
+        FfiConverterTypeContentGraphLimitsRecord_lower(limits),$0
+    )
+})
+}
+
+open func quality() -> ProductQuantizationQualityRecord  {
+    return try!  FfiConverterTypeProductQuantizationQualityRecord_lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_method_bindingproductquantizer_quality(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func search(map: BindingProximityMap, request: ProximitySearchRequestRecord)throws  -> ProximitySearchResultRecord  {
+    return try  FfiConverterTypeProximitySearchResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingproductquantizer_search(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeBindingProximityMap_lower(map),
+        FfiConverterTypeProximitySearchRequestRecord_lower(request),$0
+    )
+})
+}
+
+open func sourceDescriptor() -> Data  {
+    return try!  FfiConverterData.lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_method_bindingproductquantizer_source_descriptor(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBindingProductQuantizer: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = BindingProductQuantizer
+
+    public static func lift(_ handle: UInt64) throws -> BindingProductQuantizer {
+        return BindingProductQuantizer(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: BindingProductQuantizer) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BindingProductQuantizer {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: BindingProductQuantizer, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBindingProductQuantizer_lift(_ handle: UInt64) throws -> BindingProductQuantizer {
+    return try FfiConverterTypeBindingProductQuantizer.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBindingProductQuantizer_lower(_ value: BindingProductQuantizer) -> UInt64 {
+    return FfiConverterTypeBindingProductQuantizer.lower(value)
+}
+
+
+
+
+
+
 public protocol BindingProximityMapProtocol: AnyObject, Sendable {
 
     func buildHnsw(config: HnswConfigRecord, limits: HnswBuildLimitsRecord) throws  -> HnswBuildResultRecord
+
+    func buildPq(config: ProductQuantizationConfigRecord, workerThreads: UInt64, limits: ProductQuantizationBuildLimitsRecord) throws  -> ProductQuantizationBuildResultRecord
 
     func clearContentCache() throws
 
@@ -2551,6 +2724,8 @@ public protocol BindingProximityMapProtocol: AnyObject, Sendable {
     func get(key: Data) throws  -> ExactProximityRecordRecord?
 
     func loadHnsw(manifest: Data) throws  -> BindingHnswIndex
+
+    func loadPq(manifest: Data) throws  -> BindingProductQuantizer
 
     func mutate(mutations: [ProximityMutationRecord]) throws  -> ProximityMutationResultRecord
 
@@ -2634,6 +2809,17 @@ open func buildHnsw(config: HnswConfigRecord, limits: HnswBuildLimitsRecord)thro
 })
 }
 
+open func buildPq(config: ProductQuantizationConfigRecord, workerThreads: UInt64, limits: ProductQuantizationBuildLimitsRecord)throws  -> ProductQuantizationBuildResultRecord  {
+    return try  FfiConverterTypeProductQuantizationBuildResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingproximitymap_build_pq(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeProductQuantizationConfigRecord_lower(config),
+        FfiConverterUInt64.lower(workerThreads),
+        FfiConverterTypeProductQuantizationBuildLimitsRecord_lower(limits),$0
+    )
+})
+}
+
 open func clearContentCache()throws   {try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingproximitymap_clear_content_cache(
             self.uniffiCloneHandle(),$0
@@ -2694,6 +2880,15 @@ open func get(key: Data)throws  -> ExactProximityRecordRecord?  {
 open func loadHnsw(manifest: Data)throws  -> BindingHnswIndex  {
     return try  FfiConverterTypeBindingHnswIndex_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingproximitymap_load_hnsw(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(manifest),$0
+    )
+})
+}
+
+open func loadPq(manifest: Data)throws  -> BindingProductQuantizer  {
+    return try  FfiConverterTypeBindingProductQuantizer_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingproximitymap_load_pq(
             self.uniffiCloneHandle(),
         FfiConverterData.lower(manifest),$0
     )
@@ -14336,6 +14531,324 @@ public func FfiConverterTypeParallelConfigRecord_lower(_ value: ParallelConfigRe
 }
 
 
+public struct ProductQuantizationBuildLimitsRecord: Equatable, Hashable {
+    public var maxTrainingVectors: UInt64?
+    public var maxTrainingBytes: UInt64?
+    public var maxTemporaryCodeBytes: UInt64?
+    public var maxDistanceEvaluations: UInt64?
+    public var maxEncodedOutputBytes: UInt64?
+    public var maxWorkerThreads: UInt64?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(maxTrainingVectors: UInt64?, maxTrainingBytes: UInt64?, maxTemporaryCodeBytes: UInt64?, maxDistanceEvaluations: UInt64?, maxEncodedOutputBytes: UInt64?, maxWorkerThreads: UInt64?) {
+        self.maxTrainingVectors = maxTrainingVectors
+        self.maxTrainingBytes = maxTrainingBytes
+        self.maxTemporaryCodeBytes = maxTemporaryCodeBytes
+        self.maxDistanceEvaluations = maxDistanceEvaluations
+        self.maxEncodedOutputBytes = maxEncodedOutputBytes
+        self.maxWorkerThreads = maxWorkerThreads
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension ProductQuantizationBuildLimitsRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProductQuantizationBuildLimitsRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProductQuantizationBuildLimitsRecord {
+        return
+            try ProductQuantizationBuildLimitsRecord(
+                maxTrainingVectors: FfiConverterOptionUInt64.read(from: &buf),
+                maxTrainingBytes: FfiConverterOptionUInt64.read(from: &buf),
+                maxTemporaryCodeBytes: FfiConverterOptionUInt64.read(from: &buf),
+                maxDistanceEvaluations: FfiConverterOptionUInt64.read(from: &buf),
+                maxEncodedOutputBytes: FfiConverterOptionUInt64.read(from: &buf),
+                maxWorkerThreads: FfiConverterOptionUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProductQuantizationBuildLimitsRecord, into buf: inout [UInt8]) {
+        FfiConverterOptionUInt64.write(value.maxTrainingVectors, into: &buf)
+        FfiConverterOptionUInt64.write(value.maxTrainingBytes, into: &buf)
+        FfiConverterOptionUInt64.write(value.maxTemporaryCodeBytes, into: &buf)
+        FfiConverterOptionUInt64.write(value.maxDistanceEvaluations, into: &buf)
+        FfiConverterOptionUInt64.write(value.maxEncodedOutputBytes, into: &buf)
+        FfiConverterOptionUInt64.write(value.maxWorkerThreads, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProductQuantizationBuildLimitsRecord_lift(_ buf: RustBuffer) throws -> ProductQuantizationBuildLimitsRecord {
+    return try FfiConverterTypeProductQuantizationBuildLimitsRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProductQuantizationBuildLimitsRecord_lower(_ value: ProductQuantizationBuildLimitsRecord) -> RustBuffer {
+    return FfiConverterTypeProductQuantizationBuildLimitsRecord.lower(value)
+}
+
+
+public struct ProductQuantizationBuildResultRecord {
+    public var index: BindingProductQuantizer
+    public var stats: ProductQuantizationBuildStatsRecord
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(index: BindingProductQuantizer, stats: ProductQuantizationBuildStatsRecord) {
+        self.index = index
+        self.stats = stats
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension ProductQuantizationBuildResultRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProductQuantizationBuildResultRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProductQuantizationBuildResultRecord {
+        return
+            try ProductQuantizationBuildResultRecord(
+                index: FfiConverterTypeBindingProductQuantizer.read(from: &buf),
+                stats: FfiConverterTypeProductQuantizationBuildStatsRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProductQuantizationBuildResultRecord, into buf: inout [UInt8]) {
+        FfiConverterTypeBindingProductQuantizer.write(value.index, into: &buf)
+        FfiConverterTypeProductQuantizationBuildStatsRecord.write(value.stats, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProductQuantizationBuildResultRecord_lift(_ buf: RustBuffer) throws -> ProductQuantizationBuildResultRecord {
+    return try FfiConverterTypeProductQuantizationBuildResultRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProductQuantizationBuildResultRecord_lower(_ value: ProductQuantizationBuildResultRecord) -> RustBuffer {
+    return FfiConverterTypeProductQuantizationBuildResultRecord.lower(value)
+}
+
+
+public struct ProductQuantizationBuildStatsRecord: Equatable, Hashable {
+    public var trainingDistanceEvaluations: UInt64
+    public var encodingDistanceEvaluations: UInt64
+    public var encodedVectors: UInt64
+    public var trainingVectors: UInt64
+    public var trainingBytes: UInt64
+    public var encodedOutputBytes: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(trainingDistanceEvaluations: UInt64, encodingDistanceEvaluations: UInt64, encodedVectors: UInt64, trainingVectors: UInt64, trainingBytes: UInt64, encodedOutputBytes: UInt64) {
+        self.trainingDistanceEvaluations = trainingDistanceEvaluations
+        self.encodingDistanceEvaluations = encodingDistanceEvaluations
+        self.encodedVectors = encodedVectors
+        self.trainingVectors = trainingVectors
+        self.trainingBytes = trainingBytes
+        self.encodedOutputBytes = encodedOutputBytes
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension ProductQuantizationBuildStatsRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProductQuantizationBuildStatsRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProductQuantizationBuildStatsRecord {
+        return
+            try ProductQuantizationBuildStatsRecord(
+                trainingDistanceEvaluations: FfiConverterUInt64.read(from: &buf),
+                encodingDistanceEvaluations: FfiConverterUInt64.read(from: &buf),
+                encodedVectors: FfiConverterUInt64.read(from: &buf),
+                trainingVectors: FfiConverterUInt64.read(from: &buf),
+                trainingBytes: FfiConverterUInt64.read(from: &buf),
+                encodedOutputBytes: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProductQuantizationBuildStatsRecord, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.trainingDistanceEvaluations, into: &buf)
+        FfiConverterUInt64.write(value.encodingDistanceEvaluations, into: &buf)
+        FfiConverterUInt64.write(value.encodedVectors, into: &buf)
+        FfiConverterUInt64.write(value.trainingVectors, into: &buf)
+        FfiConverterUInt64.write(value.trainingBytes, into: &buf)
+        FfiConverterUInt64.write(value.encodedOutputBytes, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProductQuantizationBuildStatsRecord_lift(_ buf: RustBuffer) throws -> ProductQuantizationBuildStatsRecord {
+    return try FfiConverterTypeProductQuantizationBuildStatsRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProductQuantizationBuildStatsRecord_lower(_ value: ProductQuantizationBuildStatsRecord) -> RustBuffer {
+    return FfiConverterTypeProductQuantizationBuildStatsRecord.lower(value)
+}
+
+
+public struct ProductQuantizationConfigRecord: Equatable, Hashable {
+    public var subquantizers: UInt32
+    public var centroidsPerSubquantizer: UInt16
+    public var trainingIterations: UInt16
+    public var rerankMultiplier: UInt32
+    public var seed: UInt64
+    public var maxTrainingVectors: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(subquantizers: UInt32, centroidsPerSubquantizer: UInt16, trainingIterations: UInt16, rerankMultiplier: UInt32, seed: UInt64, maxTrainingVectors: UInt64) {
+        self.subquantizers = subquantizers
+        self.centroidsPerSubquantizer = centroidsPerSubquantizer
+        self.trainingIterations = trainingIterations
+        self.rerankMultiplier = rerankMultiplier
+        self.seed = seed
+        self.maxTrainingVectors = maxTrainingVectors
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension ProductQuantizationConfigRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProductQuantizationConfigRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProductQuantizationConfigRecord {
+        return
+            try ProductQuantizationConfigRecord(
+                subquantizers: FfiConverterUInt32.read(from: &buf),
+                centroidsPerSubquantizer: FfiConverterUInt16.read(from: &buf),
+                trainingIterations: FfiConverterUInt16.read(from: &buf),
+                rerankMultiplier: FfiConverterUInt32.read(from: &buf),
+                seed: FfiConverterUInt64.read(from: &buf),
+                maxTrainingVectors: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProductQuantizationConfigRecord, into buf: inout [UInt8]) {
+        FfiConverterUInt32.write(value.subquantizers, into: &buf)
+        FfiConverterUInt16.write(value.centroidsPerSubquantizer, into: &buf)
+        FfiConverterUInt16.write(value.trainingIterations, into: &buf)
+        FfiConverterUInt32.write(value.rerankMultiplier, into: &buf)
+        FfiConverterUInt64.write(value.seed, into: &buf)
+        FfiConverterUInt64.write(value.maxTrainingVectors, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProductQuantizationConfigRecord_lift(_ buf: RustBuffer) throws -> ProductQuantizationConfigRecord {
+    return try FfiConverterTypeProductQuantizationConfigRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProductQuantizationConfigRecord_lower(_ value: ProductQuantizationConfigRecord) -> RustBuffer {
+    return FfiConverterTypeProductQuantizationConfigRecord.lower(value)
+}
+
+
+public struct ProductQuantizationQualityRecord: Equatable, Hashable {
+    public var meanSquaredError: Double
+    public var maximumSquaredError: Double
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(meanSquaredError: Double, maximumSquaredError: Double) {
+        self.meanSquaredError = meanSquaredError
+        self.maximumSquaredError = maximumSquaredError
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension ProductQuantizationQualityRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProductQuantizationQualityRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProductQuantizationQualityRecord {
+        return
+            try ProductQuantizationQualityRecord(
+                meanSquaredError: FfiConverterDouble.read(from: &buf),
+                maximumSquaredError: FfiConverterDouble.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProductQuantizationQualityRecord, into buf: inout [UInt8]) {
+        FfiConverterDouble.write(value.meanSquaredError, into: &buf)
+        FfiConverterDouble.write(value.maximumSquaredError, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProductQuantizationQualityRecord_lift(_ buf: RustBuffer) throws -> ProductQuantizationQualityRecord {
+    return try FfiConverterTypeProductQuantizationQualityRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProductQuantizationQualityRecord_lower(_ value: ProductQuantizationQualityRecord) -> RustBuffer {
+    return FfiConverterTypeProductQuantizationQualityRecord.lower(value)
+}
+
+
 public struct ProofBundleSummaryRecord: Equatable, Hashable {
     public var version: UInt64
     public var kind: String
@@ -24369,6 +24882,18 @@ public func defaultHnswConfig() -> HnswConfigRecord  {
     )
 })
 }
+public func defaultPqBuildLimits() -> ProductQuantizationBuildLimitsRecord  {
+    return try!  FfiConverterTypeProductQuantizationBuildLimitsRecord_lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_func_default_pq_build_limits($0
+    )
+})
+}
+public func defaultPqConfig() -> ProductQuantizationConfigRecord  {
+    return try!  FfiConverterTypeProductQuantizationConfigRecord_lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_func_default_pq_config($0
+    )
+})
+}
 public func defaultProximityConfig(dimensions: UInt32) -> ProximityConfigRecord  {
     return try!  FfiConverterTypeProximityConfigRecord_lift(try! rustCall() {
     uniffi_prolly_bindings_fn_func_default_proximity_config(
@@ -24793,6 +25318,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_func_default_hnsw_config() != 11115) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_func_default_pq_build_limits() != 40959) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_func_default_pq_config() != 62103) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_func_default_proximity_config() != 43437) {
@@ -25470,7 +26001,28 @@ private let initializationResult: InitializationResult = {
     if (uniffi_prolly_bindings_checksum_method_bindinghnswindex_source_descriptor() != 54794) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_prolly_bindings_checksum_method_bindingproductquantizer_config() != 33006) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingproductquantizer_manifest() != 51829) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingproductquantizer_prove_search() != 46039) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingproductquantizer_quality() != 29268) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingproductquantizer_search() != 14867) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingproductquantizer_source_descriptor() != 61276) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_hnsw() != 15873) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_pq() != 7075) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_bindingproximitymap_clear_content_cache() != 42240) {
@@ -25495,6 +26047,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_bindingproximitymap_load_hnsw() != 8586) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingproximitymap_load_pq() != 63976) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_bindingproximitymap_mutate() != 39394) {

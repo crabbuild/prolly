@@ -56,6 +56,60 @@ test("WASM HNSW accelerator lifecycle is portable", { skip: !generatedPresent },
   }
 });
 
+test("WASM product quantizer lifecycle is portable and bounded", { skip: !generatedPresent }, async () => {
+  const engine = api.Engine.memory(wasm);
+  try {
+    const proximity = await engine.buildProximity(4, Array.from({ length: 16 }, (_, index) => ({
+      key: bytes(`pq-vector-${index.toString().padStart(2, "0")}`),
+      vector: new Float32Array([index, index % 3, index % 5, index % 7]),
+      value: bytes(`pq-value-${index.toString().padStart(2, "0")}`),
+    })));
+    const config = {
+      subquantizers: 2,
+      centroidsPerSubquantizer: 4,
+      trainingIterations: 2,
+      rerankMultiplier: 4,
+      seed: 0xffff_ffff_ffff_ffffn,
+      maxTrainingVectors: 16n,
+    };
+    const built = await proximity.buildPq({
+      config,
+      workerThreads: 1n,
+      limits: api.defaultPqBuildLimits(),
+    });
+    assert.equal(built.stats.encodedVectors, 16n);
+    assert.equal(built.stats.trainingVectors, 16n);
+    const request = {
+      vector: new Float32Array([0, 0, 0, 0]),
+      topK: 3,
+      policy: "fixed_budget" as const,
+      backend: "product_quantized" as const,
+    };
+    const index = built.index;
+    assert.deepEqual(index.sourceDescriptor(), proximity.descriptor());
+    assert.deepEqual(index.config(), config);
+    assert.ok(index.quality().meanSquaredError >= 0);
+    const result = await index.search(proximity, request);
+    assert.equal(result.backend, "product_quantized");
+    assert.equal(Buffer.from(result.neighbors[0].key).toString(), "pq-vector-00");
+    const manifest = index.manifest();
+    const proof = index.proveSearch(proximity, request);
+    assert.equal(proof.verify(proximity.descriptor()).result.backend, "product_quantized");
+    proof.close();
+    index.close();
+    const loaded = proximity.loadPq(manifest);
+    assert.deepEqual(loaded.manifest(), manifest);
+    loaded.close();
+    await assert.rejects(
+      proximity.buildPq({ config, workerThreads: 2n }),
+      /browser-safe WASM product quantization requires workerThreads = 1/,
+    );
+    proximity.close();
+  } finally {
+    engine.close();
+  }
+});
+
 test("WASM rich proximity search preserves policy filter stats session and proof", { skip: !generatedPresent }, async () => {
   const engine = api.Engine.memory(wasm);
   try {

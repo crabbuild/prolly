@@ -49,6 +49,12 @@ class HnswBuildResult:
     stats: _native.HnswBuildStatsRecord
 
 
+@dataclass(frozen=True)
+class ProductQuantizationBuildResult:
+    index: "ProductQuantizer"
+    stats: _native.ProductQuantizationBuildStatsRecord
+
+
 IndexProjection = _native.IndexProjectionRecord
 
 
@@ -899,6 +905,27 @@ class ProximityMap(_Scoped):
         self._open()
         return HnswIndex(self._inner.load_hnsw(bytes(manifest)))
 
+    def build_pq(
+        self,
+        config: _native.ProductQuantizationConfigRecord | None = None,
+        *,
+        worker_threads: int = 1,
+        limits: _native.ProductQuantizationBuildLimitsRecord | None = None,
+    ) -> ProductQuantizationBuildResult:
+        self._open()
+        result = self._inner.build_pq(
+            config or _native.default_pq_config(),
+            worker_threads,
+            limits or _native.default_pq_build_limits(),
+        )
+        return ProductQuantizationBuildResult(
+            ProductQuantizer(result.index), result.stats
+        )
+
+    def load_pq(self, manifest: bytes) -> "ProductQuantizer":
+        self._open()
+        return ProductQuantizer(self._inner.load_pq(bytes(manifest)))
+
     def search(self, request: _native.ProximitySearchRequestRecord):
         with self.read() as session:
             return session.search(request)
@@ -1021,6 +1048,60 @@ class HnswIndex(_Scoped):
         )
 
 
+class ProductQuantizer(_Scoped):
+    def __init__(self, inner: _native.BindingProductQuantizer):
+        super().__init__()
+        self._inner = inner
+
+    @property
+    def manifest(self) -> bytes:
+        self._open()
+        return self._inner.manifest()
+
+    @property
+    def source_descriptor(self) -> bytes:
+        self._open()
+        return self._inner.source_descriptor()
+
+    @property
+    def config(self) -> _native.ProductQuantizationConfigRecord:
+        self._open()
+        return self._inner.config()
+
+    @property
+    def quality(self) -> _native.ProductQuantizationQualityRecord:
+        self._open()
+        return self._inner.quality()
+
+    def search(
+        self,
+        map: ProximityMap,
+        request: _native.ProximitySearchRequestRecord,
+    ) -> _native.ProximitySearchResultRecord:
+        self._open()
+        map._open()
+        return self._inner.search(
+            map._inner,
+            _owned_proximity_search_request(request),
+        )
+
+    def prove_search(
+        self,
+        map: ProximityMap,
+        request: _native.ProximitySearchRequestRecord,
+        limits: _native.ContentGraphLimitsRecord | None = None,
+    ) -> "ProximitySearchProof":
+        self._open()
+        map._open()
+        return ProximitySearchProof(
+            self._inner.prove_search(
+                map._inner,
+                _owned_proximity_search_request(request),
+                limits or _native.default_content_graph_limits(),
+            )
+        )
+
+
 class ProximityReadSession(_Scoped):
     def __init__(self, inner: _native.BindingProximityReadSession):
         super().__init__()
@@ -1112,6 +1193,8 @@ __all__ = [
     "ProximityReadSession",
     "ProximityRecord",
     "ProximitySearchProof",
+    "ProductQuantizationBuildResult",
+    "ProductQuantizer",
     "SecondaryIndex",
     "ScopedBytes",
     "ReadSession",

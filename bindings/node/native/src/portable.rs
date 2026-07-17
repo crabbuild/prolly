@@ -11,20 +11,23 @@ use napi::JsObject;
 use napi_derive::napi;
 use prolly_bindings::{
     default_content_graph_limits, default_hnsw_build_limits, default_hnsw_config,
-    default_proximity_config, verify_key_proof, verify_multi_key_proof,
-    verify_proximity_membership_proof, verify_proximity_structure_proof, verify_range_page_proof,
-    verify_range_proof, ActiveIndexHealthRecord, AdaptiveQualityRecord, BindingHnswIndex,
-    BindingIndexRegistry, BindingIndexedMap, BindingIndexedSnapshot, BindingMapComparison,
-    BindingMapMerge, BindingMapSnapshot, BindingMapSubscription, BindingProximityMap,
-    BindingProximityReadSession, BindingProximitySearchProof, BindingSecondaryIndexSnapshot,
-    BindingVersionedMap, BindingVersionedTransaction, DistanceMetricRecord,
-    ExactProximityRecordRecord, HnswBuildLimitsRecord, HnswBuildStatsRecord, HnswConfigRecord,
-    HnswRoutingVectorEncodingRecord, IndexBuildResultRecord, IndexEntryRecord, IndexMatchRecord,
-    IndexPageRecord, IndexProjectionRecord, IndexVerificationRecord, IndexedMapHealthRecord,
+    default_pq_build_limits, default_pq_config, default_proximity_config, verify_key_proof,
+    verify_multi_key_proof, verify_proximity_membership_proof, verify_proximity_structure_proof,
+    verify_range_page_proof, verify_range_proof, ActiveIndexHealthRecord, AdaptiveQualityRecord,
+    BindingHnswIndex, BindingIndexRegistry, BindingIndexedMap, BindingIndexedSnapshot,
+    BindingMapComparison, BindingMapMerge, BindingMapSnapshot, BindingMapSubscription,
+    BindingProductQuantizer, BindingProximityMap, BindingProximityReadSession,
+    BindingProximitySearchProof, BindingSecondaryIndexSnapshot, BindingVersionedMap,
+    BindingVersionedTransaction, DistanceMetricRecord, ExactProximityRecordRecord,
+    HnswBuildLimitsRecord, HnswBuildStatsRecord, HnswConfigRecord, HnswRoutingVectorEncodingRecord,
+    IndexBuildResultRecord, IndexEntryRecord, IndexMatchRecord, IndexPageRecord,
+    IndexProjectionRecord, IndexVerificationRecord, IndexedMapHealthRecord,
     IndexedMapMetricsRecord, IndexedRetentionRecord, IndexedSnapshotIdRecord, IndexedSourceRecord,
     IndexedUpdateKind, IndexedUpdateRecord, IndexedVersionRecord, KeyProofRecord, MapUpdateKind,
-    MapUpdateRecord, MapVersionRecord, MultiKeyProofRecord, ProllyBindingError, ProllyReadSession,
-    ProvedRangePageRecord, ProximityConfigRecord, ProximityFilterKind, ProximityFilterRecord,
+    MapUpdateRecord, MapVersionRecord, MultiKeyProofRecord, ProductQuantizationBuildLimitsRecord,
+    ProductQuantizationBuildStatsRecord, ProductQuantizationConfigRecord,
+    ProductQuantizationQualityRecord, ProllyBindingError, ProllyReadSession, ProvedRangePageRecord,
+    ProximityConfigRecord, ProximityFilterKind, ProximityFilterRecord,
     ProximityMembershipProofRecord, ProximityMutationRecord, ProximityMutationStatsRecord,
     ProximityNeighborRecord, ProximityRecordRecord, ProximitySearchClaimKindRecord,
     ProximitySearchRequestRecord, ProximitySearchResultRecord, ProximityStructuralProofRecord,
@@ -758,6 +761,128 @@ impl From<HnswBuildStatsRecord> for NodePortableHnswBuildStats {
             maximum_level: u32::from(value.maximum_level),
             owned_bytes: value.owned_bytes.to_string(),
             encoded_graph_bytes: value.encoded_graph_bytes.to_string(),
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NodePortablePqConfig {
+    pub subquantizers: u32,
+    pub centroids_per_subquantizer: u32,
+    pub training_iterations: u32,
+    pub rerank_multiplier: u32,
+    pub seed: String,
+    pub max_training_vectors: String,
+}
+
+impl From<ProductQuantizationConfigRecord> for NodePortablePqConfig {
+    fn from(value: ProductQuantizationConfigRecord) -> Self {
+        Self {
+            subquantizers: value.subquantizers,
+            centroids_per_subquantizer: u32::from(value.centroids_per_subquantizer),
+            training_iterations: u32::from(value.training_iterations),
+            rerank_multiplier: value.rerank_multiplier,
+            seed: value.seed.to_string(),
+            max_training_vectors: value.max_training_vectors.to_string(),
+        }
+    }
+}
+
+impl TryFrom<NodePortablePqConfig> for ProductQuantizationConfigRecord {
+    type Error = Error;
+
+    fn try_from(value: NodePortablePqConfig) -> Result<Self> {
+        Ok(Self {
+            subquantizers: value.subquantizers,
+            centroids_per_subquantizer: value.centroids_per_subquantizer.try_into().map_err(
+                |_| {
+                    Error::new(
+                        Status::InvalidArg,
+                        "centroidsPerSubquantizer must fit in uint16",
+                    )
+                },
+            )?,
+            training_iterations: value.training_iterations.try_into().map_err(|_| {
+                Error::new(Status::InvalidArg, "trainingIterations must fit in uint16")
+            })?,
+            rerank_multiplier: value.rerank_multiplier,
+            seed: parse_u64(value.seed, "seed")?,
+            max_training_vectors: parse_u64(value.max_training_vectors, "maxTrainingVectors")?,
+        })
+    }
+}
+
+#[napi(object)]
+pub struct NodePortablePqBuildLimits {
+    pub max_training_vectors: Option<String>,
+    pub max_training_bytes: Option<String>,
+    pub max_temporary_code_bytes: Option<String>,
+    pub max_distance_evaluations: Option<String>,
+    pub max_encoded_output_bytes: Option<String>,
+    pub max_worker_threads: Option<String>,
+}
+
+impl TryFrom<NodePortablePqBuildLimits> for ProductQuantizationBuildLimitsRecord {
+    type Error = Error;
+
+    fn try_from(value: NodePortablePqBuildLimits) -> Result<Self> {
+        Ok(Self {
+            max_training_vectors: parse_optional_u64(
+                value.max_training_vectors,
+                "maxTrainingVectors",
+            )?,
+            max_training_bytes: parse_optional_u64(value.max_training_bytes, "maxTrainingBytes")?,
+            max_temporary_code_bytes: parse_optional_u64(
+                value.max_temporary_code_bytes,
+                "maxTemporaryCodeBytes",
+            )?,
+            max_distance_evaluations: parse_optional_u64(
+                value.max_distance_evaluations,
+                "maxDistanceEvaluations",
+            )?,
+            max_encoded_output_bytes: parse_optional_u64(
+                value.max_encoded_output_bytes,
+                "maxEncodedOutputBytes",
+            )?,
+            max_worker_threads: parse_optional_u64(value.max_worker_threads, "maxWorkerThreads")?,
+        })
+    }
+}
+
+#[napi(object)]
+pub struct NodePortablePqBuildStats {
+    pub training_distance_evaluations: String,
+    pub encoding_distance_evaluations: String,
+    pub encoded_vectors: String,
+    pub training_vectors: String,
+    pub training_bytes: String,
+    pub encoded_output_bytes: String,
+}
+
+impl From<ProductQuantizationBuildStatsRecord> for NodePortablePqBuildStats {
+    fn from(value: ProductQuantizationBuildStatsRecord) -> Self {
+        Self {
+            training_distance_evaluations: value.training_distance_evaluations.to_string(),
+            encoding_distance_evaluations: value.encoding_distance_evaluations.to_string(),
+            encoded_vectors: value.encoded_vectors.to_string(),
+            training_vectors: value.training_vectors.to_string(),
+            training_bytes: value.training_bytes.to_string(),
+            encoded_output_bytes: value.encoded_output_bytes.to_string(),
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NodePortablePqQuality {
+    pub mean_squared_error: f64,
+    pub maximum_squared_error: f64,
+}
+
+impl From<ProductQuantizationQualityRecord> for NodePortablePqQuality {
+    fn from(value: ProductQuantizationQualityRecord) -> Self {
+        Self {
+            mean_squared_error: value.mean_squared_error,
+            maximum_squared_error: value.maximum_squared_error,
         }
     }
 }
@@ -2819,6 +2944,83 @@ impl NativePortableHnswIndex {
 }
 
 #[napi]
+pub struct NativePortablePqBuildResult {
+    index: Arc<BindingProductQuantizer>,
+    stats: ProductQuantizationBuildStatsRecord,
+}
+
+#[napi]
+impl NativePortablePqBuildResult {
+    #[napi]
+    pub fn index(&self) -> NativePortableProductQuantizer {
+        NativePortableProductQuantizer {
+            inner: Arc::clone(&self.index),
+        }
+    }
+
+    #[napi]
+    pub fn stats(&self) -> NodePortablePqBuildStats {
+        self.stats.clone().into()
+    }
+}
+
+#[napi]
+pub struct NativePortableProductQuantizer {
+    inner: Arc<BindingProductQuantizer>,
+}
+
+#[napi]
+impl NativePortableProductQuantizer {
+    #[napi]
+    pub fn manifest(&self) -> Buffer {
+        Buffer::from(self.inner.manifest())
+    }
+
+    #[napi(js_name = "sourceDescriptor")]
+    pub fn source_descriptor(&self) -> Buffer {
+        Buffer::from(self.inner.source_descriptor())
+    }
+
+    #[napi]
+    pub fn config(&self) -> NodePortablePqConfig {
+        self.inner.config().into()
+    }
+
+    #[napi]
+    pub fn quality(&self) -> NodePortablePqQuality {
+        self.inner.quality().into()
+    }
+
+    #[napi]
+    pub fn search(
+        &self,
+        map: &NativePortableProximityMap,
+        request: NodePortableSearchRequest,
+    ) -> Result<NodePortableSearchResult> {
+        self.inner
+            .search(Arc::clone(&map.inner), request.try_into()?)
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "proveSearch")]
+    pub fn prove_search(
+        &self,
+        map: &NativePortableProximityMap,
+        request: NodePortableSearchRequest,
+    ) -> Result<NativePortableProximitySearchProof> {
+        self.inner
+            .prove_search(
+                Arc::clone(&map.inner),
+                request.try_into()?,
+                default_content_graph_limits(),
+            )
+            .map(|inner| NativePortableProximitySearchProof { inner })
+            .map_err(to_napi_error)
+    }
+}
+
+#[napi]
 pub struct NativePortableProximityMap {
     inner: Arc<BindingProximityMap>,
 }
@@ -2853,6 +3055,38 @@ impl NativePortableProximityMap {
         self.inner
             .load_hnsw(manifest.to_vec())
             .map(|inner| NativePortableHnswIndex { inner })
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "buildPq")]
+    pub fn build_pq(
+        &self,
+        config: Option<NodePortablePqConfig>,
+        worker_threads: String,
+        limits: Option<NodePortablePqBuildLimits>,
+    ) -> Result<NativePortablePqBuildResult> {
+        let config = config
+            .map(TryInto::try_into)
+            .transpose()?
+            .unwrap_or_else(default_pq_config);
+        let limits = limits
+            .map(TryInto::try_into)
+            .transpose()?
+            .unwrap_or_else(default_pq_build_limits);
+        self.inner
+            .build_pq(config, parse_u64(worker_threads, "workerThreads")?, limits)
+            .map(|value| NativePortablePqBuildResult {
+                index: value.index,
+                stats: value.stats,
+            })
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "loadPq")]
+    pub fn load_pq(&self, manifest: Buffer) -> Result<NativePortableProductQuantizer> {
+        self.inner
+            .load_pq(manifest.to_vec())
+            .map(|inner| NativePortableProductQuantizer { inner })
             .map_err(to_napi_error)
     }
 

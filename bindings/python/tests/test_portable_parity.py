@@ -10,6 +10,7 @@ from prolly import (
     ProximityFilterKind,
     ProximityFilterRecord,
     ProximityRecord,
+    ProductQuantizationConfigRecord,
     ProximityMutationRecord,
     ProximitySearchRequestRecord,
     QueryKernelRecord,
@@ -27,6 +28,50 @@ from prolly import (
 
 
 class PortableParityTests(unittest.TestCase):
+    def test_product_quantizer_lifecycle_is_portable_and_bounded(self):
+        with Engine.memory() as engine:
+            proximity = engine.build_proximity(
+                dimensions=4,
+                records=[
+                    ProximityRecord(
+                        f"vector-{index:02}".encode(),
+                        [float(index), float(index % 3), 0.0, 1.0],
+                        f"value-{index:02}".encode(),
+                    )
+                    for index in range(16)
+                ],
+            )
+            config = ProductQuantizationConfigRecord(
+                subquantizers=2,
+                centroids_per_subquantizer=4,
+                training_iterations=2,
+                rerank_multiplier=4,
+                seed=(1 << 64) - 1,
+                max_training_vectors=16,
+            )
+            built = proximity.build_pq(config=config, worker_threads=2)
+            self.assertEqual(built.stats.encoded_vectors, 16)
+            request = exact_proximity_search_request([0.0, 0.0, 0.0, 1.0], 3)
+            request.policy = SearchPolicyKind.FIXED_BUDGET
+            request.backend = SearchBackendRecord.PRODUCT_QUANTIZED
+
+            with built.index as index:
+                self.assertEqual(index.config, config)
+                self.assertEqual(index.source_descriptor, proximity.descriptor)
+                self.assertTrue(index.quality.mean_squared_error >= 0.0)
+                result = index.search(proximity, request)
+                self.assertEqual(result.backend, SearchBackendRecord.PRODUCT_QUANTIZED)
+                self.assertEqual(result.neighbors[0].key, b"vector-00")
+                manifest = index.manifest
+                with index.prove_search(proximity, request) as proof:
+                    self.assertEqual(
+                        proof.verify(proximity.descriptor).result.backend,
+                        SearchBackendRecord.PRODUCT_QUANTIZED,
+                    )
+
+            with proximity.load_pq(manifest) as loaded:
+                self.assertEqual(loaded.manifest, manifest)
+
     def test_hnsw_accelerator_lifecycle_is_portable(self):
         with Engine.memory() as engine:
             proximity = engine.build_proximity(

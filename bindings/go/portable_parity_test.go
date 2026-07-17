@@ -173,6 +173,95 @@ func TestHNSWAcceleratorLifecycleIsPortable(t *testing.T) {
 	}
 }
 
+func TestProductQuantizerLifecycleIsPortableAndBounded(t *testing.T) {
+	config, err := DefaultConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine, err := NewMemoryEngine(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(engine.Close)
+	records := make([]ProximityRecord, 16)
+	for index := range records {
+		records[index] = ProximityRecord{
+			Key: []byte(fmt.Sprintf("pq-vector-%02d", index)),
+			Vector: []float32{
+				float32(index), float32(index % 3), float32(index % 5), float32(index % 7),
+			},
+			Value: []byte(fmt.Sprintf("pq-value-%02d", index)),
+		}
+	}
+	proximity, err := engine.BuildProximity(4, records)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(proximity.Close)
+	pqConfig := ProductQuantizationConfig{
+		Subquantizers: 2, CentroidsPerSubquantizer: 4, TrainingIterations: 2,
+		RerankMultiplier: 4, Seed: ^uint64(0), MaxTrainingVectors: 16,
+	}
+	limits, err := DefaultPQBuildLimits()
+	if err != nil {
+		t.Fatal(err)
+	}
+	built, err := proximity.BuildPQ(pqConfig, 2, limits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if built.Stats.EncodedVectors != 16 || built.Stats.TrainingVectors != 16 {
+		t.Fatalf("PQ build stats = %#v", built.Stats)
+	}
+	index := built.Index
+	manifest, err := index.Manifest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	descriptor, err := proximity.Descriptor()
+	if err != nil {
+		t.Fatal(err)
+	}
+	source, err := index.SourceDescriptor()
+	if err != nil || !bytes.Equal(source, descriptor) {
+		t.Fatalf("PQ source = %x, %v", source, err)
+	}
+	actualConfig, err := index.Config()
+	if err != nil || actualConfig != pqConfig {
+		t.Fatalf("PQ config = %#v, %v", actualConfig, err)
+	}
+	quality, err := index.Quality()
+	if err != nil || quality.MeanSquaredError < 0 || quality.MaximumSquaredError < 0 {
+		t.Fatalf("PQ quality = %#v, %v", quality, err)
+	}
+	request := ExactSearch([]float32{0, 0, 0, 0}, 3)
+	request.Policy = SearchPolicyFixedBudget
+	request.Backend = SearchBackendProductQuantized
+	result, err := index.Search(context.Background(), proximity, request)
+	if err != nil || result.Backend != "product-quantized" || !bytes.Equal(result.Neighbors[0].Key, []byte("pq-vector-00")) {
+		t.Fatalf("PQ search = %#v, %v", result, err)
+	}
+	proof, err := index.ProveSearch(proximity, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(proof.Close)
+	verified, err := proof.Verify(descriptor)
+	if err != nil || verified.Result.Backend != "product-quantized" {
+		t.Fatalf("PQ proof = %#v, %v", verified, err)
+	}
+	index.Close()
+	loaded, err := proximity.LoadPQ(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(loaded.Close)
+	loadedManifest, err := loaded.Manifest()
+	if err != nil || !bytes.Equal(loadedManifest, manifest) {
+		t.Fatalf("loaded PQ manifest = %x, %v", loadedManifest, err)
+	}
+}
+
 func TestVersionedBulkPublicationUsesNativePerformancePaths(t *testing.T) {
 	config, err := DefaultConfig()
 	if err != nil {

@@ -192,6 +192,169 @@ func DefaultHNSWBuildLimits() (HNSWBuildLimits, error) {
 	return decodeHNSWBuildLimits(raw)
 }
 
+type ProductQuantizationConfig struct {
+	Subquantizers            uint32
+	CentroidsPerSubquantizer uint16
+	TrainingIterations       uint16
+	RerankMultiplier         uint32
+	Seed                     uint64
+	MaxTrainingVectors       uint64
+}
+
+type ProductQuantizationBuildLimits struct {
+	MaxTrainingVectors     *uint64
+	MaxTrainingBytes       *uint64
+	MaxTemporaryCodeBytes  *uint64
+	MaxDistanceEvaluations *uint64
+	MaxEncodedOutputBytes  *uint64
+	MaxWorkerThreads       *uint64
+}
+
+type ProductQuantizationBuildStats struct {
+	TrainingDistanceEvaluations uint64
+	EncodingDistanceEvaluations uint64
+	EncodedVectors              uint64
+	TrainingVectors             uint64
+	TrainingBytes               uint64
+	EncodedOutputBytes          uint64
+}
+
+type ProductQuantizationQuality struct {
+	MeanSquaredError    float64
+	MaximumSquaredError float64
+}
+
+type ProductQuantizationBuildResult struct {
+	Index *ProductQuantizer
+	Stats ProductQuantizationBuildStats
+}
+
+func decodeProductQuantizationConfig(raw []byte) (ProductQuantizationConfig, error) {
+	d := byteDecoder{data: raw}
+	var result ProductQuantizationConfig
+	var err error
+	if result.Subquantizers, err = d.readUint32(); err != nil {
+		return ProductQuantizationConfig{}, err
+	}
+	high, err := d.readByte()
+	if err != nil {
+		return ProductQuantizationConfig{}, err
+	}
+	low, err := d.readByte()
+	if err != nil {
+		return ProductQuantizationConfig{}, err
+	}
+	result.CentroidsPerSubquantizer = uint16(high)<<8 | uint16(low)
+	high, err = d.readByte()
+	if err != nil {
+		return ProductQuantizationConfig{}, err
+	}
+	low, err = d.readByte()
+	if err != nil {
+		return ProductQuantizationConfig{}, err
+	}
+	result.TrainingIterations = uint16(high)<<8 | uint16(low)
+	if result.RerankMultiplier, err = d.readUint32(); err != nil {
+		return ProductQuantizationConfig{}, err
+	}
+	if result.Seed, err = d.readUint64(); err != nil {
+		return ProductQuantizationConfig{}, err
+	}
+	if result.MaxTrainingVectors, err = d.readUint64(); err != nil {
+		return ProductQuantizationConfig{}, err
+	}
+	return result, d.done()
+}
+
+func encodeProductQuantizationConfig(config ProductQuantizationConfig) []byte {
+	var out bytes.Buffer
+	writeU32(&out, config.Subquantizers)
+	out.WriteByte(byte(config.CentroidsPerSubquantizer >> 8))
+	out.WriteByte(byte(config.CentroidsPerSubquantizer))
+	out.WriteByte(byte(config.TrainingIterations >> 8))
+	out.WriteByte(byte(config.TrainingIterations))
+	writeU32(&out, config.RerankMultiplier)
+	writeU64(&out, config.Seed)
+	writeU64(&out, config.MaxTrainingVectors)
+	return out.Bytes()
+}
+
+func decodeProductQuantizationBuildLimits(raw []byte) (ProductQuantizationBuildLimits, error) {
+	d := byteDecoder{data: raw}
+	var result ProductQuantizationBuildLimits
+	var err error
+	if result.MaxTrainingVectors, err = d.readOptionalUint64(); err != nil {
+		return ProductQuantizationBuildLimits{}, err
+	}
+	if result.MaxTrainingBytes, err = d.readOptionalUint64(); err != nil {
+		return ProductQuantizationBuildLimits{}, err
+	}
+	if result.MaxTemporaryCodeBytes, err = d.readOptionalUint64(); err != nil {
+		return ProductQuantizationBuildLimits{}, err
+	}
+	if result.MaxDistanceEvaluations, err = d.readOptionalUint64(); err != nil {
+		return ProductQuantizationBuildLimits{}, err
+	}
+	if result.MaxEncodedOutputBytes, err = d.readOptionalUint64(); err != nil {
+		return ProductQuantizationBuildLimits{}, err
+	}
+	if result.MaxWorkerThreads, err = d.readOptionalUint64(); err != nil {
+		return ProductQuantizationBuildLimits{}, err
+	}
+	return result, d.done()
+}
+
+func encodeProductQuantizationBuildLimits(limits ProductQuantizationBuildLimits) []byte {
+	var out bytes.Buffer
+	encodeOptionalU64(&out, limits.MaxTrainingVectors)
+	encodeOptionalU64(&out, limits.MaxTrainingBytes)
+	encodeOptionalU64(&out, limits.MaxTemporaryCodeBytes)
+	encodeOptionalU64(&out, limits.MaxDistanceEvaluations)
+	encodeOptionalU64(&out, limits.MaxEncodedOutputBytes)
+	encodeOptionalU64(&out, limits.MaxWorkerThreads)
+	return out.Bytes()
+}
+
+func decodeProductQuantizationBuildStats(d *byteDecoder) (ProductQuantizationBuildStats, error) {
+	var result ProductQuantizationBuildStats
+	var err error
+	if result.TrainingDistanceEvaluations, err = d.readUint64(); err != nil {
+		return ProductQuantizationBuildStats{}, err
+	}
+	if result.EncodingDistanceEvaluations, err = d.readUint64(); err != nil {
+		return ProductQuantizationBuildStats{}, err
+	}
+	if result.EncodedVectors, err = d.readUint64(); err != nil {
+		return ProductQuantizationBuildStats{}, err
+	}
+	if result.TrainingVectors, err = d.readUint64(); err != nil {
+		return ProductQuantizationBuildStats{}, err
+	}
+	if result.TrainingBytes, err = d.readUint64(); err != nil {
+		return ProductQuantizationBuildStats{}, err
+	}
+	if result.EncodedOutputBytes, err = d.readUint64(); err != nil {
+		return ProductQuantizationBuildStats{}, err
+	}
+	return result, nil
+}
+
+func DefaultPQConfig() (ProductQuantizationConfig, error) {
+	raw, err := ffiDefaultPQConfig()
+	if err != nil {
+		return ProductQuantizationConfig{}, err
+	}
+	return decodeProductQuantizationConfig(raw)
+}
+
+func DefaultPQBuildLimits() (ProductQuantizationBuildLimits, error) {
+	raw, err := ffiDefaultPQBuildLimits()
+	if err != nil {
+		return ProductQuantizationBuildLimits{}, err
+	}
+	return decodeProductQuantizationBuildLimits(raw)
+}
+
 type ProximityMutation struct {
 	Key    []byte
 	Vector []float32
@@ -690,6 +853,216 @@ func (i *HNSWIndex) ProveSearch(proximity *ProximityMap, request SearchRequest) 
 	}
 	defer mapUnlock()
 	proofHandle, err := ffiHNSWIndexProveSearch(indexHandle, mapHandle, encodedRequest, limits)
+	if err != nil {
+		return nil, err
+	}
+	proof := &ProximitySearchProof{handle: proofHandle}
+	runtime.SetFinalizer(proof, (*ProximitySearchProof).Close)
+	return proof, nil
+}
+
+type ProductQuantizer struct {
+	handle uint64
+	closed atomic.Bool
+	mu     sync.RWMutex
+}
+
+func newProductQuantizer(handle uint64) *ProductQuantizer {
+	index := &ProductQuantizer{handle: handle}
+	runtime.SetFinalizer(index, (*ProductQuantizer).Close)
+	return index
+}
+
+func (i *ProductQuantizer) Close() {
+	if i == nil || i.closed.Swap(true) {
+		return
+	}
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	runtime.SetFinalizer(i, nil)
+	if i.handle != 0 {
+		ffiFreeProductQuantizer(i.handle)
+		i.handle = 0
+	}
+}
+
+func (i *ProductQuantizer) withHandle() (uint64, func(), error) {
+	if i == nil || i.closed.Load() {
+		return 0, nil, errors.New("product quantizer is closed")
+	}
+	i.mu.RLock()
+	if i.closed.Load() || i.handle == 0 {
+		i.mu.RUnlock()
+		return 0, nil, errors.New("product quantizer is closed")
+	}
+	return i.handle, i.mu.RUnlock, nil
+}
+
+func (m *ProximityMap) BuildPQ(
+	config ProductQuantizationConfig,
+	workerThreads uint64,
+	limits ProductQuantizationBuildLimits,
+) (ProductQuantizationBuildResult, error) {
+	encodedConfig := encodeProductQuantizationConfig(config)
+	encodedLimits := encodeProductQuantizationBuildLimits(limits)
+	handle, _, unlock, err := m.withHandle()
+	if err != nil {
+		return ProductQuantizationBuildResult{}, err
+	}
+	defer unlock()
+	raw, err := ffiProximityBuildPQ(handle, encodedConfig, workerThreads, encodedLimits)
+	if err != nil {
+		return ProductQuantizationBuildResult{}, err
+	}
+	d := byteDecoder{data: raw}
+	indexHandle, err := d.readUint64()
+	if err != nil {
+		return ProductQuantizationBuildResult{}, err
+	}
+	stats, err := decodeProductQuantizationBuildStats(&d)
+	if err != nil {
+		ffiFreeProductQuantizer(indexHandle)
+		return ProductQuantizationBuildResult{}, err
+	}
+	if err := d.done(); err != nil {
+		ffiFreeProductQuantizer(indexHandle)
+		return ProductQuantizationBuildResult{}, err
+	}
+	return ProductQuantizationBuildResult{Index: newProductQuantizer(indexHandle), Stats: stats}, nil
+}
+
+func (m *ProximityMap) LoadPQ(manifest []byte) (*ProductQuantizer, error) {
+	handle, _, unlock, err := m.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	indexHandle, err := ffiProximityLoadPQ(handle, append([]byte(nil), manifest...))
+	if err != nil {
+		return nil, err
+	}
+	return newProductQuantizer(indexHandle), nil
+}
+
+func (i *ProductQuantizer) Manifest() ([]byte, error) {
+	handle, unlock, err := i.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	raw, err := ffiProductQuantizerManifest(handle)
+	if err != nil {
+		return nil, err
+	}
+	return decodeHNSWByteArray(raw)
+}
+
+func (i *ProductQuantizer) SourceDescriptor() ([]byte, error) {
+	handle, unlock, err := i.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	raw, err := ffiProductQuantizerSourceDescriptor(handle)
+	if err != nil {
+		return nil, err
+	}
+	return decodeHNSWByteArray(raw)
+}
+
+func (i *ProductQuantizer) Config() (ProductQuantizationConfig, error) {
+	handle, unlock, err := i.withHandle()
+	if err != nil {
+		return ProductQuantizationConfig{}, err
+	}
+	defer unlock()
+	raw, err := ffiProductQuantizerConfig(handle)
+	if err != nil {
+		return ProductQuantizationConfig{}, err
+	}
+	return decodeProductQuantizationConfig(raw)
+}
+
+func (i *ProductQuantizer) Quality() (ProductQuantizationQuality, error) {
+	handle, unlock, err := i.withHandle()
+	if err != nil {
+		return ProductQuantizationQuality{}, err
+	}
+	defer unlock()
+	raw, err := ffiProductQuantizerQuality(handle)
+	if err != nil {
+		return ProductQuantizationQuality{}, err
+	}
+	d := byteDecoder{data: raw}
+	meanBits, err := d.readUint64()
+	if err != nil {
+		return ProductQuantizationQuality{}, err
+	}
+	maxBits, err := d.readUint64()
+	if err != nil {
+		return ProductQuantizationQuality{}, err
+	}
+	if err := d.done(); err != nil {
+		return ProductQuantizationQuality{}, err
+	}
+	return ProductQuantizationQuality{
+		MeanSquaredError: math.Float64frombits(meanBits), MaximumSquaredError: math.Float64frombits(maxBits),
+	}, nil
+}
+
+func (i *ProductQuantizer) Search(ctx context.Context, proximity *ProximityMap, request SearchRequest) (SearchResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return SearchResult{}, err
+	}
+	request = cloneSearchRequest(request)
+	encodedRequest, err := encodeProximitySearchRequest(request)
+	if err != nil {
+		return SearchResult{}, err
+	}
+	indexHandle, indexUnlock, err := i.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer indexUnlock()
+	mapHandle, _, mapUnlock, err := proximity.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer mapUnlock()
+	raw, err := ffiProductQuantizerSearch(indexHandle, mapHandle, encodedRequest)
+	if err != nil {
+		return SearchResult{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return SearchResult{}, err
+	}
+	return decodeProximitySearchResultBytes(raw)
+}
+
+func (i *ProductQuantizer) ProveSearch(proximity *ProximityMap, request SearchRequest) (*ProximitySearchProof, error) {
+	request = cloneSearchRequest(request)
+	encodedRequest, err := encodeProximitySearchRequest(request)
+	if err != nil {
+		return nil, err
+	}
+	limits, err := ffiDefaultContentGraphLimits()
+	if err != nil {
+		return nil, err
+	}
+	indexHandle, indexUnlock, err := i.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer indexUnlock()
+	mapHandle, _, mapUnlock, err := proximity.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer mapUnlock()
+	proofHandle, err := ffiProductQuantizerProveSearch(indexHandle, mapHandle, encodedRequest, limits)
 	if err != nil {
 		return nil, err
 	}

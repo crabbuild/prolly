@@ -20,6 +20,7 @@ import build.crab.prolly.javaapi.MapUpdateKind;
 import build.crab.prolly.javaapi.ParallelConfig;
 import build.crab.prolly.javaapi.ProximityRecord;
 import build.crab.prolly.javaapi.ProximityMutation;
+import build.crab.prolly.javaapi.ProductQuantizationConfig;
 import build.crab.prolly.javaapi.Proofs;
 import build.crab.prolly.javaapi.SearchRequest;
 import build.crab.prolly.javaapi.ScopedBytes;
@@ -30,6 +31,48 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
 class PortableParityTest {
+    @Test
+    void productQuantizerLifecycleIsPortableAndBounded() throws Exception {
+        Prolly.useLocalDebugLibrary();
+        var records = new ArrayList<ProximityRecord>();
+        for (int index = 0; index < 16; index++) {
+            records.add(new ProximityRecord(
+                    bytes(String.format("vector-%02d", index)),
+                    new float[] {index, index % 3, 0, 1},
+                    bytes(String.format("value-%02d", index))));
+        }
+        try (Engine engine = Engine.memory(); var proximity = engine.buildProximity(4, records)) {
+            var config = new ProductQuantizationConfig(2, 4, 2, 4, -1L, 16);
+            var built = proximity.buildPq(config, 2);
+            assertEquals(16L, built.stats().encodedVectors());
+            var request = SearchRequest.fixedBudget(
+                    new float[] {0, 0, 0, 1},
+                    3,
+                    SearchRequest.SearchBudget.unlimited(),
+                    SearchRequest.SearchFilter.all(),
+                    SearchRequest.Kernel.AUTO_DETERMINISTIC,
+                    SearchRequest.Backend.PRODUCT_QUANTIZED);
+            byte[] manifest;
+            try (var index = built.index()) {
+                assertEquals(config, index.config());
+                assertArrayEquals(proximity.descriptor(), index.sourceDescriptor());
+                assertTrue(index.quality().meanSquaredError() >= 0.0);
+                var result = index.search(proximity, request);
+                assertEquals("product_quantized", result.backend());
+                assertArrayEquals(bytes("vector-00"), result.neighbors().get(0).key());
+                manifest = index.manifest();
+                try (var proof = index.proveSearch(proximity, request)) {
+                    assertEquals(
+                            SearchBackendRecord.PRODUCT_QUANTIZED,
+                            proof.verify(proximity.descriptor()).getResult().getBackend());
+                }
+            }
+            try (var loaded = proximity.loadPq(manifest)) {
+                assertArrayEquals(manifest, loaded.manifest());
+            }
+        }
+    }
+
     @Test
     void hnswAcceleratorLifecycleIsPortable() throws Exception {
         Prolly.useLocalDebugLibrary();
