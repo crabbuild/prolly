@@ -172,11 +172,11 @@ git commit -m "feat(bindings): document idiomatic Rust equivalents"
 - Modify: `bindings/api/parity.json`
 - Create: `bindings/api/application-gap-report.json`
 
-- [ ] **Step 1: Add failing gap-report tests**
+- [x] **Step 1: Add failing gap-report tests**
 
 Test that a planned inherent method is an `unmapped_application_operation`, a reviewed method with all symbols but missing tests is `mapped_missing_evidence`, and fields/variants/associated types never appear as application-operation gaps. Test that their incomplete evidence remains visible in a separate `data_model_or_abstraction_debt` section.
 
-- [ ] **Step 2: Implement `build_application_gap_report`**
+- [x] **Step 2: Implement `build_application_gap_report`**
 
 Implement:
 

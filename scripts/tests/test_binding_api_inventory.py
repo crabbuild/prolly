@@ -5,6 +5,7 @@ import unittest
 from scripts.binding_api_inventory import (
     ApiItem,
     CheckResult,
+    build_application_gap_report,
     build_classification_audit,
     check_manifest,
     extract_public_api,
@@ -12,11 +13,188 @@ from scripts.binding_api_inventory import (
     generate_manifest,
     missing_feature_sentinels,
     review_abstraction_entries,
+    review_runtime_audience_entries,
     validate_equivalence_catalog,
 )
 
 
 class ManifestCheckTests(unittest.TestCase):
+    def test_runtime_audience_review_is_explicit_and_leaves_core_unreviewed(self) -> None:
+        items = {
+            "prolly::VersionedMap::get": ApiItem(
+                rust="prolly::VersionedMap::get",
+                kind="function",
+                owner="prolly::VersionedMap",
+                member_kind="inherent-item",
+            ),
+            "prolly::Cursor::next": ApiItem(
+                rust="prolly::Cursor::next",
+                kind="function",
+                owner="prolly::Cursor",
+                member_kind="inherent-item",
+            ),
+            "prolly::Prolly::get": ApiItem(
+                rust="prolly::Prolly::get",
+                kind="function",
+                owner="prolly::Prolly",
+                member_kind="inherent-item",
+            ),
+        }
+        manifest = {
+            "operations": [
+                {
+                    "rust": "prolly::VersionedMap::get",
+                    "family": "versioned-map",
+                    "classification": "portable",
+                    "status": "planned",
+                },
+                {
+                    "rust": "prolly::Cursor::next",
+                    "family": "session",
+                    "classification": "portable",
+                    "status": "planned",
+                },
+                {
+                    "rust": "prolly::Prolly::get",
+                    "family": "core",
+                    "classification": "portable",
+                    "status": "planned",
+                },
+            ]
+        }
+
+        reviewed = review_runtime_audience_entries(items, manifest)
+        entries = {entry["rust"]: entry for entry in reviewed["operations"]}
+
+        self.assertEqual(
+            entries["prolly::VersionedMap::get"]["audience"], "application"
+        )
+        self.assertTrue(entries["prolly::VersionedMap::get"]["reviewed"])
+        self.assertEqual(entries["prolly::Cursor::next"]["audience"], "rust-extension")
+        self.assertNotIn("audience", entries["prolly::Prolly::get"])
+
+    def test_gap_report_separates_runtime_operations_from_other_debt(self) -> None:
+        languages = {
+            language: f"{language}.VersionedMap.put"
+            for language in (
+                "python",
+                "go",
+                "node",
+                "kotlin",
+                "java",
+                "ruby",
+                "swift",
+                "wasm",
+            )
+        }
+        items = {
+            "prolly::VersionedMap::get": ApiItem(
+                rust="prolly::VersionedMap::get",
+                kind="function",
+                owner="prolly::VersionedMap",
+                member_kind="inherent-item",
+            ),
+            "prolly::VersionedMap::put": ApiItem(
+                rust="prolly::VersionedMap::put",
+                kind="function",
+                owner="prolly::VersionedMap",
+                member_kind="inherent-item",
+            ),
+            "prolly::VersionedMap::head": ApiItem(
+                rust="prolly::VersionedMap::head",
+                kind="function",
+                owner="prolly::VersionedMap",
+                member_kind="inherent-item",
+            ),
+            "prolly::VersionedValue::version": ApiItem(
+                rust="prolly::VersionedValue::version",
+                kind="struct_field",
+                owner="prolly::VersionedValue",
+                member_kind="field",
+            ),
+            "prolly::Store::get": ApiItem(
+                rust="prolly::Store::get",
+                kind="function",
+                owner="prolly::Store",
+                member_kind="trait-item",
+            ),
+            "prolly::internal_helper": ApiItem(
+                rust="prolly::internal_helper",
+                kind="function",
+                owner=None,
+                member_kind=None,
+            ),
+        }
+        manifest = {
+            "operations": [
+                {
+                    "rust": rust,
+                    "classification": "portable",
+                    "status": "planned",
+                    "family": "versioned-map",
+                    "performance": "owned",
+                    "languages": {},
+                    "exclusions": {},
+                    "tests": [],
+                }
+                for rust in items
+            ]
+        }
+        manifest["operations"][1].update(
+            status="implemented",
+            languages=languages,
+        )
+        manifest["operations"][2].update(
+            status="implemented",
+            languages={
+                language: f"{language}.VersionedMap.head"
+                for language in languages
+            },
+            tests=["binding.versioned.head"],
+        )
+        for entry in manifest["operations"]:
+            if entry["rust"] not in {
+                "prolly::internal_helper",
+                "prolly::VersionedValue::version",
+                "prolly::VersionedMap::head",
+            }:
+                entry["audience"] = "application"
+                entry["audience_rationale"] = "Runtime behavior is public application API."
+
+        report = build_application_gap_report(items, manifest)
+
+        self.assertEqual(
+            report["summary"],
+            {
+                "release_complete_application_operations": 1,
+                "unmapped_application_operations": 2,
+                "mapped_missing_evidence": 1,
+                "platform_review_required": 0,
+                "application_review_required": 1,
+                "non_application_runtime": 0,
+                "data_model_or_abstraction_debt": 1,
+            },
+        )
+        self.assertEqual(
+            [row["rust"] for row in report["unmapped_application_operations"]],
+            ["prolly::Store::get", "prolly::VersionedMap::get"],
+        )
+        self.assertEqual(
+            [row["rust"] for row in report["mapped_missing_evidence"]],
+            ["prolly::VersionedMap::put"],
+        )
+        self.assertEqual(
+            [row["rust"] for row in report["data_model_or_abstraction_debt"]],
+            ["prolly::VersionedValue::version"],
+        )
+        self.assertEqual(
+            [row["rust"] for row in report["application_review_required"]],
+            ["prolly::internal_helper"],
+        )
+        self.assertEqual(
+            report["mapped_missing_evidence"][0]["missing_languages"], []
+        )
+
     def test_abstraction_review_classifies_without_claiming_implementation(self) -> None:
         items = {
             "prolly::Store": ApiItem(
@@ -63,6 +241,7 @@ class ManifestCheckTests(unittest.TestCase):
 
         self.assertEqual(entries["prolly::Store"]["equivalence"], "store-trait")
         self.assertEqual(entries["prolly::Store"]["classification"], "idiomatic")
+        self.assertEqual(entries["prolly::Store"]["audience"], "rust-extension")
         self.assertEqual(
             entries["prolly::Store::Error"]["equivalence"],
             "marker-and-associated-type",
