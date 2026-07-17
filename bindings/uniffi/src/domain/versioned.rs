@@ -2,15 +2,24 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
 use prolly::{
-    ManifestStore, MapCatalogVerification, MapVersion, MapVersionId, Mutation, Prolly, Store,
-    TransactionalStore, Tree, VersionPruneResult, VersionedMapBackup, VersionedMapUpdate,
+    CrdtConfig, LargeValueConfig, ManifestStore, MapCatalogVerification, MapVersion, MapVersionId,
+    Mutation, ParallelConfig, Prolly, Store, TransactionalStore, Tree, VersionPruneResult,
+    VersionedMapBackup, VersionedMapUpdate,
 };
 
 use crate::{
-    BindingEngine, CoreSnapshotBundle, DiffPageRecord, DiffRecord, EntryRecord, GcPlanRecord,
-    GcSweepRecord, KeyProofRecord, MutationRecord, ProllyBindingError, ProllyEngine,
-    ProllyReadSession, RangeCursorRecord, RangePageRecord, SnapshotBundleRecord,
-    StatsComparisonRecord, TreeRecord,
+    BatchApplyStatsRecord, BindingBlobStore, BindingEngine, BlobGcPlanRecord, BlobGcSweepRecord,
+    ChangedSpanHintRecord, ChangedSpanRecord, ConflictPageRecord, ConflictVisitorCallback,
+    CoreSnapshotBundle, CrdtConfigRecord, CursorWindowRecord, DiffPageRecord, DiffRecord,
+    DiffVisitorCallback, EntryRecord, EntryVisitorCallback, GcPlanRecord, GcSweepRecord,
+    KeyProofRecord, LargeValueConfigRecord, MergeExplanationRecord, MergePolicyRegistry,
+    MissingNodeCopyRecord, MissingNodePlanRecord, MultiKeyProofRecord, MutationRecord,
+    NamedRootRetentionRecord, ParallelConfigRecord, ProllyBindingError, ProllyBlobStore,
+    ProllyEngine, ProllyReadSession, ProvedDiffPageRecord, ProvedRangePageRecord,
+    RangeCursorRecord, RangePageRecord, RangeProofRecord, ReverseCursorRecord, ReversePageRecord,
+    ScanOutcomeRecord, SnapshotBundleRecord, StatsComparisonRecord, StructuralDiffCursorRecord,
+    StructuralDiffPageRecord, TreeDebugComparisonRecord, TreeDebugViewRecord, TreeRecord,
+    TreeStatsRecord, ValueRefRecord,
 };
 
 macro_rules! with_readable_map {
@@ -56,6 +65,15 @@ macro_rules! with_writable_map {
             BindingEngine::Host(_) => Err(ProllyBindingError::Internal {
                 reason: "custom host stores do not expose versioned-map transactions".to_string(),
             }),
+        }
+    }};
+}
+
+macro_rules! with_binding_blob_store {
+    ($blob:expr, $store:ident, $body:block) => {{
+        match &$blob.inner {
+            BindingBlobStore::Memory($store) => $body,
+            BindingBlobStore::File($store) => $body,
         }
     }};
 }
@@ -142,6 +160,12 @@ pub struct MapCatalogVerificationRecord {
     pub version_count: u64,
     pub reachable_nodes: u64,
     pub reachable_bytes: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct VersionedMapBatchResultRecord {
+    pub version: MapVersionRecord,
+    pub stats: BatchApplyStatsRecord,
 }
 
 impl From<MapCatalogVerification> for MapCatalogVerificationRecord {
@@ -237,6 +261,14 @@ impl BindingVersionedMap {
         })
     }
 
+    pub fn rebuild_from_iter_if(
+        &self,
+        expected: Option<Vec<u8>>,
+        entries: Vec<EntryRecord>,
+    ) -> Result<MapUpdateRecord, ProllyBindingError> {
+        self.rebuild_from_entries_if(expected, entries)
+    }
+
     pub fn head(&self) -> Result<Option<MapVersionRecord>, ProllyBindingError> {
         with_readable_map!(self, map, {
             map.head()
@@ -276,6 +308,41 @@ impl BindingVersionedMap {
 
     pub fn get_many(&self, keys: Vec<Vec<u8>>) -> Result<Vec<Option<Vec<u8>>>, ProllyBindingError> {
         with_readable_map!(self, map, { map.get_many(&keys).map_err(Into::into) })
+    }
+
+    pub fn get_large_value(
+        &self,
+        blob_store: Arc<ProllyBlobStore>,
+        key: Vec<u8>,
+    ) -> Result<Option<Vec<u8>>, ProllyBindingError> {
+        with_readable_map!(self, map, {
+            with_binding_blob_store!(blob_store, store, {
+                map.get_large_value(store, &key).map_err(Into::into)
+            })
+        })
+    }
+
+    pub fn get_value_ref(
+        &self,
+        key: Vec<u8>,
+    ) -> Result<Option<ValueRefRecord>, ProllyBindingError> {
+        match self.snapshot()? {
+            Some(snapshot) => snapshot.get_value_ref(key),
+            None => Ok(None),
+        }
+    }
+
+    pub fn get_value_ref_at(
+        &self,
+        id: Vec<u8>,
+        key: Vec<u8>,
+    ) -> Result<Option<ValueRefRecord>, ProllyBindingError> {
+        let snapshot = self
+            .snapshot_at(id)?
+            .ok_or_else(|| ProllyBindingError::NotFound {
+                reason: "map version is not cataloged".to_string(),
+            })?;
+        snapshot.get_value_ref(key)
     }
 
     pub fn get_at(&self, id: Vec<u8>, key: Vec<u8>) -> Result<Option<Vec<u8>>, ProllyBindingError> {
@@ -345,6 +412,120 @@ impl BindingVersionedMap {
         snapshot.prefix(prefix)
     }
 
+    pub fn scan_range(
+        &self,
+        start: Vec<u8>,
+        range_end: Option<Vec<u8>>,
+        visitor: Arc<dyn EntryVisitorCallback>,
+    ) -> Result<ScanOutcomeRecord, ProllyBindingError> {
+        match self.snapshot()? {
+            Some(snapshot) => snapshot.scan_range(start, range_end, visitor),
+            None => self
+                .engine
+                .scan_range(self.engine.create(), start, range_end, visitor),
+        }
+    }
+
+    pub fn scan_prefix(
+        &self,
+        prefix: Vec<u8>,
+        visitor: Arc<dyn EntryVisitorCallback>,
+    ) -> Result<ScanOutcomeRecord, ProllyBindingError> {
+        match self.snapshot()? {
+            Some(snapshot) => snapshot.scan_prefix(prefix, visitor),
+            None => self
+                .engine
+                .scan_prefix(self.engine.create(), prefix, visitor),
+        }
+    }
+
+    pub fn scan_range_at(
+        &self,
+        id: Vec<u8>,
+        start: Vec<u8>,
+        range_end: Option<Vec<u8>>,
+        visitor: Arc<dyn EntryVisitorCallback>,
+    ) -> Result<ScanOutcomeRecord, ProllyBindingError> {
+        let snapshot = self
+            .snapshot_at(id)?
+            .ok_or_else(|| ProllyBindingError::NotFound {
+                reason: "map version is not cataloged".to_string(),
+            })?;
+        snapshot.scan_range(start, range_end, visitor)
+    }
+
+    pub fn scan_prefix_at(
+        &self,
+        id: Vec<u8>,
+        prefix: Vec<u8>,
+        visitor: Arc<dyn EntryVisitorCallback>,
+    ) -> Result<ScanOutcomeRecord, ProllyBindingError> {
+        let snapshot = self
+            .snapshot_at(id)?
+            .ok_or_else(|| ProllyBindingError::NotFound {
+                reason: "map version is not cataloged".to_string(),
+            })?;
+        snapshot.scan_prefix(prefix, visitor)
+    }
+
+    pub fn range_page(
+        &self,
+        cursor: Option<RangeCursorRecord>,
+        range_end: Option<Vec<u8>>,
+        limit: u64,
+    ) -> Result<RangePageRecord, ProllyBindingError> {
+        match self.snapshot()? {
+            Some(snapshot) => snapshot.range_page(cursor, range_end, limit),
+            None => self
+                .engine
+                .range_page(self.engine.create(), cursor, range_end, limit),
+        }
+    }
+
+    pub fn prefix_page(
+        &self,
+        prefix: Vec<u8>,
+        cursor: Option<RangeCursorRecord>,
+        limit: u64,
+    ) -> Result<RangePageRecord, ProllyBindingError> {
+        match self.snapshot()? {
+            Some(snapshot) => snapshot.prefix_page(prefix, cursor, limit),
+            None => self
+                .engine
+                .prefix_page(self.engine.create(), prefix, cursor, limit),
+        }
+    }
+
+    pub fn range_page_at(
+        &self,
+        id: Vec<u8>,
+        cursor: Option<RangeCursorRecord>,
+        range_end: Option<Vec<u8>>,
+        limit: u64,
+    ) -> Result<RangePageRecord, ProllyBindingError> {
+        let snapshot = self
+            .snapshot_at(id)?
+            .ok_or_else(|| ProllyBindingError::NotFound {
+                reason: "map version is not cataloged".to_string(),
+            })?;
+        snapshot.range_page(cursor, range_end, limit)
+    }
+
+    pub fn prefix_page_at(
+        &self,
+        id: Vec<u8>,
+        prefix: Vec<u8>,
+        cursor: Option<RangeCursorRecord>,
+        limit: u64,
+    ) -> Result<RangePageRecord, ProllyBindingError> {
+        let snapshot = self
+            .snapshot_at(id)?
+            .ok_or_else(|| ProllyBindingError::NotFound {
+                reason: "map version is not cataloged".to_string(),
+            })?;
+        snapshot.prefix_page(prefix, cursor, limit)
+    }
+
     pub fn diff(
         &self,
         base: Vec<u8>,
@@ -392,6 +573,13 @@ impl BindingVersionedMap {
         })
     }
 
+    pub fn edit(
+        &self,
+        mutations: Vec<MutationRecord>,
+    ) -> Result<MapVersionRecord, ProllyBindingError> {
+        self.apply(mutations)
+    }
+
     pub fn append(
         &self,
         mutations: Vec<MutationRecord>,
@@ -404,6 +592,62 @@ impl BindingVersionedMap {
             map.append(mutations)
                 .map(MapVersionRecord::from)
                 .map_err(Into::into)
+        })
+    }
+
+    pub fn parallel_apply(
+        &self,
+        mutations: Vec<MutationRecord>,
+        config: ParallelConfigRecord,
+    ) -> Result<VersionedMapBatchResultRecord, ProllyBindingError> {
+        let mutations = mutations
+            .into_iter()
+            .map(Mutation::try_from)
+            .collect::<Result<Vec<_>, _>>()?;
+        let config = ParallelConfig::try_from(config)?;
+        with_writable_map!(self, map, {
+            map.parallel_apply(mutations, &config)
+                .map(|result| VersionedMapBatchResultRecord {
+                    version: result.version.into(),
+                    stats: result.stats.into(),
+                })
+                .map_err(Into::into)
+        })
+    }
+
+    pub fn put_large_value(
+        &self,
+        blob_store: Arc<ProllyBlobStore>,
+        key: Vec<u8>,
+        value: Vec<u8>,
+        config: LargeValueConfigRecord,
+    ) -> Result<MapVersionRecord, ProllyBindingError> {
+        let config = LargeValueConfig::try_from(config)?;
+        with_writable_map!(self, map, {
+            with_binding_blob_store!(blob_store, store, {
+                map.put_large_value(store, key, value, config)
+                    .map(MapVersionRecord::from)
+                    .map_err(Into::into)
+            })
+        })
+    }
+
+    pub fn put_large_value_if(
+        &self,
+        blob_store: Arc<ProllyBlobStore>,
+        expected: Option<Vec<u8>>,
+        key: Vec<u8>,
+        value: Vec<u8>,
+        config: LargeValueConfigRecord,
+    ) -> Result<MapUpdateRecord, ProllyBindingError> {
+        let expected = expected.as_deref().map(decode_version_id).transpose()?;
+        let config = LargeValueConfig::try_from(config)?;
+        with_writable_map!(self, map, {
+            with_binding_blob_store!(blob_store, store, {
+                map.put_large_value_if(store, expected.as_ref(), key, value, config)
+                    .map(MapUpdateRecord::from)
+                    .map_err(Into::into)
+            })
         })
     }
 
@@ -438,6 +682,14 @@ impl BindingVersionedMap {
                 .map(MapUpdateRecord::from)
                 .map_err(Into::into)
         })
+    }
+
+    pub fn edit_if(
+        &self,
+        expected: Option<Vec<u8>>,
+        mutations: Vec<MutationRecord>,
+    ) -> Result<MapUpdateRecord, ProllyBindingError> {
+        self.apply_if(expected, mutations)
     }
 
     pub fn apply_if_at_millis(
@@ -566,6 +818,14 @@ impl BindingVersionedMap {
         })
     }
 
+    pub fn keep_for(&self, max_age_millis: u64) -> Result<VersionPruneRecord, ProllyBindingError> {
+        with_writable_map!(self, map, {
+            map.keep_for(std::time::Duration::from_millis(max_age_millis))
+                .map(VersionPruneRecord::from)
+                .map_err(Into::into)
+        })
+    }
+
     pub fn keep_versions(
         &self,
         ids: Vec<Vec<u8>>,
@@ -594,6 +854,32 @@ impl BindingVersionedMap {
             map.verify_catalog()
                 .map(MapCatalogVerificationRecord::from)
                 .map_err(Into::into)
+        })
+    }
+
+    pub fn retention_policy(&self) -> NamedRootRetentionRecord {
+        with_readable_map!(self, map, { map.retention_policy().into() })
+    }
+
+    pub fn plan_blob_gc(
+        &self,
+        blob_store: Arc<ProllyBlobStore>,
+    ) -> Result<BlobGcPlanRecord, ProllyBindingError> {
+        with_readable_map!(self, map, {
+            with_binding_blob_store!(blob_store, store, {
+                BlobGcPlanRecord::try_from(map.plan_blob_gc(store)?)
+            })
+        })
+    }
+
+    pub fn sweep_blob_gc(
+        &self,
+        blob_store: Arc<ProllyBlobStore>,
+    ) -> Result<BlobGcSweepRecord, ProllyBindingError> {
+        with_readable_map!(self, map, {
+            with_binding_blob_store!(blob_store, store, {
+                BlobGcSweepRecord::try_from(map.sweep_blob_gc(store)?)
+            })
         })
     }
 
@@ -704,6 +990,12 @@ impl BindingVersionedMap {
             version.map(|version| Arc::new(BindingMapSnapshot::new(self.engine.clone(), version)))
         })
     }
+
+    pub fn read_session(&self) -> Result<Option<Arc<ProllyReadSession>>, ProllyBindingError> {
+        self.snapshot()?
+            .map(|snapshot| snapshot.read_session())
+            .transpose()
+    }
 }
 
 /// Three-way merge pinned to a concrete base, head, and candidate.
@@ -738,6 +1030,66 @@ impl BindingMapMerge {
         )
     }
 
+    pub fn conflict_page(
+        &self,
+        cursor: Option<RangeCursorRecord>,
+        limit: u64,
+    ) -> Result<ConflictPageRecord, ProllyBindingError> {
+        self.map.engine.conflict_page(
+            self.base.tree.clone(),
+            self.head.tree.clone(),
+            self.candidate.tree.clone(),
+            cursor,
+            limit,
+        )
+    }
+
+    pub fn scan_conflicts(
+        &self,
+        visitor: Arc<dyn ConflictVisitorCallback>,
+    ) -> Result<ScanOutcomeRecord, ProllyBindingError> {
+        self.map.engine.scan_conflicts(
+            self.base.tree.clone(),
+            self.head.tree.clone(),
+            self.candidate.tree.clone(),
+            visitor,
+        )
+    }
+
+    pub fn merge_with_policy(
+        &self,
+        policy: Arc<MergePolicyRegistry>,
+    ) -> Result<TreeRecord, ProllyBindingError> {
+        self.map.engine.merge_with_policy(
+            self.base.tree.clone(),
+            self.head.tree.clone(),
+            self.candidate.tree.clone(),
+            policy,
+        )
+    }
+
+    pub fn crdt_merge(&self, config: CrdtConfigRecord) -> Result<TreeRecord, ProllyBindingError> {
+        self.map.engine.crdt_merge(
+            self.base.tree.clone(),
+            self.head.tree.clone(),
+            self.candidate.tree.clone(),
+            config,
+        )
+    }
+
+    pub fn crdt_merge_explain(
+        &self,
+        config: CrdtConfigRecord,
+    ) -> Result<MergeExplanationRecord, ProllyBindingError> {
+        let base = decode_version_id(&self.base.id)?;
+        let candidate = decode_version_id(&self.candidate.id)?;
+        let config = CrdtConfig::from(config);
+        with_readable_map!(self.map.as_ref(), map, {
+            let merge = map.prepare_merge(&base, &candidate)?;
+            MergeExplanationRecord::try_from(merge.crdt_merge_explain(&config))
+        })
+    }
+
     /// Publish only if the head pinned when this object was created is still current.
     pub fn publish(&self, resolver: Option<String>) -> Result<MapUpdateRecord, ProllyBindingError> {
         let current = self.map.head()?;
@@ -755,6 +1107,53 @@ impl BindingMapMerge {
             let resolver = crate::resolver_from_name(resolver.clone())?;
             merge
                 .publish(resolver)
+                .map(MapUpdateRecord::from)
+                .map_err(Into::into)
+        })
+    }
+
+    pub fn publish_with_policy(
+        &self,
+        policy: Arc<MergePolicyRegistry>,
+    ) -> Result<MapUpdateRecord, ProllyBindingError> {
+        let current = self.map.head()?;
+        if current.as_ref().map(|version| &version.id) != Some(&self.head.id) {
+            return Ok(MapUpdateRecord {
+                kind: MapUpdateKind::Conflict,
+                previous: None,
+                current,
+            });
+        }
+        let base = decode_version_id(&self.base.id)?;
+        let candidate = decode_version_id(&self.candidate.id)?;
+        with_writable_map!(self.map.as_ref(), map, {
+            let merge = map.prepare_merge(&base, &candidate)?;
+            merge
+                .publish(Some(policy.as_resolver()?))
+                .map(MapUpdateRecord::from)
+                .map_err(Into::into)
+        })
+    }
+
+    pub fn publish_crdt(
+        &self,
+        config: CrdtConfigRecord,
+    ) -> Result<MapUpdateRecord, ProllyBindingError> {
+        let current = self.map.head()?;
+        if current.as_ref().map(|version| &version.id) != Some(&self.head.id) {
+            return Ok(MapUpdateRecord {
+                kind: MapUpdateKind::Conflict,
+                previous: None,
+                current,
+            });
+        }
+        let base = decode_version_id(&self.base.id)?;
+        let candidate = decode_version_id(&self.candidate.id)?;
+        let config = CrdtConfig::from(config);
+        with_writable_map!(self.map.as_ref(), map, {
+            let merge = map.prepare_merge(&base, &candidate)?;
+            merge
+                .publish_crdt(&config)
                 .map(MapUpdateRecord::from)
                 .map_err(Into::into)
         })
@@ -784,6 +1183,14 @@ impl BindingMapComparison {
             .diff(self.base.tree.clone(), self.target.tree.clone())
     }
 
+    pub fn scan_diff(
+        &self,
+        visitor: Arc<dyn DiffVisitorCallback>,
+    ) -> Result<ScanOutcomeRecord, ProllyBindingError> {
+        self.engine
+            .scan_diff(self.base.tree.clone(), self.target.tree.clone(), visitor)
+    }
+
     pub fn diff_page(
         &self,
         cursor: Option<RangeCursorRecord>,
@@ -802,6 +1209,55 @@ impl BindingMapComparison {
     pub fn stats(&self) -> Result<StatsComparisonRecord, ProllyBindingError> {
         self.engine
             .stats_diff(self.base.tree.clone(), self.target.tree.clone())
+    }
+
+    pub fn prove_diff_page(
+        &self,
+        cursor: Option<RangeCursorRecord>,
+        range_end: Option<Vec<u8>>,
+        limit: u64,
+    ) -> Result<ProvedDiffPageRecord, ProllyBindingError> {
+        self.engine.prove_diff_page(
+            self.base.tree.clone(),
+            self.target.tree.clone(),
+            cursor,
+            range_end,
+            limit,
+        )
+    }
+
+    pub fn structural_diff_page(
+        &self,
+        cursor: Option<StructuralDiffCursorRecord>,
+        limit: u64,
+    ) -> Result<StructuralDiffPageRecord, ProllyBindingError> {
+        self.engine.structural_diff_page_with_cursor(
+            self.base.tree.clone(),
+            self.target.tree.clone(),
+            cursor,
+            limit,
+        )
+    }
+
+    pub fn debug_view(&self) -> Result<TreeDebugComparisonRecord, ProllyBindingError> {
+        self.engine
+            .debug_compare_trees(self.base.tree.clone(), self.target.tree.clone())
+    }
+
+    pub fn publish_changed_spans(
+        &self,
+        spans: Vec<ChangedSpanRecord>,
+    ) -> Result<bool, ProllyBindingError> {
+        self.engine.publish_changed_spans_hint(
+            self.base.tree.clone(),
+            self.target.tree.clone(),
+            spans,
+        )
+    }
+
+    pub fn changed_spans(&self) -> Result<Option<ChangedSpanHintRecord>, ProllyBindingError> {
+        self.engine
+            .load_changed_spans_hint(self.base.tree.clone(), self.target.tree.clone())
     }
 }
 
@@ -1188,6 +1644,13 @@ impl BindingMapSnapshot {
         self.engine.get_many(self.version.tree.clone(), keys)
     }
 
+    pub fn get_value_ref(
+        &self,
+        key: Vec<u8>,
+    ) -> Result<Option<ValueRefRecord>, ProllyBindingError> {
+        self.engine.get_value_ref(self.version.tree.clone(), key)
+    }
+
     pub fn contains_key(&self, key: Vec<u8>) -> Result<bool, ProllyBindingError> {
         self.get(key).map(|value| value.is_some())
     }
@@ -1221,6 +1684,25 @@ impl BindingMapSnapshot {
         self.engine.prefix(self.version.tree.clone(), prefix)
     }
 
+    pub fn scan_range(
+        &self,
+        start: Vec<u8>,
+        range_end: Option<Vec<u8>>,
+        visitor: Arc<dyn EntryVisitorCallback>,
+    ) -> Result<ScanOutcomeRecord, ProllyBindingError> {
+        self.engine
+            .scan_range(self.version.tree.clone(), start, range_end, visitor)
+    }
+
+    pub fn scan_prefix(
+        &self,
+        prefix: Vec<u8>,
+        visitor: Arc<dyn EntryVisitorCallback>,
+    ) -> Result<ScanOutcomeRecord, ProllyBindingError> {
+        self.engine
+            .scan_prefix(self.version.tree.clone(), prefix, visitor)
+    }
+
     pub fn range_page(
         &self,
         cursor: Option<RangeCursorRecord>,
@@ -1241,12 +1723,121 @@ impl BindingMapSnapshot {
             .prefix_page(self.version.tree.clone(), prefix, cursor, limit)
     }
 
+    pub fn reverse_page(
+        &self,
+        cursor: Option<ReverseCursorRecord>,
+        start: Vec<u8>,
+        limit: u64,
+    ) -> Result<ReversePageRecord, ProllyBindingError> {
+        self.engine
+            .reverse_page(self.version.tree.clone(), cursor, start, limit)
+    }
+
+    pub fn prefix_reverse_page(
+        &self,
+        prefix: Vec<u8>,
+        cursor: Option<ReverseCursorRecord>,
+        limit: u64,
+    ) -> Result<ReversePageRecord, ProllyBindingError> {
+        self.engine
+            .prefix_reverse_page(self.version.tree.clone(), prefix, cursor, limit)
+    }
+
+    pub fn cursor_window(
+        &self,
+        key: Vec<u8>,
+        range_end: Option<Vec<u8>>,
+        limit: u64,
+    ) -> Result<CursorWindowRecord, ProllyBindingError> {
+        self.engine
+            .cursor_window(self.version.tree.clone(), key, range_end, limit)
+    }
+
     pub fn prove_key(&self, key: Vec<u8>) -> Result<KeyProofRecord, ProllyBindingError> {
         self.engine.prove_key(self.version.tree.clone(), key)
     }
 
+    pub fn prove_keys(
+        &self,
+        keys: Vec<Vec<u8>>,
+    ) -> Result<MultiKeyProofRecord, ProllyBindingError> {
+        self.engine.prove_keys(self.version.tree.clone(), keys)
+    }
+
+    pub fn prove_range(
+        &self,
+        start: Vec<u8>,
+        range_end: Option<Vec<u8>>,
+    ) -> Result<RangeProofRecord, ProllyBindingError> {
+        self.engine
+            .prove_range(self.version.tree.clone(), start, range_end)
+    }
+
+    pub fn prove_prefix(&self, prefix: Vec<u8>) -> Result<RangeProofRecord, ProllyBindingError> {
+        self.engine.prove_prefix(self.version.tree.clone(), prefix)
+    }
+
+    pub fn prove_range_page(
+        &self,
+        cursor: Option<RangeCursorRecord>,
+        range_end: Option<Vec<u8>>,
+        limit: u64,
+    ) -> Result<ProvedRangePageRecord, ProllyBindingError> {
+        self.engine
+            .prove_range_page(self.version.tree.clone(), cursor, range_end, limit)
+    }
+
+    pub fn stats(&self) -> Result<TreeStatsRecord, ProllyBindingError> {
+        self.engine.collect_stats(self.version.tree.clone())
+    }
+
+    pub fn debug_view(&self) -> Result<TreeDebugViewRecord, ProllyBindingError> {
+        self.engine.debug_tree(self.version.tree.clone())
+    }
+
     pub fn export(&self) -> Result<SnapshotBundleRecord, ProllyBindingError> {
         self.engine.export_snapshot(self.version.tree.clone())
+    }
+
+    pub fn plan_missing_nodes(
+        &self,
+        destination: Arc<ProllyEngine>,
+    ) -> Result<MissingNodePlanRecord, ProllyBindingError> {
+        self.engine
+            .plan_missing_nodes(self.version.tree.clone(), destination)
+    }
+
+    pub fn copy_missing_nodes(
+        &self,
+        destination: Arc<ProllyEngine>,
+    ) -> Result<MissingNodeCopyRecord, ProllyBindingError> {
+        self.engine
+            .copy_missing_nodes(self.version.tree.clone(), destination)
+    }
+
+    pub fn push_to(
+        &self,
+        destination: Arc<BindingVersionedMap>,
+    ) -> Result<MapVersionRecord, ProllyBindingError> {
+        destination.import_as_head(self.export()?)
+    }
+
+    pub fn pin_root(&self) -> Result<u64, ProllyBindingError> {
+        self.engine.pin_tree_root(self.version.tree.clone())
+    }
+
+    pub fn pin_path(&self, key: Vec<u8>) -> Result<u64, ProllyBindingError> {
+        self.engine.pin_tree_path(self.version.tree.clone(), key)
+    }
+
+    pub fn publish_prefix_hint(&self, prefix: Vec<u8>) -> Result<bool, ProllyBindingError> {
+        self.engine
+            .publish_prefix_path_hint(self.version.tree.clone(), prefix)
+    }
+
+    pub fn hydrate_prefix_hint(&self, prefix: Vec<u8>) -> Result<bool, ProllyBindingError> {
+        self.engine
+            .hydrate_prefix_path_hint(self.version.tree.clone(), prefix)
     }
 
     /// Bind this snapshot to a reusable session. Native adapters use the
@@ -1259,10 +1850,30 @@ impl BindingMapSnapshot {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ConfigRecord, MutationKind, MutationRecord, ProllyEngine};
+    use crate::{
+        default_parallel_config, ConfigRecord, LargeValueConfigRecord, MutationKind,
+        MutationRecord, ProllyBlobStore, ProllyEngine,
+    };
 
     fn memory_engine() -> Arc<ProllyEngine> {
         Arc::new(ProllyEngine::memory(ConfigRecord::from(prolly::Config::default())).unwrap())
+    }
+
+    struct CollectEntries(Mutex<Vec<EntryRecord>>);
+
+    impl crate::EntryVisitorCallback for CollectEntries {
+        fn visit(&self, entry: EntryRecord) -> bool {
+            self.0.lock().unwrap().push(entry);
+            true
+        }
+    }
+
+    #[test]
+    fn portable_versioned_fixture_is_valid_json() {
+        let fixture = include_str!("../../../../conformance/binding-versioned-fixtures.v1.json");
+        let parsed: serde_json::Value = serde_json::from_str(fixture).unwrap();
+        assert_eq!(parsed["schema_version"], 1);
+        assert_eq!(parsed["scenarios"].as_array().unwrap().len(), 3);
     }
 
     #[test]
@@ -1343,8 +1954,18 @@ mod tests {
         assert_eq!(comparison.target().id, first.id);
         assert_eq!(comparison.diff().unwrap().len(), 1);
         assert_eq!(comparison.diff_page(None, None, 1).unwrap().diffs.len(), 1);
+        assert_eq!(
+            comparison
+                .prove_diff_page(None, None, 1)
+                .unwrap()
+                .page
+                .diffs
+                .len(),
+            1
+        );
         assert_eq!(comparison.stats().unwrap().before.total_key_value_pairs, 0);
         assert_eq!(comparison.stats().unwrap().after.total_key_value_pairs, 1);
+        assert!(!comparison.debug_view().unwrap().levels.is_empty());
 
         let subscription = map.subscribe_from(Some(initial.id.clone())).unwrap();
         let event = subscription.poll().unwrap().unwrap();
@@ -1369,6 +1990,23 @@ mod tests {
             snapshot.prove_key(b"missing".to_vec()).unwrap().key,
             b"missing"
         );
+        assert_eq!(
+            snapshot
+                .prove_keys(vec![b"alice".to_vec()])
+                .unwrap()
+                .keys
+                .len(),
+            1
+        );
+        assert_eq!(
+            snapshot
+                .cursor_window(b"alice".to_vec(), None, 1)
+                .unwrap()
+                .position_key,
+            Some(b"alice".to_vec())
+        );
+        assert!(snapshot.pin_root().unwrap() >= 1);
+        snapshot.pin_path(b"alice".to_vec()).unwrap();
         assert!(snapshot.export().unwrap().nodes.len() >= 1);
     }
 
@@ -1386,6 +2024,7 @@ mod tests {
             .prepare_merge(base.id.clone(), candidate.id.clone())
             .unwrap();
         assert_eq!(merge.head().id, head.id);
+        assert_eq!(merge.conflict_page(None, 1).unwrap().conflicts.len(), 1);
         let preview = merge.merge(Some("prefer_right".to_string())).unwrap();
         assert_eq!(
             map.engine.get(preview, b"alice".to_vec()).unwrap(),
@@ -1430,6 +2069,39 @@ mod tests {
         );
         assert_eq!(map.changes_since(initial.id).unwrap().len(), 1);
         assert_eq!(map.range(Vec::new(), None).unwrap().len(), 1);
+        let visitor = Arc::new(CollectEntries(Mutex::new(Vec::new())));
+        assert_eq!(
+            map.scan_range(Vec::new(), None, visitor.clone())
+                .unwrap()
+                .visited,
+            1
+        );
+        assert_eq!(
+            map.scan_prefix_at(head.id.clone(), b"a".to_vec(), visitor)
+                .unwrap()
+                .visited,
+            1
+        );
+        assert_eq!(map.range_page(None, None, 1).unwrap().entries.len(), 1);
+        assert_eq!(
+            map.range_page_at(head.id.clone(), None, None, 1)
+                .unwrap()
+                .entries
+                .len(),
+            1
+        );
+        assert_eq!(
+            map.get_value_ref(b"alice".to_vec()).unwrap().unwrap().kind,
+            crate::ValueRefKind::Inline
+        );
+        assert!(map
+            .read_session()
+            .unwrap()
+            .unwrap()
+            .get(b"alice".to_vec())
+            .unwrap()
+            .is_some());
+        assert!(!map.retention_policy().prefix.is_empty());
         assert!(!map.head_name().is_empty());
         assert!(!map.versions_prefix().is_empty());
     }
@@ -1472,13 +2144,53 @@ mod tests {
                 value: Some(b"3".to_vec()),
             }])
             .unwrap();
+        let parallel = map
+            .parallel_apply(
+                vec![MutationRecord {
+                    kind: MutationKind::Upsert,
+                    key: b"d".to_vec(),
+                    value: Some(b"4".to_vec()),
+                }],
+                default_parallel_config(),
+            )
+            .unwrap();
+        assert_eq!(parallel.stats.input_mutations, 1);
 
         let bundle = map.snapshot().unwrap().unwrap().export().unwrap();
         let destination =
             BindingVersionedMap::new(memory_engine(), b"users-copy".to_vec()).unwrap();
         let imported = destination.import_as_head(bundle).unwrap();
-        assert_eq!(imported.tree, head.tree);
-        assert_eq!(destination.range(Vec::new(), None).unwrap().len(), 3);
+        assert_ne!(imported.tree, head.tree);
+        assert_eq!(destination.range(Vec::new(), None).unwrap().len(), 4);
+    }
+
+    #[test]
+    fn large_values_and_blob_gc_follow_retained_versions() {
+        let map = BindingVersionedMap::new(memory_engine(), b"users".to_vec()).unwrap();
+        let blobs = Arc::new(ProllyBlobStore::memory());
+        let value = vec![7; 1024];
+        map.put_large_value(
+            blobs.clone(),
+            b"alice".to_vec(),
+            value.clone(),
+            LargeValueConfigRecord {
+                inline_threshold: 1,
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            map.get_large_value(blobs.clone(), b"alice".to_vec())
+                .unwrap(),
+            Some(value)
+        );
+        assert_eq!(
+            map.plan_blob_gc(blobs.clone())
+                .unwrap()
+                .reachability
+                .live_blob_count,
+            1
+        );
+        assert_eq!(map.sweep_blob_gc(blobs).unwrap().deleted_blobs, 0);
     }
 
     #[test]

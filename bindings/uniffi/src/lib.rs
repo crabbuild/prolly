@@ -40,7 +40,7 @@ pub use domain::versioned::{
     BindingMapComparison, BindingMapMerge, BindingMapSnapshot, BindingMapSubscription,
     BindingVersionedMap, BindingVersionedTransaction, MapCatalogVerificationRecord,
     MapChangeEventRecord, MapUpdateKind, MapUpdateRecord, MapVersionRecord, VersionPruneRecord,
-    VersionedTransactionCommitRecord,
+    VersionedMapBatchResultRecord, VersionedTransactionCommitRecord,
 };
 
 type MemoryEngine = Prolly<Arc<MemStore>>;

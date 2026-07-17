@@ -8579,8 +8579,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::MapVersion::created_at_millis",
@@ -8590,8 +8594,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::MapVersion::id",
@@ -8601,8 +8609,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::MapVersion::is_head",
@@ -8612,8 +8624,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::MapVersion::tree",
@@ -8623,8 +8639,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::MapVersionId",
@@ -8634,8 +8654,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::MapVersionId::as_cid",
@@ -8645,8 +8669,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::MapVersionId::for_tree",
@@ -8656,8 +8684,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::MapVersionId::from_bytes",
@@ -8667,8 +8699,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::MapVersionId::into_cid",
@@ -8678,8 +8714,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::MemBlobStore",
@@ -21817,102 +21857,138 @@
     },
     {
       "rust": "prolly::TypedVersionedMap",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "versioned-map",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::TypedVersionedMap::delete",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "versioned-map",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::TypedVersionedMap::entries",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "versioned-map",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::TypedVersionedMap::get",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "versioned-map",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::TypedVersionedMap::get_at",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "versioned-map",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::TypedVersionedMap::migrate_from",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "versioned-map",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::TypedVersionedMap::put",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "versioned-map",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::TypedVersionedMap::put_if",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "versioned-map",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::TypedVersionedMap::raw",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "versioned-map",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VERSIONED_MAP_ROOT_PREFIX",
@@ -22186,8 +22262,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::append",
@@ -22197,8 +22277,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::apply",
@@ -22208,8 +22292,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::apply_at_millis",
@@ -22219,8 +22307,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::apply_if",
@@ -22230,8 +22322,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::apply_if_at_millis",
@@ -22241,8 +22337,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::backup",
@@ -22252,8 +22352,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::changes_since",
@@ -22263,8 +22367,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::compare",
@@ -22274,8 +22382,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::compare_to_head",
@@ -22285,8 +22397,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::contains_key",
@@ -22296,8 +22412,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::delete",
@@ -22307,8 +22427,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::delete_if",
@@ -22318,8 +22442,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::diff",
@@ -22329,8 +22457,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::edit",
@@ -22340,8 +22472,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::edit_if",
@@ -22351,8 +22487,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::get",
@@ -22362,8 +22502,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::get_at",
@@ -22373,19 +22517,27 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::get_at_with",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "versioned-map",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::get_large_value",
@@ -22395,8 +22547,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::get_many",
@@ -22406,8 +22562,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::get_many_at",
@@ -22417,41 +22577,57 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::get_value_ref_at_with",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "versioned-map",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::get_value_ref_with",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "versioned-map",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::get_with",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "versioned-map",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::head",
@@ -22461,8 +22637,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::head_id",
@@ -22472,8 +22652,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::head_name",
@@ -22483,8 +22667,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::id",
@@ -22494,8 +22682,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::import_as_head",
@@ -22505,8 +22697,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::import_as_head_at_millis",
@@ -22516,8 +22712,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::initialize",
@@ -22527,8 +22727,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::initialize_sorted",
@@ -22538,8 +22742,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::is_initialized",
@@ -22549,8 +22757,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::keep_for",
@@ -22560,8 +22772,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::keep_for_at",
@@ -22571,8 +22787,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::keep_last",
@@ -22582,8 +22802,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::keep_versions",
@@ -22593,8 +22817,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::new",
@@ -22604,8 +22832,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::parallel_apply",
@@ -22615,8 +22847,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::plan_blob_gc",
@@ -22626,8 +22862,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::plan_gc",
@@ -22637,8 +22877,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::prefix",
@@ -22648,8 +22892,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::prefix_at",
@@ -22659,8 +22907,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::prefix_page",
@@ -22670,8 +22922,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::prefix_page_at",
@@ -22681,8 +22937,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::prepare_merge",
@@ -22692,8 +22952,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::prune_versions",
@@ -22703,8 +22967,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::put",
@@ -22714,8 +22982,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::put_if",
@@ -22725,8 +22997,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::put_large_value",
@@ -22736,8 +23012,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::put_large_value_if",
@@ -22747,8 +23027,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::range",
@@ -22758,8 +23042,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::range_at",
@@ -22769,8 +23057,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::range_page",
@@ -22780,8 +23072,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::range_page_at",
@@ -22791,8 +23087,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::rebuild_from_iter_if",
@@ -22802,8 +23102,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::rebuild_sorted_if",
@@ -22813,8 +23117,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::restore_backup",
@@ -22824,8 +23132,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::retention_policy",
@@ -22835,8 +23147,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::rollback_to",
@@ -22846,8 +23162,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::scan_prefix",
@@ -22857,8 +23177,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::scan_prefix_at",
@@ -22868,8 +23192,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::scan_range",
@@ -22879,8 +23207,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::scan_range_at",
@@ -22890,8 +23222,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::snapshot",
@@ -22901,8 +23237,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::snapshot_at",
@@ -22912,8 +23252,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::subscribe",
@@ -22923,8 +23267,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::subscribe_from",
@@ -22934,8 +23282,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::sweep_blob_gc",
@@ -22945,8 +23297,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::sweep_gc",
@@ -22956,19 +23312,27 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::typed",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "versioned-map",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::verify_catalog",
@@ -22978,8 +23342,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::version",
@@ -22989,8 +23357,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::versions",
@@ -23000,8 +23372,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMap::versions_prefix",
@@ -23011,8 +23387,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMapBackup",
@@ -23022,8 +23402,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMapBackup::from_bytes",
@@ -23033,8 +23417,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMapBackup::head",
@@ -23044,8 +23432,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMapBackup::map_id",
@@ -23055,8 +23447,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMapBackup::to_bytes",
@@ -23066,8 +23462,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMapBackup::verify",
@@ -23077,8 +23477,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMapBackup::versions",
@@ -23088,8 +23492,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMapBatchResult",
@@ -23099,8 +23507,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMapBatchResult::stats",
@@ -23110,8 +23522,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMapBatchResult::version",
@@ -23121,85 +23537,117 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMapEditor",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "versioned-map",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMapEditor::delete",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "versioned-map",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMapEditor::is_empty",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "versioned-map",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMapEditor::len",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "versioned-map",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMapEditor::new",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "versioned-map",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMapEditor::push",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "versioned-map",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMapEditor::put",
-      "classification": "portable",
+      "classification": "idiomatic",
       "status": "planned",
       "family": "versioned-map",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMapUpdate",
@@ -23209,8 +23657,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMapUpdate::current",
@@ -23220,8 +23672,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMapUpdate::is_applied",
@@ -23231,8 +23687,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMapUpdate::is_conflict",
@@ -23242,8 +23702,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMapsTransaction",
@@ -23253,8 +23717,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMapsTransaction::apply",
@@ -23264,8 +23732,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMapsTransaction::apply_if",
@@ -23275,8 +23747,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMapsTransaction::delete",
@@ -23286,8 +23762,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMapsTransaction::edit",
@@ -23297,8 +23777,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMapsTransaction::get",
@@ -23308,8 +23792,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMapsTransaction::head",
@@ -23319,8 +23807,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedMapsTransaction::put",
@@ -23330,8 +23822,12 @@
       "performance": "owned",
       "languages": {},
       "exclusions": {},
-      "tests": [],
-      "docs": []
+      "tests": [
+        "prolly-bindings::domain::versioned"
+      ],
+      "docs": [
+        "conformance/binding-versioned-fixtures.v1.json"
+      ]
     },
     {
       "rust": "prolly::VersionedValue",
