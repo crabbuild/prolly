@@ -1,6 +1,9 @@
 import unittest
 
 from prolly import (
+    CatalogAcceleratorKindRecord,
+    CompositeBaseKindRecord,
+    CompositeBuildOrRebuildKindRecord,
     Engine,
     EntryRecord,
     IndexProjection,
@@ -24,10 +27,89 @@ from prolly import (
     verify_range_proof,
     verify_proximity_membership_proof,
     verify_proximity_structure_proof,
+    default_composite_accelerator_config,
 )
 
 
 class PortableParityTests(unittest.TestCase):
+    def test_composite_and_catalog_lifecycle_is_portable_and_bounded(self):
+        with Engine.memory() as engine:
+            base = engine.build_proximity(
+                dimensions=2,
+                records=[
+                    ProximityRecord(
+                        f"vector-{index:02}".encode(),
+                        [float(index), 0.0],
+                        f"value-{index:02}".encode(),
+                    )
+                    for index in range(16)
+                ],
+            )
+            hnsw = base.build_hnsw().index
+            current, _ = base.mutate(
+                [
+                    ProximityMutationRecord(
+                        key=b"vector-00",
+                        vector=[0.25, 0.0],
+                        value=b"updated",
+                    )
+                ]
+            )
+            outcome = current.build_composite_hnsw(base, hnsw)
+            self.assertEqual(outcome.stats.vector_updated_records, 1)
+            self.assertEqual(outcome.reasons, [])
+            composite = outcome.accelerator
+            self.assertIsNotNone(composite)
+            request = exact_proximity_search_request([0.0, 0.0], 3)
+            request.policy = SearchPolicyKind.FIXED_BUDGET
+            request.backend = SearchBackendRecord.COMPOSITE
+            with composite:
+                self.assertEqual(composite.base_kind, CompositeBaseKindRecord.HNSW)
+                self.assertEqual(composite.current_source_descriptor, current.descriptor)
+                self.assertEqual(composite.base_source_descriptor, base.descriptor)
+                self.assertEqual(composite.delta_count, 1)
+                self.assertEqual(composite.shadow_count, 1)
+                self.assertEqual(
+                    composite.search(current, request).backend,
+                    SearchBackendRecord.COMPOSITE,
+                )
+                with composite.prove_search(current, request) as proof:
+                    self.assertEqual(
+                        proof.verify(current.descriptor).result.backend,
+                        SearchBackendRecord.COMPOSITE,
+                    )
+                manifest = composite.manifest
+                catalog = current.build_accelerator_catalog(composite=composite)
+                self.assertEqual(catalog.source_descriptor, current.descriptor)
+                self.assertEqual(
+                    catalog.entries[0].kind, CatalogAcceleratorKindRecord.COMPOSITE
+                )
+                self.assertEqual(
+                    catalog.search(current, request).backend,
+                    SearchBackendRecord.COMPOSITE,
+                )
+                catalog_manifest = catalog.manifest
+                catalog.close()
+
+            with current.load_composite(manifest) as loaded:
+                self.assertEqual(loaded.manifest, manifest)
+            with current.load_accelerator_catalog(catalog_manifest) as loaded:
+                self.assertEqual(loaded.manifest, catalog_manifest)
+
+            forced = default_composite_accelerator_config()
+            forced.max_delta_records = 0
+            rebuilt = current.build_or_rebuild_composite_hnsw(
+                base, hnsw, config=forced
+            )
+            self.assertEqual(
+                rebuilt.kind, CompositeBuildOrRebuildKindRecord.HNSW_REBUILT
+            )
+            self.assertIsNotNone(rebuilt.hnsw)
+            rebuilt.hnsw.close()
+            hnsw.close()
+            current.close()
+            base.close()
+
     def test_product_quantizer_lifecycle_is_portable_and_bounded(self):
         with Engine.memory() as engine:
             proximity = engine.build_proximity(

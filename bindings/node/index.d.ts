@@ -255,6 +255,46 @@ export interface NodePortablePqQuality {
   meanSquaredError: number
   maximumSquaredError: number
 }
+export interface NodePortableCompositeConfig {
+  maxDeltaRecords: string
+  maxShadowRecords: string
+  maxDeltaRatioPpm: number
+  maxShadowRatioPpm: number
+  baseOverfetchMultiplier: number
+}
+export interface NodePortableCompositeBuildLimits {
+  maxDiffEntries?: string
+  maxOwnedBytes?: string
+  maxEncodedOutputBytes?: string
+  maxDistanceEvaluations?: string
+}
+export interface NodePortableCompositeBuildStats {
+  diffEntries: string
+  insertedRecords: string
+  vectorUpdatedRecords: string
+  valueOnlyRecords: string
+  deletedRecords: string
+  deltaRecords: string
+  shadowRecords: string
+  ownedBytesPeak: string
+  encodedOutputBytes: string
+  distanceEvaluations: string
+}
+export interface NodePortableFullRebuildReason {
+  kind: string
+  actual: string
+  maximum: string
+}
+export interface NodePortableCompositeRebuildOptions {
+  hnswLimits: NodePortableHnswBuildLimits
+  pqWorkerThreads: string
+  pqLimits: NodePortablePqBuildLimits
+}
+export interface NodePortableCatalogEntry {
+  kind: string
+  configurationFingerprint: Buffer
+  manifest: Buffer
+}
 export interface NodePortableSearchStats {
   levelsVisited: string
   nodesRead: string
@@ -1204,11 +1244,52 @@ export declare class NativePortableProductQuantizer {
   search(map: NativePortableProximityMap, request: NodePortableSearchRequest): NodePortableSearchResult
   proveSearch(map: NativePortableProximityMap, request: NodePortableSearchRequest): NativePortableProximitySearchProof
 }
+export declare class NativePortableCompositeBuildResult {
+  accelerator(): NativePortableCompositeAccelerator | null
+  reasons(): Array<NodePortableFullRebuildReason>
+  stats(): NodePortableCompositeBuildStats
+}
+export declare class NativePortableCompositeBuildOrRebuildResult {
+  kind(): string
+  composite(): NativePortableCompositeAccelerator | null
+  hnsw(): NativePortableHnswIndex | null
+  pq(): NativePortableProductQuantizer | null
+  reasons(): Array<NodePortableFullRebuildReason>
+  compositeStats(): NodePortableCompositeBuildStats
+  hnswStats(): NodePortableHnswBuildStats | null
+  pqStats(): NodePortablePqBuildStats | null
+}
+export declare class NativePortableCompositeAccelerator {
+  manifest(): Buffer
+  currentSourceDescriptor(): Buffer
+  baseSourceDescriptor(): Buffer
+  baseKind(): string
+  deltaCount(): string
+  shadowCount(): string
+  config(): NodePortableCompositeConfig
+  buildStats(): NodePortableCompositeBuildStats
+  search(map: NativePortableProximityMap, request: NodePortableSearchRequest): NodePortableSearchResult
+  proveSearch(map: NativePortableProximityMap, request: NodePortableSearchRequest): NativePortableProximitySearchProof
+}
+export declare class NativePortableAcceleratorCatalog {
+  manifest(): Buffer
+  sourceDescriptor(): Buffer
+  entries(): Array<NodePortableCatalogEntry>
+  search(map: NativePortableProximityMap, request: NodePortableSearchRequest): NodePortableSearchResult
+  proveSearch(map: NativePortableProximityMap, request: NodePortableSearchRequest): NativePortableProximitySearchProof
+}
 export declare class NativePortableProximityMap {
   buildHnsw(config?: NodePortableHnswConfig | undefined | null, limits?: NodePortableHnswBuildLimits | undefined | null): NativePortableHnswBuildResult
   loadHnsw(manifest: Buffer): NativePortableHnswIndex
   buildPq(config: NodePortablePqConfig | undefined | null, workerThreads: string, limits?: NodePortablePqBuildLimits | undefined | null): NativePortablePqBuildResult
   loadPq(manifest: Buffer): NativePortableProductQuantizer
+  buildCompositeHnsw(baseMap: NativePortableProximityMap, base: NativePortableHnswIndex, config?: NodePortableCompositeConfig | undefined | null, limits?: NodePortableCompositeBuildLimits | undefined | null): NativePortableCompositeBuildResult
+  buildCompositePq(baseMap: NativePortableProximityMap, base: NativePortableProductQuantizer, config?: NodePortableCompositeConfig | undefined | null, limits?: NodePortableCompositeBuildLimits | undefined | null): NativePortableCompositeBuildResult
+  buildOrRebuildCompositeHnsw(baseMap: NativePortableProximityMap, base: NativePortableHnswIndex, config?: NodePortableCompositeConfig | undefined | null, limits?: NodePortableCompositeBuildLimits | undefined | null, rebuild?: NodePortableCompositeRebuildOptions | undefined | null): NativePortableCompositeBuildOrRebuildResult
+  buildOrRebuildCompositePq(baseMap: NativePortableProximityMap, base: NativePortableProductQuantizer, config?: NodePortableCompositeConfig | undefined | null, limits?: NodePortableCompositeBuildLimits | undefined | null, rebuild?: NodePortableCompositeRebuildOptions | undefined | null): NativePortableCompositeBuildOrRebuildResult
+  loadComposite(manifest: Buffer): NativePortableCompositeAccelerator
+  buildAcceleratorCatalog(hnsw?: NativePortableHnswIndex | undefined | null, pq?: NativePortableProductQuantizer | undefined | null, composite?: NativePortableCompositeAccelerator | undefined | null): NativePortableAcceleratorCatalog
+  loadAcceleratorCatalog(manifest: Buffer): NativePortableAcceleratorCatalog
   read(): NativePortableProximityReadSession
   count(): string
   config(): NodePortableProximityConfig

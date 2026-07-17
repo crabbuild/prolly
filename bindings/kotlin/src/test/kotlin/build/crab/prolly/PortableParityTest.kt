@@ -16,6 +16,74 @@ import org.junit.jupiter.api.assertThrows
 
 class PortableParityTest {
     @Test
+    fun compositeAndCatalogLifecycleIsPortableAndBounded() {
+        ProllyNative.useLocalDebugLibrary()
+        Engine.memory().use { engine ->
+            engine.buildProximity(
+                2u,
+                (0 until 16).map { index ->
+                    ProximityRecord(
+                        "vector-%02d".format(index).bytes(),
+                        listOf(index.toFloat(), 0f),
+                        "value-%02d".format(index).bytes(),
+                    )
+                },
+            ).use { base ->
+                base.buildHnsw().index.use { hnsw ->
+                    val (current, _) = base.mutate(
+                        listOf(ProximityMutationRecord("vector-00".bytes(), listOf(0.25f, 0f), "updated".bytes())),
+                    )
+                    current.use {
+                        val built = current.buildCompositeHnsw(base, hnsw)
+                        assertEquals(1uL, built.stats.vectorUpdatedRecords)
+                        assertEquals(0, built.reasons.size)
+                        built.accelerator!!.use { composite ->
+                            assertEquals(CompositeBaseKindRecord.HNSW, composite.baseKind)
+                            assertArrayEquals(current.descriptor, composite.currentSourceDescriptor)
+                            assertArrayEquals(base.descriptor, composite.baseSourceDescriptor)
+                            assertEquals(1uL, composite.deltaCount)
+                            assertEquals(1uL, composite.shadowCount)
+                            val request = exactProximitySearchRequest(listOf(0f, 0f), 3uL).copy(
+                                policy = SearchPolicyKind.FIXED_BUDGET,
+                                backend = SearchBackendRecord.COMPOSITE,
+                            )
+                            assertEquals(
+                                SearchBackendRecord.COMPOSITE,
+                                composite.search(current, request).backend,
+                            )
+                            composite.proveSearch(current, request).use { proof ->
+                                assertEquals(
+                                    SearchBackendRecord.COMPOSITE,
+                                    proof.verify(current.descriptor).result.backend,
+                                )
+                            }
+                            val manifest = composite.manifest
+                            current.buildAcceleratorCatalog(composite = composite).use { catalog ->
+                                assertArrayEquals(current.descriptor, catalog.sourceDescriptor)
+                                assertEquals(CatalogAcceleratorKindRecord.COMPOSITE, catalog.entries.single().kind)
+                                assertEquals(
+                                    SearchBackendRecord.COMPOSITE,
+                                    catalog.search(current, request).backend,
+                                )
+                                current.loadAcceleratorCatalog(catalog.manifest).use { loaded ->
+                                    assertArrayEquals(catalog.manifest, loaded.manifest)
+                                }
+                            }
+                            current.loadComposite(manifest).use { loaded ->
+                                assertArrayEquals(manifest, loaded.manifest)
+                            }
+                        }
+                        val forced = defaultCompositeAcceleratorConfig().copy(maxDeltaRecords = 0uL)
+                        val rebuilt = current.buildOrRebuildCompositeHnsw(base, hnsw, forced)
+                        assertEquals(CompositeBuildOrRebuildKindRecord.HNSW_REBUILT, rebuilt.kind)
+                        rebuilt.hnsw!!.close()
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
     fun productQuantizerLifecycleIsPortableAndBounded() {
         ProllyNative.useLocalDebugLibrary()
         Engine.memory().use { engine ->

@@ -4,6 +4,81 @@ require 'minitest/autorun'
 require 'prolly'
 
 class PortableParityTest < Minitest::Test
+  def test_composite_and_catalog_lifecycle_is_portable_and_bounded
+    Prolly::Engine.memory.use do |engine|
+      base = engine.build_proximity(
+        dimensions: 2,
+        records: 16.times.map do |index|
+          Prolly::ProximityRecord.new(
+            key: format('vector-%02d', index).b,
+            vector: [index.to_f, 0.0],
+            value: format('value-%02d', index).b
+          )
+        end
+      )
+      hnsw = base.build_hnsw.index
+      current, = base.mutate([
+        Prolly::ProximityMutationRecord.new(
+          key: 'vector-00'.b, vector: [0.25, 0.0], value: 'updated'.b
+        )
+      ])
+      built = current.build_composite_hnsw(base, hnsw)
+      assert_equal 1, built.stats.vector_updated_records
+      assert_empty built.reasons
+      exact = Prolly.exact_proximity_search_request([0.0, 0.0], 3)
+      request = Prolly::ProximitySearchRequestRecord.new(
+        query: exact.query, k: exact.k,
+        policy: Prolly::SearchPolicyKind::FIXED_BUDGET,
+        adaptive_quality: exact.adaptive_quality, budget: exact.budget,
+        filter: exact.filter, kernel: exact.kernel,
+        backend: Prolly::SearchBackendRecord::COMPOSITE,
+        hnsw_ef_search: exact.hnsw_ef_search,
+        pq_rerank_multiplier: exact.pq_rerank_multiplier
+      )
+      built.accelerator.use do |composite|
+        assert_equal Prolly::CompositeBaseKindRecord::HNSW, composite.base_kind
+        assert_equal current.descriptor, composite.current_source_descriptor
+        assert_equal base.descriptor, composite.base_source_descriptor
+        assert_equal 1, composite.delta_count
+        assert_equal 1, composite.shadow_count
+        assert_equal Prolly::SearchBackendRecord::COMPOSITE,
+                     composite.search(current, request).backend
+        composite.prove_search(current, request).use do |proof|
+          assert_equal Prolly::SearchBackendRecord::COMPOSITE,
+                       proof.verify(current.descriptor).result.backend
+        end
+        manifest = composite.manifest
+        current.build_accelerator_catalog(composite: composite).use do |catalog|
+          assert_equal current.descriptor, catalog.source_descriptor
+          assert_equal Prolly::CatalogAcceleratorKindRecord::COMPOSITE,
+                       catalog.entries.first.kind
+          assert_equal Prolly::SearchBackendRecord::COMPOSITE,
+                       catalog.search(current, request).backend
+          current.load_accelerator_catalog(catalog.manifest).use do |loaded|
+            assert_equal catalog.manifest, loaded.manifest
+          end
+        end
+        current.load_composite(manifest).use do |loaded|
+          assert_equal manifest, loaded.manifest
+        end
+      end
+      defaults = Prolly.default_composite_accelerator_config
+      forced = Prolly::CompositeAcceleratorConfigRecord.new(
+        max_delta_records: 0,
+        max_shadow_records: defaults.max_shadow_records,
+        max_delta_ratio_ppm: defaults.max_delta_ratio_ppm,
+        max_shadow_ratio_ppm: defaults.max_shadow_ratio_ppm,
+        base_overfetch_multiplier: defaults.base_overfetch_multiplier
+      )
+      rebuilt = current.build_or_rebuild_composite_hnsw(base, hnsw, config: forced)
+      assert_equal Prolly::CompositeBuildOrRebuildKindRecord::HNSW_REBUILT, rebuilt.kind
+      rebuilt.hnsw.close
+      hnsw.close
+      current.close
+      base.close
+    end
+  end
+
   def test_product_quantizer_lifecycle_is_portable_and_bounded
     Prolly::Engine.memory.use do |engine|
       proximity = engine.build_proximity(

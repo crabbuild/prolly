@@ -4,6 +4,10 @@ module Prolly
   ProximityRecord = Data.define(:key, :vector, :value)
   HnswBuildResult = Data.define(:index, :stats)
   ProductQuantizationBuildResult = Data.define(:index, :stats)
+  CompositeBuildOutcome = Data.define(:accelerator, :reasons, :stats)
+  CompositeBuildOrRebuildOutcome = Data.define(
+    :kind, :composite, :hnsw, :pq, :reasons, :composite_stats, :hnsw_stats, :pq_stats
+  )
 
   def self.owned_proximity_search_request(request)
     budget = request.budget
@@ -581,6 +585,88 @@ module Prolly
       end
     end
     def load_pq(manifest) = open! { ProductQuantizer.new(@native.load_pq(manifest.b)) }
+    def build_composite_hnsw(base_map, base, config: Prolly.default_composite_accelerator_config,
+                             limits: Prolly.default_composite_build_limits)
+      open! do
+        result = @native.build_composite_hnsw(
+          base_map.send(:native_for_accelerator), base.send(:native_for_composite), config, limits
+        )
+        CompositeBuildOutcome.new(
+          accelerator: result.accelerator && CompositeAccelerator.new(result.accelerator),
+          reasons: result.reasons,
+          stats: result.stats
+        )
+      end
+    end
+    def build_composite_pq(base_map, base, config: Prolly.default_composite_accelerator_config,
+                           limits: Prolly.default_composite_build_limits)
+      open! do
+        result = @native.build_composite_pq(
+          base_map.send(:native_for_accelerator), base.send(:native_for_composite), config, limits
+        )
+        CompositeBuildOutcome.new(
+          accelerator: result.accelerator && CompositeAccelerator.new(result.accelerator),
+          reasons: result.reasons,
+          stats: result.stats
+        )
+      end
+    end
+    def portable_rebuild_outcome(result)
+      CompositeBuildOrRebuildOutcome.new(
+        kind: result.kind,
+        composite: result.composite && CompositeAccelerator.new(result.composite),
+        hnsw: result.hnsw && HnswIndex.new(result.hnsw),
+        pq: result.pq && ProductQuantizer.new(result.pq),
+        reasons: result.reasons,
+        composite_stats: result.composite_stats,
+        hnsw_stats: result.hnsw_stats,
+        pq_stats: result.pq_stats
+      )
+    end
+    private :portable_rebuild_outcome
+    def build_or_rebuild_composite_hnsw(
+      base_map, base, config: Prolly.default_composite_accelerator_config,
+      limits: Prolly.default_composite_build_limits,
+      rebuild: Prolly.default_composite_rebuild_options
+    )
+      open! do
+        portable_rebuild_outcome(
+          @native.build_or_rebuild_composite_hnsw(
+            base_map.send(:native_for_accelerator), base.send(:native_for_composite),
+            config, limits, rebuild
+          )
+        )
+      end
+    end
+    def build_or_rebuild_composite_pq(
+      base_map, base, config: Prolly.default_composite_accelerator_config,
+      limits: Prolly.default_composite_build_limits,
+      rebuild: Prolly.default_composite_rebuild_options
+    )
+      open! do
+        portable_rebuild_outcome(
+          @native.build_or_rebuild_composite_pq(
+            base_map.send(:native_for_accelerator), base.send(:native_for_composite),
+            config, limits, rebuild
+          )
+        )
+      end
+    end
+    def load_composite(manifest) = open! { CompositeAccelerator.new(@native.load_composite(manifest.b)) }
+    def build_accelerator_catalog(hnsw: nil, pq: nil, composite: nil)
+      open! do
+        AcceleratorCatalog.new(
+          @native.build_accelerator_catalog(
+            hnsw&.send(:native_for_composite),
+            pq&.send(:native_for_composite),
+            composite&.send(:native_for_composite)
+          )
+        )
+      end
+    end
+    def load_accelerator_catalog(manifest)
+      open! { AcceleratorCatalog.new(@native.load_accelerator_catalog(manifest.b)) }
+    end
     def verify = open! { @native.verify }
     def prove_membership(key) = open! { @native.prove_membership(key.b) }
     def prove_search(request, limits = Prolly.default_content_graph_limits)
@@ -664,6 +750,8 @@ module Prolly
 
     private
 
+    def native_for_composite = open! { @native }
+
     def open!
       raise 'HNSW index is closed' if @closed
       yield
@@ -714,8 +802,106 @@ module Prolly
 
     private
 
+    def native_for_composite = open! { @native }
+
     def open!
       raise 'product quantizer is closed' if @closed
+      yield
+    end
+  end
+
+  class CompositeAccelerator
+    def initialize(native)
+      @native = native
+      @closed = false
+    end
+
+    def manifest = open! { @native.manifest }
+    def current_source_descriptor = open! { @native.current_source_descriptor }
+    def base_source_descriptor = open! { @native.base_source_descriptor }
+    def base_kind = open! { @native.base_kind }
+    def delta_count = open! { @native.delta_count }
+    def shadow_count = open! { @native.shadow_count }
+    def config = open! { @native.config }
+    def build_stats = open! { @native.build_stats }
+    def search(map, request)
+      open! do
+        @native.search(
+          map.send(:native_for_accelerator), Prolly.owned_proximity_search_request(request)
+        )
+      end
+    end
+    def prove_search(map, request, limits = Prolly.default_content_graph_limits)
+      open! do
+        ProximitySearchProof.new(
+          @native.prove_search(
+            map.send(:native_for_accelerator),
+            Prolly.owned_proximity_search_request(request), limits
+          )
+        )
+      end
+    end
+    def close = @closed = true
+    def use
+      raise 'composite accelerator is closed' if @closed
+      return self unless block_given?
+      begin
+        yield self
+      ensure
+        close
+      end
+    end
+
+    private
+
+    def native_for_composite = open! { @native }
+    def open!
+      raise 'composite accelerator is closed' if @closed
+      yield
+    end
+  end
+
+  class AcceleratorCatalog
+    def initialize(native)
+      @native = native
+      @closed = false
+    end
+
+    def manifest = open! { @native.manifest }
+    def source_descriptor = open! { @native.source_descriptor }
+    def entries = open! { @native.entries }
+    def search(map, request)
+      open! do
+        @native.search(
+          map.send(:native_for_accelerator), Prolly.owned_proximity_search_request(request)
+        )
+      end
+    end
+    def prove_search(map, request, limits = Prolly.default_content_graph_limits)
+      open! do
+        ProximitySearchProof.new(
+          @native.prove_search(
+            map.send(:native_for_accelerator),
+            Prolly.owned_proximity_search_request(request), limits
+          )
+        )
+      end
+    end
+    def close = @closed = true
+    def use
+      raise 'accelerator catalog is closed' if @closed
+      return self unless block_given?
+      begin
+        yield self
+      ensure
+        close
+      end
+    end
+
+    private
+
+    def open!
+      raise 'accelerator catalog is closed' if @closed
       yield
     end
   end

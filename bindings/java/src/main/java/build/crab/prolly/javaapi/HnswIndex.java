@@ -9,7 +9,7 @@ public final class HnswIndex implements AutoCloseable {
         this.nativeIndex = nativeIndex;
     }
 
-    private build.crab.prolly.api.HnswIndex open() {
+    build.crab.prolly.api.HnswIndex open() {
         if (nativeIndex == null) throw new IllegalStateException("HNSW index is closed");
         return nativeIndex;
     }

@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import build.crab.prolly.javaapi.Engine;
+import build.crab.prolly.javaapi.CompositeAcceleratorConfig;
 import build.crab.prolly.javaapi.HnswBuildLimits;
 import build.crab.prolly.javaapi.HnswConfig;
 import build.crab.prolly.javaapi.IndexEntry;
@@ -119,6 +120,79 @@ class PortableParityTest {
             }
             try (var loaded = proximity.loadHnsw(manifest)) {
                 assertArrayEquals(manifest, loaded.manifest());
+            }
+        }
+    }
+
+    @Test
+    void compositeAndCatalogLifecycleIsPortableAndBounded() throws Exception {
+        Prolly.useLocalDebugLibrary();
+        var records = new ArrayList<ProximityRecord>();
+        for (int index = 0; index < 16; index++) {
+            records.add(new ProximityRecord(
+                    bytes(String.format("vector-%02d", index)),
+                    new float[] {index, 0},
+                    bytes(String.format("value-%02d", index))));
+        }
+        try (Engine engine = Engine.memory(); var baseMap = engine.buildProximity(2, records)) {
+            var baseBuild = baseMap.buildHnsw();
+            try (var base = baseBuild.index()) {
+                var mutation = baseMap.mutate(List.of(ProximityMutation.upsert(
+                        bytes("vector-00"), new float[] {0.25f, 0}, bytes("updated"))));
+                try (var current = mutation.map()) {
+                    var built = current.buildCompositeHnsw(baseMap, base);
+                    assertTrue(built.reasons().isEmpty());
+                    assertEquals(1L, built.stats().vectorUpdatedRecords());
+                    var request = SearchRequest.fixedBudget(
+                            new float[] {0, 0},
+                            3,
+                            SearchRequest.SearchBudget.unlimited(),
+                            SearchRequest.SearchFilter.all(),
+                            SearchRequest.Kernel.AUTO_DETERMINISTIC,
+                            SearchRequest.Backend.COMPOSITE);
+                    byte[] compositeManifest;
+                    try (var composite = built.accelerator()) {
+                        assertArrayEquals(current.descriptor(), composite.currentSourceDescriptor());
+                        assertArrayEquals(baseMap.descriptor(), composite.baseSourceDescriptor());
+                        assertEquals("HNSW", composite.baseKind());
+                        assertEquals(1L, composite.deltaCount());
+                        assertEquals(1L, composite.shadowCount());
+                        assertEquals("composite", composite.search(current, request).backend());
+                        try (var proof = composite.proveSearch(current, request)) {
+                            assertEquals(
+                                    SearchBackendRecord.COMPOSITE,
+                                    proof.verify(current.descriptor()).getResult().getBackend());
+                        }
+                        compositeManifest = composite.manifest();
+                        try (var catalog = current.buildAcceleratorCatalog(null, null, composite)) {
+                            assertEquals(1, catalog.entries().size());
+                            assertEquals("composite", catalog.search(current, request).backend());
+                            var catalogManifest = catalog.manifest();
+                            try (var loaded = current.loadAcceleratorCatalog(catalogManifest)) {
+                                assertArrayEquals(catalogManifest, loaded.manifest());
+                            }
+                        }
+                    }
+                    try (var loaded = current.loadComposite(compositeManifest)) {
+                        assertArrayEquals(compositeManifest, loaded.manifest());
+                    }
+
+                    var defaults = CompositeAcceleratorConfig.defaults();
+                    var forced = new CompositeAcceleratorConfig(
+                            0,
+                            defaults.maxShadowRecords(),
+                            defaults.maxDeltaRatioPpm(),
+                            defaults.maxShadowRatioPpm(),
+                            defaults.baseOverfetchMultiplier());
+                    var rebuilt = current.buildOrRebuildCompositeHnsw(baseMap, base, forced);
+                    assertEquals(
+                            build.crab.prolly.javaapi.CompositeBuildOrRebuildOutcome.Kind.HNSW_REBUILT,
+                            rebuilt.kind());
+                    assertFalse(rebuilt.reasons().isEmpty());
+                    try (var rebuiltIndex = rebuilt.hnsw()) {
+                        assertArrayEquals(current.descriptor(), rebuiltIndex.sourceDescriptor());
+                    }
+                }
             }
         }
     }

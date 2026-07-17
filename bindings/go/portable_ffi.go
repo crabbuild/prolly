@@ -207,6 +207,13 @@ extern uint64_t uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_f
 extern uint64_t uniffi_prolly_bindings_fn_clone_bindingproximitymap(uint64_t ptr, RustCallStatus *out_err);
 extern void uniffi_prolly_bindings_fn_free_bindingproximitymap(uint64_t ptr, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximitymap_build_hnsw(uint64_t ptr, RustBuffer config, RustBuffer limits, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximitymap_build_composite_hnsw(uint64_t ptr, uint64_t base_map, uint64_t base, RustBuffer config, RustBuffer limits, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximitymap_build_composite_pq(uint64_t ptr, uint64_t base_map, uint64_t base, RustBuffer config, RustBuffer limits, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximitymap_build_or_rebuild_composite_hnsw(uint64_t ptr, uint64_t base_map, uint64_t base, RustBuffer config, RustBuffer limits, RustBuffer rebuild, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximitymap_build_or_rebuild_composite_pq(uint64_t ptr, uint64_t base_map, uint64_t base, RustBuffer config, RustBuffer limits, RustBuffer rebuild, RustCallStatus *out_err);
+extern uint64_t uniffi_prolly_bindings_fn_method_bindingproximitymap_load_composite(uint64_t ptr, RustBuffer manifest, RustCallStatus *out_err);
+extern uint64_t uniffi_prolly_bindings_fn_method_bindingproximitymap_build_accelerator_catalog(uint64_t ptr, RustBuffer hnsw, RustBuffer pq, RustBuffer composite, RustCallStatus *out_err);
+extern uint64_t uniffi_prolly_bindings_fn_method_bindingproximitymap_load_accelerator_catalog(uint64_t ptr, RustBuffer manifest, RustCallStatus *out_err);
 extern void uniffi_prolly_bindings_fn_method_bindingproximitymap_clear_content_cache(uint64_t ptr, RustCallStatus *out_err);
 extern int8_t uniffi_prolly_bindings_fn_method_bindingproximitymap_contains_key(uint64_t ptr, RustBuffer key, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximitymap_config(uint64_t ptr, RustCallStatus *out_err);
@@ -234,6 +241,9 @@ extern RustBuffer uniffi_prolly_bindings_fn_func_verify_proximity_structure_proo
 extern RustBuffer uniffi_prolly_bindings_fn_func_default_content_graph_limits(RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_func_default_hnsw_build_limits(RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_func_default_hnsw_config(RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_func_default_composite_accelerator_config(RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_func_default_composite_build_limits(RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_func_default_composite_rebuild_options(RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_func_default_pq_build_limits(RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_func_default_pq_config(RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_func_exact_proximity_search_request(RustBuffer query, uint64_t k, RustCallStatus *out_err);
@@ -258,6 +268,27 @@ extern uint64_t uniffi_prolly_bindings_fn_method_bindingproductquantizer_prove_s
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproductquantizer_quality(uint64_t ptr, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproductquantizer_search(uint64_t ptr, uint64_t map, RustBuffer request, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproductquantizer_source_descriptor(uint64_t ptr, RustCallStatus *out_err);
+
+extern uint64_t uniffi_prolly_bindings_fn_clone_bindingcompositeaccelerator(uint64_t ptr, RustCallStatus *out_err);
+extern void uniffi_prolly_bindings_fn_free_bindingcompositeaccelerator(uint64_t ptr, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_manifest(uint64_t ptr, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_current_source_descriptor(uint64_t ptr, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_base_source_descriptor(uint64_t ptr, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_base_kind(uint64_t ptr, RustCallStatus *out_err);
+extern uint64_t uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_delta_count(uint64_t ptr, RustCallStatus *out_err);
+extern uint64_t uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_shadow_count(uint64_t ptr, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_config(uint64_t ptr, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_build_stats(uint64_t ptr, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_search(uint64_t ptr, uint64_t map, RustBuffer request, RustCallStatus *out_err);
+extern uint64_t uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_prove_search(uint64_t ptr, uint64_t map, RustBuffer request, RustBuffer limits, RustCallStatus *out_err);
+
+extern uint64_t uniffi_prolly_bindings_fn_clone_bindingacceleratorcatalog(uint64_t ptr, RustCallStatus *out_err);
+extern void uniffi_prolly_bindings_fn_free_bindingacceleratorcatalog(uint64_t ptr, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_manifest(uint64_t ptr, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_source_descriptor(uint64_t ptr, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_entries(uint64_t ptr, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_search(uint64_t ptr, uint64_t map, RustBuffer request, RustCallStatus *out_err);
+extern uint64_t uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_prove_search(uint64_t ptr, uint64_t map, RustBuffer request, RustBuffer limits, RustCallStatus *out_err);
 
 extern ProllyFastScanOpenResult prolly_fast_index_cursor_open(uint64_t snapshot_handle, uint32_t query_kind, const uint8_t *start_ptr, size_t start_len, const uint8_t *end_ptr, size_t end_len, uint8_t has_end, uint8_t reverse);
 extern ProllyFastPageResult prolly_fast_index_cursor_next(uint64_t snapshot_handle, uint64_t cursor_handle, uint32_t max_records, uint64_t max_arena_bytes);
@@ -2687,6 +2718,441 @@ func ffiProductQuantizerProveSearch(index, proximity uint64, request, limits []b
 	proof := C.uniffi_prolly_bindings_fn_method_bindingproductquantizer_prove_search(
 		C.uint64_t(indexClone), C.uint64_t(mapClone), requestBuf, limitsBuf, &status,
 	)
+	return uint64(proof), portableStatusError(&status)
+}
+
+func ffiDefaultCompositeConfig() ([]byte, error) {
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_func_default_composite_accelerator_config(&status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiDefaultCompositeBuildLimits() ([]byte, error) {
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_func_default_composite_build_limits(&status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiDefaultCompositeRebuildOptions() ([]byte, error) {
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_func_default_composite_rebuild_options(&status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiCompositeInputs(current, baseMap, base uint64, cloneBase func(uint64) (uint64, error), config, limits []byte) (uint64, uint64, uint64, C.RustBuffer, C.RustBuffer, error) {
+	configBuf, err := portableInput(config)
+	if err != nil {
+		return 0, 0, 0, C.RustBuffer{}, C.RustBuffer{}, err
+	}
+	limitsBuf, err := portableInput(limits)
+	if err != nil {
+		portableFreeBuffer(configBuf)
+		return 0, 0, 0, C.RustBuffer{}, C.RustBuffer{}, err
+	}
+	currentClone, err := ffiCloneProximity(current)
+	if err != nil {
+		portableFreeBuffer(configBuf)
+		portableFreeBuffer(limitsBuf)
+		return 0, 0, 0, C.RustBuffer{}, C.RustBuffer{}, err
+	}
+	baseMapClone, err := ffiCloneProximity(baseMap)
+	if err != nil {
+		portableFreeBuffer(configBuf)
+		portableFreeBuffer(limitsBuf)
+		ffiFreeProximity(currentClone)
+		return 0, 0, 0, C.RustBuffer{}, C.RustBuffer{}, err
+	}
+	baseClone, err := cloneBase(base)
+	if err != nil {
+		portableFreeBuffer(configBuf)
+		portableFreeBuffer(limitsBuf)
+		ffiFreeProximity(currentClone)
+		ffiFreeProximity(baseMapClone)
+		return 0, 0, 0, C.RustBuffer{}, C.RustBuffer{}, err
+	}
+	return currentClone, baseMapClone, baseClone, configBuf, limitsBuf, nil
+}
+
+func ffiProximityBuildCompositeHNSW(current, baseMap, base uint64, config, limits []byte) ([]byte, error) {
+	currentClone, baseMapClone, baseClone, configBuf, limitsBuf, err := ffiCompositeInputs(current, baseMap, base, ffiCloneHNSWIndex, config, limits)
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingproximitymap_build_composite_hnsw(C.uint64_t(currentClone), C.uint64_t(baseMapClone), C.uint64_t(baseClone), configBuf, limitsBuf, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiProximityBuildCompositePQ(current, baseMap, base uint64, config, limits []byte) ([]byte, error) {
+	currentClone, baseMapClone, baseClone, configBuf, limitsBuf, err := ffiCompositeInputs(current, baseMap, base, ffiCloneProductQuantizer, config, limits)
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingproximitymap_build_composite_pq(C.uint64_t(currentClone), C.uint64_t(baseMapClone), C.uint64_t(baseClone), configBuf, limitsBuf, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiProximityRebuildCompositeHNSW(current, baseMap, base uint64, config, limits, rebuild []byte) ([]byte, error) {
+	currentClone, baseMapClone, baseClone, configBuf, limitsBuf, err := ffiCompositeInputs(current, baseMap, base, ffiCloneHNSWIndex, config, limits)
+	if err != nil {
+		return nil, err
+	}
+	rebuildBuf, err := portableInput(rebuild)
+	if err != nil {
+		portableFreeBuffer(configBuf)
+		portableFreeBuffer(limitsBuf)
+		ffiFreeProximity(currentClone)
+		ffiFreeProximity(baseMapClone)
+		ffiFreeHNSWIndex(baseClone)
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingproximitymap_build_or_rebuild_composite_hnsw(C.uint64_t(currentClone), C.uint64_t(baseMapClone), C.uint64_t(baseClone), configBuf, limitsBuf, rebuildBuf, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiProximityRebuildCompositePQ(current, baseMap, base uint64, config, limits, rebuild []byte) ([]byte, error) {
+	currentClone, baseMapClone, baseClone, configBuf, limitsBuf, err := ffiCompositeInputs(current, baseMap, base, ffiCloneProductQuantizer, config, limits)
+	if err != nil {
+		return nil, err
+	}
+	rebuildBuf, err := portableInput(rebuild)
+	if err != nil {
+		portableFreeBuffer(configBuf)
+		portableFreeBuffer(limitsBuf)
+		ffiFreeProximity(currentClone)
+		ffiFreeProximity(baseMapClone)
+		ffiFreeProductQuantizer(baseClone)
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingproximitymap_build_or_rebuild_composite_pq(C.uint64_t(currentClone), C.uint64_t(baseMapClone), C.uint64_t(baseClone), configBuf, limitsBuf, rebuildBuf, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiProximityLoadComposite(handle uint64, manifest []byte) (uint64, error) {
+	manifestBuf, err := portableInput(encodeByteArray(manifest))
+	if err != nil {
+		return 0, err
+	}
+	clone, err := ffiCloneProximity(handle)
+	if err != nil {
+		portableFreeBuffer(manifestBuf)
+		return 0, err
+	}
+	var status C.RustCallStatus
+	value := C.uniffi_prolly_bindings_fn_method_bindingproximitymap_load_composite(C.uint64_t(clone), manifestBuf, &status)
+	return uint64(value), portableStatusError(&status)
+}
+
+func ffiCloneComposite(handle uint64) (uint64, error) {
+	var status C.RustCallStatus
+	value := C.uniffi_prolly_bindings_fn_clone_bindingcompositeaccelerator(C.uint64_t(handle), &status)
+	return uint64(value), portableStatusError(&status)
+}
+func ffiFreeComposite(handle uint64) {
+	var status C.RustCallStatus
+	C.uniffi_prolly_bindings_fn_free_bindingcompositeaccelerator(C.uint64_t(handle), &status)
+}
+
+func ffiCompositeBufferCall(handle uint64, call func(C.uint64_t, *C.RustCallStatus) C.RustBuffer) ([]byte, error) {
+	clone, err := ffiCloneComposite(handle)
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := call(C.uint64_t(clone), &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+func ffiCompositeManifest(handle uint64) ([]byte, error) {
+	return ffiCompositeBufferCall(handle, func(clone C.uint64_t, status *C.RustCallStatus) C.RustBuffer {
+		return C.uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_manifest(clone, status)
+	})
+}
+func ffiCompositeCurrentSource(handle uint64) ([]byte, error) {
+	return ffiCompositeBufferCall(handle, func(clone C.uint64_t, status *C.RustCallStatus) C.RustBuffer {
+		return C.uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_current_source_descriptor(clone, status)
+	})
+}
+func ffiCompositeBaseSource(handle uint64) ([]byte, error) {
+	return ffiCompositeBufferCall(handle, func(clone C.uint64_t, status *C.RustCallStatus) C.RustBuffer {
+		return C.uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_base_source_descriptor(clone, status)
+	})
+}
+func ffiCompositeBaseKind(handle uint64) ([]byte, error) {
+	return ffiCompositeBufferCall(handle, func(clone C.uint64_t, status *C.RustCallStatus) C.RustBuffer {
+		return C.uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_base_kind(clone, status)
+	})
+}
+func ffiCompositeConfig(handle uint64) ([]byte, error) {
+	return ffiCompositeBufferCall(handle, func(clone C.uint64_t, status *C.RustCallStatus) C.RustBuffer {
+		return C.uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_config(clone, status)
+	})
+}
+func ffiCompositeBuildStats(handle uint64) ([]byte, error) {
+	return ffiCompositeBufferCall(handle, func(clone C.uint64_t, status *C.RustCallStatus) C.RustBuffer {
+		return C.uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_build_stats(clone, status)
+	})
+}
+func ffiCompositeCount(handle uint64, shadow bool) (uint64, error) {
+	clone, err := ffiCloneComposite(handle)
+	if err != nil {
+		return 0, err
+	}
+	var status C.RustCallStatus
+	var value C.uint64_t
+	if shadow {
+		value = C.uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_shadow_count(C.uint64_t(clone), &status)
+	} else {
+		value = C.uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_delta_count(C.uint64_t(clone), &status)
+	}
+	return uint64(value), portableStatusError(&status)
+}
+
+func ffiCompositeSearch(index, proximity uint64, request []byte) ([]byte, error) {
+	requestBuf, err := portableInput(request)
+	if err != nil {
+		return nil, err
+	}
+	indexClone, err := ffiCloneComposite(index)
+	if err != nil {
+		portableFreeBuffer(requestBuf)
+		return nil, err
+	}
+	mapClone, err := ffiCloneProximity(proximity)
+	if err != nil {
+		portableFreeBuffer(requestBuf)
+		ffiFreeComposite(indexClone)
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_search(C.uint64_t(indexClone), C.uint64_t(mapClone), requestBuf, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+func ffiCompositeProveSearch(index, proximity uint64, request, limits []byte) (uint64, error) {
+	requestBuf, err := portableInput(request)
+	if err != nil {
+		return 0, err
+	}
+	limitsBuf, err := portableInput(limits)
+	if err != nil {
+		portableFreeBuffer(requestBuf)
+		return 0, err
+	}
+	indexClone, err := ffiCloneComposite(index)
+	if err != nil {
+		portableFreeBuffer(requestBuf)
+		portableFreeBuffer(limitsBuf)
+		return 0, err
+	}
+	mapClone, err := ffiCloneProximity(proximity)
+	if err != nil {
+		portableFreeBuffer(requestBuf)
+		portableFreeBuffer(limitsBuf)
+		ffiFreeComposite(indexClone)
+		return 0, err
+	}
+	var status C.RustCallStatus
+	proof := C.uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_prove_search(C.uint64_t(indexClone), C.uint64_t(mapClone), requestBuf, limitsBuf, &status)
+	return uint64(proof), portableStatusError(&status)
+}
+
+func ffiProximityBuildCatalog(proximity uint64, hnsw, pq, composite *uint64) (uint64, error) {
+	cloneOptional := func(value *uint64, clone func(uint64) (uint64, error)) (*uint64, error) {
+		if value == nil {
+			return nil, nil
+		}
+		result, err := clone(*value)
+		return &result, err
+	}
+	hnswClone, err := cloneOptional(hnsw, ffiCloneHNSWIndex)
+	if err != nil {
+		return 0, err
+	}
+	pqClone, err := cloneOptional(pq, ffiCloneProductQuantizer)
+	if err != nil {
+		if hnswClone != nil {
+			ffiFreeHNSWIndex(*hnswClone)
+		}
+		return 0, err
+	}
+	compositeClone, err := cloneOptional(composite, ffiCloneComposite)
+	if err != nil {
+		if hnswClone != nil {
+			ffiFreeHNSWIndex(*hnswClone)
+		}
+		if pqClone != nil {
+			ffiFreeProductQuantizer(*pqClone)
+		}
+		return 0, err
+	}
+	freeClones := func() {
+		if hnswClone != nil {
+			ffiFreeHNSWIndex(*hnswClone)
+		}
+		if pqClone != nil {
+			ffiFreeProductQuantizer(*pqClone)
+		}
+		if compositeClone != nil {
+			ffiFreeComposite(*compositeClone)
+		}
+	}
+	hnswBuf, err := portableInput(encodeOptionalU64Bytes(hnswClone))
+	if err != nil {
+		freeClones()
+		return 0, err
+	}
+	pqBuf, err := portableInput(encodeOptionalU64Bytes(pqClone))
+	if err != nil {
+		portableFreeBuffer(hnswBuf)
+		freeClones()
+		return 0, err
+	}
+	compositeBuf, err := portableInput(encodeOptionalU64Bytes(compositeClone))
+	if err != nil {
+		portableFreeBuffer(hnswBuf)
+		portableFreeBuffer(pqBuf)
+		freeClones()
+		return 0, err
+	}
+	mapClone, err := ffiCloneProximity(proximity)
+	if err != nil {
+		portableFreeBuffer(hnswBuf)
+		portableFreeBuffer(pqBuf)
+		portableFreeBuffer(compositeBuf)
+		freeClones()
+		return 0, err
+	}
+	var status C.RustCallStatus
+	value := C.uniffi_prolly_bindings_fn_method_bindingproximitymap_build_accelerator_catalog(C.uint64_t(mapClone), hnswBuf, pqBuf, compositeBuf, &status)
+	return uint64(value), portableStatusError(&status)
+}
+func ffiProximityLoadCatalog(handle uint64, manifest []byte) (uint64, error) {
+	manifestBuf, err := portableInput(encodeByteArray(manifest))
+	if err != nil {
+		return 0, err
+	}
+	clone, err := ffiCloneProximity(handle)
+	if err != nil {
+		portableFreeBuffer(manifestBuf)
+		return 0, err
+	}
+	var status C.RustCallStatus
+	value := C.uniffi_prolly_bindings_fn_method_bindingproximitymap_load_accelerator_catalog(C.uint64_t(clone), manifestBuf, &status)
+	return uint64(value), portableStatusError(&status)
+}
+func ffiCloneCatalog(handle uint64) (uint64, error) {
+	var status C.RustCallStatus
+	value := C.uniffi_prolly_bindings_fn_clone_bindingacceleratorcatalog(C.uint64_t(handle), &status)
+	return uint64(value), portableStatusError(&status)
+}
+func ffiFreeCatalog(handle uint64) {
+	var status C.RustCallStatus
+	C.uniffi_prolly_bindings_fn_free_bindingacceleratorcatalog(C.uint64_t(handle), &status)
+}
+func ffiCatalogBufferCall(handle uint64, call func(C.uint64_t, *C.RustCallStatus) C.RustBuffer) ([]byte, error) {
+	clone, err := ffiCloneCatalog(handle)
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := call(C.uint64_t(clone), &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+func ffiCatalogManifest(handle uint64) ([]byte, error) {
+	return ffiCatalogBufferCall(handle, func(clone C.uint64_t, status *C.RustCallStatus) C.RustBuffer {
+		return C.uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_manifest(clone, status)
+	})
+}
+func ffiCatalogSource(handle uint64) ([]byte, error) {
+	return ffiCatalogBufferCall(handle, func(clone C.uint64_t, status *C.RustCallStatus) C.RustBuffer {
+		return C.uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_source_descriptor(clone, status)
+	})
+}
+func ffiCatalogEntries(handle uint64) ([]byte, error) {
+	return ffiCatalogBufferCall(handle, func(clone C.uint64_t, status *C.RustCallStatus) C.RustBuffer {
+		return C.uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_entries(clone, status)
+	})
+}
+func ffiCatalogSearch(index, proximity uint64, request []byte) ([]byte, error) {
+	requestBuf, err := portableInput(request)
+	if err != nil {
+		return nil, err
+	}
+	indexClone, err := ffiCloneCatalog(index)
+	if err != nil {
+		portableFreeBuffer(requestBuf)
+		return nil, err
+	}
+	mapClone, err := ffiCloneProximity(proximity)
+	if err != nil {
+		portableFreeBuffer(requestBuf)
+		ffiFreeCatalog(indexClone)
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_search(C.uint64_t(indexClone), C.uint64_t(mapClone), requestBuf, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+func ffiCatalogProveSearch(index, proximity uint64, request, limits []byte) (uint64, error) {
+	requestBuf, err := portableInput(request)
+	if err != nil {
+		return 0, err
+	}
+	limitsBuf, err := portableInput(limits)
+	if err != nil {
+		portableFreeBuffer(requestBuf)
+		return 0, err
+	}
+	indexClone, err := ffiCloneCatalog(index)
+	if err != nil {
+		portableFreeBuffer(requestBuf)
+		portableFreeBuffer(limitsBuf)
+		return 0, err
+	}
+	mapClone, err := ffiCloneProximity(proximity)
+	if err != nil {
+		portableFreeBuffer(requestBuf)
+		portableFreeBuffer(limitsBuf)
+		ffiFreeCatalog(indexClone)
+		return 0, err
+	}
+	var status C.RustCallStatus
+	proof := C.uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_prove_search(C.uint64_t(indexClone), C.uint64_t(mapClone), requestBuf, limitsBuf, &status)
 	return uint64(proof), portableStatusError(&status)
 }
 

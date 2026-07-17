@@ -2,14 +2,18 @@ use super::{js_error, WasmProllyEngine};
 use crate::page::set_bytes;
 use js_sys::{Array, BigInt, Float32Array, Object, Reflect, Uint8Array};
 use prolly::{
-    AdaptiveQuality, BuildParallelism, Cid, ContentGraphLimits, DistanceMetric, HnswBuildLimits,
-    HnswBuildStats, HnswConfig, HnswIndex, HnswRoutingVectorEncoding, HnswSearchOptions,
-    PlannerPolicy, PqSearchOptions, ProductQuantizationBuildLimits, ProductQuantizationBuildStats,
-    ProductQuantizationConfig, ProductQuantizationQuality, ProductQuantizer, ProximityConfig,
-    ProximityFilter, ProximityMap, ProximityMembershipProof, ProximityMutation, ProximityRecord,
-    ProximitySearchClaim, ProximitySearchProof, ProximityStructuralProof, ProximityVerification,
-    QueryKernel, SearchBackend, SearchBudget, SearchCompletion, SearchOptions, SearchPolicy,
-    SearchRequest,
+    AcceleratorCatalog, AcceleratorSet, AdaptiveQuality, BuildParallelism, CatalogAcceleratorKind,
+    Cid, CompositeAccelerator, CompositeAcceleratorConfig, CompositeBase, CompositeBaseKind,
+    CompositeBuildLimits, CompositeBuildOrRebuildOutcome, CompositeBuildOutcome,
+    CompositeBuildStats, CompositeRebuildOptions, ContentGraphLimits, DistanceMetric,
+    FullRebuildReason, HnswBuildLimits, HnswBuildStats, HnswConfig, HnswIndex,
+    HnswRoutingVectorEncoding, HnswSearchOptions, PlannerPolicy, PqSearchOptions,
+    ProductQuantizationBuildLimits, ProductQuantizationBuildStats, ProductQuantizationConfig,
+    ProductQuantizationQuality, ProductQuantizer, ProximityConfig, ProximityFilter, ProximityMap,
+    ProximityMembershipProof, ProximityMutation, ProximityRecord, ProximitySearchClaim,
+    ProximitySearchProof, ProximityStructuralProof, ProximityVerification, QueryKernel,
+    SearchBackend, SearchBudget, SearchCompletion, SearchIo, SearchOptions, SearchPolicy,
+    SearchRequest, SearchRuntime,
 };
 use std::sync::Arc;
 use wasm_bindgen::prelude::*;
@@ -323,6 +327,291 @@ fn pq_quality_object(quality: ProductQuantizationQuality) -> Result<Object, JsVa
     Ok(object)
 }
 
+fn composite_config_from_js(value: &JsValue) -> Result<CompositeAcceleratorConfig, JsValue> {
+    if value.is_null() || value.is_undefined() {
+        return Ok(CompositeAcceleratorConfig::default());
+    }
+    Ok(CompositeAcceleratorConfig {
+        max_delta_records: required_string_usize(value, "maxDeltaRecords")?,
+        max_shadow_records: required_string_usize(value, "maxShadowRecords")?,
+        max_delta_ratio_ppm: required_u32(value, "maxDeltaRatioPpm")?,
+        max_shadow_ratio_ppm: required_u32(value, "maxShadowRatioPpm")?,
+        base_overfetch_multiplier: required_u32(value, "baseOverfetchMultiplier")?,
+    })
+}
+
+fn composite_config_object(config: &CompositeAcceleratorConfig) -> Result<Object, JsValue> {
+    let object = Object::new();
+    Reflect::set(
+        &object,
+        &"maxDeltaRecords".into(),
+        &BigInt::from(config.max_delta_records as u64),
+    )?;
+    Reflect::set(
+        &object,
+        &"maxShadowRecords".into(),
+        &BigInt::from(config.max_shadow_records as u64),
+    )?;
+    Reflect::set(
+        &object,
+        &"maxDeltaRatioPpm".into(),
+        &JsValue::from_f64(config.max_delta_ratio_ppm as f64),
+    )?;
+    Reflect::set(
+        &object,
+        &"maxShadowRatioPpm".into(),
+        &JsValue::from_f64(config.max_shadow_ratio_ppm as f64),
+    )?;
+    Reflect::set(
+        &object,
+        &"baseOverfetchMultiplier".into(),
+        &JsValue::from_f64(config.base_overfetch_multiplier as f64),
+    )?;
+    Ok(object)
+}
+
+fn composite_limits_from_js(value: &JsValue) -> Result<CompositeBuildLimits, JsValue> {
+    if value.is_null() || value.is_undefined() {
+        return Ok(CompositeBuildLimits::default());
+    }
+    Ok(CompositeBuildLimits {
+        max_diff_entries: optional_string_usize(value, "maxDiffEntries")?,
+        max_owned_bytes: optional_string_usize(value, "maxOwnedBytes")?,
+        max_encoded_output_bytes: optional_string_usize(value, "maxEncodedOutputBytes")?,
+        max_distance_evaluations: optional_string_usize(value, "maxDistanceEvaluations")?,
+    })
+}
+
+fn composite_stats_object(stats: &CompositeBuildStats) -> Result<Object, JsValue> {
+    let object = Object::new();
+    for (name, value) in [
+        ("diffEntries", stats.diff_entries),
+        ("insertedRecords", stats.inserted_records),
+        ("vectorUpdatedRecords", stats.vector_updated_records),
+        ("valueOnlyRecords", stats.value_only_records),
+        ("deletedRecords", stats.deleted_records),
+        ("deltaRecords", stats.delta_records),
+        ("shadowRecords", stats.shadow_records),
+        ("ownedBytesPeak", stats.owned_bytes_peak),
+        ("encodedOutputBytes", stats.encoded_output_bytes),
+        ("distanceEvaluations", stats.distance_evaluations),
+    ] {
+        Reflect::set(&object, &name.into(), &BigInt::from(value as u64))?;
+    }
+    Ok(object)
+}
+
+fn rebuild_reason_object(reason: &FullRebuildReason) -> Result<Object, JsValue> {
+    let object = Object::new();
+    let (kind, actual, maximum) = match reason {
+        FullRebuildReason::DeltaRecords { actual, maximum } => {
+            ("delta_records", *actual as u64, *maximum as u64)
+        }
+        FullRebuildReason::ShadowRecords { actual, maximum } => {
+            ("shadow_records", *actual as u64, *maximum as u64)
+        }
+        FullRebuildReason::DeltaRatio {
+            actual_ppm,
+            maximum_ppm,
+        } => (
+            "delta_ratio",
+            u64::from(*actual_ppm),
+            u64::from(*maximum_ppm),
+        ),
+        FullRebuildReason::ShadowRatio {
+            actual_ppm,
+            maximum_ppm,
+        } => (
+            "shadow_ratio",
+            u64::from(*actual_ppm),
+            u64::from(*maximum_ppm),
+        ),
+    };
+    Reflect::set(&object, &"kind".into(), &kind.into())?;
+    Reflect::set(&object, &"actual".into(), &BigInt::from(actual))?;
+    Reflect::set(&object, &"maximum".into(), &BigInt::from(maximum))?;
+    Ok(object)
+}
+
+fn rebuild_reasons_array(reasons: &[FullRebuildReason]) -> Result<Array, JsValue> {
+    let array = Array::new();
+    for reason in reasons {
+        array.push(&rebuild_reason_object(reason)?.into());
+    }
+    Ok(array)
+}
+
+fn composite_rebuild_options_from_js(value: &JsValue) -> Result<CompositeRebuildOptions, JsValue> {
+    if value.is_null() || value.is_undefined() {
+        return Ok(CompositeRebuildOptions::default());
+    }
+    let hnsw = optional_field(value, "hnswLimits")?.unwrap_or(JsValue::UNDEFINED);
+    let pq_limits = optional_field(value, "pqLimits")?.unwrap_or(JsValue::UNDEFINED);
+    let threads = optional_field(value, "pqWorkerThreads")?
+        .map(|value| {
+            value
+                .as_string()
+                .ok_or_else(|| {
+                    JsValue::from_str("pqWorkerThreads must be an unsigned integer string")
+                })?
+                .parse::<usize>()
+                .map_err(|error| JsValue::from_str(&format!("invalid pqWorkerThreads: {error}")))
+        })
+        .transpose()?
+        .unwrap_or(1);
+    if threads != 1 {
+        return Err(JsValue::from_str(
+            "browser-safe WASM composite PQ rebuild requires pqWorkerThreads = 1",
+        ));
+    }
+    Ok(CompositeRebuildOptions {
+        hnsw_limits: hnsw_build_limits_from_js(&hnsw)?,
+        pq_parallelism: BuildParallelism::serial(),
+        pq_limits: pq_build_limits_from_js(&pq_limits)?,
+    })
+}
+
+fn composite_build_outcome_object(
+    engine: Arc<super::WasmEngine>,
+    outcome: CompositeBuildOutcome<Arc<prolly::MemStore>>,
+) -> Result<Object, JsValue> {
+    let object = Object::new();
+    match outcome {
+        CompositeBuildOutcome::Composite { accelerator, stats } => {
+            Reflect::set(
+                &object,
+                &"accelerator".into(),
+                &JsValue::from(WasmCompositeAccelerator {
+                    engine,
+                    inner: *accelerator,
+                }),
+            )?;
+            Reflect::set(&object, &"reasons".into(), &Array::new().into())?;
+            Reflect::set(
+                &object,
+                &"stats".into(),
+                &composite_stats_object(&stats)?.into(),
+            )?;
+        }
+        CompositeBuildOutcome::FullRebuildRequired { reasons, stats } => {
+            Reflect::set(
+                &object,
+                &"reasons".into(),
+                &rebuild_reasons_array(&reasons)?.into(),
+            )?;
+            Reflect::set(
+                &object,
+                &"stats".into(),
+                &composite_stats_object(&stats)?.into(),
+            )?;
+        }
+    }
+    Ok(object)
+}
+
+fn composite_rebuild_outcome_object(
+    engine: Arc<super::WasmEngine>,
+    outcome: CompositeBuildOrRebuildOutcome<Arc<prolly::MemStore>>,
+) -> Result<Object, JsValue> {
+    let object = Object::new();
+    match outcome {
+        CompositeBuildOrRebuildOutcome::Composite { accelerator, stats } => {
+            Reflect::set(&object, &"kind".into(), &"composite".into())?;
+            Reflect::set(
+                &object,
+                &"composite".into(),
+                &JsValue::from(WasmCompositeAccelerator {
+                    engine,
+                    inner: *accelerator,
+                }),
+            )?;
+            Reflect::set(&object, &"reasons".into(), &Array::new().into())?;
+            Reflect::set(
+                &object,
+                &"compositeStats".into(),
+                &composite_stats_object(&stats)?.into(),
+            )?;
+        }
+        CompositeBuildOrRebuildOutcome::NoAcceleratorRequired {
+            reasons,
+            composite_stats,
+        } => {
+            Reflect::set(&object, &"kind".into(), &"no_accelerator_required".into())?;
+            Reflect::set(
+                &object,
+                &"reasons".into(),
+                &rebuild_reasons_array(&reasons)?.into(),
+            )?;
+            Reflect::set(
+                &object,
+                &"compositeStats".into(),
+                &composite_stats_object(&composite_stats)?.into(),
+            )?;
+        }
+        CompositeBuildOrRebuildOutcome::HnswRebuilt {
+            accelerator,
+            reasons,
+            composite_stats,
+            rebuild_stats,
+        } => {
+            Reflect::set(&object, &"kind".into(), &"hnsw_rebuilt".into())?;
+            Reflect::set(
+                &object,
+                &"hnsw".into(),
+                &JsValue::from(WasmHnswIndex {
+                    inner: *accelerator,
+                }),
+            )?;
+            Reflect::set(
+                &object,
+                &"reasons".into(),
+                &rebuild_reasons_array(&reasons)?.into(),
+            )?;
+            Reflect::set(
+                &object,
+                &"compositeStats".into(),
+                &composite_stats_object(&composite_stats)?.into(),
+            )?;
+            Reflect::set(
+                &object,
+                &"hnswStats".into(),
+                &hnsw_build_stats_object(rebuild_stats)?.into(),
+            )?;
+        }
+        CompositeBuildOrRebuildOutcome::ProductQuantizedRebuilt {
+            accelerator,
+            reasons,
+            composite_stats,
+            rebuild_stats,
+        } => {
+            Reflect::set(&object, &"kind".into(), &"product_quantized_rebuilt".into())?;
+            Reflect::set(
+                &object,
+                &"pq".into(),
+                &JsValue::from(WasmProductQuantizer {
+                    inner: *accelerator,
+                }),
+            )?;
+            Reflect::set(
+                &object,
+                &"reasons".into(),
+                &rebuild_reasons_array(&reasons)?.into(),
+            )?;
+            Reflect::set(
+                &object,
+                &"compositeStats".into(),
+                &composite_stats_object(&composite_stats)?.into(),
+            )?;
+            Reflect::set(
+                &object,
+                &"pqStats".into(),
+                &pq_build_stats_object(rebuild_stats)?.into(),
+            )?;
+        }
+    }
+    Ok(object)
+}
+
 fn optional_u32(value: &JsValue, name: &str) -> Result<Option<u32>, JsValue> {
     optional_field(value, name)?
         .map(|value| {
@@ -585,6 +874,207 @@ impl WasmProximityMap {
         }
         Ok(WasmProductQuantizer { inner: index })
     }
+    #[wasm_bindgen(js_name = buildCompositeHnsw)]
+    pub fn build_composite_hnsw(
+        &self,
+        base_map: &WasmProximityMap,
+        base: &WasmHnswIndex,
+        config: JsValue,
+        limits: JsValue,
+    ) -> Result<Object, JsValue> {
+        let current = self.load()?;
+        let base_map = base_map.load()?;
+        let base = HnswIndex::load(
+            self.engine.store().clone(),
+            base.inner.manifest_cid().clone(),
+        )
+        .map_err(js_error)?;
+        let outcome = CompositeAccelerator::build(
+            &base_map,
+            &current,
+            CompositeBase::Hnsw(base),
+            composite_config_from_js(&config)?,
+            composite_limits_from_js(&limits)?,
+        )
+        .map_err(js_error)?;
+        composite_build_outcome_object(Arc::clone(&self.engine), outcome)
+    }
+    #[wasm_bindgen(js_name = buildCompositePq)]
+    pub fn build_composite_pq(
+        &self,
+        base_map: &WasmProximityMap,
+        base: &WasmProductQuantizer,
+        config: JsValue,
+        limits: JsValue,
+    ) -> Result<Object, JsValue> {
+        let current = self.load()?;
+        let base_map = base_map.load()?;
+        let base = ProductQuantizer::load(
+            self.engine.store().clone(),
+            base.inner.manifest_cid().clone(),
+        )
+        .map_err(js_error)?;
+        let outcome = CompositeAccelerator::build(
+            &base_map,
+            &current,
+            CompositeBase::ProductQuantized(base),
+            composite_config_from_js(&config)?,
+            composite_limits_from_js(&limits)?,
+        )
+        .map_err(js_error)?;
+        composite_build_outcome_object(Arc::clone(&self.engine), outcome)
+    }
+    #[wasm_bindgen(js_name = buildOrRebuildCompositeHnsw)]
+    pub fn build_or_rebuild_composite_hnsw(
+        &self,
+        base_map: &WasmProximityMap,
+        base: &WasmHnswIndex,
+        config: JsValue,
+        limits: JsValue,
+        rebuild: JsValue,
+    ) -> Result<Object, JsValue> {
+        let current = self.load()?;
+        let base_map = base_map.load()?;
+        let base = HnswIndex::load(
+            self.engine.store().clone(),
+            base.inner.manifest_cid().clone(),
+        )
+        .map_err(js_error)?;
+        let outcome = CompositeAccelerator::build_or_rebuild(
+            &base_map,
+            &current,
+            CompositeBase::Hnsw(base),
+            composite_config_from_js(&config)?,
+            composite_limits_from_js(&limits)?,
+            composite_rebuild_options_from_js(&rebuild)?,
+        )
+        .map_err(js_error)?;
+        composite_rebuild_outcome_object(Arc::clone(&self.engine), outcome)
+    }
+    #[wasm_bindgen(js_name = buildOrRebuildCompositePq)]
+    pub fn build_or_rebuild_composite_pq(
+        &self,
+        base_map: &WasmProximityMap,
+        base: &WasmProductQuantizer,
+        config: JsValue,
+        limits: JsValue,
+        rebuild: JsValue,
+    ) -> Result<Object, JsValue> {
+        let current = self.load()?;
+        let base_map = base_map.load()?;
+        let base = ProductQuantizer::load(
+            self.engine.store().clone(),
+            base.inner.manifest_cid().clone(),
+        )
+        .map_err(js_error)?;
+        let outcome = CompositeAccelerator::build_or_rebuild(
+            &base_map,
+            &current,
+            CompositeBase::ProductQuantized(base),
+            composite_config_from_js(&config)?,
+            composite_limits_from_js(&limits)?,
+            composite_rebuild_options_from_js(&rebuild)?,
+        )
+        .map_err(js_error)?;
+        composite_rebuild_outcome_object(Arc::clone(&self.engine), outcome)
+    }
+    #[wasm_bindgen(js_name = loadComposite)]
+    pub fn load_composite(
+        &self,
+        manifest: Uint8Array,
+    ) -> Result<WasmCompositeAccelerator, JsValue> {
+        let raw: [u8; 32] = manifest
+            .to_vec()
+            .try_into()
+            .map_err(|_| JsValue::from_str("composite manifest CID must be 32 bytes"))?;
+        let inner =
+            CompositeAccelerator::load(self.engine.store().clone(), Cid(raw)).map_err(js_error)?;
+        if inner.current_source_descriptor() != &self.descriptor {
+            return Err(JsValue::from_str(
+                "composite accelerator is bound to a different source descriptor",
+            ));
+        }
+        Ok(WasmCompositeAccelerator {
+            engine: Arc::clone(&self.engine),
+            inner,
+        })
+    }
+    #[wasm_bindgen(js_name = buildAcceleratorCatalog)]
+    pub fn build_accelerator_catalog(
+        &self,
+        hnsw: Option<Uint8Array>,
+        pq: Option<Uint8Array>,
+        composite: Option<Uint8Array>,
+    ) -> Result<WasmAcceleratorCatalog, JsValue> {
+        let map = self.load()?;
+        let mut set = AcceleratorSet::empty();
+        if let Some(value) = hnsw {
+            set = set
+                .with_hnsw(
+                    map.tree(),
+                    HnswIndex::load(
+                        self.engine.store().clone(),
+                        Cid(value.to_vec().try_into().map_err(|_| {
+                            JsValue::from_str("HNSW manifest CID must be 32 bytes")
+                        })?),
+                    )
+                    .map_err(js_error)?,
+                )
+                .map_err(js_error)?;
+        }
+        if let Some(value) = pq {
+            set = set
+                .with_pq(
+                    map.tree(),
+                    ProductQuantizer::load(
+                        self.engine.store().clone(),
+                        Cid(value
+                            .to_vec()
+                            .try_into()
+                            .map_err(|_| JsValue::from_str("PQ manifest CID must be 32 bytes"))?),
+                    )
+                    .map_err(js_error)?,
+                )
+                .map_err(js_error)?;
+        }
+        if let Some(value) = composite {
+            set = set
+                .with_composite(
+                    map.tree(),
+                    CompositeAccelerator::load(
+                        self.engine.store().clone(),
+                        Cid(value.to_vec().try_into().map_err(|_| {
+                            JsValue::from_str("composite manifest CID must be 32 bytes")
+                        })?),
+                    )
+                    .map_err(js_error)?,
+                )
+                .map_err(js_error)?;
+        }
+        let inner = AcceleratorCatalog::build(self.engine.store().clone(), map.tree(), set)
+            .map_err(js_error)?;
+        Ok(WasmAcceleratorCatalog {
+            engine: Arc::clone(&self.engine),
+            inner,
+        })
+    }
+    #[wasm_bindgen(js_name = loadAcceleratorCatalog)]
+    pub fn load_accelerator_catalog(
+        &self,
+        manifest: Uint8Array,
+    ) -> Result<WasmAcceleratorCatalog, JsValue> {
+        let raw: [u8; 32] = manifest
+            .to_vec()
+            .try_into()
+            .map_err(|_| JsValue::from_str("accelerator catalog manifest CID must be 32 bytes"))?;
+        let map = self.load()?;
+        let inner = AcceleratorCatalog::load(self.engine.store().clone(), Cid(raw), map.tree())
+            .map_err(js_error)?;
+        Ok(WasmAcceleratorCatalog {
+            engine: Arc::clone(&self.engine),
+            inner,
+        })
+    }
     pub fn verify(&self) -> Result<Object, JsValue> {
         proximity_verification_object(self.load()?.verify().map_err(js_error)?)
     }
@@ -786,6 +1276,145 @@ impl WasmProductQuantizer {
             .and_then(search_result_object)
     }
 
+    #[wasm_bindgen(js_name = proveSearch)]
+    pub fn prove_search(
+        &self,
+        map: &WasmProximityMap,
+        request: JsValue,
+    ) -> Result<WasmProximitySearchProof, JsValue> {
+        let request = owned_search_request(request)?;
+        let map = map.load()?;
+        self.inner
+            .prove_search(&map, request.as_request(), &ContentGraphLimits::default())
+            .map(|inner| WasmProximitySearchProof { inner })
+            .map_err(js_error)
+    }
+}
+
+#[wasm_bindgen(js_name = WasmCompositeAccelerator)]
+pub struct WasmCompositeAccelerator {
+    engine: Arc<super::WasmEngine>,
+    inner: CompositeAccelerator<Arc<prolly::MemStore>>,
+}
+
+#[wasm_bindgen(js_class = WasmCompositeAccelerator)]
+impl WasmCompositeAccelerator {
+    pub fn manifest(&self) -> Vec<u8> {
+        self.inner.manifest_cid().as_bytes().to_vec()
+    }
+    #[wasm_bindgen(js_name = currentSourceDescriptor)]
+    pub fn current_source_descriptor(&self) -> Vec<u8> {
+        self.inner.current_source_descriptor().as_bytes().to_vec()
+    }
+    #[wasm_bindgen(js_name = baseSourceDescriptor)]
+    pub fn base_source_descriptor(&self) -> Vec<u8> {
+        self.inner.base_source_descriptor().as_bytes().to_vec()
+    }
+    #[wasm_bindgen(js_name = baseKind)]
+    pub fn base_kind(&self) -> String {
+        match self.inner.base_kind() {
+            CompositeBaseKind::Hnsw => "hnsw",
+            CompositeBaseKind::ProductQuantized => "product_quantized",
+        }
+        .to_string()
+    }
+    #[wasm_bindgen(js_name = deltaCount)]
+    pub fn delta_count(&self) -> String {
+        self.inner.delta_count().to_string()
+    }
+    #[wasm_bindgen(js_name = shadowCount)]
+    pub fn shadow_count(&self) -> String {
+        self.inner.shadow_count().to_string()
+    }
+    pub fn config(&self) -> Result<Object, JsValue> {
+        composite_config_object(self.inner.config())
+    }
+    #[wasm_bindgen(js_name = buildStats)]
+    pub fn build_stats(&self) -> Result<Object, JsValue> {
+        composite_stats_object(self.inner.build_stats())
+    }
+    pub fn search(&self, map: &WasmProximityMap, request: JsValue) -> Result<Object, JsValue> {
+        let request = owned_search_request(request)?;
+        let map_value = map.load()?;
+        let composite = CompositeAccelerator::load(
+            self.engine.store().clone(),
+            self.inner.manifest_cid().clone(),
+        )
+        .map_err(js_error)?;
+        let accelerators = AcceleratorSet::empty()
+            .with_composite(map_value.tree(), composite)
+            .map_err(js_error)?;
+        let io = SearchIo::new(
+            self.engine.store().clone(),
+            Arc::new(SearchRuntime::default()),
+        );
+        map_value
+            .search_with(&accelerators, &io, request.as_request())
+            .map_err(js_error)
+            .and_then(search_result_object)
+    }
+    #[wasm_bindgen(js_name = proveSearch)]
+    pub fn prove_search(
+        &self,
+        map: &WasmProximityMap,
+        request: JsValue,
+    ) -> Result<WasmProximitySearchProof, JsValue> {
+        let request = owned_search_request(request)?;
+        let map = map.load()?;
+        self.inner
+            .prove_search(&map, request.as_request(), &ContentGraphLimits::default())
+            .map(|inner| WasmProximitySearchProof { inner })
+            .map_err(js_error)
+    }
+}
+
+#[wasm_bindgen(js_name = WasmAcceleratorCatalog)]
+pub struct WasmAcceleratorCatalog {
+    engine: Arc<super::WasmEngine>,
+    inner: AcceleratorCatalog<Arc<prolly::MemStore>>,
+}
+
+#[wasm_bindgen(js_class = WasmAcceleratorCatalog)]
+impl WasmAcceleratorCatalog {
+    pub fn manifest(&self) -> Vec<u8> {
+        self.inner.manifest_cid().as_bytes().to_vec()
+    }
+    #[wasm_bindgen(js_name = sourceDescriptor)]
+    pub fn source_descriptor(&self) -> Vec<u8> {
+        self.inner.source_descriptor().as_bytes().to_vec()
+    }
+    pub fn entries(&self) -> Result<Array, JsValue> {
+        let array = Array::new();
+        for entry in self.inner.entries() {
+            let object = Object::new();
+            let kind = match entry.kind {
+                CatalogAcceleratorKind::Hnsw => "hnsw",
+                CatalogAcceleratorKind::ProductQuantized => "product_quantized",
+                CatalogAcceleratorKind::Composite => "composite",
+            };
+            Reflect::set(&object, &"kind".into(), &kind.into())?;
+            set_bytes(
+                &object,
+                "configurationFingerprint",
+                entry.configuration_fingerprint.as_bytes(),
+            )?;
+            set_bytes(&object, "manifest", entry.manifest.as_bytes())?;
+            array.push(&object);
+        }
+        Ok(array)
+    }
+    pub fn search(&self, map: &WasmProximityMap, request: JsValue) -> Result<Object, JsValue> {
+        let request = owned_search_request(request)?;
+        let map_value = map.load()?;
+        let io = SearchIo::new(
+            self.engine.store().clone(),
+            Arc::new(SearchRuntime::default()),
+        );
+        map_value
+            .search_with(self.inner.accelerators(), &io, request.as_request())
+            .map_err(js_error)
+            .and_then(search_result_object)
+    }
     #[wasm_bindgen(js_name = proveSearch)]
     pub fn prove_search(
         &self,
