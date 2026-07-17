@@ -110,6 +110,19 @@ Host store callbacks are powerful but should be treated as a storage boundary.
 CAS methods must be implemented with real compare-and-swap behavior if multiple
 workers can publish the same root name.
 
+Version-1 remote-store provider gems live under `stores/` and accept
+caller-owned SDK clients. The SQLite provider borrows an
+`SQLite3::Database`, serializes operations, and leaves connection lifetime to
+the application. Verify it from the repository root:
+
+```sh
+PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" \
+  BUNDLE_GEMFILE=bindings/ruby/stores/sqlite/Gemfile \
+  BUNDLE_PATH=/tmp/prolly-ruby-sqlite-bundle \
+  bundle exec ruby -Ibindings/ruby/stores/sqlite/lib \
+  bindings/ruby/stores/sqlite/test/sqlite_store_test.rb
+```
+
 ## Large Values And GC
 
 Large-value helpers separate small indexable keys from large payloads. Publish

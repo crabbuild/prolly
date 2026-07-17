@@ -14,6 +14,8 @@ let package = Package(
     products: [
         .library(name: "Prolly", targets: ["Prolly"]),
         .library(name: "ProllyAPI", targets: ["ProllyAPI"]),
+        .library(name: "ProllyStoreSQLite", targets: ["ProllyStoreSQLite"]),
+        .executable(name: "prolly-store-sqlite-check", targets: ["StoreSQLiteCheck"]),
         .executable(name: "prolly-agent-event-log", targets: ["AgentEventLog"]),
         .executable(name: "prolly-background-compaction", targets: ["BackgroundCompaction"]),
         .executable(name: "prolly-basic-map", targets: ["BasicMap"]),
@@ -36,6 +38,7 @@ let package = Package(
         .executable(name: "prolly-fixture-check", targets: ["FixtureCheck"]),
     ],
     targets: [
+        .systemLibrary(name: "CSQLite", pkgConfig: "sqlite3"),
         .target(
             name: "prollyFFI",
             publicHeadersPath: "include"
@@ -52,6 +55,16 @@ let package = Package(
         .target(
             name: "ProllyAPI",
             dependencies: ["Prolly", "prollyFFI"]
+        ),
+        .target(
+            name: "ProllyStoreSQLite",
+            dependencies: ["Prolly", "CSQLite"],
+            exclude: ["README.md"]
+        ),
+        .executableTarget(
+            name: "StoreSQLiteCheck",
+            dependencies: ["Prolly", "ProllyStoreSQLite", "CSQLite"],
+            path: "Examples/StoreSQLiteCheck"
         ),
         .testTarget(
             name: "ProllyTests",

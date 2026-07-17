@@ -110,9 +110,20 @@ callbacks short, deterministic, and explicit about exceptions. A callback should
 not depend on global mutable process state unless that state is part of the
 application contract.
 
-The binding surface is synchronous. If an application uses `asyncio`, call the
-binding from a deliberate executor boundary and keep root publication, CAS, and
-merge steps visible in the async workflow.
+The binding also exposes the version-1 asynchronous foreign-store protocol.
+Provider packages live under `stores/` and accept caller-owned SDK clients.
+The SQLite package accepts a caller-owned `sqlite3.Connection` and optional
+executor, so it never blocks the event loop or assumes ownership of application
+resources. Keep root publication, CAS, and merge steps visible in the async
+workflow.
+
+Verify the SQLite provider from the repository root:
+
+```sh
+PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" \
+  PYTHONPATH=bindings/python:bindings/python/stores/sqlite \
+  python3 -m unittest discover -s bindings/python/stores/sqlite/tests -v
+```
 
 ## Merge, CRDT, And Proof Usage
 

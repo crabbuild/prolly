@@ -169,6 +169,22 @@ DYLD_LIBRARY_PATH="$PWD/target/debug" \
 
 ## Release Gate
 
+Provider-first SQLite checks for the remaining native languages:
+
+```sh
+PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" \
+  PYTHONPATH=bindings/python:bindings/python/stores/sqlite \
+  python3 -m unittest discover -s bindings/python/stores/sqlite/tests -v
+PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" \
+  BUNDLE_GEMFILE=bindings/ruby/stores/sqlite/Gemfile \
+  BUNDLE_PATH=/tmp/prolly-ruby-sqlite-bundle \
+  bundle exec ruby -Ibindings/ruby/stores/sqlite/lib \
+  bindings/ruby/stores/sqlite/test/sqlite_store_test.rb
+PROLLY_BINDINGS_LIBRARY_DIR="$PWD/target/debug" \
+  DYLD_LIBRARY_PATH="$PWD/target/debug" \
+  swift run --package-path bindings/swift prolly-store-sqlite-check
+```
+
 Before publishing a binding release:
 
 1. Build the Rust facade with `cargo build --manifest-path bindings/uniffi/Cargo.toml --target-dir target`.
