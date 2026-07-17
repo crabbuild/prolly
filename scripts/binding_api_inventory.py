@@ -36,6 +36,12 @@ AUDIENCES = (
     "rust-extension",
     "implementation-detail",
 )
+RECONCILIATION_STATES = (
+    "bound-direct",
+    "bound-idiomatic",
+    "confirmed-api-gap",
+    "confirmed-performance-gap",
+)
 MANIFEST_SCHEMA_VERSION = 2
 REQUIRED_RUST_FEATURES = ("async-store",)
 FEATURE_SENTINELS = {
@@ -522,6 +528,62 @@ def review_runtime_audience_entries(
     return reviewed
 
 
+def apply_reconciliations(
+    manifest: dict[str, Any], document: dict[str, Any]
+) -> dict[str, Any]:
+    """Expand reviewed reconciliation groups onto exact manifest rows."""
+
+    decisions: dict[str, tuple[str, list[str], str]] = {}
+    groups = document.get("groups")
+    if not isinstance(groups, list):
+        raise ValueError("reconciliation document must contain groups")
+    for group in groups:
+        if not isinstance(group, dict) or group.get("state") not in RECONCILIATION_STATES:
+            raise ValueError("reconciliation group has an invalid state")
+        rust_paths = group.get("rust")
+        evidence = group.get("evidence")
+        rationale = group.get("rationale")
+        if (
+            not isinstance(rust_paths, list)
+            or not rust_paths
+            or not all(isinstance(path, str) and path for path in rust_paths)
+            or not isinstance(evidence, list)
+            or not evidence
+            or not all(isinstance(path, str) and path for path in evidence)
+            or not isinstance(rationale, str)
+            or not rationale.strip()
+        ):
+            raise ValueError("reconciliation group is incomplete")
+        for rust in rust_paths:
+            if rust in decisions:
+                raise ValueError(f"duplicate reconciliation for {rust}")
+            decisions[rust] = (group["state"], list(evidence), rationale)
+
+    reconciled = dict(manifest)
+    operations: list[Any] = []
+    seen: set[str] = set()
+    for original in manifest.get("operations", []):
+        if not isinstance(original, dict):
+            operations.append(original)
+            continue
+        entry = dict(original)
+        rust = entry.get("rust")
+        if rust in decisions:
+            state, evidence, rationale = decisions[rust]
+            entry.update(
+                reconciliation=state,
+                reconciliation_evidence=evidence,
+                reconciliation_rationale=rationale,
+            )
+            seen.add(rust)
+        operations.append(entry)
+    missing = sorted(set(decisions) - seen)
+    if missing:
+        raise ValueError(f"reconciliation paths are absent from manifest: {missing}")
+    reconciled["operations"] = operations
+    return reconciled
+
+
 def _audit_bucket(
     item: ApiItem,
     entry: dict[str, Any],
@@ -615,6 +677,8 @@ def _gap_row(item: ApiItem, entry: dict[str, Any]) -> dict[str, Any]:
         "rationale": entry.get("rationale"),
         "audience": entry.get("audience"),
         "audience_rationale": entry.get("audience_rationale"),
+        "reconciliation": entry.get("reconciliation"),
+        "reconciliation_evidence": entry.get("reconciliation_evidence", []),
     }
 
 
@@ -632,6 +696,9 @@ def build_application_gap_report(
     }
     report: dict[str, Any] = {
         "release_complete_application_operations": [],
+        "bound_pending_manifest_evidence": [],
+        "confirmed_missing_implementation": [],
+        "confirmed_performance_gap": [],
         "unmapped_application_operations": [],
         "mapped_missing_evidence": [],
         "platform_review_required": [],
@@ -663,7 +730,14 @@ def build_application_gap_report(
             report["non_application_runtime"].append(_gap_row(item, entry))
             continue
         row = _gap_row(item, entry)
-        if entry.get("classification") == "platform-excluded":
+        reconciliation = entry.get("reconciliation")
+        if reconciliation in {"bound-direct", "bound-idiomatic"}:
+            report["bound_pending_manifest_evidence"].append(row)
+        elif reconciliation == "confirmed-api-gap":
+            report["confirmed_missing_implementation"].append(row)
+        elif reconciliation == "confirmed-performance-gap":
+            report["confirmed_performance_gap"].append(row)
+        elif entry.get("classification") == "platform-excluded":
             report["platform_review_required"].append(row)
         elif entry.get("status") == "implemented" or bool(entry.get("languages")):
             report["mapped_missing_evidence"].append(row)
@@ -875,12 +949,14 @@ def _parser() -> argparse.ArgumentParser:
             "gaps",
             "review-abstractions",
             "review-audiences",
+            "apply-reconciliations",
         ),
     )
     parser.add_argument("--release", action="store_true")
     parser.add_argument("--rustdoc", type=Path)
     parser.add_argument("--manifest", type=Path)
     parser.add_argument("--equivalences", type=Path)
+    parser.add_argument("--reconciliation", type=Path)
     parser.add_argument("--output", type=Path)
     return parser
 
@@ -892,6 +968,10 @@ def main(argv: list[str] | None = None) -> int:
     equivalences_path = (
         args.equivalences
         or root / "bindings" / "api" / "idiomatic-equivalents.json"
+    )
+    reconciliation_path = (
+        args.reconciliation
+        or root / "bindings" / "api" / "versioned-map-reconciliation.json"
     )
     rustdoc_path = args.rustdoc or _default_rustdoc_path(root)
     if not rustdoc_path.exists():
@@ -936,6 +1016,22 @@ def main(argv: list[str] | None = None) -> int:
         _load_json(equivalences_path) if equivalences_path.exists() else {}
     )
     equivalences = equivalence_document.get("equivalences", {})
+    if args.command == "apply-reconciliations":
+        if not reconciliation_path.exists():
+            print(f"reconciliation is missing: {reconciliation_path}", file=sys.stderr)
+            return 2
+        reconciled = apply_reconciliations(
+            manifest, _load_json(reconciliation_path)
+        )
+        _write_json(manifest_path, reconciled)
+        reconciled_count = sum(
+            1
+            for entry in reconciled["operations"]
+            if isinstance(entry, dict)
+            and entry.get("reconciliation") in RECONCILIATION_STATES
+        )
+        print(f"wrote {reconciled_count} reconciliations to {manifest_path}")
+        return 0
     if args.command == "review-abstractions":
         reviewed = review_abstraction_entries(api_items, manifest)
         _write_json(manifest_path, reviewed)

@@ -31702,7 +31702,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::append has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#VersionedMap",
+        "bindings/go/versioned.go#VersionedMap",
+        "bindings/node/src/versioned.ts#VersionedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#VersionedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/VersionedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#VersionedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#VersionedMap",
+        "bindings/wasm/src/index.ts#WasmVersionedMap"
+      ],
+      "reconciliation_rationale": "Normalized public method names and behavior are present in all eight wrappers; manifest symbols and per-operation test IDs still need to be populated."
     },
     {
       "rust": "prolly::VersionedMap::apply",
@@ -31720,7 +31732,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::apply has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#VersionedMap",
+        "bindings/go/versioned.go#VersionedMap",
+        "bindings/node/src/versioned.ts#VersionedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#VersionedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/VersionedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#VersionedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#VersionedMap",
+        "bindings/wasm/src/index.ts#WasmVersionedMap"
+      ],
+      "reconciliation_rationale": "Normalized public method names and behavior are present in all eight wrappers; manifest symbols and per-operation test IDs still need to be populated."
     },
     {
       "rust": "prolly::VersionedMap::apply_at_millis",
@@ -31738,7 +31762,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::apply_at_millis has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#VersionedMap",
+        "bindings/go/versioned.go#VersionedMap",
+        "bindings/node/src/versioned.ts#VersionedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#VersionedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/VersionedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#VersionedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#VersionedMap",
+        "bindings/wasm/src/index.ts#WasmVersionedMap"
+      ],
+      "reconciliation_rationale": "Normalized public method names and behavior are present in all eight wrappers; manifest symbols and per-operation test IDs still need to be populated."
     },
     {
       "rust": "prolly::VersionedMap::apply_if",
@@ -31756,7 +31792,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::apply_if has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#VersionedMap",
+        "bindings/go/versioned.go#VersionedMap",
+        "bindings/node/src/versioned.ts#VersionedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#VersionedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/VersionedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#VersionedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#VersionedMap",
+        "bindings/wasm/src/index.ts#WasmVersionedMap"
+      ],
+      "reconciliation_rationale": "Normalized public method names and behavior are present in all eight wrappers; manifest symbols and per-operation test IDs still need to be populated."
     },
     {
       "rust": "prolly::VersionedMap::apply_if_at_millis",
@@ -31774,7 +31822,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::apply_if_at_millis has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#VersionedMap",
+        "bindings/go/versioned.go#VersionedMap",
+        "bindings/node/src/versioned.ts#VersionedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#VersionedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/VersionedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#VersionedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#VersionedMap",
+        "bindings/wasm/src/index.ts#WasmVersionedMap"
+      ],
+      "reconciliation_rationale": "Normalized public method names and behavior are present in all eight wrappers; manifest symbols and per-operation test IDs still need to be populated."
     },
     {
       "rust": "prolly::VersionedMap::backup",
@@ -31792,7 +31852,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::backup has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#VersionedMap",
+        "bindings/go/versioned.go#VersionedMap",
+        "bindings/node/src/versioned.ts#VersionedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#VersionedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/VersionedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#VersionedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#VersionedMap",
+        "bindings/wasm/src/index.ts#WasmVersionedMap"
+      ],
+      "reconciliation_rationale": "Normalized public method names and behavior are present in all eight wrappers; manifest symbols and per-operation test IDs still need to be populated."
     },
     {
       "rust": "prolly::VersionedMap::changes_since",
@@ -31810,7 +31882,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::changes_since has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-idiomatic",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py",
+        "bindings/go/versioned.go",
+        "bindings/node/src/versioned.ts",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi",
+        "bindings/ruby/lib/prolly/api.rb",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
+        "bindings/wasm/src/index.ts"
+      ],
+      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, versioned transactions, snapshots, retained sessions, and bounded scan/page APIs."
     },
     {
       "rust": "prolly::VersionedMap::compare",
@@ -31828,7 +31912,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::compare has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#VersionedMap",
+        "bindings/go/versioned.go#VersionedMap",
+        "bindings/node/src/versioned.ts#VersionedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#VersionedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/VersionedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#VersionedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#VersionedMap",
+        "bindings/wasm/src/index.ts#WasmVersionedMap"
+      ],
+      "reconciliation_rationale": "Normalized public method names and behavior are present in all eight wrappers; manifest symbols and per-operation test IDs still need to be populated."
     },
     {
       "rust": "prolly::VersionedMap::compare_to_head",
@@ -31846,7 +31942,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::compare_to_head has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#VersionedMap",
+        "bindings/go/versioned.go#VersionedMap",
+        "bindings/node/src/versioned.ts#VersionedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#VersionedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/VersionedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#VersionedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#VersionedMap",
+        "bindings/wasm/src/index.ts#WasmVersionedMap"
+      ],
+      "reconciliation_rationale": "Normalized public method names and behavior are present in all eight wrappers; manifest symbols and per-operation test IDs still need to be populated."
     },
     {
       "rust": "prolly::VersionedMap::contains_key",
@@ -31864,7 +31972,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::contains_key has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-idiomatic",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py",
+        "bindings/go/versioned.go",
+        "bindings/node/src/versioned.ts",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi",
+        "bindings/ruby/lib/prolly/api.rb",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
+        "bindings/wasm/src/index.ts"
+      ],
+      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, versioned transactions, snapshots, retained sessions, and bounded scan/page APIs."
     },
     {
       "rust": "prolly::VersionedMap::delete",
@@ -31882,7 +32002,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::delete has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#VersionedMap",
+        "bindings/go/versioned.go#VersionedMap",
+        "bindings/node/src/versioned.ts#VersionedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#VersionedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/VersionedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#VersionedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#VersionedMap",
+        "bindings/wasm/src/index.ts#WasmVersionedMap"
+      ],
+      "reconciliation_rationale": "Normalized public method names and behavior are present in all eight wrappers; manifest symbols and per-operation test IDs still need to be populated."
     },
     {
       "rust": "prolly::VersionedMap::delete_if",
@@ -31900,7 +32032,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::delete_if has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#VersionedMap",
+        "bindings/go/versioned.go#VersionedMap",
+        "bindings/node/src/versioned.ts#VersionedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#VersionedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/VersionedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#VersionedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#VersionedMap",
+        "bindings/wasm/src/index.ts#WasmVersionedMap"
+      ],
+      "reconciliation_rationale": "Normalized public method names and behavior are present in all eight wrappers; manifest symbols and per-operation test IDs still need to be populated."
     },
     {
       "rust": "prolly::VersionedMap::diff",
@@ -31918,7 +32062,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::diff has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#VersionedMap",
+        "bindings/go/versioned.go#VersionedMap",
+        "bindings/node/src/versioned.ts#VersionedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#VersionedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/VersionedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#VersionedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#VersionedMap",
+        "bindings/wasm/src/index.ts#WasmVersionedMap"
+      ],
+      "reconciliation_rationale": "Normalized public method names and behavior are present in all eight wrappers; manifest symbols and per-operation test IDs still need to be populated."
     },
     {
       "rust": "prolly::VersionedMap::edit",
@@ -31936,7 +32092,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::edit has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-idiomatic",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py",
+        "bindings/go/versioned.go",
+        "bindings/node/src/versioned.ts",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi",
+        "bindings/ruby/lib/prolly/api.rb",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
+        "bindings/wasm/src/index.ts"
+      ],
+      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, versioned transactions, snapshots, retained sessions, and bounded scan/page APIs."
     },
     {
       "rust": "prolly::VersionedMap::edit_if",
@@ -31954,7 +32122,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::edit_if has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-idiomatic",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py",
+        "bindings/go/versioned.go",
+        "bindings/node/src/versioned.ts",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi",
+        "bindings/ruby/lib/prolly/api.rb",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
+        "bindings/wasm/src/index.ts"
+      ],
+      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, versioned transactions, snapshots, retained sessions, and bounded scan/page APIs."
     },
     {
       "rust": "prolly::VersionedMap::get",
@@ -31972,7 +32152,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::get has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#VersionedMap",
+        "bindings/go/versioned.go#VersionedMap",
+        "bindings/node/src/versioned.ts#VersionedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#VersionedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/VersionedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#VersionedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#VersionedMap",
+        "bindings/wasm/src/index.ts#WasmVersionedMap"
+      ],
+      "reconciliation_rationale": "Normalized public method names and behavior are present in all eight wrappers; manifest symbols and per-operation test IDs still need to be populated."
     },
     {
       "rust": "prolly::VersionedMap::get_at",
@@ -31990,7 +32182,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::get_at has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-idiomatic",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py",
+        "bindings/go/versioned.go",
+        "bindings/node/src/versioned.ts",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi",
+        "bindings/ruby/lib/prolly/api.rb",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
+        "bindings/wasm/src/index.ts"
+      ],
+      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, versioned transactions, snapshots, retained sessions, and bounded scan/page APIs."
     },
     {
       "rust": "prolly::VersionedMap::get_at_with",
@@ -32008,7 +32212,20 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::get_at_with has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "confirmed-performance-gap",
+      "reconciliation_evidence": [
+        "src/prolly/versioned_map.rs",
+        "bindings/go/prolly.go#ReadSession.GetView",
+        "bindings/python/prolly/api.py#ReadSession",
+        "bindings/node/src/versioned.ts#ReadSession",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#ReadSession",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/ReadSession.java",
+        "bindings/ruby/lib/prolly/api.rb#ReadSession",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#ReadSession",
+        "bindings/wasm/src/index.ts#WasmReadSession"
+      ],
+      "reconciliation_rationale": "Rust exposes callback-scoped point and ValueRef views. Go exposes point GetView, but the other application wrappers expose owned point reads only; all eight have scoped scan views, so point-read zero-copy parity remains incomplete."
     },
     {
       "rust": "prolly::VersionedMap::get_large_value",
@@ -32055,7 +32272,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::get_many has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#VersionedMap",
+        "bindings/go/versioned.go#VersionedMap",
+        "bindings/node/src/versioned.ts#VersionedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#VersionedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/VersionedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#VersionedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#VersionedMap",
+        "bindings/wasm/src/index.ts#WasmVersionedMap"
+      ],
+      "reconciliation_rationale": "Normalized public method names and behavior are present in all eight wrappers; manifest symbols and per-operation test IDs still need to be populated."
     },
     {
       "rust": "prolly::VersionedMap::get_many_at",
@@ -32073,7 +32302,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::get_many_at has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-idiomatic",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py",
+        "bindings/go/versioned.go",
+        "bindings/node/src/versioned.ts",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi",
+        "bindings/ruby/lib/prolly/api.rb",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
+        "bindings/wasm/src/index.ts"
+      ],
+      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, versioned transactions, snapshots, retained sessions, and bounded scan/page APIs."
     },
     {
       "rust": "prolly::VersionedMap::get_value_ref_at_with",
@@ -32091,7 +32332,20 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::get_value_ref_at_with has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "confirmed-performance-gap",
+      "reconciliation_evidence": [
+        "src/prolly/versioned_map.rs",
+        "bindings/go/prolly.go#ReadSession.GetView",
+        "bindings/python/prolly/api.py#ReadSession",
+        "bindings/node/src/versioned.ts#ReadSession",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#ReadSession",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/ReadSession.java",
+        "bindings/ruby/lib/prolly/api.rb#ReadSession",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#ReadSession",
+        "bindings/wasm/src/index.ts#WasmReadSession"
+      ],
+      "reconciliation_rationale": "Rust exposes callback-scoped point and ValueRef views. Go exposes point GetView, but the other application wrappers expose owned point reads only; all eight have scoped scan views, so point-read zero-copy parity remains incomplete."
     },
     {
       "rust": "prolly::VersionedMap::get_value_ref_with",
@@ -32109,7 +32363,20 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::get_value_ref_with has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "confirmed-performance-gap",
+      "reconciliation_evidence": [
+        "src/prolly/versioned_map.rs",
+        "bindings/go/prolly.go#ReadSession.GetView",
+        "bindings/python/prolly/api.py#ReadSession",
+        "bindings/node/src/versioned.ts#ReadSession",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#ReadSession",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/ReadSession.java",
+        "bindings/ruby/lib/prolly/api.rb#ReadSession",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#ReadSession",
+        "bindings/wasm/src/index.ts#WasmReadSession"
+      ],
+      "reconciliation_rationale": "Rust exposes callback-scoped point and ValueRef views. Go exposes point GetView, but the other application wrappers expose owned point reads only; all eight have scoped scan views, so point-read zero-copy parity remains incomplete."
     },
     {
       "rust": "prolly::VersionedMap::get_with",
@@ -32127,7 +32394,20 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::get_with has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "confirmed-performance-gap",
+      "reconciliation_evidence": [
+        "src/prolly/versioned_map.rs",
+        "bindings/go/prolly.go#ReadSession.GetView",
+        "bindings/python/prolly/api.py#ReadSession",
+        "bindings/node/src/versioned.ts#ReadSession",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#ReadSession",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/ReadSession.java",
+        "bindings/ruby/lib/prolly/api.rb#ReadSession",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#ReadSession",
+        "bindings/wasm/src/index.ts#WasmReadSession"
+      ],
+      "reconciliation_rationale": "Rust exposes callback-scoped point and ValueRef views. Go exposes point GetView, but the other application wrappers expose owned point reads only; all eight have scoped scan views, so point-read zero-copy parity remains incomplete."
     },
     {
       "rust": "prolly::VersionedMap::head",
@@ -32145,7 +32425,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::head has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#VersionedMap",
+        "bindings/go/versioned.go#VersionedMap",
+        "bindings/node/src/versioned.ts#VersionedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#VersionedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/VersionedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#VersionedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#VersionedMap",
+        "bindings/wasm/src/index.ts#WasmVersionedMap"
+      ],
+      "reconciliation_rationale": "Normalized public method names and behavior are present in all eight wrappers; manifest symbols and per-operation test IDs still need to be populated."
     },
     {
       "rust": "prolly::VersionedMap::head_id",
@@ -32163,7 +32455,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::head_id has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#VersionedMap",
+        "bindings/go/versioned.go#VersionedMap",
+        "bindings/node/src/versioned.ts#VersionedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#VersionedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/VersionedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#VersionedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#VersionedMap",
+        "bindings/wasm/src/index.ts#WasmVersionedMap"
+      ],
+      "reconciliation_rationale": "Normalized public method names and behavior are present in all eight wrappers; manifest symbols and per-operation test IDs still need to be populated."
     },
     {
       "rust": "prolly::VersionedMap::head_name",
@@ -32209,7 +32513,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::id has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-idiomatic",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py",
+        "bindings/go/versioned.go",
+        "bindings/node/src/versioned.ts",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi",
+        "bindings/ruby/lib/prolly/api.rb",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
+        "bindings/wasm/src/index.ts"
+      ],
+      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, versioned transactions, snapshots, retained sessions, and bounded scan/page APIs."
     },
     {
       "rust": "prolly::VersionedMap::import_as_head",
@@ -32284,7 +32600,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::initialize has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#VersionedMap",
+        "bindings/go/versioned.go#VersionedMap",
+        "bindings/node/src/versioned.ts#VersionedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#VersionedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/VersionedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#VersionedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#VersionedMap",
+        "bindings/wasm/src/index.ts#WasmVersionedMap"
+      ],
+      "reconciliation_rationale": "Normalized public method names and behavior are present in all eight wrappers; manifest symbols and per-operation test IDs still need to be populated."
     },
     {
       "rust": "prolly::VersionedMap::initialize_sorted",
@@ -32302,7 +32630,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::initialize_sorted has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#VersionedMap",
+        "bindings/go/versioned.go#VersionedMap",
+        "bindings/node/src/versioned.ts#VersionedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#VersionedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/VersionedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#VersionedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#VersionedMap",
+        "bindings/wasm/src/index.ts#WasmVersionedMap"
+      ],
+      "reconciliation_rationale": "Normalized public method names and behavior are present in all eight wrappers; manifest symbols and per-operation test IDs still need to be populated."
     },
     {
       "rust": "prolly::VersionedMap::is_initialized",
@@ -32320,7 +32660,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::is_initialized has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-idiomatic",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py",
+        "bindings/go/versioned.go",
+        "bindings/node/src/versioned.ts",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi",
+        "bindings/ruby/lib/prolly/api.rb",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
+        "bindings/wasm/src/index.ts"
+      ],
+      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, versioned transactions, snapshots, retained sessions, and bounded scan/page APIs."
     },
     {
       "rust": "prolly::VersionedMap::keep_for",
@@ -32338,7 +32690,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::keep_for has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#VersionedMap",
+        "bindings/go/versioned.go#VersionedMap",
+        "bindings/node/src/versioned.ts#VersionedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#VersionedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/VersionedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#VersionedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#VersionedMap",
+        "bindings/wasm/src/index.ts#WasmVersionedMap"
+      ],
+      "reconciliation_rationale": "Normalized public method names and behavior are present in all eight wrappers; manifest symbols and per-operation test IDs still need to be populated."
     },
     {
       "rust": "prolly::VersionedMap::keep_for_at",
@@ -32356,7 +32720,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::keep_for_at has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#VersionedMap",
+        "bindings/go/versioned.go#VersionedMap",
+        "bindings/node/src/versioned.ts#VersionedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#VersionedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/VersionedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#VersionedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#VersionedMap",
+        "bindings/wasm/src/index.ts#WasmVersionedMap"
+      ],
+      "reconciliation_rationale": "Normalized public method names and behavior are present in all eight wrappers; manifest symbols and per-operation test IDs still need to be populated."
     },
     {
       "rust": "prolly::VersionedMap::keep_last",
@@ -32374,7 +32750,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::keep_last has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#VersionedMap",
+        "bindings/go/versioned.go#VersionedMap",
+        "bindings/node/src/versioned.ts#VersionedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#VersionedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/VersionedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#VersionedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#VersionedMap",
+        "bindings/wasm/src/index.ts#WasmVersionedMap"
+      ],
+      "reconciliation_rationale": "Normalized public method names and behavior are present in all eight wrappers; manifest symbols and per-operation test IDs still need to be populated."
     },
     {
       "rust": "prolly::VersionedMap::keep_versions",
@@ -32392,7 +32780,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::keep_versions has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#VersionedMap",
+        "bindings/go/versioned.go#VersionedMap",
+        "bindings/node/src/versioned.ts#VersionedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#VersionedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/VersionedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#VersionedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#VersionedMap",
+        "bindings/wasm/src/index.ts#WasmVersionedMap"
+      ],
+      "reconciliation_rationale": "Normalized public method names and behavior are present in all eight wrappers; manifest symbols and per-operation test IDs still need to be populated."
     },
     {
       "rust": "prolly::VersionedMap::new",
@@ -32410,7 +32810,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::new has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-idiomatic",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py",
+        "bindings/go/versioned.go",
+        "bindings/node/src/versioned.ts",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi",
+        "bindings/ruby/lib/prolly/api.rb",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
+        "bindings/wasm/src/index.ts"
+      ],
+      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, versioned transactions, snapshots, retained sessions, and bounded scan/page APIs."
     },
     {
       "rust": "prolly::VersionedMap::parallel_apply",
@@ -32428,7 +32840,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::parallel_apply has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#VersionedMap",
+        "bindings/go/versioned.go#VersionedMap",
+        "bindings/node/src/versioned.ts#VersionedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#VersionedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/VersionedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#VersionedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#VersionedMap",
+        "bindings/wasm/src/index.ts#WasmVersionedMap"
+      ],
+      "reconciliation_rationale": "Normalized public method names and behavior are present in all eight wrappers; manifest symbols and per-operation test IDs still need to be populated."
     },
     {
       "rust": "prolly::VersionedMap::plan_blob_gc",
@@ -32475,7 +32899,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::plan_gc has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#VersionedMap",
+        "bindings/go/versioned.go#VersionedMap",
+        "bindings/node/src/versioned.ts#VersionedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#VersionedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/VersionedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#VersionedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#VersionedMap",
+        "bindings/wasm/src/index.ts#WasmVersionedMap"
+      ],
+      "reconciliation_rationale": "Normalized public method names and behavior are present in all eight wrappers; manifest symbols and per-operation test IDs still need to be populated."
     },
     {
       "rust": "prolly::VersionedMap::prefix",
@@ -32493,7 +32929,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::prefix has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#VersionedMap",
+        "bindings/go/versioned.go#VersionedMap",
+        "bindings/node/src/versioned.ts#VersionedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#VersionedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/VersionedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#VersionedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#VersionedMap",
+        "bindings/wasm/src/index.ts#WasmVersionedMap"
+      ],
+      "reconciliation_rationale": "Normalized public method names and behavior are present in all eight wrappers; manifest symbols and per-operation test IDs still need to be populated."
     },
     {
       "rust": "prolly::VersionedMap::prefix_at",
@@ -32511,7 +32959,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::prefix_at has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-idiomatic",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py",
+        "bindings/go/versioned.go",
+        "bindings/node/src/versioned.ts",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi",
+        "bindings/ruby/lib/prolly/api.rb",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
+        "bindings/wasm/src/index.ts"
+      ],
+      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, versioned transactions, snapshots, retained sessions, and bounded scan/page APIs."
     },
     {
       "rust": "prolly::VersionedMap::prefix_page",
@@ -32529,7 +32989,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::prefix_page has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#VersionedMap",
+        "bindings/go/versioned.go#VersionedMap",
+        "bindings/node/src/versioned.ts#VersionedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#VersionedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/VersionedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#VersionedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#VersionedMap",
+        "bindings/wasm/src/index.ts#WasmVersionedMap"
+      ],
+      "reconciliation_rationale": "Normalized public method names and behavior are present in all eight wrappers; manifest symbols and per-operation test IDs still need to be populated."
     },
     {
       "rust": "prolly::VersionedMap::prefix_page_at",
@@ -32547,7 +33019,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::prefix_page_at has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-idiomatic",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py",
+        "bindings/go/versioned.go",
+        "bindings/node/src/versioned.ts",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi",
+        "bindings/ruby/lib/prolly/api.rb",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
+        "bindings/wasm/src/index.ts"
+      ],
+      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, versioned transactions, snapshots, retained sessions, and bounded scan/page APIs."
     },
     {
       "rust": "prolly::VersionedMap::prepare_merge",
@@ -32565,7 +33049,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::prepare_merge has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#VersionedMap",
+        "bindings/go/versioned.go#VersionedMap",
+        "bindings/node/src/versioned.ts#VersionedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#VersionedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/VersionedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#VersionedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#VersionedMap",
+        "bindings/wasm/src/index.ts#WasmVersionedMap"
+      ],
+      "reconciliation_rationale": "Normalized public method names and behavior are present in all eight wrappers; manifest symbols and per-operation test IDs still need to be populated."
     },
     {
       "rust": "prolly::VersionedMap::prune_versions",
@@ -32583,7 +33079,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::prune_versions has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#VersionedMap",
+        "bindings/go/versioned.go#VersionedMap",
+        "bindings/node/src/versioned.ts#VersionedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#VersionedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/VersionedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#VersionedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#VersionedMap",
+        "bindings/wasm/src/index.ts#WasmVersionedMap"
+      ],
+      "reconciliation_rationale": "Normalized public method names and behavior are present in all eight wrappers; manifest symbols and per-operation test IDs still need to be populated."
     },
     {
       "rust": "prolly::VersionedMap::put",
@@ -32601,7 +33109,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::put has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#VersionedMap",
+        "bindings/go/versioned.go#VersionedMap",
+        "bindings/node/src/versioned.ts#VersionedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#VersionedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/VersionedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#VersionedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#VersionedMap",
+        "bindings/wasm/src/index.ts#WasmVersionedMap"
+      ],
+      "reconciliation_rationale": "Normalized public method names and behavior are present in all eight wrappers; manifest symbols and per-operation test IDs still need to be populated."
     },
     {
       "rust": "prolly::VersionedMap::put_if",
@@ -32619,7 +33139,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::put_if has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#VersionedMap",
+        "bindings/go/versioned.go#VersionedMap",
+        "bindings/node/src/versioned.ts#VersionedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#VersionedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/VersionedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#VersionedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#VersionedMap",
+        "bindings/wasm/src/index.ts#WasmVersionedMap"
+      ],
+      "reconciliation_rationale": "Normalized public method names and behavior are present in all eight wrappers; manifest symbols and per-operation test IDs still need to be populated."
     },
     {
       "rust": "prolly::VersionedMap::put_large_value",
@@ -32695,7 +33227,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::range has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#VersionedMap",
+        "bindings/go/versioned.go#VersionedMap",
+        "bindings/node/src/versioned.ts#VersionedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#VersionedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/VersionedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#VersionedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#VersionedMap",
+        "bindings/wasm/src/index.ts#WasmVersionedMap"
+      ],
+      "reconciliation_rationale": "Normalized public method names and behavior are present in all eight wrappers; manifest symbols and per-operation test IDs still need to be populated."
     },
     {
       "rust": "prolly::VersionedMap::range_at",
@@ -32713,7 +33257,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::range_at has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-idiomatic",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py",
+        "bindings/go/versioned.go",
+        "bindings/node/src/versioned.ts",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi",
+        "bindings/ruby/lib/prolly/api.rb",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
+        "bindings/wasm/src/index.ts"
+      ],
+      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, versioned transactions, snapshots, retained sessions, and bounded scan/page APIs."
     },
     {
       "rust": "prolly::VersionedMap::range_page",
@@ -32731,7 +33287,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::range_page has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#VersionedMap",
+        "bindings/go/versioned.go#VersionedMap",
+        "bindings/node/src/versioned.ts#VersionedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#VersionedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/VersionedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#VersionedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#VersionedMap",
+        "bindings/wasm/src/index.ts#WasmVersionedMap"
+      ],
+      "reconciliation_rationale": "Normalized public method names and behavior are present in all eight wrappers; manifest symbols and per-operation test IDs still need to be populated."
     },
     {
       "rust": "prolly::VersionedMap::range_page_at",
@@ -32749,7 +33317,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::range_page_at has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-idiomatic",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py",
+        "bindings/go/versioned.go",
+        "bindings/node/src/versioned.ts",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi",
+        "bindings/ruby/lib/prolly/api.rb",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
+        "bindings/wasm/src/index.ts"
+      ],
+      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, versioned transactions, snapshots, retained sessions, and bounded scan/page APIs."
     },
     {
       "rust": "prolly::VersionedMap::rebuild_from_iter_if",
@@ -32767,7 +33347,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::rebuild_from_iter_if has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#VersionedMap",
+        "bindings/go/versioned.go#VersionedMap",
+        "bindings/node/src/versioned.ts#VersionedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#VersionedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/VersionedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#VersionedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#VersionedMap",
+        "bindings/wasm/src/index.ts#WasmVersionedMap"
+      ],
+      "reconciliation_rationale": "Normalized public method names and behavior are present in all eight wrappers; manifest symbols and per-operation test IDs still need to be populated."
     },
     {
       "rust": "prolly::VersionedMap::rebuild_sorted_if",
@@ -32785,7 +33377,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::rebuild_sorted_if has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#VersionedMap",
+        "bindings/go/versioned.go#VersionedMap",
+        "bindings/node/src/versioned.ts#VersionedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#VersionedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/VersionedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#VersionedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#VersionedMap",
+        "bindings/wasm/src/index.ts#WasmVersionedMap"
+      ],
+      "reconciliation_rationale": "Normalized public method names and behavior are present in all eight wrappers; manifest symbols and per-operation test IDs still need to be populated."
     },
     {
       "rust": "prolly::VersionedMap::restore_backup",
@@ -32803,7 +33407,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::restore_backup has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#VersionedMap",
+        "bindings/go/versioned.go#VersionedMap",
+        "bindings/node/src/versioned.ts#VersionedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#VersionedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/VersionedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#VersionedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#VersionedMap",
+        "bindings/wasm/src/index.ts#WasmVersionedMap"
+      ],
+      "reconciliation_rationale": "Normalized public method names and behavior are present in all eight wrappers; manifest symbols and per-operation test IDs still need to be populated."
     },
     {
       "rust": "prolly::VersionedMap::retention_policy",
@@ -32821,7 +33437,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::retention_policy has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#VersionedMap",
+        "bindings/go/versioned.go#VersionedMap",
+        "bindings/node/src/versioned.ts#VersionedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#VersionedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/VersionedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#VersionedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#VersionedMap",
+        "bindings/wasm/src/index.ts#WasmVersionedMap"
+      ],
+      "reconciliation_rationale": "Normalized public method names and behavior are present in all eight wrappers; manifest symbols and per-operation test IDs still need to be populated."
     },
     {
       "rust": "prolly::VersionedMap::rollback_to",
@@ -32839,7 +33467,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::rollback_to has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-idiomatic",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py",
+        "bindings/go/versioned.go",
+        "bindings/node/src/versioned.ts",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi",
+        "bindings/ruby/lib/prolly/api.rb",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
+        "bindings/wasm/src/index.ts"
+      ],
+      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, versioned transactions, snapshots, retained sessions, and bounded scan/page APIs."
     },
     {
       "rust": "prolly::VersionedMap::scan_prefix",
@@ -32857,7 +33497,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::scan_prefix has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-idiomatic",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py",
+        "bindings/go/versioned.go",
+        "bindings/node/src/versioned.ts",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi",
+        "bindings/ruby/lib/prolly/api.rb",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
+        "bindings/wasm/src/index.ts"
+      ],
+      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, versioned transactions, snapshots, retained sessions, and bounded scan/page APIs."
     },
     {
       "rust": "prolly::VersionedMap::scan_prefix_at",
@@ -32875,7 +33527,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::scan_prefix_at has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-idiomatic",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py",
+        "bindings/go/versioned.go",
+        "bindings/node/src/versioned.ts",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi",
+        "bindings/ruby/lib/prolly/api.rb",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
+        "bindings/wasm/src/index.ts"
+      ],
+      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, versioned transactions, snapshots, retained sessions, and bounded scan/page APIs."
     },
     {
       "rust": "prolly::VersionedMap::scan_range",
@@ -32893,7 +33557,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::scan_range has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-idiomatic",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py",
+        "bindings/go/versioned.go",
+        "bindings/node/src/versioned.ts",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi",
+        "bindings/ruby/lib/prolly/api.rb",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
+        "bindings/wasm/src/index.ts"
+      ],
+      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, versioned transactions, snapshots, retained sessions, and bounded scan/page APIs."
     },
     {
       "rust": "prolly::VersionedMap::scan_range_at",
@@ -32911,7 +33587,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::scan_range_at has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-idiomatic",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py",
+        "bindings/go/versioned.go",
+        "bindings/node/src/versioned.ts",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi",
+        "bindings/ruby/lib/prolly/api.rb",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
+        "bindings/wasm/src/index.ts"
+      ],
+      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, versioned transactions, snapshots, retained sessions, and bounded scan/page APIs."
     },
     {
       "rust": "prolly::VersionedMap::snapshot",
@@ -32929,7 +33617,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::snapshot has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#VersionedMap",
+        "bindings/go/versioned.go#VersionedMap",
+        "bindings/node/src/versioned.ts#VersionedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#VersionedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/VersionedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#VersionedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#VersionedMap",
+        "bindings/wasm/src/index.ts#WasmVersionedMap"
+      ],
+      "reconciliation_rationale": "Normalized public method names and behavior are present in all eight wrappers; manifest symbols and per-operation test IDs still need to be populated."
     },
     {
       "rust": "prolly::VersionedMap::snapshot_at",
@@ -32947,7 +33647,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::snapshot_at has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-idiomatic",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py",
+        "bindings/go/versioned.go",
+        "bindings/node/src/versioned.ts",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi",
+        "bindings/ruby/lib/prolly/api.rb",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
+        "bindings/wasm/src/index.ts"
+      ],
+      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, versioned transactions, snapshots, retained sessions, and bounded scan/page APIs."
     },
     {
       "rust": "prolly::VersionedMap::subscribe",
@@ -32965,7 +33677,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::subscribe has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#VersionedMap",
+        "bindings/go/versioned.go#VersionedMap",
+        "bindings/node/src/versioned.ts#VersionedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#VersionedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/VersionedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#VersionedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#VersionedMap",
+        "bindings/wasm/src/index.ts#WasmVersionedMap"
+      ],
+      "reconciliation_rationale": "Normalized public method names and behavior are present in all eight wrappers; manifest symbols and per-operation test IDs still need to be populated."
     },
     {
       "rust": "prolly::VersionedMap::subscribe_from",
@@ -32983,7 +33707,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::subscribe_from has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-idiomatic",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py",
+        "bindings/go/versioned.go",
+        "bindings/node/src/versioned.ts",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi",
+        "bindings/ruby/lib/prolly/api.rb",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift",
+        "bindings/wasm/src/index.ts"
+      ],
+      "reconciliation_rationale": "The behavior is present through host predicates/properties, labeled Swift overloads, Engine factories, versioned transactions, snapshots, retained sessions, and bounded scan/page APIs."
     },
     {
       "rust": "prolly::VersionedMap::sweep_blob_gc",
@@ -33030,7 +33766,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::sweep_gc has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#VersionedMap",
+        "bindings/go/versioned.go#VersionedMap",
+        "bindings/node/src/versioned.ts#VersionedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#VersionedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/VersionedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#VersionedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#VersionedMap",
+        "bindings/wasm/src/index.ts#WasmVersionedMap"
+      ],
+      "reconciliation_rationale": "Normalized public method names and behavior are present in all eight wrappers; manifest symbols and per-operation test IDs still need to be populated."
     },
     {
       "rust": "prolly::VersionedMap::typed",
@@ -33048,7 +33796,20 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::typed has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "confirmed-api-gap",
+      "reconciliation_evidence": [
+        "src/prolly/versioned_map.rs",
+        "bindings/python",
+        "bindings/go",
+        "bindings/node",
+        "bindings/kotlin",
+        "bindings/java",
+        "bindings/ruby",
+        "bindings/swift",
+        "bindings/wasm"
+      ],
+      "reconciliation_rationale": "No binding exposes TypedVersionedMap or host key/value codec wrappers; portable typed-codec construction is a confirmed missing application API."
     },
     {
       "rust": "prolly::VersionedMap::verify_catalog",
@@ -33066,7 +33827,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::verify_catalog has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#VersionedMap",
+        "bindings/go/versioned.go#VersionedMap",
+        "bindings/node/src/versioned.ts#VersionedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#VersionedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/VersionedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#VersionedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#VersionedMap",
+        "bindings/wasm/src/index.ts#WasmVersionedMap"
+      ],
+      "reconciliation_rationale": "Normalized public method names and behavior are present in all eight wrappers; manifest symbols and per-operation test IDs still need to be populated."
     },
     {
       "rust": "prolly::VersionedMap::version",
@@ -33084,7 +33857,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::version has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#VersionedMap",
+        "bindings/go/versioned.go#VersionedMap",
+        "bindings/node/src/versioned.ts#VersionedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#VersionedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/VersionedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#VersionedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#VersionedMap",
+        "bindings/wasm/src/index.ts#WasmVersionedMap"
+      ],
+      "reconciliation_rationale": "Normalized public method names and behavior are present in all eight wrappers; manifest symbols and per-operation test IDs still need to be populated."
     },
     {
       "rust": "prolly::VersionedMap::versions",
@@ -33102,7 +33887,19 @@
       ],
       "audience": "application",
       "audience_rationale": "prolly::VersionedMap::versions has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
+      "reviewed": true,
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#VersionedMap",
+        "bindings/go/versioned.go#VersionedMap",
+        "bindings/node/src/versioned.ts#VersionedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#VersionedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/VersionedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#VersionedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#VersionedMap",
+        "bindings/wasm/src/index.ts#WasmVersionedMap"
+      ],
+      "reconciliation_rationale": "Normalized public method names and behavior are present in all eight wrappers; manifest symbols and per-operation test IDs still need to be populated."
     },
     {
       "rust": "prolly::VersionedMap::versions_prefix",
