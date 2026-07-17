@@ -29516,9 +29516,9 @@ end
         RustBuffer.check_lower_TypeTreeRecord(tree)
         start = Prolly::uniffi_bytes(start)
         
-        end = (end ? Prolly::uniffi_bytes(end) : nil)
-        RustBuffer.check_lower_Optionalbytes(end)
-    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_asyncprollyengine_range,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.allocFromBytes(start),RustBuffer.alloc_from_Optionalbytes(end))
+        _end = (_end ? Prolly::uniffi_bytes(_end) : nil)
+        RustBuffer.check_lower_Optionalbytes(_end)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_asyncprollyengine_range,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.allocFromBytes(start),RustBuffer.alloc_from_Optionalbytes(_end))
     return result.consumeIntoSequenceTypeEntryRecord
   end
   def range_page(tree, cursor, _end, limit)
@@ -29526,11 +29526,11 @@ end
         RustBuffer.check_lower_TypeTreeRecord(tree)
         cursor = (cursor ? cursor : nil)
         RustBuffer.check_lower_OptionalTypeRangeCursorRecord(cursor)
-        end = (end ? Prolly::uniffi_bytes(end) : nil)
-        RustBuffer.check_lower_Optionalbytes(end)
+        _end = (_end ? Prolly::uniffi_bytes(_end) : nil)
+        RustBuffer.check_lower_Optionalbytes(_end)
         limit = Prolly::uniffi_in_range(limit, "u64", 0, 2**64)
         
-    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_asyncprollyengine_range_page,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.alloc_from_OptionalTypeRangeCursorRecord(cursor),RustBuffer.alloc_from_Optionalbytes(end),limit)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_asyncprollyengine_range_page,uniffi_clone_handle(),RustBuffer.alloc_from_TypeTreeRecord(tree),RustBuffer.alloc_from_OptionalTypeRangeCursorRecord(cursor),RustBuffer.alloc_from_Optionalbytes(_end),limit)
     return result.consumeIntoTypeRangePageRecord
   end
   
