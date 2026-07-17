@@ -3,6 +3,34 @@
 module Prolly
   ProximityRecord = Data.define(:key, :vector, :value)
 
+  def self.owned_proximity_search_request(request)
+    budget = request.budget
+    filter = request.filter
+    ProximitySearchRequestRecord.new(
+      query: request.query.map(&:to_f),
+      k: request.k,
+      policy: request.policy,
+      adaptive_quality: request.adaptive_quality,
+      budget: SearchBudgetRecord.new(
+        max_nodes: budget.max_nodes,
+        max_committed_bytes: budget.max_committed_bytes,
+        max_distance_evaluations: budget.max_distance_evaluations,
+        max_frontier_entries: budget.max_frontier_entries
+      ),
+      filter: ProximityFilterRecord.new(
+        kind: filter.kind,
+        start: filter.start&.dup,
+        range_end: filter.range_end&.dup,
+        prefix: filter.prefix&.dup,
+        eligible_keys: filter.eligible_keys.map(&:dup)
+      ),
+      kernel: request.kernel,
+      backend: request.backend,
+      hnsw_ef_search: request.hnsw_ef_search,
+      pq_rerank_multiplier: request.pq_rerank_multiplier
+    )
+  end
+
   module RubySecondaryIndexExtractorCallbacks
     class VTable < FFI::Struct
       layout :uniffi_free, :pointer,
@@ -532,7 +560,8 @@ module Prolly
     def verify = open! { @native.verify }
     def prove_membership(key) = open! { @native.prove_membership(key.b) }
     def prove_search(request, limits = Prolly.default_content_graph_limits)
-      open! { ProximitySearchProof.new(@native.prove_search(request, limits)) }
+      owned = Prolly.owned_proximity_search_request(request)
+      open! { ProximitySearchProof.new(@native.prove_search(owned, limits)) }
     end
     def prove_search_exact(query, k, limits = Prolly.default_content_graph_limits)
       prove_search(Prolly.exact_proximity_search_request(query, k), limits)
@@ -547,6 +576,10 @@ module Prolly
     end
     def rebuild(mutations) = open! { ProximityMap.new(@native.rebuild(mutations)) }
     def read = open! { ProximityReadSession.new(@native.read_session) }
+
+    def search(request)
+      read.use { |session| session.search(request) }
+    end
 
     def search_exact(query, k)
       read.use { |session| session.search_exact(query, k) }
@@ -574,7 +607,8 @@ module Prolly
 
     def get(key) = open! { @native.get(key.b) }
     def contains?(key) = open! { @native.contains_key(key.b) }
-    def search_exact(query, k) = open! { @native.search(Prolly.exact_proximity_search_request(query, k)) }
+    def search(request) = open! { @native.search(Prolly.owned_proximity_search_request(request)) }
+    def search_exact(query, k) = search(Prolly.exact_proximity_search_request(query, k))
     def search_view(query, k, &block)
       open! { PackedPage.proximity_search_view(@native.fast_handle, query, k, &block) }
     end

@@ -842,6 +842,32 @@ public struct NeighborView {
     public let proof: ScopedBytes?
 }
 
+private func ownedSearchRequest(_ request: ProximitySearchRequestRecord) -> ProximitySearchRequestRecord {
+    ProximitySearchRequestRecord(
+        query: Array(request.query),
+        k: request.k,
+        policy: request.policy,
+        adaptiveQuality: request.adaptiveQuality,
+        budget: SearchBudgetRecord(
+            maxNodes: request.budget.maxNodes,
+            maxCommittedBytes: request.budget.maxCommittedBytes,
+            maxDistanceEvaluations: request.budget.maxDistanceEvaluations,
+            maxFrontierEntries: request.budget.maxFrontierEntries
+        ),
+        filter: ProximityFilterRecord(
+            kind: request.filter.kind,
+            start: request.filter.start.map { Data($0) },
+            rangeEnd: request.filter.rangeEnd.map { Data($0) },
+            prefix: request.filter.prefix.map { Data($0) },
+            eligibleKeys: request.filter.eligibleKeys.map { Data($0) }
+        ),
+        kernel: request.kernel,
+        backend: request.backend,
+        hnswEfSearch: request.hnswEfSearch,
+        pqRerankMultiplier: request.pqRerankMultiplier
+    )
+}
+
 public final class ProximityMap: @unchecked Sendable {
     let native: BindingProximityMap
     init(native: BindingProximityMap) { self.native = native }
@@ -851,6 +877,11 @@ public final class ProximityMap: @unchecked Sendable {
     public var config: ProximityConfigRecord { get throws { try native.config() } }
     public func get(_ key: Data) throws -> ExactProximityRecordRecord? { try native.get(key: Data(key)) }
     public func contains(_ key: Data) throws -> Bool { try native.containsKey(key: Data(key)) }
+    public func search(_ request: ProximitySearchRequestRecord) throws -> ProximitySearchResultRecord {
+        let session = try read()
+        defer { session.close() }
+        return try session.search(request)
+    }
     public func searchExact(_ query: [Float], k: UInt64) throws -> ProximitySearchResultRecord {
         let session = try read()
         defer { session.close() }
@@ -874,7 +905,9 @@ public final class ProximityMap: @unchecked Sendable {
         _ request: ProximitySearchRequestRecord,
         limits: ContentGraphLimitsRecord = defaultContentGraphLimits()
     ) throws -> ProximitySearchProof {
-        ProximitySearchProof(native: try native.proveSearch(request: request, limits: limits))
+        ProximitySearchProof(
+            native: try native.proveSearch(request: ownedSearchRequest(request), limits: limits)
+        )
     }
     public func proveSearchExact(
         _ query: [Float],
@@ -965,9 +998,12 @@ public final class ProximityReadSession: @unchecked Sendable {
     init(native: BindingProximityReadSession) { self.native = native }
     public func get(_ key: Data) throws -> ExactProximityRecordRecord? { try native.get(key: Data(key)) }
     public func contains(_ key: Data) throws -> Bool { try native.containsKey(key: Data(key)) }
-    public func searchExact(_ query: [Float], k: UInt64) throws -> ProximitySearchResultRecord {
+    public func search(_ request: ProximitySearchRequestRecord) throws -> ProximitySearchResultRecord {
         guard !closed else { throw PortableAPIError.closed("proximity read session") }
-        return try native.search(request: exactProximitySearchRequest(query: query, k: k))
+        return try native.search(request: ownedSearchRequest(request))
+    }
+    public func searchExact(_ query: [Float], k: UInt64) throws -> ProximitySearchResultRecord {
+        try search(exactProximitySearchRequest(query: query, k: k))
     }
     public func withSearchView<R>(
         query: [Float],

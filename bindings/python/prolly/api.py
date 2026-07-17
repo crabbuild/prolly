@@ -123,6 +123,36 @@ def _owned_entries(entries):
     ]
 
 
+def _owned_proximity_search_request(request):
+    budget = request.budget
+    filter_record = request.filter
+    return _native.ProximitySearchRequestRecord(
+        query=[float(value) for value in request.query],
+        k=int(request.k),
+        policy=request.policy,
+        adaptive_quality=request.adaptive_quality,
+        budget=_native.SearchBudgetRecord(
+            max_nodes=budget.max_nodes,
+            max_committed_bytes=budget.max_committed_bytes,
+            max_distance_evaluations=budget.max_distance_evaluations,
+            max_frontier_entries=budget.max_frontier_entries,
+        ),
+        filter=_native.ProximityFilterRecord(
+            kind=filter_record.kind,
+            start=None if filter_record.start is None else bytes(filter_record.start),
+            range_end=(
+                None if filter_record.range_end is None else bytes(filter_record.range_end)
+            ),
+            prefix=None if filter_record.prefix is None else bytes(filter_record.prefix),
+            eligible_keys=[bytes(key) for key in filter_record.eligible_keys],
+        ),
+        kernel=request.kernel,
+        backend=request.backend,
+        hnsw_ef_search=request.hnsw_ef_search,
+        pq_rerank_multiplier=request.pq_rerank_multiplier,
+    )
+
+
 class VersionedMap(_Scoped):
     def __init__(self, inner: _native.BindingVersionedMap):
         super().__init__()
@@ -889,7 +919,8 @@ class ProximityMap(_Scoped):
         self._open()
         return ProximitySearchProof(
             self._inner.prove_search(
-                request, limits or _native.default_content_graph_limits()
+                _owned_proximity_search_request(request),
+                limits or _native.default_content_graph_limits(),
             )
         )
 
@@ -929,7 +960,7 @@ class ProximityReadSession(_Scoped):
 
     def search(self, request: _native.ProximitySearchRequestRecord):
         self._open()
-        return self._inner.search(request)
+        return self._inner.search(_owned_proximity_search_request(request))
 
     def search_exact(self, query: Sequence[float], k: int):
         return self.search(

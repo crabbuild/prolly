@@ -50,6 +50,17 @@ import kotlinx.coroutines.withContext
 
 data class ProximityRecord(val key: ByteArray, val vector: List<Float>, val value: ByteArray)
 
+private fun ownedSearchRequest(request: ProximitySearchRequestRecord) = request.copy(
+    query = request.query.toList(),
+    budget = request.budget.copy(),
+    filter = request.filter.copy(
+        start = request.filter.start?.copyOf(),
+        rangeEnd = request.filter.rangeEnd?.copyOf(),
+        prefix = request.filter.prefix?.copyOf(),
+        eligibleKeys = request.filter.eligibleKeys.map(ByteArray::copyOf),
+    ),
+)
+
 class Engine private constructor(internal val native: ProllyEngine) : AutoCloseable {
     companion object {
         fun memory(config: ConfigRecord = defaultConfig()) = Engine(ProllyEngine.memory(config))
@@ -377,6 +388,8 @@ class ProximityMap(internal val native: BindingProximityMap) : AutoCloseable {
     val config: ProximityConfigRecord get() = native.config()
     fun get(key: ByteArray) = native.get(key.copyOf())
     fun containsKey(key: ByteArray) = native.containsKey(key.copyOf())
+    fun search(request: ProximitySearchRequestRecord): ProximitySearchResultRecord =
+        read().use { it.search(request) }
     fun searchExact(query: List<Float>, k: ULong): ProximitySearchResultRecord =
         read().use { it.searchExact(query, k) }
     fun read() = ProximityReadSession(native.readSession())
@@ -395,7 +408,7 @@ class ProximityMap(internal val native: BindingProximityMap) : AutoCloseable {
     fun proveSearch(
         request: ProximitySearchRequestRecord,
         limits: ContentGraphLimitsRecord = defaultContentGraphLimits(),
-    ) = ProximitySearchProof(native.proveSearch(request, limits))
+    ) = ProximitySearchProof(native.proveSearch(ownedSearchRequest(request), limits))
     fun proveSearchExact(
         query: List<Float>,
         k: ULong,
@@ -410,8 +423,10 @@ class ProximityMap(internal val native: BindingProximityMap) : AutoCloseable {
 class ProximityReadSession(internal val native: BindingProximityReadSession) : AutoCloseable {
     fun get(key: ByteArray) = native.get(key.copyOf())
     fun containsKey(key: ByteArray) = native.containsKey(key.copyOf())
+    fun search(request: ProximitySearchRequestRecord): ProximitySearchResultRecord =
+        native.search(ownedSearchRequest(request))
     fun searchExact(query: List<Float>, k: ULong): ProximitySearchResultRecord =
-        native.search(exactProximitySearchRequest(query.toList(), k))
+        search(exactProximitySearchRequest(query.toList(), k))
     fun <R> withSearchView(
         query: List<Float>,
         k: UInt,
