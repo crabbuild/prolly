@@ -65,7 +65,7 @@ export PROLLY_DYNAMODB_ENDPOINT="http://127.0.0.1:$DYNAMODB_PORT"
 export SPANNER_EMULATOR_HOST="127.0.0.1:$SPANNER_GRPC_PORT"
 
 cd "$ROOT_DIR/bindings/go"
-go test -race ./...
+go test -race -count=1 ./...
 go run ./internal/verifycompat ../../conformance/store-protocol-v1/compatibility.json
 
 core_deps="$(go list -deps ./...)"
@@ -80,12 +80,12 @@ for module in sqlite postgres mysql redis dynamodb cosmosdb spanner; do
     (
       unset PROLLY_COSMOS_ENDPOINT PROLLY_COSMOS_KEY PROLLY_COSMOS_DATABASE
       cd "$ROOT_DIR/bindings/go/stores/$module"
-      go test -race ./...
+      go test -race -count=1 ./...
     )
   else
     (
       cd "$ROOT_DIR/bindings/go/stores/$module"
-      go test -race ./...
+      go test -race -count=1 ./...
     )
   fi
 done
