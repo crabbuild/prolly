@@ -102,14 +102,19 @@ extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_initializ
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_initialize_sorted(uint64_t ptr, RustBuffer entries, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_head(uint64_t ptr, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_head_id(uint64_t ptr, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_head_name(uint64_t ptr, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_versions_prefix(uint64_t ptr, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_version(uint64_t ptr, RustBuffer id, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_versions(uint64_t ptr, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_get(uint64_t ptr, RustBuffer key, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_get_large_value(uint64_t ptr, uint64_t blob_store, RustBuffer key, RustCallStatus *out_err);
 extern int8_t uniffi_prolly_bindings_fn_method_bindingversionedmap_contains_key(uint64_t ptr, RustBuffer key, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_get_many(uint64_t ptr, RustBuffer keys, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_get_at(uint64_t ptr, RustBuffer id, RustBuffer key, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_get_many_at(uint64_t ptr, RustBuffer id, RustBuffer keys, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_put(uint64_t ptr, RustBuffer key, RustBuffer value, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_put_large_value(uint64_t ptr, uint64_t blob_store, RustBuffer key, RustBuffer value, RustBuffer config, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_put_large_value_if(uint64_t ptr, uint64_t blob_store, RustBuffer expected, RustBuffer key, RustBuffer value, RustBuffer config, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_apply(uint64_t ptr, RustBuffer mutations, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_append(uint64_t ptr, RustBuffer mutations, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_parallel_apply(uint64_t ptr, RustBuffer mutations, RustBuffer config, RustCallStatus *out_err);
@@ -137,6 +142,8 @@ extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_verify_ca
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_retention_policy(uint64_t ptr, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_plan_gc(uint64_t ptr, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_sweep_gc(uint64_t ptr, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_plan_blob_gc(uint64_t ptr, uint64_t blob_store, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_sweep_blob_gc(uint64_t ptr, uint64_t blob_store, RustCallStatus *out_err);
 extern uint64_t uniffi_prolly_bindings_fn_method_bindingversionedmap_prepare_merge(uint64_t ptr, RustBuffer base, RustBuffer candidate, RustCallStatus *out_err);
 extern uint64_t uniffi_prolly_bindings_fn_clone_bindingmapmerge(uint64_t ptr, RustCallStatus *out_err);
 extern void uniffi_prolly_bindings_fn_free_bindingmapmerge(uint64_t ptr, RustCallStatus *out_err);
@@ -750,6 +757,18 @@ func ffiVersionedHeadID(handle uint64) ([]byte, error) {
 	})
 }
 
+func ffiVersionedHeadName(handle uint64) ([]byte, error) {
+	return ffiVersionedNoArg(handle, func(clone C.uint64_t, status *C.RustCallStatus) C.RustBuffer {
+		return C.uniffi_prolly_bindings_fn_method_bindingversionedmap_head_name(clone, status)
+	})
+}
+
+func ffiVersionedVersionsPrefix(handle uint64) ([]byte, error) {
+	return ffiVersionedNoArg(handle, func(clone C.uint64_t, status *C.RustCallStatus) C.RustBuffer {
+		return C.uniffi_prolly_bindings_fn_method_bindingversionedmap_versions_prefix(clone, status)
+	})
+}
+
 func ffiVersionedVersion(handle uint64, id []byte) ([]byte, error) {
 	clone, err := portableCloneVersioned(handle)
 	if err != nil {
@@ -784,6 +803,29 @@ func ffiVersionedGet(handle uint64, key []byte) ([]byte, error) {
 	}
 	var status C.RustCallStatus
 	buf := C.uniffi_prolly_bindings_fn_method_bindingversionedmap_get(clone, keyBuf, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiVersionedGetLargeValue(handle uint64, blobStore *BlobStore, key []byte) ([]byte, error) {
+	clone, err := portableCloneVersioned(handle)
+	if err != nil {
+		return nil, err
+	}
+	blobHandle, err := blobStore.cloneHandle()
+	if err != nil {
+		return nil, err
+	}
+	keyBuf, err := portableInput(encodeByteArray(key))
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingversionedmap_get_large_value(
+		clone, C.uint64_t(blobHandle), keyBuf, &status,
+	)
 	if err := portableStatusError(&status); err != nil {
 		return nil, err
 	}
@@ -878,6 +920,82 @@ func ffiVersionedPut(handle uint64, key, value []byte) ([]byte, error) {
 	}
 	var status C.RustCallStatus
 	buf := C.uniffi_prolly_bindings_fn_method_bindingversionedmap_put(clone, keyBuf, valueBuf, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiVersionedPutLargeValue(
+	handle uint64,
+	blobStore *BlobStore,
+	key, value []byte,
+	config LargeValueConfig,
+) ([]byte, error) {
+	clone, err := portableCloneVersioned(handle)
+	if err != nil {
+		return nil, err
+	}
+	blobHandle, err := blobStore.cloneHandle()
+	if err != nil {
+		return nil, err
+	}
+	keyBuf, err := portableInput(encodeByteArray(key))
+	if err != nil {
+		return nil, err
+	}
+	valueBuf, err := portableInput(encodeByteArray(value))
+	if err != nil {
+		return nil, err
+	}
+	configBuf, err := portableInput(encodeLargeValueConfig(config))
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingversionedmap_put_large_value(
+		clone, C.uint64_t(blobHandle), keyBuf, valueBuf, configBuf, &status,
+	)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiVersionedPutLargeValueIf(
+	handle uint64,
+	blobStore *BlobStore,
+	expected, key, value []byte,
+	config LargeValueConfig,
+) ([]byte, error) {
+	clone, err := portableCloneVersioned(handle)
+	if err != nil {
+		return nil, err
+	}
+	blobHandle, err := blobStore.cloneHandle()
+	if err != nil {
+		return nil, err
+	}
+	expectedBuf, err := portableInput(encodeOptionalByteArray(expected))
+	if err != nil {
+		return nil, err
+	}
+	keyBuf, err := portableInput(encodeByteArray(key))
+	if err != nil {
+		return nil, err
+	}
+	valueBuf, err := portableInput(encodeByteArray(value))
+	if err != nil {
+		return nil, err
+	}
+	configBuf, err := portableInput(encodeLargeValueConfig(config))
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingversionedmap_put_large_value_if(
+		clone, C.uint64_t(blobHandle), expectedBuf, keyBuf, valueBuf, configBuf, &status,
+	)
 	if err := portableStatusError(&status); err != nil {
 		return nil, err
 	}
@@ -1347,6 +1465,44 @@ func ffiVersionedSweepGC(handle uint64) ([]byte, error) {
 	return ffiVersionedNoArg(handle, func(clone C.uint64_t, status *C.RustCallStatus) C.RustBuffer {
 		return C.uniffi_prolly_bindings_fn_method_bindingversionedmap_sweep_gc(clone, status)
 	})
+}
+
+func ffiVersionedPlanBlobGC(handle uint64, blobStore *BlobStore) ([]byte, error) {
+	clone, err := portableCloneVersioned(handle)
+	if err != nil {
+		return nil, err
+	}
+	blobHandle, err := blobStore.cloneHandle()
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingversionedmap_plan_blob_gc(
+		clone, C.uint64_t(blobHandle), &status,
+	)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiVersionedSweepBlobGC(handle uint64, blobStore *BlobStore) ([]byte, error) {
+	clone, err := portableCloneVersioned(handle)
+	if err != nil {
+		return nil, err
+	}
+	blobHandle, err := blobStore.cloneHandle()
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingversionedmap_sweep_blob_gc(
+		clone, C.uint64_t(blobHandle), &status,
+	)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
 }
 
 func ffiMapSnapshotGet(handle uint64, key []byte) ([]byte, error) {

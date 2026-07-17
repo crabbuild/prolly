@@ -36,6 +36,28 @@ import org.junit.jupiter.api.Test;
 
 class PortableParityTest {
     @Test
+    void versionedLargeValuesAndBlobGcAreApplicationFacing() {
+        Prolly.useLocalDebugLibrary();
+        try (Engine engine = Engine.memory();
+                build.crab.prolly.javaapi.BlobStore blobs =
+                        build.crab.prolly.javaapi.BlobStore.memory();
+                var versioned = engine.versionedMap(bytes("large-values"))) {
+            versioned.initialize();
+            assertFalse(versioned.headName().length == 0);
+            assertFalse(versioned.versionsPrefix().length == 0);
+            var first = versioned.putLargeValue(blobs, bytes("document"), bytes("large-value"), 1);
+            assertArrayEquals(bytes("large-value"), versioned.getLargeValue(blobs, bytes("document")).orElseThrow());
+            var updated = versioned.putLargeValueIf(
+                    blobs, first.id(), bytes("document"), bytes("new-large-value"), 1);
+            assertEquals(MapUpdateKind.APPLIED, updated.kind());
+            assertTrue(versioned.planBlobGc(blobs).reachability().liveBlobCount() >= 1);
+            var sweep = versioned.sweepBlobGcAsync(blobs);
+            blobs.close();
+            assertTrue(sweep.join().plan().reachability().liveBlobCount() >= 1);
+        }
+    }
+
+    @Test
     void retainedSearchRuntimeReusesValidatedContent() throws Exception {
         Prolly.useLocalDebugLibrary();
         var records = new ArrayList<ProximityRecord>();

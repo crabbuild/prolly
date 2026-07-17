@@ -25450,13 +25450,24 @@
     {
       "rust": "prolly::VersionedMap::get_large_value",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "prolly.api.VersionedMap.get_large_value",
+        "go": "prolly.(*VersionedMap).GetLargeValue",
+        "node": "@trail/prolly-node.VersionedMap.getLargeValue",
+        "kotlin": "build.crab.prolly.api.VersionedMap.getLargeValue",
+        "java": "build.crab.prolly.javaapi.VersionedMap.getLargeValue",
+        "ruby": "Prolly::VersionedMap#get_large_value",
+        "swift": "ProllyAPI.VersionedMap.getLargeValue",
+        "wasm": "@trail/prolly-wasm.WasmVersionedMap.getLargeValue"
+      },
       "exclusions": {},
       "tests": [
-        "prolly-bindings::domain::versioned"
+        "prolly-bindings::domain::versioned",
+        "portable-parity::versioned-large-values-blob-gc",
+        "portable-parity::async-blob-store-ownership"
       ],
       "docs": [
         "conformance/binding-versioned-fixtures.v1.json"
@@ -25570,13 +25581,23 @@
     {
       "rust": "prolly::VersionedMap::head_name",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "prolly.api.VersionedMap.head_name",
+        "go": "prolly.(*VersionedMap).HeadName",
+        "node": "@trail/prolly-node.VersionedMap.headName",
+        "kotlin": "build.crab.prolly.api.VersionedMap.headName",
+        "java": "build.crab.prolly.javaapi.VersionedMap.headName",
+        "ruby": "Prolly::VersionedMap#head_name",
+        "swift": "ProllyAPI.VersionedMap.headName",
+        "wasm": "@trail/prolly-wasm.WasmVersionedMap.headName"
+      },
       "exclusions": {},
       "tests": [
-        "prolly-bindings::domain::versioned"
+        "prolly-bindings::domain::versioned",
+        "portable-parity::versioned-large-values-blob-gc"
       ],
       "docs": [
         "conformance/binding-versioned-fixtures.v1.json"
@@ -25786,13 +25807,24 @@
     {
       "rust": "prolly::VersionedMap::plan_blob_gc",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "prolly.api.VersionedMap.plan_blob_gc",
+        "go": "prolly.(*VersionedMap).PlanBlobGC",
+        "node": "@trail/prolly-node.VersionedMap.planBlobGc",
+        "kotlin": "build.crab.prolly.api.VersionedMap.planBlobGc",
+        "java": "build.crab.prolly.javaapi.VersionedMap.planBlobGc",
+        "ruby": "Prolly::VersionedMap#plan_blob_gc",
+        "swift": "ProllyAPI.VersionedMap.planBlobGC",
+        "wasm": "@trail/prolly-wasm.WasmVersionedMap.planBlobGc"
+      },
       "exclusions": {},
       "tests": [
-        "prolly-bindings::domain::versioned"
+        "prolly-bindings::domain::versioned",
+        "portable-parity::versioned-large-values-blob-gc",
+        "portable-parity::async-blob-store-ownership"
       ],
       "docs": [
         "conformance/binding-versioned-fixtures.v1.json"
@@ -25936,13 +25968,24 @@
     {
       "rust": "prolly::VersionedMap::put_large_value",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "prolly.api.VersionedMap.put_large_value",
+        "go": "prolly.(*VersionedMap).PutLargeValue",
+        "node": "@trail/prolly-node.VersionedMap.putLargeValue",
+        "kotlin": "build.crab.prolly.api.VersionedMap.putLargeValue",
+        "java": "build.crab.prolly.javaapi.VersionedMap.putLargeValue",
+        "ruby": "Prolly::VersionedMap#put_large_value",
+        "swift": "ProllyAPI.VersionedMap.putLargeValue",
+        "wasm": "@trail/prolly-wasm.WasmVersionedMap.putLargeValue"
+      },
       "exclusions": {},
       "tests": [
-        "prolly-bindings::domain::versioned"
+        "prolly-bindings::domain::versioned",
+        "portable-parity::versioned-large-values-blob-gc",
+        "portable-parity::async-blob-store-ownership"
       ],
       "docs": [
         "conformance/binding-versioned-fixtures.v1.json"
@@ -25951,13 +25994,24 @@
     {
       "rust": "prolly::VersionedMap::put_large_value_if",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "prolly.api.VersionedMap.put_large_value_if",
+        "go": "prolly.(*VersionedMap).PutLargeValueIf",
+        "node": "@trail/prolly-node.VersionedMap.putLargeValueIf",
+        "kotlin": "build.crab.prolly.api.VersionedMap.putLargeValueIf",
+        "java": "build.crab.prolly.javaapi.VersionedMap.putLargeValueIf",
+        "ruby": "Prolly::VersionedMap#put_large_value_if",
+        "swift": "ProllyAPI.VersionedMap.putLargeValueIf",
+        "wasm": "@trail/prolly-wasm.WasmVersionedMap.putLargeValueIf"
+      },
       "exclusions": {},
       "tests": [
-        "prolly-bindings::domain::versioned"
+        "prolly-bindings::domain::versioned",
+        "portable-parity::versioned-large-values-blob-gc",
+        "portable-parity::async-blob-store-ownership"
       ],
       "docs": [
         "conformance/binding-versioned-fixtures.v1.json"
@@ -26221,13 +26275,24 @@
     {
       "rust": "prolly::VersionedMap::sweep_blob_gc",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "prolly.api.VersionedMap.sweep_blob_gc",
+        "go": "prolly.(*VersionedMap).SweepBlobGC",
+        "node": "@trail/prolly-node.VersionedMap.sweepBlobGc",
+        "kotlin": "build.crab.prolly.api.VersionedMap.sweepBlobGc",
+        "java": "build.crab.prolly.javaapi.VersionedMap.sweepBlobGc",
+        "ruby": "Prolly::VersionedMap#sweep_blob_gc",
+        "swift": "ProllyAPI.VersionedMap.sweepBlobGC",
+        "wasm": "@trail/prolly-wasm.WasmVersionedMap.sweepBlobGc"
+      },
       "exclusions": {},
       "tests": [
-        "prolly-bindings::domain::versioned"
+        "prolly-bindings::domain::versioned",
+        "portable-parity::versioned-large-values-blob-gc",
+        "portable-parity::async-blob-store-ownership"
       ],
       "docs": [
         "conformance/binding-versioned-fixtures.v1.json"
@@ -26311,13 +26376,23 @@
     {
       "rust": "prolly::VersionedMap::versions_prefix",
       "classification": "portable",
-      "status": "planned",
+      "status": "implemented",
       "family": "versioned-map",
       "performance": "owned",
-      "languages": {},
+      "languages": {
+        "python": "prolly.api.VersionedMap.versions_prefix",
+        "go": "prolly.(*VersionedMap).VersionsPrefix",
+        "node": "@trail/prolly-node.VersionedMap.versionsPrefix",
+        "kotlin": "build.crab.prolly.api.VersionedMap.versionsPrefix",
+        "java": "build.crab.prolly.javaapi.VersionedMap.versionsPrefix",
+        "ruby": "Prolly::VersionedMap#versions_prefix",
+        "swift": "ProllyAPI.VersionedMap.versionsPrefix",
+        "wasm": "@trail/prolly-wasm.WasmVersionedMap.versionsPrefix"
+      },
       "exclusions": {},
       "tests": [
-        "prolly-bindings::domain::versioned"
+        "prolly-bindings::domain::versioned",
+        "portable-parity::versioned-large-values-blob-gc"
       ],
       "docs": [
         "conformance/binding-versioned-fixtures.v1.json"

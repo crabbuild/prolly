@@ -1,5 +1,12 @@
 import { nativePromise, ownedBytes, scopedBytes, type ViewScope } from "./packed.ts";
-import type { NativeSnapshotBundleRecord } from "./native.ts";
+import { loadNative } from "./native.ts";
+import type {
+  NativeBlobGcPlanRecord,
+  NativeBlobGcSweepRecord,
+  NativeLargeValueConfigRecord,
+  NativeProllyBlobStore,
+  NativeSnapshotBundleRecord,
+} from "./native.ts";
 
 export type SnapshotBundle = NativeSnapshotBundleRecord;
 
@@ -66,6 +73,24 @@ export interface GcPlan {
   missingCandidates: bigint;
 }
 export interface GcSweep { plan: GcPlan; deletedNodes: bigint; deletedBytes: bigint; }
+export interface VersionedLargeValueConfig { inlineThreshold: bigint; }
+export interface BlobRef { cid: Uint8Array; len: bigint; }
+export interface BlobGcReachability {
+  liveBlobs: BlobRef[];
+  liveBlobCount: bigint;
+  liveBlobBytes: bigint;
+  scannedNodes: bigint;
+  scannedValues: bigint;
+}
+export interface BlobGcPlan {
+  reachability: BlobGcReachability;
+  candidateBlobs: bigint;
+  reclaimableBlobs: BlobRef[];
+  reclaimableBlobCount: bigint;
+  reclaimableBlobBytes: bigint;
+  missingCandidates: bigint;
+}
+export interface BlobGcSweep { plan: BlobGcPlan; deletedBlobs: bigint; deletedBlobBytes: bigint; }
 export interface NamedRootRetention {
   kind: "all" | "exact" | "prefix" | "newest_by_name" | "updated_since";
   names: Uint8Array[];
@@ -136,6 +161,8 @@ interface NativeMapVersion {
 
 interface NativeVersionedMap {
   id(): Uint8Array;
+  headName(): Uint8Array;
+  versionsPrefix(): Uint8Array;
   isInitialized(): boolean;
   initialize(): NativeMapVersion;
   initializeSorted(entries: MapEntry[]): NativeMapUpdate;
@@ -144,6 +171,7 @@ interface NativeVersionedMap {
   version(id: Uint8Array): NativeMapVersion | null;
   versions(): NativeMapVersion[];
   get(key: Uint8Array): Uint8Array | null;
+  getLargeValue(blobStore: NativeProllyBlobStore, key: Uint8Array): Uint8Array | null;
   containsKey(key: Uint8Array): boolean;
   getMany(keys: Uint8Array[]): Array<Uint8Array | null>;
   getAt(id: Uint8Array, key: Uint8Array): Uint8Array | null;
@@ -160,6 +188,7 @@ interface NativeVersionedMap {
   changesSince(base: Uint8Array): MapDiff[];
   rollbackTo(id: Uint8Array): NativeMapVersion;
   put(key: Uint8Array, value: Uint8Array): NativeMapVersion;
+  putLargeValue(blobStore: NativeProllyBlobStore, key: Uint8Array, value: Uint8Array, config: NativeLargeValueConfigRecord): NativeMapVersion;
   apply(mutations: MapMutation[]): NativeMapVersion;
   append(mutations: MapMutation[]): NativeMapVersion;
   parallelApply(mutations: MapMutation[], config: NativeVersionedParallelConfig): NativeVersionedMapBatchResult;
@@ -169,6 +198,7 @@ interface NativeVersionedMap {
   applyIf(expected: Uint8Array | null, mutations: MapMutation[]): NativeMapUpdate;
   applyIfAtMillis(expected: Uint8Array | null, mutations: MapMutation[], timestampMillis: string): NativeMapUpdate;
   putIf(expected: Uint8Array | null, key: Uint8Array, value: Uint8Array): NativeMapUpdate;
+  putLargeValueIf(blobStore: NativeProllyBlobStore, expected: Uint8Array | null, key: Uint8Array, value: Uint8Array, config: NativeLargeValueConfigRecord): NativeMapUpdate;
   deleteIf(expected: Uint8Array | null, key: Uint8Array): NativeMapUpdate;
   delete(key: Uint8Array): NativeMapVersion;
   snapshot(): NativeMapSnapshot | null;
@@ -191,6 +221,8 @@ interface NativeVersionedMap {
   verifyCatalog(): NativeCatalogVerification;
   planGc(): NativeGcPlan;
   sweepGc(): NativeGcSweep;
+  planBlobGc(blobStore: NativeProllyBlobStore): NativeBlobGcPlanRecord;
+  sweepBlobGc(blobStore: NativeProllyBlobStore): NativeBlobGcSweepRecord;
 }
 
 interface NativeMapComparison {
@@ -356,6 +388,35 @@ function retention(value: NativeNamedRootRetention): NamedRootRetention {
   };
 }
 
+function blobRef(value: { cid: Uint8Array; len: string }): BlobRef {
+  return { cid: value.cid, len: BigInt(value.len) };
+}
+
+function blobGcPlan(value: NativeBlobGcPlanRecord): BlobGcPlan {
+  return {
+    reachability: {
+      liveBlobs: value.reachability.liveBlobs.map(blobRef),
+      liveBlobCount: BigInt(value.reachability.liveBlobCount),
+      liveBlobBytes: BigInt(value.reachability.liveBlobBytes),
+      scannedNodes: BigInt(value.reachability.scannedNodes),
+      scannedValues: BigInt(value.reachability.scannedValues),
+    },
+    candidateBlobs: BigInt(value.candidateBlobs),
+    reclaimableBlobs: value.reclaimableBlobs.map(blobRef),
+    reclaimableBlobCount: BigInt(value.reclaimableBlobCount),
+    reclaimableBlobBytes: BigInt(value.reclaimableBlobBytes),
+    missingCandidates: BigInt(value.missingCandidates),
+  };
+}
+
+function blobGcSweep(value: NativeBlobGcSweepRecord): BlobGcSweep {
+  return {
+    plan: blobGcPlan(value.plan),
+    deletedBlobs: BigInt(value.deletedBlobs),
+    deletedBlobBytes: BigInt(value.deletedBlobBytes),
+  };
+}
+
 function mapVersion(value: NativeMapVersion): MapVersion {
   return {
     id: value.id,
@@ -433,6 +494,32 @@ function ownedReverseCursor(cursor: ReverseCursor | undefined): ReverseCursor | 
   };
 }
 
+export class BlobStore implements Disposable {
+  #native?: NativeProllyBlobStore;
+
+  private constructor(native: NativeProllyBlobStore) {
+    this.#native = native;
+  }
+
+  static async memory(): Promise<BlobStore> {
+    const module = await loadNative();
+    return new BlobStore(module.NativeProllyBlobStore.memory());
+  }
+
+  static async file(path: string): Promise<BlobStore> {
+    const module = await loadNative();
+    return new BlobStore(module.NativeProllyBlobStore.file(path));
+  }
+
+  nativeHandle(): NativeProllyBlobStore {
+    if (this.#native == null) throw new Error("prolly blob store is closed");
+    return this.#native;
+  }
+
+  close(): void { this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
 export class VersionedMap implements Disposable {
   #native?: NativeVersionedMap;
 
@@ -446,6 +533,10 @@ export class VersionedMap implements Disposable {
   }
 
   id(): Uint8Array { return this.#open().id(); }
+
+  headName(): Uint8Array { return this.#open().headName(); }
+
+  versionsPrefix(): Uint8Array { return this.#open().versionsPrefix(); }
 
   isInitialized(signal?: AbortSignal): Promise<boolean> {
     const native = this.#open();
@@ -492,6 +583,11 @@ export class VersionedMap implements Disposable {
     const native = this.#open();
     key = ownedBytes(key);
     return nativePromise(signal, () => native.get(key) ?? undefined);
+  }
+
+  getLargeValue(blobStore: BlobStore, key: Uint8Array, signal?: AbortSignal): Promise<Uint8Array | undefined> {
+    const native = this.#open(); const nativeBlobStore = blobStore.nativeHandle(); key = ownedBytes(key);
+    return nativePromise(signal, () => native.getLargeValue(nativeBlobStore, key) ?? undefined);
   }
 
   containsKey(key: Uint8Array, signal?: AbortSignal): Promise<boolean> {
@@ -580,6 +676,13 @@ export class VersionedMap implements Disposable {
     return nativePromise(signal, () => mapVersion(native.put(key, value)));
   }
 
+  putLargeValue(blobStore: BlobStore, key: Uint8Array, value: Uint8Array, config: VersionedLargeValueConfig, signal?: AbortSignal): Promise<MapVersion> {
+    const native = this.#open(); const nativeBlobStore = blobStore.nativeHandle();
+    key = ownedBytes(key); value = ownedBytes(value);
+    const ownedConfig = { inlineThreshold: checkedU64(config.inlineThreshold, "inlineThreshold") };
+    return nativePromise(signal, () => mapVersion(native.putLargeValue(nativeBlobStore, key, value, ownedConfig)));
+  }
+
   apply(mutations: readonly MapMutation[], signal?: AbortSignal): Promise<MapVersion> {
     const native = this.#open(); const owned = ownedMutations(mutations);
     return nativePromise(signal, () => mapVersion(native.apply(owned)));
@@ -635,6 +738,14 @@ export class VersionedMap implements Disposable {
     const ownedExpected = expected == null ? null : ownedBytes(expected);
     key = ownedBytes(key); value = ownedBytes(value);
     return nativePromise(signal, () => mapUpdate(native.putIf(ownedExpected, key, value)));
+  }
+
+  putLargeValueIf(blobStore: BlobStore, expected: Uint8Array | undefined, key: Uint8Array, value: Uint8Array, config: VersionedLargeValueConfig, signal?: AbortSignal): Promise<MapUpdate> {
+    const native = this.#open(); const nativeBlobStore = blobStore.nativeHandle();
+    const ownedExpected = expected == null ? null : ownedBytes(expected);
+    key = ownedBytes(key); value = ownedBytes(value);
+    const ownedConfig = { inlineThreshold: checkedU64(config.inlineThreshold, "inlineThreshold") };
+    return nativePromise(signal, () => mapUpdate(native.putLargeValueIf(nativeBlobStore, ownedExpected, key, value, ownedConfig)));
   }
 
   deleteIf(expected: Uint8Array | undefined, key: Uint8Array, signal?: AbortSignal): Promise<MapUpdate> {
@@ -758,6 +869,16 @@ export class VersionedMap implements Disposable {
       const value = native.sweepGc();
       return { plan: gcPlan(value.plan), deletedNodes: BigInt(value.deletedNodes), deletedBytes: BigInt(value.deletedBytes) };
     });
+  }
+
+  planBlobGc(blobStore: BlobStore, signal?: AbortSignal): Promise<BlobGcPlan> {
+    const native = this.#open(); const nativeBlobStore = blobStore.nativeHandle();
+    return nativePromise(signal, () => blobGcPlan(native.planBlobGc(nativeBlobStore)));
+  }
+
+  sweepBlobGc(blobStore: BlobStore, signal?: AbortSignal): Promise<BlobGcSweep> {
+    const native = this.#open(); const nativeBlobStore = blobStore.nativeHandle();
+    return nativePromise(signal, () => blobGcSweep(native.sweepBlobGc(nativeBlobStore)));
   }
 
   close(): void {

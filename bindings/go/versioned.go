@@ -556,6 +556,44 @@ func (m *VersionedMap) ID() ([]byte, error) {
 	return value, d.done()
 }
 
+// HeadName returns the owned catalog key used for this map's head pointer.
+func (m *VersionedMap) HeadName() ([]byte, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	raw, err := ffiVersionedHeadName(handle)
+	if err != nil {
+		return nil, err
+	}
+	d := byteDecoder{data: raw}
+	value, err := d.readByteArray()
+	if err != nil {
+		return nil, err
+	}
+	return value, d.done()
+}
+
+// VersionsPrefix returns the owned catalog namespace containing this map's versions.
+func (m *VersionedMap) VersionsPrefix() ([]byte, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	raw, err := ffiVersionedVersionsPrefix(handle)
+	if err != nil {
+		return nil, err
+	}
+	d := byteDecoder{data: raw}
+	value, err := d.readByteArray()
+	if err != nil {
+		return nil, err
+	}
+	return value, d.done()
+}
+
 func (m *VersionedMap) IsInitialized() (bool, error) {
 	handle, unlock, err := m.withHandle()
 	if err != nil {
@@ -664,6 +702,25 @@ func (m *VersionedMap) Get(key []byte) ([]byte, bool, error) {
 		return nil, false, err
 	}
 	return value, ok, decoder.done()
+}
+
+// GetLargeValue resolves either an inline value or its external blob payload.
+func (m *VersionedMap) GetLargeValue(blobStore *BlobStore, key []byte) ([]byte, bool, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return nil, false, err
+	}
+	defer unlock()
+	raw, err := ffiVersionedGetLargeValue(handle, blobStore, bytes.Clone(key))
+	if err != nil {
+		return nil, false, err
+	}
+	d := byteDecoder{data: raw}
+	value, ok, err := d.readOptionalByteArray()
+	if err != nil {
+		return nil, false, err
+	}
+	return value, ok, d.done()
 }
 
 func (m *VersionedMap) ContainsKey(key []byte) (bool, error) {
@@ -889,6 +946,20 @@ func (m *VersionedMap) Put(key, value []byte) (MapVersion, error) {
 	return decodePortableMapVersion(raw)
 }
 
+// PutLargeValue stores value inline or in blobStore according to config.
+func (m *VersionedMap) PutLargeValue(blobStore *BlobStore, key, value []byte, config LargeValueConfig) (MapVersion, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return MapVersion{}, err
+	}
+	defer unlock()
+	raw, err := ffiVersionedPutLargeValue(handle, blobStore, bytes.Clone(key), bytes.Clone(value), config)
+	if err != nil {
+		return MapVersion{}, err
+	}
+	return decodePortableMapVersion(raw)
+}
+
 func (m *VersionedMap) Apply(mutations []Mutation) (MapVersion, error) {
 	handle, unlock, err := m.withHandle()
 	if err != nil {
@@ -1029,6 +1100,27 @@ func (m *VersionedMap) PutIf(expected, key, value []byte) (MapUpdate, error) {
 	}
 	defer unlock()
 	raw, err := ffiVersionedPutIf(handle, append([]byte(nil), expected...), append([]byte(nil), key...), append([]byte(nil), value...))
+	if err != nil {
+		return MapUpdate{}, err
+	}
+	return decodePortableMapUpdate(raw)
+}
+
+// PutLargeValueIf conditionally stores an inline or external value when expected is still head.
+func (m *VersionedMap) PutLargeValueIf(blobStore *BlobStore, expected, key, value []byte, config LargeValueConfig) (MapUpdate, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return MapUpdate{}, err
+	}
+	defer unlock()
+	raw, err := ffiVersionedPutLargeValueIf(
+		handle,
+		blobStore,
+		bytes.Clone(expected),
+		bytes.Clone(key),
+		bytes.Clone(value),
+		config,
+	)
 	if err != nil {
 		return MapUpdate{}, err
 	}
@@ -1269,6 +1361,35 @@ func (m *VersionedMap) SweepGC() (GcSweep, error) {
 	}
 	return decodeGcSweep(raw)
 }
+
+// PlanBlobGC reports external blobs reachable from retained map versions.
+func (m *VersionedMap) PlanBlobGC(blobStore *BlobStore) (BlobGcPlan, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return BlobGcPlan{}, err
+	}
+	defer unlock()
+	raw, err := ffiVersionedPlanBlobGC(handle, blobStore)
+	if err != nil {
+		return BlobGcPlan{}, err
+	}
+	return decodeBlobGcPlan(raw)
+}
+
+// SweepBlobGC deletes external blobs not reachable from retained map versions.
+func (m *VersionedMap) SweepBlobGC(blobStore *BlobStore) (BlobGcSweep, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return BlobGcSweep{}, err
+	}
+	defer unlock()
+	raw, err := ffiVersionedSweepBlobGC(handle, blobStore)
+	if err != nil {
+		return BlobGcSweep{}, err
+	}
+	return decodeBlobGcSweep(raw)
+}
+
 func (m *VersionedMap) VerifyCatalog() (CatalogVerification, error) {
 	handle, unlock, err := m.withHandle()
 	if err != nil {

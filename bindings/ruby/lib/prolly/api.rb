@@ -9,6 +9,60 @@ module Prolly
     :kind, :composite, :hnsw, :pq, :reasons, :composite_stats, :hnsw_stats, :pq_stats
   )
 
+  class BlobStore
+    def self.memory = new(ProllyBlobStore.memory)
+    def self.file(path) = new(ProllyBlobStore.file(path))
+
+    def initialize(native)
+      @native = native
+      @closed = false
+    end
+
+    def native_handle
+      raise 'blob store is closed' if @closed
+
+      @native
+    end
+
+    def owned_clone
+      self.class.new(ProllyBlobStore.uniffi_allocate(native_handle.uniffi_clone_handle))
+    end
+
+    def put_blob(bytes) = native_handle.put_blob(bytes.b.dup)
+    def get_blob(reference) = native_handle.get_blob(reference)
+    def delete_blob(reference) = native_handle.delete_blob(reference)
+    def list_blob_refs = native_handle.list_blob_refs
+    def blob_count = native_handle.blob_count
+
+    def close
+      return if @closed
+
+      @closed = true
+      @native = nil
+    end
+
+    def use
+      raise 'blob store is closed' if @closed
+      return self unless block_given?
+
+      begin
+        yield self
+      ensure
+        close
+      end
+    end
+  end
+
+  def self.native_blob_store(store)
+    store.is_a?(BlobStore) ? store.native_handle : store
+  end
+
+  def self.with_owned_blob_store(store)
+    yield store
+  ensure
+    store.close if store.is_a?(BlobStore)
+  end
+
   def self.owned_proximity_search_request(request)
     budget = request.budget
     filter = request.filter
@@ -399,9 +453,13 @@ module Prolly
     def initialized? = open! { @native.is_initialized }
     def head = open! { @native.head }
     def head_id = open! { @native.head_id }
+    def head_name = open! { @native.head_name }
+    def versions_prefix = open! { @native.versions_prefix }
     def version(id) = open! { @native.version(id.b) }
     def versions = open! { @native.versions }
     def get(key) = open! { @native.get(key.b) }
+    def get_large_value(blob_store, key) =
+      open! { @native.get_large_value(Prolly.native_blob_store(blob_store), key.b) }
     def contains?(key) = open! { @native.contains_key(key.b) }
     def get_many(keys) = open! { @native.get_many(keys.map { |key| key.b.dup }) }
     def get_at(id, key) = open! { @native.get_at(id.b, key.b) }
@@ -418,6 +476,16 @@ module Prolly
     def changes_since(base) = open! { @native.changes_since(base.b) }
     def rollback_to(id) = open! { @native.rollback_to(id.b) }
     def put(key, value) = open! { @native.put(key.b, value.b) }
+    def put_large_value(blob_store, key, value, config) =
+      open! do
+        @native.put_large_value(Prolly.native_blob_store(blob_store), key.b, value.b, config)
+      end
+    def put_large_value_if(blob_store, expected, key, value, config) =
+      open! do
+        @native.put_large_value_if(
+          Prolly.native_blob_store(blob_store), expected&.b, key.b, value.b, config
+        )
+      end
     def apply(mutations) = open! { @native.apply(owned_mutations(mutations)) }
     def append(mutations) = open! { @native.append(owned_mutations(mutations)) }
     def parallel_apply(mutations, config)
@@ -461,6 +529,10 @@ module Prolly
     def verify_catalog = open! { @native.verify_catalog }
     def plan_gc = open! { @native.plan_gc }
     def sweep_gc = open! { @native.sweep_gc }
+    def plan_blob_gc(blob_store) =
+      open! { @native.plan_blob_gc(Prolly.native_blob_store(blob_store)) }
+    def sweep_blob_gc(blob_store) =
+      open! { @native.sweep_blob_gc(Prolly.native_blob_store(blob_store)) }
 
     def put_async(key, value)
       copied_key = key.b.dup
@@ -472,11 +544,53 @@ module Prolly
     def head_async = Future.new { head }
     def version_async(id) = Future.new { version(id.b.dup) }
     def get_async(key) = Future.new { get(key.b.dup) }
+    def get_large_value_async(blob_store, key)
+      owned_store = blob_store.is_a?(BlobStore) ? blob_store.owned_clone : blob_store
+      owned_key = key.b.dup
+      Future.new do
+        Prolly.with_owned_blob_store(owned_store) { get_large_value(owned_store, owned_key) }
+      end
+    end
     def apply_async(mutations)
       owned = owned_mutations(mutations)
       Future.new { apply(owned) }
     end
     def delete_async(key) = Future.new { delete(key.b.dup) }
+    def put_large_value_async(blob_store, key, value, config)
+      owned_store = blob_store.is_a?(BlobStore) ? blob_store.owned_clone : blob_store
+      owned_key = key.b.dup
+      owned_value = value.b.dup
+      owned_config = LargeValueConfigRecord.new(inline_threshold: config.inline_threshold)
+      Future.new do
+        Prolly.with_owned_blob_store(owned_store) do
+          put_large_value(owned_store, owned_key, owned_value, owned_config)
+        end
+      end
+    end
+    def put_large_value_if_async(blob_store, expected, key, value, config)
+      owned_store = blob_store.is_a?(BlobStore) ? blob_store.owned_clone : blob_store
+      owned_expected = expected&.b&.dup
+      owned_key = key.b.dup
+      owned_value = value.b.dup
+      owned_config = LargeValueConfigRecord.new(inline_threshold: config.inline_threshold)
+      Future.new do
+        Prolly.with_owned_blob_store(owned_store) do
+          put_large_value_if(owned_store, owned_expected, owned_key, owned_value, owned_config)
+        end
+      end
+    end
+    def plan_blob_gc_async(blob_store)
+      owned_store = blob_store.is_a?(BlobStore) ? blob_store.owned_clone : blob_store
+      Future.new do
+        Prolly.with_owned_blob_store(owned_store) { plan_blob_gc(owned_store) }
+      end
+    end
+    def sweep_blob_gc_async(blob_store)
+      owned_store = blob_store.is_a?(BlobStore) ? blob_store.owned_clone : blob_store
+      Future.new do
+        Prolly.with_owned_blob_store(owned_store) { sweep_blob_gc(owned_store) }
+      end
+    end
     def snapshot_async = Future.new { snapshot }
     def snapshot_at_async(id) = Future.new { snapshot_at(id.b.dup) }
     def import_as_head_async(bundle)

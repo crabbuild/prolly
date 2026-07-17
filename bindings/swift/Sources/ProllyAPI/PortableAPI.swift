@@ -217,6 +217,39 @@ public enum PortableAPIError: Error, Equatable {
     case packedPage(String)
 }
 
+public final class BlobStore: @unchecked Sendable {
+    private let lock = NSLock()
+    private var native: ProllyBlobStore?
+
+    private init(native: ProllyBlobStore) { self.native = native }
+
+    public static func memory() -> BlobStore {
+        BlobStore(native: ProllyBlobStore.memory())
+    }
+
+    public static func file(_ path: String) throws -> BlobStore {
+        BlobStore(native: try ProllyBlobStore.file(path: path))
+    }
+
+    func checkedNative() throws -> ProllyBlobStore {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let native else { throw PortableAPIError.closed("blob store") }
+        return native
+    }
+
+    func ownedClone() throws -> ProllyBlobStore {
+        let source = try checkedNative()
+        return ProllyBlobStore(unsafeFromHandle: source.uniffiCloneHandle())
+    }
+
+    public func close() {
+        lock.lock()
+        native = nil
+        lock.unlock()
+    }
+}
+
 public final class VersionedMap: @unchecked Sendable {
     let native: BindingVersionedMap
     private var closed = false
@@ -232,11 +265,17 @@ public final class VersionedMap: @unchecked Sendable {
     }
     public func head() throws -> MapVersionRecord? { try open { try native.head() } }
     public func headID() throws -> Data? { try open { try native.headId() } }
+    public func headName() -> Data { native.headName() }
+    public func versionsPrefix() -> Data { native.versionsPrefix() }
     public func version(_ id: Data) throws -> MapVersionRecord? {
         try open { try native.version(id: Data(id)) }
     }
     public func versions() throws -> [MapVersionRecord] { try open { try native.versions() } }
     public func get(_ key: Data) throws -> Data? { try open { try native.get(key: Data(key)) } }
+    public func getLargeValue(_ blobStore: BlobStore, key: Data) throws -> Data? {
+        let nativeBlobStore = try blobStore.checkedNative()
+        return try open { try native.getLargeValue(blobStore: nativeBlobStore, key: Data(key)) }
+    }
     public func contains(_ key: Data) throws -> Bool {
         try open { try native.containsKey(key: Data(key)) }
     }
@@ -256,7 +295,7 @@ public final class VersionedMap: @unchecked Sendable {
         try open { try native.prefix(prefix: Data(prefix)) }
     }
     public func range(at id: Data, from start: Data = Data(), to end: Data? = nil) throws -> [EntryRecord] {
-        try open {
+        return try open {
             try native.rangeAt(id: Data(id), start: Data(start), rangeEnd: end.map { Data($0) })
         }
     }
@@ -283,7 +322,7 @@ public final class VersionedMap: @unchecked Sendable {
         to end: Data? = nil,
         limit: UInt64 = 256
     ) throws -> RangePageRecord {
-        try open {
+        return try open {
             try native.rangePageAt(id: Data(id), cursor: cursor, rangeEnd: end.map { Data($0) }, limit: limit)
         }
     }
@@ -308,6 +347,37 @@ public final class VersionedMap: @unchecked Sendable {
     }
     public func put(_ key: Data, value: Data) throws -> MapVersionRecord {
         try open { try native.put(key: Data(key), value: Data(value)) }
+    }
+    public func putLargeValue(
+        _ blobStore: BlobStore,
+        key: Data,
+        value: Data,
+        config: LargeValueConfigRecord
+    ) throws -> MapVersionRecord {
+        let nativeBlobStore = try blobStore.checkedNative()
+        return try open {
+            try native.putLargeValue(
+                blobStore: nativeBlobStore, key: Data(key), value: Data(value), config: config
+            )
+        }
+    }
+    public func putLargeValueIf(
+        _ blobStore: BlobStore,
+        expected: Data?,
+        key: Data,
+        value: Data,
+        config: LargeValueConfigRecord
+    ) throws -> MapUpdateRecord {
+        let nativeBlobStore = try blobStore.checkedNative()
+        return try open {
+            try native.putLargeValueIf(
+                blobStore: nativeBlobStore,
+                expected: expected.map { Data($0) },
+                key: Data(key),
+                value: Data(value),
+                config: config
+            )
+        }
     }
     public func apply(_ mutations: [MutationRecord]) throws -> MapVersionRecord {
         try open { try native.apply(mutations: mutations.map(ownedMutation)) }
@@ -446,6 +516,14 @@ public final class VersionedMap: @unchecked Sendable {
     }
     public func planGC() throws -> GcPlanRecord { try open { try native.planGc() } }
     public func sweepGC() throws -> GcSweepRecord { try open { try native.sweepGc() } }
+    public func planBlobGC(_ blobStore: BlobStore) throws -> BlobGcPlanRecord {
+        let nativeBlobStore = try blobStore.checkedNative()
+        return try open { try native.planBlobGc(blobStore: nativeBlobStore) }
+    }
+    public func sweepBlobGC(_ blobStore: BlobStore) throws -> BlobGcSweepRecord {
+        let nativeBlobStore = try blobStore.checkedNative()
+        return try open { try native.sweepBlobGc(blobStore: nativeBlobStore) }
+    }
 
     public func putAsync(_ key: Data, value: Data) -> Task<MapVersionRecord, Error> {
         let copiedKey = Data(key)
@@ -470,6 +548,19 @@ public final class VersionedMap: @unchecked Sendable {
         let owned = Data(key)
         return Task { try Task.checkCancellation(); return try self.get(owned) }
     }
+    public func getLargeValueAsync(
+        _ blobStore: BlobStore,
+        key: Data
+    ) throws -> Task<Data?, Error> {
+        let ownedBlobStore = try blobStore.ownedClone()
+        let owned = Data(key)
+        return Task {
+            try Task.checkCancellation()
+            return try self.open {
+                try self.native.getLargeValue(blobStore: ownedBlobStore, key: owned)
+            }
+        }
+    }
     public func applyAsync(_ mutations: [MutationRecord]) -> Task<MapVersionRecord, Error> {
         let owned = mutations.map(ownedMutation)
         return Task { try Task.checkCancellation(); return try self.apply(owned) }
@@ -477,6 +568,63 @@ public final class VersionedMap: @unchecked Sendable {
     public func deleteAsync(_ key: Data) -> Task<MapVersionRecord, Error> {
         let owned = Data(key)
         return Task { try Task.checkCancellation(); return try self.delete(owned) }
+    }
+    public func putLargeValueAsync(
+        _ blobStore: BlobStore,
+        key: Data,
+        value: Data,
+        config: LargeValueConfigRecord
+    ) throws -> Task<MapVersionRecord, Error> {
+        let ownedBlobStore = try blobStore.ownedClone()
+        let ownedKey = Data(key), ownedValue = Data(value), ownedConfig = config
+        return Task {
+            try Task.checkCancellation()
+            return try self.open {
+                try self.native.putLargeValue(
+                    blobStore: ownedBlobStore,
+                    key: ownedKey,
+                    value: ownedValue,
+                    config: ownedConfig
+                )
+            }
+        }
+    }
+    public func putLargeValueIfAsync(
+        _ blobStore: BlobStore,
+        expected: Data?,
+        key: Data,
+        value: Data,
+        config: LargeValueConfigRecord
+    ) throws -> Task<MapUpdateRecord, Error> {
+        let ownedBlobStore = try blobStore.ownedClone()
+        let ownedExpected = expected.map { Data($0) }
+        let ownedKey = Data(key), ownedValue = Data(value), ownedConfig = config
+        return Task {
+            try Task.checkCancellation()
+            return try self.open {
+                try self.native.putLargeValueIf(
+                    blobStore: ownedBlobStore,
+                    expected: ownedExpected,
+                    key: ownedKey,
+                    value: ownedValue,
+                    config: ownedConfig
+                )
+            }
+        }
+    }
+    public func planBlobGCAsync(_ blobStore: BlobStore) throws -> Task<BlobGcPlanRecord, Error> {
+        let ownedBlobStore = try blobStore.ownedClone()
+        return Task {
+            try Task.checkCancellation()
+            return try self.open { try self.native.planBlobGc(blobStore: ownedBlobStore) }
+        }
+    }
+    public func sweepBlobGCAsync(_ blobStore: BlobStore) throws -> Task<BlobGcSweepRecord, Error> {
+        let ownedBlobStore = try blobStore.ownedClone()
+        return Task {
+            try Task.checkCancellation()
+            return try self.open { try self.native.sweepBlobGc(blobStore: ownedBlobStore) }
+        }
     }
     public func snapshotAsync() -> Task<MapSnapshot?, Error> {
         Task { try Task.checkCancellation(); return try self.snapshot() }

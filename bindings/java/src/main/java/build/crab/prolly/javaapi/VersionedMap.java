@@ -31,6 +31,10 @@ public final class VersionedMap implements AutoCloseable {
 
     public byte[] id() { return open().getId().clone(); }
 
+    public byte[] headName() { return open().headName().clone(); }
+
+    public byte[] versionsPrefix() { return open().versionsPrefix().clone(); }
+
     public boolean isInitialized() { return open().isInitialized(); }
 
     public Optional<MapVersion> head() {
@@ -54,6 +58,12 @@ public final class VersionedMap implements AutoCloseable {
 
     public Optional<byte[]> get(byte[] key) {
         byte[] value = open().get(key.clone());
+        return Optional.ofNullable(value == null ? null : value.clone());
+    }
+
+    public Optional<byte[]> getLargeValue(BlobStore blobStore, byte[] key) {
+        byte[] value = build.crab.prolly.api.JavaPortableBridge.versionedGetLargeValue(
+                open(), blobStore.nativeHandle(), key.clone());
         return Optional.ofNullable(value == null ? null : value.clone());
     }
 
@@ -130,6 +140,13 @@ public final class VersionedMap implements AutoCloseable {
         return MapVersion.fromNative(open().put(key.clone(), value.clone()));
     }
 
+    public MapVersion putLargeValue(
+            BlobStore blobStore, byte[] key, byte[] value, long inlineThreshold) {
+        return MapVersion.fromNative(
+                build.crab.prolly.api.JavaPortableBridge.versionedPutLargeValue(
+                        open(), blobStore.nativeHandle(), key.clone(), value.clone(), inlineThreshold));
+    }
+
     public MapVersion apply(List<MapMutation> mutations) {
         return MapVersion.fromNative(build.crab.prolly.api.JavaPortableBridge.applyVersioned(
                 open(), mutations.stream().map(MapMutation::toBridge).toList()));
@@ -185,6 +202,19 @@ public final class VersionedMap implements AutoCloseable {
     public MapUpdate putIf(byte[] expected, byte[] key, byte[] value) {
         return MapUpdate.fromBridge(build.crab.prolly.api.JavaPortableBridge.putVersionedIf(
                 open(), expected == null ? null : expected.clone(), key.clone(), value.clone()));
+    }
+
+    public MapUpdate putLargeValueIf(
+            BlobStore blobStore,
+            byte[] expected,
+            byte[] key,
+            byte[] value,
+            long inlineThreshold) {
+        return MapUpdate.fromBridge(
+                build.crab.prolly.api.JavaPortableBridge.versionedPutLargeValueIf(
+                        open(), blobStore.nativeHandle(),
+                        expected == null ? null : expected.clone(),
+                        key.clone(), value.clone(), inlineThreshold));
     }
 
     public MapUpdate deleteIf(byte[] expected, byte[] key) {
@@ -249,6 +279,16 @@ public final class VersionedMap implements AutoCloseable {
     public GcSweep sweepGc() {
         return GcSweep.fromBridge(build.crab.prolly.api.JavaPortableBridge.versionedSweepGc(open()));
     }
+    public BlobGcPlan planBlobGc(BlobStore blobStore) {
+        return BlobGcPlan.fromBridge(
+                build.crab.prolly.api.JavaPortableBridge.versionedPlanBlobGc(
+                        open(), blobStore.nativeHandle()));
+    }
+    public BlobGcSweep sweepBlobGc(BlobStore blobStore) {
+        return BlobGcSweep.fromBridge(
+                build.crab.prolly.api.JavaPortableBridge.versionedSweepBlobGc(
+                        open(), blobStore.nativeHandle()));
+    }
     public VersionPrune keepLast(long count) {
         return VersionPrune.fromBridge(build.crab.prolly.api.JavaPortableBridge.keepLast(open(), count));
     }
@@ -284,6 +324,20 @@ public final class VersionedMap implements AutoCloseable {
         });
     }
 
+    public CompletableFuture<Optional<byte[]>> getLargeValueAsync(
+            BlobStore blobStore, byte[] key) {
+        var nativeHandle = open();
+        var ownedBlobStore = blobStore.cloneNativeHandle();
+        byte[] ownedKey = key.clone();
+        return CompletableFuture.supplyAsync(() -> {
+            try (ownedBlobStore) {
+                byte[] value = build.crab.prolly.api.JavaPortableBridge.versionedGetLargeValue(
+                        nativeHandle, ownedBlobStore, ownedKey);
+                return Optional.ofNullable(value == null ? null : value.clone());
+            }
+        });
+    }
+
     public CompletableFuture<Optional<MapVersion>> headAsync() {
         var nativeHandle = open();
         return CompletableFuture.supplyAsync(() -> {
@@ -306,6 +360,66 @@ public final class VersionedMap implements AutoCloseable {
         byte[] ownedValue = value.clone();
         return CompletableFuture.supplyAsync(
                 () -> MapVersion.fromNative(nativeHandle.put(ownedKey, ownedValue)));
+    }
+
+    public CompletableFuture<MapVersion> putLargeValueAsync(
+            BlobStore blobStore, byte[] key, byte[] value, long inlineThreshold) {
+        var nativeHandle = open();
+        var ownedBlobStore = blobStore.cloneNativeHandle();
+        byte[] ownedKey = key.clone();
+        byte[] ownedValue = value.clone();
+        return CompletableFuture.supplyAsync(() -> {
+            try (ownedBlobStore) {
+                return MapVersion.fromNative(
+                        build.crab.prolly.api.JavaPortableBridge.versionedPutLargeValue(
+                                nativeHandle, ownedBlobStore, ownedKey, ownedValue, inlineThreshold));
+            }
+        });
+    }
+
+    public CompletableFuture<MapUpdate> putLargeValueIfAsync(
+            BlobStore blobStore,
+            byte[] expected,
+            byte[] key,
+            byte[] value,
+            long inlineThreshold) {
+        var nativeHandle = open();
+        var ownedBlobStore = blobStore.cloneNativeHandle();
+        byte[] ownedExpected = expected == null ? null : expected.clone();
+        byte[] ownedKey = key.clone();
+        byte[] ownedValue = value.clone();
+        return CompletableFuture.supplyAsync(() -> {
+            try (ownedBlobStore) {
+                return MapUpdate.fromBridge(
+                        build.crab.prolly.api.JavaPortableBridge.versionedPutLargeValueIf(
+                                nativeHandle, ownedBlobStore, ownedExpected,
+                                ownedKey, ownedValue, inlineThreshold));
+            }
+        });
+    }
+
+    public CompletableFuture<BlobGcPlan> planBlobGcAsync(BlobStore blobStore) {
+        var nativeHandle = open();
+        var ownedBlobStore = blobStore.cloneNativeHandle();
+        return CompletableFuture.supplyAsync(() -> {
+            try (ownedBlobStore) {
+                return BlobGcPlan.fromBridge(
+                        build.crab.prolly.api.JavaPortableBridge.versionedPlanBlobGc(
+                                nativeHandle, ownedBlobStore));
+            }
+        });
+    }
+
+    public CompletableFuture<BlobGcSweep> sweepBlobGcAsync(BlobStore blobStore) {
+        var nativeHandle = open();
+        var ownedBlobStore = blobStore.cloneNativeHandle();
+        return CompletableFuture.supplyAsync(() -> {
+            try (ownedBlobStore) {
+                return BlobGcSweep.fromBridge(
+                        build.crab.prolly.api.JavaPortableBridge.versionedSweepBlobGc(
+                                nativeHandle, ownedBlobStore));
+            }
+        });
     }
 
     public CompletableFuture<MapVersion> applyAsync(List<MapMutation> mutations) {

@@ -4,6 +4,32 @@ import ProllyAPI
 import XCTest
 
 final class PortableParityTests: XCTestCase {
+    func testVersionedLargeValuesAndBlobGCAreApplicationFacing() throws {
+        try Engine.withMemory { engine in
+            let blobs = BlobStore.memory()
+            defer { blobs.close() }
+            let versioned = try engine.versionedMap(Data("large-values".utf8))
+            _ = try versioned.initialize()
+            XCTAssertFalse(versioned.headName().isEmpty)
+            XCTAssertFalse(versioned.versionsPrefix().isEmpty)
+            let config = LargeValueConfigRecord(inlineThreshold: 1)
+            let first = try versioned.putLargeValue(
+                blobs, key: Data("document".utf8), value: Data("large-value".utf8), config: config
+            )
+            XCTAssertEqual(
+                try versioned.getLargeValue(blobs, key: Data("document".utf8)),
+                Data("large-value".utf8)
+            )
+            let updated = try versioned.putLargeValueIf(
+                blobs, expected: first.id, key: Data("document".utf8),
+                value: Data("new-large-value".utf8), config: config
+            )
+            XCTAssertEqual(updated.kind, .applied)
+            XCTAssertGreaterThanOrEqual(try versioned.planBlobGC(blobs).reachability.liveBlobCount, 1)
+            XCTAssertGreaterThanOrEqual(try versioned.sweepBlobGC(blobs).plan.reachability.liveBlobCount, 1)
+        }
+    }
+
     func testRetainedSearchRuntimeReusesValidatedContent() throws {
         try Engine.withMemory { engine in
             let proximity = try engine.buildProximity(

@@ -1082,6 +1082,8 @@ export declare class NodePortableProximityMutationResult {
 }
 export declare class NativePortableVersionedMap {
   id(): Buffer
+  headName(): Buffer
+  versionsPrefix(): Buffer
   isInitialized(): boolean
   initialize(): NodePortableMapVersion
   initializeSorted(entries: Array<NodeEntryRecord>): NodePortableMapUpdate
@@ -1090,6 +1092,7 @@ export declare class NativePortableVersionedMap {
   version(id: Buffer): NodePortableMapVersion | null
   versions(): Array<NodePortableMapVersion>
   get(key: Buffer): Buffer | null
+  getLargeValue(blobStore: NativeProllyBlobStore, key: Buffer): Buffer | null
   containsKey(key: Buffer): boolean
   getMany(keys: Array<Buffer>): Array<Buffer | undefined | null>
   getAt(id: Buffer, key: Buffer): Buffer | null
@@ -1106,6 +1109,7 @@ export declare class NativePortableVersionedMap {
   changesSince(base: Buffer): Array<NodeDiffRecord>
   rollbackTo(id: Buffer): NodePortableMapVersion
   put(key: Buffer, value: Buffer): NodePortableMapVersion
+  putLargeValue(blobStore: NativeProllyBlobStore, key: Buffer, value: Buffer, config: NodeLargeValueConfigRecord): NodePortableMapVersion
   apply(mutations: Array<NodeMutationRecord>): NodePortableMapVersion
   append(mutations: Array<NodeMutationRecord>): NodePortableMapVersion
   parallelApply(mutations: Array<NodeMutationRecord>, config: NodeParallelConfigRecord): NodePortableVersionedMapBatchResult
@@ -1115,6 +1119,7 @@ export declare class NativePortableVersionedMap {
   applyIf(expected: Buffer | undefined | null, mutations: Array<NodeMutationRecord>): NodePortableMapUpdate
   applyIfAtMillis(expected: Buffer | undefined | null, mutations: Array<NodeMutationRecord>, timestampMillis: string): NodePortableMapUpdate
   putIf(expected: Buffer | undefined | null, key: Buffer, value: Buffer): NodePortableMapUpdate
+  putLargeValueIf(blobStore: NativeProllyBlobStore, expected: Buffer | undefined | null, key: Buffer, value: Buffer, config: NodeLargeValueConfigRecord): NodePortableMapUpdate
   deleteIf(expected: Buffer | undefined | null, key: Buffer): NodePortableMapUpdate
   delete(key: Buffer): NodePortableMapVersion
   snapshot(): NativePortableMapSnapshot | null
@@ -1137,6 +1142,8 @@ export declare class NativePortableVersionedMap {
   verifyCatalog(): NodePortableCatalogVerification
   planGc(): NodeGcPlanRecord
   sweepGc(): NodeGcSweepRecord
+  planBlobGc(blobStore: NativeProllyBlobStore): NodeBlobGcPlanRecord
+  sweepBlobGc(blobStore: NativeProllyBlobStore): NodeBlobGcSweepRecord
 }
 export declare class NativePortableMapComparison {
   base(): NodePortableMapVersion

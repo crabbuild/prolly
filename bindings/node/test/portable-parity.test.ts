@@ -2,10 +2,29 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  Engine, defaultCompositeAcceleratorConfig, defaultSecondaryIndexLimits, exactSearch,
+  BlobStore, Engine, defaultCompositeAcceleratorConfig, defaultSecondaryIndexLimits, exactSearch,
 } from "../src/index.ts";
 
 const bytes = (value: string): Buffer => Buffer.from(value);
+
+test("versioned large values and blob GC are application-facing", async () => {
+  const engine = await Engine.memory();
+  const blobs = await BlobStore.memory();
+  try {
+    const map = engine.versionedMap(bytes("large-values"));
+    await map.initialize();
+    assert.ok(map.headName().byteLength > 0);
+    assert.ok(map.versionsPrefix().byteLength > 0);
+    const first = await map.putLargeValue(blobs, bytes("document"), bytes("large-value"), { inlineThreshold: 1n });
+    assert.equal(Buffer.from(await map.getLargeValue(blobs, bytes("document")) ?? []).toString(), "large-value");
+    assert.equal((await map.putLargeValueIf(blobs, first.id, bytes("document"), bytes("new-large-value"), { inlineThreshold: 1n })).kind, "applied");
+    assert.ok((await map.planBlobGc(blobs)).reachability.liveBlobCount >= 1n);
+    assert.ok((await map.sweepBlobGc(blobs)).plan.reachability.liveBlobCount >= 1n);
+  } finally {
+    blobs.close();
+    engine.close();
+  }
+});
 
 test("retained search runtime reuses validated content", async () => {
   const engine = await Engine.memory();

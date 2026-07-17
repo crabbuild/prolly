@@ -10,13 +10,35 @@ use super::{
 use crate::page::set_bytes;
 use js_sys::{Array, Function, Object, Reflect, Uint8Array};
 use prolly::{
-    KeyProof, MapVersionId, MultiKeyProof, OwnedReadSession, ProvedRangePage, RangeProof,
-    SnapshotBundle, VersionedMapBackup, VersionedMapUpdate,
+    KeyProof, LargeValueConfig, MapVersionId, MemBlobStore, MultiKeyProof, OwnedReadSession,
+    ProvedRangePage, RangeProof, SnapshotBundle, VersionedMapBackup, VersionedMapUpdate,
 };
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use wasm_bindgen::prelude::*;
+
+#[wasm_bindgen(js_name = WasmBlobStore)]
+pub struct WasmBlobStore {
+    inner: Arc<MemBlobStore>,
+}
+
+#[wasm_bindgen(js_class = WasmBlobStore)]
+impl WasmBlobStore {
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> Self {
+        Self {
+            inner: Arc::new(MemBlobStore::new()),
+        }
+    }
+
+    #[wasm_bindgen(js_name = cloneHandle)]
+    pub fn clone_handle(&self) -> Self {
+        Self {
+            inner: Arc::clone(&self.inner),
+        }
+    }
+}
 
 #[wasm_bindgen(js_name = WasmVersionedMap)]
 pub struct WasmVersionedMap {
@@ -28,6 +50,19 @@ pub struct WasmVersionedMap {
 impl WasmVersionedMap {
     pub fn id(&self) -> Vec<u8> {
         self.id.clone()
+    }
+
+    #[wasm_bindgen(js_name = headName)]
+    pub fn head_name(&self) -> Vec<u8> {
+        self.engine.versioned_map(&self.id).head_name().to_vec()
+    }
+
+    #[wasm_bindgen(js_name = versionsPrefix)]
+    pub fn versions_prefix(&self) -> Vec<u8> {
+        self.engine
+            .versioned_map(&self.id)
+            .versions_prefix()
+            .to_vec()
     }
 
     #[wasm_bindgen(js_name = isInitialized)]
@@ -97,6 +132,19 @@ impl WasmVersionedMap {
         self.engine
             .versioned_map(&self.id)
             .get(&key.to_vec())
+            .map(optional_bytes)
+            .map_err(js_error)
+    }
+
+    #[wasm_bindgen(js_name = getLargeValue)]
+    pub fn get_large_value(
+        &self,
+        blob_store: &WasmBlobStore,
+        key: Uint8Array,
+    ) -> Result<JsValue, JsValue> {
+        self.engine
+            .versioned_map(&self.id)
+            .get_large_value(blob_store.inner.as_ref(), &key.to_vec())
             .map(optional_bytes)
             .map_err(js_error)
     }
@@ -341,6 +389,28 @@ impl WasmVersionedMap {
             .and_then(map_version_object)
     }
 
+    #[wasm_bindgen(js_name = putLargeValue)]
+    pub fn put_large_value(
+        &self,
+        blob_store: &WasmBlobStore,
+        key: Uint8Array,
+        value: Uint8Array,
+        inline_threshold: u64,
+    ) -> Result<Object, JsValue> {
+        let inline_threshold = usize::try_from(inline_threshold)
+            .map_err(|_| JsValue::from_str("inline threshold does not fit this platform"))?;
+        self.engine
+            .versioned_map(&self.id)
+            .put_large_value(
+                blob_store.inner.as_ref(),
+                key.to_vec(),
+                value.to_vec(),
+                LargeValueConfig::new(inline_threshold),
+            )
+            .map_err(js_error)
+            .and_then(map_version_object)
+    }
+
     pub fn apply(&self, mutations: Array) -> Result<Object, JsValue> {
         self.engine
             .versioned_map(&self.id)
@@ -487,6 +557,34 @@ impl WasmVersionedMap {
         self.engine
             .versioned_map(&self.id)
             .put_if(expected.as_ref(), key.to_vec(), value.to_vec())
+            .map_err(js_error)
+            .and_then(map_update_object)
+    }
+
+    #[wasm_bindgen(js_name = putLargeValueIf)]
+    pub fn put_large_value_if(
+        &self,
+        blob_store: &WasmBlobStore,
+        expected: Option<Uint8Array>,
+        key: Uint8Array,
+        value: Uint8Array,
+        inline_threshold: u64,
+    ) -> Result<Object, JsValue> {
+        let expected = expected
+            .map(|value| MapVersionId::from_bytes(&value.to_vec()))
+            .transpose()
+            .map_err(js_error)?;
+        let inline_threshold = usize::try_from(inline_threshold)
+            .map_err(|_| JsValue::from_str("inline threshold does not fit this platform"))?;
+        self.engine
+            .versioned_map(&self.id)
+            .put_large_value_if(
+                blob_store.inner.as_ref(),
+                expected.as_ref(),
+                key.to_vec(),
+                value.to_vec(),
+                LargeValueConfig::new(inline_threshold),
+            )
             .map_err(js_error)
             .and_then(map_update_object)
     }
@@ -765,6 +863,24 @@ impl WasmVersionedMap {
             .sweep_gc()
             .map_err(js_error)
             .and_then(gc_sweep_object)
+    }
+
+    #[wasm_bindgen(js_name = planBlobGc)]
+    pub fn plan_blob_gc(&self, blob_store: &WasmBlobStore) -> Result<Object, JsValue> {
+        self.engine
+            .versioned_map(&self.id)
+            .plan_blob_gc(blob_store.inner.as_ref())
+            .map_err(js_error)
+            .and_then(blob_gc_plan_object)
+    }
+
+    #[wasm_bindgen(js_name = sweepBlobGc)]
+    pub fn sweep_blob_gc(&self, blob_store: &WasmBlobStore) -> Result<Object, JsValue> {
+        self.engine
+            .versioned_map(&self.id)
+            .sweep_blob_gc(blob_store.inner.as_ref())
+            .map_err(js_error)
+            .and_then(blob_gc_sweep_object)
     }
 }
 
@@ -1673,6 +1789,82 @@ fn gc_sweep_object(value: prolly::GcSweep) -> Result<Object, JsValue> {
     Reflect::set(&object, &"plan".into(), &gc_plan_object(value.plan)?.into())?;
     set_count(&object, "deletedNodes", value.deleted_nodes)?;
     set_count(&object, "deletedBytes", value.deleted_bytes)?;
+    Ok(object)
+}
+
+fn blob_ref_object(value: prolly::BlobRef) -> Result<Object, JsValue> {
+    let object = Object::new();
+    set_bytes(&object, "cid", value.cid.as_bytes())?;
+    Reflect::set(&object, &"len".into(), &value.len.to_string().into())?;
+    Ok(object)
+}
+
+fn blob_refs_array(values: Vec<prolly::BlobRef>) -> Result<Array, JsValue> {
+    let array = Array::new();
+    for value in values {
+        array.push(&blob_ref_object(value)?.into());
+    }
+    Ok(array)
+}
+
+fn blob_gc_reachability_object(value: prolly::BlobGcReachability) -> Result<Object, JsValue> {
+    let object = Object::new();
+    Reflect::set(
+        &object,
+        &"liveBlobs".into(),
+        &blob_refs_array(value.live_blobs)?.into(),
+    )?;
+    set_count(&object, "liveBlobCount", value.live_blob_count)?;
+    Reflect::set(
+        &object,
+        &"liveBlobBytes".into(),
+        &value.live_blob_bytes.to_string().into(),
+    )?;
+    set_count(&object, "scannedNodes", value.scanned_nodes)?;
+    set_count(&object, "scannedValues", value.scanned_values)?;
+    Ok(object)
+}
+
+fn blob_gc_plan_object(value: prolly::BlobGcPlan) -> Result<Object, JsValue> {
+    let object = Object::new();
+    Reflect::set(
+        &object,
+        &"reachability".into(),
+        &blob_gc_reachability_object(value.reachability)?.into(),
+    )?;
+    set_count(&object, "candidateBlobs", value.candidate_blobs)?;
+    Reflect::set(
+        &object,
+        &"reclaimableBlobs".into(),
+        &blob_refs_array(value.reclaimable_blobs)?.into(),
+    )?;
+    set_count(
+        &object,
+        "reclaimableBlobCount",
+        value.reclaimable_blob_count,
+    )?;
+    Reflect::set(
+        &object,
+        &"reclaimableBlobBytes".into(),
+        &value.reclaimable_blob_bytes.to_string().into(),
+    )?;
+    set_count(&object, "missingCandidates", value.missing_candidates)?;
+    Ok(object)
+}
+
+fn blob_gc_sweep_object(value: prolly::BlobGcSweep) -> Result<Object, JsValue> {
+    let object = Object::new();
+    Reflect::set(
+        &object,
+        &"plan".into(),
+        &blob_gc_plan_object(value.plan)?.into(),
+    )?;
+    set_count(&object, "deletedBlobs", value.deleted_blobs)?;
+    Reflect::set(
+        &object,
+        &"deletedBlobBytes".into(),
+        &value.deleted_blob_bytes.to_string().into(),
+    )?;
     Ok(object)
 }
 

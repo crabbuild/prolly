@@ -19,6 +19,29 @@ import org.junit.jupiter.api.assertThrows
 
 class PortableParityTest {
     @Test
+    fun versionedLargeValuesAndBlobGcAreApplicationFacing() {
+        ProllyNative.useLocalDebugLibrary()
+        Engine.memory().use { engine ->
+            ProllyBlobStore.memory().use { blobs ->
+                engine.versionedMap("large-values".bytes()).use { versioned ->
+                    versioned.initialize()
+                    assertEquals(true, versioned.headName().isNotEmpty())
+                    assertEquals(true, versioned.versionsPrefix().isNotEmpty())
+                    val config = LargeValueConfigRecord(1uL)
+                    val first = versioned.putLargeValue(blobs, "document".bytes(), "large-value".bytes(), config)
+                    assertArrayEquals("large-value".bytes(), versioned.getLargeValue(blobs, "document".bytes()))
+                    val updated = versioned.putLargeValueIf(
+                        blobs, first.id, "document".bytes(), "new-large-value".bytes(), config,
+                    )
+                    assertEquals(MapUpdateKind.APPLIED, updated.kind)
+                    assertEquals(true, versioned.planBlobGc(blobs).reachability.liveBlobCount >= 1uL)
+                    assertEquals(true, versioned.sweepBlobGc(blobs).plan.reachability.liveBlobCount >= 1uL)
+                }
+            }
+        }
+    }
+
+    @Test
     fun retainedSearchRuntimeReusesValidatedContent() {
         ProllyNative.useLocalDebugLibrary()
         Engine.memory().use { engine ->

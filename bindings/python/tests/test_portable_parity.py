@@ -2,6 +2,7 @@ import unittest
 
 from prolly import (
     CatalogAcceleratorKindRecord,
+    BlobStore,
     CompositeBaseKindRecord,
     CompositeBuildOrRebuildKindRecord,
     Engine,
@@ -10,6 +11,7 @@ from prolly import (
     MutationKind,
     MutationRecord,
     ParallelConfigRecord,
+    LargeValueConfigRecord,
     ProximityFilterKind,
     ProximityFilterRecord,
     ProximityRecord,
@@ -35,6 +37,24 @@ from prolly import (
 
 
 class PortableParityTests(unittest.TestCase):
+    def test_versioned_large_values_and_blob_gc_are_application_facing(self):
+        with Engine.memory() as engine, BlobStore.memory() as blobs:
+            versioned = engine.versioned_map(b"large-values")
+            versioned.initialize()
+            self.assertTrue(versioned.head_name())
+            self.assertTrue(versioned.versions_prefix())
+            first = versioned.put_large_value(
+                blobs, b"document", b"large-value", LargeValueConfigRecord(inline_threshold=1)
+            )
+            self.assertEqual(versioned.get_large_value(blobs, b"document"), b"large-value")
+            updated = versioned.put_large_value_if(
+                blobs, first.id, b"document", b"new-large-value",
+                LargeValueConfigRecord(inline_threshold=1),
+            )
+            self.assertEqual(updated.kind.name, "APPLIED")
+            self.assertGreaterEqual(versioned.plan_blob_gc(blobs).reachability.live_blob_count, 1)
+            self.assertGreaterEqual(versioned.sweep_blob_gc(blobs).plan.reachability.live_blob_count, 1)
+
     def test_retained_search_runtime_reuses_validated_content(self):
         with Engine.memory() as engine:
             proximity = engine.build_proximity(

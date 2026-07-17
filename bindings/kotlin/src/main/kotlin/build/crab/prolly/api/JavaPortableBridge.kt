@@ -455,6 +455,34 @@ data class JavaGcSweep(
     val deletedBytes: Long,
 )
 
+data class JavaBlobRef(
+    val cid: ByteArray,
+    val len: Long,
+)
+
+data class JavaBlobGcReachability(
+    val liveBlobs: List<JavaBlobRef>,
+    val liveBlobCount: Long,
+    val liveBlobBytes: Long,
+    val scannedNodes: Long,
+    val scannedValues: Long,
+)
+
+data class JavaBlobGcPlan(
+    val reachability: JavaBlobGcReachability,
+    val candidateBlobs: Long,
+    val reclaimableBlobs: List<JavaBlobRef>,
+    val reclaimableBlobCount: Long,
+    val reclaimableBlobBytes: Long,
+    val missingCandidates: Long,
+)
+
+data class JavaBlobGcSweep(
+    val plan: JavaBlobGcPlan,
+    val deletedBlobs: Long,
+    val deletedBlobBytes: Long,
+)
+
 data class JavaIndexedVersion(
     val sourceVersion: ByteArray,
     val catalogVersion: ByteArray?,
@@ -593,6 +621,23 @@ private fun build.crab.prolly.GcPlanRecord.toJava() = JavaGcPlan(
 
 private fun build.crab.prolly.GcSweepRecord.toJava() = JavaGcSweep(
     plan.toJava(), deletedNodes.toLong(), deletedBytes.toLong(),
+)
+
+private fun build.crab.prolly.BlobRefRecord.toJava() = JavaBlobRef(cid.copyOf(), len.toLong())
+
+private fun build.crab.prolly.BlobGcReachabilityRecord.toJava() = JavaBlobGcReachability(
+    liveBlobs.map(build.crab.prolly.BlobRefRecord::toJava), liveBlobCount.toLong(),
+    liveBlobBytes.toLong(), scannedNodes.toLong(), scannedValues.toLong(),
+)
+
+private fun build.crab.prolly.BlobGcPlanRecord.toJava() = JavaBlobGcPlan(
+    reachability.toJava(), candidateBlobs.toLong(),
+    reclaimableBlobs.map(build.crab.prolly.BlobRefRecord::toJava),
+    reclaimableBlobCount.toLong(), reclaimableBlobBytes.toLong(), missingCandidates.toLong(),
+)
+
+private fun build.crab.prolly.BlobGcSweepRecord.toJava() = JavaBlobGcSweep(
+    plan.toJava(), deletedBlobs.toLong(), deletedBlobBytes.toLong(),
 )
 
 private fun IndexBuildResultRecord.toJava() = JavaIndexBuildResult(
@@ -758,6 +803,57 @@ object JavaPortableBridge {
     @JvmStatic
     fun ownedSnapshotBundle(bundle: SnapshotBundleRecord): SnapshotBundleRecord =
         build.crab.prolly.api.ownedSnapshotBundle(bundle)
+
+    @JvmStatic
+    fun cloneBlobStore(store: build.crab.prolly.ProllyBlobStore) =
+        build.crab.prolly.ProllyBlobStore(
+            build.crab.prolly.UniffiWithHandle,
+            store.uniffiCloneHandle(),
+        )
+
+    @JvmStatic
+    fun versionedGetLargeValue(
+        map: VersionedMap,
+        blobStore: build.crab.prolly.ProllyBlobStore,
+        key: ByteArray,
+    ): ByteArray? = map.getLargeValue(blobStore, key)?.copyOf()
+
+    @JvmStatic
+    fun versionedPutLargeValue(
+        map: VersionedMap,
+        blobStore: build.crab.prolly.ProllyBlobStore,
+        key: ByteArray,
+        value: ByteArray,
+        inlineThreshold: Long,
+    ): MapVersionRecord = map.putLargeValue(
+        blobStore, key, value,
+        build.crab.prolly.LargeValueConfigRecord(inlineThreshold.toULong()),
+    )
+
+    @JvmStatic
+    fun versionedPutLargeValueIf(
+        map: VersionedMap,
+        blobStore: build.crab.prolly.ProllyBlobStore,
+        expected: ByteArray?,
+        key: ByteArray,
+        value: ByteArray,
+        inlineThreshold: Long,
+    ): JavaMapUpdate = map.putLargeValueIf(
+        blobStore, expected, key, value,
+        build.crab.prolly.LargeValueConfigRecord(inlineThreshold.toULong()),
+    ).toJava()
+
+    @JvmStatic
+    fun versionedPlanBlobGc(
+        map: VersionedMap,
+        blobStore: build.crab.prolly.ProllyBlobStore,
+    ): JavaBlobGcPlan = map.planBlobGc(blobStore).toJava()
+
+    @JvmStatic
+    fun versionedSweepBlobGc(
+        map: VersionedMap,
+        blobStore: build.crab.prolly.ProllyBlobStore,
+    ): JavaBlobGcSweep = map.sweepBlobGc(blobStore).toJava()
 
     @JvmStatic
     fun importAsHeadAtMillis(
