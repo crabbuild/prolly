@@ -129,6 +129,7 @@ Run:
 
 ~~~sh
 python3 scripts/binding_api_inventory.py review-audiences
+python3 scripts/binding_api_inventory.py apply-reconciliations
 python3 scripts/binding_api_inventory.py gaps
 ~~~
 
@@ -138,6 +139,14 @@ explicitly reviewed as `application`. The report sections mean:
 
 - `release_complete_application_operations`: strict mapping and test evidence
   exists;
+- `bound_pending_manifest_evidence`: source reconciliation found the behavior
+  in all eight wrappers, directly or idiomatically, but concrete manifest
+  symbols/tests are not complete yet;
+- `confirmed_missing_implementation`: reviewed source evidence confirms the
+  application behavior is absent;
+- `confirmed_performance_gap`: functional behavior exists, but a Rust
+  scoped-view, retained-session, packed-page, or zero-copy contract is not
+  consistently exposed;
 - `unmapped_application_operations`: reviewed application behavior has no
   manifest mapping yet;
 - `mapped_missing_evidence`: at least one mapping exists, but strict language or
@@ -155,3 +164,9 @@ explicitly reviewed as `application`. The report sections mean:
 source-surface reconciliation must next determine whether the operation is
 already bound under an idiomatic name, grouped into another host operation, or
 actually absent.
+
+`versioned-map-reconciliation.json` is the first exact source reconciliation.
+Its four groups partition all 66 incomplete `VersionedMap` methods into direct
+bindings, idiomatic bindings, confirmed API gaps, and confirmed performance
+gaps. `apply-reconciliations` expands those reviewed groups onto the individual
+manifest rows; it does not mark any row implemented.

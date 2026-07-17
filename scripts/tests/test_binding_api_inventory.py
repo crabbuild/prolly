@@ -5,6 +5,7 @@ import unittest
 from scripts.binding_api_inventory import (
     ApiItem,
     CheckResult,
+    apply_reconciliations,
     build_application_gap_report,
     build_classification_audit,
     check_manifest,
@@ -19,6 +20,85 @@ from scripts.binding_api_inventory import (
 
 
 class ManifestCheckTests(unittest.TestCase):
+    def test_reconciliation_groups_expand_to_exact_manifest_rows(self) -> None:
+        manifest = {
+            "operations": [
+                {"rust": "prolly::VersionedMap::get", "status": "planned"}
+            ]
+        }
+        document = {
+            "groups": [
+                {
+                    "state": "bound-direct",
+                    "rust": ["prolly::VersionedMap::get"],
+                    "evidence": ["bindings/python/prolly/api.py"],
+                    "rationale": "All public wrappers expose get.",
+                }
+            ]
+        }
+
+        reconciled = apply_reconciliations(manifest, document)
+
+        self.assertEqual(
+            reconciled["operations"][0]["reconciliation"], "bound-direct"
+        )
+        self.assertEqual(
+            reconciled["operations"][0]["reconciliation_evidence"],
+            ["bindings/python/prolly/api.py"],
+        )
+
+    def test_gap_report_distinguishes_reconciled_binding_and_real_gaps(self) -> None:
+        items = {
+            name: ApiItem(
+                rust=name,
+                kind="function",
+                owner="prolly::VersionedMap",
+                member_kind="inherent-item",
+            )
+            for name in (
+                "prolly::VersionedMap::get",
+                "prolly::VersionedMap::edit",
+                "prolly::VersionedMap::typed",
+                "prolly::VersionedMap::get_with",
+            )
+        }
+        states = (
+            "bound-direct",
+            "bound-idiomatic",
+            "confirmed-api-gap",
+            "confirmed-performance-gap",
+        )
+        manifest = {
+            "operations": [
+                {
+                    "rust": rust,
+                    "classification": "portable",
+                    "status": "planned",
+                    "family": "versioned-map",
+                    "performance": "owned",
+                    "languages": {},
+                    "exclusions": {},
+                    "tests": [],
+                    "audience": "application",
+                    "reconciliation": state,
+                    "reconciliation_evidence": ["bindings/python/prolly/api.py"],
+                }
+                for rust, state in zip(items, states)
+            ]
+        }
+
+        report = build_application_gap_report(items, manifest)
+
+        self.assertEqual(len(report["bound_pending_manifest_evidence"]), 2)
+        self.assertEqual(
+            [row["rust"] for row in report["confirmed_missing_implementation"]],
+            ["prolly::VersionedMap::typed"],
+        )
+        self.assertEqual(
+            [row["rust"] for row in report["confirmed_performance_gap"]],
+            ["prolly::VersionedMap::get_with"],
+        )
+
     def test_runtime_audience_review_is_explicit_and_leaves_core_unreviewed(self) -> None:
         items = {
             "prolly::VersionedMap::get": ApiItem(
@@ -167,6 +247,9 @@ class ManifestCheckTests(unittest.TestCase):
             report["summary"],
             {
                 "release_complete_application_operations": 1,
+                "bound_pending_manifest_evidence": 0,
+                "confirmed_missing_implementation": 0,
+                "confirmed_performance_gap": 0,
                 "unmapped_application_operations": 2,
                 "mapped_missing_evidence": 1,
                 "platform_review_required": 0,
