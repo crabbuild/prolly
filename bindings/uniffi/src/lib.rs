@@ -44,6 +44,20 @@ pub use domain::indexed::{
     IndexedUpdateKind, IndexedUpdateRecord, IndexedVersionRecord, SecondaryIndexExtractorCallback,
     SecondaryIndexLimitsRecord,
 };
+pub use domain::proximity::{
+    default_content_graph_limits, default_proximity_config, exact_proximity_search_request,
+    verify_proximity_membership_proof, verify_proximity_structure_proof, AdaptiveQualityRecord,
+    BindingProximityMap, BindingProximityReadSession, ContentGraphLimitsRecord,
+    ContentObjectKindRecord, DistanceMetricRecord, ExactProximityRecordRecord,
+    ProximityConfigRecord, ProximityFilterKind, ProximityFilterRecord,
+    ProximityMembershipProofRecord, ProximityMembershipVerificationRecord, ProximityMutationRecord,
+    ProximityMutationResultRecord, ProximityMutationStatsRecord, ProximityNeighborRecord,
+    ProximityRecordRecord, ProximityRecordVisitorCallback, ProximitySearchRequestRecord,
+    ProximitySearchResultRecord, ProximitySearchStatsRecord, ProximityStructuralProofRecord,
+    ProximityStructuralVerificationRecord, ProximityVerificationRecord, QueryKernelRecord,
+    SearchBackendRecord, SearchBudgetRecord, SearchCompletionRecord, SearchPolicyKind,
+    TypedContentObjectRecord,
+};
 pub use domain::versioned::{
     BindingMapComparison, BindingMapMerge, BindingMapSnapshot, BindingMapSubscription,
     BindingVersionedMap, BindingVersionedTransaction, MapCatalogVerificationRecord,
@@ -2372,6 +2386,38 @@ impl ProllyEngine {
             registry,
         )
         .map(Arc::new)
+    }
+
+    /// Canonically build one immutable proximity map and return its
+    /// descriptor-bound application handle.
+    pub fn build_proximity_map(
+        &self,
+        config: ProximityConfigRecord,
+        records: Vec<ProximityRecordRecord>,
+        threads: Option<u64>,
+    ) -> Result<Arc<BindingProximityMap>, ProllyBindingError> {
+        domain::proximity::build_proximity_map(
+            Arc::new(Self {
+                inner: self.inner.clone(),
+            }),
+            config,
+            records,
+            threads,
+        )
+    }
+
+    /// Reopen and validate an immutable proximity descriptor from this
+    /// engine's content store.
+    pub fn load_proximity_map(
+        &self,
+        descriptor: Vec<u8>,
+    ) -> Result<Arc<BindingProximityMap>, ProllyBindingError> {
+        domain::proximity::load_proximity_map(
+            Arc::new(Self {
+                inner: self.inner.clone(),
+            }),
+            descriptor,
+        )
     }
 
     pub fn begin_versioned_transaction(

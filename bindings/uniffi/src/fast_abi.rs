@@ -12,7 +12,10 @@ use std::slice;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, Weak};
 
-use super::{BindingRangeScanSession, BindingSecondaryIndexSnapshot, ProllyReadSession};
+use super::{
+    BindingProximityMap, BindingRangeScanSession, BindingSecondaryIndexSnapshot, ProllyReadSession,
+    ProximitySearchRequestRecord,
+};
 use crate::domain::handle::{HandleKind, HandleRegistry, ResourceHandle};
 use crate::domain::page::{PackedPage, PackedPageBuilder, PackedPageKind, PageLimits};
 
@@ -23,6 +26,7 @@ pub const FAST_CAP_RETAINED_SCAN: u64 = 1 << 2;
 pub const FAST_CAP_GET_MANY_PAGE: u64 = 1 << 3;
 pub const FAST_CAP_VALUE_LEASE: u64 = 1 << 4;
 pub const FAST_CAP_INDEX_CURSOR: u64 = 1 << 5;
+pub const FAST_CAP_PROXIMITY_SEARCH: u64 = 1 << 6;
 
 pub const FAST_STATUS_OK: i32 = 0;
 pub const FAST_STATUS_BUFFER_TOO_SMALL: i32 = 1;
@@ -105,12 +109,15 @@ static NEXT_SCAN_HANDLE: AtomicU64 = AtomicU64::new(1);
 static NEXT_VALUE_HANDLE: AtomicU64 = AtomicU64::new(1);
 static NEXT_INDEX_SNAPSHOT_HANDLE: AtomicU64 = AtomicU64::new(1);
 static NEXT_INDEX_CURSOR_HANDLE: AtomicU64 = AtomicU64::new(1);
+static NEXT_PROXIMITY_HANDLE: AtomicU64 = AtomicU64::new(1);
 static SESSION_HANDLES: OnceLock<Mutex<HashMap<u64, Weak<ProllyReadSession>>>> = OnceLock::new();
 static SCAN_HANDLES: OnceLock<Mutex<HashMap<u64, Arc<FastScanHandle>>>> = OnceLock::new();
 static VALUE_HANDLES: OnceLock<Mutex<HashMap<u64, Arc<prolly::OwnedValueLease>>>> = OnceLock::new();
 static INDEX_SNAPSHOT_HANDLES: OnceLock<Mutex<HashMap<u64, Weak<BindingSecondaryIndexSnapshot>>>> =
     OnceLock::new();
 static INDEX_CURSOR_HANDLES: OnceLock<Mutex<HashMap<u64, Arc<FastIndexCursorHandle>>>> =
+    OnceLock::new();
+static PROXIMITY_HANDLES: OnceLock<Mutex<HashMap<u64, Weak<BindingProximityMap>>>> =
     OnceLock::new();
 static RESOURCE_HANDLES: OnceLock<HandleRegistry> = OnceLock::new();
 
@@ -195,6 +202,43 @@ fn index_cursor_from_handle(handle: u64) -> Option<Arc<FastIndexCursorHandle>> {
         .unwrap_or_else(std::sync::PoisonError::into_inner)
         .get(&handle)
         .cloned()
+}
+
+fn proximity_handles() -> &'static Mutex<HashMap<u64, Weak<BindingProximityMap>>> {
+    PROXIMITY_HANDLES.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+pub(crate) fn register_proximity_map(map: &Arc<BindingProximityMap>) -> u64 {
+    let mut handles = proximity_handles()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    loop {
+        let handle = next_nonzero_handle(&NEXT_PROXIMITY_HANDLE);
+        if let std::collections::hash_map::Entry::Vacant(entry) = handles.entry(handle) {
+            entry.insert(Arc::downgrade(map));
+            return handle;
+        }
+    }
+}
+
+pub(crate) fn unregister_proximity_map(handle: u64) {
+    if handle != 0 {
+        proximity_handles()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .remove(&handle);
+    }
+}
+
+fn proximity_from_handle(handle: u64) -> Option<Arc<BindingProximityMap>> {
+    let mut handles = proximity_handles()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let map = handles.get(&handle).and_then(Weak::upgrade);
+    if map.is_none() {
+        handles.remove(&handle);
+    }
+    map
 }
 
 fn next_nonzero_handle(counter: &AtomicU64) -> u64 {
@@ -431,6 +475,7 @@ pub extern "C" fn prolly_fast_abi_capabilities() -> u64 {
         | FAST_CAP_GET_MANY_PAGE
         | FAST_CAP_VALUE_LEASE
         | FAST_CAP_INDEX_CURSOR
+        | FAST_CAP_PROXIMITY_SEARCH
 }
 
 unsafe fn input_slice<'a>(ptr: *const u8, len: usize) -> Option<&'a [u8]> {
@@ -1430,6 +1475,101 @@ pub unsafe extern "C" fn prolly_fast_index_cursor_close(cursor_handle: u64) {
         .remove(&cursor_handle);
 }
 
+/// Execute an exact native proximity search and return one leased PRPG v2
+/// neighbor page. Distances retain the Rust API's full `f64` precision.
+#[no_mangle]
+pub unsafe extern "C" fn prolly_fast_proximity_search(
+    map_handle: u64,
+    query_ptr: *const f32,
+    dimensions: usize,
+    k: u32,
+    max_arena_bytes: u64,
+) -> FastPageResult {
+    let Some(map) = proximity_from_handle(map_handle) else {
+        return FastPageResult {
+            status: FAST_STATUS_INVALID_ARGUMENT,
+            ..FastPageResult::default()
+        };
+    };
+    if dimensions == 0
+        || dimensions > MAX_BOUND_BYTES / std::mem::size_of::<f32>()
+        || query_ptr.is_null()
+        || k == 0
+        || k > MAX_PAGE_RECORDS
+        || max_arena_bytes == 0
+        || max_arena_bytes > MAX_PAGE_ARENA_BYTES
+    {
+        return FastPageResult {
+            status: FAST_STATUS_INVALID_ARGUMENT,
+            ..FastPageResult::default()
+        };
+    }
+    // SAFETY: the caller supplies an aligned, readable f32 range that remains
+    // live for this synchronous call; Rust copies it before returning.
+    let query = unsafe { slice::from_raw_parts(query_ptr, dimensions) }.to_vec();
+    match catch_unwind(AssertUnwindSafe(|| {
+        let result = match map.search(ProximitySearchRequestRecord::exact(query, k as u64)) {
+            Ok(result) => result,
+            Err(_) => {
+                return FastPageResult {
+                    status: FAST_STATUS_READ_ERROR,
+                    ..FastPageResult::default()
+                };
+            }
+        };
+        let record_count = result.neighbors.len() as u32;
+        let mut builder = PackedPageBuilder::with_limits(
+            PackedPageKind::ProximityNeighbor,
+            PageLimits {
+                max_records: k,
+                max_arena_bytes,
+            },
+        );
+        for (rank, neighbor) in result.neighbors.iter().enumerate() {
+            builder = match builder.push_neighbor(
+                &neighbor.key,
+                neighbor.distance,
+                rank as u32,
+                Some(&neighbor.value),
+                None,
+            ) {
+                Ok(builder) => builder,
+                Err(_) => {
+                    return FastPageResult {
+                        status: FAST_STATUS_INVALID_ARGUMENT,
+                        ..FastPageResult::default()
+                    };
+                }
+            };
+        }
+        let bytes = match builder.finish(true) {
+            Ok(bytes) => bytes,
+            Err(_) => {
+                return FastPageResult {
+                    status: FAST_STATUS_READ_ERROR,
+                    ..FastPageResult::default()
+                };
+            }
+        };
+        let (lease_handle, data_ptr, data_len) = register_page(bytes);
+        FastPageResult {
+            status: FAST_STATUS_OK,
+            terminal: 1,
+            record_count,
+            lease_handle,
+            data_ptr,
+            data_len,
+            ..FastPageResult::default()
+        }
+    })) {
+        Ok(result) => result,
+        Err(_) => FastPageResult {
+            status: FAST_STATUS_PANIC,
+            ..FastPageResult::default()
+        },
+    }
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn prolly_fast_scan_close(scan_handle: u64) {
     if scan_handle == 0 {
@@ -1546,6 +1686,38 @@ mod tests {
         let stale =
             unsafe { prolly_fast_index_cursor_next(snapshot_handle, opened.scan_handle, 16, 4096) };
         assert_eq!(stale.status, FAST_STATUS_INVALID_ARGUMENT);
+    }
+
+    #[test]
+    fn proximity_search_returns_one_leased_f64_neighbor_page() {
+        let engine = Arc::new(ProllyEngine::memory(default_config()).unwrap());
+        let map = engine
+            .build_proximity_map(
+                crate::ProximityConfigRecord::new(2),
+                vec![crate::ProximityRecordRecord {
+                    key: b"a".to_vec(),
+                    vector: vec![0.0, 0.0],
+                    value: b"alpha".to_vec(),
+                }],
+                None,
+            )
+            .unwrap();
+        let query = [0.25f32, 0.25];
+        let page = unsafe {
+            prolly_fast_proximity_search(map.fast_handle(), query.as_ptr(), query.len(), 1, 4096)
+        };
+        assert_eq!(page.status, FAST_STATUS_OK);
+        assert_eq!(page.record_count, 1);
+        let packed = PackedPage::parse(
+            unsafe { slice::from_raw_parts(page.data_ptr, page.data_len as usize) },
+            PageLimits::default(),
+        )
+        .unwrap();
+        let neighbor = packed.neighbor(0).unwrap();
+        assert_eq!(neighbor.key, b"a");
+        assert_eq!(neighbor.value, Some(b"alpha".as_slice()));
+        assert_eq!(neighbor.distance, 0.125);
+        unsafe { prolly_fast_page_release(page.lease_handle) };
     }
 
     #[test]

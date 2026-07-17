@@ -32,7 +32,7 @@ impl PackedPageKind {
             Self::Conflict => 36,
             Self::IndexMatch => 36,
             Self::JoinedIndexRecord => 44,
-            Self::ProximityNeighbor => 36,
+            Self::ProximityNeighbor => 40,
         }
     }
 
@@ -44,7 +44,7 @@ impl PackedPageKind {
             Self::Conflict => &[(4, 8), (12, 16), (20, 24), (28, 32)],
             Self::IndexMatch => &[(4, 8), (12, 16), (20, 24), (28, 32)],
             Self::JoinedIndexRecord => &[(4, 8), (12, 16), (20, 24), (28, 32), (36, 40)],
-            Self::ProximityNeighbor => &[(4, 8), (20, 24), (28, 32)],
+            Self::ProximityNeighbor => &[(4, 8), (24, 28), (32, 36)],
         }
     }
 }
@@ -94,7 +94,7 @@ pub(crate) struct EntryRecordRef<'a> {
 #[allow(dead_code)]
 pub(crate) struct NeighborRecordRef<'a> {
     pub(crate) key: &'a [u8],
-    pub(crate) distance: f32,
+    pub(crate) distance: f64,
     pub(crate) rank: u32,
     pub(crate) value: Option<&'a [u8]>,
     pub(crate) proof: Option<&'a [u8]>,
@@ -261,19 +261,19 @@ impl<'a> PackedPage<'a> {
         let flags = read_u32(record, 0)?;
         Ok(NeighborRecordRef {
             key: self.arena_slice(read_u32(record, 4)?, read_u32(record, 8)?)?,
-            distance: f32::from_bits(read_u32(record, 12)?),
-            rank: read_u32(record, 16)?,
+            distance: f64::from_bits(read_u64(record, 12)?),
+            rank: read_u32(record, 20)?,
             value: optional_slice(
                 self,
                 flags & RECORD_FLAG_VALUE != 0,
-                read_u32(record, 20)?,
                 read_u32(record, 24)?,
+                read_u32(record, 28)?,
             )?,
             proof: optional_slice(
                 self,
                 flags & RECORD_FLAG_PROOF != 0,
-                read_u32(record, 28)?,
                 read_u32(record, 32)?,
+                read_u32(record, 36)?,
             )?,
         })
     }
@@ -370,7 +370,7 @@ impl<'a> PackedPage<'a> {
                         "neighbor record has unknown flags",
                     ));
                 }
-                let distance = f32::from_bits(read_u32(record, 12)?);
+                let distance = f64::from_bits(read_u64(record, 12)?);
                 if !distance.is_finite() {
                     return Err(BindingError::malformed_transport(
                         "neighbor distance is not finite",
@@ -379,14 +379,14 @@ impl<'a> PackedPage<'a> {
                 optional_slice(
                     self,
                     flags & RECORD_FLAG_VALUE != 0,
-                    read_u32(record, 20)?,
                     read_u32(record, 24)?,
+                    read_u32(record, 28)?,
                 )?;
                 optional_slice(
                     self,
                     flags & RECORD_FLAG_PROOF != 0,
-                    read_u32(record, 28)?,
                     read_u32(record, 32)?,
+                    read_u32(record, 36)?,
                 )?;
             }
             if matches!(
@@ -493,7 +493,7 @@ impl PackedPageBuilder {
     pub(crate) fn push_neighbor(
         mut self,
         key: &[u8],
-        distance: f32,
+        distance: f64,
         rank: u32,
         value: Option<&[u8]>,
         proof: Option<&[u8]>,
@@ -733,6 +733,20 @@ mod tests {
     use super::*;
 
     #[test]
+    fn proximity_neighbor_page_preserves_f64_distance() {
+        let distance: f64 = 1.000_000_000_000_000_2;
+        let bytes = PackedPageBuilder::new(PackedPageKind::ProximityNeighbor)
+            .push_neighbor(b"k", distance, 7, Some(b"value"), None)
+            .unwrap()
+            .finish(true)
+            .unwrap();
+        let page = PackedPage::parse(&bytes, PageLimits::default()).unwrap();
+        let record = page.neighbor(0).unwrap();
+        assert_eq!(record.distance.to_bits(), distance.to_bits());
+        assert_eq!(record.rank, 7);
+    }
+
+    #[test]
     fn joined_index_page_round_trips_binary_fields() {
         let bytes = PackedPageBuilder::new(PackedPageKind::JoinedIndexRecord)
             .push_joined_index_record(
@@ -806,7 +820,7 @@ mod tests {
         assert_eq!(neighbor.proof, None);
 
         let mut bytes = valid.into_vec();
-        bytes[48..52].copy_from_slice(&u32::MAX.to_le_bytes());
+        bytes[52..56].copy_from_slice(&u32::MAX.to_le_bytes());
 
         let error = PackedPage::parse(&bytes, PageLimits::default()).unwrap_err();
         assert_eq!(error.code, ErrorCode::MalformedTransport);
