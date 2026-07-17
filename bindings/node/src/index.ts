@@ -2,7 +2,14 @@ import { createHash } from "node:crypto";
 import { loadNative } from "./native.ts";
 import { IndexRegistry, IndexedMap } from "./indexed.ts";
 import { nativePromise, ownedBytes } from "./packed.ts";
-import { ownProximityRecords, ProximityMap, type ProximityRecord } from "./proximity.ts";
+import {
+  ownProximityRecords,
+  ownProximitySearchRuntimePolicy,
+  ProximityMap,
+  ProximitySearchRuntime,
+  type ProximityRecord,
+  type ProximitySearchRuntimePolicy,
+} from "./proximity.ts";
 import { VersionedMap, VersionedTransaction } from "./versioned.ts";
 
 export { IndexRegistry, IndexedMap } from "./indexed.ts";
@@ -14,6 +21,7 @@ export {
   defaultCompositeBuildLimits,
   defaultPqBuildLimits,
   defaultPqConfig,
+  defaultProximitySearchRuntimePolicy,
   exactSearch,
   HnswIndex,
   AcceleratorCatalog,
@@ -21,6 +29,7 @@ export {
   ProductQuantizer,
   ProximityMap,
   ProximityReadSession,
+  ProximitySearchRuntime,
 } from "./proximity.ts";
 export { MapComparison, MapMerge, MapSubscription, VersionedMap, VersionedTransaction } from "./versioned.ts";
 export type * from "./indexed.ts";
@@ -78,6 +87,16 @@ export class Engine implements Disposable {
     const native = this.#open();
     const owned = ownProximityRecords(records);
     return nativePromise(signal, () => new ProximityMap(native.buildProximity(dimensions, owned)));
+  }
+
+  proximitySearchRuntime(
+    policy?: ProximitySearchRuntimePolicy,
+  ): ProximitySearchRuntime {
+    return new ProximitySearchRuntime(
+      this.#open().proximitySearchRuntime(
+        policy == null ? undefined : ownProximitySearchRuntimePolicy(policy),
+      ),
+    );
   }
 
   close(): void {

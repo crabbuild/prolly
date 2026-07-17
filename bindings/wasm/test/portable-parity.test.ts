@@ -15,6 +15,33 @@ if (generatedPresent) {
 
 const bytes = (value: string): Uint8Array => new TextEncoder().encode(value);
 
+test("WASM retained search runtime reuses validated content", { skip: !generatedPresent }, async () => {
+  const engine = api.Engine.memory(wasm);
+  try {
+    const proximity = await engine.buildProximity(2, Array.from({ length: 16 }, (_, index) => ({
+      key: bytes(`runtime-vector-${index.toString().padStart(2, "0")}`),
+      vector: new Float32Array([index, 0]),
+      value: bytes(`runtime-value-${index.toString().padStart(2, "0")}`),
+    })));
+    const runtime = engine.proximitySearchRuntime();
+    try {
+      const request = { vector: new Float32Array([0, 0]), topK: 3, policy: "exact" as const };
+      const cold = await proximity.searchWithRuntime(request, runtime);
+      const warm = await proximity.searchWithRuntime(request, runtime);
+      assert.ok(cold.stats.physicalBytesRead > 0n);
+      assert.equal(warm.stats.physicalBytesRead, 0n);
+      assert.ok(runtime.stats().physicalReads > 0n);
+      runtime.clear();
+      assert.ok((await proximity.searchWithRuntime(request, runtime)).stats.physicalBytesRead > 0n);
+    } finally {
+      runtime.close();
+      proximity.close();
+    }
+  } finally {
+    engine.close();
+  }
+});
+
 test("WASM HNSW accelerator lifecycle is portable", { skip: !generatedPresent }, async () => {
   const engine = api.Engine.memory(wasm);
   try {

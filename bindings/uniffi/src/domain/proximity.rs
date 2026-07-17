@@ -44,6 +44,30 @@ mod tests {
             .search(ProximitySearchRequestRecord::exact(vec![0.1, 0.1], 1))
             .unwrap();
         assert_eq!(result.neighbors[0].key, b"a");
+        let runtime = engine
+            .proximity_search_runtime(default_proximity_search_runtime_policy())
+            .unwrap();
+        assert_eq!(
+            map.search_with_runtime(
+                ProximitySearchRequestRecord::exact(vec![0.1, 0.1], 1),
+                runtime.clone(),
+            )
+            .unwrap()
+            .neighbors[0]
+            .key,
+            b"a"
+        );
+        assert_eq!(
+            session
+                .search_with_runtime(
+                    ProximitySearchRequestRecord::exact(vec![0.1, 0.1], 1),
+                    runtime,
+                )
+                .unwrap()
+                .neighbors[0]
+                .key,
+            b"a"
+        );
         let updated = map
             .mutate(vec![ProximityMutationRecord {
                 key: b"a".to_vec(),
@@ -177,6 +201,17 @@ mod tests {
         let result = built.index.search(map.clone(), request.clone()).unwrap();
         assert_eq!(result.backend, SearchBackendRecord::ProductQuantized);
         assert_eq!(result.neighbors[0].key, b"vector-00");
+        let runtime = engine
+            .proximity_search_runtime(default_proximity_search_runtime_policy())
+            .unwrap();
+        assert_eq!(
+            built
+                .index
+                .search_with_runtime(map.clone(), request.clone(), runtime)
+                .unwrap()
+                .backend,
+            SearchBackendRecord::ProductQuantized
+        );
         let proof = built
             .index
             .prove_search(map.clone(), request, ContentGraphLimitsRecord::defaults())
@@ -191,6 +226,66 @@ mod tests {
         );
         let loaded = map.load_pq(built.index.manifest()).unwrap();
         assert_eq!(loaded.manifest(), built.index.manifest());
+    }
+
+    #[test]
+    fn retained_search_runtime_reuses_validated_content_and_is_engine_bound() {
+        let engine = Arc::new(ProllyEngine::memory(default_config()).unwrap());
+        let records = (0..16)
+            .map(|index| ProximityRecordRecord {
+                key: format!("vector-{index:02}").into_bytes(),
+                vector: vec![index as f32, 0.0],
+                value: format!("value-{index:02}").into_bytes(),
+            })
+            .collect();
+        let map = engine
+            .build_proximity_map(ProximityConfigRecord::new(2), records, None)
+            .unwrap();
+        let hnsw = map
+            .build_hnsw(default_hnsw_config(), default_hnsw_build_limits())
+            .unwrap()
+            .index;
+        let policy = default_proximity_search_runtime_policy();
+        let runtime = engine.proximity_search_runtime(policy.clone()).unwrap();
+        assert_eq!(runtime.policy(), policy);
+        assert_eq!(runtime.stats().physical_reads, 0);
+
+        let mut request = ProximitySearchRequestRecord::exact(vec![0.0, 0.0], 3);
+        request.policy = SearchPolicyKind::FixedBudget;
+        request.backend = SearchBackendRecord::Hnsw;
+        let cold = hnsw
+            .search_with_runtime(map.clone(), request.clone(), runtime.clone())
+            .unwrap();
+        assert!(cold.stats.physical_bytes_read > 0);
+        let cold_stats = runtime.stats();
+        assert!(cold_stats.physical_reads > 0);
+        assert!(cold_stats.physical_bytes_read > 0);
+
+        let warm = hnsw
+            .search_with_runtime(map.clone(), request.clone(), runtime.clone())
+            .unwrap();
+        assert_eq!(warm.neighbors, cold.neighbors);
+        assert_eq!(warm.stats.physical_bytes_read, 0);
+        assert_eq!(runtime.stats(), cold_stats);
+
+        runtime.clear();
+        let after_clear = hnsw
+            .search_with_runtime(map.clone(), request.clone(), runtime.clone())
+            .unwrap();
+        assert!(after_clear.stats.physical_bytes_read > 0);
+        assert!(runtime.stats().physical_reads > cold_stats.physical_reads);
+
+        let other_engine = Arc::new(ProllyEngine::memory(default_config()).unwrap());
+        let foreign_runtime = other_engine
+            .proximity_search_runtime(default_proximity_search_runtime_policy())
+            .unwrap();
+        assert!(hnsw
+            .search_with_runtime(map, request, foreign_runtime)
+            .is_err());
+
+        let mut invalid = default_proximity_search_runtime_policy();
+        invalid.max_entries = 0;
+        assert!(engine.proximity_search_runtime(invalid).is_err());
     }
 
     #[test]
@@ -245,6 +340,16 @@ mod tests {
                 .backend,
             SearchBackendRecord::Composite
         );
+        let runtime = engine
+            .proximity_search_runtime(default_proximity_search_runtime_policy())
+            .unwrap();
+        assert_eq!(
+            composite
+                .search_with_runtime(current.clone(), request.clone(), runtime.clone())
+                .unwrap()
+                .backend,
+            SearchBackendRecord::Composite
+        );
         let proof = composite
             .prove_search(
                 current.clone(),
@@ -278,6 +383,13 @@ mod tests {
         assert_eq!(
             catalog
                 .search(current.clone(), request.clone())
+                .unwrap()
+                .backend,
+            SearchBackendRecord::Composite
+        );
+        assert_eq!(
+            catalog
+                .search_with_runtime(current.clone(), request.clone(), runtime)
                 .unwrap()
                 .backend,
             SearchBackendRecord::Composite
@@ -337,8 +449,8 @@ use prolly::{
     ProximityMutationStats, ProximityRecord, ProximitySearchClaim, ProximitySearchProof,
     ProximitySearchStats, ProximityStructuralProof, ProximityVerification, QueryKernel,
     ScalarQuantizationConfig, SearchBackend, SearchBudget, SearchCompletion, SearchIo,
-    SearchOptions, SearchPolicy, SearchRequest, SearchResult, SearchRuntime, Store,
-    TypedContentObject, TypedContentRoot, VectorStorageConfig,
+    SearchOptions, SearchPolicy, SearchRequest, SearchResult, SearchRuntime, SearchRuntimePolicy,
+    Store, TypedContentObject, TypedContentRoot, VectorStorageConfig,
 };
 
 use crate::{BindingEngine, KeyProofRecord, ProllyBindingError, ProllyEngine};
@@ -914,6 +1026,50 @@ pub struct ProximityNeighborRecord {
     pub key: Vec<u8>,
     pub value: Vec<u8>,
     pub distance: f64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct ProximitySearchRuntimePolicyRecord {
+    pub max_entries: u64,
+    pub max_bytes: u64,
+    pub authoritative_max_bytes: u64,
+    pub hnsw_max_bytes: u64,
+    pub pq_max_bytes: u64,
+}
+
+impl From<SearchRuntimePolicy> for ProximitySearchRuntimePolicyRecord {
+    fn from(value: SearchRuntimePolicy) -> Self {
+        Self {
+            max_entries: value.max_entries as u64,
+            max_bytes: value.max_bytes as u64,
+            authoritative_max_bytes: value.authoritative_max_bytes as u64,
+            hnsw_max_bytes: value.hnsw_max_bytes as u64,
+            pq_max_bytes: value.pq_max_bytes as u64,
+        }
+    }
+}
+
+impl TryFrom<ProximitySearchRuntimePolicyRecord> for SearchRuntimePolicy {
+    type Error = ProllyBindingError;
+
+    fn try_from(value: ProximitySearchRuntimePolicyRecord) -> Result<Self, Self::Error> {
+        Ok(Self {
+            max_entries: to_usize(value.max_entries, "max_entries")?,
+            max_bytes: to_usize(value.max_bytes, "max_bytes")?,
+            authoritative_max_bytes: to_usize(
+                value.authoritative_max_bytes,
+                "authoritative_max_bytes",
+            )?,
+            hnsw_max_bytes: to_usize(value.hnsw_max_bytes, "hnsw_max_bytes")?,
+            pq_max_bytes: to_usize(value.pq_max_bytes, "pq_max_bytes")?,
+        })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct ProximitySearchRuntimeStatsRecord {
+    pub physical_reads: u64,
+    pub physical_bytes_read: u64,
 }
 
 impl From<Neighbor> for ProximityNeighborRecord {
@@ -1668,6 +1824,7 @@ macro_rules! with_proximity_session {
 
 #[derive(uniffi::Object)]
 pub struct BindingProximityReadSession {
+    engine: Arc<ProllyEngine>,
     inner: BindingProximitySessionMap,
     fast_handle: AtomicU64,
 }
@@ -1717,6 +1874,15 @@ impl BindingProximityReadSession {
         })
     }
 
+    pub fn search_with_runtime(
+        &self,
+        request: ProximitySearchRequestRecord,
+        runtime: Arc<BindingProximitySearchRuntime>,
+    ) -> Result<ProximitySearchResultRecord, ProllyBindingError> {
+        let request = proximity_search_request(&request)?;
+        search_session_with_runtime(self, &runtime, request)
+    }
+
     pub fn scan_records(
         &self,
         visitor: Arc<dyn ProximityRecordVisitorCallback>,
@@ -1762,6 +1928,201 @@ impl BindingProximityMap {
             map.scan_records_range_until(start, end, visit)
                 .map_err(Into::into)
         })
+    }
+}
+
+enum BindingProximitySearchIo {
+    Memory(SearchIo<Arc<prolly::MemStore>>),
+    File(SearchIo<Arc<prolly::FileNodeStore>>),
+    #[cfg(feature = "sqlite")]
+    Sqlite(SearchIo<Arc<SqliteStore>>),
+    Host(SearchIo<Arc<crate::HostStore>>),
+}
+
+#[derive(uniffi::Object)]
+pub struct BindingProximitySearchRuntime {
+    engine: Arc<ProllyEngine>,
+    policy: ProximitySearchRuntimePolicyRecord,
+    inner: BindingProximitySearchIo,
+}
+
+impl BindingProximitySearchRuntime {
+    pub(crate) fn new(
+        engine: Arc<ProllyEngine>,
+        policy: ProximitySearchRuntimePolicyRecord,
+    ) -> Result<Self, ProllyBindingError> {
+        let runtime = Arc::new(SearchRuntime::new(policy.clone().try_into()?)?);
+        let inner = match &engine.inner {
+            BindingEngine::Memory(inner) => BindingProximitySearchIo::Memory(SearchIo::new(
+                inner.store().clone(),
+                runtime,
+            )),
+            BindingEngine::File(inner) => BindingProximitySearchIo::File(SearchIo::new(
+                inner.store().clone(),
+                runtime,
+            )),
+            #[cfg(feature = "sqlite")]
+            BindingEngine::Sqlite(inner) => BindingProximitySearchIo::Sqlite(SearchIo::new(
+                inner.store().clone(),
+                runtime,
+            )),
+            BindingEngine::Host(inner) => BindingProximitySearchIo::Host(SearchIo::new(
+                inner.store().clone(),
+                runtime,
+            )),
+        };
+        Ok(Self {
+            engine,
+            policy,
+            inner,
+        })
+    }
+
+    fn belongs_to(&self, engine: &ProllyEngine) -> bool {
+        same_binding_engine(&self.engine, engine)
+    }
+}
+
+#[uniffi::export]
+impl BindingProximitySearchRuntime {
+    pub fn policy(&self) -> ProximitySearchRuntimePolicyRecord {
+        self.policy.clone()
+    }
+
+    pub fn stats(&self) -> ProximitySearchRuntimeStatsRecord {
+        let (physical_reads, physical_bytes_read) = match &self.inner {
+            BindingProximitySearchIo::Memory(io) => {
+                (io.physical_reads(), io.physical_bytes_read())
+            }
+            BindingProximitySearchIo::File(io) => {
+                (io.physical_reads(), io.physical_bytes_read())
+            }
+            #[cfg(feature = "sqlite")]
+            BindingProximitySearchIo::Sqlite(io) => {
+                (io.physical_reads(), io.physical_bytes_read())
+            }
+            BindingProximitySearchIo::Host(io) => {
+                (io.physical_reads(), io.physical_bytes_read())
+            }
+        };
+        ProximitySearchRuntimeStatsRecord {
+            physical_reads: physical_reads as u64,
+            physical_bytes_read: physical_bytes_read as u64,
+        }
+    }
+
+    pub fn clear(&self) {
+        match &self.inner {
+            BindingProximitySearchIo::Memory(io) => io.runtime().clear(),
+            BindingProximitySearchIo::File(io) => io.runtime().clear(),
+            #[cfg(feature = "sqlite")]
+            BindingProximitySearchIo::Sqlite(io) => io.runtime().clear(),
+            BindingProximitySearchIo::Host(io) => io.runtime().clear(),
+        }
+    }
+}
+
+fn same_binding_engine(left: &ProllyEngine, right: &ProllyEngine) -> bool {
+    match (&left.inner, &right.inner) {
+        (BindingEngine::Memory(left), BindingEngine::Memory(right)) => Arc::ptr_eq(left, right),
+        (BindingEngine::File(left), BindingEngine::File(right)) => Arc::ptr_eq(left, right),
+        #[cfg(feature = "sqlite")]
+        (BindingEngine::Sqlite(left), BindingEngine::Sqlite(right)) => Arc::ptr_eq(left, right),
+        (BindingEngine::Host(left), BindingEngine::Host(right)) => Arc::ptr_eq(left, right),
+        _ => false,
+    }
+}
+
+macro_rules! with_proximity_search_io {
+    ($runtime:expr, $io:ident, $body:block) => {{
+        match &$runtime.inner {
+            BindingProximitySearchIo::Memory($io) => $body,
+            BindingProximitySearchIo::File($io) => $body,
+            #[cfg(feature = "sqlite")]
+            BindingProximitySearchIo::Sqlite($io) => $body,
+            BindingProximitySearchIo::Host($io) => $body,
+        }
+    }};
+}
+
+fn search_native_with_runtime<S>(
+    map: &ProximityMap<S>,
+    io: &SearchIo<S>,
+    request: SearchRequest<'_>,
+) -> Result<ProximitySearchResultRecord, ProllyBindingError>
+where
+    S: Store + Clone + Send + Sync,
+    S::Error: Send + Sync,
+{
+    let accelerators = AcceleratorSet::empty();
+    map.search_with(&accelerators, io, request)
+        .map(Into::into)
+        .map_err(Into::into)
+}
+
+fn search_map_with_runtime(
+    binding: &BindingProximityMap,
+    runtime: &BindingProximitySearchRuntime,
+    request: SearchRequest<'_>,
+) -> Result<ProximitySearchResultRecord, ProllyBindingError> {
+    if !runtime.belongs_to(&binding.engine) {
+        return Err(ProllyBindingError::InvalidArgument {
+            reason: "proximity map and search runtime must belong to the same engine".to_string(),
+        });
+    }
+    let descriptor = crate::cid_from_vec(binding.descriptor.clone())?;
+    match (&binding.engine.inner, &runtime.inner) {
+        (BindingEngine::Memory(engine), BindingProximitySearchIo::Memory(io)) => {
+            let map = ProximityMap::load(engine.store().clone(), descriptor)?;
+            search_native_with_runtime(&map, io, request)
+        }
+        (BindingEngine::File(engine), BindingProximitySearchIo::File(io)) => {
+            let map = ProximityMap::load(engine.store().clone(), descriptor)?;
+            search_native_with_runtime(&map, io, request)
+        }
+        #[cfg(feature = "sqlite")]
+        (BindingEngine::Sqlite(engine), BindingProximitySearchIo::Sqlite(io)) => {
+            let map = ProximityMap::load(engine.store().clone(), descriptor)?;
+            search_native_with_runtime(&map, io, request)
+        }
+        (BindingEngine::Host(engine), BindingProximitySearchIo::Host(io)) => {
+            let map = ProximityMap::load(engine.store().clone(), descriptor)?;
+            search_native_with_runtime(&map, io, request)
+        }
+        _ => Err(ProllyBindingError::InvalidArgument {
+            reason: "proximity map and search runtime store kinds do not match".to_string(),
+        }),
+    }
+}
+
+fn search_session_with_runtime(
+    session: &BindingProximityReadSession,
+    runtime: &BindingProximitySearchRuntime,
+    request: SearchRequest<'_>,
+) -> Result<ProximitySearchResultRecord, ProllyBindingError> {
+    if !runtime.belongs_to(&session.engine) {
+        return Err(ProllyBindingError::InvalidArgument {
+            reason: "proximity session and search runtime must belong to the same engine"
+                .to_string(),
+        });
+    }
+    match (&session.inner, &runtime.inner) {
+        (BindingProximitySessionMap::Memory(map), BindingProximitySearchIo::Memory(io)) => {
+            search_native_with_runtime(map, io, request)
+        }
+        (BindingProximitySessionMap::File(map), BindingProximitySearchIo::File(io)) => {
+            search_native_with_runtime(map, io, request)
+        }
+        #[cfg(feature = "sqlite")]
+        (BindingProximitySessionMap::Sqlite(map), BindingProximitySearchIo::Sqlite(io)) => {
+            search_native_with_runtime(map, io, request)
+        }
+        (BindingProximitySessionMap::Host(map), BindingProximitySearchIo::Host(io)) => {
+            search_native_with_runtime(map, io, request)
+        }
+        _ => Err(ProllyBindingError::InvalidArgument {
+            reason: "proximity session and search runtime store kinds do not match".to_string(),
+        }),
     }
 }
 
@@ -2353,6 +2714,32 @@ impl BindingHnswIndex {
         }
     }
 
+    pub fn search_with_runtime(
+        &self,
+        map: Arc<BindingProximityMap>,
+        request: ProximitySearchRequestRecord,
+        runtime: Arc<BindingProximitySearchRuntime>,
+    ) -> Result<ProximitySearchResultRecord, ProllyBindingError> {
+        if !Arc::ptr_eq(&self.engine, &map.engine) || !runtime.belongs_to(&self.engine) {
+            return Err(ProllyBindingError::InvalidArgument {
+                reason: "HNSW index, proximity map, and search runtime must belong to the same engine"
+                    .to_string(),
+            });
+        }
+        let manifest = crate::cid_from_vec(self.manifest.clone())?;
+        let source = crate::cid_from_vec(map.descriptor())?;
+        let request = proximity_search_request(&request)?;
+        with_proximity_search_io!(runtime, io, {
+            let store = io.store().clone();
+            let map = ProximityMap::load(store.clone(), source)?;
+            let index = HnswIndex::load(store, manifest)?;
+            let accelerators = AcceleratorSet::empty().with_hnsw(map.tree(), index)?;
+            map.search_with(&accelerators, io, request)
+                .map(Into::into)
+                .map_err(Into::into)
+        })
+    }
+
     pub fn prove_search(
         &self,
         map: Arc<BindingProximityMap>,
@@ -2434,6 +2821,32 @@ impl BindingProductQuantizer {
                 search_pq(engine.store().clone(), &manifest, &source, request)
             }
         }
+    }
+
+    pub fn search_with_runtime(
+        &self,
+        map: Arc<BindingProximityMap>,
+        request: ProximitySearchRequestRecord,
+        runtime: Arc<BindingProximitySearchRuntime>,
+    ) -> Result<ProximitySearchResultRecord, ProllyBindingError> {
+        if !Arc::ptr_eq(&self.engine, &map.engine) || !runtime.belongs_to(&self.engine) {
+            return Err(ProllyBindingError::InvalidArgument {
+                reason: "product quantizer, proximity map, and search runtime must belong to the same engine"
+                    .to_string(),
+            });
+        }
+        let manifest = crate::cid_from_vec(self.manifest.clone())?;
+        let source = crate::cid_from_vec(map.descriptor())?;
+        let request = proximity_search_request(&request)?;
+        with_proximity_search_io!(runtime, io, {
+            let store = io.store().clone();
+            let map = ProximityMap::load(store.clone(), source)?;
+            let index = ProductQuantizer::load(store, manifest)?;
+            let accelerators = AcceleratorSet::empty().with_pq(map.tree(), index)?;
+            map.search_with(&accelerators, io, request)
+                .map(Into::into)
+                .map_err(Into::into)
+        })
     }
 
     pub fn prove_search(
@@ -2536,6 +2949,32 @@ impl BindingCompositeAccelerator {
         }
     }
 
+    pub fn search_with_runtime(
+        &self,
+        map: Arc<BindingProximityMap>,
+        request: ProximitySearchRequestRecord,
+        runtime: Arc<BindingProximitySearchRuntime>,
+    ) -> Result<ProximitySearchResultRecord, ProllyBindingError> {
+        if !Arc::ptr_eq(&self.engine, &map.engine) || !runtime.belongs_to(&self.engine) {
+            return Err(ProllyBindingError::InvalidArgument {
+                reason: "composite accelerator, proximity map, and search runtime must belong to the same engine"
+                    .to_string(),
+            });
+        }
+        let manifest = crate::cid_from_vec(self.manifest.clone())?;
+        let source = crate::cid_from_vec(map.descriptor())?;
+        let request = proximity_search_request(&request)?;
+        with_proximity_search_io!(runtime, io, {
+            let store = io.store().clone();
+            let map = ProximityMap::load(store.clone(), source)?;
+            let composite = CompositeAccelerator::load(store, manifest)?;
+            let accelerators = AcceleratorSet::empty().with_composite(map.tree(), composite)?;
+            map.search_with(&accelerators, io, request)
+                .map(Into::into)
+                .map_err(Into::into)
+        })
+    }
+
     pub fn prove_search(
         &self,
         map: Arc<BindingProximityMap>,
@@ -2614,6 +3053,31 @@ impl BindingAcceleratorCatalog {
                 search_catalog(engine.store().clone(), &manifest, &source, request)
             }
         }
+    }
+
+    pub fn search_with_runtime(
+        &self,
+        map: Arc<BindingProximityMap>,
+        request: ProximitySearchRequestRecord,
+        runtime: Arc<BindingProximitySearchRuntime>,
+    ) -> Result<ProximitySearchResultRecord, ProllyBindingError> {
+        if !Arc::ptr_eq(&self.engine, &map.engine) || !runtime.belongs_to(&self.engine) {
+            return Err(ProllyBindingError::InvalidArgument {
+                reason: "accelerator catalog, proximity map, and search runtime must belong to the same engine"
+                    .to_string(),
+            });
+        }
+        let manifest = crate::cid_from_vec(self.manifest.clone())?;
+        let source = crate::cid_from_vec(map.descriptor())?;
+        let request = proximity_search_request(&request)?;
+        with_proximity_search_io!(runtime, io, {
+            let store = io.store().clone();
+            let map = ProximityMap::load(store.clone(), source)?;
+            let catalog = AcceleratorCatalog::load(store, manifest, map.tree())?;
+            map.search_with(catalog.accelerators(), io, request)
+                .map(Into::into)
+                .map_err(Into::into)
+        })
     }
 
     pub fn prove_search(
@@ -2711,6 +3175,7 @@ impl BindingProximityMap {
                 ),
             };
         let session = Arc::new(BindingProximityReadSession {
+            engine: self.engine.clone(),
             inner,
             fast_handle: AtomicU64::new(0),
         });
@@ -3215,6 +3680,15 @@ impl BindingProximityMap {
         })
     }
 
+    pub fn search_with_runtime(
+        &self,
+        request: ProximitySearchRequestRecord,
+        runtime: Arc<BindingProximitySearchRuntime>,
+    ) -> Result<ProximitySearchResultRecord, ProllyBindingError> {
+        let request = proximity_search_request(&request)?;
+        search_map_with_runtime(self, &runtime, request)
+    }
+
     pub fn prove_search(
         &self,
         request: ProximitySearchRequestRecord,
@@ -3423,6 +3897,11 @@ pub(crate) fn load_proximity_map(
 #[uniffi::export]
 pub fn default_proximity_config(dimensions: u32) -> ProximityConfigRecord {
     ProximityConfigRecord::new(dimensions)
+}
+
+#[uniffi::export]
+pub fn default_proximity_search_runtime_policy() -> ProximitySearchRuntimePolicyRecord {
+    SearchRuntimePolicy::default().into()
 }
 
 #[uniffi::export]

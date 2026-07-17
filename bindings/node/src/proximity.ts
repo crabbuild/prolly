@@ -73,6 +73,29 @@ export interface SearchStats {
   candidateRetainedBytesPeak: bigint;
 }
 
+export interface ProximitySearchRuntimePolicy {
+  maxEntries: bigint;
+  maxBytes: bigint;
+  authoritativeMaxBytes: bigint;
+  hnswMaxBytes: bigint;
+  pqMaxBytes: bigint;
+}
+
+export interface ProximitySearchRuntimeStats {
+  physicalReads: bigint;
+  physicalBytesRead: bigint;
+}
+
+export function defaultProximitySearchRuntimePolicy(): ProximitySearchRuntimePolicy {
+  return {
+    maxEntries: 16_384n,
+    maxBytes: 256n * 1024n * 1024n,
+    authoritativeMaxBytes: 128n * 1024n * 1024n,
+    hnswMaxBytes: 96n * 1024n * 1024n,
+    pqMaxBytes: 32n * 1024n * 1024n,
+  };
+}
+
 export interface ProximityConfig {
   dimensions: number;
   metric: "l2_squared" | "cosine" | "inner_product";
@@ -377,6 +400,7 @@ interface NativeHnswIndex {
   config(): NativeHnswConfig;
   isCanonical(): boolean;
   search(map: NativeProximityMap, request: NativeSearchRequest): NativeSearchResult;
+  searchWithRuntime(map: NativeProximityMap, request: NativeSearchRequest, runtime: NativeProximitySearchRuntime): NativeSearchResult;
   proveSearch(map: NativeProximityMap, request: NativeSearchRequest): NativeProximitySearchProof;
 }
 
@@ -414,6 +438,7 @@ interface NativeProductQuantizer {
   config(): NativePqConfig;
   quality(): ProductQuantizationQuality;
   search(map: NativeProximityMap, request: NativeSearchRequest): NativeSearchResult;
+  searchWithRuntime(map: NativeProximityMap, request: NativeSearchRequest, runtime: NativeProximitySearchRuntime): NativeSearchResult;
   proveSearch(map: NativeProximityMap, request: NativeSearchRequest): NativeProximitySearchProof;
 }
 
@@ -473,6 +498,7 @@ interface NativeCompositeAccelerator {
   config(): NativeCompositeConfig;
   buildStats(): NativeCompositeBuildStats;
   search(map: NativeProximityMap, request: NativeSearchRequest): NativeSearchResult;
+  searchWithRuntime(map: NativeProximityMap, request: NativeSearchRequest, runtime: NativeProximitySearchRuntime): NativeSearchResult;
   proveSearch(map: NativeProximityMap, request: NativeSearchRequest): NativeProximitySearchProof;
 }
 interface NativeAcceleratorCatalog {
@@ -480,6 +506,7 @@ interface NativeAcceleratorCatalog {
   sourceDescriptor(): Uint8Array;
   entries(): Array<{ kind: AcceleratorCatalogEntry["kind"]; configurationFingerprint: Uint8Array; manifest: Uint8Array }>;
   search(map: NativeProximityMap, request: NativeSearchRequest): NativeSearchResult;
+  searchWithRuntime(map: NativeProximityMap, request: NativeSearchRequest, runtime: NativeProximitySearchRuntime): NativeSearchResult;
   proveSearch(map: NativeProximityMap, request: NativeSearchRequest): NativeProximitySearchProof;
 }
 
@@ -516,6 +543,20 @@ interface NativeSearchResult {
   planFormatVersion: number;
 }
 
+export interface NativeProximitySearchRuntimePolicy {
+  maxEntries: string;
+  maxBytes: string;
+  authoritativeMaxBytes: string;
+  hnswMaxBytes: string;
+  pqMaxBytes: string;
+}
+
+export interface NativeProximitySearchRuntime {
+  policy(): NativeProximitySearchRuntimePolicy;
+  stats(): { physicalReads: string; physicalBytesRead: string };
+  clear(): void;
+}
+
 interface NativeProximityMap {
   buildHnsw(config?: NativeHnswConfig, limits?: NativeHnswBuildLimits): NativeHnswBuildResult;
   loadHnsw(manifest: Uint8Array): NativeHnswIndex;
@@ -530,6 +571,7 @@ interface NativeProximityMap {
   loadAcceleratorCatalog(manifest: Uint8Array): NativeAcceleratorCatalog;
   read(): NativeProximityReadSession;
   search(request: NativeSearchRequest): NativeSearchResult;
+  searchWithRuntime(request: NativeSearchRequest, runtime: NativeProximitySearchRuntime): NativeSearchResult;
   count(): string;
   config(): NativeProximityConfig;
   get(key: Uint8Array): { vector: number[]; value: Uint8Array } | null;
@@ -545,6 +587,7 @@ interface NativeProximityMap {
 }
 interface NativeProximityReadSession {
   search(request: NativeSearchRequest): NativeSearchResult;
+  searchWithRuntime(request: NativeSearchRequest, runtime: NativeProximitySearchRuntime): NativeSearchResult;
   get(key: Uint8Array): { vector: number[]; value: Uint8Array } | null;
   contains(key: Uint8Array): boolean;
   scanRecords(visitor: (record: { key: Uint8Array; vector: Float32Array; value: Uint8Array }) => boolean): string;
@@ -628,6 +671,32 @@ function requireUnsignedBigInt(value: bigint, name: string): string {
     throw new RangeError(`${name} must fit an unsigned 64-bit integer`);
   }
   return value.toString();
+}
+
+export function ownProximitySearchRuntimePolicy(
+  value: ProximitySearchRuntimePolicy,
+): NativeProximitySearchRuntimePolicy {
+  return {
+    maxEntries: requireUnsignedBigInt(value.maxEntries, "maxEntries"),
+    maxBytes: requireUnsignedBigInt(value.maxBytes, "maxBytes"),
+    authoritativeMaxBytes: requireUnsignedBigInt(
+      value.authoritativeMaxBytes, "authoritativeMaxBytes",
+    ),
+    hnswMaxBytes: requireUnsignedBigInt(value.hnswMaxBytes, "hnswMaxBytes"),
+    pqMaxBytes: requireUnsignedBigInt(value.pqMaxBytes, "pqMaxBytes"),
+  };
+}
+
+function proximitySearchRuntimePolicy(
+  value: NativeProximitySearchRuntimePolicy,
+): ProximitySearchRuntimePolicy {
+  return {
+    maxEntries: BigInt(value.maxEntries),
+    maxBytes: BigInt(value.maxBytes),
+    authoritativeMaxBytes: BigInt(value.authoritativeMaxBytes),
+    hnswMaxBytes: BigInt(value.hnswMaxBytes),
+    pqMaxBytes: BigInt(value.pqMaxBytes),
+  };
 }
 
 function ownHnswConfig(value: HnswConfig | undefined): NativeHnswConfig | undefined {
@@ -866,6 +935,28 @@ function verification(value: NativeProximityVerification): ProximityVerification
   };
 }
 
+export class ProximitySearchRuntime implements Disposable {
+  #native?: NativeProximitySearchRuntime;
+  constructor(native: NativeProximitySearchRuntime) { this.#native = native; }
+  nativeHandle(): NativeProximitySearchRuntime {
+    if (this.#native == null) throw new Error("proximity search runtime is closed");
+    return this.#native;
+  }
+  policy(): ProximitySearchRuntimePolicy {
+    return proximitySearchRuntimePolicy(this.nativeHandle().policy());
+  }
+  stats(): ProximitySearchRuntimeStats {
+    const value = this.nativeHandle().stats();
+    return {
+      physicalReads: BigInt(value.physicalReads),
+      physicalBytesRead: BigInt(value.physicalBytesRead),
+    };
+  }
+  clear(): void { this.nativeHandle().clear(); }
+  close(): void { this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
 export class ProximityMap implements Disposable {
   #native?: NativeProximityMap;
   constructor(native: NativeProximityMap) { this.#native = native; }
@@ -875,6 +966,18 @@ export class ProximityMap implements Disposable {
   }
   read(): ProximityReadSession { return new ProximityReadSession(this.nativeHandle().read()); }
   search(request: SearchRequest): Promise<SearchResult> { return this.read().search(request); }
+  searchWithRuntime(
+    request: SearchRequest,
+    runtime: ProximitySearchRuntime,
+  ): Promise<SearchResult> {
+    const native = this.nativeHandle();
+    const owned = ownSearchRequest(request);
+    const nativeRuntime = runtime.nativeHandle();
+    return nativePromise(
+      request.signal,
+      () => searchResult(native.searchWithRuntime(owned, nativeRuntime)),
+    );
+  }
   get(key: Uint8Array): { vector: Float32Array; value: Uint8Array } | undefined {
     const record = this.nativeHandle().get(ownedBytes(key));
     return record == null ? undefined : { vector: new Float32Array(record.vector), value: record.value };
@@ -1069,6 +1172,18 @@ export class HnswIndex implements Disposable {
     const owned = ownSearchRequest(request);
     return nativePromise(request.signal, () => searchResult(native.search(nativeMap, owned)));
   }
+  searchWithRuntime(
+    map: ProximityMap, request: SearchRequest, runtime: ProximitySearchRuntime,
+  ): Promise<SearchResult> {
+    const native = this.#open();
+    const nativeMap = map.nativeHandle();
+    const owned = ownSearchRequest(request);
+    const nativeRuntime = runtime.nativeHandle();
+    return nativePromise(
+      request.signal,
+      () => searchResult(native.searchWithRuntime(nativeMap, owned, nativeRuntime)),
+    );
+  }
   proveSearch(map: ProximityMap, request: SearchRequest): ProximitySearchProof {
     return new ProximitySearchProof(
       this.#open().proveSearch(map.nativeHandle(), ownSearchRequest(request)),
@@ -1095,6 +1210,18 @@ export class ProductQuantizer implements Disposable {
     const nativeMap = map.nativeHandle();
     const owned = ownSearchRequest(request);
     return nativePromise(request.signal, () => searchResult(native.search(nativeMap, owned)));
+  }
+  searchWithRuntime(
+    map: ProximityMap, request: SearchRequest, runtime: ProximitySearchRuntime,
+  ): Promise<SearchResult> {
+    const native = this.#open();
+    const nativeMap = map.nativeHandle();
+    const owned = ownSearchRequest(request);
+    const nativeRuntime = runtime.nativeHandle();
+    return nativePromise(
+      request.signal,
+      () => searchResult(native.searchWithRuntime(nativeMap, owned, nativeRuntime)),
+    );
   }
   proveSearch(map: ProximityMap, request: SearchRequest): ProximitySearchProof {
     return new ProximitySearchProof(
@@ -1126,6 +1253,18 @@ export class CompositeAccelerator implements Disposable {
     const owned = ownSearchRequest(request);
     return nativePromise(request.signal, () => searchResult(native.search(nativeMap, owned)));
   }
+  searchWithRuntime(
+    map: ProximityMap, request: SearchRequest, runtime: ProximitySearchRuntime,
+  ): Promise<SearchResult> {
+    const native = this.nativeHandle();
+    const nativeMap = map.nativeHandle();
+    const owned = ownSearchRequest(request);
+    const nativeRuntime = runtime.nativeHandle();
+    return nativePromise(
+      request.signal,
+      () => searchResult(native.searchWithRuntime(nativeMap, owned, nativeRuntime)),
+    );
+  }
   proveSearch(map: ProximityMap, request: SearchRequest): ProximitySearchProof {
     return new ProximitySearchProof(
       this.nativeHandle().proveSearch(map.nativeHandle(), ownSearchRequest(request)),
@@ -1156,6 +1295,18 @@ export class AcceleratorCatalog implements Disposable {
     const nativeMap = map.nativeHandle();
     const owned = ownSearchRequest(request);
     return nativePromise(request.signal, () => searchResult(native.search(nativeMap, owned)));
+  }
+  searchWithRuntime(
+    map: ProximityMap, request: SearchRequest, runtime: ProximitySearchRuntime,
+  ): Promise<SearchResult> {
+    const native = this.#open();
+    const nativeMap = map.nativeHandle();
+    const owned = ownSearchRequest(request);
+    const nativeRuntime = runtime.nativeHandle();
+    return nativePromise(
+      request.signal,
+      () => searchResult(native.searchWithRuntime(nativeMap, owned, nativeRuntime)),
+    );
   }
   proveSearch(map: ProximityMap, request: SearchRequest): ProximitySearchProof {
     return new ProximitySearchProof(
@@ -1266,6 +1417,19 @@ export class ProximityReadSession implements Disposable {
     const native = this.#native;
     const owned = ownSearchRequest(request);
     return nativePromise(request.signal, () => searchResult(native.search(owned)));
+  }
+  searchWithRuntime(
+    request: SearchRequest,
+    runtime: ProximitySearchRuntime,
+  ): Promise<SearchResult> {
+    if (this.#native == null) return Promise.reject(new Error("proximity session is closed"));
+    const native = this.#native;
+    const owned = ownSearchRequest(request);
+    const nativeRuntime = runtime.nativeHandle();
+    return nativePromise(
+      request.signal,
+      () => searchResult(native.searchWithRuntime(owned, nativeRuntime)),
+    );
   }
   fastHandle(): bigint {
     if (this.#native == null) throw new Error("proximity session is closed");

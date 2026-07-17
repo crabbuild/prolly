@@ -646,6 +646,8 @@ public protocol BindingAcceleratorCatalogProtocol: AnyObject, Sendable {
 
     func search(map: BindingProximityMap, request: ProximitySearchRequestRecord) throws  -> ProximitySearchResultRecord
 
+    func searchWithRuntime(map: BindingProximityMap, request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime) throws  -> ProximitySearchResultRecord
+
     func sourceDescriptor()  -> Data
 
 }
@@ -739,6 +741,17 @@ open func search(map: BindingProximityMap, request: ProximitySearchRequestRecord
 })
 }
 
+open func searchWithRuntime(map: BindingProximityMap, request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime)throws  -> ProximitySearchResultRecord  {
+    return try  FfiConverterTypeProximitySearchResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_search_with_runtime(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeBindingProximityMap_lower(map),
+        FfiConverterTypeProximitySearchRequestRecord_lower(request),
+        FfiConverterTypeBindingProximitySearchRuntime_lower(runtime),$0
+    )
+})
+}
+
 open func sourceDescriptor() -> Data  {
     return try!  FfiConverterData.lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_source_descriptor(
@@ -816,6 +829,8 @@ public protocol BindingCompositeAcceleratorProtocol: AnyObject, Sendable {
     func proveSearch(map: BindingProximityMap, request: ProximitySearchRequestRecord, limits: ContentGraphLimitsRecord) throws  -> BindingProximitySearchProof
 
     func search(map: BindingProximityMap, request: ProximitySearchRequestRecord) throws  -> ProximitySearchResultRecord
+
+    func searchWithRuntime(map: BindingProximityMap, request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime) throws  -> ProximitySearchResultRecord
 
     func shadowCount()  -> UInt64
 
@@ -950,6 +965,17 @@ open func search(map: BindingProximityMap, request: ProximitySearchRequestRecord
 })
 }
 
+open func searchWithRuntime(map: BindingProximityMap, request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime)throws  -> ProximitySearchResultRecord  {
+    return try  FfiConverterTypeProximitySearchResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_search_with_runtime(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeBindingProximityMap_lower(map),
+        FfiConverterTypeProximitySearchRequestRecord_lower(request),
+        FfiConverterTypeBindingProximitySearchRuntime_lower(runtime),$0
+    )
+})
+}
+
 open func shadowCount() -> UInt64  {
     return try!  FfiConverterUInt64.lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_shadow_count(
@@ -1019,6 +1045,8 @@ public protocol BindingHnswIndexProtocol: AnyObject, Sendable {
     func proveSearch(map: BindingProximityMap, request: ProximitySearchRequestRecord, limits: ContentGraphLimitsRecord) throws  -> BindingProximitySearchProof
 
     func search(map: BindingProximityMap, request: ProximitySearchRequestRecord) throws  -> ProximitySearchResultRecord
+
+    func searchWithRuntime(map: BindingProximityMap, request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime) throws  -> ProximitySearchResultRecord
 
     func sourceDescriptor()  -> Data
 
@@ -1117,6 +1145,17 @@ open func search(map: BindingProximityMap, request: ProximitySearchRequestRecord
             self.uniffiCloneHandle(),
         FfiConverterTypeBindingProximityMap_lower(map),
         FfiConverterTypeProximitySearchRequestRecord_lower(request),$0
+    )
+})
+}
+
+open func searchWithRuntime(map: BindingProximityMap, request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime)throws  -> ProximitySearchResultRecord  {
+    return try  FfiConverterTypeProximitySearchResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindinghnswindex_search_with_runtime(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeBindingProximityMap_lower(map),
+        FfiConverterTypeProximitySearchRequestRecord_lower(request),
+        FfiConverterTypeBindingProximitySearchRuntime_lower(runtime),$0
     )
 })
 }
@@ -2916,6 +2955,8 @@ public protocol BindingProductQuantizerProtocol: AnyObject, Sendable {
 
     func search(map: BindingProximityMap, request: ProximitySearchRequestRecord) throws  -> ProximitySearchResultRecord
 
+    func searchWithRuntime(map: BindingProximityMap, request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime) throws  -> ProximitySearchResultRecord
+
     func sourceDescriptor()  -> Data
 
 }
@@ -3013,6 +3054,17 @@ open func search(map: BindingProximityMap, request: ProximitySearchRequestRecord
             self.uniffiCloneHandle(),
         FfiConverterTypeBindingProximityMap_lower(map),
         FfiConverterTypeProximitySearchRequestRecord_lower(request),$0
+    )
+})
+}
+
+open func searchWithRuntime(map: BindingProximityMap, request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime)throws  -> ProximitySearchResultRecord  {
+    return try  FfiConverterTypeProximitySearchResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingproductquantizer_search_with_runtime(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeBindingProximityMap_lower(map),
+        FfiConverterTypeProximitySearchRequestRecord_lower(request),
+        FfiConverterTypeBindingProximitySearchRuntime_lower(runtime),$0
     )
 })
 }
@@ -3128,6 +3180,8 @@ public protocol BindingProximityMapProtocol: AnyObject, Sendable {
     func scanRecords(visitor: ProximityRecordVisitorCallback) throws  -> UInt64
 
     func search(request: ProximitySearchRequestRecord) throws  -> ProximitySearchResultRecord
+
+    func searchWithRuntime(request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime) throws  -> ProximitySearchResultRecord
 
     func verify() throws  -> ProximityVerificationRecord
 
@@ -3432,6 +3486,16 @@ open func search(request: ProximitySearchRequestRecord)throws  -> ProximitySearc
 })
 }
 
+open func searchWithRuntime(request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime)throws  -> ProximitySearchResultRecord  {
+    return try  FfiConverterTypeProximitySearchResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingproximitymap_search_with_runtime(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeProximitySearchRequestRecord_lower(request),
+        FfiConverterTypeBindingProximitySearchRuntime_lower(runtime),$0
+    )
+})
+}
+
 open func verify()throws  -> ProximityVerificationRecord  {
     return try  FfiConverterTypeProximityVerificationRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingproximitymap_verify(
@@ -3501,6 +3565,8 @@ public protocol BindingProximityReadSessionProtocol: AnyObject, Sendable {
     func scanRecords(visitor: ProximityRecordVisitorCallback) throws  -> UInt64
 
     func search(request: ProximitySearchRequestRecord) throws  -> ProximitySearchResultRecord
+
+    func searchWithRuntime(request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime) throws  -> ProximitySearchResultRecord
 
 }
 open class BindingProximityReadSession: BindingProximityReadSessionProtocol, @unchecked Sendable {
@@ -3596,6 +3662,16 @@ open func search(request: ProximitySearchRequestRecord)throws  -> ProximitySearc
     uniffi_prolly_bindings_fn_method_bindingproximityreadsession_search(
             self.uniffiCloneHandle(),
         FfiConverterTypeProximitySearchRequestRecord_lower(request),$0
+    )
+})
+}
+
+open func searchWithRuntime(request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime)throws  -> ProximitySearchResultRecord  {
+    return try  FfiConverterTypeProximitySearchResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingproximityreadsession_search_with_runtime(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeProximitySearchRequestRecord_lower(request),
+        FfiConverterTypeBindingProximitySearchRuntime_lower(runtime),$0
     )
 })
 }
@@ -3771,6 +3847,141 @@ public func FfiConverterTypeBindingProximitySearchProof_lift(_ handle: UInt64) t
 #endif
 public func FfiConverterTypeBindingProximitySearchProof_lower(_ value: BindingProximitySearchProof) -> UInt64 {
     return FfiConverterTypeBindingProximitySearchProof.lower(value)
+}
+
+
+
+
+
+
+public protocol BindingProximitySearchRuntimeProtocol: AnyObject, Sendable {
+
+    func clear()
+
+    func policy()  -> ProximitySearchRuntimePolicyRecord
+
+    func stats()  -> ProximitySearchRuntimeStatsRecord
+
+}
+open class BindingProximitySearchRuntime: BindingProximitySearchRuntimeProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_prolly_bindings_fn_clone_bindingproximitysearchruntime(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_prolly_bindings_fn_free_bindingproximitysearchruntime(handle, $0) }
+    }
+
+
+
+
+open func clear()  {try! rustCall() {
+    uniffi_prolly_bindings_fn_method_bindingproximitysearchruntime_clear(
+            self.uniffiCloneHandle(),$0
+    )
+}
+}
+
+open func policy() -> ProximitySearchRuntimePolicyRecord  {
+    return try!  FfiConverterTypeProximitySearchRuntimePolicyRecord_lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_method_bindingproximitysearchruntime_policy(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+open func stats() -> ProximitySearchRuntimeStatsRecord  {
+    return try!  FfiConverterTypeProximitySearchRuntimeStatsRecord_lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_method_bindingproximitysearchruntime_stats(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+
+
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBindingProximitySearchRuntime: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = BindingProximitySearchRuntime
+
+    public static func lift(_ handle: UInt64) throws -> BindingProximitySearchRuntime {
+        return BindingProximitySearchRuntime(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: BindingProximitySearchRuntime) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BindingProximitySearchRuntime {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: BindingProximitySearchRuntime, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBindingProximitySearchRuntime_lift(_ handle: UInt64) throws -> BindingProximitySearchRuntime {
+    return try FfiConverterTypeBindingProximitySearchRuntime.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBindingProximitySearchRuntime_lower(_ value: BindingProximitySearchRuntime) -> UInt64 {
+    return FfiConverterTypeBindingProximitySearchRuntime.lower(value)
 }
 
 
@@ -7421,6 +7632,13 @@ public protocol ProllyEngineProtocol: AnyObject, Sendable {
 
     func proveRangePage(tree: TreeRecord, cursor: RangeCursorRecord?, rangeEnd: Data?, limit: UInt64) throws  -> ProvedRangePageRecord
 
+    /**
+     * Create an engine-bound, reusable proximity search runtime. Reusing this
+     * object across searches preserves validated content-cache entries and
+     * exposes cumulative physical I/O counters.
+     */
+    func proximitySearchRuntime(policy: ProximitySearchRuntimePolicyRecord) throws  -> BindingProximitySearchRuntime
+
     func publishChangedSpansHint(base: TreeRecord, changed: TreeRecord, spans: [ChangedSpanRecord]) throws  -> Bool
 
     func publishNamedRoot(name: Data, tree: TreeRecord) throws
@@ -8592,6 +8810,20 @@ open func proveRangePage(tree: TreeRecord, cursor: RangeCursorRecord?, rangeEnd:
         FfiConverterOptionTypeRangeCursorRecord.lower(cursor),
         FfiConverterOptionData.lower(rangeEnd),
         FfiConverterUInt64.lower(limit),$0
+    )
+})
+}
+
+    /**
+     * Create an engine-bound, reusable proximity search runtime. Reusing this
+     * object across searches preserves validated content-cache entries and
+     * exposes cumulative physical I/O counters.
+     */
+open func proximitySearchRuntime(policy: ProximitySearchRuntimePolicyRecord)throws  -> BindingProximitySearchRuntime  {
+    return try  FfiConverterTypeBindingProximitySearchRuntime_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_prollyengine_proximity_search_runtime(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeProximitySearchRuntimePolicyRecord_lower(policy),$0
     )
 })
 }
@@ -16915,6 +17147,126 @@ public func FfiConverterTypeProximitySearchResultRecord_lift(_ buf: RustBuffer) 
 #endif
 public func FfiConverterTypeProximitySearchResultRecord_lower(_ value: ProximitySearchResultRecord) -> RustBuffer {
     return FfiConverterTypeProximitySearchResultRecord.lower(value)
+}
+
+
+public struct ProximitySearchRuntimePolicyRecord: Equatable, Hashable {
+    public var maxEntries: UInt64
+    public var maxBytes: UInt64
+    public var authoritativeMaxBytes: UInt64
+    public var hnswMaxBytes: UInt64
+    public var pqMaxBytes: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(maxEntries: UInt64, maxBytes: UInt64, authoritativeMaxBytes: UInt64, hnswMaxBytes: UInt64, pqMaxBytes: UInt64) {
+        self.maxEntries = maxEntries
+        self.maxBytes = maxBytes
+        self.authoritativeMaxBytes = authoritativeMaxBytes
+        self.hnswMaxBytes = hnswMaxBytes
+        self.pqMaxBytes = pqMaxBytes
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension ProximitySearchRuntimePolicyRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProximitySearchRuntimePolicyRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProximitySearchRuntimePolicyRecord {
+        return
+            try ProximitySearchRuntimePolicyRecord(
+                maxEntries: FfiConverterUInt64.read(from: &buf),
+                maxBytes: FfiConverterUInt64.read(from: &buf),
+                authoritativeMaxBytes: FfiConverterUInt64.read(from: &buf),
+                hnswMaxBytes: FfiConverterUInt64.read(from: &buf),
+                pqMaxBytes: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProximitySearchRuntimePolicyRecord, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.maxEntries, into: &buf)
+        FfiConverterUInt64.write(value.maxBytes, into: &buf)
+        FfiConverterUInt64.write(value.authoritativeMaxBytes, into: &buf)
+        FfiConverterUInt64.write(value.hnswMaxBytes, into: &buf)
+        FfiConverterUInt64.write(value.pqMaxBytes, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProximitySearchRuntimePolicyRecord_lift(_ buf: RustBuffer) throws -> ProximitySearchRuntimePolicyRecord {
+    return try FfiConverterTypeProximitySearchRuntimePolicyRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProximitySearchRuntimePolicyRecord_lower(_ value: ProximitySearchRuntimePolicyRecord) -> RustBuffer {
+    return FfiConverterTypeProximitySearchRuntimePolicyRecord.lower(value)
+}
+
+
+public struct ProximitySearchRuntimeStatsRecord: Equatable, Hashable {
+    public var physicalReads: UInt64
+    public var physicalBytesRead: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(physicalReads: UInt64, physicalBytesRead: UInt64) {
+        self.physicalReads = physicalReads
+        self.physicalBytesRead = physicalBytesRead
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension ProximitySearchRuntimeStatsRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProximitySearchRuntimeStatsRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProximitySearchRuntimeStatsRecord {
+        return
+            try ProximitySearchRuntimeStatsRecord(
+                physicalReads: FfiConverterUInt64.read(from: &buf),
+                physicalBytesRead: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProximitySearchRuntimeStatsRecord, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.physicalReads, into: &buf)
+        FfiConverterUInt64.write(value.physicalBytesRead, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProximitySearchRuntimeStatsRecord_lift(_ buf: RustBuffer) throws -> ProximitySearchRuntimeStatsRecord {
+    return try FfiConverterTypeProximitySearchRuntimeStatsRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProximitySearchRuntimeStatsRecord_lower(_ value: ProximitySearchRuntimeStatsRecord) -> RustBuffer {
+    return FfiConverterTypeProximitySearchRuntimeStatsRecord.lower(value)
 }
 
 
@@ -26381,6 +26733,12 @@ public func defaultProximityConfig(dimensions: UInt32) -> ProximityConfigRecord 
     )
 })
 }
+public func defaultProximitySearchRuntimePolicy() -> ProximitySearchRuntimePolicyRecord  {
+    return try!  FfiConverterTypeProximitySearchRuntimePolicyRecord_lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_func_default_proximity_search_runtime_policy($0
+    )
+})
+}
 public func exactProximitySearchRequest(query: [Float], k: UInt64) -> ProximitySearchRequestRecord  {
     return try!  FfiConverterTypeProximitySearchRequestRecord_lift(try! rustCall() {
     uniffi_prolly_bindings_fn_func_exact_proximity_search_request(
@@ -26818,6 +27176,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_prolly_bindings_checksum_func_default_proximity_config() != 43437) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_prolly_bindings_checksum_func_default_proximity_search_runtime_policy() != 8352) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_prolly_bindings_checksum_func_exact_proximity_search_request() != 59384) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -27208,6 +27569,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_prolly_bindings_checksum_method_prollyengine_prove_range_page() != 35557) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_prolly_bindings_checksum_method_prollyengine_proximity_search_runtime() != 6204) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_prolly_bindings_checksum_method_prollyengine_publish_changed_spans_hint() != 57418) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -27484,6 +27848,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_search() != 55802) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_search_with_runtime() != 53678) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_source_descriptor() != 29366) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -27514,6 +27881,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_search() != 7681) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_search_with_runtime() != 35233) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_shadow_count() != 49297) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -27532,6 +27902,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_prolly_bindings_checksum_method_bindinghnswindex_search() != 59229) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_prolly_bindings_checksum_method_bindinghnswindex_search_with_runtime() != 42474) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_prolly_bindings_checksum_method_bindinghnswindex_source_descriptor() != 54794) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -27548,6 +27921,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_bindingproductquantizer_search() != 14867) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingproductquantizer_search_with_runtime() != 59197) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_bindingproductquantizer_source_descriptor() != 61276) {
@@ -27631,6 +28007,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_prolly_bindings_checksum_method_bindingproximitymap_search() != 3285) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_prolly_bindings_checksum_method_bindingproximitymap_search_with_runtime() != 38486) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_prolly_bindings_checksum_method_bindingproximitymap_verify() != 62601) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -27649,10 +28028,22 @@ private let initializationResult: InitializationResult = {
     if (uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_search() != 12060) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_search_with_runtime() != 989) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_prolly_bindings_checksum_method_bindingproximitysearchproof_source_descriptor() != 57653) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_bindingproximitysearchproof_verify() != 38054) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingproximitysearchruntime_clear() != 37935) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingproximitysearchruntime_policy() != 55203) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingproximitysearchruntime_stats() != 45140) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_proximityrecordvisitorcallback_visit() != 31782) {

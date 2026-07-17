@@ -13,6 +13,12 @@ public final class ProximityReadSession implements AutoCloseable {
         return ProximityMap.fromNative(
                 build.crab.prolly.api.JavaPortableBridge.search(nativeSession, request.toNative()));
     }
+    public SearchResult searchWithRuntime(
+            SearchRequest request, ProximitySearchRuntime runtime) {
+        if (nativeSession == null) throw new IllegalStateException("proximity session is closed");
+        return ProximityMap.fromNative(JavaPortableBridge.searchWithRuntime(
+                nativeSession, request.toNative(), runtime.open()));
+    }
     public build.crab.prolly.ExactProximityRecordRecord get(byte[] key) {
         if (nativeSession == null) throw new IllegalStateException("proximity session is closed");
         return nativeSession.get(key.clone());

@@ -32,6 +32,39 @@ from prolly import (
 
 
 class PortableParityTests(unittest.TestCase):
+    def test_retained_search_runtime_reuses_validated_content(self):
+        with Engine.memory() as engine:
+            proximity = engine.build_proximity(
+                dimensions=2,
+                records=[
+                    ProximityRecord(
+                        f"vector-{index:02}".encode(),
+                        [float(index), 0.0],
+                        f"value-{index:02}".encode(),
+                    )
+                    for index in range(16)
+                ],
+            )
+            index = proximity.build_hnsw().index
+            request = exact_proximity_search_request([0.0, 0.0], 3)
+            request.policy = SearchPolicyKind.FIXED_BUDGET
+            request.backend = SearchBackendRecord.HNSW
+            with engine.proximity_search_runtime() as runtime:
+                cold = index.search_with_runtime(proximity, request, runtime)
+                self.assertGreater(cold.stats.physical_bytes_read, 0)
+                cold_stats = runtime.stats
+                self.assertGreater(cold_stats.physical_reads, 0)
+                warm = index.search_with_runtime(proximity, request, runtime)
+                self.assertEqual(warm.neighbors, cold.neighbors)
+                self.assertEqual(warm.stats.physical_bytes_read, 0)
+                self.assertEqual(runtime.stats, cold_stats)
+                runtime.clear()
+                self.assertGreater(
+                    index.search_with_runtime(proximity, request, runtime)
+                    .stats.physical_bytes_read,
+                    0,
+                )
+
     def test_composite_and_catalog_lifecycle_is_portable_and_bounded(self):
         with Engine.memory() as engine:
             base = engine.build_proximity(
@@ -63,6 +96,7 @@ class PortableParityTests(unittest.TestCase):
             request = exact_proximity_search_request([0.0, 0.0], 3)
             request.policy = SearchPolicyKind.FIXED_BUDGET
             request.backend = SearchBackendRecord.COMPOSITE
+            runtime = engine.proximity_search_runtime()
             with composite:
                 self.assertEqual(composite.base_kind, CompositeBaseKindRecord.HNSW)
                 self.assertEqual(composite.current_source_descriptor, current.descriptor)
@@ -71,6 +105,10 @@ class PortableParityTests(unittest.TestCase):
                 self.assertEqual(composite.shadow_count, 1)
                 self.assertEqual(
                     composite.search(current, request).backend,
+                    SearchBackendRecord.COMPOSITE,
+                )
+                self.assertEqual(
+                    composite.search_with_runtime(current, request, runtime).backend,
                     SearchBackendRecord.COMPOSITE,
                 )
                 with composite.prove_search(current, request) as proof:
@@ -88,8 +126,13 @@ class PortableParityTests(unittest.TestCase):
                     catalog.search(current, request).backend,
                     SearchBackendRecord.COMPOSITE,
                 )
+                self.assertEqual(
+                    catalog.search_with_runtime(current, request, runtime).backend,
+                    SearchBackendRecord.COMPOSITE,
+                )
                 catalog_manifest = catalog.manifest
                 catalog.close()
+            runtime.close()
 
             with current.load_composite(manifest) as loaded:
                 self.assertEqual(loaded.manifest, manifest)
@@ -144,6 +187,11 @@ class PortableParityTests(unittest.TestCase):
                 result = index.search(proximity, request)
                 self.assertEqual(result.backend, SearchBackendRecord.PRODUCT_QUANTIZED)
                 self.assertEqual(result.neighbors[0].key, b"vector-00")
+                with engine.proximity_search_runtime() as runtime:
+                    self.assertEqual(
+                        index.search_with_runtime(proximity, request, runtime).backend,
+                        SearchBackendRecord.PRODUCT_QUANTIZED,
+                    )
                 manifest = index.manifest
                 with index.prove_search(proximity, request) as proof:
                     self.assertEqual(
@@ -235,9 +283,27 @@ class PortableParityTests(unittest.TestCase):
                 2,
             )
             self.assertEqual(scanned, [b"a", b"ab"])
-            with proximity.read() as session:
+            with engine.proximity_search_runtime() as runtime, proximity.read() as session:
+                self.assertEqual(
+                    [
+                        neighbor.key
+                        for neighbor in proximity.search_with_runtime(
+                            request, runtime
+                        ).neighbors
+                    ],
+                    [b"a", b"ab"],
+                )
                 self.assertEqual(
                     [neighbor.key for neighbor in session.search(request).neighbors],
+                    [b"a", b"ab"],
+                )
+                self.assertEqual(
+                    [
+                        neighbor.key
+                        for neighbor in session.search_with_runtime(
+                            request, runtime
+                        ).neighbors
+                    ],
                     [b"a", b"ab"],
                 )
                 retained = []

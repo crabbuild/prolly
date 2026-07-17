@@ -13,7 +13,7 @@ use prolly::{
     ProximityMembershipProof, ProximityMutation, ProximityRecord, ProximitySearchClaim,
     ProximitySearchProof, ProximityStructuralProof, ProximityVerification, QueryKernel,
     SearchBackend, SearchBudget, SearchCompletion, SearchIo, SearchOptions, SearchPolicy,
-    SearchRequest, SearchRuntime,
+    SearchRequest, SearchRuntime, SearchRuntimePolicy,
 };
 use std::sync::Arc;
 use wasm_bindgen::prelude::*;
@@ -23,6 +23,57 @@ use wasm_bindgen::JsCast;
 pub struct WasmProximityMap {
     engine: Arc<super::WasmEngine>,
     descriptor: Cid,
+}
+
+#[wasm_bindgen(js_name = WasmProximitySearchRuntime)]
+pub struct WasmProximitySearchRuntime {
+    engine: Arc<super::WasmEngine>,
+    policy: SearchRuntimePolicy,
+    io: SearchIo<Arc<prolly::MemStore>>,
+}
+
+impl WasmProximitySearchRuntime {
+    fn new(engine: Arc<super::WasmEngine>, policy: SearchRuntimePolicy) -> Result<Self, JsValue> {
+        let runtime = Arc::new(SearchRuntime::new(policy.clone()).map_err(js_error)?);
+        let io = SearchIo::new(engine.store().clone(), runtime);
+        Ok(Self { engine, policy, io })
+    }
+
+    fn ensure_engine(&self, engine: &Arc<super::WasmEngine>) -> Result<(), JsValue> {
+        if Arc::ptr_eq(&self.engine, engine) {
+            Ok(())
+        } else {
+            Err(JsValue::from_str(
+                "proximity search runtime and search target must belong to the same engine",
+            ))
+        }
+    }
+}
+
+#[wasm_bindgen(js_class = WasmProximitySearchRuntime)]
+impl WasmProximitySearchRuntime {
+    pub fn policy(&self) -> Result<Object, JsValue> {
+        search_runtime_policy_object(&self.policy)
+    }
+
+    pub fn stats(&self) -> Result<Object, JsValue> {
+        let object = Object::new();
+        Reflect::set(
+            &object,
+            &"physicalReads".into(),
+            &BigInt::from(self.io.physical_reads() as u64).into(),
+        )?;
+        Reflect::set(
+            &object,
+            &"physicalBytesRead".into(),
+            &BigInt::from(self.io.physical_bytes_read() as u64).into(),
+        )?;
+        Ok(object)
+    }
+
+    pub fn clear(&self) {
+        self.io.runtime().clear();
+    }
 }
 
 impl WasmProximityMap {
@@ -114,6 +165,49 @@ fn required_string_u64(value: &JsValue, name: &str) -> Result<u64, JsValue> {
         .ok_or_else(|| JsValue::from_str(&format!("{name} must be an unsigned integer string")))?
         .parse::<u64>()
         .map_err(|error| JsValue::from_str(&format!("invalid {name}: {error}")))
+}
+
+fn search_runtime_policy_from_js(value: &JsValue) -> Result<SearchRuntimePolicy, JsValue> {
+    if value.is_null() || value.is_undefined() {
+        return Ok(SearchRuntimePolicy::default());
+    }
+    Ok(SearchRuntimePolicy {
+        max_entries: required_string_usize(value, "maxEntries")?,
+        max_bytes: required_string_usize(value, "maxBytes")?,
+        authoritative_max_bytes: required_string_usize(value, "authoritativeMaxBytes")?,
+        hnsw_max_bytes: required_string_usize(value, "hnswMaxBytes")?,
+        pq_max_bytes: required_string_usize(value, "pqMaxBytes")?,
+    })
+}
+
+fn search_runtime_policy_object(policy: &SearchRuntimePolicy) -> Result<Object, JsValue> {
+    let object = Object::new();
+    Reflect::set(
+        &object,
+        &"maxEntries".into(),
+        &BigInt::from(policy.max_entries as u64).into(),
+    )?;
+    Reflect::set(
+        &object,
+        &"maxBytes".into(),
+        &BigInt::from(policy.max_bytes as u64).into(),
+    )?;
+    Reflect::set(
+        &object,
+        &"authoritativeMaxBytes".into(),
+        &BigInt::from(policy.authoritative_max_bytes as u64).into(),
+    )?;
+    Reflect::set(
+        &object,
+        &"hnswMaxBytes".into(),
+        &BigInt::from(policy.hnsw_max_bytes as u64).into(),
+    )?;
+    Reflect::set(
+        &object,
+        &"pqMaxBytes".into(),
+        &BigInt::from(policy.pq_max_bytes as u64).into(),
+    )?;
+    Ok(object)
 }
 
 fn required_u32(value: &JsValue, name: &str) -> Result<u32, JsValue> {
@@ -559,6 +653,7 @@ fn composite_rebuild_outcome_object(
                 &object,
                 &"hnsw".into(),
                 &JsValue::from(WasmHnswIndex {
+                    engine,
                     inner: *accelerator,
                 }),
             )?;
@@ -589,6 +684,7 @@ fn composite_rebuild_outcome_object(
                 &object,
                 &"pq".into(),
                 &JsValue::from(WasmProductQuantizer {
+                    engine,
                     inner: *accelerator,
                 }),
             )?;
@@ -772,8 +868,25 @@ impl WasmProximityMap {
         search_map(&self.load()?, &request)
     }
 
+    #[wasm_bindgen(js_name = searchWithRuntime)]
+    pub fn search_with_runtime(
+        &self,
+        request: JsValue,
+        runtime: &WasmProximitySearchRuntime,
+    ) -> Result<Object, JsValue> {
+        runtime.ensure_engine(&self.engine)?;
+        let request = owned_search_request(request)?;
+        self.load()?
+            .search_with(&AcceleratorSet::empty(), &runtime.io, request.as_request())
+            .map_err(js_error)
+            .and_then(search_result_object)
+    }
+
     pub fn read(&self) -> Result<WasmProximityReadSession, JsValue> {
-        Ok(WasmProximityReadSession { map: self.load()? })
+        Ok(WasmProximityReadSession {
+            engine: Arc::clone(&self.engine),
+            map: self.load()?,
+        })
     }
 
     pub fn descriptor(&self) -> Vec<u8> {
@@ -815,7 +928,10 @@ impl WasmProximityMap {
         Reflect::set(
             &result,
             &"index".into(),
-            &JsValue::from(WasmHnswIndex { inner: index }),
+            &JsValue::from(WasmHnswIndex {
+                engine: Arc::clone(&self.engine),
+                inner: index,
+            }),
         )?;
         Reflect::set(
             &result,
@@ -836,7 +952,10 @@ impl WasmProximityMap {
                 "HNSW index is bound to a different source descriptor",
             ));
         }
-        Ok(WasmHnswIndex { inner: index })
+        Ok(WasmHnswIndex {
+            engine: Arc::clone(&self.engine),
+            inner: index,
+        })
     }
     #[wasm_bindgen(js_name = buildPq)]
     pub fn build_pq(
@@ -863,7 +982,10 @@ impl WasmProximityMap {
         Reflect::set(
             &result,
             &"index".into(),
-            &JsValue::from(WasmProductQuantizer { inner: index }),
+            &JsValue::from(WasmProductQuantizer {
+                engine: Arc::clone(&self.engine),
+                inner: index,
+            }),
         )?;
         Reflect::set(
             &result,
@@ -885,7 +1007,10 @@ impl WasmProximityMap {
                 "product quantizer is bound to a different source descriptor",
             ));
         }
-        Ok(WasmProductQuantizer { inner: index })
+        Ok(WasmProductQuantizer {
+            engine: Arc::clone(&self.engine),
+            inner: index,
+        })
     }
     #[wasm_bindgen(js_name = buildCompositeHnsw)]
     pub fn build_composite_hnsw(
@@ -1209,6 +1334,7 @@ impl WasmProximityMap {
 
 #[wasm_bindgen(js_name = WasmHnswIndex)]
 pub struct WasmHnswIndex {
+    engine: Arc<super::WasmEngine>,
     inner: HnswIndex<Arc<prolly::MemStore>>,
 }
 
@@ -1241,6 +1367,30 @@ impl WasmHnswIndex {
             .and_then(search_result_object)
     }
 
+    #[wasm_bindgen(js_name = searchWithRuntime)]
+    pub fn search_with_runtime(
+        &self,
+        map: &WasmProximityMap,
+        request: JsValue,
+        runtime: &WasmProximitySearchRuntime,
+    ) -> Result<Object, JsValue> {
+        runtime.ensure_engine(&self.engine)?;
+        runtime.ensure_engine(&map.engine)?;
+        let request = owned_search_request(request)?;
+        let map = map.load()?;
+        let index = HnswIndex::load(
+            runtime.io.store().clone(),
+            self.inner.manifest_cid().clone(),
+        )
+        .map_err(js_error)?;
+        let accelerators = AcceleratorSet::empty()
+            .with_hnsw(map.tree(), index)
+            .map_err(js_error)?;
+        map.search_with(&accelerators, &runtime.io, request.as_request())
+            .map_err(js_error)
+            .and_then(search_result_object)
+    }
+
     #[wasm_bindgen(js_name = proveSearch)]
     pub fn prove_search(
         &self,
@@ -1258,6 +1408,7 @@ impl WasmHnswIndex {
 
 #[wasm_bindgen(js_name = WasmProductQuantizer)]
 pub struct WasmProductQuantizer {
+    engine: Arc<super::WasmEngine>,
     inner: ProductQuantizer<Arc<prolly::MemStore>>,
 }
 
@@ -1285,6 +1436,30 @@ impl WasmProductQuantizer {
         let map = map.load()?;
         self.inner
             .search(&map, request.as_request())
+            .map_err(js_error)
+            .and_then(search_result_object)
+    }
+
+    #[wasm_bindgen(js_name = searchWithRuntime)]
+    pub fn search_with_runtime(
+        &self,
+        map: &WasmProximityMap,
+        request: JsValue,
+        runtime: &WasmProximitySearchRuntime,
+    ) -> Result<Object, JsValue> {
+        runtime.ensure_engine(&self.engine)?;
+        runtime.ensure_engine(&map.engine)?;
+        let request = owned_search_request(request)?;
+        let map = map.load()?;
+        let index = ProductQuantizer::load(
+            runtime.io.store().clone(),
+            self.inner.manifest_cid().clone(),
+        )
+        .map_err(js_error)?;
+        let accelerators = AcceleratorSet::empty()
+            .with_pq(map.tree(), index)
+            .map_err(js_error)?;
+        map.search_with(&accelerators, &runtime.io, request.as_request())
             .map_err(js_error)
             .and_then(search_result_object)
     }
@@ -1366,6 +1541,30 @@ impl WasmCompositeAccelerator {
             .map_err(js_error)
             .and_then(search_result_object)
     }
+    #[wasm_bindgen(js_name = searchWithRuntime)]
+    pub fn search_with_runtime(
+        &self,
+        map: &WasmProximityMap,
+        request: JsValue,
+        runtime: &WasmProximitySearchRuntime,
+    ) -> Result<Object, JsValue> {
+        runtime.ensure_engine(&self.engine)?;
+        runtime.ensure_engine(&map.engine)?;
+        let request = owned_search_request(request)?;
+        let map_value = map.load()?;
+        let composite = CompositeAccelerator::load(
+            runtime.io.store().clone(),
+            self.inner.manifest_cid().clone(),
+        )
+        .map_err(js_error)?;
+        let accelerators = AcceleratorSet::empty()
+            .with_composite(map_value.tree(), composite)
+            .map_err(js_error)?;
+        map_value
+            .search_with(&accelerators, &runtime.io, request.as_request())
+            .map_err(js_error)
+            .and_then(search_result_object)
+    }
     #[wasm_bindgen(js_name = proveSearch)]
     pub fn prove_search(
         &self,
@@ -1425,6 +1624,28 @@ impl WasmAcceleratorCatalog {
         );
         map_value
             .search_with(self.inner.accelerators(), &io, request.as_request())
+            .map_err(js_error)
+            .and_then(search_result_object)
+    }
+    #[wasm_bindgen(js_name = searchWithRuntime)]
+    pub fn search_with_runtime(
+        &self,
+        map: &WasmProximityMap,
+        request: JsValue,
+        runtime: &WasmProximitySearchRuntime,
+    ) -> Result<Object, JsValue> {
+        runtime.ensure_engine(&self.engine)?;
+        runtime.ensure_engine(&map.engine)?;
+        let request = owned_search_request(request)?;
+        let map_value = map.load()?;
+        let catalog = AcceleratorCatalog::load(
+            runtime.io.store().clone(),
+            self.inner.manifest_cid().clone(),
+            map_value.tree(),
+        )
+        .map_err(js_error)?;
+        map_value
+            .search_with(catalog.accelerators(), &runtime.io, request.as_request())
             .map_err(js_error)
             .and_then(search_result_object)
     }
@@ -1558,6 +1779,7 @@ impl WasmProximitySearchProof {
 
 #[wasm_bindgen(js_name = WasmProximityReadSession)]
 pub struct WasmProximityReadSession {
+    engine: Arc<super::WasmEngine>,
     map: ProximityMap<Arc<prolly::MemStore>>,
 }
 
@@ -1599,6 +1821,20 @@ impl WasmProximityReadSession {
     pub fn search(&self, request: JsValue) -> Result<Object, JsValue> {
         let request = owned_search_request(request)?;
         search_map(&self.map, &request)
+    }
+
+    #[wasm_bindgen(js_name = searchWithRuntime)]
+    pub fn search_with_runtime(
+        &self,
+        request: JsValue,
+        runtime: &WasmProximitySearchRuntime,
+    ) -> Result<Object, JsValue> {
+        runtime.ensure_engine(&self.engine)?;
+        let request = owned_search_request(request)?;
+        self.map
+            .search_with(&AcceleratorSet::empty(), &runtime.io, request.as_request())
+            .map_err(js_error)
+            .and_then(search_result_object)
     }
 }
 
@@ -1684,6 +1920,17 @@ fn with_proximity_search_view(
 
 #[wasm_bindgen(js_class = WasmProllyEngine)]
 impl WasmProllyEngine {
+    #[wasm_bindgen(js_name = proximitySearchRuntime)]
+    pub fn proximity_search_runtime(
+        &self,
+        policy: JsValue,
+    ) -> Result<WasmProximitySearchRuntime, JsValue> {
+        WasmProximitySearchRuntime::new(
+            Arc::clone(&self.inner),
+            search_runtime_policy_from_js(&policy)?,
+        )
+    }
+
     #[wasm_bindgen(js_name = buildProximity)]
     pub fn portable_build_proximity(
         &self,

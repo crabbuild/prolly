@@ -28,6 +28,11 @@ public final class CompositeAccelerator implements AutoCloseable {
         return ProximityMap.fromNative(
                 JavaPortableBridge.compositeSearch(open(), map.open(), request.toNative()));
     }
+    public SearchResult searchWithRuntime(
+            ProximityMap map, SearchRequest request, ProximitySearchRuntime runtime) {
+        return ProximityMap.fromNative(JavaPortableBridge.compositeSearchWithRuntime(
+                open(), map.open(), request.toNative(), runtime.open()));
+    }
     public ProximitySearchProof proveSearch(ProximityMap map, SearchRequest request) {
         return new ProximitySearchProof(
                 JavaPortableBridge.compositeProveSearch(open(), map.open(), request.toNative()));

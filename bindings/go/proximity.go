@@ -626,6 +626,163 @@ type SearchStats struct {
 	CandidateRetainedBytesPeak   uint64
 }
 
+// ProximitySearchRuntimePolicy bounds the retained, validated content cache
+// shared by repeated proximity searches.
+type ProximitySearchRuntimePolicy struct {
+	MaxEntries            uint64
+	MaxBytes              uint64
+	AuthoritativeMaxBytes uint64
+	HNSWMaxBytes          uint64
+	PQMaxBytes            uint64
+}
+
+type ProximitySearchRuntimeStats struct {
+	PhysicalReads     uint64
+	PhysicalBytesRead uint64
+}
+
+// ProximitySearchRuntime is engine-bound and safe for reuse across map,
+// session, and accelerator search calls.
+type ProximitySearchRuntime struct {
+	handle uint64
+	closed atomic.Bool
+	mu     sync.RWMutex
+}
+
+func encodeProximitySearchRuntimePolicy(policy ProximitySearchRuntimePolicy) []byte {
+	var out bytes.Buffer
+	writeU64(&out, policy.MaxEntries)
+	writeU64(&out, policy.MaxBytes)
+	writeU64(&out, policy.AuthoritativeMaxBytes)
+	writeU64(&out, policy.HNSWMaxBytes)
+	writeU64(&out, policy.PQMaxBytes)
+	return out.Bytes()
+}
+
+func decodeProximitySearchRuntimePolicy(raw []byte) (ProximitySearchRuntimePolicy, error) {
+	d := byteDecoder{data: raw}
+	values := [5]uint64{}
+	for index := range values {
+		value, err := d.readUint64()
+		if err != nil {
+			return ProximitySearchRuntimePolicy{}, err
+		}
+		values[index] = value
+	}
+	if err := d.done(); err != nil {
+		return ProximitySearchRuntimePolicy{}, err
+	}
+	return ProximitySearchRuntimePolicy{
+		MaxEntries: values[0], MaxBytes: values[1], AuthoritativeMaxBytes: values[2],
+		HNSWMaxBytes: values[3], PQMaxBytes: values[4],
+	}, nil
+}
+
+func DefaultProximitySearchRuntimePolicy() (ProximitySearchRuntimePolicy, error) {
+	raw, err := ffiDefaultProximitySearchRuntimePolicy()
+	if err != nil {
+		return ProximitySearchRuntimePolicy{}, err
+	}
+	return decodeProximitySearchRuntimePolicy(raw)
+}
+
+func (e *Engine) NewProximitySearchRuntime(
+	policies ...ProximitySearchRuntimePolicy,
+) (*ProximitySearchRuntime, error) {
+	if len(policies) > 1 {
+		return nil, errors.New("expected at most one proximity search runtime policy")
+	}
+	var policy ProximitySearchRuntimePolicy
+	var err error
+	if len(policies) == 0 {
+		policy, err = DefaultProximitySearchRuntimePolicy()
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		policy = policies[0]
+	}
+	handle, err := ffiEngineProximitySearchRuntime(e, encodeProximitySearchRuntimePolicy(policy))
+	if err != nil {
+		return nil, err
+	}
+	result := &ProximitySearchRuntime{handle: handle}
+	runtime.SetFinalizer(result, (*ProximitySearchRuntime).Close)
+	return result, nil
+}
+
+func (r *ProximitySearchRuntime) withHandle() (uint64, func(), error) {
+	if r == nil || r.closed.Load() {
+		return 0, nil, errors.New("proximity search runtime is closed")
+	}
+	r.mu.RLock()
+	if r.closed.Load() || r.handle == 0 {
+		r.mu.RUnlock()
+		return 0, nil, errors.New("proximity search runtime is closed")
+	}
+	return r.handle, r.mu.RUnlock, nil
+}
+
+func (r *ProximitySearchRuntime) Close() {
+	if r == nil || r.closed.Swap(true) {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	runtime.SetFinalizer(r, nil)
+	if r.handle != 0 {
+		ffiFreeProximitySearchRuntime(r.handle)
+		r.handle = 0
+	}
+}
+
+func (r *ProximitySearchRuntime) Policy() (ProximitySearchRuntimePolicy, error) {
+	handle, unlock, err := r.withHandle()
+	if err != nil {
+		return ProximitySearchRuntimePolicy{}, err
+	}
+	defer unlock()
+	raw, err := ffiProximitySearchRuntimePolicy(handle)
+	if err != nil {
+		return ProximitySearchRuntimePolicy{}, err
+	}
+	return decodeProximitySearchRuntimePolicy(raw)
+}
+
+func (r *ProximitySearchRuntime) Stats() (ProximitySearchRuntimeStats, error) {
+	handle, unlock, err := r.withHandle()
+	if err != nil {
+		return ProximitySearchRuntimeStats{}, err
+	}
+	defer unlock()
+	raw, err := ffiProximitySearchRuntimeStats(handle)
+	if err != nil {
+		return ProximitySearchRuntimeStats{}, err
+	}
+	d := byteDecoder{data: raw}
+	reads, err := d.readUint64()
+	if err != nil {
+		return ProximitySearchRuntimeStats{}, err
+	}
+	readBytes, err := d.readUint64()
+	if err != nil {
+		return ProximitySearchRuntimeStats{}, err
+	}
+	if err := d.done(); err != nil {
+		return ProximitySearchRuntimeStats{}, err
+	}
+	return ProximitySearchRuntimeStats{PhysicalReads: reads, PhysicalBytesRead: readBytes}, nil
+}
+
+func (r *ProximitySearchRuntime) Clear() error {
+	handle, unlock, err := r.withHandle()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	return ffiProximitySearchRuntimeClear(handle)
+}
+
 type ProximityMap struct {
 	handle uint64
 	fast   uint64
@@ -825,6 +982,44 @@ func (i *HNSWIndex) Search(ctx context.Context, proximity *ProximityMap, request
 	}
 	defer mapUnlock()
 	raw, err := ffiHNSWIndexSearch(indexHandle, mapHandle, encodedRequest)
+	if err != nil {
+		return SearchResult{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return SearchResult{}, err
+	}
+	return decodeProximitySearchResultBytes(raw)
+}
+
+func (i *HNSWIndex) SearchWithRuntime(
+	ctx context.Context, proximity *ProximityMap, request SearchRequest, searchRuntime *ProximitySearchRuntime,
+) (SearchResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return SearchResult{}, err
+	}
+	encoded, err := encodeProximitySearchRequest(cloneSearchRequest(request))
+	if err != nil {
+		return SearchResult{}, err
+	}
+	index, indexUnlock, err := i.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer indexUnlock()
+	proximityHandle, _, proximityUnlock, err := proximity.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer proximityUnlock()
+	runtimeHandle, runtimeUnlock, err := searchRuntime.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer runtimeUnlock()
+	raw, err := ffiHNSWIndexSearchWithRuntime(index, proximityHandle, encoded, runtimeHandle)
 	if err != nil {
 		return SearchResult{}, err
 	}
@@ -1035,6 +1230,44 @@ func (i *ProductQuantizer) Search(ctx context.Context, proximity *ProximityMap, 
 	}
 	defer mapUnlock()
 	raw, err := ffiProductQuantizerSearch(indexHandle, mapHandle, encodedRequest)
+	if err != nil {
+		return SearchResult{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return SearchResult{}, err
+	}
+	return decodeProximitySearchResultBytes(raw)
+}
+
+func (i *ProductQuantizer) SearchWithRuntime(
+	ctx context.Context, proximity *ProximityMap, request SearchRequest, searchRuntime *ProximitySearchRuntime,
+) (SearchResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return SearchResult{}, err
+	}
+	encoded, err := encodeProximitySearchRequest(cloneSearchRequest(request))
+	if err != nil {
+		return SearchResult{}, err
+	}
+	index, indexUnlock, err := i.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer indexUnlock()
+	proximityHandle, _, proximityUnlock, err := proximity.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer proximityUnlock()
+	runtimeHandle, runtimeUnlock, err := searchRuntime.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer runtimeUnlock()
+	raw, err := ffiProductQuantizerSearchWithRuntime(index, proximityHandle, encoded, runtimeHandle)
 	if err != nil {
 		return SearchResult{}, err
 	}
@@ -1483,6 +1716,39 @@ func (m *ProximityMap) Search(ctx context.Context, request SearchRequest) (Searc
 	return decodeProximitySearchResultBytes(raw)
 }
 
+func (m *ProximityMap) SearchWithRuntime(
+	ctx context.Context, request SearchRequest, searchRuntime *ProximitySearchRuntime,
+) (SearchResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return SearchResult{}, err
+	}
+	encoded, err := encodeProximitySearchRequest(cloneSearchRequest(request))
+	if err != nil {
+		return SearchResult{}, err
+	}
+	handle, _, unlock, err := m.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer unlock()
+	runtimeHandle, runtimeUnlock, err := searchRuntime.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer runtimeUnlock()
+	raw, err := ffiProximitySearchRecordWithRuntime(handle, encoded, runtimeHandle)
+	if err != nil {
+		return SearchResult{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return SearchResult{}, err
+	}
+	return decodeProximitySearchResultBytes(raw)
+}
+
 func (p *ProximitySearchProof) Close() {
 	if p == nil || p.closed.Swap(true) {
 		return
@@ -1691,6 +1957,43 @@ func (s *ProximitySession) Search(ctx context.Context, request SearchRequest) (S
 	}
 	defer unlock()
 	raw, err := ffiProximityReadSessionSearch(handle, nativeRequest)
+	if err != nil {
+		return SearchResult{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return SearchResult{}, err
+	}
+	return decodeProximitySearchResultBytes(raw)
+}
+
+func (s *ProximitySession) SearchWithRuntime(
+	ctx context.Context, request SearchRequest, searchRuntime *ProximitySearchRuntime,
+) (SearchResult, error) {
+	request = cloneSearchRequest(request)
+	if err := request.validate(); err != nil {
+		return SearchResult{}, err
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return SearchResult{}, err
+	}
+	encoded, err := encodeProximitySearchRequest(request)
+	if err != nil {
+		return SearchResult{}, err
+	}
+	handle, unlock, err := s.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer unlock()
+	runtimeHandle, runtimeUnlock, err := searchRuntime.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer runtimeUnlock()
+	raw, err := ffiProximityReadSessionSearchWithRuntime(handle, encoded, runtimeHandle)
 	if err != nil {
 		return SearchResult{}, err
 	}

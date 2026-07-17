@@ -1160,6 +1160,8 @@ external fun uniffi_prolly_bindings_checksum_func_default_pq_config(
 ): Short
 external fun uniffi_prolly_bindings_checksum_func_default_proximity_config(
 ): Short
+external fun uniffi_prolly_bindings_checksum_func_default_proximity_search_runtime_policy(
+): Short
 external fun uniffi_prolly_bindings_checksum_func_exact_proximity_search_request(
 ): Short
 external fun uniffi_prolly_bindings_checksum_func_verify_proximity_membership_proof(
@@ -1420,6 +1422,8 @@ external fun uniffi_prolly_bindings_checksum_method_prollyengine_prove_range(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_prollyengine_prove_range_page(
 ): Short
+external fun uniffi_prolly_bindings_checksum_method_prollyengine_proximity_search_runtime(
+): Short
 external fun uniffi_prolly_bindings_checksum_method_prollyengine_publish_changed_spans_hint(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_prollyengine_publish_named_root(
@@ -1604,6 +1608,8 @@ external fun uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_pr
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_search(
 ): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_search_with_runtime(
+): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_source_descriptor(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_base_kind(
@@ -1624,6 +1630,8 @@ external fun uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_search(
 ): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_search_with_runtime(
+): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_shadow_count(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_bindinghnswindex_config(
@@ -1636,6 +1644,8 @@ external fun uniffi_prolly_bindings_checksum_method_bindinghnswindex_prove_searc
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_bindinghnswindex_search(
 ): Short
+external fun uniffi_prolly_bindings_checksum_method_bindinghnswindex_search_with_runtime(
+): Short
 external fun uniffi_prolly_bindings_checksum_method_bindinghnswindex_source_descriptor(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingproductquantizer_config(
@@ -1647,6 +1657,8 @@ external fun uniffi_prolly_bindings_checksum_method_bindingproductquantizer_prov
 external fun uniffi_prolly_bindings_checksum_method_bindingproductquantizer_quality(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingproductquantizer_search(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingproductquantizer_search_with_runtime(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingproductquantizer_source_descriptor(
 ): Short
@@ -1702,6 +1714,8 @@ external fun uniffi_prolly_bindings_checksum_method_bindingproximitymap_scan_rec
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingproximitymap_search(
 ): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingproximitymap_search_with_runtime(
+): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingproximitymap_verify(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_contains_key(
@@ -1714,9 +1728,17 @@ external fun uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_search(
 ): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_search_with_runtime(
+): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingproximitysearchproof_source_descriptor(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingproximitysearchproof_verify(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingproximitysearchruntime_clear(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingproximitysearchruntime_policy(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingproximitysearchruntime_stats(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_proximityrecordvisitorcallback_visit(
 ): Short
@@ -2370,6 +2392,8 @@ external fun uniffi_prolly_bindings_fn_method_prollyengine_prove_range(`ptr`: Lo
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_prollyengine_prove_range_page(`ptr`: Long,`tree`: RustBuffer.ByValue,`cursor`: RustBuffer.ByValue,`rangeEnd`: RustBuffer.ByValue,`limit`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_prollyengine_proximity_search_runtime(`ptr`: Long,`policy`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): Long
 external fun uniffi_prolly_bindings_fn_method_prollyengine_publish_changed_spans_hint(`ptr`: Long,`base`: RustBuffer.ByValue,`changed`: RustBuffer.ByValue,`spans`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): Byte
 external fun uniffi_prolly_bindings_fn_method_prollyengine_publish_named_root(`ptr`: Long,`name`: RustBuffer.ByValue,`tree`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -2592,6 +2616,8 @@ external fun uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_prove_se
 ): Long
 external fun uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_search(`ptr`: Long,`map`: Long,`request`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_search_with_runtime(`ptr`: Long,`map`: Long,`request`: RustBuffer.ByValue,`runtime`: Long,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_source_descriptor(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_clone_bindingcompositeaccelerator(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -2616,6 +2642,8 @@ external fun uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_prove_
 ): Long
 external fun uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_search(`ptr`: Long,`map`: Long,`request`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_search_with_runtime(`ptr`: Long,`map`: Long,`request`: RustBuffer.ByValue,`runtime`: Long,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_shadow_count(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): Long
 external fun uniffi_prolly_bindings_fn_clone_bindinghnswindex(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -2632,6 +2660,8 @@ external fun uniffi_prolly_bindings_fn_method_bindinghnswindex_prove_search(`ptr
 ): Long
 external fun uniffi_prolly_bindings_fn_method_bindinghnswindex_search(`ptr`: Long,`map`: Long,`request`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindinghnswindex_search_with_runtime(`ptr`: Long,`map`: Long,`request`: RustBuffer.ByValue,`runtime`: Long,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_bindinghnswindex_source_descriptor(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_clone_bindingproductquantizer(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -2647,6 +2677,8 @@ external fun uniffi_prolly_bindings_fn_method_bindingproductquantizer_prove_sear
 external fun uniffi_prolly_bindings_fn_method_bindingproductquantizer_quality(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_bindingproductquantizer_search(`ptr`: Long,`map`: Long,`request`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindingproductquantizer_search_with_runtime(`ptr`: Long,`map`: Long,`request`: RustBuffer.ByValue,`runtime`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_bindingproductquantizer_source_descriptor(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
@@ -2706,6 +2738,8 @@ external fun uniffi_prolly_bindings_fn_method_bindingproximitymap_scan_records(`
 ): Long
 external fun uniffi_prolly_bindings_fn_method_bindingproximitymap_search(`ptr`: Long,`request`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindingproximitymap_search_with_runtime(`ptr`: Long,`request`: RustBuffer.ByValue,`runtime`: Long,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_bindingproximitymap_verify(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_clone_bindingproximityreadsession(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -2722,6 +2756,8 @@ external fun uniffi_prolly_bindings_fn_method_bindingproximityreadsession_scan_r
 ): Long
 external fun uniffi_prolly_bindings_fn_method_bindingproximityreadsession_search(`ptr`: Long,`request`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindingproximityreadsession_search_with_runtime(`ptr`: Long,`request`: RustBuffer.ByValue,`runtime`: Long,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_clone_bindingproximitysearchproof(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): Long
 external fun uniffi_prolly_bindings_fn_free_bindingproximitysearchproof(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -2729,6 +2765,16 @@ external fun uniffi_prolly_bindings_fn_free_bindingproximitysearchproof(`handle`
 external fun uniffi_prolly_bindings_fn_method_bindingproximitysearchproof_source_descriptor(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_bindingproximitysearchproof_verify(`ptr`: Long,`expectedDescriptor`: RustBuffer.ByValue,`limits`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_clone_bindingproximitysearchruntime(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+): Long
+external fun uniffi_prolly_bindings_fn_free_bindingproximitysearchruntime(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+): Unit
+external fun uniffi_prolly_bindings_fn_method_bindingproximitysearchruntime_clear(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+): Unit
+external fun uniffi_prolly_bindings_fn_method_bindingproximitysearchruntime_policy(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindingproximitysearchruntime_stats(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_clone_proximityrecordvisitorcallback(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): Long
@@ -3312,6 +3358,8 @@ external fun uniffi_prolly_bindings_fn_func_default_pq_config(uniffi_out_err: Un
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_default_proximity_config(`dimensions`: Int,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_func_default_proximity_search_runtime_policy(uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_exact_proximity_search_request(`query`: RustBuffer.ByValue,`k`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_verify_proximity_membership_proof(`proof`: RustBuffer.ByValue,`expectedDescriptor`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -3833,6 +3881,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_prolly_bindings_checksum_func_default_proximity_config() != 43437.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_prolly_bindings_checksum_func_default_proximity_search_runtime_policy() != 8352.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_prolly_bindings_checksum_func_exact_proximity_search_request() != 59384.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -4223,6 +4274,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_prove_range_page() != 35557.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_proximity_search_runtime() != 6204.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_prolly_bindings_checksum_method_prollyengine_publish_changed_spans_hint() != 57418.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -4499,6 +4553,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_search() != 55802.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_search_with_runtime() != 53678.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_source_descriptor() != 29366.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -4529,6 +4586,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_search() != 7681.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_search_with_runtime() != 35233.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_prolly_bindings_checksum_method_bindingcompositeaccelerator_shadow_count() != 49297.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -4547,6 +4607,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_prolly_bindings_checksum_method_bindinghnswindex_search() != 59229.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindinghnswindex_search_with_runtime() != 42474.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_prolly_bindings_checksum_method_bindinghnswindex_source_descriptor() != 54794.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -4563,6 +4626,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_method_bindingproductquantizer_search() != 14867.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingproductquantizer_search_with_runtime() != 59197.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_method_bindingproductquantizer_source_descriptor() != 61276.toShort()) {
@@ -4646,6 +4712,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_search() != 3285.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_search_with_runtime() != 38486.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_verify() != 62601.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -4664,10 +4733,22 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_search() != 12060.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingproximityreadsession_search_with_runtime() != 989.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_prolly_bindings_checksum_method_bindingproximitysearchproof_source_descriptor() != 57653.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_method_bindingproximitysearchproof_verify() != 38054.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingproximitysearchruntime_clear() != 37935.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingproximitysearchruntime_policy() != 55203.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingproximitysearchruntime_stats() != 45140.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_method_proximityrecordvisitorcallback_visit() != 31782.toShort()) {
@@ -5709,6 +5790,8 @@ public interface BindingAcceleratorCatalogInterface {
 
     fun `search`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord): ProximitySearchResultRecord
 
+    fun `searchWithRuntime`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord, `runtime`: BindingProximitySearchRuntime): ProximitySearchResultRecord
+
     fun `sourceDescriptor`(): kotlin.ByteArray
 
     companion object
@@ -5858,6 +5941,20 @@ open class BindingAcceleratorCatalog: Disposable, AutoCloseable, BindingAccelera
     UniffiLib.uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_search(
         it,
         FfiConverterTypeBindingProximityMap.lower(`map`),FfiConverterTypeProximitySearchRequestRecord.lower(`request`),_status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `searchWithRuntime`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord, `runtime`: BindingProximitySearchRuntime): ProximitySearchResultRecord {
+            return FfiConverterTypeProximitySearchResultRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_search_with_runtime(
+        it,
+        FfiConverterTypeBindingProximityMap.lower(`map`),FfiConverterTypeProximitySearchRequestRecord.lower(`request`),FfiConverterTypeBindingProximitySearchRuntime.lower(`runtime`),_status)
 }
     }
     )
@@ -6030,6 +6127,8 @@ public interface BindingCompositeAcceleratorInterface {
     fun `proveSearch`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord, `limits`: ContentGraphLimitsRecord): BindingProximitySearchProof
 
     fun `search`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord): ProximitySearchResultRecord
+
+    fun `searchWithRuntime`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord, `runtime`: BindingProximitySearchRuntime): ProximitySearchResultRecord
 
     fun `shadowCount`(): kotlin.ULong
 
@@ -6251,6 +6350,20 @@ open class BindingCompositeAccelerator: Disposable, AutoCloseable, BindingCompos
     }
 
 
+
+    @Throws(ProllyBindingException::class)override fun `searchWithRuntime`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord, `runtime`: BindingProximitySearchRuntime): ProximitySearchResultRecord {
+            return FfiConverterTypeProximitySearchResultRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_search_with_runtime(
+        it,
+        FfiConverterTypeBindingProximityMap.lower(`map`),FfiConverterTypeProximitySearchRequestRecord.lower(`request`),FfiConverterTypeBindingProximitySearchRuntime.lower(`runtime`),_status)
+}
+    }
+    )
+    }
+
+
     override fun `shadowCount`(): kotlin.ULong {
             return FfiConverterULong.lift(
     callWithHandle {
@@ -6409,6 +6522,8 @@ public interface BindingHnswIndexInterface {
     fun `proveSearch`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord, `limits`: ContentGraphLimitsRecord): BindingProximitySearchProof
 
     fun `search`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord): ProximitySearchResultRecord
+
+    fun `searchWithRuntime`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord, `runtime`: BindingProximitySearchRuntime): ProximitySearchResultRecord
 
     fun `sourceDescriptor`(): kotlin.ByteArray
 
@@ -6572,6 +6687,20 @@ open class BindingHnswIndex: Disposable, AutoCloseable, BindingHnswIndexInterfac
     UniffiLib.uniffi_prolly_bindings_fn_method_bindinghnswindex_search(
         it,
         FfiConverterTypeBindingProximityMap.lower(`map`),FfiConverterTypeProximitySearchRequestRecord.lower(`request`),_status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `searchWithRuntime`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord, `runtime`: BindingProximitySearchRuntime): ProximitySearchResultRecord {
+            return FfiConverterTypeProximitySearchResultRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindinghnswindex_search_with_runtime(
+        it,
+        FfiConverterTypeBindingProximityMap.lower(`map`),FfiConverterTypeProximitySearchRequestRecord.lower(`request`),FfiConverterTypeBindingProximitySearchRuntime.lower(`runtime`),_status)
 }
     }
     )
@@ -9769,6 +9898,8 @@ public interface BindingProductQuantizerInterface {
 
     fun `search`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord): ProximitySearchResultRecord
 
+    fun `searchWithRuntime`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord, `runtime`: BindingProximitySearchRuntime): ProximitySearchResultRecord
+
     fun `sourceDescriptor`(): kotlin.ByteArray
 
     companion object
@@ -9931,6 +10062,20 @@ open class BindingProductQuantizer: Disposable, AutoCloseable, BindingProductQua
     UniffiLib.uniffi_prolly_bindings_fn_method_bindingproductquantizer_search(
         it,
         FfiConverterTypeBindingProximityMap.lower(`map`),FfiConverterTypeProximitySearchRequestRecord.lower(`request`),_status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `searchWithRuntime`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord, `runtime`: BindingProximitySearchRuntime): ProximitySearchResultRecord {
+            return FfiConverterTypeProximitySearchResultRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingproductquantizer_search_with_runtime(
+        it,
+        FfiConverterTypeBindingProximityMap.lower(`map`),FfiConverterTypeProximitySearchRequestRecord.lower(`request`),FfiConverterTypeBindingProximitySearchRuntime.lower(`runtime`),_status)
 }
     }
     )
@@ -10137,6 +10282,8 @@ public interface BindingProximityMapInterface {
     fun `scanRecords`(`visitor`: ProximityRecordVisitorCallback): kotlin.ULong
 
     fun `search`(`request`: ProximitySearchRequestRecord): ProximitySearchResultRecord
+
+    fun `searchWithRuntime`(`request`: ProximitySearchRequestRecord, `runtime`: BindingProximitySearchRuntime): ProximitySearchResultRecord
 
     fun `verify`(): ProximityVerificationRecord
 
@@ -10601,6 +10748,20 @@ open class BindingProximityMap: Disposable, AutoCloseable, BindingProximityMapIn
 
 
 
+    @Throws(ProllyBindingException::class)override fun `searchWithRuntime`(`request`: ProximitySearchRequestRecord, `runtime`: BindingProximitySearchRuntime): ProximitySearchResultRecord {
+            return FfiConverterTypeProximitySearchResultRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_search_with_runtime(
+        it,
+        FfiConverterTypeProximitySearchRequestRecord.lower(`request`),FfiConverterTypeBindingProximitySearchRuntime.lower(`runtime`),_status)
+}
+    }
+    )
+    }
+
+
+
     @Throws(ProllyBindingException::class)override fun `verify`(): ProximityVerificationRecord {
             return FfiConverterTypeProximityVerificationRecord.lift(
     callWithHandle {
@@ -10759,6 +10920,8 @@ public interface BindingProximityReadSessionInterface {
     fun `scanRecords`(`visitor`: ProximityRecordVisitorCallback): kotlin.ULong
 
     fun `search`(`request`: ProximitySearchRequestRecord): ProximitySearchResultRecord
+
+    fun `searchWithRuntime`(`request`: ProximitySearchRequestRecord, `runtime`: BindingProximitySearchRuntime): ProximitySearchResultRecord
 
     companion object
 }
@@ -10922,6 +11085,20 @@ open class BindingProximityReadSession: Disposable, AutoCloseable, BindingProxim
     UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximityreadsession_search(
         it,
         FfiConverterTypeProximitySearchRequestRecord.lower(`request`),_status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `searchWithRuntime`(`request`: ProximitySearchRequestRecord, `runtime`: BindingProximitySearchRuntime): ProximitySearchResultRecord {
+            return FfiConverterTypeProximitySearchResultRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximityreadsession_search_with_runtime(
+        it,
+        FfiConverterTypeProximitySearchRequestRecord.lower(`request`),FfiConverterTypeBindingProximitySearchRuntime.lower(`runtime`),_status)
 }
     }
     )
@@ -11228,6 +11405,285 @@ public object FfiConverterTypeBindingProximitySearchProof: FfiConverter<BindingP
     override fun allocationSize(value: BindingProximitySearchProof) = 8UL
 
     override fun write(value: BindingProximitySearchProof, buf: ByteBuffer) {
+        buf.putLong(lower(value))
+    }
+}
+
+
+// This template implements a class for working with a Rust struct via a handle
+// to the live Rust struct on the other side of the FFI.
+//
+// There's some subtlety here, because we have to be careful not to operate on a Rust
+// struct after it has been dropped, and because we must expose a public API for freeing
+// theq Kotlin wrapper object in lieu of reliable finalizers. The core requirements are:
+//
+//   * Each instance holds an opaque handle to the underlying Rust struct.
+//     Method calls need to read this handle from the object's state and pass it in to
+//     the Rust FFI.
+//
+//   * When an instance is no longer needed, its handle should be passed to a
+//     special destructor function provided by the Rust FFI, which will drop the
+//     underlying Rust struct.
+//
+//   * Given an instance, calling code is expected to call the special
+//     `destroy` method in order to free it after use, either by calling it explicitly
+//     or by using a higher-level helper like the `use` method. Failing to do so risks
+//     leaking the underlying Rust struct.
+//
+//   * We can't assume that calling code will do the right thing, and must be prepared
+//     to handle Kotlin method calls executing concurrently with or even after a call to
+//     `destroy`, and to handle multiple (possibly concurrent!) calls to `destroy`.
+//
+//   * We must never allow Rust code to operate on the underlying Rust struct after
+//     the destructor has been called, and must never call the destructor more than once.
+//     Doing so may trigger memory unsafety.
+//
+//   * To mitigate many of the risks of leaking memory and use-after-free unsafety, a `Cleaner`
+//     is implemented to call the destructor when the Kotlin object becomes unreachable.
+//     This is done in a background thread. This is not a panacea, and client code should be aware that
+//      1. the thread may starve if some there are objects that have poorly performing
+//     `drop` methods or do significant work in their `drop` methods.
+//      2. the thread is shared across the whole library. This can be tuned by using `android_cleaner = true`,
+//         or `android = true` in the [`kotlin` section of the `uniffi.toml` file](https://mozilla.github.io/uniffi-rs/kotlin/configuration.html).
+//
+// If we try to implement this with mutual exclusion on access to the handle, there is the
+// possibility of a race between a method call and a concurrent call to `destroy`:
+//
+//    * Thread A starts a method call, reads the value of the handle, but is interrupted
+//      before it can pass the handle over the FFI to Rust.
+//    * Thread B calls `destroy` and frees the underlying Rust struct.
+//    * Thread A resumes, passing the already-read handle value to Rust and triggering
+//      a use-after-free.
+//
+// One possible solution would be to use a `ReadWriteLock`, with each method call taking
+// a read lock (and thus allowed to run concurrently) and the special `destroy` method
+// taking a write lock (and thus blocking on live method calls). However, we aim not to
+// generate methods with any hidden blocking semantics, and a `destroy` method that might
+// block if called incorrectly seems to meet that bar.
+//
+// So, we achieve our goals by giving each instance an associated `AtomicLong` counter to track
+// the number of in-flight method calls, and an `AtomicBoolean` flag to indicate whether `destroy`
+// has been called. These are updated according to the following rules:
+//
+//    * The initial value of the counter is 1, indicating a live object with no in-flight calls.
+//      The initial value for the flag is false.
+//
+//    * At the start of each method call, we atomically check the counter.
+//      If it is 0 then the underlying Rust struct has already been destroyed and the call is aborted.
+//      If it is nonzero them we atomically increment it by 1 and proceed with the method call.
+//
+//    * At the end of each method call, we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+//    * When `destroy` is called, we atomically flip the flag from false to true.
+//      If the flag was already true we silently fail.
+//      Otherwise we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+// Astute readers may observe that this all sounds very similar to the way that Rust's `Arc<T>` works,
+// and indeed it is, with the addition of a flag to guard against multiple calls to `destroy`.
+//
+// The overall effect is that the underlying Rust struct is destroyed only when `destroy` has been
+// called *and* all in-flight method calls have completed, avoiding violating any of the expectations
+// of the underlying Rust code.
+//
+// This makes a cleaner a better alternative to _not_ calling `destroy()` as
+// and when the object is finished with, but the abstraction is not perfect: if the Rust object's `drop`
+// method is slow, and/or there are many objects to cleanup, and it's on a low end Android device, then the cleaner
+// thread may be starved, and the app will leak memory.
+//
+// In this case, `destroy`ing manually may be a better solution.
+//
+// The cleaner can live side by side with the manual calling of `destroy`. In the order of responsiveness, uniffi objects
+// with Rust peers are reclaimed:
+//
+// 1. By calling the `destroy` method of the object, which calls `rustObject.free()`. If that doesn't happen:
+// 2. When the object becomes unreachable, AND the Cleaner thread gets to call `rustObject.free()`. If the thread is starved then:
+// 3. The memory is reclaimed when the process terminates.
+//
+// [1] https://stackoverflow.com/questions/24376768/can-java-finalize-an-object-when-it-is-still-in-scope/24380219
+//
+
+
+public interface BindingProximitySearchRuntimeInterface {
+
+    fun `clear`()
+
+    fun `policy`(): ProximitySearchRuntimePolicyRecord
+
+    fun `stats`(): ProximitySearchRuntimeStatsRecord
+
+    companion object
+}
+
+open class BindingProximitySearchRuntime: Disposable, AutoCloseable, BindingProximitySearchRuntimeInterface
+{
+
+    @Suppress("UNUSED_PARAMETER")
+    /**
+     * @suppress
+     */
+    constructor(withHandle: UniffiWithHandle, handle: Long) {
+        this.handle = handle
+        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
+    }
+
+    /**
+     * @suppress
+     *
+     * This constructor can be used to instantiate a fake object. Only used for tests. Any
+     * attempt to actually use an object constructed this way will fail as there is no
+     * connected Rust object.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    constructor(noHandle: NoHandle) {
+        this.handle = 0
+        this.cleanable = null
+    }
+
+    protected val handle: Long
+    protected val cleanable: UniffiCleaner.Cleanable?
+
+    private val wasDestroyed = AtomicBoolean(false)
+    private val callCounter = AtomicLong(1)
+
+    override fun destroy() {
+        // Only allow a single call to this method.
+        // TODO: maybe we should log a warning if called more than once?
+        if (this.wasDestroyed.compareAndSet(false, true)) {
+            // This decrement always matches the initial count of 1 given at creation time.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    @Synchronized
+    override fun close() {
+        this.destroy()
+    }
+
+    internal inline fun <R> callWithHandle(block: (handle: Long) -> R): R {
+        // Check and increment the call counter, to keep the object alive.
+        // This needs a compare-and-set retry loop in case of concurrent updates.
+        do {
+            val c = this.callCounter.get()
+            if (c == 0L) {
+                throw IllegalStateException("${this.javaClass.simpleName} object has already been destroyed")
+            }
+            if (c == Long.MAX_VALUE) {
+                throw IllegalStateException("${this.javaClass.simpleName} call counter would overflow")
+            }
+        } while (! this.callCounter.compareAndSet(c, c + 1L))
+        // Now we can safely do the method call without the handle being freed concurrently.
+        try {
+            return block(this.uniffiCloneHandle())
+        } finally {
+            // This decrement always matches the increment we performed above.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    // Use a static inner class instead of a closure so as not to accidentally
+    // capture `this` as part of the cleanable's action.
+    private class UniffiCleanAction(private val handle: Long) : Runnable {
+        override fun run() {
+            if (handle == 0.toLong()) {
+                // Fake object created with `NoHandle`, don't try to free.
+                return;
+            }
+            uniffiRustCall { status ->
+                UniffiLib.uniffi_prolly_bindings_fn_free_bindingproximitysearchruntime(handle, status)
+            }
+        }
+    }
+
+    /**
+     * @suppress
+     */
+    fun uniffiCloneHandle(): Long {
+        if (handle == 0.toLong()) {
+            throw InternalException("uniffiCloneHandle() called on NoHandle object");
+        }
+        return uniffiRustCall() { status ->
+            UniffiLib.uniffi_prolly_bindings_fn_clone_bindingproximitysearchruntime(handle, status)
+        }
+    }
+
+    override fun `clear`()
+        =
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitysearchruntime_clear(
+        it,
+        _status)
+}
+    }
+
+
+
+    override fun `policy`(): ProximitySearchRuntimePolicyRecord {
+            return FfiConverterTypeProximitySearchRuntimePolicyRecord.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitysearchruntime_policy(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+    override fun `stats`(): ProximitySearchRuntimeStatsRecord {
+            return FfiConverterTypeProximitySearchRuntimeStatsRecord.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitysearchruntime_stats(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+
+
+
+
+
+
+    /**
+     * @suppress
+     */
+    companion object
+
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeBindingProximitySearchRuntime: FfiConverter<BindingProximitySearchRuntime, Long> {
+    override fun lower(value: BindingProximitySearchRuntime): Long {
+        return value.uniffiCloneHandle()
+    }
+
+    override fun lift(value: Long): BindingProximitySearchRuntime {
+        return BindingProximitySearchRuntime(UniffiWithHandle, value)
+    }
+
+    override fun read(buf: ByteBuffer): BindingProximitySearchRuntime {
+        return lift(buf.getLong())
+    }
+
+    override fun allocationSize(value: BindingProximitySearchRuntime) = 8UL
+
+    override fun write(value: BindingProximitySearchRuntime, buf: ByteBuffer) {
         buf.putLong(lower(value))
     }
 }
@@ -16709,6 +17165,13 @@ public interface ProllyEngineInterface {
 
     fun `proveRangePage`(`tree`: TreeRecord, `cursor`: RangeCursorRecord?, `rangeEnd`: kotlin.ByteArray?, `limit`: kotlin.ULong): ProvedRangePageRecord
 
+    /**
+     * Create an engine-bound, reusable proximity search runtime. Reusing this
+     * object across searches preserves validated content-cache entries and
+     * exposes cumulative physical I/O counters.
+     */
+    fun `proximitySearchRuntime`(`policy`: ProximitySearchRuntimePolicyRecord): BindingProximitySearchRuntime
+
     fun `publishChangedSpansHint`(`base`: TreeRecord, `changed`: TreeRecord, `spans`: List<ChangedSpanRecord>): kotlin.Boolean
 
     fun `publishNamedRoot`(`name`: kotlin.ByteArray, `tree`: TreeRecord)
@@ -18216,6 +18679,25 @@ open class ProllyEngine: Disposable, AutoCloseable, ProllyEngineInterface
     UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_prove_range_page(
         it,
         FfiConverterTypeTreeRecord.lower(`tree`),FfiConverterOptionalTypeRangeCursorRecord.lower(`cursor`),FfiConverterOptionalByteArray.lower(`rangeEnd`),FfiConverterULong.lower(`limit`),_status)
+}
+    }
+    )
+    }
+
+
+
+    /**
+     * Create an engine-bound, reusable proximity search runtime. Reusing this
+     * object across searches preserves validated content-cache entries and
+     * exposes cumulative physical I/O counters.
+     */
+    @Throws(ProllyBindingException::class)override fun `proximitySearchRuntime`(`policy`: ProximitySearchRuntimePolicyRecord): BindingProximitySearchRuntime {
+            return FfiConverterTypeBindingProximitySearchRuntime.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_prollyengine_proximity_search_runtime(
+        it,
+        FfiConverterTypeProximitySearchRuntimePolicyRecord.lower(`policy`),_status)
 }
     }
     )
@@ -25850,6 +26332,97 @@ public object FfiConverterTypeProximitySearchResultRecord: FfiConverterRustBuffe
             FfiConverterTypeSearchCompletionRecord.write(value.`completion`, buf)
             FfiConverterTypeSearchBackendRecord.write(value.`backend`, buf)
             FfiConverterUByte.write(value.`planFormatVersion`, buf)
+    }
+}
+
+
+
+data class ProximitySearchRuntimePolicyRecord (
+    var `maxEntries`: kotlin.ULong
+    ,
+    var `maxBytes`: kotlin.ULong
+    ,
+    var `authoritativeMaxBytes`: kotlin.ULong
+    ,
+    var `hnswMaxBytes`: kotlin.ULong
+    ,
+    var `pqMaxBytes`: kotlin.ULong
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeProximitySearchRuntimePolicyRecord: FfiConverterRustBuffer<ProximitySearchRuntimePolicyRecord> {
+    override fun read(buf: ByteBuffer): ProximitySearchRuntimePolicyRecord {
+        return ProximitySearchRuntimePolicyRecord(
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: ProximitySearchRuntimePolicyRecord) = (
+            FfiConverterULong.allocationSize(value.`maxEntries`) +
+            FfiConverterULong.allocationSize(value.`maxBytes`) +
+            FfiConverterULong.allocationSize(value.`authoritativeMaxBytes`) +
+            FfiConverterULong.allocationSize(value.`hnswMaxBytes`) +
+            FfiConverterULong.allocationSize(value.`pqMaxBytes`)
+    )
+
+    override fun write(value: ProximitySearchRuntimePolicyRecord, buf: ByteBuffer) {
+            FfiConverterULong.write(value.`maxEntries`, buf)
+            FfiConverterULong.write(value.`maxBytes`, buf)
+            FfiConverterULong.write(value.`authoritativeMaxBytes`, buf)
+            FfiConverterULong.write(value.`hnswMaxBytes`, buf)
+            FfiConverterULong.write(value.`pqMaxBytes`, buf)
+    }
+}
+
+
+
+data class ProximitySearchRuntimeStatsRecord (
+    var `physicalReads`: kotlin.ULong
+    ,
+    var `physicalBytesRead`: kotlin.ULong
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeProximitySearchRuntimeStatsRecord: FfiConverterRustBuffer<ProximitySearchRuntimeStatsRecord> {
+    override fun read(buf: ByteBuffer): ProximitySearchRuntimeStatsRecord {
+        return ProximitySearchRuntimeStatsRecord(
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: ProximitySearchRuntimeStatsRecord) = (
+            FfiConverterULong.allocationSize(value.`physicalReads`) +
+            FfiConverterULong.allocationSize(value.`physicalBytesRead`)
+    )
+
+    override fun write(value: ProximitySearchRuntimeStatsRecord, buf: ByteBuffer) {
+            FfiConverterULong.write(value.`physicalReads`, buf)
+            FfiConverterULong.write(value.`physicalBytesRead`, buf)
     }
 }
 
@@ -34064,6 +34637,16 @@ public object FfiConverterSequenceOptionalByteArray: FfiConverterRustBuffer<List
     UniffiLib.uniffi_prolly_bindings_fn_func_default_proximity_config(
 
         FfiConverterUInt.lower(`dimensions`),_status)
+}
+    )
+    }
+
+ fun `defaultProximitySearchRuntimePolicy`(): ProximitySearchRuntimePolicyRecord {
+            return FfiConverterTypeProximitySearchRuntimePolicyRecord.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_func_default_proximity_search_runtime_policy(
+
+        _status)
 }
     )
     }

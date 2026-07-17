@@ -146,6 +146,11 @@ public final class ProximityMap implements AutoCloseable {
     public SearchResult search(SearchRequest request) {
         return fromNative(JavaPortableBridge.search(open(), request.toNative()));
     }
+    public SearchResult searchWithRuntime(
+            SearchRequest request, ProximitySearchRuntime runtime) {
+        return fromNative(JavaPortableBridge.searchWithRuntime(
+                open(), request.toNative(), runtime.open()));
+    }
     static SearchResult fromNative(build.crab.prolly.ProximitySearchResultRecord result) {
         var stats = JavaPortableBridge.searchStats(result);
         return new SearchResult(result.getNeighbors().stream().map(neighbor ->

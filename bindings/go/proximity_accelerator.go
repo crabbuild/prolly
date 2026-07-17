@@ -682,6 +682,43 @@ func (a *CompositeAccelerator) Search(ctx context.Context, proximity *ProximityM
 	}
 	return decodeProximitySearchResultBytes(raw)
 }
+func (a *CompositeAccelerator) SearchWithRuntime(
+	ctx context.Context, proximity *ProximityMap, request SearchRequest, searchRuntime *ProximitySearchRuntime,
+) (SearchResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return SearchResult{}, err
+	}
+	encoded, err := encodeProximitySearchRequest(cloneSearchRequest(request))
+	if err != nil {
+		return SearchResult{}, err
+	}
+	index, indexUnlock, err := a.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer indexUnlock()
+	source, _, sourceUnlock, err := proximity.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer sourceUnlock()
+	runtimeHandle, runtimeUnlock, err := searchRuntime.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer runtimeUnlock()
+	raw, err := ffiCompositeSearchWithRuntime(index, source, encoded, runtimeHandle)
+	if err != nil {
+		return SearchResult{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return SearchResult{}, err
+	}
+	return decodeProximitySearchResultBytes(raw)
+}
 func (a *CompositeAccelerator) ProveSearch(proximity *ProximityMap, request SearchRequest) (*ProximitySearchProof, error) {
 	encoded, err := encodeProximitySearchRequest(cloneSearchRequest(request))
 	if err != nil {
@@ -879,6 +916,43 @@ func (a *AcceleratorCatalog) Search(ctx context.Context, proximity *ProximityMap
 	}
 	defer sourceUnlock()
 	raw, err := ffiCatalogSearch(catalog, source, encoded)
+	if err != nil {
+		return SearchResult{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return SearchResult{}, err
+	}
+	return decodeProximitySearchResultBytes(raw)
+}
+func (a *AcceleratorCatalog) SearchWithRuntime(
+	ctx context.Context, proximity *ProximityMap, request SearchRequest, searchRuntime *ProximitySearchRuntime,
+) (SearchResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return SearchResult{}, err
+	}
+	encoded, err := encodeProximitySearchRequest(cloneSearchRequest(request))
+	if err != nil {
+		return SearchResult{}, err
+	}
+	catalog, catalogUnlock, err := a.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer catalogUnlock()
+	source, _, sourceUnlock, err := proximity.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer sourceUnlock()
+	runtimeHandle, runtimeUnlock, err := searchRuntime.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer runtimeUnlock()
+	raw, err := ffiCatalogSearchWithRuntime(catalog, source, encoded, runtimeHandle)
 	if err != nil {
 		return SearchResult{}, err
 	}

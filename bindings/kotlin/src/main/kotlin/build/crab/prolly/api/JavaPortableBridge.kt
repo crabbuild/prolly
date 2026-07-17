@@ -51,6 +51,8 @@ import java.util.function.Predicate
 import build.crab.prolly.TreeStatsRecord
 import build.crab.prolly.ProximitySearchResultRecord
 import build.crab.prolly.ProximitySearchRequestRecord
+import build.crab.prolly.ProximitySearchRuntimePolicyRecord
+import build.crab.prolly.ProximitySearchRuntimeStatsRecord
 import build.crab.prolly.ProximitySearchVerificationRecord
 import build.crab.prolly.ProductQuantizationBuildLimitsRecord
 import build.crab.prolly.ProductQuantizationBuildStatsRecord
@@ -77,6 +79,7 @@ import build.crab.prolly.defaultPqConfig as nativeDefaultPqConfig
 import build.crab.prolly.defaultCompositeAcceleratorConfig as nativeDefaultCompositeAcceleratorConfig
 import build.crab.prolly.defaultCompositeBuildLimits as nativeDefaultCompositeBuildLimits
 import build.crab.prolly.defaultCompositeRebuildOptions as nativeDefaultCompositeRebuildOptions
+import build.crab.prolly.defaultProximitySearchRuntimePolicy as nativeDefaultProximitySearchRuntimePolicy
 import build.crab.prolly.verifyMultiKeyProof as verifyNativeMultiKeyProof
 import build.crab.prolly.verifyRangePageProof as verifyNativeRangePageProof
 import build.crab.prolly.verifyRangeProof as verifyNativeRangeProof
@@ -625,6 +628,33 @@ data class JavaProximityMutationResult(
     val stats: JavaProximityMutationStats,
 )
 
+data class JavaProximitySearchRuntimePolicy(
+    val maxEntries: Long,
+    val maxBytes: Long,
+    val authoritativeMaxBytes: Long,
+    val hnswMaxBytes: Long,
+    val pqMaxBytes: Long,
+) {
+    fun toNative() = ProximitySearchRuntimePolicyRecord(
+        maxEntries.toULong(), maxBytes.toULong(), authoritativeMaxBytes.toULong(),
+        hnswMaxBytes.toULong(), pqMaxBytes.toULong(),
+    )
+}
+
+data class JavaProximitySearchRuntimeStats(
+    val physicalReads: Long,
+    val physicalBytesRead: Long,
+)
+
+private fun ProximitySearchRuntimePolicyRecord.toJava() = JavaProximitySearchRuntimePolicy(
+    maxEntries.toLong(), maxBytes.toLong(), authoritativeMaxBytes.toLong(),
+    hnswMaxBytes.toLong(), pqMaxBytes.toLong(),
+)
+
+private fun ProximitySearchRuntimeStatsRecord.toJava() = JavaProximitySearchRuntimeStats(
+    physicalReads.toLong(), physicalBytesRead.toLong(),
+)
+
 data class JavaProximityMutationStats(
     val directoryEntriesScanned: Long,
     val directoryNodesRead: Long,
@@ -942,6 +972,26 @@ object JavaPortableBridge {
     ): ProximityMap = engine.buildProximity(dimensions.toUInt(), records)
 
     @JvmStatic
+    fun defaultProximitySearchRuntimePolicy(): JavaProximitySearchRuntimePolicy =
+        nativeDefaultProximitySearchRuntimePolicy().toJava()
+
+    @JvmStatic
+    fun proximitySearchRuntime(
+        engine: Engine,
+        policy: JavaProximitySearchRuntimePolicy,
+    ): ProximitySearchRuntime = engine.proximitySearchRuntime(policy.toNative())
+
+    @JvmStatic
+    fun proximitySearchRuntimePolicy(
+        runtime: ProximitySearchRuntime,
+    ): JavaProximitySearchRuntimePolicy = runtime.policy.toJava()
+
+    @JvmStatic
+    fun proximitySearchRuntimeStats(
+        runtime: ProximitySearchRuntime,
+    ): JavaProximitySearchRuntimeStats = runtime.stats.toJava()
+
+    @JvmStatic
     fun defaultHnswConfig(): JavaHnswConfig = nativeDefaultHnswConfig().toJava()
 
     @JvmStatic
@@ -969,6 +1019,14 @@ object JavaPortableBridge {
         map: ProximityMap,
         request: JavaProximitySearchRequest,
     ): ProximitySearchResultRecord = index.search(map, request.toNative())
+
+    @JvmStatic
+    fun hnswSearchWithRuntime(
+        index: HnswIndex,
+        map: ProximityMap,
+        request: JavaProximitySearchRequest,
+        runtime: ProximitySearchRuntime,
+    ): ProximitySearchResultRecord = index.searchWithRuntime(map, request.toNative(), runtime)
 
     @JvmStatic
     fun hnswProveSearch(
@@ -1011,6 +1069,14 @@ object JavaPortableBridge {
         map: ProximityMap,
         request: JavaProximitySearchRequest,
     ): ProximitySearchResultRecord = index.search(map, request.toNative())
+
+    @JvmStatic
+    fun pqSearchWithRuntime(
+        index: ProductQuantizer,
+        map: ProximityMap,
+        request: JavaProximitySearchRequest,
+        runtime: ProximitySearchRuntime,
+    ): ProximitySearchResultRecord = index.searchWithRuntime(map, request.toNative(), runtime)
 
     @JvmStatic
     fun pqProveSearch(
@@ -1117,6 +1183,14 @@ object JavaPortableBridge {
     ): ProximitySearchResultRecord = index.search(map, request.toNative())
 
     @JvmStatic
+    fun compositeSearchWithRuntime(
+        index: CompositeAccelerator,
+        map: ProximityMap,
+        request: JavaProximitySearchRequest,
+        runtime: ProximitySearchRuntime,
+    ): ProximitySearchResultRecord = index.searchWithRuntime(map, request.toNative(), runtime)
+
+    @JvmStatic
     fun compositeProveSearch(
         index: CompositeAccelerator,
         map: ProximityMap,
@@ -1135,6 +1209,14 @@ object JavaPortableBridge {
     ): ProximitySearchResultRecord = catalog.search(map, request.toNative())
 
     @JvmStatic
+    fun catalogSearchWithRuntime(
+        catalog: AcceleratorCatalog,
+        map: ProximityMap,
+        request: JavaProximitySearchRequest,
+        runtime: ProximitySearchRuntime,
+    ): ProximitySearchResultRecord = catalog.searchWithRuntime(map, request.toNative(), runtime)
+
+    @JvmStatic
     fun catalogProveSearch(
         catalog: AcceleratorCatalog,
         map: ProximityMap,
@@ -1148,10 +1230,24 @@ object JavaPortableBridge {
     ): ProximitySearchResultRecord = map.search(request.toNative())
 
     @JvmStatic
+    fun searchWithRuntime(
+        map: ProximityMap,
+        request: JavaProximitySearchRequest,
+        runtime: ProximitySearchRuntime,
+    ): ProximitySearchResultRecord = map.searchWithRuntime(request.toNative(), runtime)
+
+    @JvmStatic
     fun search(
         session: ProximityReadSession,
         request: JavaProximitySearchRequest,
     ): ProximitySearchResultRecord = session.search(request.toNative())
+
+    @JvmStatic
+    fun searchWithRuntime(
+        session: ProximityReadSession,
+        request: JavaProximitySearchRequest,
+        runtime: ProximitySearchRuntime,
+    ): ProximitySearchResultRecord = session.searchWithRuntime(request.toNative(), runtime)
 
     @JvmStatic
     fun scanRecords(

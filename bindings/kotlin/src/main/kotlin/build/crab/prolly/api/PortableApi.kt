@@ -13,6 +13,7 @@ import build.crab.prolly.BindingProductQuantizer
 import build.crab.prolly.BindingProximityMap
 import build.crab.prolly.BindingProximityReadSession
 import build.crab.prolly.BindingProximitySearchProof
+import build.crab.prolly.BindingProximitySearchRuntime
 import build.crab.prolly.BindingSecondaryIndexSnapshot
 import build.crab.prolly.BindingVersionedMap
 import build.crab.prolly.BindingVersionedTransaction
@@ -45,6 +46,8 @@ import build.crab.prolly.ProximityRecordRecord
 import build.crab.prolly.ProximityRecordVisitorCallback
 import build.crab.prolly.ProximitySearchResultRecord
 import build.crab.prolly.ProximitySearchRequestRecord
+import build.crab.prolly.ProximitySearchRuntimePolicyRecord
+import build.crab.prolly.ProximitySearchRuntimeStatsRecord
 import build.crab.prolly.ProductQuantizationBuildLimitsRecord
 import build.crab.prolly.ProductQuantizationBuildStatsRecord
 import build.crab.prolly.ProductQuantizationConfigRecord
@@ -65,6 +68,7 @@ import build.crab.prolly.defaultHnswConfig
 import build.crab.prolly.defaultPqBuildLimits
 import build.crab.prolly.defaultPqConfig
 import build.crab.prolly.defaultProximityConfig
+import build.crab.prolly.defaultProximitySearchRuntimePolicy
 import build.crab.prolly.exactProximitySearchRequest
 import build.crab.prolly.verifyKeyProof as verifyNativeKeyProof
 import build.crab.prolly.verifyMultiKeyProof as verifyNativeMultiKeyProof
@@ -153,6 +157,10 @@ class Engine private constructor(internal val native: ProllyEngine) : AutoClosea
 
     fun loadProximity(descriptor: ByteArray) =
         ProximityMap(native.loadProximityMap(descriptor.copyOf()))
+
+    fun proximitySearchRuntime(
+        policy: ProximitySearchRuntimePolicyRecord = defaultProximitySearchRuntimePolicy(),
+    ) = ProximitySearchRuntime(native.proximitySearchRuntime(policy))
 
     override fun close() = native.close()
 }
@@ -510,6 +518,11 @@ class ProximityMap(internal val native: BindingProximityMap) : AutoCloseable {
     fun containsKey(key: ByteArray) = native.containsKey(key.copyOf())
     fun search(request: ProximitySearchRequestRecord): ProximitySearchResultRecord =
         read().use { it.search(request) }
+    fun searchWithRuntime(
+        request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime,
+    ): ProximitySearchResultRecord =
+        native.searchWithRuntime(ownedSearchRequest(request), runtime.native)
     fun searchExact(query: List<Float>, k: ULong): ProximitySearchResultRecord =
         read().use { it.searchExact(query, k) }
     fun scanRecords(visitor: (ProximityRecordRecord) -> Boolean): ULong =
@@ -544,6 +557,15 @@ class ProximityMap(internal val native: BindingProximityMap) : AutoCloseable {
     override fun close() = native.close()
 }
 
+class ProximitySearchRuntime(
+    internal val native: BindingProximitySearchRuntime,
+) : AutoCloseable {
+    val policy: ProximitySearchRuntimePolicyRecord get() = native.policy()
+    val stats: ProximitySearchRuntimeStatsRecord get() = native.stats()
+    fun clear() = native.clear()
+    override fun close() = native.close()
+}
+
 class HnswIndex(internal val native: BindingHnswIndex) : AutoCloseable {
     val manifest: ByteArray get() = native.manifest().copyOf()
     val sourceDescriptor: ByteArray get() = native.sourceDescriptor().copyOf()
@@ -551,6 +573,12 @@ class HnswIndex(internal val native: BindingHnswIndex) : AutoCloseable {
     val isCanonical: Boolean get() = native.isCanonical()
     fun search(map: ProximityMap, request: ProximitySearchRequestRecord): ProximitySearchResultRecord =
         native.search(map.native, ownedSearchRequest(request))
+    fun searchWithRuntime(
+        map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime,
+    ): ProximitySearchResultRecord =
+        native.searchWithRuntime(map.native, ownedSearchRequest(request), runtime.native)
     fun proveSearch(
         map: ProximityMap,
         request: ProximitySearchRequestRecord,
@@ -566,6 +594,12 @@ class ProductQuantizer(internal val native: BindingProductQuantizer) : AutoClose
     val quality: ProductQuantizationQualityRecord get() = native.quality()
     fun search(map: ProximityMap, request: ProximitySearchRequestRecord): ProximitySearchResultRecord =
         native.search(map.native, ownedSearchRequest(request))
+    fun searchWithRuntime(
+        map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime,
+    ): ProximitySearchResultRecord =
+        native.searchWithRuntime(map.native, ownedSearchRequest(request), runtime.native)
     fun proveSearch(
         map: ProximityMap,
         request: ProximitySearchRequestRecord,
@@ -585,6 +619,12 @@ class CompositeAccelerator(internal val native: BindingCompositeAccelerator) : A
     val buildStats: CompositeBuildStatsRecord get() = native.buildStats()
     fun search(map: ProximityMap, request: ProximitySearchRequestRecord): ProximitySearchResultRecord =
         native.search(map.native, ownedSearchRequest(request))
+    fun searchWithRuntime(
+        map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime,
+    ): ProximitySearchResultRecord =
+        native.searchWithRuntime(map.native, ownedSearchRequest(request), runtime.native)
     fun proveSearch(
         map: ProximityMap,
         request: ProximitySearchRequestRecord,
@@ -599,6 +639,12 @@ class AcceleratorCatalog(internal val native: BindingAcceleratorCatalog) : AutoC
     val entries get() = native.entries()
     fun search(map: ProximityMap, request: ProximitySearchRequestRecord): ProximitySearchResultRecord =
         native.search(map.native, ownedSearchRequest(request))
+    fun searchWithRuntime(
+        map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime,
+    ): ProximitySearchResultRecord =
+        native.searchWithRuntime(map.native, ownedSearchRequest(request), runtime.native)
     fun proveSearch(
         map: ProximityMap,
         request: ProximitySearchRequestRecord,
@@ -612,6 +658,11 @@ class ProximityReadSession(internal val native: BindingProximityReadSession) : A
     fun containsKey(key: ByteArray) = native.containsKey(key.copyOf())
     fun search(request: ProximitySearchRequestRecord): ProximitySearchResultRecord =
         native.search(ownedSearchRequest(request))
+    fun searchWithRuntime(
+        request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime,
+    ): ProximitySearchResultRecord =
+        native.searchWithRuntime(ownedSearchRequest(request), runtime.native)
     fun searchExact(query: List<Float>, k: ULong): ProximitySearchResultRecord =
         search(exactProximitySearchRequest(query.toList(), k))
     fun scanRecords(visitor: (ProximityRecordRecord) -> Boolean): ULong =

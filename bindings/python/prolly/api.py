@@ -75,6 +75,8 @@ class CompositeBuildOrRebuildOutcome:
 
 
 IndexProjection = _native.IndexProjectionRecord
+ProximitySearchRuntimePolicy = _native.ProximitySearchRuntimePolicyRecord
+ProximitySearchRuntimeStats = _native.ProximitySearchRuntimeStatsRecord
 
 
 class Engine(_Scoped):
@@ -134,6 +136,17 @@ class Engine(_Scoped):
     def load_proximity(self, descriptor: bytes) -> "ProximityMap":
         self._open()
         return ProximityMap(self._inner.load_proximity_map(bytes(descriptor)))
+
+    def proximity_search_runtime(
+        self,
+        policy: _native.ProximitySearchRuntimePolicyRecord | None = None,
+    ) -> "ProximitySearchRuntime":
+        self._open()
+        return ProximitySearchRuntime(
+            self._inner.proximity_search_runtime(
+                policy or _native.default_proximity_search_runtime_policy()
+            )
+        )
 
 
 def _owned_mutations(mutations):
@@ -1077,6 +1090,17 @@ class ProximityMap(_Scoped):
         with self.read() as session:
             return session.search(request)
 
+    def search_with_runtime(
+        self,
+        request: _native.ProximitySearchRequestRecord,
+        runtime: "ProximitySearchRuntime",
+    ):
+        self._open()
+        runtime._open()
+        return self._inner.search_with_runtime(
+            _owned_proximity_search_request(request), runtime._inner
+        )
+
     def search_exact(self, query: Sequence[float], k: int):
         with self.read() as session:
             return session.search_exact(query, k)
@@ -1147,6 +1171,26 @@ class ProximityMap(_Scoped):
         self._inner.clear_content_cache()
 
 
+class ProximitySearchRuntime(_Scoped):
+    def __init__(self, inner: _native.BindingProximitySearchRuntime):
+        super().__init__()
+        self._inner = inner
+
+    @property
+    def policy(self) -> _native.ProximitySearchRuntimePolicyRecord:
+        self._open()
+        return self._inner.policy()
+
+    @property
+    def stats(self) -> _native.ProximitySearchRuntimeStatsRecord:
+        self._open()
+        return self._inner.stats()
+
+    def clear(self) -> None:
+        self._open()
+        self._inner.clear()
+
+
 class HnswIndex(_Scoped):
     def __init__(self, inner: _native.BindingHnswIndex):
         super().__init__()
@@ -1182,6 +1226,21 @@ class HnswIndex(_Scoped):
         return self._inner.search(
             map._inner,
             _owned_proximity_search_request(request),
+        )
+
+    def search_with_runtime(
+        self,
+        map: ProximityMap,
+        request: _native.ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime,
+    ) -> _native.ProximitySearchResultRecord:
+        self._open()
+        map._open()
+        runtime._open()
+        return self._inner.search_with_runtime(
+            map._inner,
+            _owned_proximity_search_request(request),
+            runtime._inner,
         )
 
     def prove_search(
@@ -1236,6 +1295,21 @@ class ProductQuantizer(_Scoped):
         return self._inner.search(
             map._inner,
             _owned_proximity_search_request(request),
+        )
+
+    def search_with_runtime(
+        self,
+        map: ProximityMap,
+        request: _native.ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime,
+    ) -> _native.ProximitySearchResultRecord:
+        self._open()
+        map._open()
+        runtime._open()
+        return self._inner.search_with_runtime(
+            map._inner,
+            _owned_proximity_search_request(request),
+            runtime._inner,
         )
 
     def prove_search(
@@ -1305,6 +1379,21 @@ class CompositeAccelerator(_Scoped):
         map._open()
         return self._inner.search(map._inner, _owned_proximity_search_request(request))
 
+    def search_with_runtime(
+        self,
+        map: ProximityMap,
+        request,
+        runtime: ProximitySearchRuntime,
+    ):
+        self._open()
+        map._open()
+        runtime._open()
+        return self._inner.search_with_runtime(
+            map._inner,
+            _owned_proximity_search_request(request),
+            runtime._inner,
+        )
+
     def prove_search(self, map: ProximityMap, request, limits=None) -> "ProximitySearchProof":
         self._open()
         map._open()
@@ -1342,6 +1431,21 @@ class AcceleratorCatalog(_Scoped):
         map._open()
         return self._inner.search(map._inner, _owned_proximity_search_request(request))
 
+    def search_with_runtime(
+        self,
+        map: ProximityMap,
+        request,
+        runtime: ProximitySearchRuntime,
+    ):
+        self._open()
+        map._open()
+        runtime._open()
+        return self._inner.search_with_runtime(
+            map._inner,
+            _owned_proximity_search_request(request),
+            runtime._inner,
+        )
+
     def prove_search(self, map: ProximityMap, request, limits=None) -> "ProximitySearchProof":
         self._open()
         map._open()
@@ -1370,6 +1474,17 @@ class ProximityReadSession(_Scoped):
     def search(self, request: _native.ProximitySearchRequestRecord):
         self._open()
         return self._inner.search(_owned_proximity_search_request(request))
+
+    def search_with_runtime(
+        self,
+        request: _native.ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime,
+    ):
+        self._open()
+        runtime._open()
+        return self._inner.search_with_runtime(
+            _owned_proximity_search_request(request), runtime._inner
+        )
 
     def search_exact(self, query: Sequence[float], k: int):
         return self.search(
@@ -1464,6 +1579,9 @@ __all__ = [
     "ProximityMap",
     "ProximityReadSession",
     "ProximityRecord",
+    "ProximitySearchRuntime",
+    "ProximitySearchRuntimePolicy",
+    "ProximitySearchRuntimeStats",
     "ProximitySearchProof",
     "ProductQuantizationBuildResult",
     "ProductQuantizer",

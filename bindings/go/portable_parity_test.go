@@ -9,6 +9,59 @@ import (
 	"testing"
 )
 
+func TestRetainedSearchRuntimeReusesValidatedContent(t *testing.T) {
+	config, err := DefaultConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine, err := NewMemoryEngine(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(engine.Close)
+	records := make([]ProximityRecord, 16)
+	for index := range records {
+		records[index] = ProximityRecord{
+			Key: []byte(fmt.Sprintf("vector-%02d", index)), Vector: []float32{float32(index), 0},
+			Value: []byte(fmt.Sprintf("value-%02d", index)),
+		}
+	}
+	proximity, err := engine.BuildProximity(2, records)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(proximity.Close)
+	runtime, err := engine.NewProximitySearchRuntime()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(runtime.Close)
+	request := ExactSearch([]float32{0, 0}, 3)
+
+	cold, err := proximity.SearchWithRuntime(context.Background(), request, runtime)
+	if err != nil {
+		t.Fatal(err)
+	}
+	warm, err := proximity.SearchWithRuntime(context.Background(), request, runtime)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cold.Stats.PhysicalBytesRead == 0 || warm.Stats.PhysicalBytesRead != 0 {
+		t.Fatalf("physical bytes cold=%d warm=%d", cold.Stats.PhysicalBytesRead, warm.Stats.PhysicalBytesRead)
+	}
+	stats, err := runtime.Stats()
+	if err != nil || stats.PhysicalReads == 0 {
+		t.Fatalf("runtime stats = %#v, %v", stats, err)
+	}
+	if err := runtime.Clear(); err != nil {
+		t.Fatal(err)
+	}
+	recold, err := proximity.SearchWithRuntime(context.Background(), request, runtime)
+	if err != nil || recold.Stats.PhysicalBytesRead == 0 {
+		t.Fatalf("search after clear = %#v, %v", recold, err)
+	}
+}
+
 func TestRichProximitySearchPreservesPolicyFilterStatsSessionAndProof(t *testing.T) {
 	config, err := DefaultConfig()
 	if err != nil {

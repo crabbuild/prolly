@@ -5,6 +5,33 @@ import { Engine, defaultCompositeAcceleratorConfig, exactSearch } from "../src/i
 
 const bytes = (value: string): Buffer => Buffer.from(value);
 
+test("retained search runtime reuses validated content", async () => {
+  const engine = await Engine.memory();
+  try {
+    const proximity = await engine.buildProximity(2, Array.from({ length: 16 }, (_, index) => ({
+      key: bytes(`vector-${index.toString().padStart(2, "0")}`),
+      vector: new Float32Array([index, 0]),
+      value: bytes(`value-${index.toString().padStart(2, "0")}`),
+    })));
+    const runtime = engine.proximitySearchRuntime();
+    try {
+      const request = exactSearch(new Float32Array([0, 0]), 3);
+      const cold = await proximity.searchWithRuntime(request, runtime);
+      const warm = await proximity.searchWithRuntime(request, runtime);
+      assert.ok(cold.stats.physicalBytesRead > 0n);
+      assert.equal(warm.stats.physicalBytesRead, 0n);
+      assert.ok(runtime.stats().physicalReads > 0n);
+      runtime.clear();
+      assert.ok((await proximity.searchWithRuntime(request, runtime)).stats.physicalBytesRead > 0n);
+    } finally {
+      runtime.close();
+      proximity.close();
+    }
+  } finally {
+    engine.close();
+  }
+});
+
 test("product quantizer lifecycle is portable and bounded", async () => {
   const engine = await Engine.memory();
   try {
