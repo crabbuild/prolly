@@ -261,6 +261,19 @@ PROLLY_DYNAMODB_ENDPOINT=http://127.0.0.1:8000 \
   swift run --package-path bindings/swift prolly-store-dynamodb-check
 ```
 
+Provider-first Python Cosmos DB SDK-contract check:
+
+```sh
+PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" \
+  PYTHONPATH=bindings/python:bindings/python/stores/cosmosdb \
+  python3 -m unittest discover -s bindings/python/stores/cosmosdb/tests -v
+```
+
+Set `PROLLY_COSMOS_ENDPOINT`, `PROLLY_COSMOS_KEY`, and
+`PROLLY_COSMOS_DATABASE` to include the managed-cloud round trip. Ruby and
+Swift remain explicitly unsupported because Microsoft does not publish
+supported Cosmos DB SDKs for those languages.
+
 Before publishing a binding release:
 
 1. Build the Rust facade with `cargo build --manifest-path bindings/uniffi/Cargo.toml --target-dir target`.

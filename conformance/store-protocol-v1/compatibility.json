@@ -417,6 +417,18 @@
         "capabilities": {"native_batch_reads":true,"atomic_batch_writes":false,"node_scan":true,"hints":true,"atomic_nodes_and_hint":false,"root_scan":true,"root_compare_and_swap":true,"transactions":true,"read_parallelism":16},
         "limits": {"max_batch_read_items":100,"max_batch_write_items":25,"max_transaction_operations":100,"max_node_bytes":null},
         "evidence": ["PROLLY_DYNAMODB_ENDPOINT=http://127.0.0.1:8000 PROLLY_BINDINGS_LIBRARY=target/debug/libprolly_bindings.dylib PYTHONPATH=bindings/python:bindings/python/stores/dynamodb python3 -m unittest discover -s bindings/python/stores/dynamodb/tests"]
+      },
+      "cosmosdb": {
+        "status": "supported",
+        "module": "trail-prolly-store-cosmosdb",
+        "sdk_module": "azure-cosmos",
+        "sdk_version": "4.16.1",
+        "minimum_python": "3.10",
+        "protocol_major": 1,
+        "schema_version": 1,
+        "capabilities": {"native_batch_reads":false,"atomic_batch_writes":false,"node_scan":true,"hints":true,"atomic_nodes_and_hint":false,"root_scan":true,"root_compare_and_swap":true,"transactions":true,"read_parallelism":16},
+        "limits": {"max_batch_read_items":null,"max_batch_write_items":null,"max_transaction_operations":100,"max_node_bytes":null},
+        "evidence": ["PROLLY_BINDINGS_LIBRARY=target/debug/libprolly_bindings.dylib PYTHONPATH=bindings/python:bindings/python/stores/cosmosdb python3 -m unittest discover -s bindings/python/stores/cosmosdb/tests", "live: PROLLY_COSMOS_ENDPOINT, PROLLY_COSMOS_KEY, and PROLLY_COSMOS_DATABASE"]
       }
     },
     "ruby": {
