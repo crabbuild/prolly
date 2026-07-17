@@ -147,6 +147,182 @@ impl WasmVersionedMap {
         Ok(result)
     }
 
+    pub fn range(&self, start: Uint8Array, end: Option<Uint8Array>) -> Result<Array, JsValue> {
+        let entries = self
+            .engine
+            .versioned_map(&self.id)
+            .range(
+                &start.to_vec(),
+                end.as_ref().map(Uint8Array::to_vec).as_deref(),
+            )
+            .map_err(js_error)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(js_error)?;
+        entries_to_array(entries)
+    }
+
+    pub fn prefix(&self, prefix: Uint8Array) -> Result<Array, JsValue> {
+        let entries = self
+            .engine
+            .versioned_map(&self.id)
+            .prefix(&prefix.to_vec())
+            .map_err(js_error)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(js_error)?;
+        entries_to_array(entries)
+    }
+
+    #[wasm_bindgen(js_name = rangeAt)]
+    pub fn range_at(
+        &self,
+        id: Uint8Array,
+        start: Uint8Array,
+        end: Option<Uint8Array>,
+    ) -> Result<Array, JsValue> {
+        let id = MapVersionId::from_bytes(&id.to_vec()).map_err(js_error)?;
+        let entries = self
+            .engine
+            .versioned_map(&self.id)
+            .range_at(
+                &id,
+                &start.to_vec(),
+                end.as_ref().map(Uint8Array::to_vec).as_deref(),
+            )
+            .map_err(js_error)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(js_error)?;
+        entries_to_array(entries)
+    }
+
+    #[wasm_bindgen(js_name = prefixAt)]
+    pub fn prefix_at(&self, id: Uint8Array, prefix: Uint8Array) -> Result<Array, JsValue> {
+        let id = MapVersionId::from_bytes(&id.to_vec()).map_err(js_error)?;
+        let entries = self
+            .engine
+            .versioned_map(&self.id)
+            .prefix_at(&id, &prefix.to_vec())
+            .map_err(js_error)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(js_error)?;
+        entries_to_array(entries)
+    }
+
+    #[wasm_bindgen(js_name = rangePage)]
+    pub fn range_page(
+        &self,
+        cursor: Option<WasmRangeCursor>,
+        end: Option<Uint8Array>,
+        limit: u32,
+    ) -> Result<Object, JsValue> {
+        self.engine
+            .versioned_map(&self.id)
+            .range_page(
+                &cursor
+                    .map(|value| value.inner)
+                    .unwrap_or_else(prolly::RangeCursor::start),
+                end.as_ref().map(Uint8Array::to_vec).as_deref(),
+                limit as usize,
+            )
+            .map_err(js_error)
+            .and_then(range_page_to_object)
+    }
+
+    #[wasm_bindgen(js_name = prefixPage)]
+    pub fn prefix_page(
+        &self,
+        prefix: Uint8Array,
+        cursor: Option<WasmRangeCursor>,
+        limit: u32,
+    ) -> Result<Object, JsValue> {
+        self.engine
+            .versioned_map(&self.id)
+            .prefix_page(
+                &prefix.to_vec(),
+                &cursor
+                    .map(|value| value.inner)
+                    .unwrap_or_else(prolly::RangeCursor::start),
+                limit as usize,
+            )
+            .map_err(js_error)
+            .and_then(range_page_to_object)
+    }
+
+    #[wasm_bindgen(js_name = rangePageAt)]
+    pub fn range_page_at(
+        &self,
+        id: Uint8Array,
+        cursor: Option<WasmRangeCursor>,
+        end: Option<Uint8Array>,
+        limit: u32,
+    ) -> Result<Object, JsValue> {
+        let id = MapVersionId::from_bytes(&id.to_vec()).map_err(js_error)?;
+        self.engine
+            .versioned_map(&self.id)
+            .range_page_at(
+                &id,
+                &cursor
+                    .map(|value| value.inner)
+                    .unwrap_or_else(prolly::RangeCursor::start),
+                end.as_ref().map(Uint8Array::to_vec).as_deref(),
+                limit as usize,
+            )
+            .map_err(js_error)
+            .and_then(range_page_to_object)
+    }
+
+    #[wasm_bindgen(js_name = prefixPageAt)]
+    pub fn prefix_page_at(
+        &self,
+        id: Uint8Array,
+        prefix: Uint8Array,
+        cursor: Option<WasmRangeCursor>,
+        limit: u32,
+    ) -> Result<Object, JsValue> {
+        let id = MapVersionId::from_bytes(&id.to_vec()).map_err(js_error)?;
+        self.engine
+            .versioned_map(&self.id)
+            .prefix_page_at(
+                &id,
+                &prefix.to_vec(),
+                &cursor
+                    .map(|value| value.inner)
+                    .unwrap_or_else(prolly::RangeCursor::start),
+                limit as usize,
+            )
+            .map_err(js_error)
+            .and_then(range_page_to_object)
+    }
+
+    pub fn diff(&self, base: Uint8Array, target: Uint8Array) -> Result<Array, JsValue> {
+        let base = MapVersionId::from_bytes(&base.to_vec()).map_err(js_error)?;
+        let target = MapVersionId::from_bytes(&target.to_vec()).map_err(js_error)?;
+        self.engine
+            .versioned_map(&self.id)
+            .diff(&base, &target)
+            .map_err(js_error)
+            .and_then(diffs_to_array)
+    }
+
+    #[wasm_bindgen(js_name = changesSince)]
+    pub fn changes_since(&self, base: Uint8Array) -> Result<Array, JsValue> {
+        let base = MapVersionId::from_bytes(&base.to_vec()).map_err(js_error)?;
+        self.engine
+            .versioned_map(&self.id)
+            .changes_since(&base)
+            .map_err(js_error)
+            .and_then(diffs_to_array)
+    }
+
+    #[wasm_bindgen(js_name = rollbackTo)]
+    pub fn rollback_to(&self, id: Uint8Array) -> Result<Object, JsValue> {
+        let id = MapVersionId::from_bytes(&id.to_vec()).map_err(js_error)?;
+        self.engine
+            .versioned_map(&self.id)
+            .rollback_to(&id)
+            .map_err(js_error)
+            .and_then(map_version_object)
+    }
+
     pub fn put(&self, key: Uint8Array, value: Uint8Array) -> Result<Object, JsValue> {
         self.engine
             .versioned_map(&self.id)

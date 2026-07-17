@@ -258,6 +258,33 @@ final class PortableParityTests: XCTestCase {
             comparison.close()
         }
     }
+    func testVersionedHistoryNavigationDiffAndRollbackStayNative() throws {
+        try Engine.withMemory { engine in
+            let map = try engine.versionedMap(Data("history-navigation".utf8))
+            _ = try map.initialize()
+            _ = try map.put(Data("a".utf8), value: Data("one".utf8))
+            _ = try map.put(Data("ab".utf8), value: Data("two".utf8))
+            let base = try map.put(Data("b".utf8), value: Data("three".utf8))
+            let target = try map.put(Data("a".utf8), value: Data("updated".utf8))
+
+            XCTAssertEqual(try map.range(from: Data("a".utf8), to: Data("c".utf8)).map(\.key), [Data("a".utf8), Data("ab".utf8), Data("b".utf8)])
+            XCTAssertEqual(try map.prefix(Data("a".utf8)).map(\.key), [Data("a".utf8), Data("ab".utf8)])
+            XCTAssertEqual(try map.range(at: base.id, from: Data("a".utf8), to: Data("b".utf8)).first?.value, Data("one".utf8))
+            XCTAssertEqual(try map.prefix(at: base.id, Data("a".utf8)).map(\.key), [Data("a".utf8), Data("ab".utf8)])
+            XCTAssertEqual(try map.rangePage(limit: 2).entries.map(\.key), [Data("a".utf8), Data("ab".utf8)])
+            XCTAssertEqual(try map.prefixPage(Data("a".utf8), limit: 1).entries.map(\.key), [Data("a".utf8)])
+            let historicalPage = try map.prefixPage(at: base.id, Data("a".utf8), limit: 1)
+            XCTAssertEqual(historicalPage.entries.map(\.key), [Data("a".utf8)])
+            XCTAssertNotNil(historicalPage.nextCursor)
+            XCTAssertEqual(try map.diff(base: base.id, target: target.id).map(\.key), [Data("a".utf8)])
+            XCTAssertEqual(try map.changes(since: base.id).map(\.key), [Data("a".utf8)])
+
+            let rolledBack = try map.rollback(to: base.id)
+            XCTAssertEqual(try map.headID(), rolledBack.id)
+            XCTAssertEqual(try map.get(Data("a".utf8)), Data("one".utf8))
+            XCTAssertTrue(try map.changes(since: base.id).isEmpty)
+        }
+    }
     func testVersionedSubscriptionResumesAndPollsOwnedDiffs() throws {
         try Engine.withMemory { engine in
             let map = try engine.versionedMap(Data("subscription".utf8))

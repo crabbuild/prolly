@@ -3,6 +3,10 @@ package build.crab.prolly.javaapi;
 import java.util.Optional;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import build.crab.prolly.DiffRecord;
+import build.crab.prolly.EntryRecord;
+import build.crab.prolly.RangeCursorRecord;
+import build.crab.prolly.RangePageRecord;
 
 public final class VersionedMap implements AutoCloseable {
     private build.crab.prolly.api.VersionedMap nativeMap;
@@ -65,6 +69,56 @@ public final class VersionedMap implements AutoCloseable {
         return open().getManyAt(id.clone(), keys.stream().map(byte[]::clone).toList()).stream()
                 .map(value -> Optional.ofNullable(value == null ? null : value.clone()))
                 .toList();
+    }
+
+    public List<EntryRecord> range(byte[] start, byte[] end) {
+        return open().range(start.clone(), end == null ? null : end.clone());
+    }
+
+    public List<EntryRecord> prefix(byte[] prefix) {
+        return open().prefix(prefix.clone());
+    }
+
+    public List<EntryRecord> rangeAt(byte[] id, byte[] start, byte[] end) {
+        return open().rangeAt(id.clone(), start.clone(), end == null ? null : end.clone());
+    }
+
+    public List<EntryRecord> prefixAt(byte[] id, byte[] prefix) {
+        return open().prefixAt(id.clone(), prefix.clone());
+    }
+
+    public RangePageRecord rangePage(RangeCursorRecord cursor, byte[] end, long limit) {
+        return build.crab.prolly.api.JavaPortableBridge.versionedRangePage(
+                open(), cursor, end == null ? null : end.clone(), limit);
+    }
+
+    public RangePageRecord prefixPage(byte[] prefix, RangeCursorRecord cursor, long limit) {
+        return build.crab.prolly.api.JavaPortableBridge.versionedPrefixPage(
+                open(), prefix.clone(), cursor, limit);
+    }
+
+    public RangePageRecord rangePageAt(
+            byte[] id, RangeCursorRecord cursor, byte[] end, long limit) {
+        return build.crab.prolly.api.JavaPortableBridge.versionedRangePageAt(
+                open(), id.clone(), cursor, end == null ? null : end.clone(), limit);
+    }
+
+    public RangePageRecord prefixPageAt(
+            byte[] id, byte[] prefix, RangeCursorRecord cursor, long limit) {
+        return build.crab.prolly.api.JavaPortableBridge.versionedPrefixPageAt(
+                open(), id.clone(), prefix.clone(), cursor, limit);
+    }
+
+    public List<DiffRecord> diff(byte[] base, byte[] target) {
+        return open().diff(base.clone(), target.clone());
+    }
+
+    public List<DiffRecord> changesSince(byte[] base) {
+        return open().changesSince(base.clone());
+    }
+
+    public MapVersion rollbackTo(byte[] id) {
+        return MapVersion.fromNative(open().rollbackTo(id.clone()));
     }
 
     public MapVersion put(byte[] key, byte[] value) {

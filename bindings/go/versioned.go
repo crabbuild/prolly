@@ -704,6 +704,160 @@ func (m *VersionedMap) GetManyAt(id []byte, keys [][]byte) ([][]byte, error) {
 	return values, err
 }
 
+// Range returns owned entries from one head snapshot.
+func (m *VersionedMap) Range(start, end []byte) ([]Entry, error) {
+	snapshot, err := m.Snapshot()
+	if err != nil {
+		return nil, err
+	}
+	if snapshot == nil {
+		tree, err := m.engine.Create()
+		if err != nil {
+			return nil, err
+		}
+		return m.engine.Range(tree, bytes.Clone(start), bytes.Clone(end))
+	}
+	defer snapshot.Close()
+	return snapshot.Range(bytes.Clone(start), bytes.Clone(end))
+}
+
+// Prefix returns owned entries sharing prefix from one head snapshot.
+func (m *VersionedMap) Prefix(prefix []byte) ([]Entry, error) {
+	snapshot, err := m.Snapshot()
+	if err != nil {
+		return nil, err
+	}
+	if snapshot == nil {
+		tree, err := m.engine.Create()
+		if err != nil {
+			return nil, err
+		}
+		return m.engine.Prefix(tree, bytes.Clone(prefix))
+	}
+	defer snapshot.Close()
+	return snapshot.Prefix(bytes.Clone(prefix))
+}
+
+// RangeAt returns owned entries from a cataloged immutable version.
+func (m *VersionedMap) RangeAt(id, start, end []byte) ([]Entry, error) {
+	snapshot, err := m.SnapshotAt(bytes.Clone(id))
+	if err != nil {
+		return nil, err
+	}
+	if snapshot == nil {
+		return nil, errors.New("map version is not cataloged")
+	}
+	defer snapshot.Close()
+	return snapshot.Range(bytes.Clone(start), bytes.Clone(end))
+}
+
+// PrefixAt returns owned entries from a cataloged immutable version.
+func (m *VersionedMap) PrefixAt(id, prefix []byte) ([]Entry, error) {
+	snapshot, err := m.SnapshotAt(bytes.Clone(id))
+	if err != nil {
+		return nil, err
+	}
+	if snapshot == nil {
+		return nil, errors.New("map version is not cataloged")
+	}
+	defer snapshot.Close()
+	return snapshot.Prefix(bytes.Clone(prefix))
+}
+
+// RangePage returns one bounded page from the current head.
+func (m *VersionedMap) RangePage(cursor *RangeCursor, end []byte, limit uint64) (RangePage, error) {
+	snapshot, err := m.Snapshot()
+	if err != nil {
+		return RangePage{}, err
+	}
+	if snapshot == nil {
+		tree, err := m.engine.Create()
+		if err != nil {
+			return RangePage{}, err
+		}
+		return m.engine.RangePage(tree, cloneRangeCursor(cursor), bytes.Clone(end), limit)
+	}
+	defer snapshot.Close()
+	return snapshot.RangePage(cloneRangeCursor(cursor), bytes.Clone(end), limit)
+}
+
+// PrefixPage returns one bounded prefix page from the current head.
+func (m *VersionedMap) PrefixPage(prefix []byte, cursor *RangeCursor, limit uint64) (RangePage, error) {
+	snapshot, err := m.Snapshot()
+	if err != nil {
+		return RangePage{}, err
+	}
+	if snapshot == nil {
+		tree, err := m.engine.Create()
+		if err != nil {
+			return RangePage{}, err
+		}
+		return m.engine.PrefixPage(tree, bytes.Clone(prefix), cloneRangeCursor(cursor), limit)
+	}
+	defer snapshot.Close()
+	return snapshot.PrefixPage(bytes.Clone(prefix), cloneRangeCursor(cursor), limit)
+}
+
+// RangePageAt returns one bounded page pinned to a cataloged version.
+func (m *VersionedMap) RangePageAt(id []byte, cursor *RangeCursor, end []byte, limit uint64) (RangePage, error) {
+	snapshot, err := m.SnapshotAt(bytes.Clone(id))
+	if err != nil {
+		return RangePage{}, err
+	}
+	if snapshot == nil {
+		return RangePage{}, errors.New("map version is not cataloged")
+	}
+	defer snapshot.Close()
+	return snapshot.RangePage(cloneRangeCursor(cursor), bytes.Clone(end), limit)
+}
+
+// PrefixPageAt returns one bounded prefix page pinned to a cataloged version.
+func (m *VersionedMap) PrefixPageAt(id, prefix []byte, cursor *RangeCursor, limit uint64) (RangePage, error) {
+	snapshot, err := m.SnapshotAt(bytes.Clone(id))
+	if err != nil {
+		return RangePage{}, err
+	}
+	if snapshot == nil {
+		return RangePage{}, errors.New("map version is not cataloged")
+	}
+	defer snapshot.Close()
+	return snapshot.PrefixPage(bytes.Clone(prefix), cloneRangeCursor(cursor), limit)
+}
+
+// Diff compares two cataloged immutable versions.
+func (m *VersionedMap) Diff(base, target []byte) ([]Diff, error) {
+	comparison, err := m.Compare(bytes.Clone(base), bytes.Clone(target))
+	if err != nil {
+		return nil, err
+	}
+	defer comparison.Close()
+	return comparison.Diff()
+}
+
+// ChangesSince compares a cataloged immutable version with the current head.
+func (m *VersionedMap) ChangesSince(base []byte) ([]Diff, error) {
+	comparison, err := m.CompareToHead(bytes.Clone(base))
+	if err != nil {
+		return nil, err
+	}
+	defer comparison.Close()
+	return comparison.Diff()
+}
+
+// RollbackTo moves head to an existing cataloged version without deleting history.
+func (m *VersionedMap) RollbackTo(id []byte) (MapVersion, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return MapVersion{}, err
+	}
+	defer unlock()
+	raw, err := ffiVersionedRollbackTo(handle, bytes.Clone(id))
+	if err != nil {
+		return MapVersion{}, err
+	}
+	return decodePortableMapVersion(raw)
+}
+
 func (m *VersionedMap) Put(key, value []byte) (MapVersion, error) {
 	handle, unlock, err := m.withHandle()
 	if err != nil {

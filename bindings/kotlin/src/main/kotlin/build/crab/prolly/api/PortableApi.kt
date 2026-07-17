@@ -95,6 +95,37 @@ class VersionedMap(internal val native: BindingVersionedMap) : AutoCloseable {
     fun getAt(id: ByteArray, key: ByteArray) = native.getAt(id.copyOf(), key.copyOf())
     fun getManyAt(id: ByteArray, keys: List<ByteArray>) =
         native.getManyAt(id.copyOf(), keys.map(ByteArray::copyOf))
+    fun range(start: ByteArray = ByteArray(0), end: ByteArray? = null) =
+        native.range(start.copyOf(), end?.copyOf())
+    fun prefix(prefix: ByteArray) = native.prefix(prefix.copyOf())
+    fun rangeAt(id: ByteArray, start: ByteArray = ByteArray(0), end: ByteArray? = null) =
+        native.rangeAt(id.copyOf(), start.copyOf(), end?.copyOf())
+    fun prefixAt(id: ByteArray, prefix: ByteArray) = native.prefixAt(id.copyOf(), prefix.copyOf())
+    fun rangePage(
+        cursor: RangeCursorRecord? = null,
+        end: ByteArray? = null,
+        limit: ULong = 256uL,
+    ) = native.rangePage(ownedRangeCursor(cursor), end?.copyOf(), limit)
+    fun prefixPage(
+        prefix: ByteArray,
+        cursor: RangeCursorRecord? = null,
+        limit: ULong = 256uL,
+    ) = native.prefixPage(prefix.copyOf(), ownedRangeCursor(cursor), limit)
+    fun rangePageAt(
+        id: ByteArray,
+        cursor: RangeCursorRecord? = null,
+        end: ByteArray? = null,
+        limit: ULong = 256uL,
+    ) = native.rangePageAt(id.copyOf(), ownedRangeCursor(cursor), end?.copyOf(), limit)
+    fun prefixPageAt(
+        id: ByteArray,
+        prefix: ByteArray,
+        cursor: RangeCursorRecord? = null,
+        limit: ULong = 256uL,
+    ) = native.prefixPageAt(id.copyOf(), prefix.copyOf(), ownedRangeCursor(cursor), limit)
+    fun diff(base: ByteArray, target: ByteArray) = native.diff(base.copyOf(), target.copyOf())
+    fun changesSince(base: ByteArray) = native.changesSince(base.copyOf())
+    fun rollbackTo(id: ByteArray) = native.rollbackTo(id.copyOf())
     fun put(key: ByteArray, value: ByteArray) = native.put(key.copyOf(), value.copyOf())
     fun apply(mutations: List<MutationRecord>) = native.apply(mutations.map(::ownedMutation))
     fun applyIf(expected: ByteArray?, mutations: List<MutationRecord>) =

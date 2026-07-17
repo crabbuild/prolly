@@ -282,6 +282,32 @@ class PortableParityTests(unittest.TestCase):
                 self.assertEqual([diff.key for diff in comparison.diff()], [b"k"])
                 self.assertEqual([diff.key for diff in comparison.diff_page(limit=1).diffs], [b"k"])
 
+    def test_versioned_history_navigation_diff_and_rollback(self):
+        with Engine.memory() as engine:
+            versioned = engine.versioned_map(b"history-navigation")
+            versioned.initialize()
+            versioned.put(b"a", b"one")
+            versioned.put(b"ab", b"two")
+            base = versioned.put(b"b", b"three")
+            target = versioned.put(b"a", b"updated")
+
+            self.assertEqual([entry.key for entry in versioned.range(b"a", b"c")], [b"a", b"ab", b"b"])
+            self.assertEqual([entry.key for entry in versioned.prefix(b"a")], [b"a", b"ab"])
+            self.assertEqual(versioned.range_at(base.id, b"a", b"b")[0].value, b"one")
+            self.assertEqual([entry.key for entry in versioned.prefix_at(base.id, b"a")], [b"a", b"ab"])
+            self.assertEqual([entry.key for entry in versioned.range_page(limit=2).entries], [b"a", b"ab"])
+            self.assertEqual([entry.key for entry in versioned.prefix_page(b"a", limit=1).entries], [b"a"])
+            historical_page = versioned.prefix_page_at(base.id, b"a", limit=1)
+            self.assertEqual([entry.key for entry in historical_page.entries], [b"a"])
+            self.assertIsNotNone(historical_page.next_cursor)
+            self.assertEqual([diff.key for diff in versioned.diff(base.id, target.id)], [b"a"])
+            self.assertEqual([diff.key for diff in versioned.changes_since(base.id)], [b"a"])
+
+            rolled_back = versioned.rollback_to(base.id)
+            self.assertEqual(versioned.head_id(), rolled_back.id)
+            self.assertEqual(versioned.get(b"a"), b"one")
+            self.assertEqual(versioned.changes_since(base.id), [])
+
     def test_versioned_subscription_resumes_and_polls_owned_diffs(self):
         with Engine.memory() as engine:
             versioned = engine.versioned_map(b"subscription")

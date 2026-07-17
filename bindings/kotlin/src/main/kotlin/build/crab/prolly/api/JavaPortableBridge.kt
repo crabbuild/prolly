@@ -295,6 +295,40 @@ private fun ProximityVerificationRecord.toJava() = JavaProximityVerification(
 
 object JavaPortableBridge {
     @JvmStatic
+    fun versionedRangePage(
+        map: VersionedMap,
+        cursor: RangeCursorRecord?,
+        end: ByteArray?,
+        limit: Long,
+    ): RangePageRecord = map.rangePage(cursor, end, limit.toULong())
+
+    @JvmStatic
+    fun versionedPrefixPage(
+        map: VersionedMap,
+        prefix: ByteArray,
+        cursor: RangeCursorRecord?,
+        limit: Long,
+    ): RangePageRecord = map.prefixPage(prefix, cursor, limit.toULong())
+
+    @JvmStatic
+    fun versionedRangePageAt(
+        map: VersionedMap,
+        id: ByteArray,
+        cursor: RangeCursorRecord?,
+        end: ByteArray?,
+        limit: Long,
+    ): RangePageRecord = map.rangePageAt(id, cursor, end, limit.toULong())
+
+    @JvmStatic
+    fun versionedPrefixPageAt(
+        map: VersionedMap,
+        id: ByteArray,
+        prefix: ByteArray,
+        cursor: RangeCursorRecord?,
+        limit: Long,
+    ): RangePageRecord = map.prefixPageAt(id, prefix, cursor, limit.toULong())
+
+    @JvmStatic
     fun mapSnapshotProveRangePage(
         snapshot: MapSnapshot,
         cursor: RangeCursorRecord?,
