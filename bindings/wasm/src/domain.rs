@@ -339,6 +339,22 @@ impl WasmVersionedMap {
             .and_then(map_version_object)
     }
 
+    #[wasm_bindgen(js_name = applyAtMillis)]
+    pub fn apply_at_millis(
+        &self,
+        mutations: Array,
+        timestamp_millis: u64,
+    ) -> Result<Object, JsValue> {
+        self.engine
+            .versioned_map(&self.id)
+            .apply_at_millis(
+                crate::indexed::mutations_from_array(&mutations)?,
+                timestamp_millis,
+            )
+            .map_err(js_error)
+            .and_then(map_version_object)
+    }
+
     #[wasm_bindgen(js_name = applyIf)]
     pub fn apply_if(
         &self,
@@ -354,6 +370,28 @@ impl WasmVersionedMap {
             .apply_if(
                 expected.as_ref(),
                 crate::indexed::mutations_from_array(&mutations)?,
+            )
+            .map_err(js_error)
+            .and_then(map_update_object)
+    }
+
+    #[wasm_bindgen(js_name = applyIfAtMillis)]
+    pub fn apply_if_at_millis(
+        &self,
+        expected: Option<Uint8Array>,
+        mutations: Array,
+        timestamp_millis: u64,
+    ) -> Result<Object, JsValue> {
+        let expected = expected
+            .map(|value| MapVersionId::from_bytes(&value.to_vec()))
+            .transpose()
+            .map_err(js_error)?;
+        self.engine
+            .versioned_map(&self.id)
+            .apply_if_at_millis(
+                expected.as_ref(),
+                crate::indexed::mutations_from_array(&mutations)?,
+                timestamp_millis,
             )
             .map_err(js_error)
             .and_then(map_update_object)
@@ -549,10 +587,55 @@ impl WasmVersionedMap {
             .versioned_map(&self.id)
             .keep_last(count as usize)
             .map_err(js_error)?;
-        let object = Object::new();
-        set_version_ids(&object, "retained", result.retained)?;
-        set_version_ids(&object, "removed", result.removed)?;
-        Ok(object)
+        version_prune_object(result)
+    }
+
+    #[wasm_bindgen(js_name = pruneVersions)]
+    pub fn prune_versions(&self, keep_latest: u64) -> Result<Object, JsValue> {
+        let keep_latest = usize::try_from(keep_latest)
+            .map_err(|_| JsValue::from_str("version count does not fit this platform"))?;
+        self.engine
+            .versioned_map(&self.id)
+            .prune_versions(keep_latest)
+            .map_err(js_error)
+            .and_then(version_prune_object)
+    }
+
+    #[wasm_bindgen(js_name = keepForAt)]
+    pub fn keep_for_at(&self, now_millis: u64, max_age_millis: u64) -> Result<Object, JsValue> {
+        self.engine
+            .versioned_map(&self.id)
+            .keep_for_at(now_millis, std::time::Duration::from_millis(max_age_millis))
+            .map_err(js_error)
+            .and_then(version_prune_object)
+    }
+
+    #[wasm_bindgen(js_name = keepFor)]
+    pub fn keep_for(&self, max_age_millis: u64) -> Result<Object, JsValue> {
+        self.engine
+            .versioned_map(&self.id)
+            .keep_for(std::time::Duration::from_millis(max_age_millis))
+            .map_err(js_error)
+            .and_then(version_prune_object)
+    }
+
+    #[wasm_bindgen(js_name = keepVersions)]
+    pub fn keep_versions(&self, ids: Array) -> Result<Object, JsValue> {
+        let ids = ids
+            .iter()
+            .map(|value| MapVersionId::from_bytes(&Uint8Array::new(&value).to_vec()))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(js_error)?;
+        self.engine
+            .versioned_map(&self.id)
+            .keep_versions(&ids)
+            .map_err(js_error)
+            .and_then(version_prune_object)
+    }
+
+    #[wasm_bindgen(js_name = retentionPolicy)]
+    pub fn retention_policy(&self) -> Result<Object, JsValue> {
+        named_root_retention_object(self.engine.versioned_map(&self.id).retention_policy())
     }
 
     #[wasm_bindgen(js_name = verifyCatalog)]
@@ -562,7 +645,7 @@ impl WasmVersionedMap {
             .versioned_map(&self.id)
             .verify_catalog()
             .map_err(js_error)?;
-        maintenance_summary(value.version_count as u64, value.reachable_bytes as u64)
+        catalog_verification_object(value)
     }
 
     #[wasm_bindgen(js_name = planGc)]
@@ -572,10 +655,16 @@ impl WasmVersionedMap {
             .versioned_map(&self.id)
             .plan_gc()
             .map_err(js_error)?;
-        maintenance_summary(
-            value.reachability.live_nodes as u64,
-            value.reclaimable_bytes as u64,
-        )
+        gc_plan_object(value)
+    }
+
+    #[wasm_bindgen(js_name = sweepGc)]
+    pub fn sweep_gc(&self) -> Result<Object, JsValue> {
+        self.engine
+            .versioned_map(&self.id)
+            .sweep_gc()
+            .map_err(js_error)
+            .and_then(gc_sweep_object)
     }
 }
 
@@ -1376,6 +1465,117 @@ fn set_version_ids(object: &Object, name: &str, values: Vec<MapVersionId>) -> Re
     }
     Reflect::set(object, &name.into(), &array.into())?;
     Ok(())
+}
+
+fn version_prune_object(value: prolly::VersionPruneResult) -> Result<Object, JsValue> {
+    let object = Object::new();
+    set_version_ids(&object, "retained", value.retained)?;
+    set_version_ids(&object, "removed", value.removed)?;
+    Ok(object)
+}
+
+fn cid_array(values: &[prolly::Cid]) -> Array {
+    let array = Array::new();
+    for value in values {
+        array.push(&Uint8Array::from(value.as_bytes()).into());
+    }
+    array
+}
+
+fn set_count(object: &Object, name: &str, value: usize) -> Result<(), JsValue> {
+    Reflect::set(object, &name.into(), &value.to_string().into())?;
+    Ok(())
+}
+
+fn named_root_retention_object(value: prolly::NamedRootRetention) -> Result<Object, JsValue> {
+    let object = Object::new();
+    let names = Array::new();
+    Reflect::set(&object, &"names".into(), &names.into())?;
+    match value {
+        prolly::NamedRootRetention::All => {
+            Reflect::set(&object, &"kind".into(), &"all".into())?;
+        }
+        prolly::NamedRootRetention::Exact { names } => {
+            Reflect::set(&object, &"kind".into(), &"exact".into())?;
+            let values = Array::new();
+            for name in names {
+                values.push(&Uint8Array::from(name.as_slice()).into());
+            }
+            Reflect::set(&object, &"names".into(), &values.into())?;
+        }
+        prolly::NamedRootRetention::Prefix { prefix } => {
+            Reflect::set(&object, &"kind".into(), &"prefix".into())?;
+            set_bytes(&object, "prefix", &prefix)?;
+        }
+        prolly::NamedRootRetention::NewestByName { prefix, count } => {
+            Reflect::set(&object, &"kind".into(), &"newest_by_name".into())?;
+            set_bytes(&object, "prefix", &prefix)?;
+            set_count(&object, "count", count)?;
+        }
+        prolly::NamedRootRetention::UpdatedSince {
+            prefix,
+            min_updated_at_millis,
+        } => {
+            Reflect::set(&object, &"kind".into(), &"updated_since".into())?;
+            set_bytes(&object, "prefix", &prefix)?;
+            Reflect::set(
+                &object,
+                &"minUpdatedAtMillis".into(),
+                &min_updated_at_millis.to_string().into(),
+            )?;
+        }
+    }
+    Ok(object)
+}
+
+fn catalog_verification_object(value: prolly::MapCatalogVerification) -> Result<Object, JsValue> {
+    let object = Object::new();
+    set_bytes(&object, "head", value.head.as_cid().as_bytes())?;
+    set_count(&object, "versionCount", value.version_count)?;
+    set_count(&object, "reachableNodes", value.reachable_nodes)?;
+    set_count(&object, "reachableBytes", value.reachable_bytes)?;
+    Ok(object)
+}
+
+fn gc_reachability_object(value: prolly::GcReachability) -> Result<Object, JsValue> {
+    let object = Object::new();
+    Reflect::set(
+        &object,
+        &"liveCids".into(),
+        &cid_array(&value.live_cids).into(),
+    )?;
+    set_count(&object, "liveNodes", value.live_nodes)?;
+    set_count(&object, "liveBytes", value.live_bytes)?;
+    set_count(&object, "leafNodes", value.leaf_nodes)?;
+    set_count(&object, "internalNodes", value.internal_nodes)?;
+    Ok(object)
+}
+
+fn gc_plan_object(value: prolly::GcPlan) -> Result<Object, JsValue> {
+    let object = Object::new();
+    Reflect::set(
+        &object,
+        &"reachability".into(),
+        &gc_reachability_object(value.reachability)?.into(),
+    )?;
+    set_count(&object, "candidateNodes", value.candidate_nodes)?;
+    Reflect::set(
+        &object,
+        &"reclaimableCids".into(),
+        &cid_array(&value.reclaimable_cids).into(),
+    )?;
+    set_count(&object, "reclaimableNodes", value.reclaimable_nodes)?;
+    set_count(&object, "reclaimableBytes", value.reclaimable_bytes)?;
+    set_count(&object, "missingCandidates", value.missing_candidates)?;
+    Ok(object)
+}
+
+fn gc_sweep_object(value: prolly::GcSweep) -> Result<Object, JsValue> {
+    let object = Object::new();
+    Reflect::set(&object, &"plan".into(), &gc_plan_object(value.plan)?.into())?;
+    set_count(&object, "deletedNodes", value.deleted_nodes)?;
+    set_count(&object, "deletedBytes", value.deleted_bytes)?;
+    Ok(object)
 }
 
 #[wasm_bindgen(js_class = WasmProllyEngine)]

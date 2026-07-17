@@ -1,9 +1,9 @@
 use super::{
     to_napi_error, NativeProllyEngine, NodeConflictPageRecord, NodeDiffPageRecord, NodeDiffRecord,
-    NodeEntryRecord, NodeMultiKeyProofVerificationRecord, NodeMutationRecord,
-    NodeRangeCursorRecord, NodeRangePageProofVerificationRecord, NodeRangePageRecord,
-    NodeRangeProofVerificationRecord, NodeReverseCursorRecord, NodeReversePageRecord,
-    NodeTreeRecord,
+    NodeEntryRecord, NodeGcPlanRecord, NodeGcSweepRecord, NodeMultiKeyProofVerificationRecord,
+    NodeMutationRecord, NodeNamedRootRetentionRecord, NodeRangeCursorRecord,
+    NodeRangePageProofVerificationRecord, NodeRangePageRecord, NodeRangeProofVerificationRecord,
+    NodeReverseCursorRecord, NodeReversePageRecord, NodeTreeRecord,
 };
 use napi::bindgen_prelude::{Buffer, Env, Error, Float32Array, FunctionRef, Result, Status};
 use napi::JsObject;
@@ -646,6 +646,14 @@ pub struct NodePortableMaintenanceSummary {
 }
 
 #[napi(object)]
+pub struct NodePortableCatalogVerification {
+    pub head: Buffer,
+    pub version_count: String,
+    pub reachable_nodes: String,
+    pub reachable_bytes: String,
+}
+
+#[napi(object)]
 pub struct NodePortableReadScanOutcome {
     pub visited: String,
     pub stopped: bool,
@@ -997,6 +1005,28 @@ impl NativePortableVersionedMap {
             .map_err(to_napi_error)
     }
 
+    #[napi(js_name = "applyAtMillis")]
+    pub fn apply_at_millis(
+        &self,
+        mutations: Vec<NodeMutationRecord>,
+        timestamp_millis: String,
+    ) -> Result<NodePortableMapVersion> {
+        let mutations = mutations
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect::<Result<Vec<_>>>()?;
+        let timestamp_millis = timestamp_millis.parse::<u64>().map_err(|_| {
+            Error::new(
+                Status::InvalidArg,
+                "timestamp must be an unsigned 64-bit integer",
+            )
+        })?;
+        self.inner
+            .apply_at_millis(mutations, timestamp_millis)
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
     #[napi(js_name = "applyIf")]
     pub fn apply_if(
         &self,
@@ -1009,6 +1039,33 @@ impl NativePortableVersionedMap {
             .collect::<Result<Vec<_>>>()?;
         self.inner
             .apply_if(expected.map(|value| value.to_vec()), mutations)
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "applyIfAtMillis")]
+    pub fn apply_if_at_millis(
+        &self,
+        expected: Option<Buffer>,
+        mutations: Vec<NodeMutationRecord>,
+        timestamp_millis: String,
+    ) -> Result<NodePortableMapUpdate> {
+        let mutations = mutations
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect::<Result<Vec<_>>>()?;
+        let timestamp_millis = timestamp_millis.parse::<u64>().map_err(|_| {
+            Error::new(
+                Status::InvalidArg,
+                "timestamp must be an unsigned 64-bit integer",
+            )
+        })?;
+        self.inner
+            .apply_if_at_millis(
+                expected.map(|value| value.to_vec()),
+                mutations,
+                timestamp_millis,
+            )
             .map(Into::into)
             .map_err(to_napi_error)
     }
@@ -1130,26 +1187,71 @@ impl NativePortableVersionedMap {
             .map_err(to_napi_error)
     }
 
+    #[napi(js_name = "pruneVersions")]
+    pub fn prune_versions(&self, keep_latest: String) -> Result<NodePortableVersionPrune> {
+        self.inner
+            .prune_versions(parse_index_page_limit(&keep_latest)?)
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "keepForAt")]
+    pub fn keep_for_at(
+        &self,
+        now_millis: String,
+        max_age_millis: String,
+    ) -> Result<NodePortableVersionPrune> {
+        self.inner
+            .keep_for_at(
+                parse_index_page_limit(&now_millis)?,
+                parse_index_page_limit(&max_age_millis)?,
+            )
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "keepFor")]
+    pub fn keep_for(&self, max_age_millis: String) -> Result<NodePortableVersionPrune> {
+        self.inner
+            .keep_for(parse_index_page_limit(&max_age_millis)?)
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "keepVersions")]
+    pub fn keep_versions(&self, ids: Vec<Buffer>) -> Result<NodePortableVersionPrune> {
+        self.inner
+            .keep_versions(ids.into_iter().map(|id| id.to_vec()).collect())
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "retentionPolicy")]
+    pub fn retention_policy(&self) -> NodeNamedRootRetentionRecord {
+        self.inner.retention_policy().into()
+    }
+
     #[napi(js_name = "verifyCatalog")]
-    pub fn verify_catalog(&self) -> Result<NodePortableMaintenanceSummary> {
+    pub fn verify_catalog(&self) -> Result<NodePortableCatalogVerification> {
         self.inner
             .verify_catalog()
-            .map(|value| NodePortableMaintenanceSummary {
-                item_count: value.version_count.to_string(),
-                byte_count: value.reachable_bytes.to_string(),
+            .map(|value| NodePortableCatalogVerification {
+                head: Buffer::from(value.head),
+                version_count: value.version_count.to_string(),
+                reachable_nodes: value.reachable_nodes.to_string(),
+                reachable_bytes: value.reachable_bytes.to_string(),
             })
             .map_err(to_napi_error)
     }
 
     #[napi(js_name = "planGc")]
-    pub fn plan_gc(&self) -> Result<NodePortableMaintenanceSummary> {
-        self.inner
-            .plan_gc()
-            .map(|value| NodePortableMaintenanceSummary {
-                item_count: value.reachability.live_nodes.to_string(),
-                byte_count: value.reclaimable_bytes.to_string(),
-            })
-            .map_err(to_napi_error)
+    pub fn plan_gc(&self) -> Result<NodeGcPlanRecord> {
+        self.inner.plan_gc().map(Into::into).map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "sweepGc")]
+    pub fn sweep_gc(&self) -> Result<NodeGcSweepRecord> {
+        self.inner.sweep_gc().map(Into::into).map_err(to_napi_error)
     }
 }
 

@@ -128,8 +128,12 @@ class VersionedMap(internal val native: BindingVersionedMap) : AutoCloseable {
     fun rollbackTo(id: ByteArray) = native.rollbackTo(id.copyOf())
     fun put(key: ByteArray, value: ByteArray) = native.put(key.copyOf(), value.copyOf())
     fun apply(mutations: List<MutationRecord>) = native.apply(mutations.map(::ownedMutation))
+    fun applyAtMillis(mutations: List<MutationRecord>, timestampMillis: ULong) =
+        native.applyAtMillis(mutations.map(::ownedMutation), timestampMillis)
     fun applyIf(expected: ByteArray?, mutations: List<MutationRecord>) =
         native.applyIf(expected?.copyOf(), mutations.map(::ownedMutation))
+    fun applyIfAtMillis(expected: ByteArray?, mutations: List<MutationRecord>, timestampMillis: ULong) =
+        native.applyIfAtMillis(expected?.copyOf(), mutations.map(::ownedMutation), timestampMillis)
     fun putIf(expected: ByteArray?, key: ByteArray, value: ByteArray) =
         native.putIf(expected?.copyOf(), key.copyOf(), value.copyOf())
     fun deleteIf(expected: ByteArray?, key: ByteArray) =
@@ -150,6 +154,11 @@ class VersionedMap(internal val native: BindingVersionedMap) : AutoCloseable {
     fun restoreBackup(bundle: ByteArray) = native.restoreBackup(bundle.copyOf())
     fun importAsHead(bundle: SnapshotBundleRecord) = native.importAsHead(bundle)
     fun keepLast(count: ULong) = native.keepLast(count)
+    fun pruneVersions(keepLatest: ULong) = native.pruneVersions(keepLatest)
+    fun keepForAt(nowMillis: ULong, maxAgeMillis: ULong) = native.keepForAt(nowMillis, maxAgeMillis)
+    fun keepFor(maxAgeMillis: ULong) = native.keepFor(maxAgeMillis)
+    fun keepVersions(ids: List<ByteArray>) = native.keepVersions(ids.map(ByteArray::copyOf))
+    fun retentionPolicy() = native.retentionPolicy()
     fun verifyCatalog() = native.verifyCatalog()
     fun planGc() = native.planGc()
     fun sweepGc() = native.sweepGc()

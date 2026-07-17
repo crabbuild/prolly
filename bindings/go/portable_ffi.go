@@ -84,7 +84,9 @@ extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_get_at(ui
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_get_many_at(uint64_t ptr, RustBuffer id, RustBuffer keys, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_put(uint64_t ptr, RustBuffer key, RustBuffer value, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_apply(uint64_t ptr, RustBuffer mutations, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_apply_at_millis(uint64_t ptr, RustBuffer mutations, uint64_t timestamp_millis, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_apply_if(uint64_t ptr, RustBuffer expected, RustBuffer mutations, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_apply_if_at_millis(uint64_t ptr, RustBuffer expected, RustBuffer mutations, uint64_t timestamp_millis, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_put_if(uint64_t ptr, RustBuffer expected, RustBuffer key, RustBuffer value, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_delete_if(uint64_t ptr, RustBuffer expected, RustBuffer key, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_delete(uint64_t ptr, RustBuffer key, RustCallStatus *out_err);
@@ -94,7 +96,14 @@ extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_backup(ui
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_restore_backup(uint64_t ptr, RustBuffer bytes, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_rollback_to(uint64_t ptr, RustBuffer id, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_keep_last(uint64_t ptr, uint64_t count, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_prune_versions(uint64_t ptr, uint64_t keep_latest, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_keep_for_at(uint64_t ptr, uint64_t now_millis, uint64_t max_age_millis, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_keep_for(uint64_t ptr, uint64_t max_age_millis, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_keep_versions(uint64_t ptr, RustBuffer ids, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_verify_catalog(uint64_t ptr, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_retention_policy(uint64_t ptr, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_plan_gc(uint64_t ptr, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingversionedmap_sweep_gc(uint64_t ptr, RustCallStatus *out_err);
 extern uint64_t uniffi_prolly_bindings_fn_method_bindingversionedmap_prepare_merge(uint64_t ptr, RustBuffer base, RustBuffer candidate, RustCallStatus *out_err);
 extern uint64_t uniffi_prolly_bindings_fn_clone_bindingmapmerge(uint64_t ptr, RustCallStatus *out_err);
 extern void uniffi_prolly_bindings_fn_free_bindingmapmerge(uint64_t ptr, RustCallStatus *out_err);
@@ -659,6 +668,25 @@ func ffiVersionedApply(handle uint64, mutations []byte) ([]byte, error) {
 	return portableTakeBuffer(buf), nil
 }
 
+func ffiVersionedApplyAtMillis(handle uint64, mutations []byte, timestampMillis uint64) ([]byte, error) {
+	clone, err := portableCloneVersioned(handle)
+	if err != nil {
+		return nil, err
+	}
+	mutationsBuf, err := portableInput(mutations)
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingversionedmap_apply_at_millis(
+		clone, mutationsBuf, C.uint64_t(timestampMillis), &status,
+	)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
 func ffiVersionedApplyIf(handle uint64, expected, mutations []byte) ([]byte, error) {
 	clone, err := portableCloneVersioned(handle)
 	if err != nil {
@@ -674,6 +702,29 @@ func ffiVersionedApplyIf(handle uint64, expected, mutations []byte) ([]byte, err
 	}
 	var status C.RustCallStatus
 	buf := C.uniffi_prolly_bindings_fn_method_bindingversionedmap_apply_if(clone, expectedBuf, mutationsBuf, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiVersionedApplyIfAtMillis(handle uint64, expected, mutations []byte, timestampMillis uint64) ([]byte, error) {
+	clone, err := portableCloneVersioned(handle)
+	if err != nil {
+		return nil, err
+	}
+	expectedBuf, err := portableInput(encodeOptionalByteArray(expected))
+	if err != nil {
+		return nil, err
+	}
+	mutationsBuf, err := portableInput(mutations)
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingversionedmap_apply_if_at_millis(
+		clone, expectedBuf, mutationsBuf, C.uint64_t(timestampMillis), &status,
+	)
 	if err := portableStatusError(&status); err != nil {
 		return nil, err
 	}
@@ -849,6 +900,66 @@ func ffiVersionedKeepLast(handle, count uint64) ([]byte, error) {
 	return portableTakeBuffer(buf), nil
 }
 
+func ffiVersionedCountArg(
+	handle, count uint64,
+	call func(C.uint64_t, C.uint64_t, *C.RustCallStatus) C.RustBuffer,
+) ([]byte, error) {
+	clone, err := portableCloneVersioned(handle)
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := call(clone, C.uint64_t(count), &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiVersionedPruneVersions(handle, keepLatest uint64) ([]byte, error) {
+	return ffiVersionedCountArg(handle, keepLatest, func(clone, count C.uint64_t, status *C.RustCallStatus) C.RustBuffer {
+		return C.uniffi_prolly_bindings_fn_method_bindingversionedmap_prune_versions(clone, count, status)
+	})
+}
+
+func ffiVersionedKeepFor(handle, maxAgeMillis uint64) ([]byte, error) {
+	return ffiVersionedCountArg(handle, maxAgeMillis, func(clone, age C.uint64_t, status *C.RustCallStatus) C.RustBuffer {
+		return C.uniffi_prolly_bindings_fn_method_bindingversionedmap_keep_for(clone, age, status)
+	})
+}
+
+func ffiVersionedKeepForAt(handle, nowMillis, maxAgeMillis uint64) ([]byte, error) {
+	clone, err := portableCloneVersioned(handle)
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingversionedmap_keep_for_at(
+		clone, C.uint64_t(nowMillis), C.uint64_t(maxAgeMillis), &status,
+	)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiVersionedKeepVersions(handle uint64, ids [][]byte) ([]byte, error) {
+	clone, err := portableCloneVersioned(handle)
+	if err != nil {
+		return nil, err
+	}
+	idsBuf, err := portableInput(encodeByteArraySequence(ids))
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingversionedmap_keep_versions(clone, idsBuf, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
 func ffiVersionedVerifyCatalog(handle uint64) ([]byte, error) {
 	clone, err := portableCloneVersioned(handle)
 	if err != nil {
@@ -860,6 +971,24 @@ func ffiVersionedVerifyCatalog(handle uint64) ([]byte, error) {
 		return nil, err
 	}
 	return portableTakeBuffer(buf), nil
+}
+
+func ffiVersionedRetentionPolicy(handle uint64) ([]byte, error) {
+	return ffiVersionedNoArg(handle, func(clone C.uint64_t, status *C.RustCallStatus) C.RustBuffer {
+		return C.uniffi_prolly_bindings_fn_method_bindingversionedmap_retention_policy(clone, status)
+	})
+}
+
+func ffiVersionedPlanGC(handle uint64) ([]byte, error) {
+	return ffiVersionedNoArg(handle, func(clone C.uint64_t, status *C.RustCallStatus) C.RustBuffer {
+		return C.uniffi_prolly_bindings_fn_method_bindingversionedmap_plan_gc(clone, status)
+	})
+}
+
+func ffiVersionedSweepGC(handle uint64) ([]byte, error) {
+	return ffiVersionedNoArg(handle, func(clone C.uint64_t, status *C.RustCallStatus) C.RustBuffer {
+		return C.uniffi_prolly_bindings_fn_method_bindingversionedmap_sweep_gc(clone, status)
+	})
 }
 
 func ffiMapSnapshotGet(handle uint64, key []byte) ([]byte, error) {

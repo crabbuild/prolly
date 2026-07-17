@@ -23,6 +23,35 @@ export interface VersionPrune {
   retained: Uint8Array[];
   removed: Uint8Array[];
 }
+export interface CatalogVerification {
+  head: Uint8Array;
+  versionCount: bigint;
+  reachableNodes: bigint;
+  reachableBytes: bigint;
+}
+export interface GcReachability {
+  liveCids: Uint8Array[];
+  liveNodes: bigint;
+  liveBytes: bigint;
+  leafNodes: bigint;
+  internalNodes: bigint;
+}
+export interface GcPlan {
+  reachability: GcReachability;
+  candidateNodes: bigint;
+  reclaimableCids: Uint8Array[];
+  reclaimableNodes: bigint;
+  reclaimableBytes: bigint;
+  missingCandidates: bigint;
+}
+export interface GcSweep { plan: GcPlan; deletedNodes: bigint; deletedBytes: bigint; }
+export interface NamedRootRetention {
+  kind: "all" | "exact" | "prefix" | "newest_by_name" | "updated_since";
+  names: Uint8Array[];
+  prefix?: Uint8Array;
+  count?: bigint;
+  minUpdatedAtMillis?: bigint;
+}
 
 export interface MapEntry { key: Uint8Array; value: Uint8Array; }
 export interface RangeCursor { afterKey?: Uint8Array; }
@@ -110,7 +139,9 @@ interface NativeVersionedMap {
   rollbackTo(id: Uint8Array): NativeMapVersion;
   put(key: Uint8Array, value: Uint8Array): NativeMapVersion;
   apply(mutations: MapMutation[]): NativeMapVersion;
+  applyAtMillis(mutations: MapMutation[], timestampMillis: string): NativeMapVersion;
   applyIf(expected: Uint8Array | null, mutations: MapMutation[]): NativeMapUpdate;
+  applyIfAtMillis(expected: Uint8Array | null, mutations: MapMutation[], timestampMillis: string): NativeMapUpdate;
   putIf(expected: Uint8Array | null, key: Uint8Array, value: Uint8Array): NativeMapUpdate;
   deleteIf(expected: Uint8Array | null, key: Uint8Array): NativeMapUpdate;
   delete(key: Uint8Array): NativeMapVersion;
@@ -124,8 +155,14 @@ interface NativeVersionedMap {
   backup(): Uint8Array;
   restoreBackup(bytes: Uint8Array): NativeMapVersion;
   keepLast(count: number): { retained: Uint8Array[]; removed: Uint8Array[] };
-  verifyCatalog(): NativeMaintenanceSummary;
-  planGc(): NativeMaintenanceSummary;
+  pruneVersions(keepLatest: string): { retained: Uint8Array[]; removed: Uint8Array[] };
+  keepForAt(nowMillis: string, maxAgeMillis: string): { retained: Uint8Array[]; removed: Uint8Array[] };
+  keepFor(maxAgeMillis: string): { retained: Uint8Array[]; removed: Uint8Array[] };
+  keepVersions(ids: Uint8Array[]): { retained: Uint8Array[]; removed: Uint8Array[] };
+  retentionPolicy(): NativeNamedRootRetention;
+  verifyCatalog(): NativeCatalogVerification;
+  planGc(): NativeGcPlan;
+  sweepGc(): NativeGcSweep;
 }
 
 interface NativeMapComparison {
@@ -171,6 +208,11 @@ interface NativeMapUpdate {
 }
 
 interface NativeMaintenanceSummary { itemCount: string; byteCount: string; }
+interface NativeCatalogVerification { head: Uint8Array; versionCount: string; reachableNodes: string; reachableBytes: string; }
+interface NativeGcReachability { liveCids: Uint8Array[]; liveNodes: string; liveBytes: string; leafNodes: string; internalNodes: string; }
+interface NativeGcPlan { reachability: NativeGcReachability; candidateNodes: string; reclaimableCids: Uint8Array[]; reclaimableNodes: string; reclaimableBytes: string; missingCandidates: string; }
+interface NativeGcSweep { plan: NativeGcPlan; deletedNodes: string; deletedBytes: string; }
+interface NativeNamedRootRetention { kind: NamedRootRetention["kind"]; names: Uint8Array[]; prefix?: Uint8Array; count?: string; minUpdatedAtMillis?: string; }
 interface NativeMapSnapshot {
   id(): Uint8Array;
   version(): NativeMapVersion;
@@ -221,6 +263,42 @@ function maintenance(value: NativeMaintenanceSummary): MaintenanceSummary {
   return { itemCount: BigInt(value.itemCount), byteCount: BigInt(value.byteCount) };
 }
 
+function catalogVerification(value: NativeCatalogVerification): CatalogVerification {
+  return {
+    head: value.head,
+    versionCount: BigInt(value.versionCount),
+    reachableNodes: BigInt(value.reachableNodes),
+    reachableBytes: BigInt(value.reachableBytes),
+  };
+}
+
+function gcPlan(value: NativeGcPlan): GcPlan {
+  return {
+    reachability: {
+      liveCids: value.reachability.liveCids,
+      liveNodes: BigInt(value.reachability.liveNodes),
+      liveBytes: BigInt(value.reachability.liveBytes),
+      leafNodes: BigInt(value.reachability.leafNodes),
+      internalNodes: BigInt(value.reachability.internalNodes),
+    },
+    candidateNodes: BigInt(value.candidateNodes),
+    reclaimableCids: value.reclaimableCids,
+    reclaimableNodes: BigInt(value.reclaimableNodes),
+    reclaimableBytes: BigInt(value.reclaimableBytes),
+    missingCandidates: BigInt(value.missingCandidates),
+  };
+}
+
+function retention(value: NativeNamedRootRetention): NamedRootRetention {
+  return {
+    kind: value.kind,
+    names: value.names,
+    prefix: value.prefix,
+    count: value.count == null ? undefined : BigInt(value.count),
+    minUpdatedAtMillis: value.minUpdatedAtMillis == null ? undefined : BigInt(value.minUpdatedAtMillis),
+  };
+}
+
 function mapVersion(value: NativeMapVersion): MapVersion {
   return {
     id: value.id,
@@ -251,6 +329,13 @@ function checkedPageLimit(limit: bigint): string {
     throw new RangeError("page limit must be an unsigned 64-bit integer");
   }
   return limit.toString();
+}
+
+function checkedU64(value: bigint, name: string): string {
+  if (value < 0n || value > 0xffff_ffff_ffff_ffffn) {
+    throw new RangeError(`${name} must be an unsigned 64-bit integer`);
+  }
+  return value.toString();
 }
 
 function ownedRangeCursor(cursor: RangeCursor | undefined): RangeCursor | null {
@@ -412,11 +497,23 @@ export class VersionedMap implements Disposable {
     return nativePromise(signal, () => mapVersion(native.apply(owned)));
   }
 
+  applyAtMillis(mutations: readonly MapMutation[], timestampMillis: bigint, signal?: AbortSignal): Promise<MapVersion> {
+    const native = this.#open(); const owned = ownedMutations(mutations);
+    const timestamp = checkedU64(timestampMillis, "timestampMillis");
+    return nativePromise(signal, () => mapVersion(native.applyAtMillis(owned, timestamp)));
+  }
+
   applyIf(expected: Uint8Array | undefined, mutations: readonly MapMutation[], signal?: AbortSignal): Promise<MapUpdate> {
     const native = this.#open();
     const ownedExpected = expected == null ? null : ownedBytes(expected);
     const owned = ownedMutations(mutations);
     return nativePromise(signal, () => mapUpdate(native.applyIf(ownedExpected, owned)));
+  }
+
+  applyIfAtMillis(expected: Uint8Array | undefined, mutations: readonly MapMutation[], timestampMillis: bigint, signal?: AbortSignal): Promise<MapUpdate> {
+    const native = this.#open(); const ownedExpected = expected == null ? null : ownedBytes(expected);
+    const owned = ownedMutations(mutations); const timestamp = checkedU64(timestampMillis, "timestampMillis");
+    return nativePromise(signal, () => mapUpdate(native.applyIfAtMillis(ownedExpected, owned, timestamp)));
   }
 
   putIf(expected: Uint8Array | undefined, key: Uint8Array, value: Uint8Array, signal?: AbortSignal): Promise<MapUpdate> {
@@ -493,14 +590,45 @@ export class VersionedMap implements Disposable {
     return nativePromise(signal, () => native.keepLast(count));
   }
 
-  verifyCatalog(signal?: AbortSignal): Promise<MaintenanceSummary> {
-    const native = this.#open();
-    return nativePromise(signal, () => maintenance(native.verifyCatalog()));
+  pruneVersions(keepLatest: bigint, signal?: AbortSignal): Promise<VersionPrune> {
+    const native = this.#open(); const count = checkedU64(keepLatest, "keepLatest");
+    return nativePromise(signal, () => native.pruneVersions(count));
   }
 
-  planGc(signal?: AbortSignal): Promise<MaintenanceSummary> {
+  keepForAt(nowMillis: bigint, maxAgeMillis: bigint, signal?: AbortSignal): Promise<VersionPrune> {
+    const native = this.#open(); const now = checkedU64(nowMillis, "nowMillis");
+    const age = checkedU64(maxAgeMillis, "maxAgeMillis");
+    return nativePromise(signal, () => native.keepForAt(now, age));
+  }
+
+  keepFor(maxAgeMillis: bigint, signal?: AbortSignal): Promise<VersionPrune> {
+    const native = this.#open(); const age = checkedU64(maxAgeMillis, "maxAgeMillis");
+    return nativePromise(signal, () => native.keepFor(age));
+  }
+
+  keepVersions(ids: readonly Uint8Array[], signal?: AbortSignal): Promise<VersionPrune> {
+    const native = this.#open(); const owned = ids.map(ownedBytes);
+    return nativePromise(signal, () => native.keepVersions(owned));
+  }
+
+  retentionPolicy(): NamedRootRetention { return retention(this.#open().retentionPolicy()); }
+
+  verifyCatalog(signal?: AbortSignal): Promise<CatalogVerification> {
     const native = this.#open();
-    return nativePromise(signal, () => maintenance(native.planGc()));
+    return nativePromise(signal, () => catalogVerification(native.verifyCatalog()));
+  }
+
+  planGc(signal?: AbortSignal): Promise<GcPlan> {
+    const native = this.#open();
+    return nativePromise(signal, () => gcPlan(native.planGc()));
+  }
+
+  sweepGc(signal?: AbortSignal): Promise<GcSweep> {
+    const native = this.#open();
+    return nativePromise(signal, () => {
+      const value = native.sweepGc();
+      return { plan: gcPlan(value.plan), deletedNodes: BigInt(value.deletedNodes), deletedBytes: BigInt(value.deletedBytes) };
+    });
   }
 
   close(): void {

@@ -390,6 +390,38 @@ class PortableParityTest {
     }
 
     @Test
+    void versionedTimestampedWritesExposeCompleteMaintenanceAndRetentionRecords() {
+        Prolly.useLocalDebugLibrary();
+        try (Engine engine = Engine.memory(); var map = engine.versionedMap(bytes("maintenance-complete"))) {
+            var first = map.applyAtMillis(List.of(MapMutation.upsert(bytes("k"), bytes("one"))), 1_000);
+            var second = map.applyIfAtMillis(first.id(), List.of(MapMutation.upsert(bytes("k"), bytes("two"))), 2_000).current();
+            var third = map.applyAtMillis(List.of(MapMutation.upsert(bytes("k"), bytes("three"))), 3_000);
+
+        assertEquals(1_000L, first.createdAtMillis().orElseThrow());
+        assertEquals(2_000L, second.createdAtMillis().orElseThrow());
+            assertEquals(NamedRootRetentionKind.PREFIX, map.retentionPolicy().getKind());
+            var verification = map.verifyCatalog();
+            assertArrayEquals(third.id(), verification.getHead());
+            assertEquals(3, map.catalogVersionCount());
+            var plan = map.planGc();
+            assertTrue(plan.reachability().liveNodes() > 0);
+            assertTrue(plan.candidateNodes() >= plan.reclaimableNodes());
+
+            var aged = map.keepForAt(3_000, 1_500);
+            assertTrue(aged.retained().stream().anyMatch(id -> java.util.Arrays.equals(id, second.id())));
+            assertTrue(aged.removed().stream().anyMatch(id -> java.util.Arrays.equals(id, first.id())));
+            var explicit = map.keepVersions(List.of(second.id()));
+            assertTrue(explicit.retained().stream().anyMatch(id -> java.util.Arrays.equals(id, third.id())));
+            var pruned = map.pruneVersions(0);
+            assertEquals(1, pruned.retained().size());
+            assertArrayEquals(third.id(), pruned.retained().get(0));
+            assertTrue(pruned.removed().stream().anyMatch(id -> java.util.Arrays.equals(id, second.id())));
+            assertFalse(map.keepFor(10_000).retained().isEmpty());
+            assertTrue(map.sweepGc().deletedNodes() >= 0);
+        }
+    }
+
+    @Test
     void versionedSubscriptionsResumeAndPollOwnedDiffs() {
         Prolly.useLocalDebugLibrary();
         try (Engine engine = Engine.memory(); var map = engine.versionedMap(bytes("subscription"))) {

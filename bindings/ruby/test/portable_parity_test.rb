@@ -277,6 +277,41 @@ class PortableParityTest < Minitest::Test
     end
   end
 
+  def test_versioned_timestamped_writes_expose_complete_maintenance_records
+    Prolly::Engine.memory.use do |engine|
+      map = engine.versioned_map('maintenance-complete'.b)
+      first = map.apply_at_millis([
+        Prolly::MutationRecord.new(kind: Prolly::MutationKind::UPSERT, key: 'k'.b, value: 'one'.b)
+      ], 1_000)
+      second = map.apply_if_at_millis(first.id, [
+        Prolly::MutationRecord.new(kind: Prolly::MutationKind::UPSERT, key: 'k'.b, value: 'two'.b)
+      ], 2_000).current
+      third = map.apply_at_millis([
+        Prolly::MutationRecord.new(kind: Prolly::MutationKind::UPSERT, key: 'k'.b, value: 'three'.b)
+      ], 3_000)
+
+      assert_equal 1_000, first.created_at_millis
+      assert_equal 2_000, second.created_at_millis
+      assert_equal Prolly::NamedRootRetentionKind::PREFIX, map.retention_policy.kind
+      verification = map.verify_catalog
+      assert_equal third.id, verification.head
+      assert_equal 3, verification.version_count
+      plan = map.plan_gc
+      assert_operator plan.reachability.live_nodes, :>, 0
+      assert_operator plan.candidate_nodes, :>=, plan.reclaimable_nodes
+
+      aged = map.keep_for_at(3_000, 1_500)
+      assert_includes aged.retained, second.id
+      assert_includes aged.removed, first.id
+      assert_includes map.keep_versions([second.id]).retained, third.id
+      pruned = map.prune_versions(0)
+      assert_equal [third.id], pruned.retained
+      assert_includes pruned.removed, second.id
+      refute_empty map.keep_for(10_000).retained
+      assert_operator map.sweep_gc.deleted_nodes, :>=, 0
+    end
+  end
+
 
   def test_versioned_subscription_resumes_and_polls_owned_diffs
     Prolly::Engine.memory.use do |engine|

@@ -296,6 +296,8 @@ module Prolly
     def changes_since(base) = open! { @native.changes_since(base.b) }
     def rollback_to(id) = open! { @native.rollback_to(id.b) }
     def put(key, value) = open! { @native.put(key.b, value.b) }
+    def apply_at_millis(mutations, timestamp_millis) = open! { @native.apply_at_millis(owned_mutations(mutations), timestamp_millis) }
+    def apply_if_at_millis(expected, mutations, timestamp_millis) = open! { @native.apply_if_at_millis(expected&.b, owned_mutations(mutations), timestamp_millis) }
     def delete(key) = open! { @native.delete(key.b) }
     def snapshot = open! { @native.snapshot&.then { |value| MapSnapshot.new(value) } }
     def snapshot_at(id) = open! { @native.snapshot_at(id.b)&.then { |value| MapSnapshot.new(value) } }
@@ -307,6 +309,11 @@ module Prolly
     def backup = open! { @native.backup }
     def restore_backup(bundle) = open! { @native.restore_backup(bundle.b) }
     def keep_last(count) = open! { @native.keep_last(count) }
+    def prune_versions(keep_latest) = open! { @native.prune_versions(keep_latest) }
+    def keep_for_at(now_millis, max_age_millis) = open! { @native.keep_for_at(now_millis, max_age_millis) }
+    def keep_for(max_age_millis) = open! { @native.keep_for(max_age_millis) }
+    def keep_versions(ids) = open! { @native.keep_versions(ids.map { |id| id.b.dup }) }
+    def retention_policy = open! { @native.retention_policy }
     def verify_catalog = open! { @native.verify_catalog }
     def plan_gc = open! { @native.plan_gc }
     def sweep_gc = open! { @native.sweep_gc }
@@ -320,6 +327,14 @@ module Prolly
     def close = @closed = true
 
     private
+
+    def owned_mutations(mutations)
+      mutations.map do |mutation|
+        MutationRecord.new(
+          kind: mutation.kind, key: mutation.key.b.dup, value: mutation.value&.b&.dup
+        )
+      end
+    end
 
     def open!
       raise 'versioned map is closed' if @closed

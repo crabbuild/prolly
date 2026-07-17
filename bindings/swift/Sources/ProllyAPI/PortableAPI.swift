@@ -191,9 +191,32 @@ public final class VersionedMap: @unchecked Sendable {
     public func apply(_ mutations: [MutationRecord]) throws -> MapVersionRecord {
         try open { try native.apply(mutations: mutations.map(ownedMutation)) }
     }
+    public func applyAtMillis(
+        _ mutations: [MutationRecord],
+        timestampMillis: UInt64
+    ) throws -> MapVersionRecord {
+        try open {
+            try native.applyAtMillis(
+                mutations: mutations.map(ownedMutation), timestampMillis: timestampMillis
+            )
+        }
+    }
     public func applyIf(expected: Data?, mutations: [MutationRecord]) throws -> MapUpdateRecord {
         try open {
             try native.applyIf(expected: expected.map { Data($0) }, mutations: mutations.map(ownedMutation))
+        }
+    }
+    public func applyIfAtMillis(
+        expected: Data?,
+        mutations: [MutationRecord],
+        timestampMillis: UInt64
+    ) throws -> MapUpdateRecord {
+        try open {
+            try native.applyIfAtMillis(
+                expected: expected.map { Data($0) },
+                mutations: mutations.map(ownedMutation),
+                timestampMillis: timestampMillis
+            )
         }
     }
     public func putIf(expected: Data?, key: Data, value: Data) throws -> MapUpdateRecord {
@@ -234,6 +257,21 @@ public final class VersionedMap: @unchecked Sendable {
     }
     public func keepLast(_ count: UInt64) throws -> VersionPruneRecord {
         try open { try native.keepLast(count: count) }
+    }
+    public func pruneVersions(_ keepLatest: UInt64) throws -> VersionPruneRecord {
+        try open { try native.pruneVersions(keepLatest: keepLatest) }
+    }
+    public func keepForAt(nowMillis: UInt64, maxAgeMillis: UInt64) throws -> VersionPruneRecord {
+        try open { try native.keepForAt(nowMillis: nowMillis, maxAgeMillis: maxAgeMillis) }
+    }
+    public func keepFor(maxAgeMillis: UInt64) throws -> VersionPruneRecord {
+        try open { try native.keepFor(maxAgeMillis: maxAgeMillis) }
+    }
+    public func keepVersions(_ ids: [Data]) throws -> VersionPruneRecord {
+        try open { try native.keepVersions(ids: ids.map { Data($0) }) }
+    }
+    public func retentionPolicy() -> NamedRootRetentionRecord {
+        native.retentionPolicy()
     }
     public func verifyCatalog() throws -> MapCatalogVerificationRecord {
         try open { try native.verifyCatalog() }

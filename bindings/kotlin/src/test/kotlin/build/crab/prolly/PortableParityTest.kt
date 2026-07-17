@@ -298,6 +298,46 @@ class PortableParityTest {
     }
 
     @Test
+    fun versionedTimestampedWritesExposeCompleteMaintenanceAndRetentionRecords() {
+        ProllyNative.useLocalDebugLibrary()
+        Engine.memory().use { engine ->
+            engine.versionedMap("maintenance-complete".bytes()).use { map ->
+                val first = map.applyAtMillis(listOf(
+                    MutationRecord(MutationKind.UPSERT, "k".bytes(), "one".bytes())
+                ), 1_000uL)
+                val second = map.applyIfAtMillis(first.id, listOf(
+                    MutationRecord(MutationKind.UPSERT, "k".bytes(), "two".bytes())
+                ), 2_000uL).current!!
+                val third = map.applyAtMillis(listOf(
+                    MutationRecord(MutationKind.UPSERT, "k".bytes(), "three".bytes())
+                ), 3_000uL)
+
+                assertEquals(1_000uL, first.createdAtMillis)
+                assertEquals(2_000uL, second.createdAtMillis)
+                assertEquals(NamedRootRetentionKind.PREFIX, map.retentionPolicy().kind)
+                val verification = map.verifyCatalog()
+                assertArrayEquals(third.id, verification.head)
+                assertEquals(3uL, verification.versionCount)
+                val plan = map.planGc()
+                assertEquals(true, plan.reachability.liveNodes > 0uL)
+                assertEquals(true, plan.candidateNodes >= plan.reclaimableNodes)
+
+                val aged = map.keepForAt(3_000uL, 1_500uL)
+                assertEquals(true, aged.retained.any { it.contentEquals(second.id) })
+                assertEquals(true, aged.removed.any { it.contentEquals(first.id) })
+                val explicit = map.keepVersions(listOf(second.id))
+                assertEquals(true, explicit.retained.any { it.contentEquals(third.id) })
+                val pruned = map.pruneVersions(0uL)
+                assertEquals(1, pruned.retained.size)
+                assertArrayEquals(third.id, pruned.retained.single())
+                assertEquals(true, pruned.removed.any { it.contentEquals(second.id) })
+                assertEquals(true, map.keepFor(10_000uL).retained.isNotEmpty())
+                assertEquals(true, map.sweepGc().deletedNodes >= 0uL)
+            }
+        }
+    }
+
+    @Test
     fun versionedSubscriptionsResumeAndPollOwnedDiffs() {
         ProllyNative.useLocalDebugLibrary()
         Engine.memory().use { engine ->

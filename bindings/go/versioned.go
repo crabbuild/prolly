@@ -888,6 +888,23 @@ func (m *VersionedMap) Apply(mutations []Mutation) (MapVersion, error) {
 	return decodePortableMapVersion(raw)
 }
 
+func (m *VersionedMap) ApplyAtMillis(mutations []Mutation, timestampMillis uint64) (MapVersion, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return MapVersion{}, err
+	}
+	defer unlock()
+	encoded, err := encodeMutations(cloneMutations(mutations))
+	if err != nil {
+		return MapVersion{}, err
+	}
+	raw, err := ffiVersionedApplyAtMillis(handle, encoded, timestampMillis)
+	if err != nil {
+		return MapVersion{}, err
+	}
+	return decodePortableMapVersion(raw)
+}
+
 func (m *VersionedMap) ApplyIf(expected []byte, mutations []Mutation) (MapUpdate, error) {
 	handle, unlock, err := m.withHandle()
 	if err != nil {
@@ -899,6 +916,23 @@ func (m *VersionedMap) ApplyIf(expected []byte, mutations []Mutation) (MapUpdate
 		return MapUpdate{}, err
 	}
 	raw, err := ffiVersionedApplyIf(handle, append([]byte(nil), expected...), encoded)
+	if err != nil {
+		return MapUpdate{}, err
+	}
+	return decodePortableMapUpdate(raw)
+}
+
+func (m *VersionedMap) ApplyIfAtMillis(expected []byte, mutations []Mutation, timestampMillis uint64) (MapUpdate, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return MapUpdate{}, err
+	}
+	defer unlock()
+	encoded, err := encodeMutations(cloneMutations(mutations))
+	if err != nil {
+		return MapUpdate{}, err
+	}
+	raw, err := ffiVersionedApplyIfAtMillis(handle, bytes.Clone(expected), encoded, timestampMillis)
 	if err != nil {
 		return MapUpdate{}, err
 	}
@@ -1016,6 +1050,10 @@ func (m *VersionedMap) KeepLast(count uint64) (VersionPrune, error) {
 	if err != nil {
 		return VersionPrune{}, err
 	}
+	return decodePortableVersionPrune(raw)
+}
+
+func decodePortableVersionPrune(raw []byte) (VersionPrune, error) {
 	d := byteDecoder{data: raw}
 	retained, err := d.readByteArraySequence()
 	if err != nil {
@@ -1026,6 +1064,97 @@ func (m *VersionedMap) KeepLast(count uint64) (VersionPrune, error) {
 		return VersionPrune{}, err
 	}
 	return VersionPrune{Retained: retained, Removed: removed}, d.done()
+}
+
+func (m *VersionedMap) PruneVersions(keepLatest uint64) (VersionPrune, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return VersionPrune{}, err
+	}
+	defer unlock()
+	raw, err := ffiVersionedPruneVersions(handle, keepLatest)
+	if err != nil {
+		return VersionPrune{}, err
+	}
+	return decodePortableVersionPrune(raw)
+}
+
+func (m *VersionedMap) KeepForAt(nowMillis, maxAgeMillis uint64) (VersionPrune, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return VersionPrune{}, err
+	}
+	defer unlock()
+	raw, err := ffiVersionedKeepForAt(handle, nowMillis, maxAgeMillis)
+	if err != nil {
+		return VersionPrune{}, err
+	}
+	return decodePortableVersionPrune(raw)
+}
+
+func (m *VersionedMap) KeepFor(maxAgeMillis uint64) (VersionPrune, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return VersionPrune{}, err
+	}
+	defer unlock()
+	raw, err := ffiVersionedKeepFor(handle, maxAgeMillis)
+	if err != nil {
+		return VersionPrune{}, err
+	}
+	return decodePortableVersionPrune(raw)
+}
+
+func (m *VersionedMap) KeepVersions(ids [][]byte) (VersionPrune, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return VersionPrune{}, err
+	}
+	defer unlock()
+	raw, err := ffiVersionedKeepVersions(handle, cloneByteSlices(ids))
+	if err != nil {
+		return VersionPrune{}, err
+	}
+	return decodePortableVersionPrune(raw)
+}
+
+func (m *VersionedMap) RetentionPolicy() (NamedRootRetention, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return NamedRootRetention{}, err
+	}
+	defer unlock()
+	raw, err := ffiVersionedRetentionPolicy(handle)
+	if err != nil {
+		return NamedRootRetention{}, err
+	}
+	return decodeNamedRootRetention(raw)
+}
+
+func (m *VersionedMap) PlanGC() (GcPlan, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return GcPlan{}, err
+	}
+	defer unlock()
+	raw, err := ffiVersionedPlanGC(handle)
+	if err != nil {
+		return GcPlan{}, err
+	}
+	return decodeGcPlan(raw)
+}
+
+func (m *VersionedMap) SweepGC() (GcSweep, error) {
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return GcSweep{}, err
+	}
+	defer unlock()
+	raw, err := ffiVersionedSweepGC(handle)
+	if err != nil {
+		return GcSweep{}, err
+	}
+	return decodeGcSweep(raw)
 }
 func (m *VersionedMap) VerifyCatalog() (CatalogVerification, error) {
 	handle, unlock, err := m.withHandle()
