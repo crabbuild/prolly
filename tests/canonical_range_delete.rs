@@ -403,6 +403,49 @@ fn range_delete_does_not_publish_when_batch_put_fails() {
 }
 
 #[test]
+fn canonical_batch_does_not_return_a_root_when_persistence_fails() {
+    let config = fixed_small_chunk_config(NodeLayoutSpec::PrefixCompressed);
+    let store = Arc::new(FailingBatchPutMemStore::new());
+    let manager = Prolly::new(store.clone(), config.clone());
+    let mut builder = BatchBuilder::new(store.clone(), config);
+    for index in 0..40 {
+        builder.add(key(index), value(index));
+    }
+    let base = builder.build().unwrap();
+    let successful_writes_before = store.successful_batch_puts.load(Ordering::Relaxed);
+
+    store.fail_next_batch_put();
+    let result = manager.batch(
+        &base,
+        vec![Mutation::Upsert {
+            key: b"key-00000000000000000020a".to_vec(),
+            val: b"inserted".to_vec(),
+        }],
+    );
+
+    assert!(matches!(result, Err(prolly::Error::Store(_))));
+    assert_eq!(keys(&manager, &base), (0..40).map(key).collect::<Vec<_>>());
+    assert_eq!(
+        store.successful_batch_puts.load(Ordering::Relaxed),
+        successful_writes_before
+    );
+}
+
+#[test]
+fn sorted_builder_does_not_return_a_root_when_persistence_fails() {
+    let config = fixed_small_chunk_config(NodeLayoutSpec::Plain);
+    let store = Arc::new(FailingBatchPutMemStore::new());
+    store.fail_next_batch_put();
+    let mut builder = prolly::SortedBatchBuilder::new(store.clone(), config);
+    for index in 0..40 {
+        builder.add(key(index), value(index)).unwrap();
+    }
+
+    assert!(matches!(builder.build(), Err(prolly::Error::Store(_))));
+    assert_eq!(store.successful_batch_puts.load(Ordering::Relaxed), 0);
+}
+
+#[test]
 fn value_sensitive_height_two_root_promotion_falls_back_to_the_canonical_rebuild() {
     let mut policy = chunking::entry_count_key_value_hash();
     policy.min = 1;

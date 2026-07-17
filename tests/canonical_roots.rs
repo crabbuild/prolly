@@ -30,6 +30,101 @@ fn build_records(config: Config, records: &[(Vec<u8>, Vec<u8>)]) -> prolly::Tree
     builder.build().unwrap()
 }
 
+fn next_random(state: &mut u64) -> u64 {
+    *state ^= *state << 13;
+    *state ^= *state >> 7;
+    *state ^= *state << 17;
+    *state
+}
+
+#[test]
+fn randomized_mixed_api_histories_match_bulk_for_every_policy() {
+    for mut policy in [
+        chunking::entry_count_key_hash(),
+        chunking::entry_count_key_value_hash(),
+        chunking::logical_bytes_key_weibull(),
+        chunking::logical_bytes_rolling_hash(),
+    ] {
+        match policy.measure {
+            prolly::ChunkMeasure::EntryCount => {
+                policy.min = 2;
+                policy.target = 8;
+                policy.max = 16;
+                policy.hard_max_node_bytes = 1_024;
+            }
+            _ => {
+                policy.min = 96;
+                policy.target = 256;
+                policy.max = 768;
+                policy.hard_max_node_bytes = 1_024;
+            }
+        }
+
+        for seed in 0..32_u64 {
+            let config = Config::builder()
+                .chunking(policy.clone())
+                .node_layout(NodeLayoutSpec::PrefixCompressed)
+                .build();
+            let manager = Prolly::new(Arc::new(MemStore::new()), config.clone());
+            let writer = BatchWriter::new();
+            let parallel = ParallelConfig::new(4, 1);
+            let mut tree = manager.create();
+            let mut expected = BTreeMap::new();
+            let mut state = seed.wrapping_add(1).wrapping_mul(0x9e37_79b9_7f4a_7c15);
+
+            for step in 0..192 {
+                let random = next_random(&mut state);
+                let key_index = random as usize % 96;
+                let key = format!("key-{key_index:04}").into_bytes();
+                let mutation = if random % 5 == 0 {
+                    expected.remove(&key);
+                    Mutation::Delete { key }
+                } else {
+                    let value_len = 8 + ((random >> 8) as usize % 73);
+                    let value = vec![(random >> 24) as u8; value_len];
+                    expected.insert(key.clone(), value.clone());
+                    Mutation::Upsert { key, val: value }
+                };
+
+                tree = match step % 6 {
+                    0 => match mutation {
+                        Mutation::Upsert { key, val } => manager.put(&tree, key, val).unwrap(),
+                        Mutation::Delete { key } => manager.delete(&tree, &key).unwrap(),
+                    },
+                    1 => manager.batch(&tree, vec![mutation]).unwrap(),
+                    2 => {
+                        manager
+                            .batch_with_stats(&tree, vec![mutation])
+                            .unwrap()
+                            .tree
+                    }
+                    3 => {
+                        writer
+                            .apply_batch_with_stats(&manager, &tree, vec![mutation])
+                            .unwrap()
+                            .tree
+                    }
+                    4 => manager
+                        .parallel_batch(&tree, vec![mutation], &parallel)
+                        .unwrap(),
+                    _ => manager.append_batch(&tree, vec![mutation]).unwrap(),
+                };
+            }
+
+            let mut bulk = BatchBuilder::new(Arc::new(MemStore::new()), config);
+            for (key, value) in expected {
+                bulk.add(key, value);
+            }
+            assert_eq!(
+                tree.root,
+                bulk.build().unwrap().root,
+                "policy={:?}, seed={seed}",
+                policy.rule
+            );
+        }
+    }
+}
+
 #[test]
 fn direct_batch_writer_stats_matches_canonical_root_for_every_policy() {
     for policy in [
