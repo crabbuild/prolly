@@ -10,14 +10,16 @@ use napi::bindgen_prelude::{Buffer, Env, Error, Float32Array, FunctionRef, Resul
 use napi::JsObject;
 use napi_derive::napi;
 use prolly_bindings::{
-    default_content_graph_limits, default_proximity_config, verify_key_proof,
-    verify_multi_key_proof, verify_proximity_membership_proof, verify_proximity_structure_proof,
-    verify_range_page_proof, verify_range_proof, ActiveIndexHealthRecord, AdaptiveQualityRecord,
+    default_content_graph_limits, default_hnsw_build_limits, default_hnsw_config,
+    default_proximity_config, verify_key_proof, verify_multi_key_proof,
+    verify_proximity_membership_proof, verify_proximity_structure_proof, verify_range_page_proof,
+    verify_range_proof, ActiveIndexHealthRecord, AdaptiveQualityRecord, BindingHnswIndex,
     BindingIndexRegistry, BindingIndexedMap, BindingIndexedSnapshot, BindingMapComparison,
     BindingMapMerge, BindingMapSnapshot, BindingMapSubscription, BindingProximityMap,
     BindingProximityReadSession, BindingProximitySearchProof, BindingSecondaryIndexSnapshot,
     BindingVersionedMap, BindingVersionedTransaction, DistanceMetricRecord,
-    ExactProximityRecordRecord, IndexBuildResultRecord, IndexEntryRecord, IndexMatchRecord,
+    ExactProximityRecordRecord, HnswBuildLimitsRecord, HnswBuildStatsRecord, HnswConfigRecord,
+    HnswRoutingVectorEncodingRecord, IndexBuildResultRecord, IndexEntryRecord, IndexMatchRecord,
     IndexPageRecord, IndexProjectionRecord, IndexVerificationRecord, IndexedMapHealthRecord,
     IndexedMapMetricsRecord, IndexedRetentionRecord, IndexedSnapshotIdRecord, IndexedSourceRecord,
     IndexedUpdateKind, IndexedUpdateRecord, IndexedVersionRecord, KeyProofRecord, MapUpdateKind,
@@ -648,6 +650,116 @@ fn parse_u64(value: String, name: &str) -> Result<u64> {
 
 fn parse_optional_u64(value: Option<String>, name: &str) -> Result<Option<u64>> {
     value.map(|value| parse_u64(value, name)).transpose()
+}
+
+#[napi(object)]
+pub struct NodePortableHnswConfig {
+    pub max_connections: u32,
+    pub ef_construction: u32,
+    pub ef_search: u32,
+    pub level_bits: u32,
+    pub overfetch_multiplier: u32,
+    pub seed: String,
+    pub routing_vector_encoding: String,
+}
+
+impl From<HnswConfigRecord> for NodePortableHnswConfig {
+    fn from(value: HnswConfigRecord) -> Self {
+        Self {
+            max_connections: u32::from(value.max_connections),
+            ef_construction: value.ef_construction,
+            ef_search: value.ef_search,
+            level_bits: u32::from(value.level_bits),
+            overfetch_multiplier: value.overfetch_multiplier,
+            seed: value.seed.to_string(),
+            routing_vector_encoding: match value.routing_vector_encoding {
+                HnswRoutingVectorEncodingRecord::FullF32 => "full_f32",
+            }
+            .to_string(),
+        }
+    }
+}
+
+impl TryFrom<NodePortableHnswConfig> for HnswConfigRecord {
+    type Error = Error;
+
+    fn try_from(value: NodePortableHnswConfig) -> Result<Self> {
+        Ok(Self {
+            max_connections: value
+                .max_connections
+                .try_into()
+                .map_err(|_| Error::new(Status::InvalidArg, "maxConnections must fit in uint16"))?,
+            ef_construction: value.ef_construction,
+            ef_search: value.ef_search,
+            level_bits: value
+                .level_bits
+                .try_into()
+                .map_err(|_| Error::new(Status::InvalidArg, "levelBits must fit in uint8"))?,
+            overfetch_multiplier: value.overfetch_multiplier,
+            seed: parse_u64(value.seed, "seed")?,
+            routing_vector_encoding: match value.routing_vector_encoding.as_str() {
+                "full_f32" => HnswRoutingVectorEncodingRecord::FullF32,
+                other => {
+                    return Err(Error::new(
+                        Status::InvalidArg,
+                        format!("unknown HNSW routing-vector encoding: {other}"),
+                    ))
+                }
+            },
+        })
+    }
+}
+
+#[napi(object)]
+pub struct NodePortableHnswBuildLimits {
+    pub max_records: Option<String>,
+    pub max_owned_bytes: Option<String>,
+    pub max_distance_evaluations: Option<String>,
+    pub worker_threads: String,
+    pub max_encoded_graph_bytes: Option<String>,
+}
+
+impl TryFrom<NodePortableHnswBuildLimits> for HnswBuildLimitsRecord {
+    type Error = Error;
+
+    fn try_from(value: NodePortableHnswBuildLimits) -> Result<Self> {
+        Ok(Self {
+            max_records: parse_optional_u64(value.max_records, "maxRecords")?,
+            max_owned_bytes: parse_optional_u64(value.max_owned_bytes, "maxOwnedBytes")?,
+            max_distance_evaluations: parse_optional_u64(
+                value.max_distance_evaluations,
+                "maxDistanceEvaluations",
+            )?,
+            worker_threads: parse_u64(value.worker_threads, "workerThreads")?,
+            max_encoded_graph_bytes: parse_optional_u64(
+                value.max_encoded_graph_bytes,
+                "maxEncodedGraphBytes",
+            )?,
+        })
+    }
+}
+
+#[napi(object)]
+pub struct NodePortableHnswBuildStats {
+    pub records: String,
+    pub distance_evaluations: String,
+    pub directed_edges: String,
+    pub maximum_level: u32,
+    pub owned_bytes: String,
+    pub encoded_graph_bytes: String,
+}
+
+impl From<HnswBuildStatsRecord> for NodePortableHnswBuildStats {
+    fn from(value: HnswBuildStatsRecord) -> Self {
+        Self {
+            records: value.records.to_string(),
+            distance_evaluations: value.distance_evaluations.to_string(),
+            directed_edges: value.directed_edges.to_string(),
+            maximum_level: u32::from(value.maximum_level),
+            owned_bytes: value.owned_bytes.to_string(),
+            encoded_graph_bytes: value.encoded_graph_bytes.to_string(),
+        }
+    }
 }
 
 impl TryFrom<NodePortableSearchRequest> for ProximitySearchRequestRecord {
@@ -2630,12 +2742,120 @@ fn parse_index_page_limit(limit: &str) -> Result<u64> {
 }
 
 #[napi]
+pub struct NativePortableHnswBuildResult {
+    index: Arc<BindingHnswIndex>,
+    stats: HnswBuildStatsRecord,
+}
+
+#[napi]
+impl NativePortableHnswBuildResult {
+    #[napi]
+    pub fn index(&self) -> NativePortableHnswIndex {
+        NativePortableHnswIndex {
+            inner: Arc::clone(&self.index),
+        }
+    }
+
+    #[napi]
+    pub fn stats(&self) -> NodePortableHnswBuildStats {
+        self.stats.clone().into()
+    }
+}
+
+#[napi]
+pub struct NativePortableHnswIndex {
+    inner: Arc<BindingHnswIndex>,
+}
+
+#[napi]
+impl NativePortableHnswIndex {
+    #[napi]
+    pub fn manifest(&self) -> Buffer {
+        Buffer::from(self.inner.manifest())
+    }
+
+    #[napi(js_name = "sourceDescriptor")]
+    pub fn source_descriptor(&self) -> Buffer {
+        Buffer::from(self.inner.source_descriptor())
+    }
+
+    #[napi]
+    pub fn config(&self) -> NodePortableHnswConfig {
+        self.inner.config().into()
+    }
+
+    #[napi(js_name = "isCanonical")]
+    pub fn is_canonical(&self) -> bool {
+        self.inner.is_canonical()
+    }
+
+    #[napi]
+    pub fn search(
+        &self,
+        map: &NativePortableProximityMap,
+        request: NodePortableSearchRequest,
+    ) -> Result<NodePortableSearchResult> {
+        self.inner
+            .search(Arc::clone(&map.inner), request.try_into()?)
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "proveSearch")]
+    pub fn prove_search(
+        &self,
+        map: &NativePortableProximityMap,
+        request: NodePortableSearchRequest,
+    ) -> Result<NativePortableProximitySearchProof> {
+        self.inner
+            .prove_search(
+                Arc::clone(&map.inner),
+                request.try_into()?,
+                default_content_graph_limits(),
+            )
+            .map(|inner| NativePortableProximitySearchProof { inner })
+            .map_err(to_napi_error)
+    }
+}
+
+#[napi]
 pub struct NativePortableProximityMap {
     inner: Arc<BindingProximityMap>,
 }
 
 #[napi]
 impl NativePortableProximityMap {
+    #[napi(js_name = "buildHnsw")]
+    pub fn build_hnsw(
+        &self,
+        config: Option<NodePortableHnswConfig>,
+        limits: Option<NodePortableHnswBuildLimits>,
+    ) -> Result<NativePortableHnswBuildResult> {
+        let config = config
+            .map(TryInto::try_into)
+            .transpose()?
+            .unwrap_or_else(default_hnsw_config);
+        let limits = limits
+            .map(TryInto::try_into)
+            .transpose()?
+            .unwrap_or_else(default_hnsw_build_limits);
+        self.inner
+            .build_hnsw(config, limits)
+            .map(|value| NativePortableHnswBuildResult {
+                index: value.index,
+                stats: value.stats,
+            })
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "loadHnsw")]
+    pub fn load_hnsw(&self, manifest: Buffer) -> Result<NativePortableHnswIndex> {
+        self.inner
+            .load_hnsw(manifest.to_vec())
+            .map(|inner| NativePortableHnswIndex { inner })
+            .map_err(to_napi_error)
+    }
+
     #[napi]
     pub fn read(&self) -> Result<NativePortableProximityReadSession> {
         self.inner

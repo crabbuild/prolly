@@ -78,6 +78,60 @@ export interface ProximityConfig {
   scalarQuantizationGroupSize?: number;
 }
 
+export interface HnswConfig {
+  maxConnections: number;
+  efConstruction: number;
+  efSearch: number;
+  levelBits: number;
+  overfetchMultiplier: number;
+  seed: bigint;
+  routingVectorEncoding: "full_f32";
+}
+
+export interface HnswBuildLimits {
+  maxRecords?: bigint;
+  maxOwnedBytes?: bigint;
+  maxDistanceEvaluations?: bigint;
+  workerThreads: bigint;
+  maxEncodedGraphBytes?: bigint;
+}
+
+export interface HnswBuildStats {
+  records: bigint;
+  distanceEvaluations: bigint;
+  directedEdges: bigint;
+  maximumLevel: number;
+  ownedBytes: bigint;
+  encodedGraphBytes: bigint;
+}
+
+export interface HnswBuildOptions {
+  config?: HnswConfig;
+  limits?: HnswBuildLimits;
+  signal?: AbortSignal;
+}
+
+export interface HnswBuildResult {
+  index: HnswIndex;
+  stats: HnswBuildStats;
+}
+
+export function defaultHnswConfig(): HnswConfig {
+  return {
+    maxConnections: 16,
+    efConstruction: 128,
+    efSearch: 64,
+    levelBits: 4,
+    overfetchMultiplier: 8,
+    seed: 0n,
+    routingVectorEncoding: "full_f32",
+  };
+}
+
+export function defaultHnswBuildLimits(): HnswBuildLimits {
+  return { workerThreads: 1n };
+}
+
 export interface ProximityMutation {
   key: Uint8Array;
   vector?: Float32Array;
@@ -137,6 +191,43 @@ interface NativeProximityMutationResult {
   stats(): NativeProximityMutationStats;
 }
 
+interface NativeHnswConfig {
+  maxConnections: number;
+  efConstruction: number;
+  efSearch: number;
+  levelBits: number;
+  overfetchMultiplier: number;
+  seed: string;
+  routingVectorEncoding: string;
+}
+interface NativeHnswBuildLimits {
+  maxRecords?: string;
+  maxOwnedBytes?: string;
+  maxDistanceEvaluations?: string;
+  workerThreads: string;
+  maxEncodedGraphBytes?: string;
+}
+interface NativeHnswBuildStats {
+  records: string;
+  distanceEvaluations: string;
+  directedEdges: string;
+  maximumLevel: number;
+  ownedBytes: string;
+  encodedGraphBytes: string;
+}
+interface NativeHnswBuildResult {
+  index(): NativeHnswIndex;
+  stats(): NativeHnswBuildStats;
+}
+interface NativeHnswIndex {
+  manifest(): Uint8Array;
+  sourceDescriptor(): Uint8Array;
+  config(): NativeHnswConfig;
+  isCanonical(): boolean;
+  search(map: NativeProximityMap, request: NativeSearchRequest): NativeSearchResult;
+  proveSearch(map: NativeProximityMap, request: NativeSearchRequest): NativeProximitySearchProof;
+}
+
 interface NativeSearchRequest {
   query: Float32Array;
   k: string;
@@ -171,6 +262,8 @@ interface NativeSearchResult {
 }
 
 interface NativeProximityMap {
+  buildHnsw(config?: NativeHnswConfig, limits?: NativeHnswBuildLimits): NativeHnswBuildResult;
+  loadHnsw(manifest: Uint8Array): NativeHnswIndex;
   read(): NativeProximityReadSession;
   search(request: NativeSearchRequest): NativeSearchResult;
   count(): string;
@@ -252,6 +345,63 @@ function ownSearchRequest(request: SearchRequest): NativeSearchRequest {
   };
 }
 
+function requireUnsignedInteger(value: number, maximum: number, name: string): number {
+  if (!Number.isSafeInteger(value) || value < 0 || value > maximum) {
+    throw new RangeError(`${name} must be an unsigned integer no greater than ${maximum}`);
+  }
+  return value;
+}
+
+function requireUnsignedBigInt(value: bigint, name: string): string {
+  if (value < 0n || value > ((1n << 64n) - 1n)) {
+    throw new RangeError(`${name} must fit an unsigned 64-bit integer`);
+  }
+  return value.toString();
+}
+
+function ownHnswConfig(value: HnswConfig | undefined): NativeHnswConfig | undefined {
+  if (value == null) return undefined;
+  return {
+    maxConnections: requireUnsignedInteger(value.maxConnections, 0xffff, "maxConnections"),
+    efConstruction: requireUnsignedInteger(value.efConstruction, 0xffff_ffff, "efConstruction"),
+    efSearch: requireUnsignedInteger(value.efSearch, 0xffff_ffff, "efSearch"),
+    levelBits: requireUnsignedInteger(value.levelBits, 0xff, "levelBits"),
+    overfetchMultiplier: requireUnsignedInteger(
+      value.overfetchMultiplier,
+      0xffff_ffff,
+      "overfetchMultiplier",
+    ),
+    seed: requireUnsignedBigInt(value.seed, "seed"),
+    routingVectorEncoding: value.routingVectorEncoding,
+  };
+}
+
+function ownHnswBuildLimits(value: HnswBuildLimits | undefined): NativeHnswBuildLimits | undefined {
+  if (value == null) return undefined;
+  return {
+    maxRecords: value.maxRecords == null ? undefined : requireUnsignedBigInt(value.maxRecords, "maxRecords"),
+    maxOwnedBytes: value.maxOwnedBytes == null ? undefined : requireUnsignedBigInt(value.maxOwnedBytes, "maxOwnedBytes"),
+    maxDistanceEvaluations: value.maxDistanceEvaluations == null
+      ? undefined
+      : requireUnsignedBigInt(value.maxDistanceEvaluations, "maxDistanceEvaluations"),
+    workerThreads: requireUnsignedBigInt(value.workerThreads, "workerThreads"),
+    maxEncodedGraphBytes: value.maxEncodedGraphBytes == null
+      ? undefined
+      : requireUnsignedBigInt(value.maxEncodedGraphBytes, "maxEncodedGraphBytes"),
+  };
+}
+
+function hnswBuildStats(value: NativeHnswBuildStats): HnswBuildStats {
+  return {
+    records: BigInt(value.records),
+    distanceEvaluations: BigInt(value.distanceEvaluations),
+    directedEdges: BigInt(value.directedEdges),
+    maximumLevel: value.maximumLevel,
+    ownedBytes: BigInt(value.ownedBytes),
+    encodedGraphBytes: BigInt(value.encodedGraphBytes),
+  };
+}
+
 function searchResult(value: NativeSearchResult): SearchResult {
   return {
     neighbors: value.neighbors.map((neighbor) => ({
@@ -322,6 +472,18 @@ export class ProximityMap implements Disposable {
     return record == null ? undefined : { vector: new Float32Array(record.vector), value: record.value };
   }
   contains(key: Uint8Array): boolean { return this.nativeHandle().contains(ownedBytes(key)); }
+  buildHnsw(options: HnswBuildOptions = {}): Promise<HnswBuildResult> {
+    const native = this.nativeHandle();
+    const config = ownHnswConfig(options.config);
+    const limits = ownHnswBuildLimits(options.limits);
+    return nativePromise(options.signal, () => {
+      const result = native.buildHnsw(config, limits);
+      return { index: new HnswIndex(result.index()), stats: hnswBuildStats(result.stats()) };
+    });
+  }
+  loadHnsw(manifest: Uint8Array): HnswIndex {
+    return new HnswIndex(this.nativeHandle().loadHnsw(ownedBytes(manifest)));
+  }
   count(): bigint { return BigInt(this.nativeHandle().count()); }
   config(): ProximityConfig {
     const value = this.nativeHandle().config();
@@ -362,6 +524,43 @@ export class ProximityMap implements Disposable {
   }
   proveStructure(): ProximityStructuralProof {
     return new ProximityStructuralProof(this.nativeHandle().proveStructure());
+  }
+  close(): void { this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class HnswIndex implements Disposable {
+  #native?: NativeHnswIndex;
+  constructor(native: NativeHnswIndex) { this.#native = native; }
+  #open(): NativeHnswIndex {
+    if (this.#native == null) throw new Error("HNSW index is closed");
+    return this.#native;
+  }
+  manifest(): Uint8Array { return ownedBytes(this.#open().manifest()); }
+  sourceDescriptor(): Uint8Array { return ownedBytes(this.#open().sourceDescriptor()); }
+  config(): HnswConfig {
+    const value = this.#open().config();
+    return {
+      maxConnections: value.maxConnections,
+      efConstruction: value.efConstruction,
+      efSearch: value.efSearch,
+      levelBits: value.levelBits,
+      overfetchMultiplier: value.overfetchMultiplier,
+      seed: BigInt(value.seed),
+      routingVectorEncoding: value.routingVectorEncoding as "full_f32",
+    };
+  }
+  isCanonical(): boolean { return this.#open().isCanonical(); }
+  search(map: ProximityMap, request: SearchRequest): Promise<SearchResult> {
+    const native = this.#open();
+    const nativeMap = map.nativeHandle();
+    const owned = ownSearchRequest(request);
+    return nativePromise(request.signal, () => searchResult(native.search(nativeMap, owned)));
+  }
+  proveSearch(map: ProximityMap, request: SearchRequest): ProximitySearchProof {
+    return new ProximitySearchProof(
+      this.#open().proveSearch(map.nativeHandle(), ownSearchRequest(request)),
+    );
   }
   close(): void { this.#native = undefined; }
   [Symbol.dispose](): void { this.close(); }

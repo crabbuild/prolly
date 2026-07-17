@@ -10,6 +10,10 @@ import build.crab.prolly.IndexBuildResultRecord
 import build.crab.prolly.IndexMatchRecord
 import build.crab.prolly.IndexPageRecord
 import build.crab.prolly.IndexVerificationRecord
+import build.crab.prolly.HnswBuildLimitsRecord
+import build.crab.prolly.HnswBuildStatsRecord
+import build.crab.prolly.HnswConfigRecord
+import build.crab.prolly.HnswRoutingVectorEncodingRecord
 import build.crab.prolly.IndexedMapHealthRecord
 import build.crab.prolly.IndexedRetentionRecord
 import build.crab.prolly.IndexedSnapshotIdRecord
@@ -54,6 +58,8 @@ import build.crab.prolly.SecondaryIndexExtractorCallback
 import build.crab.prolly.SearchBackendRecord
 import build.crab.prolly.SearchBudgetRecord
 import build.crab.prolly.SearchPolicyKind
+import build.crab.prolly.defaultHnswBuildLimits as nativeDefaultHnswBuildLimits
+import build.crab.prolly.defaultHnswConfig as nativeDefaultHnswConfig
 import build.crab.prolly.verifyMultiKeyProof as verifyNativeMultiKeyProof
 import build.crab.prolly.verifyRangePageProof as verifyNativeRangePageProof
 import build.crab.prolly.verifyRangeProof as verifyNativeRangeProof
@@ -150,6 +156,71 @@ data class JavaProximitySearchStats(
     val frontierPeak: Long,
     val candidateHandlesPeak: Long,
     val candidateRetainedBytesPeak: Long,
+)
+
+data class JavaHnswConfig(
+    val maxConnections: Int,
+    val efConstruction: Long,
+    val efSearch: Long,
+    val levelBits: Int,
+    val overfetchMultiplier: Long,
+    val seed: Long,
+    val routingVectorEncoding: String,
+) {
+    fun toNative() = HnswConfigRecord(
+        maxConnections.toUShort(),
+        efConstruction.toUInt(),
+        efSearch.toUInt(),
+        levelBits.toUByte(),
+        overfetchMultiplier.toUInt(),
+        seed.toULong(),
+        HnswRoutingVectorEncodingRecord.valueOf(routingVectorEncoding),
+    )
+}
+
+data class JavaHnswBuildLimits(
+    val maxRecords: Long?,
+    val maxOwnedBytes: Long?,
+    val maxDistanceEvaluations: Long?,
+    val workerThreads: Long,
+    val maxEncodedGraphBytes: Long?,
+) {
+    fun toNative() = HnswBuildLimitsRecord(
+        maxRecords?.toULong(),
+        maxOwnedBytes?.toULong(),
+        maxDistanceEvaluations?.toULong(),
+        workerThreads.toULong(),
+        maxEncodedGraphBytes?.toULong(),
+    )
+}
+
+data class JavaHnswBuildStats(
+    val records: Long,
+    val distanceEvaluations: Long,
+    val directedEdges: Long,
+    val maximumLevel: Int,
+    val ownedBytes: Long,
+    val encodedGraphBytes: Long,
+)
+
+data class JavaHnswBuildResult(
+    val index: HnswIndex,
+    val stats: JavaHnswBuildStats,
+)
+
+private fun HnswConfigRecord.toJava() = JavaHnswConfig(
+    maxConnections.toInt(), efConstruction.toLong(), efSearch.toLong(), levelBits.toInt(),
+    overfetchMultiplier.toLong(), seed.toLong(), routingVectorEncoding.name,
+)
+
+private fun HnswBuildLimitsRecord.toJava() = JavaHnswBuildLimits(
+    maxRecords?.toLong(), maxOwnedBytes?.toLong(), maxDistanceEvaluations?.toLong(),
+    workerThreads.toLong(), maxEncodedGraphBytes?.toLong(),
+)
+
+private fun HnswBuildStatsRecord.toJava() = JavaHnswBuildStats(
+    records.toLong(), distanceEvaluations.toLong(), directedEdges.toLong(), maximumLevel.toInt(),
+    ownedBytes.toLong(), encodedGraphBytes.toLong(),
 )
 
 data class JavaMapUpdate(
@@ -676,6 +747,42 @@ object JavaPortableBridge {
         dimensions: Int,
         records: List<ProximityRecord>,
     ): ProximityMap = engine.buildProximity(dimensions.toUInt(), records)
+
+    @JvmStatic
+    fun defaultHnswConfig(): JavaHnswConfig = nativeDefaultHnswConfig().toJava()
+
+    @JvmStatic
+    fun defaultHnswBuildLimits(): JavaHnswBuildLimits = nativeDefaultHnswBuildLimits().toJava()
+
+    @JvmStatic
+    fun buildHnsw(
+        map: ProximityMap,
+        config: JavaHnswConfig,
+        limits: JavaHnswBuildLimits,
+    ): JavaHnswBuildResult = map.buildHnsw(config.toNative(), limits.toNative()).let {
+        JavaHnswBuildResult(it.index, it.stats.toJava())
+    }
+
+    @JvmStatic
+    fun loadHnsw(map: ProximityMap, manifest: ByteArray): HnswIndex =
+        map.loadHnsw(manifest.copyOf())
+
+    @JvmStatic
+    fun hnswConfig(index: HnswIndex): JavaHnswConfig = index.config.toJava()
+
+    @JvmStatic
+    fun hnswSearch(
+        index: HnswIndex,
+        map: ProximityMap,
+        request: JavaProximitySearchRequest,
+    ): ProximitySearchResultRecord = index.search(map, request.toNative())
+
+    @JvmStatic
+    fun hnswProveSearch(
+        index: HnswIndex,
+        map: ProximityMap,
+        request: JavaProximitySearchRequest,
+    ): ProximitySearchProof = index.proveSearch(map, request.toNative())
 
     @JvmStatic
     fun search(

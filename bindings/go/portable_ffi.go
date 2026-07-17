@@ -206,6 +206,7 @@ extern uint64_t uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_f
 
 extern uint64_t uniffi_prolly_bindings_fn_clone_bindingproximitymap(uint64_t ptr, RustCallStatus *out_err);
 extern void uniffi_prolly_bindings_fn_free_bindingproximitymap(uint64_t ptr, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximitymap_build_hnsw(uint64_t ptr, RustBuffer config, RustBuffer limits, RustCallStatus *out_err);
 extern void uniffi_prolly_bindings_fn_method_bindingproximitymap_clear_content_cache(uint64_t ptr, RustCallStatus *out_err);
 extern int8_t uniffi_prolly_bindings_fn_method_bindingproximitymap_contains_key(uint64_t ptr, RustBuffer key, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximitymap_config(uint64_t ptr, RustCallStatus *out_err);
@@ -213,6 +214,7 @@ extern uint64_t uniffi_prolly_bindings_fn_method_bindingproximitymap_count(uint6
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximitymap_descriptor(uint64_t ptr, RustCallStatus *out_err);
 extern uint64_t uniffi_prolly_bindings_fn_method_bindingproximitymap_fast_handle(uint64_t ptr, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximitymap_get(uint64_t ptr, RustBuffer key, RustCallStatus *out_err);
+extern uint64_t uniffi_prolly_bindings_fn_method_bindingproximitymap_load_hnsw(uint64_t ptr, RustBuffer manifest, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximitymap_mutate(uint64_t ptr, RustBuffer mutations, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximitymap_prove_membership(uint64_t ptr, RustBuffer key, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximitymap_prove_structure(uint64_t ptr, RustBuffer limits, RustCallStatus *out_err);
@@ -230,10 +232,20 @@ extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximityreadsession_s
 extern RustBuffer uniffi_prolly_bindings_fn_func_verify_proximity_membership_proof(RustBuffer proof, RustBuffer expected_descriptor, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_func_verify_proximity_structure_proof(RustBuffer proof, RustBuffer expected_descriptor, RustBuffer limits, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_func_default_content_graph_limits(RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_func_default_hnsw_build_limits(RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_func_default_hnsw_config(RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_func_exact_proximity_search_request(RustBuffer query, uint64_t k, RustCallStatus *out_err);
 extern uint64_t uniffi_prolly_bindings_fn_clone_bindingproximitysearchproof(uint64_t ptr, RustCallStatus *out_err);
 extern void uniffi_prolly_bindings_fn_free_bindingproximitysearchproof(uint64_t ptr, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingproximitysearchproof_verify(uint64_t ptr, RustBuffer expected_descriptor, RustBuffer limits, RustCallStatus *out_err);
+extern uint64_t uniffi_prolly_bindings_fn_clone_bindinghnswindex(uint64_t ptr, RustCallStatus *out_err);
+extern void uniffi_prolly_bindings_fn_free_bindinghnswindex(uint64_t ptr, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindinghnswindex_config(uint64_t ptr, RustCallStatus *out_err);
+extern int8_t uniffi_prolly_bindings_fn_method_bindinghnswindex_is_canonical(uint64_t ptr, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindinghnswindex_manifest(uint64_t ptr, RustCallStatus *out_err);
+extern uint64_t uniffi_prolly_bindings_fn_method_bindinghnswindex_prove_search(uint64_t ptr, uint64_t map, RustBuffer request, RustBuffer limits, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindinghnswindex_search(uint64_t ptr, uint64_t map, RustBuffer request, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindinghnswindex_source_descriptor(uint64_t ptr, RustCallStatus *out_err);
 
 extern ProllyFastScanOpenResult prolly_fast_index_cursor_open(uint64_t snapshot_handle, uint32_t query_kind, const uint8_t *start_ptr, size_t start_len, const uint8_t *end_ptr, size_t end_len, uint8_t has_end, uint8_t reverse);
 extern ProllyFastPageResult prolly_fast_index_cursor_next(uint64_t snapshot_handle, uint64_t cursor_handle, uint32_t max_records, uint64_t max_arena_bytes);
@@ -2324,6 +2336,178 @@ func ffiProximityFastHandle(handle uint64) (uint64, error) {
 	var status C.RustCallStatus
 	fast := C.uniffi_prolly_bindings_fn_method_bindingproximitymap_fast_handle(C.uint64_t(clone), &status)
 	return uint64(fast), portableStatusError(&status)
+}
+
+func ffiDefaultHNSWConfig() ([]byte, error) {
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_func_default_hnsw_config(&status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiDefaultHNSWBuildLimits() ([]byte, error) {
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_func_default_hnsw_build_limits(&status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiProximityBuildHNSW(handle uint64, config, limits []byte) ([]byte, error) {
+	configBuf, err := portableInput(config)
+	if err != nil {
+		return nil, err
+	}
+	limitsBuf, err := portableInput(limits)
+	if err != nil {
+		portableFreeBuffer(configBuf)
+		return nil, err
+	}
+	clone, err := ffiCloneProximity(handle)
+	if err != nil {
+		portableFreeBuffer(configBuf)
+		portableFreeBuffer(limitsBuf)
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingproximitymap_build_hnsw(
+		C.uint64_t(clone), configBuf, limitsBuf, &status,
+	)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiProximityLoadHNSW(handle uint64, manifest []byte) (uint64, error) {
+	manifestBuf, err := portableInput(encodeByteArray(manifest))
+	if err != nil {
+		return 0, err
+	}
+	clone, err := ffiCloneProximity(handle)
+	if err != nil {
+		portableFreeBuffer(manifestBuf)
+		return 0, err
+	}
+	var status C.RustCallStatus
+	index := C.uniffi_prolly_bindings_fn_method_bindingproximitymap_load_hnsw(
+		C.uint64_t(clone), manifestBuf, &status,
+	)
+	return uint64(index), portableStatusError(&status)
+}
+
+func ffiCloneHNSWIndex(handle uint64) (uint64, error) {
+	var status C.RustCallStatus
+	clone := C.uniffi_prolly_bindings_fn_clone_bindinghnswindex(C.uint64_t(handle), &status)
+	return uint64(clone), portableStatusError(&status)
+}
+
+func ffiFreeHNSWIndex(handle uint64) {
+	var status C.RustCallStatus
+	C.uniffi_prolly_bindings_fn_free_bindinghnswindex(C.uint64_t(handle), &status)
+}
+
+func ffiHNSWIndexBufferCall(
+	handle uint64,
+	call func(C.uint64_t, *C.RustCallStatus) C.RustBuffer,
+) ([]byte, error) {
+	clone, err := ffiCloneHNSWIndex(handle)
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := call(C.uint64_t(clone), &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiHNSWIndexManifest(handle uint64) ([]byte, error) {
+	return ffiHNSWIndexBufferCall(handle, func(clone C.uint64_t, status *C.RustCallStatus) C.RustBuffer {
+		return C.uniffi_prolly_bindings_fn_method_bindinghnswindex_manifest(clone, status)
+	})
+}
+
+func ffiHNSWIndexSourceDescriptor(handle uint64) ([]byte, error) {
+	return ffiHNSWIndexBufferCall(handle, func(clone C.uint64_t, status *C.RustCallStatus) C.RustBuffer {
+		return C.uniffi_prolly_bindings_fn_method_bindinghnswindex_source_descriptor(clone, status)
+	})
+}
+
+func ffiHNSWIndexConfig(handle uint64) ([]byte, error) {
+	return ffiHNSWIndexBufferCall(handle, func(clone C.uint64_t, status *C.RustCallStatus) C.RustBuffer {
+		return C.uniffi_prolly_bindings_fn_method_bindinghnswindex_config(clone, status)
+	})
+}
+
+func ffiHNSWIndexIsCanonical(handle uint64) (bool, error) {
+	clone, err := ffiCloneHNSWIndex(handle)
+	if err != nil {
+		return false, err
+	}
+	var status C.RustCallStatus
+	value := C.uniffi_prolly_bindings_fn_method_bindinghnswindex_is_canonical(C.uint64_t(clone), &status)
+	return value != 0, portableStatusError(&status)
+}
+
+func ffiHNSWIndexSearch(index, proximity uint64, request []byte) ([]byte, error) {
+	requestBuf, err := portableInput(request)
+	if err != nil {
+		return nil, err
+	}
+	indexClone, err := ffiCloneHNSWIndex(index)
+	if err != nil {
+		portableFreeBuffer(requestBuf)
+		return nil, err
+	}
+	mapClone, err := ffiCloneProximity(proximity)
+	if err != nil {
+		portableFreeBuffer(requestBuf)
+		ffiFreeHNSWIndex(indexClone)
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindinghnswindex_search(
+		C.uint64_t(indexClone), C.uint64_t(mapClone), requestBuf, &status,
+	)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiHNSWIndexProveSearch(index, proximity uint64, request, limits []byte) (uint64, error) {
+	requestBuf, err := portableInput(request)
+	if err != nil {
+		return 0, err
+	}
+	limitsBuf, err := portableInput(limits)
+	if err != nil {
+		portableFreeBuffer(requestBuf)
+		return 0, err
+	}
+	indexClone, err := ffiCloneHNSWIndex(index)
+	if err != nil {
+		portableFreeBuffer(requestBuf)
+		portableFreeBuffer(limitsBuf)
+		return 0, err
+	}
+	mapClone, err := ffiCloneProximity(proximity)
+	if err != nil {
+		portableFreeBuffer(requestBuf)
+		portableFreeBuffer(limitsBuf)
+		ffiFreeHNSWIndex(indexClone)
+		return 0, err
+	}
+	var status C.RustCallStatus
+	proof := C.uniffi_prolly_bindings_fn_method_bindinghnswindex_prove_search(
+		C.uint64_t(indexClone), C.uint64_t(mapClone), requestBuf, limitsBuf, &status,
+	)
+	return uint64(proof), portableStatusError(&status)
 }
 
 func ffiProximityReadSession(handle uint64) (uint64, error) {
